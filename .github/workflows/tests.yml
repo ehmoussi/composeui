@@ -18,10 +18,8 @@ jobs:
           - "3.11"
           # - "3.12"
     steps:
-      - name: Install xclip
+      - name: Install xclip and xvfb
         run: sudo apt install -y xclip xvfb
-      - name: Add display for copy/paste tests
-        run: Xvfb :20 >/dev/null 2>&1 & export DISPLAY=:20
       - uses: actions/checkout@v4
       - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v5
@@ -37,4 +35,4 @@ jobs:
       - name: Install
         run: uv sync --extra dev_maestro --extra all
       - name: Run the tests
-        run: uv run maestro test
+        run: xvfb-run --auto-servernum uv run maestro test
