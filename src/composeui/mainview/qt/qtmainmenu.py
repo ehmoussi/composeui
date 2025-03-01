@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, fields
 class QtMainMenu(QtView):
     r"""Main Menu View."""
 
-    view: QMenuBar = field(init=False)
+    view: QMenuBar = field(init=False, repr=False)
     main_view: QMainWindow
     menus: OrderedDict[str, QtMenu] = field(
         init=False, repr=False, default_factory=OrderedDict[str, QtMenu]

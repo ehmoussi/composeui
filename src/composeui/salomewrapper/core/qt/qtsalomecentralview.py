@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtSalomeCentralView(QtSalomeView):
-    view: QWidget = field(init=False)
-    layout: QVBoxLayout = field(init=False)
+    view: QWidget = field(init=False, repr=False)
+    layout: QVBoxLayout = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.view = QWidget()

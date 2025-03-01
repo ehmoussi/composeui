@@ -19,9 +19,9 @@ class QtExampleMainToolBar(QtMainToolBar, ExampleMainToolBar): ...
 
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
-    menu: MainMenu = field(init=False)
-    toolbar: ExampleMainToolBar = field(init=False)
-    lines: QtLinkedTableView[LinesItems, PointsItems] = field(init=False)
+    menu: MainMenu = field(init=False, repr=False)
+    toolbar: ExampleMainToolBar = field(init=False, repr=False)
+    lines: QtLinkedTableView[LinesItems, PointsItems] = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

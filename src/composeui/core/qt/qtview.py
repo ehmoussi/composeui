@@ -12,9 +12,9 @@ from typing import Optional, Union
 class QtView(View):
     """View."""
 
-    view: Optional[Union[QAction, QWidget]] = field(init=False)
+    view: Optional[Union[QAction, QWidget]] = field(init=False, repr=False)
 
-    _block_signals: bool = field(init=False, default=False)
+    _block_signals: bool = field(init=False, repr=False, default=False)
 
     @property  # type: ignore[misc]
     def is_visible(self) -> bool:

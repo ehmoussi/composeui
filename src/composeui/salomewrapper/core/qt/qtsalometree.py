@@ -24,11 +24,11 @@ class QtSalomeTree(QtView, SalomeTree):
     """A view for the Salome tree widget."""
 
     view: QTreeView = field(
-        init=False, default_factory=lambda: helper.sgPyQt.getObjectBrowser()
+        init=False, repr=False, default_factory=lambda: helper.sgPyQt.getObjectBrowser()
     )
 
-    _parent_view: QWidget = field(init=False)
-    _signals: SalomeTreeSignals = field(init=False)
+    _parent_view: QWidget = field(init=False, repr=False)
+    _signals: SalomeTreeSignals = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

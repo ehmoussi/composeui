@@ -26,22 +26,24 @@ if typing.TYPE_CHECKING:
 @dataclass(eq=False)
 class CubeParametersView(GroupBoxApplyFormView["CubeDefinitionItems"]):
     name: LabelLineEditView["CubeDefinitionItems"] = field(
-        init=False, default_factory=LabelLineEditView
+        init=False, repr=False, default_factory=LabelLineEditView
     )
     point_1: LabelVector3DView["CubeDefinitionItems"] = field(
-        init=False, default_factory=LabelVector3DView
+        init=False, repr=False, default_factory=LabelVector3DView
     )
     point_2: LabelVector3DView["CubeDefinitionItems"] = field(
-        init=False, default_factory=LabelVector3DView
+        init=False, repr=False, default_factory=LabelVector3DView
     )
 
 
 @dataclass(eq=False)
 class CubeDefinitionView(FormView["CubeDefinitionItems"]):
     cube: LabelComboBoxView["CubeDefinitionItems"] = field(
-        init=False, default_factory=LabelComboBoxView
+        init=False, repr=False, default_factory=LabelComboBoxView
     )
-    parameters: CubeParametersView = field(init=False, default_factory=CubeParametersView)
+    parameters: CubeParametersView = field(
+        init=False, repr=False, default_factory=CubeParametersView
+    )
 
 
 class CubeQuery:

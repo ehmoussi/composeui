@@ -9,7 +9,7 @@ from typing import List, Optional
 
 @dataclass(eq=False)
 class QtSalomeView(SalomeView):
-    view: Optional[QWidget] = field(default=None)
+    view: Optional[QWidget] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

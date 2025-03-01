@@ -17,12 +17,12 @@ class ToolBar(View):
 @dataclass(eq=False)
 class CheckableToolBar(ToolBar):
     is_exclusive: bool = field(init=False, default=False)
-    toggled: BaseSignal = field(init=False, default=BaseSignal())
+    toggled: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
 
 @dataclass(eq=False)
 class FileToolBar(ToolBar):
-    new: ActionView = field(init=False, default_factory=ActionView)
-    open_file: ActionView = field(init=False, default_factory=ActionView)
-    save: ActionView = field(init=False, default_factory=ActionView)
-    save_as: ActionView = field(init=False, default_factory=ActionView)
+    new: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    open_file: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    save: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    save_as: ActionView = field(init=False, repr=False, default_factory=ActionView)

@@ -15,12 +15,14 @@ if typing.TYPE_CHECKING:
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    points: ActionView = field(init=False, default_factory=ActionView)
+    points: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 PointsTableView: TypeAlias = SimpleTableView["Model"]
@@ -28,8 +30,12 @@ PointsTableView: TypeAlias = SimpleTableView["Model"]
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
-    points_view: PointsTableView = field(init=False, default_factory=PointsTableView)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
+    points_view: PointsTableView = field(
+        init=False, repr=False, default_factory=PointsTableView
+    )
 
 
 def initialize_navigation(view: NavigationToolBar, main_view: "ExampleMainView") -> None:

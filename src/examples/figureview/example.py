@@ -6,4 +6,4 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    batman: BatmanView = field(init=False)
+    batman: BatmanView = field(init=False, repr=False)

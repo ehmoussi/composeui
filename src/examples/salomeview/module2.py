@@ -15,20 +15,24 @@ if typing.TYPE_CHECKING:
 
 @dataclass(eq=False)
 class Module2NavigationToolBar(CheckableToolBar):
-    cube_table: ActionView = field(init=False, default_factory=ActionView)
+    cube_table: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class Module2MainToolBar(MainToolBar):
     navigation: Module2NavigationToolBar = field(
-        init=False, default_factory=Module2NavigationToolBar
+        init=False, repr=False, default_factory=Module2NavigationToolBar
     )
 
 
 @dataclass(eq=False)
 class Module2MainView(SalomeMainView):
-    toolbar: Module2MainToolBar = field(init=False, default_factory=Module2MainToolBar)
-    cube_table: TableView["CubeTableItems"] = field(init=False, default_factory=TableView)
+    toolbar: Module2MainToolBar = field(
+        init=False, repr=False, default_factory=Module2MainToolBar
+    )
+    cube_table: TableView["CubeTableItems"] = field(
+        init=False, repr=False, default_factory=TableView
+    )
 
 
 def initialize_navigation(view: Module2NavigationToolBar, main_view: Module2MainView) -> None:

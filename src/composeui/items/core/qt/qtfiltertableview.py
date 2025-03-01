@@ -15,7 +15,7 @@ from typing import Tuple
 class QtFilterTableView(QtView, FilterTableView):
     r"""View of an action."""
 
-    view: QWidget = field(init=False)
+    view: QWidget = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.view = QWidget()

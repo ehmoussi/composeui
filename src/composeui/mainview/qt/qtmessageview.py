@@ -13,7 +13,7 @@ from typing import Optional, Union
 class QtMessageView(QtView, MessageView):
     r"""Display a message in a modal view."""
 
-    view: None = field(init=False, default=None)
+    view: None = field(init=False, repr=False, default=None)
     _parent: QWidget
     _type: Optional[MessageViewType] = field(init=False, repr=False, default=None)
     _buttons: Optional[Union[QMessageBox.StandardButtons, QMessageBox.StandardButton]] = field(

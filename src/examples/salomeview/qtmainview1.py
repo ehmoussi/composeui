@@ -27,7 +27,7 @@ class QtCubeDefinitionView(QtFormView[CubeDefinitionItems], CubeDefinitionView):
 
 @dataclass(eq=False)
 class QtLeftDockView(QtDockView, LeftDockView):
-    cube_definition: QtCubeDefinitionView = field(init=False)
+    cube_definition: QtCubeDefinitionView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -37,9 +37,9 @@ class QtLeftDockView(QtDockView, LeftDockView):
 
 @dataclass(eq=False)
 class QtModule1MainView(QtSalomeMainView, Module1MainView):
-    menu: QtExampleMainMenu = field(init=False)
-    left_dock: QtLeftDockView = field(init=False)
-    toolbar: QtModule1ToolBar = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    left_dock: QtLeftDockView = field(init=False, repr=False)
+    toolbar: QtModule1ToolBar = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

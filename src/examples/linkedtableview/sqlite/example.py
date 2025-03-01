@@ -10,19 +10,23 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    lines: ActionView = field(init=False, default_factory=ActionView)
+    lines: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
     lines: LinkedTableView[LinesItems, PointsItems] = field(
-        init=False, default_factory=LinkedTableView[LinesItems, PointsItems]
+        init=False, repr=False, default_factory=LinkedTableView[LinesItems, PointsItems]
     )
     extension_study = ".example"
 

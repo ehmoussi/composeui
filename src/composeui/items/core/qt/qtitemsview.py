@@ -21,9 +21,9 @@ from typing import List, Set, Tuple
 class QtItemsView(QtView, ItemsView):
     r"""Items view."""
 
-    table_widget: ItemsWidget = field(init=False)
-    filter_view: QtFilterTableView = field(init=False)
-    pagination_view: QtPaginationView = field(init=False)
+    table_widget: ItemsWidget = field(init=False, repr=False)
+    filter_view: QtFilterTableView = field(init=False, repr=False)
+    pagination_view: QtPaginationView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -248,7 +248,7 @@ class QtItemsView(QtView, ItemsView):
 class QtItemsGroupView(QtItemsView, QtGroupView):
     r"""ItemsView inside a groupbox."""
 
-    view: QGroupBox = field(init=False)
+    view: QGroupBox = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.view = QGroupBox()

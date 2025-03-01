@@ -13,9 +13,9 @@ T = TypeVar("T", bound=AbstractTask)
 @dataclass(eq=False)
 class WorkerView(View, Generic[T]):
     tasks: Optional[Tasks[T]] = field(init=False, default=None)
-    progress: BaseSignal = field(init=False, default=BaseSignal())
-    finished: BaseSignal = field(init=False, default=BaseSignal())
-    canceled: BaseSignal = field(init=False, default=BaseSignal())
+    progress: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    finished: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    canceled: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
     def run(self) -> None:
         """Run the tasks using python threads."""

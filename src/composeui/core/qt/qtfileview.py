@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 class QtFileView(QtView, FileView):
     r"""Display a modal view to select files or directories."""
 
-    view: None = field(init=False, default=None)
+    view: None = field(init=False, default=None, repr=False)
     parent: QWidget
 
     def open_file(self) -> str:

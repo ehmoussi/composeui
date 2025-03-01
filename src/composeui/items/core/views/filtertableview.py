@@ -13,4 +13,4 @@ class FilterTableView(View):
     match_whole_word: bool = field(init=False, default=False)
     use_regex: bool = field(init=False, default=False)
     selected_column_indices: Tuple[int, ...] = field(init=False, default_factory=tuple)
-    filter_changed: BaseSignal = field(init=False, default=BaseSignal())
+    filter_changed: BaseSignal = field(init=False, repr=False, default=BaseSignal())

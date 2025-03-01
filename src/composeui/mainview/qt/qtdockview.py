@@ -12,7 +12,7 @@ from functools import reduce
 
 @dataclass(eq=False)
 class QtDockView(QtView, DockView):
-    view: QDockWidget = field(init=False, default_factory=QDockWidget)
+    view: QDockWidget = field(init=False, repr=False, default_factory=QDockWidget)
 
     def __post_init__(self) -> None:
         super().__post_init__()

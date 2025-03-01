@@ -21,19 +21,23 @@ PointsItems: TypeAlias = SimpleTableItems["Model"]
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    points: ActionView = field(init=False, default_factory=ActionView)
+    points: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
     points: LinkedTableFigureView[PointsItems] = field(
-        init=False, default_factory=LinkedTableFigureView
+        init=False, repr=False, default_factory=LinkedTableFigureView
     )
 
 

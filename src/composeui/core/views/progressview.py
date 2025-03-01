@@ -22,4 +22,4 @@ class ProgressView(Progress[T]):
     cancel_text: str = field(init=False, default="Cancel")
     button_text: str = field(init=False, default="")
     button_enabled: bool = field(init=False, default=False)
-    button_clicked: BaseSignal = field(init=False, default=BaseSignal())
+    button_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())

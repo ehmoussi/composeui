@@ -120,38 +120,38 @@ class VTKInfosView(GroupView):
 @dataclass(eq=False)
 class VTKConfigView(GroupBoxApplyFormView[VTKConfigFormItems]):
     file: NoLabelSelectFileView[VTKConfigFormItems] = field(
-        init=False, default_factory=NoLabelSelectFileView
+        init=False, repr=False, default_factory=NoLabelSelectFileView
     )
     scalar_field: LabelComboBoxView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelComboBoxView
+        init=False, repr=False, default_factory=LabelComboBoxView
     )
     edge: LabelRadioButtonGroupView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelRadioButtonGroupView
+        init=False, repr=False, default_factory=LabelRadioButtonGroupView
     )
     edge_width: LabelDoubleLineEditView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelDoubleLineEditView
+        init=False, repr=False, default_factory=LabelDoubleLineEditView
     )
     warp: LabelComboBoxView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelComboBoxView
+        init=False, repr=False, default_factory=LabelComboBoxView
     )
     warp_scale: LabelDoubleLineEditView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelDoubleLineEditView
+        init=False, repr=False, default_factory=LabelDoubleLineEditView
     )
     pick_type: LabelRadioButtonGroupView[VTKConfigFormItems] = field(
-        init=False, default_factory=LabelRadioButtonGroupView
+        init=False, repr=False, default_factory=LabelRadioButtonGroupView
     )
 
 
 @dataclass(eq=False)
 class VTKExampleView(View):
-    configuration: VTKConfigView = field(init=False, default_factory=VTKConfigView)
-    vtk_view: VTKView = field(init=False, default_factory=VTKView)
-    informations: VTKInfosView = field(init=False, default_factory=VTKInfosView)
+    configuration: VTKConfigView = field(init=False, repr=False, default_factory=VTKConfigView)
+    vtk_view: VTKView = field(init=False, repr=False, default_factory=VTKView)
+    informations: VTKInfosView = field(init=False, repr=False, default_factory=VTKInfosView)
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    vtk_example: VTKExampleView = field(init=False, default_factory=VTKExampleView)
+    vtk_example: VTKExampleView = field(init=False, repr=False, default_factory=VTKExampleView)
 
 
 def read_file(*, view: VTKConfigView, main_view: ExampleMainView, model: "Model") -> None:

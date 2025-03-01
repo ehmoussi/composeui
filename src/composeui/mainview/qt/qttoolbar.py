@@ -15,7 +15,7 @@ from typing import List, Type
 class QtToolBar(QtView, ToolBar):
     r"""Toolbar."""
 
-    view: QToolBar = field(init=False)
+    view: QToolBar = field(init=False, repr=False)
     _actions: List[QtActionView] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:

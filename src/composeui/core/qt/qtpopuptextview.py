@@ -15,14 +15,14 @@ from typing import Optional
 class QtPopupTextView(QtView, PopupTextView):
     r"""View used to confirm/reject a proposition in a long text format."""
 
-    view: QDialog = field(init=False)
+    view: QDialog = field(init=False, repr=False)
 
     parent: InitVar[QWidget]
 
-    text_view: QTextEdit = field(init=False, default_factory=QTextEdit)
-    confirm_button: QPushButton = field(init=False, default_factory=QPushButton)
+    text_view: QTextEdit = field(init=False, repr=False, default_factory=QTextEdit)
+    confirm_button: QPushButton = field(init=False, repr=False, default_factory=QPushButton)
     cancel_button: QPushButton = field(
-        init=False, default_factory=lambda: QPushButton("Cancel")
+        init=False, repr=False, default_factory=lambda: QPushButton("Cancel")
     )
 
     def __post_init__(self, parent: QWidget) -> None:

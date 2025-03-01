@@ -15,8 +15,8 @@ class QtTableView(QtItemsView, TableView[AnyTableItems]):
     r"""Table view."""
 
     double_clicked_is_check: InitVar[bool] = False
-    table_widget: TableWidget = field(init=False)
-    view: TableWidget = field(init=False)
+    table_widget: TableWidget = field(init=False, repr=False)
+    view: TableWidget = field(init=False, repr=False)
 
     def __post_init__(self, double_clicked_is_check: bool) -> None:
         self.table_widget = TableWidget(double_clicked_is_check)
@@ -51,7 +51,7 @@ class QtTableGroupView(QtItemsGroupView, TableGroupView[AnyTableItems]):
     r"""Table inside a groupbox."""
 
     double_clicked_is_check: InitVar[bool] = False
-    table_widget: TableWidget = field(init=False)
+    table_widget: TableWidget = field(init=False, repr=False)
 
     def __post_init__(self, double_clicked_is_check: bool) -> None:
         self.table_widget = TableWidget(double_clicked_is_check)

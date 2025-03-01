@@ -25,8 +25,6 @@ class FormViewApp(QtBaseApp[ExampleMainView, Model]):
         pipeform.initialize_pipe(
             self.main_view.pipe_view, self.main_view, self.model, is_visible=True
         )
-        pipeapplyform.initialize_apply_pipe(
-            self.main_view.apply_pipe_view, self.main_view, self.model
-        )
+        pipeapplyform.initialize_apply_pipe(self.main_view.apply_pipe_view, self.model)
 
     def connect_app(self) -> None: ...  # no connections

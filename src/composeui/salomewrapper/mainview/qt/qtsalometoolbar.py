@@ -20,7 +20,7 @@ class QtSalomeToolBar(QtView, ToolBar):
     module_name: str
     name: str
 
-    view: QToolBar = field(init=False)
+    view: QToolBar = field(init=False, repr=False)
 
     toolbar_id: int = field(init=False)
 

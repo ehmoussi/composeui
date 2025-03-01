@@ -13,8 +13,8 @@ class QtTreeView(QtItemsView, TreeView[AnyTreeItems]):
     r"""Tree view."""
 
     double_clicked_is_check: InitVar[bool] = False
-    table_widget: TreeWidget = field(init=False)
-    view: TreeWidget = field(init=False)
+    table_widget: TreeWidget = field(init=False, repr=False)
+    view: TreeWidget = field(init=False, repr=False)
 
     def __post_init__(self, double_clicked_is_check: bool) -> None:
         self.table_widget = TreeWidget(double_clicked_is_check)
@@ -51,7 +51,7 @@ class QtTreeGroupView(
     r"""Tree view in a group view."""
 
     double_clicked_is_check: InitVar[bool] = False
-    table_widget: TreeWidget = field(init=False)
+    table_widget: TreeWidget = field(init=False, repr=False)
 
     def __post_init__(self, double_clicked_is_check: bool) -> None:
         self.table_widget = TreeWidget(double_clicked_is_check)

@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtView3(QtView, View3):
-    view: QWidget = field(init=False, default_factory=QWidget)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
 
-    text_3_label: QLabel = field(init=False, default_factory=QLabel)
+    text_3_label: QLabel = field(init=False, repr=False, default_factory=QLabel)
 
     def __post_init__(self) -> None:
         super().__post_init__()

@@ -18,8 +18,8 @@ class QtExampleMainToolBar(QtMainToolBar, MainToolBar): ...
 
 @dataclass(eq=False)
 class ExampleMainView(QtMainView, MainView):
-    menu: QtExampleMainMenu = field(init=False)
-    toolbar: QtExampleMainToolBar = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    toolbar: QtExampleMainToolBar = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

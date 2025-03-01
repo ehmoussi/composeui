@@ -92,13 +92,13 @@ def update_task_status(
 @dataclass(eq=False)
 class TaskConfigForm(GroupBoxFormView["TaskConfigItems"]):
     min_duration: LabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
+        init=False, repr=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
     max_duration: LabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
+        init=False, repr=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
     percentage_failure: LabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
+        init=False, repr=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
 
 
@@ -106,8 +106,10 @@ class TaskConfigForm(GroupBoxFormView["TaskConfigItems"]):
 class TaskView(View):
     status_tasks: List[str] = field(init=False, default_factory=list)
 
-    config: TaskConfigForm = field(init=False, default_factory=TaskConfigForm)
-    progress: ProgressView["Task"] = field(init=False, default_factory=ProgressView["Task"])
+    config: TaskConfigForm = field(init=False, repr=False, default_factory=TaskConfigForm)
+    progress: ProgressView["Task"] = field(
+        init=False, repr=False, default_factory=ProgressView["Task"]
+    )
 
 
 def initialize_task(view: TaskView, main_view: "ExampleMainView", model: "Model") -> None:

@@ -16,7 +16,7 @@ from typing import Tuple, Type
 class QtMenu(QtView, Menu):
     r"""Menu."""
 
-    view: QMenu = field(init=False)
+    view: QMenu = field(init=False, repr=False)
     _actions: OrderedDict[str, QtActionView] = field(
         init=False, repr=False, default_factory=OrderedDict
     )

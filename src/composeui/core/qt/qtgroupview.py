@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 class QtGroupView(QtView, GroupView):
     """View with a groupbox."""
 
-    view: QGroupBox = field(init=False)
+    view: QGroupBox = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

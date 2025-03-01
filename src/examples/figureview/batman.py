@@ -42,7 +42,7 @@ _CURVES: List[Tuple[float, float, Callable[[float], float]]] = [
 @dataclass(eq=False)
 class BatmanView(View):
     message: str = field(init=False, default="")
-    figure: FigureView = field(init=False)
+    figure: FigureView = field(init=False, repr=False)
 
 
 def connect_batman(view: BatmanView) -> None:

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 class QtActionView(QtView, ActionView):
     r"""View of an action."""
 
-    view: QAction = field(init=False)
+    view: QAction = field(init=False, repr=False)
     _icon_filepath: str = field(init=False, repr=False)
 
     def __post_init__(self) -> None:

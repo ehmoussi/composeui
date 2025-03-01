@@ -9,18 +9,22 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    points: ActionView = field(init=False, default_factory=ActionView)
+    points: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
-    points_view: IPointsView = field(init=False, default_factory=IPointsView)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
+    points_view: IPointsView = field(init=False, repr=False, default_factory=IPointsView)
 
 
 def initialize_navigation(view: NavigationToolBar, main_view: "ExampleMainView") -> None:

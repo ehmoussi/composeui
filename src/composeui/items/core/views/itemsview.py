@@ -47,26 +47,30 @@ class ItemsView(PendingView):
     )
     export_extensions: FormatExtension = field(init=False, default=FormatExtension.ALL)
     # signals
-    clicked: BaseSignal = field(init=False, default=BaseSignal())
-    double_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    item_edited: BaseSignal = field(init=False, default=BaseSignal())
-    item_toggled: BaseSignal = field(init=False, default=BaseSignal())
-    selection_changed: BaseSignal = field(init=False, default=BaseSignal())
-    context_menu_requested: BaseSignal = field(init=False, default=BaseSignal())
-    shortcut_clear: BaseSignal = field(init=False, default=BaseSignal())
-    shortcut_add: BaseSignal = field(init=False, default=BaseSignal())
-    shortcut_delete: BaseSignal = field(init=False, default=BaseSignal())
-    shortcut_copy: BaseSignal = field(init=False, default=BaseSignal())
-    shortcut_paste: BaseSignal = field(init=False, default=BaseSignal())
-    check_all: BaseSignal = field(init=False, default=BaseSignal())
-    filter_changed: BaseSignal = field(init=False, default=BaseSignal())
-    import_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    export_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    add_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    remove_clicked: BaseSignal = field(init=False, default=BaseSignal())
+    clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    double_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    item_edited: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    item_toggled: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    selection_changed: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    context_menu_requested: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    shortcut_clear: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    shortcut_add: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    shortcut_delete: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    shortcut_copy: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    shortcut_paste: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    check_all: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    filter_changed: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    import_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    export_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    add_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    remove_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
     # views
-    filter_view: FilterTableView = field(init=False, default_factory=FilterTableView)
-    pagination_view: PaginationView = field(init=False, default_factory=PaginationView)
+    filter_view: FilterTableView = field(
+        init=False, repr=False, default_factory=FilterTableView
+    )
+    pagination_view: PaginationView = field(
+        init=False, repr=False, default_factory=PaginationView
+    )
 
     @property
     def context_menu_selection(self) -> Tuple[Tuple[int, ...], int]:
