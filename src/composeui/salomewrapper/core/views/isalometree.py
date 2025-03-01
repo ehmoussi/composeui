@@ -1,12 +1,12 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from typing import List
 
 
 @dataclass(eq=False)
-class ISalomeTree(IView):
+class SalomeTree(View):
     current_selections: List[str] = field(init=False, default_factory=list)
     selection_changed: BaseSignal = field(init=False, default=BaseSignal())
     data_changed: BaseSignal = field(init=False, default=BaseSignal())

@@ -1,7 +1,7 @@
 from composeui.core.tasks.abstracttask import TaskStatus
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.imenu import IFileMenu
-from composeui.mainview.interfaces.itoolbar import IFileToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.imenu import FileMenu
+from composeui.mainview.views.itoolbar import FileToolBar
 from composeui.model.basemodel import BaseModel
 from examples.mainview.app import MainViewApp
 
@@ -50,7 +50,7 @@ def test_save_before_exit(app: MainViewApp, tmp_path: Path) -> None:
 @pytest.fixture()
 def app_menu_toolbar_view(
     app: MainViewApp, is_menu: bool = True
-) -> Tuple[IMainView, Union[IFileMenu, IFileToolBar], BaseModel]:
+) -> Tuple[MainView, Union[FileMenu, FileToolBar], BaseModel]:
     """Fixture to test the file menu and toolbar with the same tests."""
     if is_menu:
         return (app.main_view, app.main_view.menu.file, app.model)
@@ -58,7 +58,7 @@ def app_menu_toolbar_view(
 
 
 @pytest.mark.parametrize("app_menu_toolbar_view", [True, False], indirect=True)
-def test_file_menu_new(app_menu_toolbar_view: Tuple[IMainView, IFileMenu, BaseModel]) -> None:
+def test_file_menu_new(app_menu_toolbar_view: Tuple[MainView, FileMenu, BaseModel]) -> None:
     main_view, view, model = app_menu_toolbar_view
     model.filepath = Path("test.example")
     # confirm that we want to create a new study
@@ -70,7 +70,7 @@ def test_file_menu_new(app_menu_toolbar_view: Tuple[IMainView, IFileMenu, BaseMo
 
 @pytest.mark.parametrize("app_menu_toolbar_view", [True, False], indirect=True)
 def test_file_menu_open(
-    app_menu_toolbar_view: Tuple[IMainView, IFileMenu, BaseModel],
+    app_menu_toolbar_view: Tuple[MainView, FileMenu, BaseModel],
     tmp_path: Path,
 ) -> None:
     main_view, view, model = app_menu_toolbar_view
@@ -95,7 +95,7 @@ def test_file_menu_open(
 
 @pytest.mark.parametrize("app_menu_toolbar_view", [True, False], indirect=True)
 def test_file_menu_save(
-    app_menu_toolbar_view: Tuple[IMainView, IFileMenu, BaseModel],
+    app_menu_toolbar_view: Tuple[MainView, FileMenu, BaseModel],
     tmp_path: Path,
 ) -> None:
     main_view, view, model = app_menu_toolbar_view
@@ -117,7 +117,7 @@ def test_file_menu_save(
 
 @pytest.mark.parametrize("app_menu_toolbar_view", [True, False], indirect=True)
 def test_file_menu_save_as(
-    app_menu_toolbar_view: Tuple[IMainView, IFileMenu, BaseModel],
+    app_menu_toolbar_view: Tuple[MainView, FileMenu, BaseModel],
     tmp_path: Path,
 ) -> None:
     main_view, view, model = app_menu_toolbar_view

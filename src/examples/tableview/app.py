@@ -1,7 +1,7 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.sqlitemodel import SqliteModel
-from examples.tableview.example import IExampleMainView, initialize_navigation
+from examples.tableview.example import ExampleMainView, initialize_navigation
 from examples.tableview.points import PointsQuery, initialize_points
 
 from pathlib import Path
@@ -16,8 +16,8 @@ class Model(SqliteModel):
         self.points_query = PointsQuery(self._data)
 
 
-class TableViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class TableViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(Model(), main_view)
 
     def initialize_app(self) -> None:

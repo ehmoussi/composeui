@@ -1,4 +1,4 @@
-from examples.taskview.mashumaro.app import IExampleMainView, MashumaroTaskViewApp
+from examples.taskview.mashumaro.app import ExampleMainView, MashumaroTaskViewApp
 
 import pytest
 
@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> MashumaroTaskViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = MashumaroTaskViewApp(main_view)
     app.run()
     return app

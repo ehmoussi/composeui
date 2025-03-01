@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyTreeItems
-from composeui.core.views.iview import IGroupView
-from composeui.items.core.views.iitemsview import IItemsView
+from composeui.core.views.iview import GroupView
+from composeui.items.core.views.iitemsview import ItemsView
 
 import enum
 from dataclasses import dataclass, field
@@ -20,11 +20,11 @@ class ExportTreeOptions(enum.Flag):
 
 
 @dataclass(eq=False)
-class ITreeView(IItemsView, Generic[AnyTreeItems]):
+class TreeView(ItemsView, Generic[AnyTreeItems]):
     items: Optional[AnyTreeItems] = field(init=False, default=None)
     is_expansion_animated: bool = field(init=False, default=False)
     export_options: ExportTreeOptions = field(init=False, default=ExportTreeOptions.EXPORT_ALL)
 
 
 @dataclass(eq=False)
-class ITreeGroupView(ITreeView[AnyTreeItems], IGroupView): ...
+class TreeGroupView(TreeView[AnyTreeItems], GroupView): ...

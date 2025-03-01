@@ -14,7 +14,7 @@ from composeui.commontypes import AnyModel
 from composeui.core import tools
 from composeui.core.basesignal import SIGNAL_LOGGER
 from composeui.mainview import toolbar
-from composeui.salomewrapper.mainview.isalomemainview import ISalomeMainView
+from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
 from composeui.store.salomehdfstore import SalomeHDFStore
 
 import argparse
@@ -29,7 +29,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, TypeVar
 
-V = TypeVar("V", bound=ISalomeMainView)
+V = TypeVar("V", bound=SalomeMainView)
 
 
 class SalomeModuleApp(EventDrivenAppMixin[V, AnyModel]):

@@ -1,5 +1,5 @@
 from examples.asyncview.app import AsyncViewApp
-from examples.asyncview.example import IExampleMainView
+from examples.asyncview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> AsyncViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = AsyncViewApp(main_view)
     app.run()
     return app

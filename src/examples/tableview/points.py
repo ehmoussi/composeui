@@ -1,6 +1,6 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.itableview import TableView
 from composeui.store.sqlitestore import SqliteStore
 
 from typing_extensions import TypeAlias
@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from examples.tableview.app import Model
-    from examples.tableview.example import IExampleMainView
+    from examples.tableview.example import ExampleMainView
 
-IPointsView: TypeAlias = ITableView["PointsItems"]
+IPointsView: TypeAlias = TableView["PointsItems"]
 
 
 class PointsQuery:
@@ -257,9 +257,7 @@ class PointsItems(AbstractTableItems["Model"]):
         return super().get_delegate_props(row, column)
 
 
-def initialize_points(
-    view: IPointsView, main_view: "IExampleMainView", model: "Model"
-) -> None:
+def initialize_points(view: IPointsView, main_view: "ExampleMainView", model: "Model") -> None:
     view.is_visible = True
     view.has_import = True
     view.has_export = True

@@ -3,7 +3,7 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.mashumaromodel import MashumaroModel
-from examples.asyncview.example import IExampleMainView, initialize_navigation
+from examples.asyncview.example import ExampleMainView, initialize_navigation
 from examples.asyncview.filereader import connect_file_reader, initialize_file_reader
 
 from mashumaro.mixins.json import DataClassJSONMixin
@@ -23,8 +23,8 @@ class FileReaderConfig(DataClassJSONMixin):
 Model: TypeAlias = MashumaroModel[FileReaderConfig]
 
 
-class AsyncViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class AsyncViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(
             MashumaroModel("example", get_version("composeui"), FileReaderConfig()),
             main_view,

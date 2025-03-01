@@ -1,6 +1,6 @@
 from composeui.core.tasks.abstracttask import TaskStatus
-from examples.taskview.mashumaro.app import IExampleMainView, MashumaroTaskViewApp, Model
-from examples.taskview.mashumaro.task import ITaskView
+from examples.taskview.mashumaro.app import ExampleMainView, MashumaroTaskViewApp, Model
+from examples.taskview.mashumaro.task import TaskView
 
 import pytest
 
@@ -11,11 +11,11 @@ from typing import Tuple
 @pytest.fixture()
 def app_task(
     app: MashumaroTaskViewApp,
-) -> Tuple[ITaskView, IExampleMainView, Model]:
+) -> Tuple[TaskView, ExampleMainView, Model]:
     return (app.main_view.task, app.main_view, app.model)
 
 
-def test_initialize(app_task: Tuple[ITaskView, IExampleMainView, Model]) -> None:
+def test_initialize(app_task: Tuple[TaskView, ExampleMainView, Model]) -> None:
     view, _, _ = app_task
     assert view.progress.is_percentage_visible is False
     assert view.progress.minimum == 0
@@ -30,7 +30,7 @@ def test_initialize(app_task: Tuple[ITaskView, IExampleMainView, Model]) -> None
     assert len(view.progress.tasks) == 25
 
 
-def test_run(app_task: Tuple[ITaskView, IExampleMainView, Model]) -> None:
+def test_run(app_task: Tuple[TaskView, ExampleMainView, Model]) -> None:
     view, _, model = app_task
     assert view.progress.tasks is not None
     view.config.min_duration.field_view.value = 0
@@ -61,7 +61,7 @@ def test_run(app_task: Tuple[ITaskView, IExampleMainView, Model]) -> None:
 
 
 def test_open_save_study(
-    app_task: Tuple[ITaskView, IExampleMainView, Model], tmp_path: Path
+    app_task: Tuple[TaskView, ExampleMainView, Model], tmp_path: Path
 ) -> None:
     view, main_view, model = app_task
     # set up
@@ -93,7 +93,7 @@ def test_open_save_study(
     assert view.config.percentage_failure.field_view.value == 50
 
 
-def test_new(app_task: Tuple[ITaskView, IExampleMainView, Model]) -> None:
+def test_new(app_task: Tuple[TaskView, ExampleMainView, Model]) -> None:
     """Test the new file menu action."""
     view, main_view, model = app_task
     # initial state

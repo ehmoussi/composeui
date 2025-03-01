@@ -1,24 +1,24 @@
 r"""Main view."""
 
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.salomewrapper.core.views.isalometree import ISalomeTree
-from composeui.salomewrapper.core.views.isalomeview import ISalomeView
-from composeui.salomewrapper.core.views.isalomeviews import ISalomeViews
+from composeui.mainview.views.imainview import MainView
+from composeui.salomewrapper.core.views.isalometree import SalomeTree
+from composeui.salomewrapper.core.views.isalomeview import SalomeView
+from composeui.salomewrapper.core.views.isalomeviews import SalomeViews
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ISalomeMainView(IMainView):
+class SalomeMainView(MainView):
     module_name: str
-    salome_tree: ISalomeTree = field(init=False, default_factory=ISalomeTree)
-    salome_views: ISalomeViews = field(init=False)
-    central_view: ISalomeView = field(init=False)
+    salome_tree: SalomeTree = field(init=False, default_factory=SalomeTree)
+    salome_views: SalomeViews = field(init=False)
+    central_view: SalomeView = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         self.create_central_views()
 
     def create_central_views(self) -> None:
-        self.central_view = ISalomeView(self.module_name, f"central_view_{self.module_name}")
-        self.salome_views = ISalomeViews(self.module_name)
+        self.central_view = SalomeView(self.module_name, f"central_view_{self.module_name}")
+        self.salome_views = SalomeViews(self.module_name)

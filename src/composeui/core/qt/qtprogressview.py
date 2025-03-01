@@ -2,7 +2,7 @@ r"""Computation cases runner view."""
 
 from composeui.core.qt.qtworkerview import QtWorkerView
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.core.views.iprogressview import IProgressView
+from composeui.core.views.iprogressview import ProgressView
 
 from qtpy.QtWidgets import QHBoxLayout, QProgressBar, QPushButton, QWidget
 
@@ -13,7 +13,7 @@ T = TypeVar("T", bound=AbstractTask)
 
 
 @dataclass(eq=False)
-class QtProgressView(QtWorkerView[T], IProgressView[T]):
+class QtProgressView(QtWorkerView[T], ProgressView[T]):
     r"""View of a progress bar and run button to execute a task in background."""
 
     view: QWidget = field(init=False, default_factory=QWidget)

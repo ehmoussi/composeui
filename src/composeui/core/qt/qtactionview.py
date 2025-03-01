@@ -1,7 +1,7 @@
 r"""View of an action."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iactionview import IActionView
+from composeui.core.views.iactionview import ActionView
 
 from qtpy.QtGui import QIcon, QKeySequence
 from qtpy.QtWidgets import QAction
@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtActionView(QtView, IActionView):
+class QtActionView(QtView, ActionView):
     r"""View of an action."""
 
     view: QAction = field(init=False)

@@ -14,12 +14,12 @@ Contains the table and the tree components and its derivatives.
 from composeui.items.core import itemsslots
 from composeui.items.core.connect import connect_pagination
 from composeui.items.table import table
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.itableview import TableView
 
 from typing import Any
 
 
-def connect_table(view: ITableView[Any]) -> bool:
+def connect_table(view: TableView[Any]) -> bool:
     r"""Connect the slots for the table view."""
     view.shortcut_add = [table.add_clicked]
     view.shortcut_delete = [table.remove_clicked]

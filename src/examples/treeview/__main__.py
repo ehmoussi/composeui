@@ -1,12 +1,12 @@
 """Main of the TreeView example."""
 
 from examples.treeview.app import TreeViewApp
-from examples.treeview.qtexample import ExampleMainView
+from examples.treeview.qtexample import QtExampleMainView
 
 
 def main() -> None:
     """Launch the example."""
-    app = TreeViewApp(main_view=ExampleMainView())
+    app = TreeViewApp(main_view=QtExampleMainView())
     app.run()
 
 

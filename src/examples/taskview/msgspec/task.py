@@ -1,10 +1,10 @@
 from composeui import form
 from composeui.core.tasks.abstracttask import AbstractTask
 from composeui.core.tasks.tasks import Tasks
-from composeui.core.views.iprogressview import IProgressView
-from composeui.core.views.iview import IView
+from composeui.core.views.iprogressview import ProgressView
+from composeui.core.views.iview import View
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import IGroupBoxFormView, ILabelSpinBoxView
+from composeui.form.iformview import GroupBoxFormView, LabelSpinBoxView
 
 import random
 import time
@@ -13,28 +13,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 if TYPE_CHECKING:
-    from examples.taskview.msgspec.app import IExampleMainView, Model
+    from examples.taskview.msgspec.app import ExampleMainView, Model
 
 
 @dataclass(eq=False)
-class ITaskConfigForm(IGroupBoxFormView["TaskConfigItems"]):
-    min_duration: ILabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=ILabelSpinBoxView["TaskConfigItems"]
+class TaskConfigForm(GroupBoxFormView["TaskConfigItems"]):
+    min_duration: LabelSpinBoxView["TaskConfigItems"] = field(
+        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
-    max_duration: ILabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=ILabelSpinBoxView["TaskConfigItems"]
+    max_duration: LabelSpinBoxView["TaskConfigItems"] = field(
+        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
-    percentage_failure: ILabelSpinBoxView["TaskConfigItems"] = field(
-        init=False, default_factory=ILabelSpinBoxView["TaskConfigItems"]
+    percentage_failure: LabelSpinBoxView["TaskConfigItems"] = field(
+        init=False, default_factory=LabelSpinBoxView["TaskConfigItems"]
     )
 
 
 @dataclass(eq=False)
-class ITaskView(IView):
+class TaskView(View):
     status_tasks: List[str] = field(init=False, default_factory=list)
 
-    config: ITaskConfigForm = field(init=False, default_factory=ITaskConfigForm)
-    progress: IProgressView["Task"] = field(init=False, default_factory=IProgressView["Task"])
+    config: TaskConfigForm = field(init=False, default_factory=TaskConfigForm)
+    progress: ProgressView["Task"] = field(init=False, default_factory=ProgressView["Task"])
 
 
 class Task(AbstractTask):
@@ -61,8 +61,8 @@ class Task(AbstractTask):
         return True
 
 
-class TaskConfigItems(AbstractFormItems["Model", "ITaskConfigForm"]):
-    def __init__(self, model: "Model", view: "ITaskConfigForm") -> None:
+class TaskConfigItems(AbstractFormItems["Model", "TaskConfigForm"]):
+    def __init__(self, model: "Model", view: "TaskConfigForm") -> None:
         super().__init__(model, view)
         self._labels = {
             "min_duration": "Minimum Duration (s)",
@@ -95,7 +95,7 @@ class TaskConfigItems(AbstractFormItems["Model", "ITaskConfigForm"]):
         return super().set_value(field, value, parent_fields)
 
 
-def update_task_status(*, view: IProgressView["Task"], parent_view: "ITaskView") -> None:
+def update_task_status(*, view: ProgressView["Task"], parent_view: "TaskView") -> None:
     # If the tasks is not defined the app will crash
     if view.tasks is None:
         raise ValueError("The tasks are not defined.")
@@ -108,7 +108,7 @@ def update_task_status(*, view: IProgressView["Task"], parent_view: "ITaskView")
         ]
 
 
-def initialize_task(view: ITaskView, main_view: "IExampleMainView", model: "Model") -> None:
+def initialize_task(view: TaskView, main_view: "ExampleMainView", model: "Model") -> None:
     view.config.title = "Configuration"
     form.initialize_form_view(view.config, TaskConfigItems(model, view.config))
     view.status_tasks = [""] * 25
@@ -121,7 +121,7 @@ def initialize_task(view: ITaskView, main_view: "IExampleMainView", model: "Mode
     )
 
 
-def connect_task(view: ITaskView) -> None:
+def connect_task(view: TaskView) -> None:
     view.progress.progress += [update_task_status]
     view.progress.finished += [update_task_status]
     view.progress.canceled += [update_task_status]

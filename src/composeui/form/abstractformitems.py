@@ -1,17 +1,17 @@
 from composeui.commontypes import AnyFormView, AnyModel
 from composeui.form.abstractcomboboxitems import AbstractComboboxItems
 from composeui.form.iformview import (
-    IButtonsGroupView,
-    ICheckBoxView,
-    IComboBoxView,
-    IDoubleLineEditView,
-    IFormView,
-    ILineEditView,
-    IRowView,
-    ISelectFileView,
-    ISpinBoxView,
-    ITextEditView,
-    IVector3DView,
+    ButtonsGroupView,
+    CheckBoxView,
+    ComboBoxView,
+    DoubleLineEditView,
+    FormView,
+    LineEditView,
+    RowView,
+    SelectFileView,
+    SpinBoxView,
+    TextEditView,
+    Vector3DView,
 )
 
 from typing_extensions import OrderedDict, Self
@@ -128,34 +128,34 @@ class AbstractFormItems(ABC, Generic[AnyModel, AnyFormView]):
     def update(
         self, field: str, parent_fields: Tuple[str, ...] = (), is_label: bool = False
     ) -> None:
-        row_view: Union[IFormView[Self], IRowView[Self]] = self._view
+        row_view: Union[FormView[Self], RowView[Self]] = self._view
         for parent_field in parent_fields:
             row_view = getattr(row_view, parent_field)
         row_view = getattr(row_view, field)
-        if isinstance(row_view, IRowView):
+        if isinstance(row_view, RowView):
             if is_label:
                 view = row_view.label_view
             else:
                 view = row_view.field_view
-            if isinstance(view, ICheckBoxView):
+            if isinstance(view, CheckBoxView):
                 is_checked = self.is_field_available(field, parent_fields)
                 if is_checked != view.is_checked:
                     view.is_checked = is_checked
             # only field_view
             if not is_label:
-                if isinstance(view, IDoubleLineEditView):
+                if isinstance(view, DoubleLineEditView):
                     value = self.get_value(field, parent_fields)
                     if value is None:
                         view.value = None
                     else:
                         view.value = float(value)
-                elif isinstance(view, (ILineEditView, ISelectFileView, ITextEditView)):
+                elif isinstance(view, (LineEditView, SelectFileView, TextEditView)):
                     value = self.get_value(field, parent_fields)
                     if value is None:
                         view.text = ""
                     else:
                         view.text = str(value)
-                elif isinstance(view, IVector3DView):
+                elif isinstance(view, Vector3DView):
                     value = self.get_value(field, parent_fields)
                     if value is None:
                         view.values = (None, None, None)
@@ -168,13 +168,13 @@ class AbstractFormItems(ABC, Generic[AnyModel, AnyFormView]):
                             "Expected None or a tuple of 3 float|None values"
                         )
                         raise ValueError(msg)
-                elif isinstance(view, ISpinBoxView):
+                elif isinstance(view, SpinBoxView):
                     value = self.get_value(field, parent_fields)
                     if value is None:
                         view.value = None
                     else:
                         view.value = int(value)
-                elif isinstance(view, IButtonsGroupView):
+                elif isinstance(view, ButtonsGroupView):
                     # update the proposed values if different
                     values = self.acceptable_displayed_values(field, parent_fields)
                     if values is not None:
@@ -186,7 +186,7 @@ class AbstractFormItems(ABC, Generic[AnyModel, AnyFormView]):
                     # update the current value
                     value = self.get_current_index(field, parent_fields)
                     view.current_index = value
-                elif isinstance(view, IComboBoxView):
+                elif isinstance(view, ComboBoxView):
                     current_index = self.get_current_index(field, parent_fields)
                     # update the proposed values if different
                     values = self.acceptable_values(field, parent_fields)

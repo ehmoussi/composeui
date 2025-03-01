@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from composeui.vtk.ivtkview import IVTKView, VTKPickType
+from composeui.vtk.ivtkview import VTKPickType, VTKView
 
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -44,7 +44,7 @@ class CameraConfiguration:
 
 
 @dataclass(eq=False)
-class QtVTKView(QtView, IVTKView):
+class QtVTKView(QtView, VTKView):
     view: QWidget = field(init=False)
 
     _toolbar: QWidget = field(init=False)

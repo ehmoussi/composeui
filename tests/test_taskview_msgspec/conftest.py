@@ -10,12 +10,12 @@ def pytest_ignore_collect(collection_path: Path) -> bool:
 
 
 if not sys.version_info < (3, 8):
-    from examples.taskview.msgspec.app import IExampleMainView, MsgspecTaskViewApp
+    from examples.taskview.msgspec.app import ExampleMainView, MsgspecTaskViewApp
 
     @pytest.fixture(scope="session")
     def global_app() -> MsgspecTaskViewApp:
         r"""Create model and view."""
-        main_view = IExampleMainView()
+        main_view = ExampleMainView()
         app = MsgspecTaskViewApp(main_view)
         app.run()
         return app

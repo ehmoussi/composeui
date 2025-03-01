@@ -1,6 +1,6 @@
-from composeui.items.tree.itreeview import ExportTreeOptions, ITreeView
+from composeui.items.tree.itreeview import ExportTreeOptions, TreeView
 from examples.treeview.app import Model, TreeViewApp
-from examples.treeview.example import IExampleMainView
+from examples.treeview.example import ExampleMainView
 from examples.treeview.lines import LinesItems
 
 import pytest
@@ -16,11 +16,11 @@ DATA_DIRPATH = Path("tests", "test_treeview", "data")
 @pytest.fixture()
 def app_lines(
     app: TreeViewApp,
-) -> Tuple[ITreeView[LinesItems], IExampleMainView, Model]:
+) -> Tuple[TreeView[LinesItems], ExampleMainView, Model]:
     return (app.main_view.lines_view, app.main_view, app.model)
 
 
-def test_add_remove(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model]) -> None:
+def test_add_remove(app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model]) -> None:
     view, _, model = app_lines
     assert view.items is not None
     view.add_clicked()
@@ -38,7 +38,7 @@ def test_add_remove(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Mo
     assert view.items.get_selected_positions() == [(0,)]
 
 
-def test_add_point(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model]) -> None:
+def test_add_point(app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model]) -> None:
     view, _, model = app_lines
     assert view.items is not None
     view.add_clicked()
@@ -63,7 +63,7 @@ def test_add_point(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Mod
     assert view.items.get_data(3, 0, (1,)) == "point 3"
 
 
-def test_import(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model]) -> None:
+def test_import(app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model]) -> None:
     view, main_view, _ = app_lines
     csv_filepath = Path(DATA_DIRPATH, "test_correct.csv")
     assert csv_filepath.exists() is True
@@ -89,7 +89,7 @@ def test_import(app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model]
 
 
 def test_import_without_cleaning(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_lines
     csv_filepath = Path(DATA_DIRPATH, "test_correct.csv")
@@ -120,7 +120,7 @@ def test_import_without_cleaning(
 
 
 def test_import_missing_column(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_lines
     csv_filepath = Path(DATA_DIRPATH, "test_missing_column.csv")
@@ -142,7 +142,7 @@ def test_import_missing_column(
 
 
 def test_export(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
     tmp_path: Path,
 ) -> None:
     view, main_view, _ = app_lines
@@ -169,7 +169,7 @@ def test_export(
     [(".xlsx", True), (".xlsx", False), (".xls", True), (".xls", False), (".json", False)],
 )
 def test_import_export_excel_json(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
     tmp_path: Path,
     extension: str,
     use_parent_sheet_names: bool,
@@ -217,7 +217,7 @@ def test_import_export_excel_json(
 
 @pytest.mark.parametrize("extension", [".md", ".html"])
 def test_export_markdown_html(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
     tmp_path: Path,
     extension: str,
 ) -> None:
@@ -241,7 +241,7 @@ def test_export_markdown_html(
 
 
 def test_copy_paste_with_failed_insertion(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, main_view, model = app_lines
@@ -261,7 +261,7 @@ def test_copy_paste_with_failed_insertion(
 
 
 def test_copy_paste_with_failed_insertion2(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, main_view, model = app_lines
@@ -285,8 +285,8 @@ def test_copy_paste_with_failed_insertion2(
 
 @pytest.fixture()
 def app_lines_with_data(
-    app_lines: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
-) -> Tuple[ITreeView[LinesItems], IExampleMainView, Model]:
+    app_lines: Tuple[TreeView[LinesItems], ExampleMainView, Model],
+) -> Tuple[TreeView[LinesItems], ExampleMainView, Model]:
     """Add data to the app."""
     view, main_view, model = app_lines
     model.lines_query.insert_line(0, "line 1")
@@ -303,7 +303,7 @@ def app_lines_with_data(
 
 
 def test_copy_from_one_parent_to_another(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -342,7 +342,7 @@ def test_copy_from_one_parent_to_another(
 
 
 def test_copy_paste_with_insertion(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -383,7 +383,7 @@ def test_copy_paste_with_insertion(
 
 
 def test_copy_one_item_paste_one_item(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -408,7 +408,7 @@ def test_copy_one_item_paste_one_item(
 
 
 def test_copy_one_row_paste_one_row(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -433,7 +433,7 @@ def test_copy_one_row_paste_one_row(
 
 
 def test_copy_one_row_paste_multiple_rows(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -458,7 +458,7 @@ def test_copy_one_row_paste_multiple_rows(
 
 
 def test_copy_one_row_paste_unstructured_selection(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -483,7 +483,7 @@ def test_copy_one_row_paste_unstructured_selection(
 
 
 def test_copy_one_row_paste_unstructured_selection_same_shape(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -508,7 +508,7 @@ def test_copy_one_row_paste_unstructured_selection_same_shape(
 
 
 def test_copy_block_to_one_item_selected(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -540,7 +540,7 @@ def test_copy_block_to_one_item_selected(
 
 
 def test_copy_unstructured_data_to_structured_selection(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data
@@ -570,7 +570,7 @@ def test_copy_unstructured_data_to_structured_selection(
 
 
 def test_copy_unstructured_data_to_unstructured_selection_with_same_shape(
-    app_lines_with_data: Tuple[ITreeView[LinesItems], IExampleMainView, Model],
+    app_lines_with_data: Tuple[TreeView[LinesItems], ExampleMainView, Model],
 ) -> None:
     # set up
     view, _, model = app_lines_with_data

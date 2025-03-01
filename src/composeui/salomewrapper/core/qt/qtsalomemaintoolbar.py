@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IToolBar
+from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
 from composeui.salomewrapper.mainview.qt.qtsalometoolbar import (
     CheckableSalomeToolBar,
     QtSalomeToolBar,
@@ -25,14 +25,14 @@ class QtSalomeMainToolBar(QtView):
         for toolbar_field in fields(self):
             itoolbar = getattr(self, toolbar_field.name)
             # ICheckableToolBar must be first because it is also an IToolBar.
-            if isinstance(itoolbar, ICheckableToolBar):
+            if isinstance(itoolbar, CheckableToolBar):
                 checkable_toolbar = CheckableSalomeToolBar.from_icheckable_toolbar(
                     self.module_name, toolbar_field.name, itoolbar
                 )
                 setattr(self, toolbar_field.name, checkable_toolbar)
                 # self.main_view.addToolBar(checkable_toolbar.view)
                 # self.main_view.addToolBarBreak()
-            elif isinstance(itoolbar, IToolBar):
+            elif isinstance(itoolbar, ToolBar):
                 toolbar = QtSalomeToolBar.from_itoolbar(
                     self.module_name, toolbar_field.name, itoolbar
                 )

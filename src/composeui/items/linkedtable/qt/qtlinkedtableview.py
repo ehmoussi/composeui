@@ -2,8 +2,8 @@ r"""Select/Modify view using a combination of two table."""
 
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.core.qt.qtview import QtView
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
-from composeui.items.table.qt.qttableview import TableGroupView
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.table.qt.qttableview import QtTableGroupView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
@@ -14,21 +14,21 @@ from typing import Tuple, Union
 
 
 @dataclass(eq=False)
-class QtLinkedTableView(QtView, ILinkedTableView[AnyMasterTableItems, AnyDetailTableItems]):
+class QtLinkedTableView(QtView, LinkedTableView[AnyMasterTableItems, AnyDetailTableItems]):
     r"""view using a combination of two tables.
 
     - The master table is used to select an item
-    - The detail table is displaying the datas according to the selection
+    - The detail table is displaying the details for the current selection of the selection
     of the master table.
 
     """
 
     view: Union[QWidget, QGroupBox] = field(init=False)
-    master_table: TableGroupView[AnyMasterTableItems] = field(
-        init=False, default_factory=TableGroupView[AnyMasterTableItems]
+    master_table: QtTableGroupView[AnyMasterTableItems] = field(
+        init=False, default_factory=QtTableGroupView[AnyMasterTableItems]
     )
-    detail_table: TableGroupView[AnyDetailTableItems] = field(
-        init=False, default_factory=TableGroupView[AnyDetailTableItems]
+    detail_table: QtTableGroupView[AnyDetailTableItems] = field(
+        init=False, default_factory=QtTableGroupView[AnyDetailTableItems]
     )
 
     is_horizontal: InitVar[bool] = True

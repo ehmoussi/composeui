@@ -1,7 +1,7 @@
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
 from composeui.items.tree.itreeview import ExportTreeOptions
 from examples.linkedtableview.sqlite.app import LinkedTableViewApp, Model
-from examples.linkedtableview.sqlite.example import IExampleMainView
+from examples.linkedtableview.sqlite.example import ExampleMainView
 from examples.linkedtableview.sqlite.lines import LinesItems, PointsItems
 
 import pytest
@@ -15,7 +15,7 @@ from unittest.mock import patch
 @pytest.fixture()
 def app_lines(
     app: LinkedTableViewApp,
-) -> Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model]:
+) -> Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model]:
     app.model.lines_query.add_line()
     app.model.lines_query.add_line()
     app.model.lines_query.add_point(1)
@@ -30,28 +30,28 @@ def app_lines(
 
 @pytest.fixture()
 def model(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> Model:
     return app_lines[2]
 
 
 @pytest.fixture()
 def main_view(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
-) -> IExampleMainView:
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
+) -> ExampleMainView:
     return app_lines[1]
 
 
 @pytest.fixture()
 def linked_table(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
-) -> ILinkedTableView[LinesItems, PointsItems]:
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
+) -> LinkedTableView[LinesItems, PointsItems]:
     return app_lines[0]
 
 
 @pytest.fixture()
 def lines_items(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> LinesItems:
     assert app_lines[0].master_table.items is not None
     return app_lines[0].master_table.items
@@ -59,14 +59,14 @@ def lines_items(
 
 @pytest.fixture()
 def points_items(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> PointsItems:
     assert app_lines[0].detail_table.items is not None
     return app_lines[0].detail_table.items
 
 
 def test_update_detail_table(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> None:
     linked_table, *_ = app_lines
     assert linked_table.master_table.items is not None
@@ -87,7 +87,7 @@ def test_update_detail_table(
 
 
 def test_remove_point(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> None:
     linked_table, *_ = app_lines
     assert linked_table.master_table.items is not None
@@ -105,7 +105,7 @@ def test_remove_point(
 
 
 def test_add_point(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> None:
     linked_table, *_ = app_lines
     assert linked_table.master_table.items is not None
@@ -126,9 +126,9 @@ def test_add_point(
 
 
 def test_import_empty_file(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     tmpdir: Path,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
     filepath = Path(tmpdir, "bad_file.csv")
@@ -140,9 +140,9 @@ def test_import_empty_file(
 
 
 def test_import_bad_file(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     tmpdir: Path,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
     filepath = Path(tmpdir, "bad_file.csv")
@@ -154,9 +154,9 @@ def test_import_bad_file(
 
 
 def test_bad_implementation_items_exported_column_indices_empty(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
     filepath = Path("tests/test_linkedtableview_sqlite/data/lines.csv")
@@ -172,9 +172,9 @@ def test_bad_implementation_items_exported_column_indices_empty(
 
 
 def test_bad_implementation_items_exported_column_indices_bad_index_negative(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
     filepath = Path("tests/test_linkedtableview_sqlite/data/lines.csv")
@@ -187,9 +187,9 @@ def test_bad_implementation_items_exported_column_indices_bad_index_negative(
 
 
 def test_bad_implementation_items_exported_column_indices_bad_index_too_big(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
     filepath = Path("tests/test_linkedtableview_sqlite/data/lines.csv")
@@ -202,10 +202,10 @@ def test_bad_implementation_items_exported_column_indices_bad_index_too_big(
 
 
 def test_import(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     # set up
     main_view.message_view.run = lambda: False  # type: ignore[method-assign]
@@ -231,10 +231,10 @@ def test_import(
 
 
 def test_import_and_remove_all(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     # set up
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
@@ -254,10 +254,10 @@ def test_import_and_remove_all(
 
 
 def test_import_and_remove_all_with_two_columns_for_master(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     # set up
     lines_items.get_exported_column_indices = lambda: [0, 1]  # type: ignore[method-assign]
@@ -279,10 +279,10 @@ def test_import_and_remove_all_with_two_columns_for_master(
 
 
 def test_import_and_remove_all_with_missing_detail_columns(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     # set up
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
@@ -303,10 +303,10 @@ def test_import_and_remove_all_with_missing_detail_columns(
 
 
 def test_import_and_remove_all_with_bad_data_detail_column(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
 ) -> None:
     # set up
     main_view.message_view.run = lambda: True  # type: ignore[method-assign]
@@ -327,8 +327,8 @@ def test_import_and_remove_all_with_bad_data_detail_column(
 
 
 def test_export(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
-    main_view: IExampleMainView,
+    linked_table: LinkedTableView[LinesItems, PointsItems],
+    main_view: ExampleMainView,
     tmpdir: Path,
 ) -> None:
     # set up: choose the filepath
@@ -351,9 +351,9 @@ def test_export(
 
 
 def test_export_empty_table(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
     tmpdir: Path,
 ) -> None:
     # set up:
@@ -372,8 +372,8 @@ def test_export_empty_table(
 
 
 def test_export_permission_error(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
-    main_view: IExampleMainView,
+    linked_table: LinkedTableView[LinesItems, PointsItems],
+    main_view: ExampleMainView,
     tmpdir: Path,
 ) -> None:
     # set up: choose the filepath
@@ -396,10 +396,10 @@ def test_export_permission_error(
     [(".xlsx", True), (".xlsx", False), (".xls", True), (".xls", False), (".json", False)],
 )
 def test_import_export_excel_json(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
+    linked_table: LinkedTableView[LinesItems, PointsItems],
     lines_items: LinesItems,
     points_items: PointsItems,
-    main_view: IExampleMainView,
+    main_view: ExampleMainView,
     tmp_path: Path,
     extension: str,
     use_parent_sheet_names: bool,
@@ -442,8 +442,8 @@ def test_import_export_excel_json(
 
 @pytest.mark.parametrize("extension", [".md", ".html"])
 def test_export_markdown_html(
-    linked_table: ILinkedTableView[LinesItems, PointsItems],
-    main_view: IExampleMainView,
+    linked_table: LinkedTableView[LinesItems, PointsItems],
+    main_view: ExampleMainView,
     tmp_path: Path,
     extension: str,
 ) -> None:

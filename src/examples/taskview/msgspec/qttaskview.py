@@ -1,7 +1,7 @@
 from composeui.core.qt.qtprogressview import QtProgressView
 from composeui.core.qt.qtview import QtView
 from composeui.form.qtformview import QtGroupBoxFormView
-from examples.taskview.msgspec.task import ITaskConfigForm, ITaskView, Task, TaskConfigItems
+from examples.taskview.msgspec.task import Task, TaskConfigForm, TaskConfigItems, TaskView
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QGridLayout, QLabel, QWidget
@@ -11,14 +11,14 @@ from typing import List
 
 
 @dataclass(eq=False)
-class TaskConfigForm(QtGroupBoxFormView[TaskConfigItems], ITaskConfigForm): ...
+class QtTaskConfigForm(QtGroupBoxFormView[TaskConfigItems], TaskConfigForm): ...
 
 
 @dataclass(eq=False)
-class TaskView(QtView, ITaskView):
+class QtTaskView(QtView, TaskView):
 
     view: QWidget = field(init=False, default_factory=QWidget)
-    config: TaskConfigForm = field(init=False, default_factory=TaskConfigForm)
+    config: QtTaskConfigForm = field(init=False, default_factory=QtTaskConfigForm)
     progress: QtProgressView[Task] = field(init=False, default_factory=QtProgressView[Task])
 
     labels: List[QLabel] = field(init=False, default_factory=list)

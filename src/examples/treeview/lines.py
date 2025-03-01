@@ -1,15 +1,15 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-from composeui.items.tree.itreeview import ExportTreeOptions, ITreeGroupView
+from composeui.items.tree.itreeview import ExportTreeOptions, TreeGroupView
 from composeui.store.sqlitestore import SqliteStore
 
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from examples.treeview.app import Model
-    from examples.treeview.example import IExampleMainView
+    from examples.treeview.example import ExampleMainView
 
-ILinesView = ITreeGroupView["LinesItems"]
+ILinesView = TreeGroupView["LinesItems"]
 
 
 class LinesQuery:
@@ -447,7 +447,7 @@ class LinesItems(AbstractTreeItems["Model"]):
 
 
 def initialize_lines(
-    view: ITreeGroupView[LinesItems], main_view: "IExampleMainView", model: "Model"
+    view: TreeGroupView[LinesItems], main_view: "ExampleMainView", model: "Model"
 ) -> None:
     view.is_visible = True
     view.title = "Lines"

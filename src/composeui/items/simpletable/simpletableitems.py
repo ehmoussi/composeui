@@ -11,7 +11,7 @@ import typing
 from typing import Any, Dict, List, Optional
 
 if typing.TYPE_CHECKING:
-    from composeui.items.table.itableview import ITableView
+    from composeui.items.table.itableview import TableView
 
 
 class _TableInfo(TypedDict):
@@ -26,7 +26,7 @@ class _TableInfo(TypedDict):
 class SimpleTableItems(AbstractTableItems[AnyModel]):
     def __init__(
         self,
-        view: "ITableView[Self]",
+        view: "TableView[Self]",
         model: AnyModel,
         store: SqliteStore,
         table_name: str,

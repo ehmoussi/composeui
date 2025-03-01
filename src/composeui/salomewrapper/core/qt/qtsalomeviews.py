@@ -1,14 +1,14 @@
 """Base views of Salome"""
 
 from composeui.core.qt.qtview import QtView
-from composeui.salomewrapper.core.views.isalomeviews import ISalomeViews
 from composeui.salomewrapper.core.qt.qtoccview import QtOCCView
+from composeui.salomewrapper.core.views.isalomeviews import SalomeViews
 
 from dataclasses import InitVar, dataclass, field
 
 
 @dataclass(eq=False)
-class QtSalomeViews(QtView, ISalomeViews):
+class QtSalomeViews(QtView, SalomeViews):
 
     main_id: InitVar[int]
     occ_view: QtOCCView = field(init=False)

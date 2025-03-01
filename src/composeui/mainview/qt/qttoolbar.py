@@ -2,8 +2,8 @@ r"""Toolbar View."""
 
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
 
 from qtpy.QtWidgets import QActionGroup, QToolBar
 
@@ -12,7 +12,7 @@ from typing import List, Type
 
 
 @dataclass(eq=False)
-class QtToolBar(QtView, IToolBar):
+class QtToolBar(QtView, ToolBar):
     r"""Toolbar."""
 
     view: QToolBar = field(init=False)
@@ -28,7 +28,7 @@ class QtToolBar(QtView, IToolBar):
     def _add_actions(self) -> None:
         r"""Add actions to toolbar."""
         for action_field in fields(self):
-            if action_field.type is IActionView:
+            if action_field.type is ActionView:
                 self.add_action(action_field.name)
 
     def add_action(self, name: str) -> None:
@@ -59,7 +59,7 @@ class QtToolBar(QtView, IToolBar):
         self.view.setMovable(is_movable)
 
     @classmethod
-    def from_itoolbar(cls, itoolbar: IToolBar) -> "QtToolBar":
+    def from_itoolbar(cls, itoolbar: ToolBar) -> "QtToolBar":
         """Create a ToolBar instance from an IToolBar."""
         itoolbar_type = type(itoolbar)
         cls_name = itoolbar_type.__name__
@@ -72,7 +72,7 @@ class QtToolBar(QtView, IToolBar):
 
 
 @dataclass(eq=False)
-class CheckableToolBar(QtToolBar, ICheckableToolBar):
+class QtCheckableToolBar(QtToolBar, CheckableToolBar):
     r"""Checkable Toolbar."""
 
     _actions_group: QActionGroup = field(init=False, repr=False)
@@ -102,13 +102,13 @@ class CheckableToolBar(QtToolBar, ICheckableToolBar):
         self._actions_group.setExclusive(is_exclusive)
 
     @classmethod
-    def from_icheckable_toolbar(cls, itoolbar: ICheckableToolBar) -> "CheckableToolBar":
+    def from_icheckable_toolbar(cls, itoolbar: CheckableToolBar) -> "QtCheckableToolBar":
         """Create a CheckableToolBar instance from an ICheckableToolBar."""
         itoolbar_type = type(itoolbar)
         cls_name = itoolbar_type.__name__
         if cls_name.startswith("I") and cls_name[1].isupper():
             cls_name = itoolbar_type.__name__[1:]
-        toolbar_type: Type[CheckableToolBar] = make_dataclass(
-            cls_name, (), bases=(CheckableToolBar, itoolbar_type), eq=False
+        toolbar_type: Type[QtCheckableToolBar] = make_dataclass(
+            cls_name, (), bases=(QtCheckableToolBar, itoolbar_type), eq=False
         )
         return toolbar_type()

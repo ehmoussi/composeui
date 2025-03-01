@@ -2,8 +2,8 @@ r"""Toolbar View."""
 
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.imenu import IMenu
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.imenu import Menu
 from composeui.mainview.qt.qtmenu import QtMenu
 
 from qtpy.QtWidgets import QAction, QMenu
@@ -15,7 +15,7 @@ from typing import Type
 
 
 @dataclass(eq=False)
-class QtSalomeMenu(QtView, IMenu):
+class QtSalomeMenu(QtView, Menu):
     r"""Menu."""
 
     name: str
@@ -53,12 +53,12 @@ class QtSalomeMenu(QtView, IMenu):
 
     def add_actions(self) -> None:
         for action_field in fields(self):
-            if action_field.type is IActionView:
+            if action_field.type is ActionView:
                 self.add_action(action_field.name)
 
     def add_sub_menus(self) -> None:
         for action_field in fields(self):
-            if action_field.type is IMenu:
+            if action_field.type is Menu:
                 # TODO: add an example with submenus
                 raise NotImplementedError("Submenus are not implemented yet")
 
@@ -73,7 +73,7 @@ class QtSalomeMenu(QtView, IMenu):
         self.view.menuAction().setText(value)
 
     @classmethod
-    def from_imenu(cls, name: str, index: int, imenu: IMenu) -> "QtSalomeMenu":
+    def from_imenu(cls, name: str, index: int, imenu: Menu) -> "QtSalomeMenu":
         """Create a Menu instance from an IMenu."""
         imenu_type = type(imenu)
         cls_name = imenu_type.__name__[1:]

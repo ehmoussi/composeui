@@ -5,12 +5,12 @@ from typing import Any, List, MutableMapping
 
 
 @dataclass(eq=False)
-class IView:
+class View:
     view_name: str = field(init=False)
     is_visible: bool = field(init=False, default=False)
     is_enabled: bool = field(init=False, default=False)
-    children: MutableMapping[str, "IView"] = field(init=False, default_factory=dict)
-    dependencies: List["IView"] = field(init=False, default_factory=list)
+    children: MutableMapping[str, "View"] = field(init=False, default_factory=dict)
+    dependencies: List["View"] = field(init=False, default_factory=list)
     block_signals: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
@@ -20,7 +20,7 @@ class IView:
         return
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if isinstance(value, IView):
+        if isinstance(value, View):
             value.view_name = name
             self.children[name] = value
         elif isinstance(value, BaseSignal) and (
@@ -31,7 +31,7 @@ class IView:
 
 
 @dataclass(eq=False)
-class IGroupView(IView):
+class GroupView(View):
     title: str = field(init=False, default="")
     is_checkable: bool = field(init=False, default=False)
     is_checked: bool = field(init=False, default=False)

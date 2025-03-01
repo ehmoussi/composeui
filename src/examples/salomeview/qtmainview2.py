@@ -1,9 +1,9 @@
 from composeui.items.table.qt.qttableview import QtTableView
-from composeui.mainview.interfaces.imainmenu import IMainMenu
+from composeui.mainview.views.imainmenu import MainMenu
 from composeui.salomewrapper.core.qt.qtsalomemaintoolbar import QtSalomeMainToolBar
 from composeui.salomewrapper.mainview.qt.qtsalomemainmenu import QtSalomeMainMenu
 from composeui.salomewrapper.mainview.qt.qtsalomemainview import QtSalomeMainView
-from examples.salomeview.module2 import IModule2MainToolBar, IModule2MainView
+from examples.salomeview.module2 import Module2MainToolBar, Module2MainView
 
 import typing
 from dataclasses import dataclass, field
@@ -13,15 +13,15 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class QtExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtSalomeMainMenu, MainMenu): ...
 
 
 @dataclass(eq=False)
-class QtModule2ToolBar(QtSalomeMainToolBar, IModule2MainToolBar): ...
+class QtModule2ToolBar(QtSalomeMainToolBar, Module2MainToolBar): ...
 
 
 @dataclass(eq=False)
-class QtModule2MainView(QtSalomeMainView, IModule2MainView):
+class QtModule2MainView(QtSalomeMainView, Module2MainView):
     menu: QtExampleMainMenu = field(init=False)
     toolbar: QtModule2ToolBar = field(init=False)
     cube_table: QtTableView["CubeTableItems"] = field(init=False)

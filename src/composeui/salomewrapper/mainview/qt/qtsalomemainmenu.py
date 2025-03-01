@@ -1,8 +1,8 @@
 r"""View of the menu."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.interfaces.imenu import IMenu
+from composeui.mainview.views.imainmenu import MainMenu
+from composeui.mainview.views.imenu import Menu
 from composeui.salomewrapper.mainview.qt.qtsalomemenu import QtSalomeMenu
 
 from typing_extensions import OrderedDict
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, fields
 
 
 @dataclass(eq=False)
-class QtSalomeMainMenu(QtView, IMainMenu):
+class QtSalomeMainMenu(QtView, MainMenu):
     r"""Salome main menu View."""
 
     menus: OrderedDict[str, QtSalomeMenu] = field(
@@ -28,7 +28,7 @@ class QtSalomeMainMenu(QtView, IMainMenu):
         index = 0
         for menu_field in fields(self):
             imenu = getattr(self, menu_field.name)
-            if isinstance(imenu, IMenu):
+            if isinstance(imenu, Menu):
                 name = menu_field.name
                 menu = QtSalomeMenu.from_imenu(name, index, imenu)
                 setattr(self, name, menu)

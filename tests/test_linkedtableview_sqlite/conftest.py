@@ -1,5 +1,5 @@
 from examples.linkedtableview.sqlite.app import LinkedTableViewApp
-from examples.linkedtableview.sqlite.example import IExampleMainView
+from examples.linkedtableview.sqlite.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> LinkedTableViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = LinkedTableViewApp(main_view)
     app.run()
     return app

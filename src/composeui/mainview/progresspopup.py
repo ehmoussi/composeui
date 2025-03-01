@@ -5,15 +5,15 @@ from composeui.core import tools
 from composeui.core.basesignal import Callback
 from composeui.core.tasks.abstracttask import AbstractTask, TaskStatus
 from composeui.core.tasks.tasks import Tasks
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.iprogresspopupview import IProgressPopupView
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.iprogresspopupview import ProgressPopupView
 
 from functools import partial
 from typing import Iterable, Optional
 
 
 def display_view(
-    main_view: IMainView,
+    main_view: MainView,
     tasks: Tasks[AbstractTask],
     progress_slots: Optional[Iterable[Callback]] = None,
     finished_slots: Optional[Iterable[Callback]] = None,
@@ -35,7 +35,7 @@ def display_view(
     main_view.progress_popup_view.run()
 
 
-def check(main_view: IMainView) -> None:
+def check(main_view: MainView) -> None:
     r"""Check if the save task has not failed."""
     tasks = main_view.progress_popup_view.tasks
     if tasks is not None:
@@ -45,7 +45,7 @@ def check(main_view: IMainView) -> None:
             tools.display_warning_message(main_view, tasks.join_warning_messages())
 
 
-def display_cancelling_text(view: IProgressPopupView) -> None:
+def display_cancelling_text(view: ProgressPopupView) -> None:
     r"""Display a cancelling text."""
     tasks = view.tasks
     if tasks is not None:

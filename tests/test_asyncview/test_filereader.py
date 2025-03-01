@@ -1,6 +1,6 @@
 from examples.asyncview.app import AsyncViewApp
-from examples.asyncview.example import IExampleMainView
-from examples.asyncview.filereader import IFileReaderView
+from examples.asyncview.example import ExampleMainView
+from examples.asyncview.filereader import FileReaderView
 
 import pytest
 
@@ -9,18 +9,18 @@ from pathlib import Path
 
 
 @pytest.fixture()
-def file_reader_view(app: AsyncViewApp) -> IFileReaderView:
+def file_reader_view(app: AsyncViewApp) -> FileReaderView:
     return app.main_view.file_reader
 
 
 @pytest.fixture()
-def main_view(app: AsyncViewApp) -> IExampleMainView:
+def main_view(app: AsyncViewApp) -> ExampleMainView:
     return app.main_view
 
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_read_write_file(
-    file_reader_view: IFileReaderView, main_view: IExampleMainView, tmpdir: Path
+    file_reader_view: FileReaderView, main_view: ExampleMainView, tmpdir: Path
 ) -> None:
     # set up read test
     # - file to read

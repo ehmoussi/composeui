@@ -1,8 +1,8 @@
 r"""View of the toolbar."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IToolBar
-from composeui.mainview.qt.qttoolbar import CheckableToolBar, QtToolBar
+from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
+from composeui.mainview.qt.qttoolbar import QtCheckableToolBar, QtToolBar
 
 from qtpy.QtWidgets import QMainWindow
 
@@ -26,12 +26,12 @@ class QtMainToolBar(QtView):
         for toolbar_field in fields(self):
             itoolbar = getattr(self, toolbar_field.name)
             # ICheckableToolBar must be first because it is also an IToolBar.
-            if isinstance(itoolbar, ICheckableToolBar):
-                checkable_toolbar = CheckableToolBar.from_icheckable_toolbar(itoolbar)
+            if isinstance(itoolbar, CheckableToolBar):
+                checkable_toolbar = QtCheckableToolBar.from_icheckable_toolbar(itoolbar)
                 setattr(self, toolbar_field.name, checkable_toolbar)
                 self.main_view.addToolBar(checkable_toolbar.view)
                 self.main_view.addToolBarBreak()
-            elif isinstance(itoolbar, IToolBar):
+            elif isinstance(itoolbar, ToolBar):
                 toolbar = QtToolBar.from_itoolbar(itoolbar)
                 setattr(self, toolbar_field.name, toolbar)
                 self.main_view.addToolBar(toolbar.view)

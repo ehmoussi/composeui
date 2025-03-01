@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from examples.multipleviews.component1.view1 import ILeftView1, IView1
+from examples.multipleviews.component1.view1 import LeftView1, View1
 
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtView1(QtView, IView1):
+class QtView1(QtView, View1):
     view: QWidget = field(init=False, default_factory=QWidget)
     text_1_label: QLabel = field(init=False, default_factory=QLabel)
 
@@ -33,7 +33,7 @@ class QtView1(QtView, IView1):
 
 
 @dataclass(eq=False)
-class LeftView1(QtView, ILeftView1):
+class QtLeftView1(QtView, LeftView1):
     view: QWidget = field(init=False, default_factory=QWidget)
 
     text_1_label: QLabel = field(init=False, default_factory=QLabel)

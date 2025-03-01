@@ -1,7 +1,7 @@
 from composeui.core.tasks.abstracttask import TaskStatus
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
 from examples.linkedtableview.sqlalchemy.app import LinkedTableViewApp, Model
-from examples.linkedtableview.sqlalchemy.example import IExampleMainView
+from examples.linkedtableview.sqlalchemy.example import ExampleMainView
 from examples.linkedtableview.sqlalchemy.lines import LinesItems, PointsItems
 
 import pytest
@@ -13,7 +13,7 @@ from typing import Tuple
 @pytest.fixture()
 def app_lines(
     app: LinkedTableViewApp,
-) -> Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model]:
+) -> Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model]:
     app.model.lines_query.add_line()
     app.model.lines_query.add_line()
     app.model.lines_query.add_point(1)
@@ -27,7 +27,7 @@ def app_lines(
 
 
 def test_update_detail_table(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> None:
     linked_table, *_ = app_lines
     assert linked_table.master_table.items is not None
@@ -48,7 +48,7 @@ def test_update_detail_table(
 
 
 def test_open_save_study(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
     tmp_path: Path,
 ) -> None:
     linked_table, main_view, _ = app_lines
@@ -87,7 +87,7 @@ def test_open_save_study(
 
 
 def test_new(
-    app_lines: Tuple[ILinkedTableView[LinesItems, PointsItems], IExampleMainView, Model],
+    app_lines: Tuple[LinkedTableView[LinesItems, PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test the new file menu action."""
     linked_table, main_view, _ = app_lines

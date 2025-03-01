@@ -1,7 +1,7 @@
 """Salome Dock View."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.idockview import DockArea, IDockView
+from composeui.mainview.views.idockview import DockArea, DockView
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QDockWidget, QVBoxLayout, QWidget
@@ -11,7 +11,7 @@ from functools import reduce
 
 
 @dataclass(eq=False)
-class QtDockView(QtView, IDockView):
+class QtDockView(QtView, DockView):
     view: QDockWidget = field(init=False, default_factory=QDockWidget)
 
     def __post_init__(self) -> None:

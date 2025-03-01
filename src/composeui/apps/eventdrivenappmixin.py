@@ -3,8 +3,8 @@ from composeui.core import disconnect
 from composeui.core.basesignal import BaseSignal
 from composeui.core.connect import connect_by_default
 from composeui.core.initialize import initialize_default_view
-from composeui.core.views.iview import IView
-from composeui.form.iformview import IFormView, IRowItemView
+from composeui.core.views.iview import View
+from composeui.form.iformview import FormView, RowItemView
 from composeui.model.basemodel import BaseModel
 
 import weakref
@@ -45,9 +45,9 @@ class EventDrivenAppMixin(ABC, Generic[AnyMainView, AnyModel]):
         disconnect.disconnect(self._main_view)
 
     @staticmethod
-    def _add_app_to_base_signal(main_view: IView, model: BaseModel) -> None:
+    def _add_app_to_base_signal(main_view: View, model: BaseModel) -> None:
         views: deque[  # type:ignore[type-arg]
-            Tuple[Optional[IFormView], Optional[IView], IView]
+            Tuple[Optional[FormView], Optional[View], View]
         ] = deque()
         views.append((None, None, main_view))
         while len(views) > 0:
@@ -72,9 +72,9 @@ class EventDrivenAppMixin(ABC, Generic[AnyMainView, AnyModel]):
                     current_field.current_view = weakref.ref(current_view)
                     current_field.main_view = weakref.ref(main_view)
                     current_field.model = weakref.ref(model)
-                elif isinstance(current_field, IView):
-                    if isinstance(current_field, IRowItemView) and isinstance(
-                        current_parent_view, IFormView
+                elif isinstance(current_field, View):
+                    if isinstance(current_field, RowItemView) and isinstance(
+                        current_parent_view, FormView
                     ):
                         views.append((current_parent_view, current_view, current_field))
                     else:

@@ -1,5 +1,5 @@
 from examples.vtkview.app import VTKViewApp
-from examples.vtkview.example import IExampleMainView
+from examples.vtkview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> VTKViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = VTKViewApp(main_view)
     app.run()
     return app

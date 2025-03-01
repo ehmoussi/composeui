@@ -1,11 +1,11 @@
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 
 @dataclass(eq=False)
-class ISalomeView(IView):
+class SalomeView(View):
     module_name: str
     view_type: str
     main_id: Optional[int] = field(default=None)

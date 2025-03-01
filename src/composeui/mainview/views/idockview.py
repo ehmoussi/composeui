@@ -1,6 +1,6 @@
 """Dock View."""
 
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 import enum
 from dataclasses import dataclass, field
@@ -14,6 +14,6 @@ class DockArea(enum.IntFlag):
 
 
 @dataclass(eq=False)
-class IDockView(IView):
+class DockView(View):
     title: str = field(init=False, default="")
     area: DockArea = field(init=False, default=DockArea.BOTTOM)

@@ -1,7 +1,7 @@
 from composeui.linkedtablefigure.qt.qtlinkedtablefigureview import QtLinkedTableFigureView
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
-from examples.linkedtablefigureview.example import IExampleMainToolBar, IExampleMainView
+from examples.linkedtablefigureview.example import ExampleMainToolBar, ExampleMainView
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -11,11 +11,11 @@ if TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class QtExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, ExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class QtExampleMainView(QtMainView, IExampleMainView):
+class QtExampleMainView(QtMainView, ExampleMainView):
     toolbar: QtExampleMainToolBar = field(init=False)
     points: QtLinkedTableFigureView["PointsItems"] = field(init=False)
 

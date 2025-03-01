@@ -11,8 +11,8 @@ from examples.salomeview.cubedefinition import (
     initialize_cube_definition,
 )
 from examples.salomeview.cubetable import connect_cube_table, initialize_cube_table
-from examples.salomeview.module1 import IModule1MainView
-from examples.salomeview.module2 import IModule2MainView
+from examples.salomeview.module1 import Module1MainView
+from examples.salomeview.module2 import Module2MainView
 
 from pathlib import Path
 from typing import Optional
@@ -47,14 +47,14 @@ def create_model() -> Model:
     return _MODEL
 
 
-class Module1App(SalomeModuleApp[IModule1MainView, Model]):
+class Module1App(SalomeModuleApp[Module1MainView, Model]):
 
     def _create_model(self) -> None:
         self._model = create_model()
 
     def _create_main_view(self) -> None:
         if self.is_testing:
-            self._main_view = IModule1MainView(self.get_module_name())
+            self._main_view = Module1MainView(self.get_module_name())
         else:
             from examples.salomeview.qtmainview1 import QtModule1MainView
 
@@ -73,14 +73,14 @@ class Module1App(SalomeModuleApp[IModule1MainView, Model]):
         connect_cube_definition(self.main_view.left_dock.cube_definition)
 
 
-class Module2App(SalomeModuleApp[IModule2MainView, Model]):
+class Module2App(SalomeModuleApp[Module2MainView, Model]):
 
     def _create_model(self) -> None:
         self._model = create_model()
 
     def _create_main_view(self) -> None:
         if self.is_testing:
-            self._main_view = IModule2MainView(self.get_module_name())
+            self._main_view = Module2MainView(self.get_module_name())
         else:
             from examples.salomeview.qtmainview2 import QtModule2MainView
 

@@ -1,5 +1,5 @@
 from examples.treeview.app import TreeViewApp
-from examples.treeview.example import IExampleMainView
+from examples.treeview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> TreeViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = TreeViewApp(main_view)
     app.run()
     return app

@@ -1,7 +1,7 @@
 r"""View of the menu."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.imenu import IMenu
+from composeui.mainview.views.imenu import Menu
 from composeui.mainview.qt.qtmenu import QtMenu
 
 from qtpy.QtWidgets import QMainWindow, QMenuBar
@@ -35,7 +35,7 @@ class QtMainMenu(QtView):
         """Add all menus of the interface to the main menu."""
         for menu_field in fields(self):
             imenu = getattr(self, menu_field.name)
-            if isinstance(imenu, IMenu):
+            if isinstance(imenu, Menu):
                 menu = QtMenu.from_imenu(imenu)
                 setattr(self, menu_field.name, menu)
                 self.add_menu(menu_field.name, menu)

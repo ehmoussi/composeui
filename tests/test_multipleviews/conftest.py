@@ -1,5 +1,5 @@
 from examples.multipleviews.app import MultipleViewsApp
-from examples.multipleviews.example import IExampleMainView
+from examples.multipleviews.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> MultipleViewsApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = MultipleViewsApp(main_view)
     app.run()
     return app

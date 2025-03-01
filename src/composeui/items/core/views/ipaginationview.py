@@ -1,14 +1,14 @@
 """View definition for the pagination of a table/tree."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from typing import List
 
 
 @dataclass(eq=False)
-class IPaginationView(IView):
+class PaginationView(View):
     current_page: int = field(init=False, default=0)
     current_page_size_index: int = field(init=False, default=0)
 

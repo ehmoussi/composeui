@@ -1,31 +1,31 @@
-from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
+from composeui.mainview.views.imainmenu import MainMenu
+from composeui.mainview.views.imaintoolbar import MainToolBar
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
-from examples.taskview.mashumaro.app import IExampleMainView
-from examples.taskview.mashumaro.taskview import TaskView
+from examples.taskview.mashumaro.app import ExampleMainView
+from examples.taskview.mashumaro.qttaskview import QtTaskView
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtExampleMainMenu(QtMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtMainMenu, MainMenu): ...
 
 
 @dataclass(eq=False)
-class QtExampleMainToolBar(QtMainToolBar, IMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, MainToolBar): ...
 
 
 @dataclass(eq=False)
-class QtExampleMainView(QtMainView, IExampleMainView):
+class QtExampleMainView(QtMainView, ExampleMainView):
     menu: QtExampleMainMenu = field(init=False)
     toolbar: QtExampleMainToolBar = field(init=False)
-    task: TaskView = field(init=False)
+    task: QtTaskView = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
         self.menu = QtExampleMainMenu(self.view)
         self.toolbar = QtExampleMainToolBar(self.view)
-        self.task = TaskView()
+        self.task = QtTaskView()
         self.central_layout.addWidget(self.task.view)

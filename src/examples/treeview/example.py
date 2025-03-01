@@ -1,32 +1,32 @@
-from composeui.core.views.iactionview import IActionView
-from composeui.items.tree.itreeview import ITreeGroupView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.items.tree.itreeview import TreeGroupView
+from composeui.mainview.views.imaintoolbar import MainToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
 from examples.treeview.lines import LinesItems
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    lines: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    lines: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    lines_view: ITreeGroupView[LinesItems] = field(
-        init=False, default_factory=ITreeGroupView[LinesItems]
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    lines_view: TreeGroupView[LinesItems] = field(
+        init=False, default_factory=TreeGroupView[LinesItems]
     )
 
 
-def initialize_navigation(view: INavigationToolBar, main_view: "IExampleMainView") -> None:
+def initialize_navigation(view: NavigationToolBar, main_view: "ExampleMainView") -> None:
     view.lines.is_checked = True
     view.lines.text = "Lines"
     view.lines.visible_views = [main_view.lines_view]

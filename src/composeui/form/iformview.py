@@ -1,8 +1,8 @@
 from composeui.commontypes import AnyFormItems
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.ipendingview import IPendingView
+from composeui.core.views.ipendingview import PendingView
 from composeui.core.views.iselectpathview import FileMode
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 from composeui.form.abstractcomboboxitems import AbstractComboboxItems
 
 from typing_extensions import OrderedDict
@@ -13,7 +13,7 @@ from typing import Any, Generic, Optional, Tuple, TypeVar, Union
 
 
 @dataclass(eq=False)
-class IRowItemView(IView, Generic[AnyFormItems]):
+class RowItemView(View, Generic[AnyFormItems]):
     parent_fields: Tuple[str, ...] = field(init=False, default_factory=tuple)
     field_name: str = field(init=False, default="")
     is_label: bool = field(init=False, default=False)
@@ -22,16 +22,16 @@ class IRowItemView(IView, Generic[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class INoLabelView(IRowItemView[AnyFormItems]): ...
+class NoLabelView(RowItemView[AnyFormItems]): ...
 
 
 @dataclass(eq=False)
-class ILabelView(IRowItemView[AnyFormItems]):
+class LabelView(RowItemView[AnyFormItems]):
     text: str = field(init=False, default="")
 
 
 @dataclass(eq=False)
-class ICheckBoxView(IRowItemView[AnyFormItems]):
+class CheckBoxView(RowItemView[AnyFormItems]):
     text: str = field(init=False, default="")
     is_checked: bool = field(init=False, default=False)
     status_changed: BaseSignal = field(init=False, default=BaseSignal())
@@ -44,7 +44,7 @@ class ICheckBoxView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IEditView(IRowItemView[AnyFormItems]):
+class EditView(RowItemView[AnyFormItems]):
     editing_finished: BaseSignal = field(init=False, default=BaseSignal())
     text_edited: BaseSignal = field(init=False, default=BaseSignal())
     text_changed: BaseSignal = field(init=False, default=BaseSignal())
@@ -57,7 +57,7 @@ class IEditView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class ILineEditView(IEditView[AnyFormItems]):
+class LineEditView(EditView[AnyFormItems]):
     text: str = field(init=False, default="")
 
 
@@ -68,7 +68,7 @@ class TextEditType(enum.Enum):
 
 
 @dataclass(eq=False)
-class ITextEditView(IRowItemView[AnyFormItems]):
+class TextEditView(RowItemView[AnyFormItems]):
     text: str = field(init=False, default="")
     text_type: TextEditType = field(init=False, default=TextEditType.PLAINTEXT)
     text_color: Tuple[int, int, int, int] = field(init=False, default=(0, 0, 0, 255))
@@ -93,7 +93,7 @@ class ITextEditView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IDoubleLineEditView(IEditView[AnyFormItems]):
+class DoubleLineEditView(EditView[AnyFormItems]):
     value: Optional[float] = field(init=False, default=None)
     minimum: float = field(init=False, default=0.0)
     maximum: float = field(init=False, default=0.0)
@@ -101,7 +101,7 @@ class IDoubleLineEditView(IEditView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IVector3DView(IRowItemView[AnyFormItems]):
+class Vector3DView(RowItemView[AnyFormItems]):
     values: Tuple[Optional[float], Optional[float], Optional[float]] = field(init=False)
     minimums: Tuple[float, float, float] = field(init=False)
     maximums: Tuple[float, float, float] = field(init=False)
@@ -125,7 +125,7 @@ class IVector3DView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class ISpinBoxView(IRowItemView[AnyFormItems]):
+class SpinBoxView(RowItemView[AnyFormItems]):
     value: Optional[int] = field(init=False, default=None)
     minimum: int = field(init=False, default=0)
     maximum: int = field(init=False, default=0)
@@ -140,7 +140,7 @@ class ISpinBoxView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IComboBoxView(IRowItemView[AnyFormItems]):
+class ComboBoxView(RowItemView[AnyFormItems]):
     values: OrderedDict[Any, str] = field(init=False, default_factory=OrderedDict)
     current_index: int = field(init=False, default=0)
     current_index_changed: BaseSignal = field(init=False, default=BaseSignal())
@@ -153,7 +153,7 @@ class IComboBoxView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IComboBoxItemsView(IRowItemView[AnyFormItems], IPendingView):
+class ComboBoxItemsView(RowItemView[AnyFormItems], PendingView):
     pending_until_visible: bool = field(init=False, default=False)
     combobox_items: Optional[AbstractComboboxItems] = field(init=False, default=None)
     current_index: int = field(init=False, default=0)
@@ -161,7 +161,7 @@ class IComboBoxItemsView(IRowItemView[AnyFormItems], IPendingView):
 
 
 @dataclass(eq=False)
-class IButtonsGroupView(IRowItemView[AnyFormItems]):
+class ButtonsGroupView(RowItemView[AnyFormItems]):
     values: Tuple[str, ...] = field(init=False, default_factory=tuple)
     current_index: int = field(init=False, default=0)
     is_exclusive: bool = field(init=False, default=False)
@@ -175,15 +175,15 @@ class IButtonsGroupView(IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class ICheckBoxGroupView(IButtonsGroupView[AnyFormItems]): ...
+class CheckBoxGroupView(ButtonsGroupView[AnyFormItems]): ...
 
 
 @dataclass(eq=False)
-class IRadioButtonGroupView(IButtonsGroupView[AnyFormItems]): ...
+class RadioButtonGroupView(ButtonsGroupView[AnyFormItems]): ...
 
 
 @dataclass(eq=False)
-class ISelectFileView(ILineEditView[AnyFormItems]):
+class SelectFileView(LineEditView[AnyFormItems]):
     mode: FileMode = field(init=False, default="open_file")
     is_text_field_enabled: bool = field(init=False, default=False)
     is_button_enabled: bool = field(init=False, default=False)
@@ -198,17 +198,17 @@ class ISelectFileView(ILineEditView[AnyFormItems]):
         super().update()
 
 
-L = TypeVar("L", bound=IRowItemView[Any])
-F = TypeVar("F", bound=IRowItemView[Any])
+L = TypeVar("L", bound=RowItemView[Any])
+F = TypeVar("F", bound=RowItemView[Any])
 
 
 @dataclass(eq=False)
-class IRowView(IView, Generic[AnyFormItems]):
+class RowView(View, Generic[AnyFormItems]):
     parent_fields: Tuple[str, ...] = field(init=False, default_factory=tuple)
     field_name: str = field(init=False, default="")
     items: Optional[AnyFormItems] = field(init=False, default=None)
-    label_view: IRowItemView[AnyFormItems] = field(init=False)
-    field_view: IRowItemView[AnyFormItems] = field(init=False)
+    label_view: RowItemView[AnyFormItems] = field(init=False)
+    field_view: RowItemView[AnyFormItems] = field(init=False)
 
     @property  # type: ignore[misc]
     def is_visible(self) -> bool:
@@ -230,7 +230,7 @@ class IRowView(IView, Generic[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IFormView(IView, Generic[AnyFormItems]):
+class FormView(View, Generic[AnyFormItems]):
     parent_fields: Tuple[str, ...] = field(init=False, default_factory=tuple)
     field_name: str = field(init=False, default="")
     items: Optional[AnyFormItems] = field(init=False, default=None)
@@ -239,161 +239,161 @@ class IFormView(IView, Generic[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class IApplyFormView(IFormView[AnyFormItems]):
+class ApplyFormView(FormView[AnyFormItems]):
     validate_before_apply: bool = field(init=False, default=False)
     apply_clicked: BaseSignal = field(init=False, default=BaseSignal())
 
 
 @dataclass(eq=False)
-class IGroupBoxFormView(IFormView[AnyFormItems]):  # TODO: use IGroupView instead
+class GroupBoxFormView(FormView[AnyFormItems]):  # TODO: use IGroupView instead
     title: str = field(init=False, default="")
     is_checkable: bool = field(init=False, default=False)
     is_checked: bool = field(init=False, default=False)
 
 
 @dataclass(eq=False)
-class IGroupBoxApplyFormView(IApplyFormView[AnyFormItems]):
+class GroupBoxApplyFormView(ApplyFormView[AnyFormItems]):
     title: str = field(init=False, default="")
     is_checkable: bool = field(init=False, default=False)
     is_checked: bool = field(init=False, default=False)
 
 
-IRowItemValueView = Union[IDoubleLineEditView[AnyFormItems], ISpinBoxView[AnyFormItems]]
-IRowItemTextView = Union[
-    ILabelView[AnyFormItems],
-    ICheckBoxView[AnyFormItems],
-    ILineEditView[AnyFormItems],
-    ITextEditView[AnyFormItems],
-    ISelectFileView[AnyFormItems],
+RowItemValueView = Union[DoubleLineEditView[AnyFormItems], SpinBoxView[AnyFormItems]]
+RowItemTextView = Union[
+    LabelView[AnyFormItems],
+    CheckBoxView[AnyFormItems],
+    LineEditView[AnyFormItems],
+    TextEditView[AnyFormItems],
+    SelectFileView[AnyFormItems],
 ]
-IRowItemIndexView = Union[
-    IComboBoxView[AnyFormItems],
-    IComboBoxItemsView[AnyFormItems],
-    IButtonsGroupView[AnyFormItems],
+RowItemIndexView = Union[
+    ComboBoxView[AnyFormItems],
+    ComboBoxItemsView[AnyFormItems],
+    ButtonsGroupView[AnyFormItems],
 ]
 
 
-AnyRowItemView = TypeVar("AnyRowItemView", bound=IRowItemView[Any])
+AnyRowItemView = TypeVar("AnyRowItemView", bound=RowItemView[Any])
 
 
 # Label - Field View
 @dataclass(eq=False)
-class ILabelLabelView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelLabelView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ILabelCheckBoxView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-    field_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+    field_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelLineEditView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelCheckBoxView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: ILineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ILabelTextEditView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-    field_view: ITextEditView[AnyFormItems] = field(
-        init=False, default_factory=ITextEditView[AnyFormItems]
+    field_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelDoubleLineEditView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelLineEditView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: IDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=IDoubleLineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ILabelVector3DView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-    field_view: IVector3DView[AnyFormItems] = field(
-        init=False, default_factory=IVector3DView[AnyFormItems]
+    field_view: LineEditView[AnyFormItems] = field(
+        init=False, default_factory=LineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelSpinBoxView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelTextEditView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: ISpinBoxView[AnyFormItems] = field(
-        init=False, default_factory=ISpinBoxView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ILabelComboBoxView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-    field_view: IComboBoxView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxView[AnyFormItems]
+    field_view: TextEditView[AnyFormItems] = field(
+        init=False, default_factory=TextEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelComboBoxItemsView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelDoubleLineEditView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: IComboBoxItemsView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxItemsView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ILabelCheckBoxGroupView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-    field_view: ICheckBoxGroupView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxGroupView[AnyFormItems]
+    field_view: DoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=DoubleLineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelRadioButtonGroupView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelVector3DView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: IRadioButtonGroupView[AnyFormItems] = field(
-        init=False, default_factory=IRadioButtonGroupView[AnyFormItems]
+    field_view: Vector3DView[AnyFormItems] = field(
+        init=False, default_factory=Vector3DView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ILabelSelectFileView(IRowView[AnyFormItems]):
-    label_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
+class LabelSpinBoxView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
-    field_view: ISelectFileView[AnyFormItems] = field(
-        init=False, default_factory=ISelectFileView[AnyFormItems]
+    field_view: SpinBoxView[AnyFormItems] = field(
+        init=False, default_factory=SpinBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class LabelComboBoxView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
+    )
+    field_view: ComboBoxView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class LabelComboBoxItemsView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
+    )
+    field_view: ComboBoxItemsView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxItemsView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class LabelCheckBoxGroupView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
+    )
+    field_view: CheckBoxGroupView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class LabelRadioButtonGroupView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
+    )
+    field_view: RadioButtonGroupView[AnyFormItems] = field(
+        init=False, default_factory=RadioButtonGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class LabelSelectFileView(RowView[AnyFormItems]):
+    label_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
+    )
+    field_view: SelectFileView[AnyFormItems] = field(
+        init=False, default_factory=SelectFileView[AnyFormItems]
     )
 
 
@@ -401,132 +401,132 @@ class ILabelSelectFileView(IRowView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class ICheckBoxLabelView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxLabelView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxCheckBoxView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+    field_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxLineEditView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxCheckBoxView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: ILineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxTextEditView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: ITextEditView[AnyFormItems] = field(
-        init=False, default_factory=ITextEditView[AnyFormItems]
+    field_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxDoubleLineEditView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxLineEditView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: IDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=IDoubleLineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxVector3DView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: IVector3DView[AnyFormItems] = field(
-        init=False, default_factory=IVector3DView[AnyFormItems]
+    field_view: LineEditView[AnyFormItems] = field(
+        init=False, default_factory=LineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxSpinBoxView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxTextEditView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: ISpinBoxView[AnyFormItems] = field(
-        init=False, default_factory=ISpinBoxView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxComboBoxView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: IComboBoxView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxView[AnyFormItems]
+    field_view: TextEditView[AnyFormItems] = field(
+        init=False, default_factory=TextEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxComboBoxItemsView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxDoubleLineEditView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: IComboBoxItemsView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxItemsView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxButtonsGroupView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: IButtonsGroupView[AnyFormItems] = field(
-        init=False, default_factory=IButtonsGroupView[AnyFormItems]
+    field_view: DoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=DoubleLineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxCheckBoxGroupView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxVector3DView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: ICheckBoxGroupView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxGroupView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class ICheckBoxRadioButtonGroupView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
-    )
-    field_view: IRadioButtonGroupView[AnyFormItems] = field(
-        init=False, default_factory=IRadioButtonGroupView[AnyFormItems]
+    field_view: Vector3DView[AnyFormItems] = field(
+        init=False, default_factory=Vector3DView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class ICheckBoxSelectFileView(IRowView[AnyFormItems]):
-    label_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+class CheckBoxSpinBoxView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
-    field_view: ISelectFileView[AnyFormItems] = field(
-        init=False, default_factory=ISelectFileView[AnyFormItems]
+    field_view: SpinBoxView[AnyFormItems] = field(
+        init=False, default_factory=SpinBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxComboBoxView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: ComboBoxView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxComboBoxItemsView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: ComboBoxItemsView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxItemsView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxButtonsGroupView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: ButtonsGroupView[AnyFormItems] = field(
+        init=False, default_factory=ButtonsGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxCheckBoxGroupView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: CheckBoxGroupView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxRadioButtonGroupView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: RadioButtonGroupView[AnyFormItems] = field(
+        init=False, default_factory=RadioButtonGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class CheckBoxSelectFileView(RowView[AnyFormItems]):
+    label_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
+    )
+    field_view: SelectFileView[AnyFormItems] = field(
+        init=False, default_factory=SelectFileView[AnyFormItems]
     )
 
 
@@ -534,120 +534,120 @@ class ICheckBoxSelectFileView(IRowView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class INoLabelLabelView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelLabelView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: ILabelView[AnyFormItems] = field(
-        init=False, default_factory=ILabelView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class INoLabelCheckBoxView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
-    )
-    field_view: ICheckBoxView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxView[AnyFormItems]
+    field_view: LabelView[AnyFormItems] = field(
+        init=False, default_factory=LabelView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelLineEditView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelCheckBoxView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: ILineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class INoLabelTextEditView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
-    )
-    field_view: ITextEditView[AnyFormItems] = field(
-        init=False, default_factory=ITextEditView[AnyFormItems]
+    field_view: CheckBoxView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelDoubleLineEditView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelLineEditView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: IDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=IDoubleLineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class INoLabelVector3DView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
-    )
-    field_view: IVector3DView[AnyFormItems] = field(
-        init=False, default_factory=IVector3DView[AnyFormItems]
+    field_view: LineEditView[AnyFormItems] = field(
+        init=False, default_factory=LineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelSpinBoxView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelTextEditView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: ISpinBoxView[AnyFormItems] = field(
-        init=False, default_factory=ISpinBoxView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class INoLabelComboBoxView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
-    )
-    field_view: IComboBoxView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxView[AnyFormItems]
+    field_view: TextEditView[AnyFormItems] = field(
+        init=False, default_factory=TextEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelComboBoxItemsView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelDoubleLineEditView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: IComboBoxItemsView[AnyFormItems] = field(
-        init=False, default_factory=IComboBoxItemsView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class INoLabelCheckBoxGroupView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
-    )
-    field_view: ICheckBoxGroupView[AnyFormItems] = field(
-        init=False, default_factory=ICheckBoxGroupView[AnyFormItems]
+    field_view: DoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=DoubleLineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelRadioButtonGroupView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelVector3DView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: IRadioButtonGroupView[AnyFormItems] = field(
-        init=False, default_factory=IRadioButtonGroupView[AnyFormItems]
+    field_view: Vector3DView[AnyFormItems] = field(
+        init=False, default_factory=Vector3DView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class INoLabelSelectFileView(IRowView[AnyFormItems]):
-    label_view: INoLabelView[AnyFormItems] = field(
-        init=False, default_factory=INoLabelView[AnyFormItems]
+class NoLabelSpinBoxView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
     )
-    field_view: ISelectFileView[AnyFormItems] = field(
-        init=False, default_factory=ISelectFileView[AnyFormItems]
+    field_view: SpinBoxView[AnyFormItems] = field(
+        init=False, default_factory=SpinBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class NoLabelComboBoxView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
+    )
+    field_view: ComboBoxView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class NoLabelComboBoxItemsView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
+    )
+    field_view: ComboBoxItemsView[AnyFormItems] = field(
+        init=False, default_factory=ComboBoxItemsView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class NoLabelCheckBoxGroupView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
+    )
+    field_view: CheckBoxGroupView[AnyFormItems] = field(
+        init=False, default_factory=CheckBoxGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class NoLabelRadioButtonGroupView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
+    )
+    field_view: RadioButtonGroupView[AnyFormItems] = field(
+        init=False, default_factory=RadioButtonGroupView[AnyFormItems]
+    )
+
+
+@dataclass(eq=False)
+class NoLabelSelectFileView(RowView[AnyFormItems]):
+    label_view: NoLabelView[AnyFormItems] = field(
+        init=False, default_factory=NoLabelView[AnyFormItems]
+    )
+    field_view: SelectFileView[AnyFormItems] = field(
+        init=False, default_factory=SelectFileView[AnyFormItems]
     )

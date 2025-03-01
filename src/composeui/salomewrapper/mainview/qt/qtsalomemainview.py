@@ -7,7 +7,7 @@ from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.salomewrapper.core.qt.qtsalomecentralview import QtSalomeCentralView
 from composeui.salomewrapper.core.qt.qtsalometree import QtSalomeTree
 from composeui.salomewrapper.core.qt.qtsalomeviews import QtSalomeViews
-from composeui.salomewrapper.mainview.isalomemainview import ISalomeMainView
+from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
 
 import SalomePyQt
 from qtpy.QtWidgets import QMainWindow, QMenu
@@ -18,7 +18,7 @@ from typing import cast
 
 
 @dataclass(eq=False)
-class QtSalomeMainView(QtView, ISalomeMainView):
+class QtSalomeMainView(QtView, SalomeMainView):
     """Salome main view."""
 
     view: QMainWindow = field(init=False)

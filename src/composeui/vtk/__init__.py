@@ -1,7 +1,7 @@
-from composeui.vtk.ivtkview import IVTKView, VTKPickType
+from composeui.vtk.ivtkview import VTKPickType, VTKView
 
 
-def initialize_vtk_view(view: IVTKView) -> bool:
+def initialize_vtk_view(view: VTKView) -> bool:
     """Initialize the vtk view."""
     view.vtk_ugrid = None
     view.vtk_scalar_name = None
@@ -21,6 +21,6 @@ def initialize_vtk_view(view: IVTKView) -> bool:
     return False
 
 
-def connect_vtk_view(view: IVTKView) -> bool:
+def connect_vtk_view(view: VTKView) -> bool:
     view.reset_camera_clicked = [view.reset_camera]
     return False

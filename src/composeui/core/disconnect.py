@@ -1,13 +1,13 @@
 """Disconnect all callbacks connected to signals of the views."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from collections import deque
 from dataclasses import fields
 
 
-def disconnect(view: IView) -> None:
+def disconnect(view: View) -> None:
     r"""Apply disconnections to the view and its children."""
     views = deque([view])
     while len(views) > 0:

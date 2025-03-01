@@ -2,7 +2,7 @@ r"""Main view."""
 
 from composeui.core.qt.qtfileview import QtFileView
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 from composeui.mainview.qt.qtmessageview import QtMessageView
 from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.mainview.qt.widgets.mainwindow import MainWindow
@@ -24,7 +24,7 @@ else:
 # No check because the menu, toolbar and extension study are not implemented
 # because it should be implemented in the inherited class
 @dataclass(eq=False)
-class QtMainView(QtView, IMainView):
+class QtMainView(QtView, MainView):
     r"""View of the main view."""
 
     view: MainWindow = field(init=False)

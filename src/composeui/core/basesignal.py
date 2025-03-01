@@ -9,8 +9,8 @@ import typing
 
 if typing.TYPE_CHECKING:
     from composeui.model.basemodel import BaseModel
-    from composeui.form.iformview import IFormView
-    from composeui.core.views.iview import IView
+    from composeui.form.iformview import FormView
+    from composeui.core.views.iview import View
 
 from typing_extensions import ParamSpec, TypeAlias
 
@@ -219,15 +219,15 @@ class BaseSignal(MutableSequence[Callback]):
         self._initial_callbacks: List[Callback] = []
         self._callbacks: List[CallbackFunc] = []
         self._tasks: Set[TaskCallBackFunc] = set()
-        self._objs: MutableMapping[IView, BaseSignal] = WeakKeyDictionary()
-        self.current_view: Optional[ReferenceType[IView]] = None
-        self.current_parent_view: Optional[ReferenceType[IView]] = None
+        self._objs: MutableMapping[View, BaseSignal] = WeakKeyDictionary()
+        self.current_view: Optional[ReferenceType[View]] = None
+        self.current_parent_view: Optional[ReferenceType[View]] = None
         self.current_form_view: Optional[  # type:ignore[type-arg]
-            ReferenceType[IFormView]
+            ReferenceType[FormView]
         ] = (
             None
         )
-        self.main_view: Optional[ReferenceType[IView]] = None
+        self.main_view: Optional[ReferenceType[View]] = None
         self.model: Optional[ReferenceType[BaseModel]] = None
 
     def _signal_log(self, callback: Callback, *args: Any, **kwargs: Any) -> None:
@@ -464,12 +464,10 @@ class BaseSignal(MutableSequence[Callback]):
                 )
             return partial(callback, **kwargs)
 
-    def __set_name__(self, _: Optional[Type["IView"]], name: str) -> None:
+    def __set_name__(self, _: Optional[Type["View"]], name: str) -> None:
         self._name = name
 
-    def __get__(
-        self, obj: Optional["IView"], obj_type: Optional[Type["IView"]]
-    ) -> "BaseSignal":
+    def __get__(self, obj: Optional["View"], obj_type: Optional[Type["View"]]) -> "BaseSignal":
         if obj is None:
             return self
         else:
@@ -477,7 +475,7 @@ class BaseSignal(MutableSequence[Callback]):
             base_signal._name = self._name
             return self._objs.setdefault(obj, base_signal)
 
-    def __set__(self, obj: Optional["IView"], value: Iterable[Callback]) -> None:
+    def __set__(self, obj: Optional["View"], value: Iterable[Callback]) -> None:
         if obj is not None:
             self._objs.setdefault(obj, BaseSignal(*self._parameter_types))
             if isinstance(value, BaseSignal):

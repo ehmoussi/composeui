@@ -1,10 +1,10 @@
 from composeui import figure, linkedtablefigure
-from composeui.core.views.iactionview import IActionView
+from composeui.core.views.iactionview import ActionView
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
-from composeui.linkedtablefigure.ilinkedtablefigureview import ILinkedTableFigureView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
+from composeui.mainview.views.imaintoolbar import MainToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
 
 from typing_extensions import OrderedDict, TypeAlias
 
@@ -20,30 +20,30 @@ PointsItems: TypeAlias = SimpleTableItems["Model"]
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    points: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    points: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    points: ILinkedTableFigureView[PointsItems] = field(
-        init=False, default_factory=ILinkedTableFigureView
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    points: LinkedTableFigureView[PointsItems] = field(
+        init=False, default_factory=LinkedTableFigureView
     )
 
 
-def initialize_navigation(view: INavigationToolBar) -> None:
+def initialize_navigation(view: NavigationToolBar) -> None:
     view.points.text = "Points"
     view.points.is_checked = True
     view.is_exclusive = True
 
 
-def initialize_point(view: ILinkedTableFigureView[PointsItems], model: "Model") -> None:
+def initialize_point(view: LinkedTableFigureView[PointsItems], model: "Model") -> None:
     view.table.has_add = True
     view.table.has_remove = True
     items = SimpleTableItems(

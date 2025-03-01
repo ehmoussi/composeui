@@ -7,7 +7,7 @@ if sys.version_info < (3, 7):  # noqa: UP036
     os.environ["SQLALCHEMY_SILENCE_UBER_WARNING"] = "1"
 
 from examples.linkedtableview.sqlalchemy.app import LinkedTableViewApp
-from examples.linkedtableview.sqlalchemy.example import IExampleMainView
+from examples.linkedtableview.sqlalchemy.example import ExampleMainView
 
 import pytest
 
@@ -15,7 +15,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> LinkedTableViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = LinkedTableViewApp(main_view)
     app.run()
     return app

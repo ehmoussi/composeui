@@ -1,7 +1,7 @@
 r"""File view."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.ifileview import IFileView
+from composeui.mainview.views.ifileview import FileView
 
 from qtpy.QtWidgets import QFileDialog, QWidget
 
@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtFileView(QtView, IFileView):
+class QtFileView(QtView, FileView):
     r"""Display a modal view to select files or directories."""
 
     view: None = field(init=False, default=None)

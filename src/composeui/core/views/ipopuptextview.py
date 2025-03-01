@@ -1,4 +1,4 @@
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 import enum
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ class DialogChoices(enum.Enum):
 
 
 @dataclass(eq=False)
-class IPopupTextView(IView):
+class PopupTextView(View):
     title: str = field(init=False, default="")
     text: str = field(init=False, default="")
     confirm_button_text: str = field(init=False, default="")

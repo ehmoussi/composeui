@@ -3,7 +3,7 @@ r"""Abstract Figure view."""
 from composeui.core.pendingupdate import pending_until_visible
 from composeui.core.qt.qtview import QtView
 from composeui.core.qt.widgets.widget import GroupBox, Widget
-from composeui.figure.ifigureview import IFigureGroupView, IFigureView
+from composeui.figure.ifigureview import FigureGroupView, FigureView
 
 try:
     from composeui.figure.figuretoolbar import FigureToolbar
@@ -28,7 +28,7 @@ from typing import Any, Optional, Union
 
 
 @dataclass(eq=False)
-class QtFigureView(QtView, IFigureView):
+class QtFigureView(QtView, FigureView):
     """Figure View."""
 
     has_groupbox: InitVar[bool] = False
@@ -125,7 +125,7 @@ class QtFigureView(QtView, IFigureView):
 
 
 @dataclass(eq=False)
-class FigureGroupView(QtFigureView, IFigureGroupView):
+class QtFigureGroupView(QtFigureView, FigureGroupView):
     """Figure view inside a Groupbox."""
 
     view: GroupBox = field(init=False, default_factory=GroupBox)

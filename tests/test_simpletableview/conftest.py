@@ -1,5 +1,5 @@
 from examples.simpletableview.app import SimpleTableViewApp
-from examples.simpletableview.example import IExampleMainView
+from examples.simpletableview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> SimpleTableViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = SimpleTableViewApp(main_view)
     app.run()
     return app

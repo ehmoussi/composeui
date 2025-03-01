@@ -1,6 +1,6 @@
 """View."""
 
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from qtpy.QtWidgets import QAction, QWidget
 
@@ -9,7 +9,7 @@ from typing import Optional, Union
 
 
 @dataclass(eq=False)
-class QtView(IView):
+class QtView(View):
     """View."""
 
     view: Optional[Union[QAction, QWidget]] = field(init=False)

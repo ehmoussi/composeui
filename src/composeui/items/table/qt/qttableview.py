@@ -1,8 +1,8 @@
 from composeui.commontypes import AnyModel, AnyTableItems
-from composeui.items.core.qt.qtitemsview import ItemsGroupView, QtItemsView
+from composeui.items.core.qt.qtitemsview import QtItemsGroupView, QtItemsView
+from composeui.items.simpletable.isimpletableview import SimpleTableView
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
-from composeui.items.simpletable.isimpletableview import ISimpleTableView
-from composeui.items.table.itableview import ITableGroupView, ITableView
+from composeui.items.table.itableview import TableGroupView, TableView
 from composeui.items.table.qt.widgets.tableitemmodel import TableItemModel
 from composeui.items.table.qt.widgets.tablewidget import TableWidget
 
@@ -11,7 +11,7 @@ from typing import Optional, cast
 
 
 @dataclass(eq=False)
-class QtTableView(QtItemsView, ITableView[AnyTableItems]):
+class QtTableView(QtItemsView, TableView[AnyTableItems]):
     r"""Table view."""
 
     double_clicked_is_check: InitVar[bool] = False
@@ -42,12 +42,12 @@ class QtTableView(QtItemsView, ITableView[AnyTableItems]):
 
 
 @dataclass(eq=False)
-class SimpleTableView(QtTableView[SimpleTableItems[AnyModel]], ISimpleTableView[AnyModel]):
+class QtSimpleTableView(QtTableView[SimpleTableItems[AnyModel]], SimpleTableView[AnyModel]):
     items: SimpleTableItems[AnyModel] = field(init=False)
 
 
 @dataclass(eq=False)
-class TableGroupView(ItemsGroupView, ITableGroupView[AnyTableItems]):
+class QtTableGroupView(QtItemsGroupView, TableGroupView[AnyTableItems]):
     r"""Table inside a groupbox."""
 
     double_clicked_is_check: InitVar[bool] = False

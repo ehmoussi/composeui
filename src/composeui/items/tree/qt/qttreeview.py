@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyTreeItems
-from composeui.items.core.qt.qtitemsview import ItemsGroupView, QtItemsView
-from composeui.items.tree.itreeview import ITreeGroupView, ITreeView
+from composeui.items.core.qt.qtitemsview import QtItemsGroupView, QtItemsView
+from composeui.items.tree.itreeview import TreeGroupView, TreeView
 from composeui.items.tree.qt.widgets.treeitemmodel import TreeItemModel
 from composeui.items.tree.qt.widgets.treewidget import TreeWidget
 
@@ -9,7 +9,7 @@ from typing import Optional, cast
 
 
 @dataclass(eq=False)
-class QtTreeView(QtItemsView, ITreeView[AnyTreeItems]):
+class QtTreeView(QtItemsView, TreeView[AnyTreeItems]):
     r"""Tree view."""
 
     double_clicked_is_check: InitVar[bool] = False
@@ -45,8 +45,8 @@ class QtTreeView(QtItemsView, ITreeView[AnyTreeItems]):
 
 
 @dataclass(eq=False)
-class TreeGroupView(
-    ItemsGroupView, ITreeGroupView[AnyTreeItems]
+class QtTreeGroupView(
+    QtItemsGroupView, TreeGroupView[AnyTreeItems]
 ):  # TODO: check if using TreeView as a base class is better
     r"""Tree view in a group view."""
 

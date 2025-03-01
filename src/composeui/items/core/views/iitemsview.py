@@ -1,7 +1,7 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.ipendingview import IPendingView
-from composeui.items.core.views.ifiltertableview import IFilterTableView
-from composeui.items.core.views.ipaginationview import IPaginationView
+from composeui.core.views.ipendingview import PendingView
+from composeui.items.core.views.ifiltertableview import FilterTableView
+from composeui.items.core.views.ipaginationview import PaginationView
 
 from typing_extensions import OrderedDict
 
@@ -24,7 +24,7 @@ class FormatExtension(enum.Flag):
 
 
 @dataclass(eq=False)
-class IItemsView(IPendingView):
+class ItemsView(PendingView):
     has_import: bool = field(init=False, default=False)
     has_export: bool = field(init=False, default=False)
     has_add: bool = field(init=False, default=False)
@@ -65,8 +65,8 @@ class IItemsView(IPendingView):
     add_clicked: BaseSignal = field(init=False, default=BaseSignal())
     remove_clicked: BaseSignal = field(init=False, default=BaseSignal())
     # views
-    filter_view: IFilterTableView = field(init=False, default_factory=IFilterTableView)
-    pagination_view: IPaginationView = field(init=False, default_factory=IPaginationView)
+    filter_view: FilterTableView = field(init=False, default_factory=FilterTableView)
+    pagination_view: PaginationView = field(init=False, default_factory=PaginationView)
 
     @property
     def context_menu_selection(self) -> Tuple[Tuple[int, ...], int]:

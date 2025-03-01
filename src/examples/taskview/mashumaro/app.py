@@ -1,8 +1,8 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 from composeui.model.mashumaromodel import MashumaroModel
-from examples.taskview.mashumaro.task import ITaskView, connect_task, initialize_task
+from examples.taskview.mashumaro.task import TaskView, connect_task, initialize_task
 
 from mashumaro.mixins.json import DataClassJSONMixin
 from typing_extensions import TypeAlias
@@ -18,15 +18,15 @@ class TaskConfig(DataClassJSONMixin):
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    task: ITaskView = field(init=False, default_factory=ITaskView)
+class ExampleMainView(MainView):
+    task: TaskView = field(init=False, default_factory=TaskView)
 
 
 Model: TypeAlias = MashumaroModel[TaskConfig]
 
 
-class MashumaroTaskViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class MashumaroTaskViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(
             MashumaroModel("example", get_version("composeui"), TaskConfig(), is_debug=True),
             main_view,

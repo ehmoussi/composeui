@@ -1,7 +1,7 @@
 """View to Select File View."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iselectpathview import ISelectPathView
+from composeui.core.views.iselectpathview import SelectPathView
 
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtSelectPathView(QtView, ISelectPathView):
+class QtSelectPathView(QtView, SelectPathView):
     view: QWidget = field(init=False, default_factory=QWidget)
 
     _label: QLabel = field(init=False, default_factory=QLabel)

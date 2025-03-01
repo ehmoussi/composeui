@@ -1,4 +1,4 @@
-from composeui.salomewrapper.core.views.isalomeview import ISalomeView
+from composeui.salomewrapper.core.views.isalomeview import SalomeView
 
 from qtpy.QtWidgets import QWidget
 from salome.gui import helper  # noqa: F811, RUF100
@@ -8,7 +8,7 @@ from typing import List, Optional
 
 
 @dataclass(eq=False)
-class QtSalomeView(ISalomeView):
+class QtSalomeView(SalomeView):
     view: Optional[QWidget] = field(default=None)
 
     def __post_init__(self) -> None:

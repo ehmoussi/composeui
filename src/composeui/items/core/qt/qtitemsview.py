@@ -6,7 +6,7 @@ from composeui.core.qt.qtview import QtView
 from composeui.items.core.qt.qtfiltertableview import QtFilterTableView
 from composeui.items.core.qt.qtpaginationview import QtPaginationView
 from composeui.items.core.qt.widgets.itemswidget import ItemsWidget
-from composeui.items.core.views.iitemsview import IItemsView
+from composeui.items.core.views.iitemsview import ItemsView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QKeySequence
@@ -18,7 +18,7 @@ from typing import List, Set, Tuple
 
 
 @dataclass(eq=False)
-class QtItemsView(QtView, IItemsView):
+class QtItemsView(QtView, ItemsView):
     r"""Items view."""
 
     table_widget: ItemsWidget = field(init=False)
@@ -245,7 +245,7 @@ class QtItemsView(QtView, IItemsView):
 
 
 @dataclass(eq=False)
-class ItemsGroupView(QtItemsView, QtGroupView):
+class QtItemsGroupView(QtItemsView, QtGroupView):
     r"""ItemsView inside a groupbox."""
 
     view: QGroupBox = field(init=False)

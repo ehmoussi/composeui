@@ -2,14 +2,14 @@
 
 from composeui.core.qt.qtview import QtView
 from composeui.items.core.qt.widgets.paginationwidget import PaginationWidget
-from composeui.items.core.views.ipaginationview import IPaginationView
+from composeui.items.core.views.ipaginationview import PaginationView
 
 from dataclasses import dataclass, field
 from typing import List
 
 
 @dataclass(eq=False)
-class QtPaginationView(QtView, IPaginationView):
+class QtPaginationView(QtView, PaginationView):
     view: PaginationWidget = field(init=False, default_factory=PaginationWidget)
 
     _current_page: int = field(init=False, default=-1)

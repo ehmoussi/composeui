@@ -2,25 +2,25 @@ r"""Slots of the FormView."""
 
 from composeui.commontypes import AnyFormItems
 from composeui.core import selectfiles, tools
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 from composeui.form.iformview import (
-    IButtonsGroupView,
-    ICheckBoxView,
-    IComboBoxItemsView,
-    IComboBoxView,
-    IDoubleLineEditView,
-    IFormView,
-    ILabelView,
-    ILineEditView,
-    IRowItemIndexView,
-    IRowItemTextView,
-    IRowItemValueView,
-    IRowView,
-    ISelectFileView,
-    ISpinBoxView,
-    IVector3DView,
+    ButtonsGroupView,
+    CheckBoxView,
+    ComboBoxItemsView,
+    ComboBoxView,
+    DoubleLineEditView,
+    FormView,
+    LabelView,
+    LineEditView,
+    RowItemIndexView,
+    RowItemTextView,
+    RowItemValueView,
+    RowView,
+    SelectFileView,
+    SpinBoxView,
+    Vector3DView,
 )
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 
 from typing_extensions import Concatenate, ParamSpec
 
@@ -38,14 +38,14 @@ def update_row_view(
     @wraps(update_function)
     def update_with_checking_success(*args: P.args, **kwargs: P.kwargs) -> None:
         is_ok = update_function(*args, **kwargs)
-        if is_ok and "view" in kwargs and isinstance(kwargs["view"], IView):
+        if is_ok and "view" in kwargs and isinstance(kwargs["view"], View):
             tools.update_view_with_dependencies(kwargs["view"])
 
     return update_with_checking_success
 
 
 @update_row_view
-def update_text(*, view: IRowItemTextView[AnyFormItems], with_update: bool = True) -> bool:
+def update_text(*, view: RowItemTextView[AnyFormItems], with_update: bool = True) -> bool:
     r"""Update the text in the form items.
 
     If with update is False then return False to avoid update the row view.
@@ -60,7 +60,7 @@ def update_text(*, view: IRowItemTextView[AnyFormItems], with_update: bool = Tru
 
 
 @update_row_view
-def update_vector(*, view: IVector3DView[AnyFormItems], with_update: bool = True) -> bool:
+def update_vector(*, view: Vector3DView[AnyFormItems], with_update: bool = True) -> bool:
     r"""Update the values in the form items.
 
     If with update is False then return False to avoid update the row view.
@@ -75,7 +75,7 @@ def update_vector(*, view: IVector3DView[AnyFormItems], with_update: bool = True
 
 
 @update_row_view
-def update_value(*, view: IRowItemValueView[AnyFormItems], with_update: bool = True) -> bool:
+def update_value(*, view: RowItemValueView[AnyFormItems], with_update: bool = True) -> bool:
     r"""Update the value in the form items.
 
     If with update is False then return False to avoid update the row view.
@@ -91,7 +91,7 @@ def update_value(*, view: IRowItemValueView[AnyFormItems], with_update: bool = T
 
 @update_row_view
 def update_current_index(
-    *, view: IRowItemIndexView[AnyFormItems], with_update: bool = True
+    *, view: RowItemIndexView[AnyFormItems], with_update: bool = True
 ) -> bool:
     r"""Update the current index in the form items.
 
@@ -111,9 +111,7 @@ def update_current_index(
 
 
 @update_row_view
-def open_select_path_view(
-    *, view: ISelectFileView[AnyFormItems], main_view: IMainView
-) -> bool:
+def open_select_path_view(*, view: SelectFileView[AnyFormItems], main_view: MainView) -> bool:
     """Open the select path view."""
     path = selectfiles.select_file(main_view, view.extensions, view.mode)
     if path is not None:
@@ -124,7 +122,7 @@ def open_select_path_view(
 
 
 def open_select_path_view_without_saving(
-    *, view: ISelectFileView[AnyFormItems], main_view: IMainView
+    *, view: SelectFileView[AnyFormItems], main_view: MainView
 ) -> None:
     """Open the select path view."""
     path = selectfiles.select_file(main_view, view.extensions, view.mode)
@@ -133,7 +131,7 @@ def open_select_path_view_without_saving(
 
 
 @update_row_view
-def set_field_available(*, view: ICheckBoxView[AnyFormItems]) -> bool:
+def set_field_available(*, view: CheckBoxView[AnyFormItems]) -> bool:
     """Set if the field is available or not."""
     if view.items is not None:
         view.items.set_field_available(
@@ -144,38 +142,36 @@ def set_field_available(*, view: ICheckBoxView[AnyFormItems]) -> bool:
     return False
 
 
-def update_apply_form(*, view: IFormView[AnyFormItems]) -> None:
+def update_apply_form(*, view: FormView[AnyFormItems]) -> None:
     """Update the model when the button apply is clicked."""
     for child_view in view.children.values():
-        if isinstance(child_view, IRowView):
+        if isinstance(child_view, RowView):
             field_view = child_view.field_view
-            if isinstance(field_view, (IDoubleLineEditView, ISpinBoxView)):
+            if isinstance(field_view, (DoubleLineEditView, SpinBoxView)):
                 update_value(view=field_view, with_update=False)
-            elif isinstance(
-                field_view, (IComboBoxView, IComboBoxItemsView, IButtonsGroupView)
-            ):
+            elif isinstance(field_view, (ComboBoxView, ComboBoxItemsView, ButtonsGroupView)):
                 update_current_index(view=field_view, with_update=False)
             elif isinstance(
-                field_view, (ILabelView, ICheckBoxView, ILineEditView, ISelectFileView)
+                field_view, (LabelView, CheckBoxView, LineEditView, SelectFileView)
             ):
                 update_text(view=field_view, with_update=False)
-            elif isinstance(field_view, IVector3DView):
+            elif isinstance(field_view, Vector3DView):
                 update_vector(view=field_view, with_update=False)
-        elif isinstance(child_view, IFormView):
+        elif isinstance(child_view, FormView):
             update_apply_form(view=child_view)
 
 
 def update_infos(
-    master_view: IFormView[AnyFormItems],
+    master_view: FormView[AnyFormItems],
     *,
-    parent_view: Optional[IRowView[AnyFormItems]] = None,
+    parent_view: Optional[RowView[AnyFormItems]] = None,
     with_color: bool = True,
 ) -> bool:
     if master_view.items is not None:
         infos = []
         is_children_ok = True
         for field, child_view in master_view.children.items():
-            if isinstance(child_view, IRowView):
+            if isinstance(child_view, RowView):
                 messages = master_view.items.get_error_messages(
                     field, child_view.parent_fields
                 )
@@ -191,7 +187,7 @@ def update_infos(
                             child_view.field_view.color = None
                     else:
                         child_view.field_view.color = (255, 0, 0)
-            elif isinstance(child_view, IFormView):
+            elif isinstance(child_view, FormView):
                 is_children_ok &= update_infos(
                     child_view, parent_view=parent_view, with_color=with_color
                 )
@@ -202,10 +198,10 @@ def update_infos(
 
 def enable_view(
     *,
-    parent_view: IRowView[AnyFormItems],
+    parent_view: RowView[AnyFormItems],
     before_validation: bool = False,
 ) -> None:
     """Enable/Disable the view according to the status of the checkbox label."""
-    if isinstance(parent_view.label_view, ICheckBoxView):
+    if isinstance(parent_view.label_view, CheckBoxView):
         parent_view.field_view.is_enabled = parent_view.label_view.is_checked
     tools.update_view_with_dependencies(parent_view, before_validation=before_validation)

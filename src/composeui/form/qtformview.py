@@ -9,28 +9,28 @@ from composeui.form.abstractcomboboxitems import AbstractComboboxItems
 from composeui.form.comboboxitemmodel import ComboBoxItemModel
 from composeui.form.formvalidators import FormDoubleValidator, FormVector3DValidator
 from composeui.form.iformview import (  # IFormView,; IGroupBoxFormView,
-    IApplyFormView,
-    IButtonsGroupView,
-    ICheckBoxGroupView,
-    ICheckBoxView,
-    IComboBoxItemsView,
-    IComboBoxView,
-    IDoubleLineEditView,
-    IEditView,
-    IFormView,
-    IGroupBoxApplyFormView,
-    IGroupBoxFormView,
-    ILabelView,
-    ILineEditView,
-    INoLabelView,
-    IRadioButtonGroupView,
-    IRowItemView,
-    IRowView,
-    ISelectFileView,
-    ISpinBoxView,
-    ITextEditView,
-    IVector3DView,
+    ApplyFormView,
+    ButtonsGroupView,
+    CheckBoxGroupView,
+    CheckBoxView,
+    ComboBoxItemsView,
+    ComboBoxView,
+    DoubleLineEditView,
+    EditView,
+    FormView,
+    GroupBoxApplyFormView,
+    GroupBoxFormView,
+    LabelView,
+    LineEditView,
+    NoLabelView,
+    RadioButtonGroupView,
+    RowItemView,
+    RowView,
+    SelectFileView,
+    SpinBoxView,
     TextEditType,
+    TextEditView,
+    Vector3DView,
 )
 
 from qtpy.QtGui import QColor
@@ -58,7 +58,7 @@ from typing import Any, List, Optional, Tuple, Type, Union
 
 
 @dataclass(eq=False)
-class QtRowItemView(QtView, IRowItemView[AnyFormItems]):
+class QtRowItemView(QtView, RowItemView[AnyFormItems]):
 
     view: Optional[QWidget] = field(init=False, default=None)
     _color: Optional[Tuple[int, int, int]] = field(init=False, repr=False, default=None)
@@ -86,11 +86,11 @@ class QtRowItemView(QtView, IRowItemView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtNoLabelView(QtRowItemView[AnyFormItems], INoLabelView[AnyFormItems]): ...
+class QtNoLabelView(QtRowItemView[AnyFormItems], NoLabelView[AnyFormItems]): ...
 
 
 @dataclass(eq=False)
-class QtLabelView(QtRowItemView[AnyFormItems], ILabelView[AnyFormItems]):
+class QtLabelView(QtRowItemView[AnyFormItems], LabelView[AnyFormItems]):
     view: QLabel = field(init=False, default_factory=QLabel)
 
     @property  # type: ignore[misc]
@@ -103,7 +103,7 @@ class QtLabelView(QtRowItemView[AnyFormItems], ILabelView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtCheckBoxView(QtRowItemView[AnyFormItems], ICheckBoxView[AnyFormItems]):
+class QtCheckBoxView(QtRowItemView[AnyFormItems], CheckBoxView[AnyFormItems]):
     view: QCheckBox = field(init=False, default_factory=QCheckBox)
 
     def __post_init__(self) -> None:
@@ -128,7 +128,7 @@ class QtCheckBoxView(QtRowItemView[AnyFormItems], ICheckBoxView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class _QtEditView(QtRowItemView[AnyFormItems], IEditView[AnyFormItems]):
+class _QtEditView(QtRowItemView[AnyFormItems], EditView[AnyFormItems]):
     view: QLineEdit = field(init=False, default_factory=QLineEdit)
 
     def __post_init__(self) -> None:
@@ -140,7 +140,7 @@ class _QtEditView(QtRowItemView[AnyFormItems], IEditView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtLineEditView(_QtEditView[AnyFormItems], ILineEditView[AnyFormItems]):
+class QtLineEditView(_QtEditView[AnyFormItems], LineEditView[AnyFormItems]):
 
     @property  # type:ignore[misc]
     def text(self) -> str:
@@ -152,7 +152,7 @@ class QtLineEditView(_QtEditView[AnyFormItems], ILineEditView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtTextEditView(QtRowItemView[AnyFormItems], ITextEditView[AnyFormItems]):
+class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
     view: QTextEdit = field(init=False, default_factory=QTextEdit)
 
     def __post_init__(self) -> None:
@@ -214,7 +214,7 @@ class QtTextEditView(QtRowItemView[AnyFormItems], ITextEditView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtDoubleLineEditView(_QtEditView[AnyFormItems], IDoubleLineEditView[AnyFormItems]):
+class QtDoubleLineEditView(_QtEditView[AnyFormItems], DoubleLineEditView[AnyFormItems]):
     validator: FormDoubleValidator = field(init=False)
     _items: Optional[AnyFormItems] = field(init=False, default=None)
 
@@ -264,7 +264,7 @@ class QtDoubleLineEditView(_QtEditView[AnyFormItems], IDoubleLineEditView[AnyFor
 
 
 @dataclass(eq=False)
-class QtVector3DView(QtRowItemView[AnyFormItems], IVector3DView[AnyFormItems]):
+class QtVector3DView(QtRowItemView[AnyFormItems], Vector3DView[AnyFormItems]):
     view: QWidget = field(init=False)
 
     line_edit_1: QLineEdit = field(init=False)
@@ -388,7 +388,7 @@ class QtVector3DView(QtRowItemView[AnyFormItems], IVector3DView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtSpinBoxView(QtRowItemView[AnyFormItems], ISpinBoxView[AnyFormItems]):
+class QtSpinBoxView(QtRowItemView[AnyFormItems], SpinBoxView[AnyFormItems]):
     view: QSpinBox = field(init=False, default_factory=QSpinBox)
     value_changed = BaseSignal()
 
@@ -437,7 +437,7 @@ class QtSpinBoxView(QtRowItemView[AnyFormItems], ISpinBoxView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtComboBoxView(QtRowItemView[AnyFormItems], IComboBoxView[AnyFormItems]):
+class QtComboBoxView(QtRowItemView[AnyFormItems], ComboBoxView[AnyFormItems]):
     view: QComboBox = field(init=False, default_factory=QComboBox)
 
     def __post_init__(self) -> None:
@@ -469,7 +469,7 @@ class QtComboBoxView(QtRowItemView[AnyFormItems], IComboBoxView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtComboBoxItemsView(QtRowItemView[AnyFormItems], IComboBoxItemsView[AnyFormItems]):
+class QtComboBoxItemsView(QtRowItemView[AnyFormItems], ComboBoxItemsView[AnyFormItems]):
     view: ComboBox = field(init=False, default_factory=ComboBox)
     _combobox_items: Optional[AbstractComboboxItems] = field(init=False, default=None)
 
@@ -525,7 +525,7 @@ class ButtonType(Enum):
 
 
 @dataclass(eq=False)
-class QtButtonsGroupView(QtRowItemView[AnyFormItems], IButtonsGroupView[AnyFormItems]):
+class QtButtonsGroupView(QtRowItemView[AnyFormItems], ButtonsGroupView[AnyFormItems]):
 
     view: QWidget = field(init=False, default_factory=QWidget)
     button_type: ButtonType
@@ -642,7 +642,7 @@ class QtButtonsGroupView(QtRowItemView[AnyFormItems], IButtonsGroupView[AnyFormI
 
 
 @dataclass(eq=False)
-class QtSelectFileView(QtRowItemView[AnyFormItems], ISelectFileView[AnyFormItems]):
+class QtSelectFileView(QtRowItemView[AnyFormItems], SelectFileView[AnyFormItems]):
     view: QWidget = field(init=False, default_factory=QWidget)
 
     text_field: QLineEdit = field(init=False, default_factory=QLineEdit)
@@ -702,13 +702,13 @@ class QtSelectFileView(QtRowItemView[AnyFormItems], ISelectFileView[AnyFormItems
 @dataclass(eq=False)
 # This view don't inherit from View because it doesn't have one
 # And the is_visible/is_enabled are implemented in IRowView
-class QtRowView(IRowView[AnyFormItems]):
+class QtRowView(RowView[AnyFormItems]):
     label_view: QtRowItemView[AnyFormItems] = field(repr=False)
     field_view: QtRowItemView[AnyFormItems] = field(repr=False)
 
 
 @dataclass(eq=False)
-class QtFormView(QtView, IFormView[AnyFormItems]):
+class QtFormView(QtView, FormView[AnyFormItems]):
 
     view: QWidget = field(init=False, default_factory=QWidget)
     form_infos: QLabel = field(init=False, default_factory=QLabel)
@@ -751,7 +751,7 @@ class QtFormView(QtView, IFormView[AnyFormItems]):
         for row_field in fields(self):
             irow_view = getattr(self, row_field.name)
             form_view: Union[QtApplyFormView[AnyFormItems], QtFormView[AnyFormItems]]
-            if isinstance(irow_view, IRowView):
+            if isinstance(irow_view, RowView):
                 label_view = self._make_view(irow_view.label_view)
                 field_view = self._make_view(irow_view.field_view)
                 if label_view is not None and field_view is not None:
@@ -761,21 +761,21 @@ class QtFormView(QtView, IFormView[AnyFormItems]):
                 else:
                     msg = f"Invalid row view for {irow_view}"
                     raise ValueError(msg)  # pragama: no cover
-            elif isinstance(irow_view, (IApplyFormView, IGroupBoxApplyFormView)):
+            elif isinstance(irow_view, (ApplyFormView, GroupBoxApplyFormView)):
                 form_view = self._make_apply_form(irow_view)
                 setattr(self, row_field.name, form_view)
                 self.add_form(form_view)
-            elif isinstance(irow_view, (IFormView, IGroupBoxFormView)):
+            elif isinstance(irow_view, (FormView, GroupBoxFormView)):
                 form_view = self._make_form(irow_view)
                 setattr(self, row_field.name, form_view)
                 self.add_form(form_view)
 
-    def _make_form(self, iview: IFormView[AnyFormItems]) -> "QtFormView[AnyFormItems]":
+    def _make_form(self, iview: FormView[AnyFormItems]) -> "QtFormView[AnyFormItems]":
         """Make a form view from the given interface."""
         iview_type = type(iview)
         cls_name = iview_type.__name__[1:]
         bases: Tuple[Any, ...]
-        if isinstance(iview, IGroupBoxFormView):
+        if isinstance(iview, GroupBoxFormView):
             bases = (QtGroupBoxFormView[AnyFormItems],)
         else:
             bases = (QtFormView[AnyFormItems],)
@@ -789,13 +789,13 @@ class QtFormView(QtView, IFormView[AnyFormItems]):
         return form_view_type()
 
     def _make_apply_form(
-        self, iview: IApplyFormView[AnyFormItems]
+        self, iview: ApplyFormView[AnyFormItems]
     ) -> "QtApplyFormView[AnyFormItems]":
         """Make an apply form view from the given interface."""
         iview_type = type(iview)
         cls_name = iview_type.__name__[1:]
         bases: Tuple[Any, ...]
-        if isinstance(iview, IGroupBoxApplyFormView):
+        if isinstance(iview, GroupBoxApplyFormView):
             bases = (QtGroupBoxApplyFormView[AnyFormItems],)
         else:
             bases = (QtApplyFormView[AnyFormItems],)
@@ -809,39 +809,39 @@ class QtFormView(QtView, IFormView[AnyFormItems]):
         return form_view_type()
 
     def _make_view(
-        self, iview: IRowItemView[AnyFormItems]
+        self, iview: RowItemView[AnyFormItems]
     ) -> Optional[QtRowItemView[AnyFormItems]]:
-        if isinstance(iview, INoLabelView):
+        if isinstance(iview, NoLabelView):
             return QtNoLabelView[AnyFormItems]()
-        elif isinstance(iview, ILabelView):
+        elif isinstance(iview, LabelView):
             return QtLabelView[AnyFormItems]()
-        elif isinstance(iview, ICheckBoxView):
+        elif isinstance(iview, CheckBoxView):
             return QtCheckBoxView[AnyFormItems]()
-        elif isinstance(iview, ISelectFileView):
+        elif isinstance(iview, SelectFileView):
             return QtSelectFileView[AnyFormItems]()
-        elif isinstance(iview, IDoubleLineEditView):
+        elif isinstance(iview, DoubleLineEditView):
             return QtDoubleLineEditView[AnyFormItems]()
-        elif isinstance(iview, IVector3DView):
+        elif isinstance(iview, Vector3DView):
             return QtVector3DView[AnyFormItems]()
-        elif isinstance(iview, ILineEditView):
+        elif isinstance(iview, LineEditView):
             return QtLineEditView[AnyFormItems]()
-        elif isinstance(iview, ITextEditView):
+        elif isinstance(iview, TextEditView):
             return QtTextEditView[AnyFormItems]()
-        elif isinstance(iview, ISpinBoxView):
+        elif isinstance(iview, SpinBoxView):
             return QtSpinBoxView[AnyFormItems]()
-        elif isinstance(iview, IComboBoxView):
+        elif isinstance(iview, ComboBoxView):
             return QtComboBoxView[AnyFormItems]()
-        elif isinstance(iview, IComboBoxItemsView):
+        elif isinstance(iview, ComboBoxItemsView):
             return QtComboBoxItemsView[AnyFormItems]()
-        elif isinstance(iview, ICheckBoxGroupView):
+        elif isinstance(iview, CheckBoxGroupView):
             return QtButtonsGroupView[AnyFormItems](ButtonType.CHECKBOX)
-        elif isinstance(iview, IRadioButtonGroupView):
+        elif isinstance(iview, RadioButtonGroupView):
             return QtButtonsGroupView[AnyFormItems](ButtonType.RADIOBUTTON)
         return None
 
 
 @dataclass(eq=False)
-class QtApplyFormView(QtFormView[AnyFormItems], IApplyFormView[AnyFormItems]):
+class QtApplyFormView(QtFormView[AnyFormItems], ApplyFormView[AnyFormItems]):
 
     validate_before_apply: bool = field(init=False, default=True)
 
@@ -858,9 +858,9 @@ class QtApplyFormView(QtFormView[AnyFormItems], IApplyFormView[AnyFormItems]):
     def add_apply_button(self) -> None:
         self.form_layout.addRow(self.apply_button_layout)
 
-    def _make_form(self, iview: IFormView[AnyFormItems]) -> "QtFormView[AnyFormItems]":
+    def _make_form(self, iview: FormView[AnyFormItems]) -> "QtFormView[AnyFormItems]":
         """Make a form view from the given interface."""
-        if isinstance(iview, IApplyFormView):
+        if isinstance(iview, ApplyFormView):
             iview_type = type(iview)
             cls_name = iview_type.__name__[1:]
             form_view_type: Type[QtApplyFormView[AnyFormItems]] = make_dataclass(
@@ -877,7 +877,7 @@ class QtApplyFormView(QtFormView[AnyFormItems], IApplyFormView[AnyFormItems]):
 
 
 @dataclass(eq=False)
-class QtGroupBoxFormView(QtFormView[AnyFormItems], IGroupBoxFormView[AnyFormItems]):
+class QtGroupBoxFormView(QtFormView[AnyFormItems], GroupBoxFormView[AnyFormItems]):
     view: QGroupBox = field(init=False, default_factory=QGroupBox)
 
     @property  # type: ignore[misc]
@@ -907,7 +907,7 @@ class QtGroupBoxFormView(QtFormView[AnyFormItems], IGroupBoxFormView[AnyFormItem
 
 @dataclass(eq=False)
 class QtGroupBoxApplyFormView(
-    QtApplyFormView[AnyFormItems], IGroupBoxApplyFormView[AnyFormItems]
+    QtApplyFormView[AnyFormItems], GroupBoxApplyFormView[AnyFormItems]
 ):
     view: QGroupBox = field(init=False, default_factory=QGroupBox)
 

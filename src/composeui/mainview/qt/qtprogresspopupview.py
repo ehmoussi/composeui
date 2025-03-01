@@ -3,7 +3,7 @@ r"""View for a worker progress."""
 from composeui.core.qt.qtworkerview import QtWorkerView
 from composeui.core.qt.widgets.progressdialog import ProgressDialog
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.mainview.interfaces.iprogresspopupview import IProgressPopupView
+from composeui.mainview.views.iprogresspopupview import ProgressPopupView
 
 from qtpy.QtWidgets import QWidget
 
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtProgressPopupView(QtWorkerView[AbstractTask], IProgressPopupView):
+class QtProgressPopupView(QtWorkerView[AbstractTask], ProgressPopupView):
     r"""View for the worker progress."""
 
     view: ProgressDialog = field(init=False)

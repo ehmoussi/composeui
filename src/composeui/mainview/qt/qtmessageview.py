@@ -1,7 +1,7 @@
 r"""Message view."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.interfaces.imessageview import IMessageView, MessageViewType
+from composeui.mainview.views.imessageview import MessageView, MessageViewType
 
 from qtpy.QtWidgets import QMessageBox, QWidget
 
@@ -10,7 +10,7 @@ from typing import Optional, Union
 
 
 @dataclass(eq=False)
-class QtMessageView(QtView, IMessageView):
+class QtMessageView(QtView, MessageView):
     r"""Display a message in a modal view."""
 
     view: None = field(init=False, default=None)

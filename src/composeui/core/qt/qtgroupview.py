@@ -1,7 +1,7 @@
 """View."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iview import IGroupView
+from composeui.core.views.iview import GroupView
 
 from qtpy.QtWidgets import QGroupBox
 
@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtGroupView(QtView, IGroupView):
+class QtGroupView(QtView, GroupView):
     """View with a groupbox."""
 
     view: QGroupBox = field(init=False)

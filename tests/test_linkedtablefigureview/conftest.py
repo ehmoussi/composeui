@@ -1,5 +1,5 @@
 from examples.linkedtablefigureview.app import LinkedTableFigureViewApp
-from examples.linkedtablefigureview.example import IExampleMainView
+from examples.linkedtablefigureview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> LinkedTableFigureViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = LinkedTableFigureViewApp(main_view)
     app.run()
     return app

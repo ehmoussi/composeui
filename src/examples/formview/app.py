@@ -2,7 +2,7 @@ from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.sqlitemodel import SqliteModel
 from examples.formview import pipeapplyform, pipeform
-from examples.formview.example import IExampleMainView, initialize_navigation
+from examples.formview.example import ExampleMainView, initialize_navigation
 
 from pathlib import Path
 
@@ -16,8 +16,8 @@ class Model(SqliteModel):
         self.apply_pipe_query = pipeform.PipeQuery(self._data, p_id=2)
 
 
-class FormViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class FormViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(Model(), main_view)
 
     def initialize_app(self) -> None:

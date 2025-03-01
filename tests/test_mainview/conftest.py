@@ -1,4 +1,4 @@
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 from examples.mainview.app import MainViewApp
 
 import pytest
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> MainViewApp:
     r"""Create model and view."""
-    main_view = IMainView()
+    main_view = MainView()
     app = MainViewApp(main_view)
     app.run()
     return app

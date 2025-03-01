@@ -1,7 +1,7 @@
 """Popup view to display a text."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.ipopuptextview import DialogChoices, IPopupTextView
+from composeui.core.views.ipopuptextview import DialogChoices, PopupTextView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
@@ -12,7 +12,7 @@ from typing import Optional
 
 
 @dataclass(eq=False)
-class QtPopupTextView(QtView, IPopupTextView):
+class QtPopupTextView(QtView, PopupTextView):
     r"""View used to confirm/reject a proposition in a long text format."""
 
     view: QDialog = field(init=False)

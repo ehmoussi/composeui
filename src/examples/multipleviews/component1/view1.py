@@ -1,28 +1,28 @@
-from composeui.core.views.iactionview import IActionView
-from composeui.core.views.iview import IView
+from composeui.core.views.iactionview import ActionView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from examples.multipleviews.example import IExampleMainView
+    from examples.multipleviews.example import ExampleMainView
 
 
 @dataclass(eq=False)
-class IView1(IView):
+class View1(View):
     text_1: str = field(init=False, default="")
 
 
 @dataclass(eq=False)
-class ILeftView1(IView):
+class LeftView1(View):
     left_text_1: str = field(init=False, default="")
 
 
 def initialize_component1(
-    toolbar_action: IActionView,
-    view: IView1,
-    left_view: ILeftView1,
-    main_view: "IExampleMainView",
+    toolbar_action: ActionView,
+    view: View1,
+    left_view: LeftView1,
+    main_view: "ExampleMainView",
 ) -> None:
     # toolbar action
     toolbar_action.text = "View 1"

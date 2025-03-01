@@ -1,15 +1,15 @@
 from examples.linkedtablefigureview.app import LinkedTableFigureViewApp
-from examples.linkedtablefigureview.example import IExampleMainView
+from examples.linkedtablefigureview.example import ExampleMainView
 
 import pytest
 
 
 @pytest.fixture()
-def main_view(app: LinkedTableFigureViewApp) -> IExampleMainView:
+def main_view(app: LinkedTableFigureViewApp) -> ExampleMainView:
     return app.main_view
 
 
-def test_update_figure(main_view: IExampleMainView) -> None:
+def test_update_figure(main_view: ExampleMainView) -> None:
     # initial state
     assert main_view.points.table.items is not None
     assert main_view.points.figure.figure is not None
@@ -29,7 +29,7 @@ def test_update_figure(main_view: IExampleMainView) -> None:
     assert len(axes.collections[0].get_offsets()) == 21  # type: ignore[arg-type]
 
 
-def test_update_table_selection(main_view: IExampleMainView) -> None:
+def test_update_table_selection(main_view: ExampleMainView) -> None:
     assert main_view.points.table.items is not None
     assert main_view.points.figure.figure is not None
     assert main_view.points.table.items.get_selected_rows() == []

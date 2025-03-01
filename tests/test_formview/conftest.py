@@ -1,5 +1,5 @@
 from examples.formview.app import FormViewApp
-from examples.formview.example import IExampleMainView
+from examples.formview.example import ExampleMainView
 
 import pytest
 
@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture(scope="session")
 def global_app() -> FormViewApp:
     r"""Create model and view."""
-    main_view = IExampleMainView()
+    main_view = ExampleMainView()
     app = FormViewApp(main_view)
     app.run()
     return app

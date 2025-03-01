@@ -2,7 +2,7 @@ r"""View the filter of a table."""
 
 from composeui.core.qt.qtview import QtView
 from composeui.core.qt.widgets.checkablemenubutton import CheckableMenuButton
-from composeui.items.core.views.ifiltertableview import IFilterTableView
+from composeui.items.core.views.ifiltertableview import FilterTableView
 
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QGridLayout, QLabel, QLineEdit, QPushButton, QWidget
@@ -12,7 +12,7 @@ from typing import Tuple
 
 
 @dataclass(eq=False)
-class QtFilterTableView(QtView, IFilterTableView):
+class QtFilterTableView(QtView, FilterTableView):
     r"""View of an action."""
 
     view: QWidget = field(init=False)

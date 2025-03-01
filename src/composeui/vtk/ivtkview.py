@@ -1,7 +1,7 @@
 """Interface to the VTK view."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 import enum
 import typing
@@ -24,7 +24,7 @@ class VTKPickType(enum.IntEnum):
 
 
 @dataclass(eq=False)
-class IVTKView(IView):
+class VTKView(View):
     vtk_ugrid: Optional["vtkUnstructuredGrid"] = field(init=False, default=None)
     vtk_scalar_name: Optional[str] = field(init=False, default=None)
     # edge configuration

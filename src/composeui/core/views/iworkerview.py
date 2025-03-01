@@ -1,7 +1,7 @@
 from composeui.core.basesignal import BaseSignal
 from composeui.core.tasks.abstracttask import AbstractTask
 from composeui.core.tasks.tasks import Tasks
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 import concurrent.futures
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ T = TypeVar("T", bound=AbstractTask)
 
 
 @dataclass(eq=False)
-class IWorkerView(IView, Generic[T]):
+class WorkerView(View, Generic[T]):
     tasks: Optional[Tasks[T]] = field(init=False, default=None)
     progress: BaseSignal = field(init=False, default=BaseSignal())
     finished: BaseSignal = field(init=False, default=BaseSignal())

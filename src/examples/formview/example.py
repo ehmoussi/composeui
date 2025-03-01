@@ -1,7 +1,7 @@
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.imaintoolbar import MainToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
 from examples.formview import pipeapplyform, pipeform
 
 import typing
@@ -12,29 +12,27 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    pipe: IActionView = field(init=False, default_factory=IActionView)
-    apply_pipe: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    pipe: ActionView = field(init=False, default_factory=ActionView)
+    apply_pipe: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    pipe_view: pipeform.IPipeFormView = field(
-        init=False, default_factory=pipeform.IPipeFormView
-    )
-    apply_pipe_view: pipeapplyform.IPipeApplyFormView = field(
-        init=False, default_factory=pipeapplyform.IPipeApplyFormView
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    pipe_view: pipeform.PipeFormView = field(init=False, default_factory=pipeform.PipeFormView)
+    apply_pipe_view: pipeapplyform.PipeApplyFormView = field(
+        init=False, default_factory=pipeapplyform.PipeApplyFormView
     )
 
 
 def initialize_navigation(
-    view: INavigationToolBar, main_view: IExampleMainView, model: "Model"
+    view: NavigationToolBar, main_view: ExampleMainView, model: "Model"
 ) -> None:
     view.pipe.text = "Pipe"
     view.pipe.is_checked = True

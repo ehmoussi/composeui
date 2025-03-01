@@ -1,33 +1,33 @@
-from composeui.core.views.iactionview import IActionView
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.mainview.views.imaintoolbar import MainToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
 from examples.linkedtableview.sqlite.lines import LinesItems, PointsItems
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    lines: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    lines: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    lines: ILinkedTableView[LinesItems, PointsItems] = field(
-        init=False, default_factory=ILinkedTableView[LinesItems, PointsItems]
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    lines: LinkedTableView[LinesItems, PointsItems] = field(
+        init=False, default_factory=LinkedTableView[LinesItems, PointsItems]
     )
     extension_study = ".example"
 
 
-def initialize_navigation(view: INavigationToolBar, main_view: "IExampleMainView") -> None:
+def initialize_navigation(view: NavigationToolBar, main_view: "ExampleMainView") -> None:
     view.lines.is_checked = True
     view.lines.text = "Lines"
     view.lines.visible_views = [main_view.lines]

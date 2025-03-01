@@ -2,9 +2,9 @@ from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.core.views.iitemsview import FormatExtension
 from composeui.items.linkedtable import linkedtable
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
 from composeui.items.table import connect_table
-from composeui.items.table.itableview import ITableGroupView
+from composeui.items.table.itableview import TableGroupView
 from composeui.items.tree.itreeview import ExportTreeOptions
 
 from functools import partial
@@ -14,7 +14,7 @@ from functools import partial
 
 
 def initialize_linked_table(
-    view: ILinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
+    view: LinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
 ) -> bool:
     r"""Initialize the select/modify view."""
     view.title = ""
@@ -35,7 +35,7 @@ def initialize_linked_table(
 
 
 def connect_linked_table_view(
-    table: ILinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
+    table: LinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
 ) -> bool:
     table.import_clicked = [linkedtable.import_clicked]
     table.export_clicked = [linkedtable.export_clicked]
@@ -43,8 +43,8 @@ def connect_linked_table_view(
 
 
 def connect_linked_table(
-    master_table: ITableGroupView[AnyMasterTableItems],
-    detail_table: ITableGroupView[AnyDetailTableItems],
+    master_table: TableGroupView[AnyMasterTableItems],
+    detail_table: TableGroupView[AnyDetailTableItems],
 ) -> bool:
     r"""Connect the callbacks for two linked tables."""
     master_table.selection_changed = [

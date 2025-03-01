@@ -4,20 +4,20 @@ from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems, AnyM
 from composeui.core import selectfiles, tools
 from composeui.core.tasks.tasks import Tasks
 from composeui.items.linkedtable.exportfilelinkedtabletask import ExportFileLinkedTableTask
+from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
 from composeui.items.linkedtable.importfilelinkedtabletask import ImportFileLinkedTableTask
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
-from composeui.items.table.itableview import ITableGroupView
+from composeui.items.table.itableview import TableGroupView
 from composeui.items.tree.itreeview import ExportTreeOptions
 from composeui.mainview import progresspopup
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 
 from functools import partial
 
 
 def import_clicked(
     *,
-    view: ILinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
-    main_view: IMainView,
+    view: LinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
+    main_view: MainView,
     model: AnyModel,
 ) -> None:
     if view.master_table.items is not None and view.detail_table.items is not None:
@@ -47,8 +47,8 @@ def import_clicked(
 
 def export_clicked(
     *,
-    view: ILinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
-    main_view: IMainView,
+    view: LinkedTableView[AnyMasterTableItems, AnyDetailTableItems],
+    main_view: MainView,
     model: AnyModel,
 ) -> None:
     if view.master_table.items is not None and view.detail_table.items is not None:
@@ -88,7 +88,7 @@ def export_clicked(
             progresspopup.display_view(main_view, tasks=Tasks((task,), print_to_std=True))
 
 
-def update_title_detail_table(view: ITableGroupView[AnyDetailTableItems]) -> None:
+def update_title_detail_table(view: TableGroupView[AnyDetailTableItems]) -> None:
     r"""Update the title of the detail table according to the master table."""
     if view.items is not None:
         view.title = view.items.get_title()
@@ -115,7 +115,7 @@ def update_title_detail_table(view: ITableGroupView[AnyDetailTableItems]) -> Non
 
 
 def update_status_detail_table(
-    view: ITableGroupView[AnyDetailTableItems],
+    view: TableGroupView[AnyDetailTableItems],
     update_detail_table: bool = True,
 ) -> None:
     r"""Update the status of the datas table."""

@@ -2,8 +2,8 @@ r"""Salome Toolbar View."""
 
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
 
 from PyQt5.QtWidgets import QToolBar  # need the real QToolbar or the findChildren may fail :/
 from qtpy.QtWidgets import QActionGroup, QMainWindow
@@ -14,7 +14,7 @@ from typing import List, Type, cast
 
 
 @dataclass(eq=False)
-class QtSalomeToolBar(QtView, IToolBar):
+class QtSalomeToolBar(QtView, ToolBar):
     r"""Salome Toolbar."""
 
     module_name: str
@@ -55,7 +55,7 @@ class QtSalomeToolBar(QtView, IToolBar):
     def _add_actions(self) -> None:
         r"""Add actions to toolbar."""
         for action_field in fields(self):
-            if action_field.type is IActionView:
+            if action_field.type is ActionView:
                 self.add_action(action_field.name)
 
     def add_action(self, name: str) -> None:
@@ -83,7 +83,7 @@ class QtSalomeToolBar(QtView, IToolBar):
 
     @classmethod
     def from_itoolbar(
-        cls, module_name: str, name: str, itoolbar: IToolBar
+        cls, module_name: str, name: str, itoolbar: ToolBar
     ) -> "QtSalomeToolBar":
         """Create a SalomeToolBar instance from an IToolBar."""
         itoolbar_type = type(itoolbar)
@@ -97,7 +97,7 @@ class QtSalomeToolBar(QtView, IToolBar):
 
 
 @dataclass(eq=False)
-class CheckableSalomeToolBar(QtSalomeToolBar, ICheckableToolBar):
+class CheckableSalomeToolBar(QtSalomeToolBar, CheckableToolBar):
     r"""Checkable Salome Toolbar."""
 
     def __post_init__(self) -> None:
@@ -126,7 +126,7 @@ class CheckableSalomeToolBar(QtSalomeToolBar, ICheckableToolBar):
 
     @classmethod
     def from_icheckable_toolbar(
-        cls, module_name: str, name: str, itoolbar: ICheckableToolBar
+        cls, module_name: str, name: str, itoolbar: CheckableToolBar
     ) -> "CheckableSalomeToolBar":
         """Create a CheckableSalomeToolBar instance from an ICheckableToolBar."""
         itoolbar_type = type(itoolbar)

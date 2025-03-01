@@ -1,15 +1,15 @@
 r"""Presenter of the File view."""
 
-from composeui.core.views.iselectpathview import FileMode, ISelectPathView
+from composeui.core.views.iselectpathview import FileMode, SelectPathView
 from composeui.items.core.views.iitemsview import FormatExtension
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.imainview import MainView
 
 from pathlib import Path
 from typing import Optional, Tuple
 
 
 def select_file(
-    main_view: IMainView,
+    main_view: MainView,
     extensions: str,
     mode: FileMode = "open_file",
 ) -> Optional[Path]:
@@ -29,7 +29,7 @@ def select_file(
     return None
 
 
-def select_path(*, view: ISelectPathView, main_view: IMainView) -> Optional[Path]:
+def select_path(*, view: SelectPathView, main_view: MainView) -> Optional[Path]:
     r"""Select a path file."""
     filepath = select_file(main_view, view.filter_path, view.mode)
     if filepath is not None:
@@ -38,7 +38,7 @@ def select_path(*, view: ISelectPathView, main_view: IMainView) -> Optional[Path
     return None
 
 
-def select_study_file(main_view: IMainView) -> Optional[Path]:
+def select_study_file(main_view: MainView) -> Optional[Path]:
     r"""Select a file with the extension of the study of the view."""
     extension_study = main_view.extension_study
     if extension_study == "":
@@ -46,18 +46,18 @@ def select_study_file(main_view: IMainView) -> Optional[Path]:
     return select_file(main_view, f"Study Files (*.{extension_study})")
 
 
-def select_excel_file(main_view: IMainView) -> Optional[Path]:
+def select_excel_file(main_view: MainView) -> Optional[Path]:
     r"""Select an excel file."""
     return select_file(main_view, "Excel Files (*.xl*)")
 
 
-def select_csv_file(main_view: IMainView) -> Optional[Path]:
+def select_csv_file(main_view: MainView) -> Optional[Path]:
     r"""Select a csv file."""
     return select_file(main_view, "csv Files (*.csv)")
 
 
 def select_table_file(
-    main_view: IMainView, table_extensions: FormatExtension
+    main_view: MainView, table_extensions: FormatExtension
 ) -> Tuple[Optional[Path], Optional[FormatExtension]]:
     r"""Select a file compatible to import a table."""
     filepath = select_file(main_view, _to_fileview_extension_format(table_extensions))
@@ -67,18 +67,18 @@ def select_table_file(
         return filepath, _get_extension_from_filepath(filepath)
 
 
-def save_file(main_view: IMainView, extensions: str) -> Optional[Path]:
+def save_file(main_view: MainView, extensions: str) -> Optional[Path]:
     r"""Save a file."""
     return select_file(main_view, extensions, mode="save_file")
 
 
-def save_csv_file(main_view: IMainView) -> Optional[Path]:
+def save_csv_file(main_view: MainView) -> Optional[Path]:
     r"""Save a csv file."""
     return save_file(main_view, "csv Files (*.csv)")
 
 
 def save_table_file(
-    main_view: IMainView, table_extensions: FormatExtension
+    main_view: MainView, table_extensions: FormatExtension
 ) -> Tuple[Optional[Path], Optional[FormatExtension]]:
     r"""Select a file compatible to export a table."""
     filepath = save_file(main_view, _to_fileview_extension_format(table_extensions))
@@ -88,7 +88,7 @@ def save_table_file(
         return filepath, _get_extension_from_filepath(filepath)
 
 
-def save_study_file(main_view: IMainView) -> Optional[Path]:
+def save_study_file(main_view: MainView) -> Optional[Path]:
     r"""Save a study file."""
     extension_study = main_view.extension_study
     if extension_study == "":

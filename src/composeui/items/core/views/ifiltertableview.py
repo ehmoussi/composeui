@@ -1,12 +1,12 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from typing import Tuple
 
 
 @dataclass(eq=False)
-class IFilterTableView(IView):
+class FilterTableView(View):
     text: str = field(init=False, default="")
     info_text: str = field(init=False, default="")
     match_case: bool = field(init=False, default=False)

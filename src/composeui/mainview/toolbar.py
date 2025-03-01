@@ -1,39 +1,39 @@
 r"""Toolbar utilities."""
 
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
 
 from typing import Iterator, Optional, Tuple
 
 
 def find_checked_action_from_toolbar(
-    view: ICheckableToolBar,
-) -> Tuple[str, Optional[IActionView]]:
+    view: CheckableToolBar,
+) -> Tuple[str, Optional[ActionView]]:
     for name, child_view in view.children.items():
-        if isinstance(child_view, IActionView) and child_view.is_checked:
+        if isinstance(child_view, ActionView) and child_view.is_checked:
             return name, child_view
     return "", None
 
 
-def display(*, view: ICheckableToolBar, main_view: IMainView) -> None:
+def display(*, view: CheckableToolBar, main_view: MainView) -> None:
     r"""Display the view/toolbar associated with the checked action."""
     action_name, action_view = find_checked_action_from_toolbar(view)
     if action_view is not None and len(action_view.visible_views) > 0:
         show_only_view(main_view, action_name)
 
 
-def show_only_view(main_view: IMainView, action_name: str) -> None:
+def show_only_view(main_view: MainView, action_name: str) -> None:
     r"""Show only the views of  the given action name."""
     for name, action_view in iter_toolbar_actions(main_view, action_name):
         is_visible = name == action_name
         for view in action_view.visible_views:
             view.is_visible = is_visible
-            if isinstance(view, ICheckableToolBar) and is_visible:
+            if isinstance(view, CheckableToolBar) and is_visible:
                 show_checked_action_views(view)
 
 
-def show_checked_action_views(toolbar: ICheckableToolBar) -> None:
+def show_checked_action_views(toolbar: CheckableToolBar) -> None:
     """Show the views of the checked action of the given toolbar."""
     _, checked_action = find_checked_action_from_toolbar(toolbar)
     if checked_action is not None:
@@ -61,14 +61,14 @@ def show_checked_action_views(toolbar: ICheckableToolBar) -> None:
 
 
 def iter_toolbar_actions(
-    main_view: IMainView, last_action_name: str
-) -> Iterator[Tuple[str, IActionView]]:
+    main_view: MainView, last_action_name: str
+) -> Iterator[Tuple[str, ActionView]]:
     r"""Iterate over the list of keys corresponding to an action view."""
     last_action = None
     for toolbar in main_view.toolbar.children.values():
-        if isinstance(toolbar, ICheckableToolBar):
+        if isinstance(toolbar, CheckableToolBar):
             for name, action in toolbar.children.items():
-                if isinstance(action, IActionView):
+                if isinstance(action, ActionView):
                     if name == last_action_name:
                         last_action = action
                         continue

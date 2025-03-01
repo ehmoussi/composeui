@@ -1,4 +1,4 @@
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -12,7 +12,7 @@ class MessageViewType(Enum):
 
 
 @dataclass(eq=False)
-class IMessageView(IView):
+class MessageView(View):
     title: str = field(init=False, default="")
     message: str = field(init=False, default="")
     message_type: Optional[MessageViewType] = field(init=False, default=None)

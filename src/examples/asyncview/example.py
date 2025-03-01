@@ -1,27 +1,27 @@
-from composeui.core.views.iactionview import IActionView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
-from examples.asyncview.filereader import IFileReaderView
+from composeui.core.views.iactionview import ActionView
+from composeui.mainview.views.imaintoolbar import MainToolBar
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.itoolbar import CheckableToolBar
+from examples.asyncview.filereader import FileReaderView
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    file_reader: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    file_reader: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    file_reader: IFileReaderView = field(init=False, default_factory=IFileReaderView)
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    file_reader: FileReaderView = field(init=False, default_factory=FileReaderView)
 
 
-def initialize_navigation(*, view: INavigationToolBar) -> None:
+def initialize_navigation(*, view: NavigationToolBar) -> None:
     view.file_reader.text = "File Reader"

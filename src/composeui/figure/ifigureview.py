@@ -1,6 +1,6 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.ipendingview import IPendingView
-from composeui.core.views.iview import IGroupView
+from composeui.core.views.ipendingview import PendingView
+from composeui.core.views.iview import GroupView
 
 import typing
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class IFigureView(IPendingView):
+class FigureView(PendingView):
     figure: Optional["Figure"] = field(init=False, default=None)
     has_toolbar: bool = field(init=False, default=False)
     last_clicked_axes: Optional["Axes"] = field(init=False, default=None)
@@ -22,4 +22,4 @@ class IFigureView(IPendingView):
 
 
 @dataclass(eq=False)
-class IFigureGroupView(IFigureView, IGroupView): ...
+class FigureGroupView(FigureView, GroupView): ...

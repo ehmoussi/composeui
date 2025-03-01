@@ -1,11 +1,11 @@
 r"""Common tools."""
 
-from composeui.core.views.iview import IView
-from composeui.form.iformview import IFormView, IRowView
-from composeui.items.table.itableview import ITableView
-from composeui.mainview.interfaces.ifileview import IFileView
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.imessageview import IMessageView, MessageViewType
+from composeui.core.views.iview import View
+from composeui.form.iformview import FormView, RowView
+from composeui.items.table.itableview import TableView
+from composeui.mainview.views.ifileview import FileView
+from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.imessageview import MessageView, MessageViewType
 
 from typing_extensions import OrderedDict
 
@@ -13,7 +13,7 @@ from collections import deque
 from typing import List, Optional, Set, Tuple
 
 
-def find_view(view: IView, view_path: Tuple[str, ...]) -> IView:
+def find_view(view: View, view_path: Tuple[str, ...]) -> View:
     r"""Find the view at the given path."""
     current_view_path = deque(view_path)
     current_view = view
@@ -23,7 +23,7 @@ def find_view(view: IView, view_path: Tuple[str, ...]) -> IView:
     return current_view
 
 
-def update_all_views(main_view: IMainView) -> None:
+def update_all_views(main_view: MainView) -> None:
     r"""Update all the views."""
     # call the slots associated with the update all signal
     main_view.update_all()
@@ -35,11 +35,11 @@ def update_all_views(main_view: IMainView) -> None:
 
 
 def update_view_with_dependencies(
-    view: IView, keep_selection: bool = False, before_validation: bool = False
+    view: View, keep_selection: bool = False, before_validation: bool = False
 ) -> None:
     r"""Update the given view and the views which depends on it."""
     dependencies = deque([view])
-    updated_dependencies: Set[IView] = set()
+    updated_dependencies: Set[View] = set()
     while len(dependencies) > 0:
         dependent_view = dependencies.popleft()
         _update_view(dependent_view, keep_selection, before_validation)
@@ -64,7 +64,7 @@ def update_view_with_dependencies(
 
 
 def _update_view(
-    view: IView, keep_selection: bool = False, before_validation: bool = False
+    view: View, keep_selection: bool = False, before_validation: bool = False
 ) -> None:
     r"""Update the given view.
 
@@ -72,19 +72,19 @@ def _update_view(
     """
     view.block_signals = True
     try:
-        if isinstance(view, ITableView) and view.items is not None:
+        if isinstance(view, TableView) and view.items is not None:
             selected_items = OrderedDict[Tuple[int, ...], List[int]]()
             if keep_selection:
                 selected_items = view.selected_items
             view.update()
             if keep_selection:
                 view.selected_items = selected_items
-        elif isinstance(view, IFormView) and view.items is not None:
+        elif isinstance(view, FormView) and view.items is not None:
             if not before_validation:
                 view.update()
             view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
-        elif isinstance(view, IRowView) and view.items is not None:
+        elif isinstance(view, RowView) and view.items is not None:
             if not before_validation:
                 view.update()
             view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
@@ -97,15 +97,15 @@ def _update_view(
         view.block_signals = False
 
 
-def find_focus_table(view: IView) -> Optional[IView]:
+def find_focus_table(view: View) -> Optional[View]:
     r"""Find the table with the focus."""
-    if isinstance(view, IView):
-        if isinstance(view, ITableView) and view.has_focus:
+    if isinstance(view, View):
+        if isinstance(view, TableView) and view.has_focus:
             return view
-        elif not isinstance(view, ITableView):
+        elif not isinstance(view, TableView):
             for child_view in view.children.values():
-                if isinstance(view, IMainView) and isinstance(
-                    child_view, (IMessageView, IFileView)
+                if isinstance(view, MainView) and isinstance(
+                    child_view, (MessageView, FileView)
                 ):
                     continue
                 focus_table = find_focus_table(child_view)
@@ -119,7 +119,7 @@ def find_focus_table(view: IView) -> Optional[IView]:
     return None
 
 
-def display_error_message(main_view: IMainView, message: str) -> bool:
+def display_error_message(main_view: MainView, message: str) -> bool:
     r"""Display error message."""
     main_view.message_view.title = main_view.title
     main_view.message_view.message_type = MessageViewType.critical
@@ -128,7 +128,7 @@ def display_error_message(main_view: IMainView, message: str) -> bool:
     return result is not None and result
 
 
-def display_warning_message(main_view: IMainView, message: str) -> bool:
+def display_warning_message(main_view: MainView, message: str) -> bool:
     r"""Display warning message."""
     main_view.message_view.title = main_view.title
     main_view.message_view.message_type = MessageViewType.warning
@@ -137,7 +137,7 @@ def display_warning_message(main_view: IMainView, message: str) -> bool:
     return result is not None and result
 
 
-def ask_confirmation(main_view: IMainView, message: str) -> bool:
+def ask_confirmation(main_view: MainView, message: str) -> bool:
     r"""Display error message."""
     main_view.message_view.title = main_view.title
     main_view.message_view.message_type = MessageViewType.question

@@ -1,10 +1,10 @@
-from composeui.core.views.iview import IView
+from composeui.core.views.iview import View
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class IFileView(IView):
+class FileView(View):
     filter_path: str = field(init=False, default="")
 
     def open_file(self) -> str:

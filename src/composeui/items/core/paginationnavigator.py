@@ -2,12 +2,12 @@ import typing
 from typing import Any, Generator, Optional
 
 if typing.TYPE_CHECKING:
-    from composeui.items.core.views.ipaginationview import IPaginationView
+    from composeui.items.core.views.ipaginationview import PaginationView
     from composeui.items.table.abstracttableitems import AbstractTableItems
 
 
 class PaginationNavigator:
-    def __init__(self, view: "IPaginationView", items: "AbstractTableItems[Any]") -> None:
+    def __init__(self, view: "PaginationView", items: "AbstractTableItems[Any]") -> None:
         self._view = view
         self._items = items
         self._current_page_size: int = 1

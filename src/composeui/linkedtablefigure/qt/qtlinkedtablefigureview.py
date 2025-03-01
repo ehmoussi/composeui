@@ -2,7 +2,7 @@ from composeui.commontypes import AnyTableItems
 from composeui.core.qt.qtview import QtView
 from composeui.figure.qtfigureview import QtFigureView
 from composeui.items.table.qt.qttableview import QtTableView
-from composeui.linkedtablefigure.ilinkedtablefigureview import ILinkedTableFigureView
+from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
 
 from qtpy.QtWidgets import QSplitter
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class QtLinkedTableFigureView(QtView, ILinkedTableFigureView[AnyTableItems]):
+class QtLinkedTableFigureView(QtView, LinkedTableFigureView[AnyTableItems]):
     view: QSplitter = field(init=False)
     table: QtTableView[AnyTableItems] = field(init=False)
     figure: QtFigureView = field(init=False)
