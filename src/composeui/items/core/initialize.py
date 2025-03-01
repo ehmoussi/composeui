@@ -1,10 +1,10 @@
-from composeui.items.core.iitemsview import FormatExtension, IItemsView
-from composeui.items.core.ipaginationview import IPaginationView
+from composeui.items.core.views.ipaginationview import PaginationView
+from composeui.items.core.views.itemsview import FormatExtension, ItemsView
 
 from collections import OrderedDict
 
 
-def initialize_items_view(view: IItemsView) -> bool:
+def initialize_items_view(view: ItemsView) -> bool:
     """Initialize the table/tree view."""
     view.has_add = False
     view.has_remove = False
@@ -36,7 +36,7 @@ def initialize_items_view(view: IItemsView) -> bool:
     return False
 
 
-def initialize_pagination(view: IPaginationView) -> bool:
+def initialize_pagination(view: PaginationView) -> bool:
     view.is_first_enabled = False
     view.is_previous_enabled = False
     view.is_next_enabled = False

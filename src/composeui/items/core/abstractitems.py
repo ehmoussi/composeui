@@ -9,9 +9,9 @@ from abc import ABC, abstractmethod
 from typing import Generator, Generic, List, Optional, Tuple, TypeVar
 
 if typing.TYPE_CHECKING:
-    from composeui.items.core.iitemsview import IItemsView
+    from composeui.items.core.views.itemsview import ItemsView
 
-V = TypeVar("V", bound="IItemsView")
+V = TypeVar("V", bound="ItemsView")
 
 
 class AbstractItems(ABC, Generic[V, AnyModel]):

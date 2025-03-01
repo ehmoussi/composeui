@@ -1,18 +1,18 @@
 from composeui.core import study
 from composeui.core.tasks import progresstask
 from composeui.mainview import toolbar
-from composeui.mainview.interfaces.ifileview import IFileView
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.imenu import IFileMenu
-from composeui.mainview.interfaces.imessageview import IMessageView, MessageViewType
-from composeui.mainview.interfaces.iprogresspopupview import IProgressPopupView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IFileToolBar
-from composeui.salomewrapper.mainview.isalomemainview import ISalomeMainView
+from composeui.mainview.views.fileview import FileView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.messageview import MessageView, MessageViewType
+from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
 from typing import Union
 
 
-def initialize_main_view(view: IMainView) -> bool:
+def initialize_main_view(view: MainView) -> bool:
     """Initialize the main view."""
     view.is_visible = True
     title = str(type(view).__name__)
@@ -26,7 +26,7 @@ def initialize_main_view(view: IMainView) -> bool:
     return True
 
 
-def initialize_file_menu(view: IFileMenu) -> bool:
+def initialize_file_menu(view: FileMenu) -> bool:
     r"""Initialize the file menu view."""
     view.title = "File"
     view.new.text = "New"
@@ -48,7 +48,7 @@ def initialize_file_menu(view: IFileMenu) -> bool:
     return False
 
 
-def initialize_file_toolbar(view: IFileToolBar) -> bool:
+def initialize_file_toolbar(view: FileToolBar) -> bool:
     r"""Initialize the file toolbar view."""
     view.is_visible = True
     view.is_always_visible = True
@@ -64,7 +64,7 @@ def initialize_file_toolbar(view: IFileToolBar) -> bool:
     return False
 
 
-def initialize_progress_popup_view(view: IProgressPopupView, with_tasks: bool = True) -> bool:
+def initialize_progress_popup_view(view: ProgressPopupView, with_tasks: bool = True) -> bool:
     r"""Initialize the progress popup view."""
     view.is_visible = False
     view.title = "Work in progress ..."
@@ -76,7 +76,7 @@ def initialize_progress_popup_view(view: IProgressPopupView, with_tasks: bool = 
     return False
 
 
-def initialize_message_view(view: IMessageView) -> bool:
+def initialize_message_view(view: MessageView) -> bool:
     """Initialize the message view."""
     view.is_visible = False
     view.title = ""
@@ -85,29 +85,27 @@ def initialize_message_view(view: IMessageView) -> bool:
     return False
 
 
-def initialize_file_view(view: IFileView) -> bool:
+def initialize_file_view(view: FileView) -> bool:
     """Initialize the file view."""
     view.filter_path = ""
     return False
 
 
-def connect_main_view(main_view: IMainView) -> bool:
+def connect_main_view(main_view: MainView) -> bool:
     main_view.save_before_exit = [study.save_before_exit]
     return True
 
 
-def connect_file_menu(view: IFileMenu) -> bool:
+def connect_file_menu(view: FileMenu) -> bool:
     r"""Connect the signals of the menu view."""
     view.exit_app.triggered = [study.exit_app]
     return False
 
 
-def connect_file_menu_toolbar(
-    view: Union[IFileMenu, IFileToolBar], main_view: IMainView
-) -> bool:
+def connect_file_menu_toolbar(view: Union[FileMenu, FileToolBar], main_view: MainView) -> bool:
     r"""Connect the signals of the identical menu/toolbar actions."""
     view.new.triggered = [study.new]
-    if isinstance(main_view, ISalomeMainView):
+    if isinstance(main_view, SalomeMainView):
         view.open_file.triggered = [study.open_file_without_update]
     else:
         view.open_file.triggered = [study.open_file]
@@ -116,7 +114,7 @@ def connect_file_menu_toolbar(
     return False
 
 
-def connect_checkable_toolbar(view: ICheckableToolBar) -> bool:
+def connect_checkable_toolbar(view: CheckableToolBar) -> bool:
     r"""Connect the signals of the menu view."""
     view.toggled = [toolbar.display]
     return False

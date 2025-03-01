@@ -5,9 +5,9 @@ from composeui.items.core import pagination
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
 from composeui.items.tree.exportfiletreetask import ExportFileTreeTask
 from composeui.items.tree.importfiletreetask import ImportFileTreeTask
-from composeui.items.tree.itreeview import ExportTreeOptions, ITreeView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeView
 from composeui.mainview import progresspopup
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import TypeAlias
 
@@ -15,10 +15,10 @@ from collections import defaultdict
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-AnyTreeView: TypeAlias = ITreeView[AbstractTreeItems[Any]]
+AnyTreeView: TypeAlias = TreeView[AbstractTreeItems[Any]]
 
 
-def import_clicked(*, view: AnyTreeView, main_view: IMainView, model: AnyModel) -> None:
+def import_clicked(*, view: AnyTreeView, main_view: MainView, model: AnyModel) -> None:
     """Import values from a csv file in the tree."""
     if view.items is not None:
         if view.items.get_nb_rows() == 0:
@@ -43,7 +43,7 @@ def import_clicked(*, view: AnyTreeView, main_view: IMainView, model: AnyModel) 
         )
 
 
-def export_clicked(*, view: AnyTreeView, main_view: IMainView, model: AnyModel) -> None:
+def export_clicked(*, view: AnyTreeView, main_view: MainView, model: AnyModel) -> None:
     """Export values of the tree to a csv/excel/markdown/html file."""
     if view.items is not None:
         filepath, filepath_extension = selectfiles.save_table_file(
@@ -111,7 +111,7 @@ def add_clicked(*, view: AnyTreeView) -> None:
             view.items.set_selected_positions(selected_positions)
 
 
-def remove_clicked(*, view: AnyTreeView, main_view: IMainView) -> None:
+def remove_clicked(*, view: AnyTreeView, main_view: MainView) -> None:
     r"""Remove an item in the tree."""
     if view.items is not None and (
         view.items.get_confirmation_message() == ""

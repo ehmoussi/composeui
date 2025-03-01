@@ -1,50 +1,48 @@
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.mainview.interfaces.idockview import IDockView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
-from examples.multipleviews.component1 import ILeftView1, IView1
-from examples.multipleviews.component2 import IRightView2, IView2
-from examples.multipleviews.component3 import IView3
+from composeui.core.views.actionview import ActionView
+from composeui.mainview.views.dockview import DockView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.toolbar import CheckableToolBar
+from examples.multipleviews.component1.view1 import LeftView1, View1
+from examples.multipleviews.component2.view2 import RightView2, View2
+from examples.multipleviews.component3.view3 import View3
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    view_1: IActionView = field(init=False, default_factory=IActionView)
-    view_2: IActionView = field(init=False, default_factory=IActionView)
-    view_3: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    view_1: ActionView = field(init=False, default_factory=ActionView)
+    view_2: ActionView = field(init=False, default_factory=ActionView)
+    view_3: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleMainToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class ILeftExampleDockView(IDockView):
-    view_1: ILeftView1 = field(init=False, default_factory=ILeftView1)
+class LeftExampleDockView(DockView):
+    view_1: LeftView1 = field(init=False, default_factory=LeftView1)
 
 
 @dataclass(eq=False)
-class IRightExampleDockView(IDockView):
-    view_2: IRightView2 = field(init=False, default_factory=IRightView2)
+class RightExampleDockView(DockView):
+    view_2: RightView2 = field(init=False, default_factory=RightView2)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
-    left_dock: ILeftExampleDockView = field(init=False, default_factory=ILeftExampleDockView)
-    right_dock: IRightExampleDockView = field(
-        init=False, default_factory=IRightExampleDockView
-    )
-    view_1: IView1 = field(init=False, default_factory=IView1)
-    view_2: IView2 = field(init=False, default_factory=IView2)
-    view_3: IView3 = field(init=False, default_factory=IView3)
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
+    left_dock: LeftExampleDockView = field(init=False, default_factory=LeftExampleDockView)
+    right_dock: RightExampleDockView = field(init=False, default_factory=RightExampleDockView)
+    view_1: View1 = field(init=False, default_factory=View1)
+    view_2: View2 = field(init=False, default_factory=View2)
+    view_3: View3 = field(init=False, default_factory=View3)
 
 
-def initialize_dockviews(main_view: IExampleMainView) -> None:
+def initialize_dockviews(main_view: ExampleMainView) -> None:
     # left dock
     main_view.left_dock.is_visible = True
     # right dock

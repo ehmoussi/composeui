@@ -1,17 +1,17 @@
 from composeui import form
 from composeui.core import tools
-from composeui.core.interfaces.iview import IGroupView, IView
+from composeui.core.views.view import GroupView, View
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
-    IGroupBoxApplyFormView,
-    ILabelComboBoxView,
-    ILabelDoubleLineEditView,
-    ILabelRadioButtonGroupView,
-    INoLabelSelectFileView,
+from composeui.form.formview import (
+    GroupBoxApplyFormView,
+    LabelComboBoxView,
+    LabelDoubleLineEditView,
+    LabelRadioButtonGroupView,
+    NoLabelSelectFileView,
 )
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.mainview import MainView
 from composeui.vtk import vtkutils
-from composeui.vtk.ivtkview import IVTKView, VTKPickType
+from composeui.vtk.vtkview import VTKPickType, VTKView
 
 import typing
 from dataclasses import dataclass, field
@@ -22,7 +22,7 @@ if typing.TYPE_CHECKING:
     from examples.vtkview.app import Model
 
 
-class VTKConfigFormItems(AbstractFormItems["Model", "IVTKConfigView"]):
+class VTKConfigFormItems(AbstractFormItems["Model", "VTKConfigView"]):
     def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
         if field == "edge_width":
             return self._view.edge.field_view.current_index == 0
@@ -113,48 +113,48 @@ class VTKConfigFormItems(AbstractFormItems["Model", "IVTKConfigView"]):
 
 
 @dataclass(eq=False)
-class IVTKInfosView(IGroupView):
+class VTKInfosView(GroupView):
     text: str = field(init=False, default="")
 
 
 @dataclass(eq=False)
-class IVTKConfigView(IGroupBoxApplyFormView[VTKConfigFormItems]):
-    file: INoLabelSelectFileView[VTKConfigFormItems] = field(
-        init=False, default_factory=INoLabelSelectFileView
+class VTKConfigView(GroupBoxApplyFormView[VTKConfigFormItems]):
+    file: NoLabelSelectFileView[VTKConfigFormItems] = field(
+        init=False, default_factory=NoLabelSelectFileView
     )
-    scalar_field: ILabelComboBoxView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelComboBoxView
+    scalar_field: LabelComboBoxView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelComboBoxView
     )
-    edge: ILabelRadioButtonGroupView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelRadioButtonGroupView
+    edge: LabelRadioButtonGroupView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelRadioButtonGroupView
     )
-    edge_width: ILabelDoubleLineEditView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView
+    edge_width: LabelDoubleLineEditView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView
     )
-    warp: ILabelComboBoxView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelComboBoxView
+    warp: LabelComboBoxView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelComboBoxView
     )
-    warp_scale: ILabelDoubleLineEditView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView
+    warp_scale: LabelDoubleLineEditView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView
     )
-    pick_type: ILabelRadioButtonGroupView[VTKConfigFormItems] = field(
-        init=False, default_factory=ILabelRadioButtonGroupView
+    pick_type: LabelRadioButtonGroupView[VTKConfigFormItems] = field(
+        init=False, default_factory=LabelRadioButtonGroupView
     )
 
 
 @dataclass(eq=False)
-class IVTKExampleView(IView):
-    configuration: IVTKConfigView = field(init=False, default_factory=IVTKConfigView)
-    vtk_view: IVTKView = field(init=False, default_factory=IVTKView)
-    informations: IVTKInfosView = field(init=False, default_factory=IVTKInfosView)
+class VTKExampleView(View):
+    configuration: VTKConfigView = field(init=False, default_factory=VTKConfigView)
+    vtk_view: VTKView = field(init=False, default_factory=VTKView)
+    informations: VTKInfosView = field(init=False, default_factory=VTKInfosView)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    vtk_example: IVTKExampleView = field(init=False, default_factory=IVTKExampleView)
+class ExampleMainView(MainView):
+    vtk_example: VTKExampleView = field(init=False, default_factory=VTKExampleView)
 
 
-def read_file(*, view: IVTKConfigView, main_view: IExampleMainView, model: "Model") -> None:
+def read_file(*, view: VTKConfigView, main_view: ExampleMainView, model: "Model") -> None:
     filepath = Path(view.file.field_view.text)
     vtk_ugrid = vtkutils.read_file(filepath, main_view=main_view)
     if vtk_ugrid is not None:
@@ -173,7 +173,7 @@ def read_file(*, view: IVTKConfigView, main_view: IExampleMainView, model: "Mode
         tools.update_view_with_dependencies(view.scalar_field)
 
 
-def display_informations(*, view: IVTKView, parent_view: IVTKExampleView) -> None:
+def display_informations(*, view: VTKView, parent_view: VTKExampleView) -> None:
     """Display the cell informations of the last cell/point picked."""
     text = ""
     if view.last_picked_cell_id >= 0:
@@ -200,7 +200,7 @@ def display_informations(*, view: IVTKView, parent_view: IVTKExampleView) -> Non
     parent_view.informations.text = text
 
 
-def initialize_vtk_example(view: IVTKExampleView, model: "Model") -> None:
+def initialize_vtk_example(view: VTKExampleView, model: "Model") -> None:
     """Initialize the vtk view."""
     # configuration
     form.initialize_form_view(
@@ -219,7 +219,7 @@ def initialize_vtk_example(view: IVTKExampleView, model: "Model") -> None:
     view.informations.is_enabled = False
 
 
-def connect_vtk_example(view: IVTKExampleView) -> None:
+def connect_vtk_example(view: VTKExampleView) -> None:
     view.configuration.apply_clicked += [read_file]
     view.vtk_view.cell_picked += [display_informations]
     view.vtk_view.point_picked += [display_informations]

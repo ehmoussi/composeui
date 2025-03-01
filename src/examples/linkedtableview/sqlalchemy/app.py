@@ -1,7 +1,7 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.sqlalchemymodel import SqlAlchemyModel
-from examples.linkedtableview.sqlalchemy.example import IExampleMainView, initialize_navigation
+from examples.linkedtableview.sqlalchemy.example import ExampleMainView, initialize_navigation
 from examples.linkedtableview.sqlalchemy.lines import LinesQuery, initialize_lines
 
 
@@ -12,8 +12,8 @@ class Model(SqlAlchemyModel):
         self.lines_query = LinesQuery(self._data)
 
 
-class LinkedTableViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class LinkedTableViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(Model(), main_view)
 
     def initialize_app(self) -> None:

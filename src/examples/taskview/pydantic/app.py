@@ -1,8 +1,8 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.mainview import MainView
 from composeui.model.pydanticmodel import PydanticModel
-from examples.taskview.pydantic.task import ITaskView, connect_task, initialize_task
+from examples.taskview.pydantic.task import TaskView, connect_task, initialize_task
 
 import pydantic
 from typing_extensions import TypeAlias
@@ -17,15 +17,15 @@ class TaskConfig(pydantic.BaseModel):
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    task: ITaskView = field(init=False, default_factory=ITaskView)
+class ExampleMainView(MainView):
+    task: TaskView = field(init=False, default_factory=TaskView)
 
 
 Model: TypeAlias = PydanticModel[TaskConfig]
 
 
-class PydanticTaskViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class PydanticTaskViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(
             PydanticModel("example", get_version("composeui"), TaskConfig(), is_debug=True),
             main_view,

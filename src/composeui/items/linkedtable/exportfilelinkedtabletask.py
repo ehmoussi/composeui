@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.items.core.iitemsview import FormatExtension
-from composeui.items.tree.itreeview import ExportTreeOptions
+from composeui.items.core.views.itemsview import FormatExtension
+from composeui.items.tree.treeview import ExportTreeOptions
 
 from typing_extensions import OrderedDict
 

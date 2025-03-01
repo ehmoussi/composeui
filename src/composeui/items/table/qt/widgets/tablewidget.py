@@ -3,7 +3,7 @@ r"""Items widget."""
 from composeui.items.core.qt.widgets.itemswidget import ItemsWidget, set_delegates
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.qt.widgets.tableitemmodel import TableItemModel
-from composeui.items.tree.qt.treeitemmodel import TreeItemModel
+from composeui.items.tree.qt.widgets.treeitemmodel import TreeItemModel
 
 from qtpy.QtCore import Signal  # type: ignore[attr-defined]
 from qtpy.QtCore import Slot  # type: ignore[attr-defined]

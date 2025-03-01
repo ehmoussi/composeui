@@ -1,7 +1,7 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.tableview import TableView
 from composeui.store.sqlalchemystore import SqlAlchemyDataBase, SqlAlchemyStore
 
 from sqlalchemy import (
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Generator, List, Optional
 
 if TYPE_CHECKING:
     from examples.linkedtableview.sqlalchemy.app import Model
-    from examples.linkedtableview.sqlalchemy.example import IExampleMainView
+    from examples.linkedtableview.sqlalchemy.example import ExampleMainView
 
 if sys.version_info >= (3, 7):  # noqa: UP036
     from sqlalchemy.orm import mapped_column
@@ -337,7 +337,7 @@ class LinesQuery:
 
 
 class LinesItems(AbstractTableItems["Model"]):
-    def __init__(self, view: ITableView["LinesItems"], model: "Model") -> None:
+    def __init__(self, view: TableView["LinesItems"], model: "Model") -> None:
         super().__init__(view, model)
         self._titles = ["Name", "Id"]
 
@@ -382,7 +382,7 @@ class LinesItems(AbstractTableItems["Model"]):
 
 
 class PointsItems(AbstractTableItems["Model"]):
-    def __init__(self, view: ITableView["PointsItems"], model: "Model") -> None:
+    def __init__(self, view: TableView["PointsItems"], model: "Model") -> None:
         super().__init__(view, model)
         self._titles = ["Name", "X", "Y", "Z", "Id"]
 
@@ -496,8 +496,8 @@ class PointsItems(AbstractTableItems["Model"]):
 
 
 def initialize_lines(
-    view: ILinkedTableView[LinesItems, PointsItems],
-    main_view: "IExampleMainView",
+    view: LinkedTableView[LinesItems, PointsItems],
+    main_view: "ExampleMainView",
     model: "Model",
 ) -> None:
     view.has_import = True

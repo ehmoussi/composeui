@@ -1,9 +1,9 @@
 """Test of vtkutils module."""
 
 from composeui.vtk import vtkutils
-from composeui.vtk.ivtkview import IVTKView
+from composeui.vtk.vtkview import VTKView
 from examples.vtkview.app import VTKViewApp
-from examples.vtkview.example import IExampleMainView
+from examples.vtkview.example import ExampleMainView
 
 import pytest
 
@@ -11,12 +11,12 @@ from pathlib import Path
 
 
 @pytest.fixture()
-def main_view(app: VTKViewApp) -> IExampleMainView:
+def main_view(app: VTKViewApp) -> ExampleMainView:
     return app.main_view
 
 
 @pytest.fixture()
-def vtk_view(app: VTKViewApp) -> IVTKView:
+def vtk_view(app: VTKViewApp) -> VTKView:
     vtk_view = app.main_view.vtk_example.vtk_view
     # non existing file
     vtk_view.vtk_ugrid = vtkutils.read_file(
@@ -74,7 +74,7 @@ def test_write_file(tmpdir: Path) -> None:
     assert vtu_filepath.read_text() == vtu_filepath_ref.read_text()
 
 
-def test_get_cell_field_value(vtk_view: IVTKView) -> None:
+def test_get_cell_field_value(vtk_view: VTKView) -> None:
     """Test get_cell_field_value."""
     # The scalar name is not given
     with pytest.raises(ValueError, match="Can't retrieve the value of a cell"):
@@ -103,7 +103,7 @@ def test_get_cell_field_value(vtk_view: IVTKView) -> None:
     }
 
 
-def test_get_point_field_value(vtk_view: IVTKView) -> None:
+def test_get_point_field_value(vtk_view: VTKView) -> None:
     """Test get_point_field_value."""
     # The scalar name is not given
     with pytest.raises(ValueError, match="Can't retrieve the value of a point"):
@@ -121,7 +121,7 @@ def test_get_point_field_value(vtk_view: IVTKView) -> None:
     assert vtkutils.get_point_field_value(0, view=vtk_view) == [1.0]
 
 
-def test_get_cell_type(vtk_view: IVTKView) -> None:
+def test_get_cell_type(vtk_view: VTKView) -> None:
     """Test get_cell_type."""
     # The scalar name is not given or is not correct -> not a problem because it doesn't need
     # the scalar field to retrieve the type of the cell

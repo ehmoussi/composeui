@@ -1,28 +1,28 @@
 """Test the definition of a cube."""
 
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.tableview import TableView
 from composeui.salomewrapper.core import study
 from examples.salomeview.app import ExampleSalomeApp, Module1App, Module2App
-from examples.salomeview.cubedefinition import ICubeDefinitionView
+from examples.salomeview.cubedefinition import CubeDefinitionView
 from examples.salomeview.cubetable import CubeTableItems
 
 import pytest
 
 
 @pytest.fixture()
-def cube_definition(app: ExampleSalomeApp) -> ICubeDefinitionView:
+def cube_definition(app: ExampleSalomeApp) -> CubeDefinitionView:
     assert isinstance(app.modules[0], Module1App)
     return app.modules[0].main_view.left_dock.cube_definition
 
 
 @pytest.fixture()
-def cube_table(app: ExampleSalomeApp) -> ITableView[CubeTableItems]:
+def cube_table(app: ExampleSalomeApp) -> TableView[CubeTableItems]:
     assert isinstance(app.modules[1], Module2App)
     return app.modules[1].main_view.cube_table
 
 
 def test_fill_form(
-    cube_definition: ICubeDefinitionView, cube_table: ITableView[CubeTableItems]
+    cube_definition: CubeDefinitionView, cube_table: TableView[CubeTableItems]
 ) -> None:
     # set up
     assert cube_table.items is not None

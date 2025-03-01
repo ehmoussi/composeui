@@ -3,9 +3,9 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.mashumaromodel import MashumaroModel
-from composeui.vtk.ivtkview import VTKPickType
+from composeui.vtk.vtkview import VTKPickType
 from examples.vtkview.example import (  # initialize_vtk_view,
-    IExampleMainView,
+    ExampleMainView,
     connect_vtk_example,
     initialize_vtk_example,
 )
@@ -32,8 +32,8 @@ class VTKConfig(DataClassJSONMixin):
 Model: TypeAlias = MashumaroModel[VTKConfig]
 
 
-class VTKViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class VTKViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(
             MashumaroModel("example", get_version("composeui"), VTKConfig()),
             main_view,

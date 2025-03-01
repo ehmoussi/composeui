@@ -1,8 +1,8 @@
 """Some utilities to use with the vtk view."""
 
 from composeui.core import tools
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.vtk.ivtkview import IVTKView
+from composeui.mainview.views.mainview import MainView
+from composeui.vtk.vtkview import VTKView
 
 from typing_extensions import overload
 from vtkmodules.vtkCommonCore import vtkCommand, vtkObject
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 
-def get_cell_field_value(cell_id: int, *, view: IVTKView) -> Dict[int, List[float]]:
+def get_cell_field_value(cell_id: int, *, view: VTKView) -> Dict[int, List[float]]:
     """Get the value of the current field for the given cell id for each point id."""
     if view.vtk_ugrid is not None and view.vtk_scalar_name is not None:
         active_array = view.vtk_ugrid.GetPointData().GetArray(view.vtk_scalar_name)
@@ -46,7 +46,7 @@ def get_cell_field_value(cell_id: int, *, view: IVTKView) -> Dict[int, List[floa
         raise ValueError(msg)
 
 
-def get_point_field_value(point_id: int, *, view: IVTKView) -> List[float]:
+def get_point_field_value(point_id: int, *, view: VTKView) -> List[float]:
     """Get the value of the current field for the given point id."""
     if view.vtk_ugrid is not None and view.vtk_scalar_name is not None:
         active_array = view.vtk_ugrid.GetPointData().GetArray(view.vtk_scalar_name)
@@ -72,7 +72,7 @@ def get_point_field_value(point_id: int, *, view: IVTKView) -> List[float]:
         raise ValueError(msg)
 
 
-def get_cell_type(cell_id: int, *, view: IVTKView) -> "CellType":
+def get_cell_type(cell_id: int, *, view: VTKView) -> "CellType":
     """Get type of the given cell id."""
     if view.vtk_ugrid is not None:
         cell = view.vtk_ugrid.GetCell(cell_id)
@@ -88,9 +88,9 @@ def get_cell_type(cell_id: int, *, view: IVTKView) -> "CellType":
 @overload
 def read_file(filepath: Path) -> Optional[vtkUnstructuredGrid]: ...
 @overload
-def read_file(filepath: Path, *, main_view: IMainView) -> Optional[vtkUnstructuredGrid]: ...
+def read_file(filepath: Path, *, main_view: MainView) -> Optional[vtkUnstructuredGrid]: ...
 def read_file(
-    filepath: Path, *, main_view: Optional[IMainView] = None
+    filepath: Path, *, main_view: Optional[MainView] = None
 ) -> Optional[vtkUnstructuredGrid]:
     """Read a vtk/vtu file and return a vtk unstructured grid."""
     vtk_ugrid: Optional[vtkUnstructuredGrid] = None
@@ -115,11 +115,9 @@ def read_file(
 @overload
 def read_vtk_file(filepath: Path) -> Optional[vtkUnstructuredGrid]: ...
 @overload
+def read_vtk_file(filepath: Path, *, main_view: MainView) -> Optional[vtkUnstructuredGrid]: ...
 def read_vtk_file(
-    filepath: Path, *, main_view: IMainView
-) -> Optional[vtkUnstructuredGrid]: ...
-def read_vtk_file(
-    filepath: Path, *, main_view: Optional[IMainView] = None
+    filepath: Path, *, main_view: Optional[MainView] = None
 ) -> Optional[vtkUnstructuredGrid]:
     """Read a vtk file containing a vtkUnstructuredGrid."""
     assert filepath.suffix == ".vtk", "Only vtk files are allowed"
@@ -130,11 +128,9 @@ def read_vtk_file(
 @overload
 def read_vtu_file(filepath: Path) -> Optional[vtkUnstructuredGrid]: ...
 @overload
+def read_vtu_file(filepath: Path, *, main_view: MainView) -> Optional[vtkUnstructuredGrid]: ...
 def read_vtu_file(
-    filepath: Path, *, main_view: IMainView
-) -> Optional[vtkUnstructuredGrid]: ...
-def read_vtu_file(
-    filepath: Path, *, main_view: Optional[IMainView] = None
+    filepath: Path, *, main_view: Optional[MainView] = None
 ) -> Optional[vtkUnstructuredGrid]:
     """Read a vtu file containing a vtkUnstructuredGrid."""
     assert filepath.suffix == ".vtu", "Only vtu files are allowed"
@@ -146,10 +142,10 @@ def read_vtu_file(
 def write_file(vtk_ugrid: vtkUnstructuredGrid, filepath: Path) -> None: ...
 @overload
 def write_file(
-    vtk_ugrid: vtkUnstructuredGrid, filepath: Path, *, main_view: IMainView
+    vtk_ugrid: vtkUnstructuredGrid, filepath: Path, *, main_view: MainView
 ) -> None: ...
 def write_file(
-    vtk_ugrid: vtkUnstructuredGrid, filepath: Path, *, main_view: Optional[IMainView] = None
+    vtk_ugrid: vtkUnstructuredGrid, filepath: Path, *, main_view: Optional[MainView] = None
 ) -> None:
     """Write the given unstructured grid into the given filepath."""
     writer: Optional[Union[vtkXMLUnstructuredGridWriter, vtkUnstructuredGridWriter]] = None
@@ -177,7 +173,7 @@ def _read_file(
     reader: Union[vtkXMLUnstructuredGridReader, vtkUnstructuredGridReader],
     filepath: Path,
     *,
-    main_view: Optional[IMainView] = None,
+    main_view: Optional[MainView] = None,
 ) -> Optional[vtkUnstructuredGrid]:
     """Read the unstructured grid from the given reader."""
     if not filepath.exists():
@@ -216,7 +212,7 @@ def _read_file(
     return None
 
 
-def _create_invalid_vtk_view_exception_message(view: IVTKView, action: str) -> str:
+def _create_invalid_vtk_view_exception_message(view: VTKView, action: str) -> str:
     """Create an error message if the view has invalid unstructured grid or scalar name."""
     msg = f"{action}. \n"
     if view.vtk_ugrid is None:

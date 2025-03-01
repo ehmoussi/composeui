@@ -1,14 +1,14 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.basemodel import BaseModel
-from examples.multipleviews.component1 import initialize_component1
-from examples.multipleviews.component2 import initialize_component2
-from examples.multipleviews.component3 import initialize_component3
-from examples.multipleviews.example import IExampleMainView, initialize_dockviews
+from examples.multipleviews.component1.view1 import initialize_component1
+from examples.multipleviews.component2.view2 import initialize_component2
+from examples.multipleviews.component3.view3 import initialize_component3
+from examples.multipleviews.example import ExampleMainView, initialize_dockviews
 
 
-class MultipleViewsApp(QtBaseApp[IExampleMainView, BaseModel]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class MultipleViewsApp(QtBaseApp[ExampleMainView, BaseModel]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(BaseModel("example", get_version("composeui")), main_view)
 
     def initialize_app(self) -> None:

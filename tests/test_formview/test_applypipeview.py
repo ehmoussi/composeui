@@ -1,6 +1,6 @@
 from examples.formview.app import FormViewApp, Model
-from examples.formview.example import IExampleMainView
-from examples.formview.pipeapplyform import IPipeApplyFormView
+from examples.formview.example import ExampleMainView
+from examples.formview.pipeapplyform import PipeApplyFormView
 from examples.formview.pipeform import EdgeType
 
 import pytest
@@ -9,7 +9,7 @@ from typing import Tuple
 
 
 @pytest.fixture()
-def app_apply_pipe(app: FormViewApp) -> Tuple[IPipeApplyFormView, IExampleMainView, Model]:
+def app_apply_pipe(app: FormViewApp) -> Tuple[PipeApplyFormView, ExampleMainView, Model]:
     app.main_view.toolbar.navigation.pipe.is_checked = False
     app.main_view.toolbar.navigation.apply_pipe.is_checked = True
     app.main_view.toolbar.navigation.toggled()
@@ -19,7 +19,7 @@ def app_apply_pipe(app: FormViewApp) -> Tuple[IPipeApplyFormView, IExampleMainVi
 
 
 def test_unmodify_db_before_apply(
-    app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model],
+    app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model],
 ) -> None:
     view, _, model = app_apply_pipe
     assert model.apply_pipe_query.get_main_radius() == 80
@@ -28,7 +28,7 @@ def test_unmodify_db_before_apply(
     assert model.apply_pipe_query.get_main_radius() == 80
 
 
-def test_apply(app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model]) -> None:
+def test_apply(app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model]) -> None:
     view, _, model = app_apply_pipe
     assert model.apply_pipe_query.get_main_radius() == 80
     view.main.radius.field_view.value = 75
@@ -37,7 +37,7 @@ def test_apply(app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model
 
 
 def test_open_file_without_apply(
-    app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model],
+    app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model],
 ) -> None:
     view, main_view, model = app_apply_pipe
     assert view.export.is_visible is True
@@ -50,7 +50,7 @@ def test_open_file_without_apply(
 
 
 def test_update_visibility_without_apply(
-    app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model],
+    app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model],
 ) -> None:
     view, _, model = app_apply_pipe
     assert model.apply_pipe_query.get_name() != ""
@@ -65,7 +65,7 @@ def test_update_visibility_without_apply(
 
 
 def test_update_visibility_with_incorrect_data(
-    app_apply_pipe: Tuple[IPipeApplyFormView, IExampleMainView, Model],
+    app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model],
 ) -> None:
     view, _, model = app_apply_pipe
     view.main.radius.field_view.value = 500

@@ -1,20 +1,20 @@
 r"""Initialization of views."""
 
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.core.interfaces.ipopuptextview import DialogChoices, IPopupTextView
-from composeui.core.interfaces.iprogressview import IProgressView
-from composeui.core.interfaces.iselectpathview import ISelectPathView
-from composeui.core.interfaces.iview import IGroupView, IView
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
+from composeui.core.views.actionview import ActionView
+from composeui.core.views.popuptextview import DialogChoices, PopupTextView
+from composeui.core.views.progressview import ProgressView
+from composeui.core.views.selectpathview import SelectPathView
+from composeui.core.views.view import GroupView, View
 from composeui.figure import initialize_figure_view
-from composeui.figure.ifigureview import IFigureView
+from composeui.figure.figureview import FigureView
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.linkedtable import initialize_linked_table
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
-from composeui.items.table.itableview import ITableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
+from composeui.items.table.tableview import TableView
 from composeui.items.tree import initialize_tree_view
-from composeui.items.tree.itreeview import ITreeView
+from composeui.items.tree.treeview import TreeView
 from composeui.mainview import (
     initialize_file_menu,
     initialize_file_toolbar,
@@ -23,14 +23,14 @@ from composeui.mainview import (
     initialize_message_view,
     initialize_progress_popup_view,
 )
-from composeui.mainview.interfaces.ifileview import IFileView
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.imenu import IFileMenu
-from composeui.mainview.interfaces.imessageview import IMessageView
-from composeui.mainview.interfaces.iprogresspopupview import IProgressPopupView
-from composeui.mainview.interfaces.itoolbar import IFileToolBar
+from composeui.mainview.views.fileview import FileView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.messageview import MessageView
+from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.mainview.views.toolbar import FileToolBar
 from composeui.vtk import initialize_vtk_view
-from composeui.vtk.ivtkview import IVTKView
+from composeui.vtk.vtkview import VTKView
 
 from functools import wraps
 from typing import Callable, TypeVar
@@ -38,11 +38,11 @@ from typing import Callable, TypeVar
 T = TypeVar("T", bound=AbstractTask)
 
 
-def initialize_explorer(initialize_view: Callable[[IView], bool]) -> Callable[[IView], None]:
+def initialize_explorer(initialize_view: Callable[[View], bool]) -> Callable[[View], None]:
     r"""Explore and initialize the view and its children."""
 
     @wraps(initialize_view)
-    def _initialize(view: IView) -> None:
+    def _initialize(view: View) -> None:
         keep_exploring = initialize_view(view)
         if keep_exploring:
             for child_view in view.children.values():
@@ -52,51 +52,51 @@ def initialize_explorer(initialize_view: Callable[[IView], bool]) -> Callable[[I
 
 
 @initialize_explorer
-def initialize_default_view(view: IView) -> bool:
+def initialize_default_view(view: View) -> bool:
     # global initialization
-    if isinstance(view, IView):
+    if isinstance(view, View):
         view.dependencies.clear()
         # don't modify is_visible here because the visibility
         # depend of the parent visibility unless the visibility has been
         # modified explicitly
         view.is_enabled = True
-    if isinstance(view, IGroupView):
+    if isinstance(view, GroupView):
         initialize_group_view(view)
     # specific initialization
-    if isinstance(view, IMainView):
+    if isinstance(view, MainView):
         return initialize_main_view(view)
-    elif isinstance(view, IFileMenu):
+    elif isinstance(view, FileMenu):
         return initialize_file_menu(view)
-    elif isinstance(view, IFileToolBar):
+    elif isinstance(view, FileToolBar):
         return initialize_file_toolbar(view)
-    elif isinstance(view, IActionView):
+    elif isinstance(view, ActionView):
         view.visible_views.clear()
-    elif isinstance(view, ILinkedTableView):
+    elif isinstance(view, LinkedTableView):
         return initialize_linked_table(view)
-    elif isinstance(view, ITreeView):
+    elif isinstance(view, TreeView):
         return initialize_tree_view(view)
-    elif isinstance(view, ITableView):
+    elif isinstance(view, TableView):
         return initialize_items_view(view)
-    elif isinstance(view, ISelectPathView):
+    elif isinstance(view, SelectPathView):
         return initialize_select_path_view(view)
-    elif isinstance(view, IPopupTextView):
+    elif isinstance(view, PopupTextView):
         return initialize_popup_text_view(view)
-    elif isinstance(view, IMessageView):
+    elif isinstance(view, MessageView):
         return initialize_message_view(view)
-    elif isinstance(view, IProgressView):
+    elif isinstance(view, ProgressView):
         return initialize_progress_view(view, with_tasks=False)
-    elif isinstance(view, IProgressPopupView):
+    elif isinstance(view, ProgressPopupView):
         return initialize_progress_popup_view(view, with_tasks=False)
-    elif isinstance(view, IFileView):
+    elif isinstance(view, FileView):
         return initialize_file_view(view)
-    elif isinstance(view, IFigureView):
+    elif isinstance(view, FigureView):
         return initialize_figure_view(view)
-    elif isinstance(view, IVTKView):
+    elif isinstance(view, VTKView):
         return initialize_vtk_view(view)
     return True
 
 
-def initialize_group_view(view: IGroupView) -> bool:
+def initialize_group_view(view: GroupView) -> bool:
     """Initialize the group view."""
     view.title = ""
     view.is_checkable = False
@@ -104,7 +104,7 @@ def initialize_group_view(view: IGroupView) -> bool:
     return True
 
 
-def initialize_select_path_view(view: ISelectPathView) -> bool:
+def initialize_select_path_view(view: SelectPathView) -> bool:
     """Initialize the select path view."""
     view.path = ""
     view.label = ""
@@ -114,7 +114,7 @@ def initialize_select_path_view(view: ISelectPathView) -> bool:
     return False
 
 
-def initialize_popup_text_view(view: IPopupTextView) -> bool:
+def initialize_popup_text_view(view: PopupTextView) -> bool:
     view.text = ""
     view.title = ""
     view.confirm_button_text = ""
@@ -122,7 +122,7 @@ def initialize_popup_text_view(view: IPopupTextView) -> bool:
     return False
 
 
-def initialize_progress_view(view: IProgressView[T], with_tasks: bool = True) -> bool:
+def initialize_progress_view(view: ProgressView[T], with_tasks: bool = True) -> bool:
     r"""Initialize the progress view."""
     view.is_percentage_visible = False
     view.minimum = 0

@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from examples.simpletableview.app import Model
-    from examples.simpletableview.example import IExampleMainView, IPointsTableView
+    from examples.simpletableview.example import ExampleMainView, PointsTableView
 
 PointsItems: TypeAlias = SimpleTableItems["Model"]
 
 
 def initialize_points(
-    view: "IPointsTableView", main_view: "IExampleMainView", model: "Model"
+    view: "PointsTableView", main_view: "ExampleMainView", model: "Model"
 ) -> None:
     view.is_visible = True
     view.has_import = True

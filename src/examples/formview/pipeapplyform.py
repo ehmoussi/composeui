@@ -1,17 +1,17 @@
 from composeui import form
-from composeui.form.iformview import (
-    IGroupBoxApplyFormView,
-    ILabelComboBoxView,
-    ILabelLineEditView,
-    ILabelSelectFileView,
+from composeui.form.formview import (
+    GroupBoxApplyFormView,
+    LabelComboBoxView,
+    LabelLineEditView,
+    LabelSelectFileView,
 )
 from examples.formview import pipeform
 from examples.formview.pipeform import (
     AbstractPipeFormItems,
+    ChamferDimensionView,
     EdgeType,
-    IChamferDimensionView,
-    IFilletDimensionView,
-    IPipeDimensionView,
+    FilletDimensionView,
+    PipeDimensionView,
     PipeQuery,
 )
 
@@ -20,40 +20,40 @@ from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
     from examples.formview.app import Model
-    from examples.formview.example import IExampleMainView
+    from examples.formview.example import ExampleMainView
 
 
 @dataclass(eq=False)
-class IPipeApplyFormView(IGroupBoxApplyFormView["PipeApplyFormItems"]):
-    name: ILabelLineEditView["PipeApplyFormItems"] = field(
-        init=False, default_factory=ILabelLineEditView["PipeApplyFormItems"]
+class PipeApplyFormView(GroupBoxApplyFormView["PipeApplyFormItems"]):
+    name: LabelLineEditView["PipeApplyFormItems"] = field(
+        init=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
     )
-    p_id: ILabelLineEditView["PipeApplyFormItems"] = field(
-        init=False, default_factory=ILabelLineEditView["PipeApplyFormItems"]
+    p_id: LabelLineEditView["PipeApplyFormItems"] = field(
+        init=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
     )
-    export: ILabelSelectFileView["PipeApplyFormItems"] = field(
-        init=False, default_factory=ILabelSelectFileView["PipeApplyFormItems"]
+    export: LabelSelectFileView["PipeApplyFormItems"] = field(
+        init=False, default_factory=LabelSelectFileView["PipeApplyFormItems"]
     )
-    main: IPipeDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=IPipeDimensionView["PipeApplyFormItems"]
+    main: PipeDimensionView["PipeApplyFormItems"] = field(
+        init=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
     )
-    incident: IPipeDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=IPipeDimensionView["PipeApplyFormItems"]
+    incident: PipeDimensionView["PipeApplyFormItems"] = field(
+        init=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
     )
-    edge_type: ILabelComboBoxView["PipeApplyFormItems"] = field(
-        init=False, default_factory=ILabelComboBoxView["PipeApplyFormItems"]
+    edge_type: LabelComboBoxView["PipeApplyFormItems"] = field(
+        init=False, default_factory=LabelComboBoxView["PipeApplyFormItems"]
     )
-    chamfer: IChamferDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=IChamferDimensionView["PipeApplyFormItems"]
+    chamfer: ChamferDimensionView["PipeApplyFormItems"] = field(
+        init=False, default_factory=ChamferDimensionView["PipeApplyFormItems"]
     )
-    fillet: IFilletDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=IFilletDimensionView["PipeApplyFormItems"]
+    fillet: FilletDimensionView["PipeApplyFormItems"] = field(
+        init=False, default_factory=FilletDimensionView["PipeApplyFormItems"]
     )
 
 
 def initialize_apply_pipe(
-    view: IPipeApplyFormView,
-    main_view: "IExampleMainView",
+    view: PipeApplyFormView,
+    main_view: "ExampleMainView",
     model: "Model",
     is_visible: bool = False,
 ) -> None:
@@ -69,8 +69,8 @@ def initialize_apply_pipe(
     view.edge_type.field_view.dependencies.extend([view.chamfer, view.fillet])
 
 
-class PipeApplyFormItems(AbstractPipeFormItems[IPipeApplyFormView]):
-    def __init__(self, model: "Model", view: IPipeApplyFormView) -> None:
+class PipeApplyFormItems(AbstractPipeFormItems[PipeApplyFormView]):
+    def __init__(self, model: "Model", view: PipeApplyFormView) -> None:
         super().__init__(model, view)
 
     @property

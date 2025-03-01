@@ -1,9 +1,9 @@
-from composeui.mainview.interfaces.imainview import IMainView
-from examples.figureview.batman import IBatmanView
+from composeui.mainview.views.mainview import MainView
+from examples.figureview.batman import BatmanView
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    batman: IBatmanView = field(init=False)
+class ExampleMainView(MainView):
+    batman: BatmanView = field(init=False)

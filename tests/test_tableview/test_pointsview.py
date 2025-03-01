@@ -1,7 +1,7 @@
-from composeui.items.table.itableview import ITableView
-from composeui.mainview.interfaces.imessageview import MessageViewType
+from composeui.items.table.tableview import TableView
+from composeui.mainview.views.messageview import MessageViewType
 from examples.tableview.app import Model, TableViewApp
-from examples.tableview.example import IExampleMainView
+from examples.tableview.example import ExampleMainView
 from examples.tableview.points import PointsItems
 
 import pytest
@@ -17,12 +17,12 @@ DATA_DIRPATH = Path("tests", "test_tableview", "data")
 @pytest.fixture()
 def app_points(
     app: TableViewApp,
-) -> Tuple[ITableView[PointsItems], IExampleMainView, Model]:
+) -> Tuple[TableView[PointsItems], ExampleMainView, Model]:
     return (app.main_view.points_view, app.main_view, app.model)
 
 
 def test_import_empty(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_points
     csv_empty_filepath = Path(DATA_DIRPATH, "test_empty.csv")
@@ -38,7 +38,7 @@ def test_import_empty(
 
 
 def test_import_unknown(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_points
     csv_unknown_filepath = Path(DATA_DIRPATH, "test_unknown.csv")
@@ -54,7 +54,7 @@ def test_import_unknown(
     assert view.items.get_nb_rows() == 0
 
 
-def test_import(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model]) -> None:
+def test_import(app_points: Tuple[TableView[PointsItems], ExampleMainView, Model]) -> None:
     view, main_view, _ = app_points
     csv_filepath = Path(DATA_DIRPATH, "test_correct.csv")
     assert csv_filepath.exists() is True
@@ -79,7 +79,7 @@ def test_import(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Mod
 
 
 def test_import_without_cleaning(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_points
     csv_filepath = Path(DATA_DIRPATH, "test_correct.csv")
@@ -104,7 +104,7 @@ def test_import_without_cleaning(
 
 
 def test_import_incomplete(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, main_view, _ = app_points
     csv_incomplete_path = Path(DATA_DIRPATH, "test_incomplete.csv")
@@ -126,7 +126,7 @@ def test_import_incomplete(
 
 
 def test_export(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
     tmp_path: Path,
 ) -> None:
     view, main_view, _ = app_points
@@ -150,7 +150,7 @@ def test_export(
 
 @pytest.mark.parametrize("extension", [".xlsx", ".xls", ".json"])
 def test_import_export_excel_json(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
     tmp_path: Path,
     extension: str,
 ) -> None:
@@ -199,7 +199,7 @@ def test_import_export_excel_json(
 
 @pytest.mark.parametrize("extension", [".md", ".html"])
 def test_export_markdown_html(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
     tmp_path: Path,
     extension: str,
 ) -> None:
@@ -224,7 +224,7 @@ def test_export_markdown_html(
     assert filepath.read_text() == filepath_ref.read_text()
 
 
-def test_add(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model]) -> None:
+def test_add(app_points: Tuple[TableView[PointsItems], ExampleMainView, Model]) -> None:
     view, _, _ = app_points
     assert view.items is not None
     view.add_clicked()
@@ -235,7 +235,7 @@ def test_add(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model]
     assert view.items.get_data(0, 3) == "0.00"
 
 
-def test_remove(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model]) -> None:
+def test_remove(app_points: Tuple[TableView[PointsItems], ExampleMainView, Model]) -> None:
     view, _, _ = app_points
     assert view.items is not None
     view.add_clicked()
@@ -246,7 +246,7 @@ def test_remove(app_points: Tuple[ITableView[PointsItems], IExampleMainView, Mod
 
 
 def test_shortcut_clear(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, _, model = app_points
     assert view.items is not None
@@ -265,7 +265,7 @@ def test_shortcut_clear(
 
 
 def test_shortcut_add(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, _, _ = app_points
     assert view.items is not None
@@ -277,7 +277,7 @@ def test_shortcut_add(
 
 
 def test_shortcut_delete(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     view, _, model = app_points
     assert view.items is not None
@@ -289,7 +289,7 @@ def test_shortcut_delete(
 
 
 def test_copy_paste(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -344,7 +344,7 @@ def test_copy_paste(
 
 
 def test_copy_paste_by_items(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -379,7 +379,7 @@ def test_copy_paste_by_items(
 
 
 def test_copy_paste_one_data(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -410,7 +410,7 @@ def test_copy_paste_one_data(
 
 
 def test_copy_paste_one_row(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -441,7 +441,7 @@ def test_copy_paste_one_row(
 
 
 def test_copy_paste_with_insertion(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -477,7 +477,7 @@ def test_copy_paste_with_insertion(
 
 
 def test_copy_paste_with_insertion_with_multiple_selected_rows(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -513,7 +513,7 @@ def test_copy_paste_with_insertion_with_multiple_selected_rows(
 
 
 def test_copy_paste_with_insertion_and_no_selection(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -553,7 +553,7 @@ def test_copy_paste_with_insertion_and_no_selection(
 
 
 def test_copy_paste_with_scattered_copy(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -595,7 +595,7 @@ def test_copy_paste_with_scattered_copy(
 
 
 def test_copy_paste_more_columns(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -627,7 +627,7 @@ def test_copy_paste_more_columns(
 
 
 def test_copy_paste_more_columns2(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -659,7 +659,7 @@ def test_copy_paste_more_columns2(
 
 
 def test_copy_paste_with_one_item_and_insertion(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -695,7 +695,7 @@ def test_copy_paste_with_one_item_and_insertion(
 
 
 def test_copy_one_column_to_another(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -727,7 +727,7 @@ def test_copy_one_column_to_another(
 
 
 def test_copy_two_partial_column_no_selection(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -781,7 +781,7 @@ def test_copy_two_partial_column_no_selection(
 
 
 def test_copy_rectangular_selection_paste_to_non_rectangular(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -813,7 +813,7 @@ def test_copy_rectangular_selection_paste_to_non_rectangular(
 
 
 def test_copy_non_contiguous_selection_paste_to_contiguous(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, main_view, model = app_points
@@ -848,7 +848,7 @@ def test_copy_non_contiguous_selection_paste_to_contiguous(
 
 
 def test_copy_single_column_paste_multiple_non_adjacent_columns(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -890,7 +890,7 @@ def test_copy_single_column_paste_multiple_non_adjacent_columns(
 
 
 def test_copy_single_column_paste_multiple_non_adjacent_columns2(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -933,7 +933,7 @@ def test_copy_single_column_paste_multiple_non_adjacent_columns2(
 
 
 def test_copy_multiple_non_adjacent_rows_paste_single_contiguous_block(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, main_view, model = app_points
@@ -983,7 +983,7 @@ def test_copy_multiple_non_adjacent_rows_paste_single_contiguous_block(
 
 
 def test_copy_one_item_paste_no_selection(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, main_view, model = app_points
@@ -1018,7 +1018,7 @@ def test_copy_one_item_paste_no_selection(
 
 
 def test_copy_one_row_paste_no_selection(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -1054,7 +1054,7 @@ def test_copy_one_row_paste_no_selection(
 
 
 def test_copy_unstructured_data_paste_coincident(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -1086,7 +1086,7 @@ def test_copy_unstructured_data_paste_coincident(
 
 
 def test_copy_unstructured_data_paste_not_coincident(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -1118,7 +1118,7 @@ def test_copy_unstructured_data_paste_not_coincident(
 
 
 def test_copy_one_row_paste_one_greater_selected_row(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -1150,7 +1150,7 @@ def test_copy_one_row_paste_one_greater_selected_row(
 
 
 def test_copy_one_row_paste_one_selected_unstructured_row_same_size(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points
@@ -1182,7 +1182,7 @@ def test_copy_one_row_paste_one_selected_unstructured_row_same_size(
 
 
 def test_copy_one_row_paste_one_selected_unstructured_row_not_same_size(
-    app_points: Tuple[ITableView[PointsItems], IExampleMainView, Model],
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:
     """Test copy/paste."""
     view, _, model = app_points

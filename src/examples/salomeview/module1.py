@@ -1,43 +1,39 @@
 """Example salome view."""
 
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.mainview.interfaces.idockview import IDockView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
-from composeui.salomewrapper.mainview.isalomemainview import ISalomeMainView
-from examples.salomeview.cubedefinition import ICubeDefinitionView
+from composeui.core.views.actionview import ActionView
+from composeui.mainview.views.dockview import DockView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.toolbar import CheckableToolBar
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
+from examples.salomeview.cubedefinition import CubeDefinitionView
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ILeftDockView(IDockView):
-    cube_definition: ICubeDefinitionView = field(
-        init=False, default_factory=ICubeDefinitionView
+class LeftDockView(DockView):
+    cube_definition: CubeDefinitionView = field(init=False, default_factory=CubeDefinitionView)
+
+
+@dataclass(eq=False)
+class Module1NavigationToolBar(CheckableToolBar):
+    cube_definition: ActionView = field(init=False, default_factory=ActionView)
+
+
+@dataclass(eq=False)
+class Module1MainToolBar(MainToolBar):
+    navigation: Module1NavigationToolBar = field(
+        init=False, default_factory=Module1NavigationToolBar
     )
 
 
 @dataclass(eq=False)
-class IModule1NavigationToolBar(ICheckableToolBar):
-    cube_definition: IActionView = field(init=False, default_factory=IActionView)
+class Module1MainView(SalomeMainView):
+    toolbar: Module1MainToolBar = field(init=False, default_factory=Module1MainToolBar)
+    left_dock: LeftDockView = field(init=False, default_factory=LeftDockView)
 
 
-@dataclass(eq=False)
-class IModule1MainToolBar(IMainToolBar):
-    navigation: IModule1NavigationToolBar = field(
-        init=False, default_factory=IModule1NavigationToolBar
-    )
-
-
-@dataclass(eq=False)
-class IModule1MainView(ISalomeMainView):
-    toolbar: IModule1MainToolBar = field(init=False, default_factory=IModule1MainToolBar)
-    left_dock: ILeftDockView = field(init=False, default_factory=ILeftDockView)
-
-
-def initialize_navigation(
-    view: IModule1NavigationToolBar, main_view: IModule1MainView
-) -> None:
+def initialize_navigation(view: Module1NavigationToolBar, main_view: Module1MainView) -> None:
     view.cube_definition.is_checked = True
     view.cube_definition.text = "Cube Definition"
     view.cube_definition.visible_views.extend(

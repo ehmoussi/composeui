@@ -1,6 +1,6 @@
-from composeui.vtk.ivtkview import IVTKView, VTKPickType
+from composeui.vtk.vtkview import VTKPickType, VTKView
 from examples.vtkview.app import Model, VTKViewApp
-from examples.vtkview.example import IExampleMainView, IVTKConfigView
+from examples.vtkview.example import ExampleMainView, VTKConfigView
 
 import pytest
 
@@ -8,17 +8,17 @@ from pathlib import Path
 
 
 @pytest.fixture()
-def main_view(app: VTKViewApp) -> IExampleMainView:
+def main_view(app: VTKViewApp) -> ExampleMainView:
     return app.main_view
 
 
 @pytest.fixture()
-def vtk_config_view(app: VTKViewApp) -> IVTKConfigView:
+def vtk_config_view(app: VTKViewApp) -> VTKConfigView:
     return app.main_view.vtk_example.configuration
 
 
 @pytest.fixture()
-def vtk_view(app: VTKViewApp) -> IVTKView:
+def vtk_view(app: VTKViewApp) -> VTKView:
     return app.main_view.vtk_example.vtk_view
 
 
@@ -27,7 +27,7 @@ def model(app: VTKViewApp) -> Model:
     return app.model
 
 
-def test_initialize(vtk_config_view: IVTKConfigView, model: Model) -> None:
+def test_initialize(vtk_config_view: VTKConfigView, model: Model) -> None:
     # view
     assert vtk_config_view.file.field_view.text == ""
     assert vtk_config_view.scalar_field.field_view.current_index == -1
@@ -57,7 +57,7 @@ def test_initialize(vtk_config_view: IVTKConfigView, model: Model) -> None:
     assert model.root.pick_type == VTKPickType.CELL
 
 
-def test_is_visible(vtk_config_view: IVTKConfigView) -> None:
+def test_is_visible(vtk_config_view: VTKConfigView) -> None:
     # edge_width
     assert vtk_config_view.edge_width.is_visible is False
     vtk_config_view.edge.field_view.current_index = 0
@@ -71,9 +71,9 @@ def test_is_visible(vtk_config_view: IVTKConfigView) -> None:
 
 
 def test_read_unknown_file(
-    vtk_config_view: IVTKConfigView,
-    vtk_view: IVTKView,
-    main_view: IExampleMainView,
+    vtk_config_view: VTKConfigView,
+    vtk_view: VTKView,
+    main_view: ExampleMainView,
     tmpdir: Path,
 ) -> None:
     """Test to read a file which doesn't contain an unstructured grid."""
@@ -101,7 +101,7 @@ def test_read_unknown_file(
     assert main_view.message_view.message != ""
 
 
-def test_read_vtu(vtk_config_view: IVTKConfigView, vtk_view: IVTKView) -> None:
+def test_read_vtu(vtk_config_view: VTKConfigView, vtk_view: VTKView) -> None:
     """Test the read of a vtk/vtu file."""
     # no scalar field
     assert len(vtk_config_view.scalar_field.field_view.values) == 0

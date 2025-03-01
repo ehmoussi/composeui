@@ -1,7 +1,7 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.sqlitemodel import SqliteModel
-from examples.linkedtableview.sqlite.example import IExampleMainView, initialize_navigation
+from examples.linkedtableview.sqlite.example import ExampleMainView, initialize_navigation
 from examples.linkedtableview.sqlite.lines import LinesQuery, initialize_lines
 
 from pathlib import Path
@@ -15,8 +15,8 @@ class Model(SqliteModel):
         self.lines_query = LinesQuery(self._data)
 
 
-class LinkedTableViewApp(QtBaseApp[IExampleMainView, Model]):
-    def __init__(self, main_view: IExampleMainView) -> None:
+class LinkedTableViewApp(QtBaseApp[ExampleMainView, Model]):
+    def __init__(self, main_view: ExampleMainView) -> None:
         super().__init__(Model(), main_view)
 
     def initialize_app(self) -> None:

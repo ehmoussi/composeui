@@ -1,13 +1,13 @@
 from composeui import form
 from composeui.commontypes import AnyFormItems
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
-    IFormView,
-    IGroupBoxFormView,
-    ILabelDoubleLineEditView,
-    ILabelLineEditView,
-    ILabelRadioButtonGroupView,
-    ILabelSelectFileView,
+from composeui.form.formview import (
+    FormView,
+    GroupBoxFormView,
+    LabelDoubleLineEditView,
+    LabelLineEditView,
+    LabelRadioButtonGroupView,
+    LabelSelectFileView,
 )
 from composeui.store.sqlitestore import SqliteStore
 
@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Ty
 
 if TYPE_CHECKING:
     from examples.formview.app import Model
-    from examples.formview.example import IExampleMainView
+    from examples.formview.example import ExampleMainView
 
 
 class EdgeType(Enum):
@@ -31,69 +31,69 @@ class EdgeType(Enum):
 
 
 @dataclass(eq=False)
-class IChamferDimensionView(IGroupBoxFormView[AnyFormItems]):
-    height: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
+class ChamferDimensionView(GroupBoxFormView[AnyFormItems]):
+    height: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
-    width: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
-    )
-
-
-@dataclass(eq=False)
-class IFilletDimensionView(IGroupBoxFormView[AnyFormItems]):
-    radius: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
+    width: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class IPipeDimensionView(IGroupBoxFormView[AnyFormItems]):
-    radius: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
-    )
-    width: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
-    )
-    half_length: ILabelDoubleLineEditView[AnyFormItems] = field(
-        init=False, default_factory=ILabelDoubleLineEditView[AnyFormItems]
+class FilletDimensionView(GroupBoxFormView[AnyFormItems]):
+    radius: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
 
 
 @dataclass(eq=False)
-class IPipeFormView(IGroupBoxFormView["PipeFormItems"]):
-    name: ILabelLineEditView["PipeFormItems"] = field(
-        init=False, default_factory=ILabelLineEditView["PipeFormItems"]
+class PipeDimensionView(GroupBoxFormView[AnyFormItems]):
+    radius: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
-    p_id: ILabelLineEditView["PipeFormItems"] = field(
-        init=False, default_factory=ILabelLineEditView["PipeFormItems"]
+    width: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
-    export: ILabelSelectFileView["PipeFormItems"] = field(
-        init=False, default_factory=ILabelSelectFileView["PipeFormItems"]
+    half_length: LabelDoubleLineEditView[AnyFormItems] = field(
+        init=False, default_factory=LabelDoubleLineEditView[AnyFormItems]
     )
-    main: IPipeDimensionView["PipeFormItems"] = field(
-        init=False, default_factory=IPipeDimensionView["PipeFormItems"]
+
+
+@dataclass(eq=False)
+class PipeFormView(GroupBoxFormView["PipeFormItems"]):
+    name: LabelLineEditView["PipeFormItems"] = field(
+        init=False, default_factory=LabelLineEditView["PipeFormItems"]
     )
-    incident: IPipeDimensionView["PipeFormItems"] = field(
-        init=False, default_factory=IPipeDimensionView["PipeFormItems"]
+    p_id: LabelLineEditView["PipeFormItems"] = field(
+        init=False, default_factory=LabelLineEditView["PipeFormItems"]
+    )
+    export: LabelSelectFileView["PipeFormItems"] = field(
+        init=False, default_factory=LabelSelectFileView["PipeFormItems"]
+    )
+    main: PipeDimensionView["PipeFormItems"] = field(
+        init=False, default_factory=PipeDimensionView["PipeFormItems"]
+    )
+    incident: PipeDimensionView["PipeFormItems"] = field(
+        init=False, default_factory=PipeDimensionView["PipeFormItems"]
     )
     # edge_type: ILabelComboBoxView["PipeFormItems"] = field(
     #     init=False, default_factory=ILabelComboBoxView["PipeFormItems"]
     # )
-    edge_type: ILabelRadioButtonGroupView["PipeFormItems"] = field(
-        init=False, default_factory=ILabelRadioButtonGroupView["PipeFormItems"]
+    edge_type: LabelRadioButtonGroupView["PipeFormItems"] = field(
+        init=False, default_factory=LabelRadioButtonGroupView["PipeFormItems"]
     )
-    chamfer: IChamferDimensionView["PipeFormItems"] = field(
-        init=False, default_factory=IChamferDimensionView["PipeFormItems"]
+    chamfer: ChamferDimensionView["PipeFormItems"] = field(
+        init=False, default_factory=ChamferDimensionView["PipeFormItems"]
     )
-    fillet: IFilletDimensionView["PipeFormItems"] = field(
-        init=False, default_factory=IFilletDimensionView["PipeFormItems"]
+    fillet: FilletDimensionView["PipeFormItems"] = field(
+        init=False, default_factory=FilletDimensionView["PipeFormItems"]
     )
 
 
 def initialize_pipe(
-    view: IPipeFormView,
-    main_view: "IExampleMainView",
+    view: PipeFormView,
+    main_view: "ExampleMainView",
     model: "Model",
     is_visible: bool = False,
 ) -> None:
@@ -109,32 +109,32 @@ def initialize_pipe(
     view.edge_type.field_view.dependencies.extend([view.chamfer, view.fillet])
 
 
-def initialize_main_pipe(view: IPipeDimensionView[Any]) -> None:
+def initialize_main_pipe(view: PipeDimensionView[Any]) -> None:
     view.title = "Main Pipe"
     view.radius.field_view.minimum = 0.0
     view.width.field_view.minimum = 0.0
     view.half_length.field_view.minimum = 0.0
 
 
-def initialize_incident_pipe(view: IPipeDimensionView[Any]) -> None:
+def initialize_incident_pipe(view: PipeDimensionView[Any]) -> None:
     view.title = "Incident Pipe"
     view.radius.field_view.minimum = 0.0
     view.width.field_view.minimum = 0.0
     view.half_length.field_view.minimum = 0.0
 
 
-def initialize_chamfer(view: IChamferDimensionView[Any]) -> None:
+def initialize_chamfer(view: ChamferDimensionView[Any]) -> None:
     view.title = "Chamfer"
     view.height.field_view.minimum = 0.0
     view.width.field_view.minimum = 0.0
 
 
-def initialize_fillet(view: IFilletDimensionView[Any]) -> None:
+def initialize_fillet(view: FilletDimensionView[Any]) -> None:
     view.title = "Fillet"
     view.radius.field_view.minimum = 0.0
 
 
-V = TypeVar("V", bound=IFormView[Any])
+V = TypeVar("V", bound=FormView[Any])
 
 
 class AbstractPipeFormItems(AbstractFormItems["Model", V]):
@@ -264,7 +264,7 @@ class AbstractPipeFormItems(AbstractFormItems["Model", V]):
         return super().acceptable_displayed_values(field, parent_fields)
 
 
-class PipeFormItems(AbstractPipeFormItems[IPipeFormView]):
+class PipeFormItems(AbstractPipeFormItems[PipeFormView]):
     def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
         if len(parent_fields) == 0:
             if field in ("chamfer", "fillet"):

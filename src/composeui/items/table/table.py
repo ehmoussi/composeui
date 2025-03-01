@@ -7,16 +7,16 @@ from composeui.items.core import pagination
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.exportfiletabletask import ExportFileTableTask
 from composeui.items.table.importfiletabletask import ImportFileTableTask
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.tableview import TableView
 from composeui.mainview import progresspopup
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import TypeAlias
 
 from functools import partial
 from typing import Any, Optional
 
-AnyTableView: TypeAlias = ITableView[AbstractTableItems[Any]]
+AnyTableView: TypeAlias = TableView[AbstractTableItems[Any]]
 
 
 def add_clicked(*, view: AnyTableView) -> None:
@@ -44,7 +44,7 @@ def add_clicked(*, view: AnyTableView) -> None:
             view.items.set_selected_rows([new_selected_row])
 
 
-def remove_clicked(*, view: AnyTableView, main_view: IMainView) -> None:
+def remove_clicked(*, view: AnyTableView, main_view: MainView) -> None:
     r"""Remove an item in the table."""
     if view.items is not None and (
         view.items.get_confirmation_message() == ""
@@ -72,7 +72,7 @@ def remove_clicked(*, view: AnyTableView, main_view: IMainView) -> None:
             view.items.set_selected_rows([new_selected_row])
 
 
-def import_clicked(*, view: AnyTableView, main_view: IMainView, model: AnyModel) -> None:
+def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
     """Import values from a csv file in the table."""
     if view.items is not None:
         is_cleaning = view.items.get_nb_rows() != 0 and tools.ask_confirmation(
@@ -98,7 +98,7 @@ def import_clicked(*, view: AnyTableView, main_view: IMainView, model: AnyModel)
         )
 
 
-def export_clicked(*, view: AnyTableView, main_view: IMainView, model: AnyModel) -> None:
+def export_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
     """Import values from a csv file in the table."""
     if view.items is not None:
         filepath, filepath_extension = selectfiles.save_table_file(

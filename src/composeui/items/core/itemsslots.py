@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyModel
 from composeui.core import tools
 from composeui.items.core.copypasteitems import CopyPasteItems
-from composeui.mainview.interfaces.imainview import IMainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import TypeAlias
 
@@ -11,13 +11,13 @@ from typing import Any, Union
 
 if typing.TYPE_CHECKING:
     from composeui.items.table.abstracttableitems import AbstractTableItems
-    from composeui.items.table.itableview import ITableView
+    from composeui.items.table.tableview import TableView
     from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-    from composeui.items.tree.itreeview import ITreeView
+    from composeui.items.tree.treeview import TreeView
 
 
 ITableTreeView: TypeAlias = Union[
-    "ITableView[AbstractTableItems[Any]]", "ITreeView[AbstractTreeItems[Any]]"
+    "TableView[AbstractTableItems[Any]]", "TreeView[AbstractTreeItems[Any]]"
 ]
 
 
@@ -28,7 +28,7 @@ def copy_items(*, view: ITableTreeView) -> None:
         copy_paste_manager.copy()
 
 
-def paste_items(*, view: ITableTreeView, main_view: IMainView, model: AnyModel) -> None:
+def paste_items(*, view: ITableTreeView, main_view: MainView, model: AnyModel) -> None:
     """Paste the data of the selected items."""
     if view.items is not None and not is_sorting_enabled(view, main_view):
         copy_paste_manager = CopyPasteItems(view.items)
@@ -45,7 +45,7 @@ def paste_items(*, view: ITableTreeView, main_view: IMainView, model: AnyModel) 
             tools.update_view_with_dependencies(view)
 
 
-def is_sorting_enabled(view: ITableTreeView, main_view: IMainView) -> bool:
+def is_sorting_enabled(view: ITableTreeView, main_view: MainView) -> bool:
     r"""Check if the sorting is enabled."""
     is_enabled = view.sorting_enabled
     if view.sorting_enabled:

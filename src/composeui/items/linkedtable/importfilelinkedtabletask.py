@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.items.core.iitemsview import FormatExtension
+from composeui.items.core.views.itemsview import FormatExtension
 
 import contextlib
 from pathlib import Path

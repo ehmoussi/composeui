@@ -1,12 +1,12 @@
 """Main of the Msgspec TaskView example."""
 
 from examples.taskview.msgspec.app import MsgspecTaskViewApp
-from examples.taskview.msgspec.examplemainview import ExampleMainView
+from examples.taskview.msgspec.qtexample import QtExampleMainView
 
 
 def main() -> None:
     r"""Launch the example."""
-    app = MsgspecTaskViewApp(main_view=ExampleMainView())
+    app = MsgspecTaskViewApp(main_view=QtExampleMainView())
     app.run()
 
 

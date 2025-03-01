@@ -1,9 +1,9 @@
 """Cube table."""
 
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import ITableView
+from composeui.items.table.tableview import TableView
 from composeui.salomewrapper.core import displayer, geomwrapper
-from examples.salomeview.module2 import IModule2MainView
+from examples.salomeview.module2 import Module2MainView
 
 from typing_extensions import Self, TypeAlias
 
@@ -14,11 +14,11 @@ if typing.TYPE_CHECKING:
     from examples.salomeview.app import Model
 
 
-CubeTable: TypeAlias = ITableView["CubeTableItems"]
+CubeTable: TypeAlias = TableView["CubeTableItems"]
 
 
 class CubeTableItems(AbstractTableItems["Model"]):
-    def __init__(self, view: ITableView[Self], model: "Model") -> None:
+    def __init__(self, view: TableView[Self], model: "Model") -> None:
         super().__init__(view, model, title="Cubes")
         self._column_titles = ["Name", "Point 1", "Point 2", "Entry"]
 
@@ -63,9 +63,7 @@ def remove_selected_cubes(*, view: CubeTable, model: "Model") -> None:
             geomwrapper.remove_geom_object_from_study(entry)
 
 
-def initialize_cube_table(
-    view: CubeTable, main_view: IModule2MainView, model: "Model"
-) -> None:
+def initialize_cube_table(view: CubeTable, main_view: Module2MainView, model: "Model") -> None:
     view.has_remove = True
     view.items = CubeTableItems(view, model)
     view.dependencies.append(main_view.salome_tree)

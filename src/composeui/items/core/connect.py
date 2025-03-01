@@ -1,12 +1,12 @@
 from composeui.core import tools
 from composeui.items.core import pagination
-from composeui.items.core.iitemsview import IItemsView
-from composeui.items.core.ipaginationview import IPaginationView
+from composeui.items.core.views.ipaginationview import PaginationView
+from composeui.items.core.views.itemsview import ItemsView
 
 from functools import partial
 
 
-def connect_pagination(*, view: IPaginationView, parent_view: IItemsView) -> bool:
+def connect_pagination(*, view: PaginationView, parent_view: ItemsView) -> bool:
     view.size_changed = [
         pagination.update_page_size_values,
         pagination.update_status_buttons,

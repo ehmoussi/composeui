@@ -3,12 +3,12 @@
 from composeui import form
 from composeui.core import tools
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
-    IFormView,
-    IGroupBoxApplyFormView,
-    ILabelComboBoxView,
-    ILabelLineEditView,
-    ILabelVector3DView,
+from composeui.form.formview import (
+    FormView,
+    GroupBoxApplyFormView,
+    LabelComboBoxView,
+    LabelLineEditView,
+    LabelVector3DView,
 )
 from composeui.salomewrapper.core import displayer, geomwrapper
 from composeui.store.sqlitestore import SqliteStore
@@ -20,28 +20,28 @@ from typing import Any, List, Optional, Sequence, Tuple
 
 if typing.TYPE_CHECKING:
     from examples.salomeview.app import Model
-    from examples.salomeview.module1 import IModule1MainView
+    from examples.salomeview.module1 import Module1MainView
 
 
 @dataclass(eq=False)
-class ICubeParametersView(IGroupBoxApplyFormView["CubeDefinitionItems"]):
-    name: ILabelLineEditView["CubeDefinitionItems"] = field(
-        init=False, default_factory=ILabelLineEditView
+class CubeParametersView(GroupBoxApplyFormView["CubeDefinitionItems"]):
+    name: LabelLineEditView["CubeDefinitionItems"] = field(
+        init=False, default_factory=LabelLineEditView
     )
-    point_1: ILabelVector3DView["CubeDefinitionItems"] = field(
-        init=False, default_factory=ILabelVector3DView
+    point_1: LabelVector3DView["CubeDefinitionItems"] = field(
+        init=False, default_factory=LabelVector3DView
     )
-    point_2: ILabelVector3DView["CubeDefinitionItems"] = field(
-        init=False, default_factory=ILabelVector3DView
+    point_2: LabelVector3DView["CubeDefinitionItems"] = field(
+        init=False, default_factory=LabelVector3DView
     )
 
 
 @dataclass(eq=False)
-class ICubeDefinitionView(IFormView["CubeDefinitionItems"]):
-    cube: ILabelComboBoxView["CubeDefinitionItems"] = field(
-        init=False, default_factory=ILabelComboBoxView
+class CubeDefinitionView(FormView["CubeDefinitionItems"]):
+    cube: LabelComboBoxView["CubeDefinitionItems"] = field(
+        init=False, default_factory=LabelComboBoxView
     )
-    parameters: ICubeParametersView = field(init=False, default_factory=ICubeParametersView)
+    parameters: CubeParametersView = field(init=False, default_factory=CubeParametersView)
 
 
 class CubeQuery:
@@ -224,8 +224,8 @@ class CubeQuery:
             db_conn.commit()
 
 
-class CubeDefinitionItems(AbstractFormItems["Model", "ICubeDefinitionView"]):
-    def __init__(self, model: "Model", view: ICubeDefinitionView) -> None:
+class CubeDefinitionItems(AbstractFormItems["Model", "CubeDefinitionView"]):
+    def __init__(self, model: "Model", view: CubeDefinitionView) -> None:
         super().__init__(model, view)
         self._current_id: Optional[int] = None
 
@@ -287,7 +287,7 @@ class CubeDefinitionItems(AbstractFormItems["Model", "ICubeDefinitionView"]):
 
 
 def generate_cube(
-    *, view: ICubeParametersView, main_view: "IModule1MainView", model: "Model"
+    *, view: CubeParametersView, main_view: "Module1MainView", model: "Model"
 ) -> None:
     """Generate a cube from the data of the view using GEOM module."""
     # retrieve the data
@@ -342,12 +342,12 @@ def build_cube_geometry(
     return str(entry)
 
 
-def initialize_cube_definition(view: ICubeDefinitionView, model: "Model") -> None:
+def initialize_cube_definition(view: CubeDefinitionView, model: "Model") -> None:
     form.initialize_form_view(view, CubeDefinitionItems(model, view))
     view.cube.field_view.dependencies.append(view.parameters)
 
 
-def connect_cube_definition(view: ICubeDefinitionView) -> None:
+def connect_cube_definition(view: CubeDefinitionView) -> None:
     view.parameters.apply_clicked += [
         generate_cube,
         partial(tools.update_view_with_dependencies, view.cube.field_view),

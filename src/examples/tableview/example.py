@@ -1,29 +1,29 @@
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.interfaces.imainview import IMainView
-from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
+from composeui.core.views.actionview import ActionView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.toolbar import CheckableToolBar
 from examples.tableview.points import IPointsView
 
 from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class INavigationToolBar(ICheckableToolBar):
-    points: IActionView = field(init=False, default_factory=IActionView)
+class NavigationToolBar(CheckableToolBar):
+    points: ActionView = field(init=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
-class IExampleToolBar(IMainToolBar):
-    navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
+class ExampleMainToolBar(MainToolBar):
+    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
 
 
 @dataclass(eq=False)
-class IExampleMainView(IMainView):
-    toolbar: IExampleToolBar = field(init=False, default_factory=IExampleToolBar)
+class ExampleMainView(MainView):
+    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
     points_view: IPointsView = field(init=False, default_factory=IPointsView)
 
 
-def initialize_navigation(view: INavigationToolBar, main_view: "IExampleMainView") -> None:
+def initialize_navigation(view: NavigationToolBar, main_view: "ExampleMainView") -> None:
     view.points.is_checked = True
     view.points.text = "Points"
     view.points.visible_views = [main_view.points_view]

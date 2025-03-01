@@ -2,12 +2,12 @@
 
 from composeui import form
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
-    IGroupBoxApplyFormView,
-    ILabelSelectFileView,
-    ILabelSpinBoxView,
-    ILabelTextEditView,
-    ISelectFileView,
+from composeui.form.formview import (
+    GroupBoxApplyFormView,
+    LabelSelectFileView,
+    LabelSpinBoxView,
+    LabelTextEditView,
+    SelectFileView,
 )
 
 import aiofiles
@@ -23,8 +23,8 @@ if typing.TYPE_CHECKING:
     from examples.asyncview.app import Model
 
 
-class FileReaderItems(AbstractFormItems["Model", "IFileReaderView"]):
-    def __init__(self, model: "Model", view: "IFileReaderView") -> None:
+class FileReaderItems(AbstractFormItems["Model", "FileReaderView"]):
+    def __init__(self, model: "Model", view: "FileReaderView") -> None:
         super().__init__(model, view)
 
     def get_label(self, field: str, parent_fields: Tuple[str, ...] = ()) -> str:
@@ -60,22 +60,22 @@ class FileReaderItems(AbstractFormItems["Model", "IFileReaderView"]):
 
 
 @dataclass(eq=False)
-class IFileReaderView(IGroupBoxApplyFormView[FileReaderItems]):
-    filepath: ILabelSelectFileView[FileReaderItems] = field(
-        init=False, default_factory=ILabelSelectFileView
+class FileReaderView(GroupBoxApplyFormView[FileReaderItems]):
+    filepath: LabelSelectFileView[FileReaderItems] = field(
+        init=False, default_factory=LabelSelectFileView
     )
-    delay: ILabelSpinBoxView[FileReaderItems] = field(
-        init=False, default_factory=ILabelSpinBoxView
+    delay: LabelSpinBoxView[FileReaderItems] = field(
+        init=False, default_factory=LabelSpinBoxView
     )
-    content: ILabelTextEditView[FileReaderItems] = field(
-        init=False, default_factory=ILabelTextEditView
+    content: LabelTextEditView[FileReaderItems] = field(
+        init=False, default_factory=LabelTextEditView
     )
-    output_filepath: ILabelSelectFileView[FileReaderItems] = field(
-        init=False, default_factory=ILabelSelectFileView
+    output_filepath: LabelSelectFileView[FileReaderItems] = field(
+        init=False, default_factory=LabelSelectFileView
     )
 
 
-def initialize_file_reader(*, view: IFileReaderView, model: "Model") -> None:
+def initialize_file_reader(*, view: FileReaderView, model: "Model") -> None:
     form.initialize_form_view(view, FileReaderItems(model, view))
     view.title = "File Reader"
     view.content.field_view.is_read_only = True
@@ -83,7 +83,7 @@ def initialize_file_reader(*, view: IFileReaderView, model: "Model") -> None:
 
 
 async def read_file(
-    *, form_view: IFileReaderView, view: ISelectFileView[FileReaderItems]
+    *, form_view: FileReaderView, view: SelectFileView[FileReaderItems]
 ) -> None:
     filepath = Path(view.text)
     if filepath.exists():
@@ -95,7 +95,7 @@ async def read_file(
                 form_view.content.field_view.append_text(line)
 
 
-async def write_file(*, view: IFileReaderView) -> None:
+async def write_file(*, view: FileReaderView) -> None:
     filepath = Path(view.output_filepath.field_view.text)
     delay = view.delay.field_view.value
     if filepath.exists():
@@ -109,7 +109,7 @@ async def write_file(*, view: IFileReaderView) -> None:
 
 
 def sync_read_file(
-    *, form_view: IFileReaderView, view: ISelectFileView[FileReaderItems]
+    *, form_view: FileReaderView, view: SelectFileView[FileReaderItems]
 ) -> None:
     filepath = Path(view.text)
     if filepath.exists():
@@ -121,7 +121,7 @@ def sync_read_file(
                 form_view.content.field_view.append_text(line)
 
 
-def sync_write_file(*, view: IFileReaderView) -> None:
+def sync_write_file(*, view: FileReaderView) -> None:
     filepath = Path(view.output_filepath.field_view.text)
     delay = view.delay.field_view.value
     if filepath.exists():
@@ -133,7 +133,7 @@ def sync_write_file(*, view: IFileReaderView) -> None:
             f.write(line)
 
 
-def connect_file_reader(*, view: IFileReaderView) -> None:
+def connect_file_reader(*, view: FileReaderView) -> None:
     # use sync_read_file/sync_write_file instead of read_file/write_file to see the
     # usefulness of the async here
     # view.filepath.field_view.clicked += [sync_read_file]

@@ -8,11 +8,11 @@ from typing_extensions import Literal
 import typing
 
 if typing.TYPE_CHECKING:
-    from composeui.form.formview import DoubleLineEditView, Vector3DView
+    from composeui.form.qtformview import QtDoubleLineEditView, QtVector3DView
 
 
 class FormDoubleValidator(QDoubleValidator):
-    def __init__(self, view: "DoubleLineEditView[AnyFormItems]") -> None:
+    def __init__(self, view: "QtDoubleLineEditView[AnyFormItems]") -> None:
         super().__init__()
         self._view = view
 
@@ -26,7 +26,7 @@ class FormDoubleValidator(QDoubleValidator):
 
 
 class FormVector3DValidator(QDoubleValidator):
-    def __init__(self, view: "Vector3DView[AnyFormItems]", index: Literal[0, 1, 2]) -> None:
+    def __init__(self, view: "QtVector3DView[AnyFormItems]", index: Literal[0, 1, 2]) -> None:
         super().__init__()
         self._view = view
         self._index = index

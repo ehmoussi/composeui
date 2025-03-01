@@ -10,12 +10,12 @@ from composeui.items.core import itemsslots
 from composeui.items.core.connect import connect_pagination
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.tree import tree
-from composeui.items.tree.itreeview import ExportTreeOptions, ITreeView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeView
 
 from typing import Any
 
 
-def initialize_tree_view(view: ITreeView[AnyTreeItems]) -> bool:
+def initialize_tree_view(view: TreeView[AnyTreeItems]) -> bool:
     """Initialize the tree view."""
     view.is_expansion_animated = True
     view.export_options = ExportTreeOptions.EXPORT_ALL
@@ -23,7 +23,7 @@ def initialize_tree_view(view: ITreeView[AnyTreeItems]) -> bool:
     return False
 
 
-def connect_tree(view: ITreeView[Any]) -> bool:
+def connect_tree(view: TreeView[Any]) -> bool:
     """Connect the slots for the tree view."""
     view.shortcut_add = [tree.add_clicked]
     view.shortcut_delete = [tree.remove_clicked]

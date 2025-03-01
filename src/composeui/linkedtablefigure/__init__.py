@@ -1,9 +1,9 @@
 from composeui.commontypes import AnyTableItems
 from composeui.items.table import connect_table
-from composeui.linkedtablefigure.ilinkedtablefigureview import ILinkedTableFigureView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 
 
-def connect_table_figure_view(view: ILinkedTableFigureView[AnyTableItems]) -> bool:
+def connect_table_figure_view(view: LinkedTableFigureView[AnyTableItems]) -> bool:
     connect_table(view.table)
     view.table.add_clicked += [update_figure]
     view.table.remove_clicked += [update_figure]
@@ -12,7 +12,7 @@ def connect_table_figure_view(view: ILinkedTableFigureView[AnyTableItems]) -> bo
     return False
 
 
-def update_figure(*, parent_view: ILinkedTableFigureView[AnyTableItems]) -> None:
+def update_figure(*, parent_view: LinkedTableFigureView[AnyTableItems]) -> None:
     assert parent_view.figure.figure is not None
     all_axes = parent_view.figure.figure.get_axes()
     assert len(all_axes) == 1
@@ -35,7 +35,7 @@ def update_figure(*, parent_view: ILinkedTableFigureView[AnyTableItems]) -> None
     parent_view.figure.update()
 
 
-def update_table_selection(*, parent_view: ILinkedTableFigureView[AnyTableItems]) -> None:
+def update_table_selection(*, parent_view: LinkedTableFigureView[AnyTableItems]) -> None:
     x = parent_view.figure.x_last_clicked
     y = parent_view.figure.y_last_clicked
     assert x is not None
