@@ -6,7 +6,7 @@ permissions:
   contents: read
 
 jobs:
-  linting:
+  black:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +20,53 @@ jobs:
         run: uv python install
       - name: Install
         run: uv sync --extra dev_maestro --extra all
-      - name: Run the linting
-        run: uv run maestro linting
+      - name: Run black
+        run: uv run maestro black --check
+  isort:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Set up Python
+        run: uv python install
+      - name: Install
+        run: uv sync --extra dev_maestro --extra all
+      - name: Run isort
+        run: uv run maestro isort --check
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Set up Python
+        run: uv python install
+      - name: Install
+        run: uv sync --extra dev_maestro --extra all
+      - name: Run ruff
+        run: uv run maestro ruff
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: 3.11
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Set up Python
+        run: uv python install
+      - name: Install
+        run: uv sync --extra dev_maestro --extra all
+      - name: Run mypy
+        run: uv run maestro mypy
