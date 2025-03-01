@@ -6,7 +6,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  linting:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +20,5 @@ jobs:
         run: uv python install
       - name: Install
         run: uv sync --extra dev_maestro --extra all
-      - name: Run the tests
+      - name: Run the linting
         run: uv run maestro linting
