@@ -474,7 +474,7 @@ class BaseSignal(MutableSequence[Callback]):
             return self
         else:
             base_signal = BaseSignal(*self._parameter_types)
-            base_signal._name = self._name  # noqa: SLF001
+            base_signal._name = self._name
             return self._objs.setdefault(obj, base_signal)
 
     def __set__(self, obj: Optional["IView"], value: Iterable[Callback]) -> None:
