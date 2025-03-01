@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 @dataclass(eq=False)
 class SalomeMainView(MainView):
     module_name: str
-    salome_tree: SalomeTree = field(init=False, default_factory=SalomeTree)
-    salome_views: SalomeViews = field(init=False)
-    central_view: SalomeView = field(init=False)
+    salome_tree: SalomeTree = field(init=False, repr=False, default_factory=SalomeTree)
+    salome_views: SalomeViews = field(init=False, repr=False)
+    central_view: SalomeView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

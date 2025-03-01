@@ -11,7 +11,7 @@ from dataclasses import InitVar, dataclass, field
 class QtSalomeViews(QtView, SalomeViews):
 
     main_id: InitVar[int]
-    occ_view: QtOCCView = field(init=False)
+    occ_view: QtOCCView = field(init=False, repr=False)
 
     def __post_init__(self, main_id: int) -> None:
         super().__post_init__()

@@ -21,13 +21,13 @@ from typing import cast
 class QtSalomeMainView(QtView, SalomeMainView):
     """Salome main view."""
 
-    view: QMainWindow = field(init=False)
-    message_view: QtMessageView = field(init=False)
-    file_view: QtFileView = field(init=False)
-    progress_popup_view: QtProgressPopupView = field(init=False)
-    salome_tree: QtSalomeTree = field(init=False)
-    salome_views: QtSalomeViews = field(init=False)
-    central_view: QtSalomeCentralView = field(init=False)
+    view: QMainWindow = field(init=False, repr=False)
+    message_view: QtMessageView = field(init=False, repr=False)
+    file_view: QtFileView = field(init=False, repr=False)
+    progress_popup_view: QtProgressPopupView = field(init=False, repr=False)
+    salome_tree: QtSalomeTree = field(init=False, repr=False)
+    salome_views: QtSalomeViews = field(init=False, repr=False)
+    central_view: QtSalomeCentralView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.view = self._get_salome_desktop()

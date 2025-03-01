@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtView2(QtView, View2):
-    view: QWidget = field(init=False, default_factory=QWidget)
-    text_2_label: QLabel = field(init=False, default_factory=QLabel)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
+    text_2_label: QLabel = field(init=False, repr=False, default_factory=QLabel)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -34,8 +34,8 @@ class QtView2(QtView, View2):
 
 @dataclass(eq=False)
 class QtRightView2(QtView, RightView2):
-    view: QWidget = field(init=False, default_factory=QWidget)
-    text_2_label: QLabel = field(init=False, default_factory=QLabel)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
+    text_2_label: QLabel = field(init=False, repr=False, default_factory=QLabel)
 
     def __post_init__(self) -> None:
         super().__post_init__()

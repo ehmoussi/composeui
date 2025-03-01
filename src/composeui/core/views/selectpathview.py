@@ -16,4 +16,4 @@ class SelectPathView(View):
     button_name: str = field(init=False, default="...")
     filter_path: str = field(init=False, default="")
     mode: FileMode = field(init=False, default="open_file")
-    select_clicked: BaseSignal = field(init=False, default=BaseSignal())
+    select_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())

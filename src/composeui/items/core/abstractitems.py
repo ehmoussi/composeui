@@ -146,6 +146,12 @@ class AbstractItems(ABC, Generic[V, AnyModel]):
         """
         yield
 
+    def __str__(self) -> str:
+        return self.__class__.__name__
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__
+
     @staticmethod
     def display_float(value: float, nb_decimals: int = -1) -> str:
         """Get the float value in a string format.

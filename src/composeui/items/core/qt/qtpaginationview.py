@@ -10,9 +10,9 @@ from typing import List
 
 @dataclass(eq=False)
 class QtPaginationView(QtView, PaginationView):
-    view: PaginationWidget = field(init=False, default_factory=PaginationWidget)
+    view: PaginationWidget = field(init=False, repr=False, default_factory=PaginationWidget)
 
-    _current_page: int = field(init=False, default=-1)
+    _current_page: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self) -> None:
         super().__post_init__()

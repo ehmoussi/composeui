@@ -21,7 +21,7 @@ class QtSalomeMenu(QtView, Menu):
     name: str
     index: int
 
-    view: QMenu = field(init=False)
+    view: QMenu = field(init=False, repr=False)
 
     menu_id: int = field(init=False)
 

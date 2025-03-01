@@ -53,9 +53,9 @@ class VTKView(View):
         init=False, default="Use Shift key to pick a cell/point"
     )
     # signals
-    reset_camera_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    cell_picked: BaseSignal = field(init=False, default=BaseSignal())
-    point_picked: BaseSignal = field(init=False, default=BaseSignal())
+    reset_camera_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    cell_picked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    point_picked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
     def reset_camera(self) -> None: ...
 

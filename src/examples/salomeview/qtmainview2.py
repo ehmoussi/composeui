@@ -22,9 +22,9 @@ class QtModule2ToolBar(QtSalomeMainToolBar, Module2MainToolBar): ...
 
 @dataclass(eq=False)
 class QtModule2MainView(QtSalomeMainView, Module2MainView):
-    menu: QtExampleMainMenu = field(init=False)
-    toolbar: QtModule2ToolBar = field(init=False)
-    cube_table: QtTableView["CubeTableItems"] = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    toolbar: QtModule2ToolBar = field(init=False, repr=False)
+    cube_table: QtTableView["CubeTableItems"] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

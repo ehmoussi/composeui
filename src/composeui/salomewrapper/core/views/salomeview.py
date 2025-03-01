@@ -12,7 +12,7 @@ class SalomeView(View):
     is_active: bool = field(init=False, default=False)
     is_closable: bool = field(init=False, default=True)
     title: str = field(init=False, default="")
-    _view_id: int = field(init=False, default=-1)
+    _view_id: int = field(init=False, repr=False, default=-1)
 
     def get_view_id(self) -> int:
         return self._view_id

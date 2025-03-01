@@ -9,8 +9,8 @@ from typing import Generic
 
 @dataclass(eq=False)
 class LinkedTableFigureView(View, Generic[AnyTableItems]):
-    table: TableView[AnyTableItems] = field(init=False, default_factory=TableView)
-    figure: FigureView = field(init=False, default_factory=FigureView)
+    table: TableView[AnyTableItems] = field(init=False, repr=False, default_factory=TableView)
+    figure: FigureView = field(init=False, repr=False, default_factory=FigureView)
     label: int = field(init=False, default=0)
     x: int = field(init=False, default=1)
     y: int = field(init=False, default=2)

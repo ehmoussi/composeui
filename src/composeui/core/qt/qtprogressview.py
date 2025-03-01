@@ -16,10 +16,10 @@ T = TypeVar("T", bound=AbstractTask)
 class QtProgressView(QtWorkerView[T], ProgressView[T]):
     r"""View of a progress bar and run button to execute a task in background."""
 
-    view: QWidget = field(init=False, default_factory=QWidget)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
 
-    progress_bar: QProgressBar = field(init=False, default_factory=QProgressBar)
-    run_button: QPushButton = field(init=False, default_factory=QPushButton)
+    progress_bar: QProgressBar = field(init=False, repr=False, default_factory=QProgressBar)
+    run_button: QPushButton = field(init=False, repr=False, default_factory=QPushButton)
 
     def __post_init__(self) -> None:
         super().__post_init__()

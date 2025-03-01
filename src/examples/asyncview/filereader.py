@@ -62,16 +62,16 @@ class FileReaderItems(AbstractFormItems["Model", "FileReaderView"]):
 @dataclass(eq=False)
 class FileReaderView(GroupBoxApplyFormView[FileReaderItems]):
     filepath: LabelSelectFileView[FileReaderItems] = field(
-        init=False, default_factory=LabelSelectFileView
+        init=False, repr=False, default_factory=LabelSelectFileView
     )
     delay: LabelSpinBoxView[FileReaderItems] = field(
-        init=False, default_factory=LabelSpinBoxView
+        init=False, repr=False, default_factory=LabelSpinBoxView
     )
     content: LabelTextEditView[FileReaderItems] = field(
-        init=False, default_factory=LabelTextEditView
+        init=False, repr=False, default_factory=LabelTextEditView
     )
     output_filepath: LabelSelectFileView[FileReaderItems] = field(
-        init=False, default_factory=LabelSelectFileView
+        init=False, repr=False, default_factory=LabelSelectFileView
     )
 
 

@@ -13,21 +13,27 @@ if typing.TYPE_CHECKING:
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    pipe: ActionView = field(init=False, default_factory=ActionView)
-    apply_pipe: ActionView = field(init=False, default_factory=ActionView)
+    pipe: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    apply_pipe: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
-    pipe_view: pipeform.PipeFormView = field(init=False, default_factory=pipeform.PipeFormView)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
+    pipe_view: pipeform.PipeFormView = field(
+        init=False, repr=False, default_factory=pipeform.PipeFormView
+    )
     apply_pipe_view: pipeapplyform.PipeApplyFormView = field(
-        init=False, default_factory=pipeapplyform.PipeApplyFormView
+        init=False, repr=False, default_factory=pipeapplyform.PipeApplyFormView
     )
 
 

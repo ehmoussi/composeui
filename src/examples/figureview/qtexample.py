@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtBatmanView(QtView, BatmanView):
-    view: QWidget = field(init=False)
-    figure: QtFigureView = field(init=False)
+    view: QWidget = field(init=False, repr=False)
+    figure: QtFigureView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -53,9 +53,9 @@ class QtExampleMainToolBar(QtMainToolBar, MainToolBar): ...
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
 
-    menu: QtExampleMainMenu = field(init=False)
-    toolbar: QtExampleMainToolBar = field(init=False)
-    batman: QtBatmanView = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    toolbar: QtExampleMainToolBar = field(init=False, repr=False)
+    batman: QtBatmanView = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

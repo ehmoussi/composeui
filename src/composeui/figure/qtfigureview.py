@@ -33,7 +33,7 @@ class QtFigureView(QtView, FigureView):
 
     has_groupbox: InitVar[bool] = False
 
-    view: Union[GroupBox, Widget] = field(init=False)
+    view: Union[GroupBox, Widget] = field(init=False, repr=False)
 
     # Figure
     toolbar: Optional[QtFigureToolbar] = field(init=False, repr=False, default=None)

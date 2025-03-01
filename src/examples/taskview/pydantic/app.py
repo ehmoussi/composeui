@@ -18,7 +18,7 @@ class TaskConfig(pydantic.BaseModel):
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    task: TaskView = field(init=False, default_factory=TaskView)
+    task: TaskView = field(init=False, repr=False, default_factory=TaskView)
 
 
 Model: TypeAlias = PydanticModel[TaskConfig]

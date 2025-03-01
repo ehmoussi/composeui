@@ -27,7 +27,7 @@ else:
 class QtMainView(QtView, MainView):
     r"""View of the main view."""
 
-    view: MainWindow = field(init=False)
+    view: MainWindow = field(init=False, repr=False)
     with_app: InitVar[bool] = True
 
     def __post_init__(self, with_app: bool) -> None:

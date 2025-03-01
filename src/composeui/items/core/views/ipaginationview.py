@@ -24,10 +24,12 @@ class PaginationView(View):
     page_navigation_description: str = field(init=False, default="")
 
     # signals
-    size_changed: BaseSignal = field(init=False, default=BaseSignal())
-    current_page_changed: BaseSignal = field(init=False, default=BaseSignal())
-    current_page_size_changed: BaseSignal = field(init=False, default=BaseSignal(int))
-    first_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    previous_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    next_clicked: BaseSignal = field(init=False, default=BaseSignal())
-    last_clicked: BaseSignal = field(init=False, default=BaseSignal())
+    size_changed: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    current_page_changed: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    current_page_size_changed: BaseSignal = field(
+        init=False, repr=False, default=BaseSignal(int)
+    )
+    first_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    previous_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    next_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
+    last_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())

@@ -18,7 +18,7 @@ class FigureView(PendingView):
     last_clicked_axes: Optional["Axes"] = field(init=False, default=None)
     x_last_clicked: Optional[float] = field(init=False, default=None)
     y_last_clicked: Optional[float] = field(init=False, default=None)
-    clicked: BaseSignal = field(init=False, default=BaseSignal())
+    clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
 
 @dataclass(eq=False)

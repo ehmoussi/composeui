@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtLinkedTableFigureView(QtView, LinkedTableFigureView[AnyTableItems]):
-    view: QSplitter = field(init=False)
-    table: QtTableView[AnyTableItems] = field(init=False)
-    figure: QtFigureView = field(init=False)
+    view: QSplitter = field(init=False, repr=False)
+    table: QtTableView[AnyTableItems] = field(init=False, repr=False)
+    figure: QtFigureView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

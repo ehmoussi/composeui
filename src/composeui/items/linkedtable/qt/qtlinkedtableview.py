@@ -23,12 +23,12 @@ class QtLinkedTableView(QtView, LinkedTableView[AnyMasterTableItems, AnyDetailTa
 
     """
 
-    view: Union[QWidget, QGroupBox] = field(init=False)
+    view: Union[QWidget, QGroupBox] = field(init=False, repr=False)
     master_table: QtTableGroupView[AnyMasterTableItems] = field(
-        init=False, default_factory=QtTableGroupView[AnyMasterTableItems]
+        init=False, repr=False, default_factory=QtTableGroupView[AnyMasterTableItems]
     )
     detail_table: QtTableGroupView[AnyDetailTableItems] = field(
-        init=False, default_factory=QtTableGroupView[AnyDetailTableItems]
+        init=False, repr=False, default_factory=QtTableGroupView[AnyDetailTableItems]
     )
 
     is_horizontal: InitVar[bool] = True

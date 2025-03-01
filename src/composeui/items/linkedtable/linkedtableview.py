@@ -17,10 +17,10 @@ class LinkedTableView(View, Generic[AnyMasterTableItems, AnyDetailTableItems]):
     import_clicked: BaseSignal = field(init=False, default=BaseSignal())
     export_clicked: BaseSignal = field(init=False, default=BaseSignal())
     master_table: TableGroupView[AnyMasterTableItems] = field(
-        init=False, default_factory=TableGroupView[AnyMasterTableItems]
+        init=False, repr=False, default_factory=TableGroupView[AnyMasterTableItems]
     )
     detail_table: TableGroupView[AnyDetailTableItems] = field(
-        init=False, default_factory=TableGroupView[AnyDetailTableItems]
+        init=False, repr=False, default_factory=TableGroupView[AnyDetailTableItems]
     )
     import_extensions: FormatExtension = field(
         init=False, default=FormatExtension.IMPORT_EXTENSIONS

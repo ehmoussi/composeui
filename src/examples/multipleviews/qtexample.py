@@ -28,7 +28,7 @@ class QtExampleMainToolBar(QtMainToolBar, ExampleMainToolBar): ...
 
 @dataclass(eq=False)
 class QtLeftExampleDockView(QtDockView, LeftExampleDockView):
-    view_1: QtLeftView1 = field(init=False)
+    view_1: QtLeftView1 = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -38,7 +38,7 @@ class QtLeftExampleDockView(QtDockView, LeftExampleDockView):
 
 @dataclass(eq=False)
 class QtRightExampleDockView(QtDockView, RightExampleDockView):
-    view_2: QtRightView2 = field(init=False)
+    view_2: QtRightView2 = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -48,14 +48,14 @@ class QtRightExampleDockView(QtDockView, RightExampleDockView):
 
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
-    menu: QtExampleMainMenu = field(init=False)
-    toolbar: QtExampleMainToolBar = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    toolbar: QtExampleMainToolBar = field(init=False, repr=False)
 
-    left_dock: QtLeftExampleDockView = field(init=False)
-    right_dock: QtRightExampleDockView = field(init=False)
-    view_1: QtView1 = field(init=False)
-    view_2: QtView2 = field(init=False)
-    view_3: QtView3 = field(init=False)
+    left_dock: QtLeftExampleDockView = field(init=False, repr=False)
+    right_dock: QtRightExampleDockView = field(init=False, repr=False)
+    view_1: QtView1 = field(init=False, repr=False)
+    view_2: QtView2 = field(init=False, repr=False)
+    view_3: QtView3 = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

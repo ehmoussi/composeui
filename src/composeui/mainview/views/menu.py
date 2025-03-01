@@ -11,9 +11,9 @@ class Menu(View):
 
 @dataclass(eq=False)
 class FileMenu(Menu):
-    new: ActionView = field(init=False, default_factory=ActionView)
-    open_file: ActionView = field(init=False, default_factory=ActionView)
-    save: ActionView = field(init=False, default_factory=ActionView)
-    save_as: ActionView = field(init=False, default_factory=ActionView)
-    separator_exit: ActionView = field(init=False, default_factory=ActionView)
-    exit_app: ActionView = field(init=False, default_factory=ActionView)
+    new: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    open_file: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    save: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    save_as: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    separator_exit: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    exit_app: ActionView = field(init=False, repr=False, default_factory=ActionView)

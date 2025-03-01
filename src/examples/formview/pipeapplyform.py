@@ -20,40 +20,38 @@ from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
     from examples.formview.app import Model
-    from examples.formview.example import ExampleMainView
 
 
 @dataclass(eq=False)
 class PipeApplyFormView(GroupBoxApplyFormView["PipeApplyFormItems"]):
     name: LabelLineEditView["PipeApplyFormItems"] = field(
-        init=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
     )
     p_id: LabelLineEditView["PipeApplyFormItems"] = field(
-        init=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=LabelLineEditView["PipeApplyFormItems"]
     )
     export: LabelSelectFileView["PipeApplyFormItems"] = field(
-        init=False, default_factory=LabelSelectFileView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=LabelSelectFileView["PipeApplyFormItems"]
     )
     main: PipeDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
     )
     incident: PipeDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=PipeDimensionView["PipeApplyFormItems"]
     )
     edge_type: LabelComboBoxView["PipeApplyFormItems"] = field(
-        init=False, default_factory=LabelComboBoxView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=LabelComboBoxView["PipeApplyFormItems"]
     )
     chamfer: ChamferDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=ChamferDimensionView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=ChamferDimensionView["PipeApplyFormItems"]
     )
     fillet: FilletDimensionView["PipeApplyFormItems"] = field(
-        init=False, default_factory=FilletDimensionView["PipeApplyFormItems"]
+        init=False, repr=False, default_factory=FilletDimensionView["PipeApplyFormItems"]
     )
 
 
 def initialize_apply_pipe(
     view: PipeApplyFormView,
-    main_view: "ExampleMainView",
     model: "Model",
     is_visible: bool = False,
 ) -> None:

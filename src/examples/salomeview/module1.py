@@ -12,25 +12,29 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class LeftDockView(DockView):
-    cube_definition: CubeDefinitionView = field(init=False, default_factory=CubeDefinitionView)
+    cube_definition: CubeDefinitionView = field(
+        init=False, repr=False, default_factory=CubeDefinitionView
+    )
 
 
 @dataclass(eq=False)
 class Module1NavigationToolBar(CheckableToolBar):
-    cube_definition: ActionView = field(init=False, default_factory=ActionView)
+    cube_definition: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class Module1MainToolBar(MainToolBar):
     navigation: Module1NavigationToolBar = field(
-        init=False, default_factory=Module1NavigationToolBar
+        init=False, repr=False, default_factory=Module1NavigationToolBar
     )
 
 
 @dataclass(eq=False)
 class Module1MainView(SalomeMainView):
-    toolbar: Module1MainToolBar = field(init=False, default_factory=Module1MainToolBar)
-    left_dock: LeftDockView = field(init=False, default_factory=LeftDockView)
+    toolbar: Module1MainToolBar = field(
+        init=False, repr=False, default_factory=Module1MainToolBar
+    )
+    left_dock: LeftDockView = field(init=False, repr=False, default_factory=LeftDockView)
 
 
 def initialize_navigation(view: Module1NavigationToolBar, main_view: Module1MainView) -> None:

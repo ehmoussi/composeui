@@ -6,5 +6,7 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class MainToolBar(View):
-    file: FileToolBar = field(init=False, default_factory=FileToolBar)
-    navigation: CheckableToolBar = field(init=False, default_factory=CheckableToolBar)
+    file: FileToolBar = field(init=False, repr=False, default_factory=FileToolBar)
+    navigation: CheckableToolBar = field(
+        init=False, repr=False, default_factory=CheckableToolBar
+    )

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 class QtProgressPopupView(QtWorkerView[AbstractTask], ProgressPopupView):
     r"""View for the worker progress."""
 
-    view: ProgressDialog = field(init=False)
+    view: ProgressDialog = field(init=False, repr=False)
     parent: QWidget
 
     def __post_init__(self) -> None:

@@ -9,9 +9,11 @@ from typing import Mapping
 
 @dataclass(eq=False)
 class BaseMainMenu(View):
-    menus: Mapping[str, Menu] = field(init=False, default_factory=OrderedDict[str, Menu])
+    menus: Mapping[str, Menu] = field(
+        init=False, repr=False, default_factory=OrderedDict[str, Menu]
+    )
 
 
 @dataclass(eq=False)
 class MainMenu(View):
-    file: FileMenu = field(init=False, default_factory=FileMenu)
+    file: FileMenu = field(init=False, repr=False, default_factory=FileMenu)

@@ -9,8 +9,8 @@ class View:
     view_name: str = field(init=False)
     is_visible: bool = field(init=False, default=False)
     is_enabled: bool = field(init=False, default=False)
-    children: MutableMapping[str, "View"] = field(init=False, default_factory=dict)
-    dependencies: List["View"] = field(init=False, default_factory=list)
+    children: MutableMapping[str, "View"] = field(init=False, repr=False, default_factory=dict)
+    dependencies: List["View"] = field(init=False, repr=False, default_factory=list)
     block_signals: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:

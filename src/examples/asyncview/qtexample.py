@@ -17,8 +17,8 @@ class QtFileReaderView(QtGroupBoxApplyFormView[FileReaderItems], FileReaderView)
 
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
-    toolbar: QtExampleMainToolBar = field(init=False)
-    file_reader: QtFileReaderView = field(init=False)
+    toolbar: QtExampleMainToolBar = field(init=False, repr=False)
+    file_reader: QtFileReaderView = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

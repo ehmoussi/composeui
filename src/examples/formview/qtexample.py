@@ -18,10 +18,10 @@ class QtExampleMainToolBar(QtMainToolBar, ExampleMainToolBar): ...
 
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
-    menu: QtExampleMainMenu = field(init=False)
-    toolbar: QtExampleMainToolBar = field(init=False)
-    pipe_view: QtPipeFormView = field(init=False)
-    apply_pipe_view: QtPipeApplyFormView = field(init=False)
+    menu: QtExampleMainMenu = field(init=False, repr=False)
+    toolbar: QtExampleMainToolBar = field(init=False, repr=False)
+    pipe_view: QtPipeFormView = field(init=False, repr=False)
+    apply_pipe_view: QtPipeApplyFormView = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

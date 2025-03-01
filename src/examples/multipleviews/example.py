@@ -12,34 +12,42 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class NavigationToolBar(CheckableToolBar):
-    view_1: ActionView = field(init=False, default_factory=ActionView)
-    view_2: ActionView = field(init=False, default_factory=ActionView)
-    view_3: ActionView = field(init=False, default_factory=ActionView)
+    view_1: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    view_2: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    view_3: ActionView = field(init=False, repr=False, default_factory=ActionView)
 
 
 @dataclass(eq=False)
 class ExampleMainToolBar(MainToolBar):
-    navigation: NavigationToolBar = field(init=False, default_factory=NavigationToolBar)
+    navigation: NavigationToolBar = field(
+        init=False, repr=False, default_factory=NavigationToolBar
+    )
 
 
 @dataclass(eq=False)
 class LeftExampleDockView(DockView):
-    view_1: LeftView1 = field(init=False, default_factory=LeftView1)
+    view_1: LeftView1 = field(init=False, repr=False, default_factory=LeftView1)
 
 
 @dataclass(eq=False)
 class RightExampleDockView(DockView):
-    view_2: RightView2 = field(init=False, default_factory=RightView2)
+    view_2: RightView2 = field(init=False, repr=False, default_factory=RightView2)
 
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    toolbar: ExampleMainToolBar = field(init=False, default_factory=ExampleMainToolBar)
-    left_dock: LeftExampleDockView = field(init=False, default_factory=LeftExampleDockView)
-    right_dock: RightExampleDockView = field(init=False, default_factory=RightExampleDockView)
-    view_1: View1 = field(init=False, default_factory=View1)
-    view_2: View2 = field(init=False, default_factory=View2)
-    view_3: View3 = field(init=False, default_factory=View3)
+    toolbar: ExampleMainToolBar = field(
+        init=False, repr=False, default_factory=ExampleMainToolBar
+    )
+    left_dock: LeftExampleDockView = field(
+        init=False, repr=False, default_factory=LeftExampleDockView
+    )
+    right_dock: RightExampleDockView = field(
+        init=False, repr=False, default_factory=RightExampleDockView
+    )
+    view_1: View1 = field(init=False, repr=False, default_factory=View1)
+    view_2: View2 = field(init=False, repr=False, default_factory=View2)
+    view_3: View3 = field(init=False, repr=False, default_factory=View3)
 
 
 def initialize_dockviews(main_view: ExampleMainView) -> None:

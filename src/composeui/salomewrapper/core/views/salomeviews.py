@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 @dataclass(eq=False)
 class SalomeViews(View):
     module_name: str
-    occ_view: OCCView = field(init=False)
+    occ_view: OCCView = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()

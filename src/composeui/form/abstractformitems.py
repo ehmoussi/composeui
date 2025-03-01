@@ -270,3 +270,9 @@ class AbstractFormItems(ABC, Generic[AnyModel, AnyFormView]):
                     return None
                 else:
                     return int_value
+
+    def __str__(self) -> str:
+        return self.__class__.__name__
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__

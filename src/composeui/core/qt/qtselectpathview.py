@@ -10,11 +10,11 @@ from dataclasses import dataclass, field
 
 @dataclass(eq=False)
 class QtSelectPathView(QtView, SelectPathView):
-    view: QWidget = field(init=False, default_factory=QWidget)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
 
-    _label: QLabel = field(init=False, default_factory=QLabel)
-    _file_name_lineedit: QLineEdit = field(init=False, default_factory=QLineEdit)
-    _button: QPushButton = field(init=False, default_factory=QPushButton)
+    _label: QLabel = field(init=False, repr=False, default_factory=QLabel)
+    _file_name_lineedit: QLineEdit = field(init=False, repr=False, default_factory=QLineEdit)
+    _button: QPushButton = field(init=False, repr=False, default_factory=QPushButton)
 
     def __post_init__(self) -> None:
         super().__post_init__()

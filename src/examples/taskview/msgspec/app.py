@@ -18,7 +18,7 @@ class TaskConfig(msgspec.Struct):
 
 @dataclass(eq=False)
 class ExampleMainView(MainView):
-    task: TaskView = field(init=False, default_factory=TaskView)
+    task: TaskView = field(init=False, repr=False, default_factory=TaskView)
 
 
 Model: TypeAlias = MsgspecModel[TaskConfig]

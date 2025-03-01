@@ -36,7 +36,7 @@ class QtVTKConfigView(QtGroupBoxApplyFormView[VTKConfigFormItems], VTKConfigView
 @dataclass(eq=False)
 class QtVTKInfosView(QtGroupView, VTKInfosView):
 
-    _text_edit: QTextEdit = field(init=False, default_factory=QTextEdit)
+    _text_edit: QTextEdit = field(init=False, repr=False, default_factory=QTextEdit)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -56,11 +56,17 @@ class QtVTKInfosView(QtGroupView, VTKInfosView):
 
 @dataclass(eq=False)
 class QtVTKExampleView(QtView, VTKExampleView):
-    view: QSplitter = field(init=False, default_factory=lambda: QSplitter(Qt.Vertical))
+    view: QSplitter = field(
+        init=False, repr=False, default_factory=lambda: QSplitter(Qt.Vertical)
+    )
 
-    configuration: QtVTKConfigView = field(init=False, default_factory=QtVTKConfigView)
-    vtk_view: QtVTKView = field(init=False, default_factory=QtVTKView)
-    informations: QtVTKInfosView = field(init=False, default_factory=QtVTKInfosView)
+    configuration: QtVTKConfigView = field(
+        init=False, repr=False, default_factory=QtVTKConfigView
+    )
+    vtk_view: QtVTKView = field(init=False, repr=False, default_factory=QtVTKView)
+    informations: QtVTKInfosView = field(
+        init=False, repr=False, default_factory=QtVTKInfosView
+    )
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -76,10 +82,10 @@ class QtVTKExampleView(QtView, VTKExampleView):
 
 @dataclass(eq=False)
 class QtExampleMainView(QtMainView, ExampleMainView):
-    menu: QtVTKMainMenu = field(init=False)
-    toolbar: QtVTKMainToolBar = field(init=False)
+    menu: QtVTKMainMenu = field(init=False, repr=False)
+    toolbar: QtVTKMainToolBar = field(init=False, repr=False)
 
-    vtk_example: QtVTKExampleView = field(init=False)
+    vtk_example: QtVTKExampleView = field(init=False, repr=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)

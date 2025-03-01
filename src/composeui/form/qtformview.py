@@ -60,7 +60,7 @@ from typing import Any, List, Optional, Tuple, Type, Union
 @dataclass(eq=False)
 class QtRowItemView(QtView, RowItemView[AnyFormItems]):
 
-    view: Optional[QWidget] = field(init=False, default=None)
+    view: Optional[QWidget] = field(init=False, repr=False, default=None)
     _color: Optional[Tuple[int, int, int]] = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
@@ -91,7 +91,7 @@ class QtNoLabelView(QtRowItemView[AnyFormItems], NoLabelView[AnyFormItems]): ...
 
 @dataclass(eq=False)
 class QtLabelView(QtRowItemView[AnyFormItems], LabelView[AnyFormItems]):
-    view: QLabel = field(init=False, default_factory=QLabel)
+    view: QLabel = field(init=False, repr=False, default_factory=QLabel)
 
     @property  # type: ignore[misc]
     def text(self) -> str:
@@ -104,7 +104,7 @@ class QtLabelView(QtRowItemView[AnyFormItems], LabelView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtCheckBoxView(QtRowItemView[AnyFormItems], CheckBoxView[AnyFormItems]):
-    view: QCheckBox = field(init=False, default_factory=QCheckBox)
+    view: QCheckBox = field(init=False, repr=False, default_factory=QCheckBox)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -129,7 +129,7 @@ class QtCheckBoxView(QtRowItemView[AnyFormItems], CheckBoxView[AnyFormItems]):
 
 @dataclass(eq=False)
 class _QtEditView(QtRowItemView[AnyFormItems], EditView[AnyFormItems]):
-    view: QLineEdit = field(init=False, default_factory=QLineEdit)
+    view: QLineEdit = field(init=False, repr=False, default_factory=QLineEdit)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -153,7 +153,7 @@ class QtLineEditView(_QtEditView[AnyFormItems], LineEditView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
-    view: QTextEdit = field(init=False, default_factory=QTextEdit)
+    view: QTextEdit = field(init=False, repr=False, default_factory=QTextEdit)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -215,8 +215,8 @@ class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtDoubleLineEditView(_QtEditView[AnyFormItems], DoubleLineEditView[AnyFormItems]):
-    validator: FormDoubleValidator = field(init=False)
-    _items: Optional[AnyFormItems] = field(init=False, default=None)
+    validator: FormDoubleValidator = field(init=False, repr=False)
+    _items: Optional[AnyFormItems] = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -265,18 +265,18 @@ class QtDoubleLineEditView(_QtEditView[AnyFormItems], DoubleLineEditView[AnyForm
 
 @dataclass(eq=False)
 class QtVector3DView(QtRowItemView[AnyFormItems], Vector3DView[AnyFormItems]):
-    view: QWidget = field(init=False)
+    view: QWidget = field(init=False, repr=False)
 
-    line_edit_1: QLineEdit = field(init=False)
-    validator_1: FormVector3DValidator = field(init=False)
+    line_edit_1: QLineEdit = field(init=False, repr=False)
+    validator_1: FormVector3DValidator = field(init=False, repr=False)
 
-    line_edit_2: QLineEdit = field(init=False)
-    validator_2: FormVector3DValidator = field(init=False)
+    line_edit_2: QLineEdit = field(init=False, repr=False)
+    validator_2: FormVector3DValidator = field(init=False, repr=False)
 
-    line_edit_3: QLineEdit = field(init=False)
-    validator_3: FormVector3DValidator = field(init=False)
+    line_edit_3: QLineEdit = field(init=False, repr=False)
+    validator_3: FormVector3DValidator = field(init=False, repr=False)
 
-    _items: Optional[AnyFormItems] = field(init=False, default=None)
+    _items: Optional[AnyFormItems] = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         self.view = QWidget()
@@ -389,7 +389,7 @@ class QtVector3DView(QtRowItemView[AnyFormItems], Vector3DView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtSpinBoxView(QtRowItemView[AnyFormItems], SpinBoxView[AnyFormItems]):
-    view: QSpinBox = field(init=False, default_factory=QSpinBox)
+    view: QSpinBox = field(init=False, repr=False, default_factory=QSpinBox)
     value_changed = BaseSignal()
 
     def __post_init__(self) -> None:
@@ -438,7 +438,7 @@ class QtSpinBoxView(QtRowItemView[AnyFormItems], SpinBoxView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtComboBoxView(QtRowItemView[AnyFormItems], ComboBoxView[AnyFormItems]):
-    view: QComboBox = field(init=False, default_factory=QComboBox)
+    view: QComboBox = field(init=False, repr=False, default_factory=QComboBox)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -470,8 +470,10 @@ class QtComboBoxView(QtRowItemView[AnyFormItems], ComboBoxView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtComboBoxItemsView(QtRowItemView[AnyFormItems], ComboBoxItemsView[AnyFormItems]):
-    view: ComboBox = field(init=False, default_factory=ComboBox)
-    _combobox_items: Optional[AbstractComboboxItems] = field(init=False, default=None)
+    view: ComboBox = field(init=False, repr=False, default_factory=ComboBox)
+    _combobox_items: Optional[AbstractComboboxItems] = field(
+        init=False, repr=False, default=None
+    )
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -527,7 +529,7 @@ class ButtonType(Enum):
 @dataclass(eq=False)
 class QtButtonsGroupView(QtRowItemView[AnyFormItems], ButtonsGroupView[AnyFormItems]):
 
-    view: QWidget = field(init=False, default_factory=QWidget)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
     button_type: ButtonType
     _group: QButtonGroup = field(init=False, repr=False, default_factory=QButtonGroup)
 
@@ -643,10 +645,10 @@ class QtButtonsGroupView(QtRowItemView[AnyFormItems], ButtonsGroupView[AnyFormIt
 
 @dataclass(eq=False)
 class QtSelectFileView(QtRowItemView[AnyFormItems], SelectFileView[AnyFormItems]):
-    view: QWidget = field(init=False, default_factory=QWidget)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
 
-    text_field: QLineEdit = field(init=False, default_factory=QLineEdit)
-    button: QPushButton = field(init=False, default_factory=QPushButton)
+    text_field: QLineEdit = field(init=False, repr=False, default_factory=QLineEdit)
+    button: QPushButton = field(init=False, repr=False, default_factory=QPushButton)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -710,8 +712,8 @@ class QtRowView(RowView[AnyFormItems]):
 @dataclass(eq=False)
 class QtFormView(QtView, FormView[AnyFormItems]):
 
-    view: QWidget = field(init=False, default_factory=QWidget)
-    form_infos: QLabel = field(init=False, default_factory=QLabel)
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
+    form_infos: QLabel = field(init=False, repr=False, default_factory=QLabel)
 
     def __post_init__(self) -> None:
         self.field_changed.allow_calling = True
@@ -878,7 +880,7 @@ class QtApplyFormView(QtFormView[AnyFormItems], ApplyFormView[AnyFormItems]):
 
 @dataclass(eq=False)
 class QtGroupBoxFormView(QtFormView[AnyFormItems], GroupBoxFormView[AnyFormItems]):
-    view: QGroupBox = field(init=False, default_factory=QGroupBox)
+    view: QGroupBox = field(init=False, repr=False, default_factory=QGroupBox)
 
     @property  # type: ignore[misc]
     def title(self) -> str:
@@ -909,7 +911,7 @@ class QtGroupBoxFormView(QtFormView[AnyFormItems], GroupBoxFormView[AnyFormItems
 class QtGroupBoxApplyFormView(
     QtApplyFormView[AnyFormItems], GroupBoxApplyFormView[AnyFormItems]
 ):
-    view: QGroupBox = field(init=False, default_factory=QGroupBox)
+    view: QGroupBox = field(init=False, repr=False, default_factory=QGroupBox)
 
     @property  # type: ignore[misc]
     def title(self) -> str:

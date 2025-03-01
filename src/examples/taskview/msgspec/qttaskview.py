@@ -17,12 +17,14 @@ class QtTaskConfigForm(QtGroupBoxFormView[TaskConfigItems], TaskConfigForm): ...
 @dataclass(eq=False)
 class QtTaskView(QtView, TaskView):
 
-    view: QWidget = field(init=False, default_factory=QWidget)
-    config: QtTaskConfigForm = field(init=False, default_factory=QtTaskConfigForm)
-    progress: QtProgressView[Task] = field(init=False, default_factory=QtProgressView[Task])
+    view: QWidget = field(init=False, repr=False, default_factory=QWidget)
+    config: QtTaskConfigForm = field(init=False, repr=False, default_factory=QtTaskConfigForm)
+    progress: QtProgressView[Task] = field(
+        init=False, repr=False, default_factory=QtProgressView[Task]
+    )
 
-    labels: List[QLabel] = field(init=False, default_factory=list)
-    _status_tasks: List[str] = field(default_factory=list)
+    labels: List[QLabel] = field(init=False, repr=False, default_factory=list)
+    _status_tasks: List[str] = field(repr=False, default_factory=list)
 
     def __post_init__(self) -> None:
         super().__post_init__()
