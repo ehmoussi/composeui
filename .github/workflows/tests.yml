@@ -28,6 +28,6 @@ jobs:
       - name: Set up Python
         run: uv python install
       - name: Install
-        run: uv sync --extra dev_maestro,all
+        run: uv sync --extra dev_maestro --extra all
       - name: Run the tests
         run: uv run maestro test
