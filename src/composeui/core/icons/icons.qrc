@@ -1,0 +1,31 @@
+<RCC>
+  <qresource prefix="icons">
+    <file>add.png</file>
+    <file>collapse.png</file>
+    <file>expand.png</file>
+    <file>import.png</file>
+    <file>export.png</file>
+    <file>remove.png</file>
+    <file>sort.png</file>
+    <file>new.png</file>
+    <file>open.png</file>
+    <file>save.png</file>
+    <file>save_as.png</file>
+    <file>save_new_index.png</file>
+    <file>exit.png</file>
+    <file>flowchart.png</file>
+    <file>log.png</file>
+    <file>select_all.png</file>
+    <file>filter.png</file>
+    <file>case.png</file>
+    <file>whole_word.png</file>
+    <file>regex.png</file>
+    <file>tune.png</file>
+    <file>help.png</file>
+    <file>reset_focus.png</file>
+    <file>first_page.png</file>
+    <file>previous_page.png</file>
+    <file>next_page.png</file>
+    <file>last_page.png</file>
+  </qresource>
+</RCC>

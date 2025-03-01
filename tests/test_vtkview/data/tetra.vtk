@@ -1,0 +1,31 @@
+# vtk DataFile Version 5.1
+vtk output
+ASCII
+DATASET UNSTRUCTURED_GRID
+POINTS 22 float
+0 0 0 1 0 0 0.5 0.8 0 
+0.5 0.4 1 0.5 0 -0.2 0.6 0.6 0 
+0.3 0.4 0 0.4 0.2 0.5 0.85 0.3 0.5 
+0.5 0.6 0.45 2 -0.5 0 3 0 0 
+2 0.5 0 2.5 -0.25 0 2.5 0.25 0 
+1.75 0 0 1 -0.5 -1 1 0 -2 
+1 0.5 -1 1 -0.25 -1.5 1 0.25 -1.5 
+1 0 -0.75 
+CELLS 4 22
+OFFSETS vtktypeint64
+0 10 16 22 
+CONNECTIVITY vtktypeint64
+0 1 2 3 4 5 6 7 8 
+9 10 11 12 13 14 15 16 17 
+18 19 20 21 
+CELL_TYPES 3
+24
+22
+22
+
+POINT_DATA 22
+SCALARS scalars float
+LOOKUP_TABLE default
+1 1 1 1 0 0 0 0 0 
+0 1 1 1 0 0 0 1 1 
+1 0 0 0 

@@ -1,0 +1,268 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "composeui"
+description = "Python framework to build user interfaces."
+readme = "README.md"
+requires-python = ">=3.6"
+keywords = ["widgets", "pyqt", "mvp"]
+dependencies = [
+    "importlib-metadata;python_version<'3.8'",
+    "QtPy",
+    "typing_extensions>=4.6.0",
+    "pyperclip",
+]
+dynamic = ["version"]
+[[project.authors]]
+name = "El Hadi Moussi"
+email = "50993404+ehmoussi@users.noreply.github.com"
+
+[project.optional-dependencies]
+standard = [
+    "PyQt5",
+    "matplotlib",
+    "pandas",
+    "openpyxl",
+    "xlrd",
+    "mashumaro",
+    "vtk",
+]
+standard_qt6 = [
+    "PySide6",
+    "matplotlib",
+    "pandas",
+    "openpyxl",
+    "xlrd",
+    "mashumaro",
+    "vtk",
+    "aiofiles",
+]
+pyqt5 = ["PyQt5"]
+pyside6 = ["PySide6"]
+matplotlib = ["matplotlib"]
+pandas = ["pandas", "openpyxl", "xlrd"]
+msgspec = ["msgspec;python_version>='3.8'"]
+mashumaro = ["mashumaro"]
+pydantic = ["pydantic"]
+sqlalchemy = ["sqlalchemy"]
+markdown = ["markdown", "tabulate"]
+vtk = ["vtk"]
+async = ["aiofiles"]
+all = [
+    "PyQt5",
+    "matplotlib",
+    "pandas",
+    "openpyxl",
+    "xlrd",
+    "msgspec;python_version>='3.8'",
+    "mashumaro",
+    "pydantic",
+    "sqlalchemy",
+    "markdown",
+    "tabulate",
+    "vtk",
+    "aiofiles",
+]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff",
+    "mypy",
+    "black",
+    "isort",
+    "wheel",
+    "pandas_stubs",
+    "PyQt5-stubs",
+    "types-markdown",
+    "types-openpyxl",
+    "types-aiofiles",
+    "pytest-asyncio",
+]
+dev_maestro = [
+    "maestro@git+https://github.com/ehmoussi/maestro.git",
+    "pandas_stubs",
+    "PyQt5-stubs",
+    "types-markdown",
+    "types-openpyxl",
+    "types-aiofiles",
+    "pytest-asyncio",
+]
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["composeui*"]
+exclude = ["examples*", "tests*"]
+
+[tool.black]
+line-length = 95
+
+[tool.isort]
+sections = "LOCALFOLDER,FIRSTPARTY,THIRDPARTY,STDLIB,FUTURE"
+multi_line_output = 3
+line_length = 95
+use_parentheses = true
+include_trailing_comma = true
+force_grid_wrap = 0
+ensure_newline_before_comments = true
+
+[tool.ruff]
+target-version = "py37"
+line-length = 95
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E",
+    "W",
+    "N",
+    "UP",
+    "YTT",
+    "ANN",
+    "BLE",
+    "B",
+    "A",
+    "COM",
+    "C4",
+    "T10",
+    "EM",
+    "EXE",
+    "ISC",
+    "ICN",
+    "LOG",
+    "G",
+    "INP",
+    "PIE",
+    "T20",
+    "PYI",
+    "PT",
+    "Q",
+    "RSE",
+    "RET",
+    "SLOT",
+    "SLF",
+    "SIM",
+    "TID",
+    "TCH",
+    "INT",
+    "ARG",
+    "PTH",
+    "TD",
+    "PD",
+    "PGH",
+    "PL",
+    "TRY",
+    "FLY",
+    "NPY",
+    "PERF",
+    "FURB",
+    "RUF",
+]
+ignore = [
+    "ANN401",
+    "ARG001",
+    "ARG002",
+    "COM812",
+    "EM101",
+    "PD011",
+    "PLC1901",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "PTH123",
+    "RET501",
+    "RET505",
+    "RET506",
+    "SIM108",
+    "SIM116",
+    "TD002",
+    "TD003",
+    "TC001",
+    "TC002",
+    "TC003",
+    "TRY002",
+    "TRY003",
+    "UP006",
+    "UP007",
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = true
+
+[tool.ruff.lint.per-file-ignores]
+"src/composeui/core/icons/*.py" = ["N802", "ANN201", "UP009"]
+
+[tool.mypy]
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+exclude = ["src/composeui/core/icons"]
+strict = true
+warn_unreachable = true
+disallow_any_unimported = true
+enable_error_code = [
+    "redundant-self",
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "truthy-iterable",
+    "ignore-without-code",
+    "unused-awaitable",
+    "unused-ignore",
+    "unimported-reveal",
+    "narrowed-type-not-subtype",
+]
+
+
+[[tool.mypy.overrides]]
+module = ["composeui.*", "examples.*", "tests.*"]
+disable_error_code = [
+    "explicit-override", # override is not available in python 3.6 even with typing_extensions
+    "mutable-override",  # make mypy crash :')
+]
+
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+warn_unreachable = false
+
+[[tool.mypy.overrides]]
+module = [
+    "salome.*",
+    "SalomePyQt.*",
+    "SALOMEDS.*",
+    "pyperclip.*",  # https://github.com/asweigart/pyperclip/pull/255
+    "xlrd.*",
+    "PySide6.*",
+]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+omit = [
+    "src/composeui/core/qt/*",
+    "src/composeui/figure/qt/*",
+    "src/composeui/form/qt/*",
+    "src/composeui/items/core/qt/*",
+    "src/composeui/items/linkedtable/qt/*",
+    "src/composeui/items/table/qt/*",
+    "src/composeui/items/tree/qt/*",
+    "src/composeui/linkedtablefigure/qt/*",
+    "src/composeui/mainview/qt/*",
+    "src/composeui/vtk/qt/*",
+    "src/composeui/salomewrapper/core/qt/*",
+    "src/composeui/salomewrapper/mainview/qt/*",
+    "src/composeui/core/icons/*.py",
+    "src/examples/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "def __repr__", "def __str__"]
+
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

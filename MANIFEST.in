@@ -1,0 +1,2 @@
+include src/composeui/templates/*.html
+include src/composeui/py.typed
