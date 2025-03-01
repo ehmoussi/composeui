@@ -30,9 +30,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
       - name: Set up Python
         run: uv python install
-      - name: Install requirements
-        run: uv pip install -e .[dev_maestro,all]
-        env:
-          UV_SYSTEM_PYTHON: 1
+      - name: Install
+        run: uv sync --extra dev_maestro,all
       - name: Run the tests
-        run: maestro test
+        run: uv run maestro test
