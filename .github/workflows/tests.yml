@@ -19,7 +19,7 @@ jobs:
           - "3.12"
     steps:
       - name: Install xclip
-        run: apt install -y xclip
+        run: sudo apt install -y xclip
       - uses: actions/checkout@v4
       - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v5
