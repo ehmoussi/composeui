@@ -6,12 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "composeui"
 description = "Python framework to build user interfaces."
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.6.5"
 keywords = ["widgets", "pyqt", "mvp"]
 dependencies = [
     "importlib-metadata;python_version<'3.8'",
     "QtPy",
-    "typing_extensions>=4.6.0",
+    "typing_extensions>=4.6.0;python_version>='3.8'",
+    "typing_extensions;python_version<'3.8'",
     "pyperclip",
 ]
 dynamic = ["version"]
@@ -27,7 +28,8 @@ standard = [
     "openpyxl",
     "xlrd",
     "mashumaro",
-    "vtk",
+    "vtk<=9.3.1;python_version<'3.8'",
+    "vtk;python_version>='3.8'",
 ]
 standard_qt6 = [
     "PySide6",
@@ -36,7 +38,8 @@ standard_qt6 = [
     "openpyxl",
     "xlrd",
     "mashumaro",
-    "vtk",
+    "vtk<=9.3.1;python_version<'3.8'",
+    "vtk;python_version>='3.8'",
     "aiofiles",
 ]
 pyqt5 = ["PyQt5"]
@@ -48,7 +51,7 @@ mashumaro = ["mashumaro"]
 pydantic = ["pydantic"]
 sqlalchemy = ["sqlalchemy"]
 markdown = ["markdown", "tabulate"]
-vtk = ["vtk"]
+vtk = ["vtk<=9.3.1;python_version<'3.8'", "vtk;python_version>='3.8'"]
 async = ["aiofiles"]
 all = [
     "PyQt5",
@@ -62,7 +65,8 @@ all = [
     "sqlalchemy",
     "markdown",
     "tabulate",
-    "vtk",
+    "vtk<=9.3.1;python_version<'3.8'",
+    "vtk;python_version>='3.8'",
     "aiofiles",
 ]
 dev = [
