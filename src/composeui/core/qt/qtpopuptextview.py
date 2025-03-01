@@ -1,7 +1,7 @@
 """Popup view to display a text."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.ipopuptextview import DialogChoices, PopupTextView
+from composeui.core.views.popuptextview import DialogChoices, PopupTextView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon

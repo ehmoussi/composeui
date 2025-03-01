@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from composeui.vtk.ivtkview import VTKPickType, VTKView
+from composeui.vtk.vtkview import VTKPickType, VTKView
 
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget

@@ -1,9 +1,9 @@
-from composeui.mainview.views.imainmenu import MainMenu
-from composeui.mainview.views.imaintoolbar import MainToolBar
-from composeui.mainview.views.imainview import MainView
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.mainview.views.mainmenu import MainMenu
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
 
 from dataclasses import dataclass, field
 

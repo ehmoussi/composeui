@@ -1,8 +1,8 @@
 from composeui.items.tree.qt.qttreeview import QtTreeGroupView
-from composeui.mainview.views.imainmenu import MainMenu
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.mainview.views.mainmenu import MainMenu
 from examples.treeview.example import ExampleMainToolBar, ExampleMainView
 from examples.treeview.lines import LinesItems
 

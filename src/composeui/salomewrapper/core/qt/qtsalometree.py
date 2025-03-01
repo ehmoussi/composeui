@@ -2,7 +2,7 @@
 
 from composeui.core.qt.qtview import QtView
 from composeui.salomewrapper.core.qt.widgets.salometreesignals import SalomeTreeSignals
-from composeui.salomewrapper.core.views.isalometree import SalomeTree
+from composeui.salomewrapper.core.views.salometree import SalomeTree
 
 import salome
 from qtpy.QtCore import (

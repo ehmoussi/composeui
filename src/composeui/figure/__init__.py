@@ -1,4 +1,4 @@
-from composeui.figure.ifigureview import FigureView
+from composeui.figure.figureview import FigureView
 
 import typing
 from typing import Optional

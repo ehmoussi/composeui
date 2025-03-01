@@ -8,9 +8,9 @@ from typing import Any, Union
 if typing.TYPE_CHECKING:
     from composeui.items.core.views.ipaginationview import PaginationView
     from composeui.items.table.abstracttableitems import AbstractTableItems
-    from composeui.items.table.itableview import TableView
+    from composeui.items.table.tableview import TableView
     from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-    from composeui.items.tree.itreeview import TreeView
+    from composeui.items.tree.treeview import TreeView
 
 ITableTreeView: TypeAlias = Union[
     "TableView[AbstractTableItems[Any]]", "TreeView[AbstractTreeItems[Any]]"

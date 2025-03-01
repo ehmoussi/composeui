@@ -14,7 +14,7 @@ Contains the table and the tree components and its derivatives.
 from composeui.items.core import itemsslots
 from composeui.items.core.connect import connect_pagination
 from composeui.items.table import table
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 
 from typing import Any
 

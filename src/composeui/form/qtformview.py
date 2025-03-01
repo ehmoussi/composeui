@@ -8,7 +8,7 @@ from composeui.core.qt.widgets.widget import ComboBox
 from composeui.form.abstractcomboboxitems import AbstractComboboxItems
 from composeui.form.comboboxitemmodel import ComboBoxItemModel
 from composeui.form.formvalidators import FormDoubleValidator, FormVector3DValidator
-from composeui.form.iformview import (  # IFormView,; IGroupBoxFormView,
+from composeui.form.formview import (  # IFormView,; IGroupBoxFormView,
     ApplyFormView,
     ButtonsGroupView,
     CheckBoxGroupView,

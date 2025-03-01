@@ -1,5 +1,5 @@
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
-from composeui.items.tree.itreeview import ExportTreeOptions
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
+from composeui.items.tree.treeview import ExportTreeOptions
 from examples.linkedtableview.sqlite.app import LinkedTableViewApp, Model
 from examples.linkedtableview.sqlite.example import ExampleMainView
 from examples.linkedtableview.sqlite.lines import LinesItems, PointsItems

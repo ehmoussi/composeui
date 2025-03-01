@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Generator, Generic, List, Optional, Tuple, TypeVar
 
 if typing.TYPE_CHECKING:
-    from composeui.items.core.views.iitemsview import ItemsView
+    from composeui.items.core.views.itemsview import ItemsView
 
 V = TypeVar("V", bound="ItemsView")
 

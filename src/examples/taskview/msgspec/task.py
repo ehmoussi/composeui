@@ -1,10 +1,10 @@
 from composeui import form
 from composeui.core.tasks.abstracttask import AbstractTask
 from composeui.core.tasks.tasks import Tasks
-from composeui.core.views.iprogressview import ProgressView
-from composeui.core.views.iview import View
+from composeui.core.views.progressview import ProgressView
+from composeui.core.views.view import View
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import GroupBoxFormView, LabelSpinBoxView
+from composeui.form.formview import GroupBoxFormView, LabelSpinBoxView
 
 import random
 import time

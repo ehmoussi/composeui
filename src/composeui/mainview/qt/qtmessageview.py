@@ -1,7 +1,7 @@
 r"""Message view."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.imessageview import MessageView, MessageViewType
+from composeui.mainview.views.messageview import MessageView, MessageViewType
 
 from qtpy.QtWidgets import QMessageBox, QWidget
 

@@ -1,8 +1,8 @@
 r"""View of the menu."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.imainmenu import MainMenu
-from composeui.mainview.views.imenu import Menu
+from composeui.mainview.views.mainmenu import MainMenu
+from composeui.mainview.views.menu import Menu
 from composeui.salomewrapper.mainview.qt.qtsalomemenu import QtSalomeMenu
 
 from typing_extensions import OrderedDict

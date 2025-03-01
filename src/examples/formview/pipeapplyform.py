@@ -1,5 +1,5 @@
 from composeui import form
-from composeui.form.iformview import (
+from composeui.form.formview import (
     GroupBoxApplyFormView,
     LabelComboBoxView,
     LabelLineEditView,

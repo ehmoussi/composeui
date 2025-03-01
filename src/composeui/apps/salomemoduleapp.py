@@ -14,7 +14,7 @@ from composeui.commontypes import AnyModel
 from composeui.core import tools
 from composeui.core.basesignal import SIGNAL_LOGGER
 from composeui.mainview import toolbar
-from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 from composeui.store.salomehdfstore import SalomeHDFStore
 
 import argparse

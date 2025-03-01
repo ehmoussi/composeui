@@ -5,8 +5,8 @@ from composeui.core import tools
 from composeui.core.basesignal import Callback
 from composeui.core.tasks.abstracttask import AbstractTask, TaskStatus
 from composeui.core.tasks.tasks import Tasks
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.iprogresspopupview import ProgressPopupView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.progresspopupview import ProgressPopupView
 
 from functools import partial
 from typing import Iterable, Optional

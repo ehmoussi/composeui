@@ -1,11 +1,11 @@
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.items.core.initialize import initialize_items_view
-from composeui.items.core.views.iitemsview import FormatExtension
+from composeui.items.core.views.itemsview import FormatExtension
 from composeui.items.linkedtable import linkedtable
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table import connect_table
-from composeui.items.table.itableview import TableGroupView
-from composeui.items.tree.itreeview import ExportTreeOptions
+from composeui.items.table.tableview import TableGroupView
+from composeui.items.tree.treeview import ExportTreeOptions
 
 from functools import partial
 

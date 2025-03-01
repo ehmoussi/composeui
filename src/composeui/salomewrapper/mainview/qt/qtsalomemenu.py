@@ -2,9 +2,9 @@ r"""Toolbar View."""
 
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
-from composeui.core.views.iactionview import ActionView
-from composeui.mainview.views.imenu import Menu
+from composeui.core.views.actionview import ActionView
 from composeui.mainview.qt.qtmenu import QtMenu
+from composeui.mainview.views.menu import Menu
 
 from qtpy.QtWidgets import QAction, QMenu
 from salome.gui import helper

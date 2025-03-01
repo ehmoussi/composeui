@@ -1,7 +1,7 @@
 """View definition for the pagination of a table/tree."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.views.iview import View
+from composeui.core.views.view import View
 
 from dataclasses import dataclass, field
 from typing import List

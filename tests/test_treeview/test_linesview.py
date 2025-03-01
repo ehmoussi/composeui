@@ -1,4 +1,4 @@
-from composeui.items.tree.itreeview import ExportTreeOptions, TreeView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeView
 from examples.treeview.app import Model, TreeViewApp
 from examples.treeview.example import ExampleMainView
 from examples.treeview.lines import LinesItems

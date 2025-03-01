@@ -10,7 +10,7 @@ from composeui.items.core import itemsslots
 from composeui.items.core.connect import connect_pagination
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.tree import tree
-from composeui.items.tree.itreeview import ExportTreeOptions, TreeView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeView
 
 from typing import Any
 

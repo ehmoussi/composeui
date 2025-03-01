@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyFormItems
 from composeui.core import tools
 from composeui.form import form
-from composeui.form.iformview import (
+from composeui.form.formview import (
     ApplyFormView,
     ButtonsGroupView,
     CheckBoxView,

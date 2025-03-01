@@ -1,8 +1,8 @@
 from composeui.items.linkedtable.qt.qtlinkedtableview import QtLinkedTableView
-from composeui.mainview.views.imainmenu import MainMenu
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.mainview.views.mainmenu import MainMenu
 from examples.linkedtableview.sqlalchemy.example import ExampleMainToolBar, ExampleMainView
 from examples.linkedtableview.sqlalchemy.lines import LinesItems, PointsItems
 

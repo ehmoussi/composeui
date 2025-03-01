@@ -1,6 +1,6 @@
 from composeui import figure
-from composeui.core.views.iview import View
-from composeui.figure.ifigureview import FigureView
+from composeui.core.views.view import View
+from composeui.figure.figureview import FigureView
 
 from matplotlib.axes import Axes
 

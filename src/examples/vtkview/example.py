@@ -1,17 +1,17 @@
 from composeui import form
 from composeui.core import tools
-from composeui.core.views.iview import GroupView, View
+from composeui.core.views.view import GroupView, View
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
+from composeui.form.formview import (
     GroupBoxApplyFormView,
     LabelComboBoxView,
     LabelDoubleLineEditView,
     LabelRadioButtonGroupView,
     NoLabelSelectFileView,
 )
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 from composeui.vtk import vtkutils
-from composeui.vtk.ivtkview import VTKPickType, VTKView
+from composeui.vtk.vtkview import VTKPickType, VTKView
 
 import typing
 from dataclasses import dataclass, field

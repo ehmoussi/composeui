@@ -1,7 +1,7 @@
 """Salome Dock View."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.idockview import DockArea, DockView
+from composeui.mainview.views.dockview import DockArea, DockView
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QDockWidget, QVBoxLayout, QWidget

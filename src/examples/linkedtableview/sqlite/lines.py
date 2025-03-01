@@ -1,8 +1,8 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import TableView
-from composeui.items.tree.itreeview import ExportTreeOptions
+from composeui.items.table.tableview import TableView
+from composeui.items.tree.treeview import ExportTreeOptions
 from composeui.store.sqlitestore import SqliteStore
 
 from typing import TYPE_CHECKING, Any, Generator, List, Optional

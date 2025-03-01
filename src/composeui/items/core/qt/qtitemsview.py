@@ -6,7 +6,7 @@ from composeui.core.qt.qtview import QtView
 from composeui.items.core.qt.qtfiltertableview import QtFilterTableView
 from composeui.items.core.qt.qtpaginationview import QtPaginationView
 from composeui.items.core.qt.widgets.itemswidget import ItemsWidget
-from composeui.items.core.views.iitemsview import ItemsView
+from composeui.items.core.views.itemsview import ItemsView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QKeySequence

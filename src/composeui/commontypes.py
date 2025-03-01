@@ -5,12 +5,12 @@ from typing import Any, TypeVar, Union
 
 if typing.TYPE_CHECKING:
     from composeui.form.abstractformitems import AbstractFormItems
-    from composeui.form.iformview import FormView
+    from composeui.form.formview import FormView
     from composeui.items.table.abstracttableitems import AbstractTableItems
-    from composeui.items.table.itableview import TableView
+    from composeui.items.table.tableview import TableView
     from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-    from composeui.items.tree.itreeview import TreeView
-    from composeui.mainview.views.imainview import MainView
+    from composeui.items.tree.treeview import TreeView
+    from composeui.mainview.views.mainview import MainView
     from composeui.model.basemodel import BaseModel
 
 

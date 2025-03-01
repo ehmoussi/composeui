@@ -1,7 +1,7 @@
 from composeui import form
 from composeui.commontypes import AnyFormItems
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
+from composeui.form.formview import (
     FormView,
     GroupBoxFormView,
     LabelDoubleLineEditView,

@@ -2,7 +2,7 @@
 
 from composeui.salomewrapper.core import displayer
 from composeui.salomewrapper.core.qt.qtsalomeview import QtSalomeView
-from composeui.salomewrapper.core.views.ioccview import OCCView
+from composeui.salomewrapper.core.views.occview import OCCView
 
 from dataclasses import dataclass
 from typing import List

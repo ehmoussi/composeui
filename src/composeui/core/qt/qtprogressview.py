@@ -2,7 +2,7 @@ r"""Computation cases runner view."""
 
 from composeui.core.qt.qtworkerview import QtWorkerView
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.core.views.iprogressview import ProgressView
+from composeui.core.views.progressview import ProgressView
 
 from qtpy.QtWidgets import QHBoxLayout, QProgressBar, QPushButton, QWidget
 

@@ -2,7 +2,7 @@ from composeui.commontypes import AnyTableItems
 from composeui.core.qt.qtview import QtView
 from composeui.figure.qtfigureview import QtFigureView
 from composeui.items.table.qt.qttableview import QtTableView
-from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 
 from qtpy.QtWidgets import QSplitter
 

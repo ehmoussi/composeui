@@ -1,8 +1,8 @@
 r"""View of the toolbar."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
 from composeui.mainview.qt.qttoolbar import QtCheckableToolBar, QtToolBar
+from composeui.mainview.views.toolbar import CheckableToolBar, ToolBar
 
 from qtpy.QtWidgets import QMainWindow
 

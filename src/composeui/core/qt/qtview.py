@@ -1,6 +1,6 @@
 """View."""
 
-from composeui.core.views.iview import View
+from composeui.core.views.view import View
 
 from qtpy.QtWidgets import QAction, QWidget
 

@@ -1,10 +1,10 @@
 """Example salome view."""
 
-from composeui.core.views.iactionview import ActionView
-from composeui.items.table.itableview import TableView
-from composeui.mainview.views.imaintoolbar import MainToolBar
-from composeui.mainview.views.itoolbar import CheckableToolBar
-from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
+from composeui.core.views.actionview import ActionView
+from composeui.items.table.tableview import TableView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.toolbar import CheckableToolBar
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
 import typing
 from dataclasses import dataclass, field

@@ -1,7 +1,7 @@
 """Test of vtkutils module."""
 
 from composeui.vtk import vtkutils
-from composeui.vtk.ivtkview import VTKView
+from composeui.vtk.vtkview import VTKView
 from examples.vtkview.app import VTKViewApp
 from examples.vtkview.example import ExampleMainView
 

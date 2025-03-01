@@ -1,8 +1,8 @@
-from composeui.mainview.views.imainmenu import MainMenu
 from composeui.mainview.qt.qtdockview import QtDockView
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.mainview.views.mainmenu import MainMenu
 from examples.multipleviews.component1.qtview1 import QtLeftView1, QtView1
 from examples.multipleviews.component2.qtview2 import QtRightView2, QtView2
 from examples.multipleviews.component3.qtview3 import QtView3

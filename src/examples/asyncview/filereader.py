@@ -2,7 +2,7 @@
 
 from composeui import form
 from composeui.form.abstractformitems import AbstractFormItems
-from composeui.form.iformview import (
+from composeui.form.formview import (
     GroupBoxApplyFormView,
     LabelSelectFileView,
     LabelSpinBoxView,

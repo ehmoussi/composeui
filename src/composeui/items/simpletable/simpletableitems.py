@@ -11,7 +11,7 @@ import typing
 from typing import Any, Dict, List, Optional
 
 if typing.TYPE_CHECKING:
-    from composeui.items.table.itableview import TableView
+    from composeui.items.table.tableview import TableView
 
 
 class _TableInfo(TypedDict):

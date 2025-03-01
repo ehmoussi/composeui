@@ -1,5 +1,5 @@
-from composeui.items.table.itableview import TableView
-from composeui.mainview.views.imessageview import MessageViewType
+from composeui.items.table.tableview import TableView
+from composeui.mainview.views.messageview import MessageViewType
 from examples.tableview.app import Model, TableViewApp
 from examples.tableview.example import ExampleMainView
 from examples.tableview.points import PointsItems

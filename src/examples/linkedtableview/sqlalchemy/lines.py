@@ -1,7 +1,7 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.store.sqlalchemystore import SqlAlchemyDataBase, SqlAlchemyStore
 
 from sqlalchemy import (

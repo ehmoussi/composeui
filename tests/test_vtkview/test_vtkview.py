@@ -1,4 +1,4 @@
-from composeui.vtk.ivtkview import VTKPickType, VTKView
+from composeui.vtk.vtkview import VTKPickType, VTKView
 from examples.vtkview.app import Model, VTKViewApp
 from examples.vtkview.example import ExampleMainView, VTKConfigView
 

@@ -1,6 +1,6 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 from composeui.model.msgspecmodel import MsgspecModel
 from examples.taskview.msgspec.task import TaskView, connect_task, initialize_task
 

@@ -5,9 +5,9 @@ from composeui.items.core import pagination
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
 from composeui.items.tree.exportfiletreetask import ExportFileTreeTask
 from composeui.items.tree.importfiletreetask import ImportFileTreeTask
-from composeui.items.tree.itreeview import ExportTreeOptions, TreeView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeView
 from composeui.mainview import progresspopup
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import TypeAlias
 

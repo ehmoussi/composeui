@@ -1,7 +1,7 @@
 """Cube table."""
 
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.salomewrapper.core import displayer, geomwrapper
 from examples.salomeview.module2 import Module2MainView
 

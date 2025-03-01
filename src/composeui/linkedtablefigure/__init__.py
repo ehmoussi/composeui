@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyTableItems
 from composeui.items.table import connect_table
-from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 
 
 def connect_table_figure_view(view: LinkedTableFigureView[AnyTableItems]) -> bool:

@@ -1,6 +1,6 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 from composeui.model.basemodel import BaseModel
 
 

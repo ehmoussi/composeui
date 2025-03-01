@@ -2,19 +2,19 @@ r"""Initialization of views."""
 
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.core.views.iactionview import ActionView
-from composeui.core.views.ipopuptextview import DialogChoices, PopupTextView
-from composeui.core.views.iprogressview import ProgressView
-from composeui.core.views.iselectpathview import SelectPathView
-from composeui.core.views.iview import GroupView, View
+from composeui.core.views.actionview import ActionView
+from composeui.core.views.popuptextview import DialogChoices, PopupTextView
+from composeui.core.views.progressview import ProgressView
+from composeui.core.views.selectpathview import SelectPathView
+from composeui.core.views.view import GroupView, View
 from composeui.figure import initialize_figure_view
-from composeui.figure.ifigureview import FigureView
+from composeui.figure.figureview import FigureView
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.linkedtable import initialize_linked_table
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
-from composeui.items.table.itableview import TableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
+from composeui.items.table.tableview import TableView
 from composeui.items.tree import initialize_tree_view
-from composeui.items.tree.itreeview import TreeView
+from composeui.items.tree.treeview import TreeView
 from composeui.mainview import (
     initialize_file_menu,
     initialize_file_toolbar,
@@ -23,14 +23,14 @@ from composeui.mainview import (
     initialize_message_view,
     initialize_progress_popup_view,
 )
-from composeui.mainview.views.ifileview import FileView
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.imenu import FileMenu
-from composeui.mainview.views.imessageview import MessageView
-from composeui.mainview.views.iprogresspopupview import ProgressPopupView
-from composeui.mainview.views.itoolbar import FileToolBar
+from composeui.mainview.views.fileview import FileView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.messageview import MessageView
+from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.mainview.views.toolbar import FileToolBar
 from composeui.vtk import initialize_vtk_view
-from composeui.vtk.ivtkview import VTKView
+from composeui.vtk.vtkview import VTKView
 
 from functools import wraps
 from typing import Callable, TypeVar

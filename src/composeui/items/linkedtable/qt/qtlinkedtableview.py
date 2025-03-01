@@ -2,7 +2,7 @@ r"""Select/Modify view using a combination of two table."""
 
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.core.qt.qtview import QtView
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table.qt.qttableview import QtTableGroupView
 
 from qtpy.QtCore import Qt

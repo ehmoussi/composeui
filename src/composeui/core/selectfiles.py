@@ -1,8 +1,8 @@
 r"""Presenter of the File view."""
 
-from composeui.core.views.iselectpathview import FileMode, SelectPathView
-from composeui.items.core.views.iitemsview import FormatExtension
-from composeui.mainview.views.imainview import MainView
+from composeui.core.views.selectpathview import FileMode, SelectPathView
+from composeui.items.core.views.itemsview import FormatExtension
+from composeui.mainview.views.mainview import MainView
 
 from pathlib import Path
 from typing import Optional, Tuple

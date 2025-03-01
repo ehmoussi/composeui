@@ -2,10 +2,10 @@ r"""Main view."""
 
 from composeui.core.qt.qtfileview import QtFileView
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.imainview import MainView
 from composeui.mainview.qt.qtmessageview import QtMessageView
 from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.mainview.qt.widgets.mainwindow import MainWindow
+from composeui.mainview.views.mainview import MainView
 
 from qtpy import API
 from qtpy.QtCore import QLocale

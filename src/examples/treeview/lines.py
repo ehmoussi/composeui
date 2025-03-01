@@ -1,6 +1,6 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-from composeui.items.tree.itreeview import ExportTreeOptions, TreeGroupView
+from composeui.items.tree.treeview import ExportTreeOptions, TreeGroupView
 from composeui.store.sqlitestore import SqliteStore
 
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple

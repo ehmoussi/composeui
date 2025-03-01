@@ -4,30 +4,30 @@ from composeui.commontypes import AnyModel
 from composeui.core import selectfiles
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.core.views.iprogressview import ProgressView
-from composeui.core.views.iselectpathview import SelectPathView
-from composeui.core.views.iview import View
+from composeui.core.views.progressview import ProgressView
+from composeui.core.views.selectpathview import SelectPathView
+from composeui.core.views.view import View
 from composeui.form import connect_apply_form_view, connect_form_view
-from composeui.form.iformview import ApplyFormView, FormView
+from composeui.form.formview import ApplyFormView, FormView
 from composeui.items.linkedtable import connect_linked_table, connect_linked_table_view
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table import connect_table
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.items.tree import connect_tree
-from composeui.items.tree.itreeview import TreeView
+from composeui.items.tree.treeview import TreeView
 from composeui.linkedtablefigure import connect_table_figure_view
-from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview import (
     connect_checkable_toolbar,
     connect_file_menu,
     connect_file_menu_toolbar,
     connect_main_view,
 )
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.imenu import FileMenu
-from composeui.mainview.views.itoolbar import CheckableToolBar, FileToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
 from composeui.vtk import connect_vtk_view
-from composeui.vtk.ivtkview import VTKView
+from composeui.vtk.vtkview import VTKView
 
 from typing_extensions import Concatenate, ParamSpec
 

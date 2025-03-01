@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyFormView, AnyModel
 from composeui.form.abstractcomboboxitems import AbstractComboboxItems
-from composeui.form.iformview import (
+from composeui.form.formview import (
     ButtonsGroupView,
     CheckBoxView,
     ComboBoxView,

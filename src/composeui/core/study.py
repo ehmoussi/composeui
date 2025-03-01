@@ -5,7 +5,7 @@ from composeui.core import selectfiles, tools
 from composeui.core.tasks.tasks import Tasks
 from composeui.mainview import progresspopup
 from composeui.mainview.filetask import OpenTask, SaveTask
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 
 from functools import partial
 from pathlib import Path

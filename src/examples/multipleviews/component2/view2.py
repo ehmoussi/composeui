@@ -1,5 +1,5 @@
-from composeui.core.views.iactionview import ActionView
-from composeui.core.views.iview import View
+from composeui.core.views.actionview import ActionView
+from composeui.core.views.view import View
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING

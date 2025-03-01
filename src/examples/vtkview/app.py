@@ -3,7 +3,7 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.mashumaromodel import MashumaroModel
-from composeui.vtk.ivtkview import VTKPickType
+from composeui.vtk.vtkview import VTKPickType
 from examples.vtkview.example import (  # initialize_vtk_view,
     ExampleMainView,
     connect_vtk_example,

@@ -2,8 +2,8 @@ r"""Slots of the FormView."""
 
 from composeui.commontypes import AnyFormItems
 from composeui.core import selectfiles, tools
-from composeui.core.views.iview import View
-from composeui.form.iformview import (
+from composeui.core.views.view import View
+from composeui.form.formview import (
     ButtonsGroupView,
     CheckBoxView,
     ComboBoxItemsView,
@@ -20,7 +20,7 @@ from composeui.form.iformview import (
     SpinBoxView,
     Vector3DView,
 )
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import Concatenate, ParamSpec
 

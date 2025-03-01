@@ -2,7 +2,7 @@
 
 from composeui.core.qt.qtview import QtView
 from composeui.salomewrapper.core.qt.qtoccview import QtOCCView
-from composeui.salomewrapper.core.views.isalomeviews import SalomeViews
+from composeui.salomewrapper.core.views.salomeviews import SalomeViews
 
 from dataclasses import InitVar, dataclass, field
 

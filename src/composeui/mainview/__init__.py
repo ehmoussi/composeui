@@ -1,13 +1,13 @@
 from composeui.core import study
 from composeui.core.tasks import progresstask
 from composeui.mainview import toolbar
-from composeui.mainview.views.ifileview import FileView
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.imenu import FileMenu
-from composeui.mainview.views.imessageview import MessageView, MessageViewType
-from composeui.mainview.views.iprogresspopupview import ProgressPopupView
-from composeui.mainview.views.itoolbar import CheckableToolBar, FileToolBar
-from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
+from composeui.mainview.views.fileview import FileView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.messageview import MessageView, MessageViewType
+from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
 from typing import Union
 

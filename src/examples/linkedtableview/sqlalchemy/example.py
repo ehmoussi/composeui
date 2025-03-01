@@ -1,8 +1,8 @@
-from composeui.core.views.iactionview import ActionView
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
-from composeui.mainview.views.imaintoolbar import MainToolBar
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.itoolbar import CheckableToolBar
+from composeui.core.views.actionview import ActionView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.toolbar import CheckableToolBar
 from examples.linkedtableview.sqlalchemy.lines import LinesItems, PointsItems
 
 from dataclasses import dataclass, field

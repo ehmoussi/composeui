@@ -1,11 +1,11 @@
 from composeui.core.qt.qtgroupview import QtGroupView
 from composeui.core.qt.qtview import QtView
 from composeui.form.qtformview import QtGroupBoxApplyFormView
-from composeui.mainview.views.imainmenu import MainMenu
-from composeui.mainview.views.imaintoolbar import MainToolBar
 from composeui.mainview.qt.qtmainmenu import QtMainMenu
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.mainview.views.mainmenu import MainMenu
+from composeui.mainview.views.maintoolbar import MainToolBar
 from composeui.vtk.qt.qtvtkview import QtVTKView
 from examples.vtkview.example import (
     ExampleMainView,

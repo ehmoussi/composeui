@@ -1,8 +1,8 @@
 r"""View of the menu."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.imenu import Menu
 from composeui.mainview.qt.qtmenu import QtMenu
+from composeui.mainview.views.menu import Menu
 
 from qtpy.QtWidgets import QMainWindow, QMenuBar
 from typing_extensions import OrderedDict

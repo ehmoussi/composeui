@@ -7,7 +7,7 @@ from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.salomewrapper.core.qt.qtsalomecentralview import QtSalomeCentralView
 from composeui.salomewrapper.core.qt.qtsalometree import QtSalomeTree
 from composeui.salomewrapper.core.qt.qtsalomeviews import QtSalomeViews
-from composeui.salomewrapper.mainview.isalomemainview import SalomeMainView
+from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
 import SalomePyQt
 from qtpy.QtWidgets import QMainWindow, QMenu

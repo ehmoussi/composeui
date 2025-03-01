@@ -3,8 +3,8 @@ from composeui.core import disconnect
 from composeui.core.basesignal import BaseSignal
 from composeui.core.connect import connect_by_default
 from composeui.core.initialize import initialize_default_view
-from composeui.core.views.iview import View
-from composeui.form.iformview import FormView, RowItemView
+from composeui.core.views.view import View
+from composeui.form.formview import FormView, RowItemView
 from composeui.model.basemodel import BaseModel
 
 import weakref

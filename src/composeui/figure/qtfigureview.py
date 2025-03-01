@@ -1,12 +1,12 @@
-r"""Abstract Figure view."""
+"""Qt Figure view."""
 
 from composeui.core.pendingupdate import pending_until_visible
 from composeui.core.qt.qtview import QtView
 from composeui.core.qt.widgets.widget import GroupBox, Widget
-from composeui.figure.ifigureview import FigureGroupView, FigureView
+from composeui.figure.figureview import FigureGroupView, FigureView
 
 try:
-    from composeui.figure.figuretoolbar import FigureToolbar
+    from composeui.figure.qtfiguretoolbar import QtFigureToolbar
 
     from matplotlib.backend_bases import Event, MouseEvent
 
@@ -18,8 +18,8 @@ try:
         )
 
     from matplotlib.figure import Figure
-except (ImportError, ModuleNotFoundError):
-    raise ValueError("Can't use FigureView without matplotlib.") from None
+except (ImportError, ModuleNotFoundError) as e:
+    raise ValueError("Can't use FigureView without matplotlib.") from e
 
 from qtpy.QtWidgets import QVBoxLayout
 
@@ -36,7 +36,7 @@ class QtFigureView(QtView, FigureView):
     view: Union[GroupBox, Widget] = field(init=False)
 
     # Figure
-    toolbar: Optional[FigureToolbar] = field(init=False, repr=False, default=None)
+    toolbar: Optional[QtFigureToolbar] = field(init=False, repr=False, default=None)
     figure_canvas_view: Optional[FigureCanvas] = field(init=False, repr=False, default=None)
 
     _has_toolbar: bool = field(init=False, repr=False, default=False)
@@ -66,7 +66,7 @@ class QtFigureView(QtView, FigureView):
             self.toolbar.deleteLater()
             self.toolbar = None
         elif has_toolbar and self.figure_canvas_view is not None:
-            self.toolbar = FigureToolbar(
+            self.toolbar = QtFigureToolbar(
                 self.figure_canvas_view,
                 self.view,
             )
@@ -94,7 +94,7 @@ class QtFigureView(QtView, FigureView):
         self.figure_canvas_view = FigureCanvas(self._figure)  # type: ignore[no-untyped-call]
         self.figure_canvas_view.mpl_connect("button_press_event", self._on_click)
         if self.has_toolbar:
-            self.toolbar = FigureToolbar(
+            self.toolbar = QtFigureToolbar(
                 self.figure_canvas_view,
                 self.view,
             )

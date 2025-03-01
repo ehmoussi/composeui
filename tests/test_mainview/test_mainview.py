@@ -1,7 +1,7 @@
 from composeui.core.tasks.abstracttask import TaskStatus
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.imenu import FileMenu
-from composeui.mainview.views.itoolbar import FileToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.toolbar import FileToolBar
 from composeui.model.basemodel import BaseModel
 from examples.mainview.app import MainViewApp
 

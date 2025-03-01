@@ -1,8 +1,8 @@
 """Some utilities to use with the vtk view."""
 
 from composeui.core import tools
-from composeui.mainview.views.imainview import MainView
-from composeui.vtk.ivtkview import VTKView
+from composeui.mainview.views.mainview import MainView
+from composeui.vtk.vtkview import VTKView
 
 from typing_extensions import overload
 from vtkmodules.vtkCommonCore import vtkCommand, vtkObject

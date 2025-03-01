@@ -1,5 +1,5 @@
 from composeui.items.table.qt.qttableview import QtTableView
-from composeui.mainview.views.imainmenu import MainMenu
+from composeui.mainview.views.mainmenu import MainMenu
 from composeui.salomewrapper.core.qt.qtsalomemaintoolbar import QtSalomeMainToolBar
 from composeui.salomewrapper.mainview.qt.qtsalomemainmenu import QtSalomeMainMenu
 from composeui.salomewrapper.mainview.qt.qtsalomemainview import QtSalomeMainView

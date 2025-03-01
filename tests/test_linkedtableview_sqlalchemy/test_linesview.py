@@ -1,5 +1,5 @@
 from composeui.core.tasks.abstracttask import TaskStatus
-from composeui.items.linkedtable.ilinkedtableview import LinkedTableView
+from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from examples.linkedtableview.sqlalchemy.app import LinkedTableViewApp, Model
 from examples.linkedtableview.sqlalchemy.example import ExampleMainView
 from examples.linkedtableview.sqlalchemy.lines import LinesItems, PointsItems

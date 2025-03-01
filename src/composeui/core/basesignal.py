@@ -9,8 +9,8 @@ import typing
 
 if typing.TYPE_CHECKING:
     from composeui.model.basemodel import BaseModel
-    from composeui.form.iformview import FormView
-    from composeui.core.views.iview import View
+    from composeui.form.formview import FormView
+    from composeui.core.views.view import View
 
 from typing_extensions import ParamSpec, TypeAlias
 

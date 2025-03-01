@@ -1,8 +1,8 @@
 from composeui.commontypes import AnyTreeItems
 from composeui.items.core.qt.qtitemsview import QtItemsGroupView, QtItemsView
-from composeui.items.tree.itreeview import TreeGroupView, TreeView
 from composeui.items.tree.qt.widgets.treeitemmodel import TreeItemModel
 from composeui.items.tree.qt.widgets.treewidget import TreeWidget
+from composeui.items.tree.treeview import TreeGroupView, TreeView
 
 from dataclasses import InitVar, dataclass, field
 from typing import Optional, cast

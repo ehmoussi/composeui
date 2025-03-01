@@ -1,6 +1,6 @@
 """Test the definition of a cube."""
 
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.salomewrapper.core import study
 from examples.salomeview.app import ExampleSalomeApp, Module1App, Module2App
 from examples.salomeview.cubedefinition import CubeDefinitionView

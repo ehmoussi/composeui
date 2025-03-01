@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.itoolbar import CheckableToolBar, ToolBar
+from composeui.mainview.views.toolbar import CheckableToolBar, ToolBar
 from composeui.salomewrapper.mainview.qt.qtsalometoolbar import (
     CheckableSalomeToolBar,
     QtSalomeToolBar,

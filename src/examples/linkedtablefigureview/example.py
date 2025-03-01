@@ -1,10 +1,10 @@
 from composeui import figure, linkedtablefigure
-from composeui.core.views.iactionview import ActionView
+from composeui.core.views.actionview import ActionView
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
-from composeui.linkedtablefigure.ilinkedtablefigureview import LinkedTableFigureView
-from composeui.mainview.views.imaintoolbar import MainToolBar
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.itoolbar import CheckableToolBar
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.toolbar import CheckableToolBar
 
 from typing_extensions import OrderedDict, TypeAlias
 

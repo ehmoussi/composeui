@@ -1,4 +1,4 @@
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 from examples.mainview.app import MainViewApp
 
 import pytest

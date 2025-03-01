@@ -1,7 +1,7 @@
 r"""File view."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.mainview.views.ifileview import FileView
+from composeui.mainview.views.fileview import FileView
 
 from qtpy.QtWidgets import QFileDialog, QWidget
 

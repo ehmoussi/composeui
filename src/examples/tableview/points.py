@@ -1,6 +1,6 @@
 from composeui.items.core.itemsutils import DelegateProps, FloatDelegateProps
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.store.sqlitestore import SqliteStore
 
 from typing_extensions import TypeAlias

@@ -7,9 +7,9 @@ from composeui.items.core import pagination
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.exportfiletabletask import ExportFileTableTask
 from composeui.items.table.importfiletabletask import ImportFileTableTask
-from composeui.items.table.itableview import TableView
+from composeui.items.table.tableview import TableView
 from composeui.mainview import progresspopup
-from composeui.mainview.views.imainview import MainView
+from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import TypeAlias
 

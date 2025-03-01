@@ -1,4 +1,4 @@
-from composeui.vtk.ivtkview import VTKPickType, VTKView
+from composeui.vtk.vtkview import VTKPickType, VTKView
 
 
 def initialize_vtk_view(view: VTKView) -> bool:

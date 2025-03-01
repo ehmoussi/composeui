@@ -1,11 +1,11 @@
 r"""Common tools."""
 
-from composeui.core.views.iview import View
-from composeui.form.iformview import FormView, RowView
-from composeui.items.table.itableview import TableView
-from composeui.mainview.views.ifileview import FileView
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.imessageview import MessageView, MessageViewType
+from composeui.core.views.view import View
+from composeui.form.formview import FormView, RowView
+from composeui.items.table.tableview import TableView
+from composeui.mainview.views.fileview import FileView
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.messageview import MessageView, MessageViewType
 
 from typing_extensions import OrderedDict
 

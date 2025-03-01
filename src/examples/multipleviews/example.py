@@ -1,8 +1,8 @@
-from composeui.core.views.iactionview import ActionView
-from composeui.mainview.views.idockview import DockView
-from composeui.mainview.views.imaintoolbar import MainToolBar
-from composeui.mainview.views.imainview import MainView
-from composeui.mainview.views.itoolbar import CheckableToolBar
+from composeui.core.views.actionview import ActionView
+from composeui.mainview.views.dockview import DockView
+from composeui.mainview.views.maintoolbar import MainToolBar
+from composeui.mainview.views.mainview import MainView
+from composeui.mainview.views.toolbar import CheckableToolBar
 from examples.multipleviews.component1.view1 import LeftView1, View1
 from examples.multipleviews.component2.view2 import RightView2, View2
 from examples.multipleviews.component3.view3 import View3
