@@ -8,20 +8,20 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class FileReaderView(QtGroupBoxApplyFormView[FileReaderItems], IFileReaderView): ...
+class QtFileReaderView(QtGroupBoxApplyFormView[FileReaderItems], IFileReaderView): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(QtMainView, IExampleMainView):
-    toolbar: ExampleMainToolBar = field(init=False)
-    file_reader: FileReaderView = field(init=False)
+class QtExampleMainView(QtMainView, IExampleMainView):
+    toolbar: QtExampleMainToolBar = field(init=False)
+    file_reader: QtFileReaderView = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.toolbar = ExampleMainToolBar(self.view)
-        self.file_reader = FileReaderView()
+        self.toolbar = QtExampleMainToolBar(self.view)
+        self.file_reader = QtFileReaderView()
         self.central_layout.addWidget(self.file_reader.view)

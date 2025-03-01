@@ -14,13 +14,13 @@ class INavigationToolBar(ICheckableToolBar):
 
 
 @dataclass(eq=False)
-class IExampleToolBar(IMainToolBar):
+class IExampleMainToolBar(IMainToolBar):
     navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
 
 
 @dataclass(eq=False)
 class IExampleMainView(IMainView):
-    toolbar: IExampleToolBar = field(init=False, default_factory=IExampleToolBar)
+    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
     lines: ILinkedTableView[LinesItems, PointsItems] = field(
         init=False, default_factory=ILinkedTableView
     )

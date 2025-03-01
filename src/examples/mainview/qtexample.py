@@ -9,19 +9,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(QtMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(QtMainToolBar, IMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, IMainToolBar): ...
 
 
 @dataclass(eq=False)
 class ExampleMainView(QtMainView, IMainView):
-    menu: ExampleMainMenu = field(init=False)
-    toolbar: ExampleToolBar = field(init=False)
+    menu: QtExampleMainMenu = field(init=False)
+    toolbar: QtExampleMainToolBar = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.menu: IMainMenu = ExampleMainMenu(self.view)
-        self.toolbar: IMainToolBar = ExampleToolBar(self.view)
+        self.menu: IMainMenu = QtExampleMainMenu(self.view)
+        self.toolbar: IMainToolBar = QtExampleMainToolBar(self.view)

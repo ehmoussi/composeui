@@ -1,7 +1,7 @@
 """Main of the MainView example."""
 
 from examples.mainview.app import MainViewApp
-from examples.mainview.examplemainview import ExampleMainView
+from examples.mainview.qtexample import ExampleMainView
 
 
 def main() -> None:

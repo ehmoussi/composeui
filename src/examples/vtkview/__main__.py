@@ -1,9 +1,9 @@
 from examples.vtkview.app import VTKViewApp
-from examples.vtkview.examplemainview import ExampleMainView
+from examples.vtkview.qtexample import QtExampleMainView
 
 
 def main() -> None:
-    main_view = ExampleMainView()
+    main_view = QtExampleMainView()
     app = VTKViewApp(main_view)
     app.run()
 

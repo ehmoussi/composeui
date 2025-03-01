@@ -13,23 +13,23 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class Module2ToolBar(QtSalomeMainToolBar, IModule2MainToolBar): ...
+class QtModule2ToolBar(QtSalomeMainToolBar, IModule2MainToolBar): ...
 
 
 @dataclass(eq=False)
-class Module2MainView(QtSalomeMainView, IModule2MainView):
-    menu: ExampleMainMenu = field(init=False)
-    toolbar: Module2ToolBar = field(init=False)
+class QtModule2MainView(QtSalomeMainView, IModule2MainView):
+    menu: QtExampleMainMenu = field(init=False)
+    toolbar: QtModule2ToolBar = field(init=False)
     cube_table: QtTableView["CubeTableItems"] = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.menu = ExampleMainMenu()
-        self.toolbar = Module2ToolBar(self.module_name, self.view)
+        self.menu = QtExampleMainMenu()
+        self.toolbar = QtModule2ToolBar(self.module_name, self.view)
 
     def create_central_views(self) -> None:
         super().create_central_views()

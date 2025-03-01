@@ -19,7 +19,7 @@ class INavigationToolBar(ICheckableToolBar):
 
 
 @dataclass(eq=False)
-class IExampleToolBar(IMainToolBar):
+class IExampleMainToolBar(IMainToolBar):
     navigation: INavigationToolBar = field(init=False, default_factory=INavigationToolBar)
 
 
@@ -28,7 +28,7 @@ IPointsTableView: TypeAlias = ISimpleTableView["Model"]
 
 @dataclass(eq=False)
 class IExampleMainView(IMainView):
-    toolbar: IExampleToolBar = field(init=False, default_factory=IExampleToolBar)
+    toolbar: IExampleMainToolBar = field(init=False, default_factory=IExampleMainToolBar)
     points_view: IPointsTableView = field(init=False, default_factory=IPointsTableView)
 
 

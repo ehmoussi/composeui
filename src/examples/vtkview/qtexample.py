@@ -22,19 +22,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class VTKMainMenu(QtMainMenu, IMainMenu): ...
+class QtVTKMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class VTKMainToolBar(QtMainToolBar, IMainToolBar): ...
+class QtVTKMainToolBar(QtMainToolBar, IMainToolBar): ...
 
 
 @dataclass(eq=False)
-class VTKConfigView(QtGroupBoxApplyFormView[VTKConfigFormItems], IVTKConfigView): ...
+class QtVTKConfigView(QtGroupBoxApplyFormView[VTKConfigFormItems], IVTKConfigView): ...
 
 
 @dataclass(eq=False)
-class VTKInfosView(QtGroupView, IVTKInfosView):
+class QtVTKInfosView(QtGroupView, IVTKInfosView):
 
     _text_edit: QTextEdit = field(init=False, default_factory=QTextEdit)
 
@@ -55,12 +55,12 @@ class VTKInfosView(QtGroupView, IVTKInfosView):
 
 
 @dataclass(eq=False)
-class VTKExampleView(QtView, IVTKExampleView):
+class QtVTKExampleView(QtView, IVTKExampleView):
     view: QSplitter = field(init=False, default_factory=lambda: QSplitter(Qt.Vertical))
 
-    configuration: VTKConfigView = field(init=False, default_factory=VTKConfigView)
+    configuration: QtVTKConfigView = field(init=False, default_factory=QtVTKConfigView)
     vtk_view: QtVTKView = field(init=False, default_factory=QtVTKView)
-    informations: VTKInfosView = field(init=False, default_factory=VTKInfosView)
+    informations: QtVTKInfosView = field(init=False, default_factory=QtVTKInfosView)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -75,16 +75,16 @@ class VTKExampleView(QtView, IVTKExampleView):
 
 
 @dataclass(eq=False)
-class ExampleMainView(QtMainView, IExampleMainView):
-    menu: VTKMainMenu = field(init=False)
-    toolbar: VTKMainToolBar = field(init=False)
+class QtExampleMainView(QtMainView, IExampleMainView):
+    menu: QtVTKMainMenu = field(init=False)
+    toolbar: QtVTKMainToolBar = field(init=False)
 
-    vtk_example: VTKExampleView = field(init=False)
+    vtk_example: QtVTKExampleView = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.menu = VTKMainMenu(self.view)
-        self.toolbar = VTKMainToolBar(self.view)
+        self.menu = QtVTKMainMenu(self.view)
+        self.toolbar = QtVTKMainToolBar(self.view)
         # views
-        self.vtk_example = VTKExampleView()
+        self.vtk_example = QtVTKExampleView()
         self.central_layout.addWidget(self.vtk_example.view)

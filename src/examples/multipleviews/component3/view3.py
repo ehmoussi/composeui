@@ -1,33 +1,26 @@
-from composeui.core.qt.qtview import QtView
-from examples.multipleviews.component3 import IView3
-
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
+from composeui.core.interfaces.iactionview import IActionView
+from composeui.core.interfaces.iview import IView
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from examples.multipleviews.example import IExampleMainView
 
 
 @dataclass(eq=False)
-class View3(QtView, IView3):
-    view: QWidget = field(init=False, default_factory=QWidget)
+class IView3(IView):
+    text_3: str = field(init=False, default="")
 
-    text_3_label: QLabel = field(init=False, default_factory=QLabel)
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        layout = QHBoxLayout()
-        self.view.setLayout(layout)
-        # label
-        font = self.text_3_label.font()
-        font.setPointSize(24)
-        self.text_3_label.setFont(font)
-        layout.addStretch()
-        layout.addWidget(self.text_3_label)
-        layout.addStretch()
-
-    @property  # type: ignore[misc]
-    def text_3(self) -> str:
-        return str(self.text_3_label.text())
-
-    @text_3.setter
-    def text_3(self, text: str) -> None:
-        self.text_3_label.setText(text)
+def initialize_component3(
+    toolbar_action: IActionView,
+    view: IView3,
+    main_view: "IExampleMainView",
+) -> None:
+    # toolbar action
+    toolbar_action.text = "View 3"
+    toolbar_action.visible_views = [main_view.view_3]
+    # central view
+    view.is_visible = False
+    view.text_3 = "VIEW 3"

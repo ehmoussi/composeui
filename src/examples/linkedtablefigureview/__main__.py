@@ -1,9 +1,9 @@
 from examples.linkedtablefigureview.app import LinkedTableFigureViewApp
-from examples.linkedtablefigureview.mainview import ExampleMainView
+from examples.linkedtablefigureview.qtexample import QtExampleMainView
 
 
 def main() -> None:
-    app = LinkedTableFigureViewApp(ExampleMainView())
+    app = LinkedTableFigureViewApp(QtExampleMainView())
     app.run()
 
 

@@ -14,39 +14,39 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class Module1ToolBar(QtSalomeMainToolBar, IModule1MainToolBar): ...
+class QtModule1ToolBar(QtSalomeMainToolBar, IModule1MainToolBar): ...
 
 
 @dataclass(eq=False)
-class CubeDefinitionView(QtFormView[CubeDefinitionItems], ICubeDefinitionView): ...
+class QtCubeDefinitionView(QtFormView[CubeDefinitionItems], ICubeDefinitionView): ...
 
 
 @dataclass(eq=False)
-class LeftDockView(QtDockView, ILeftDockView):
-    cube_definition: CubeDefinitionView = field(init=False)
+class QtLeftDockView(QtDockView, ILeftDockView):
+    cube_definition: QtCubeDefinitionView = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.cube_definition = CubeDefinitionView()
+        self.cube_definition = QtCubeDefinitionView()
         self.central_layout.addWidget(self.cube_definition.view)
 
 
 @dataclass(eq=False)
-class Module1MainView(QtSalomeMainView, IModule1MainView):
-    menu: ExampleMainMenu = field(init=False)
-    left_dock: LeftDockView = field(init=False)
-    toolbar: Module1ToolBar = field(init=False)
+class QtModule1MainView(QtSalomeMainView, IModule1MainView):
+    menu: QtExampleMainMenu = field(init=False)
+    left_dock: QtLeftDockView = field(init=False)
+    toolbar: QtModule1ToolBar = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.menu = ExampleMainMenu()
-        self.toolbar = Module1ToolBar(self.module_name, self.view)
+        self.menu = QtExampleMainMenu()
+        self.toolbar = QtModule1ToolBar(self.module_name, self.view)
         # left dock
-        self.left_dock = LeftDockView()
+        self.left_dock = QtLeftDockView()
         self.left_dock.area = DockArea.LEFT
         self.view.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.left_dock.view)
 

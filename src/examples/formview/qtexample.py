@@ -9,24 +9,24 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(QtMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(QtMainToolBar, IExampleMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(QtMainView, IExampleMainView):
-    menu: ExampleMainMenu = field(init=False)
-    toolbar: ExampleToolBar = field(init=False)
+class QtExampleMainView(QtMainView, IExampleMainView):
+    menu: QtExampleMainMenu = field(init=False)
+    toolbar: QtExampleMainToolBar = field(init=False)
     pipe_view: PipeFormView = field(init=False)
     apply_pipe_view: PipeApplyFormView = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.menu = ExampleMainMenu(self.view)
-        self.toolbar = ExampleToolBar(self.view)
+        self.menu = QtExampleMainMenu(self.view)
+        self.toolbar = QtExampleMainToolBar(self.view)
         self.pipe_view = PipeFormView()
         self.central_layout.addWidget(self.pipe_view.view)
         self.apply_pipe_view = PipeApplyFormView()

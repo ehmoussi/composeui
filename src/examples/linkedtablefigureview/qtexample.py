@@ -11,17 +11,17 @@ if TYPE_CHECKING:
 
 
 @dataclass(eq=False)
-class ExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(QtMainView, IExampleMainView):
-    toolbar: ExampleMainToolBar = field(init=False)
+class QtExampleMainView(QtMainView, IExampleMainView):
+    toolbar: QtExampleMainToolBar = field(init=False)
     points: QtLinkedTableFigureView["PointsItems"] = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.toolbar = ExampleMainToolBar(self.view)
+        self.toolbar = QtExampleMainToolBar(self.view)
         # points
         self.points = QtLinkedTableFigureView()
         self.central_layout.addWidget(self.points.view)

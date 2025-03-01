@@ -1,12 +1,12 @@
 """Main of the TableView example."""
 
 from examples.tableview.app import TableViewApp
-from examples.tableview.examplemainview import ExampleMainView
+from examples.tableview.qtexample import QtExampleMainView
 
 
 def main() -> None:
     """Launch the example."""
-    app = TableViewApp(ExampleMainView())
+    app = TableViewApp(QtExampleMainView())
     app.run()
 
 

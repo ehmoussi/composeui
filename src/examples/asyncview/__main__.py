@@ -16,7 +16,7 @@ if importlib.util.find_spec("aiofiles") is None:
     ) from None
 
 from examples.asyncview.app import AsyncViewApp
-from examples.asyncview.examplemainview import ExampleMainView
+from examples.asyncview.qtexample import QtExampleMainView
 
 from qtpy import API
 
@@ -24,7 +24,7 @@ from qtpy import API
 def main() -> None:
     r"""Launch the example."""
     if API == "pyside6":
-        app = AsyncViewApp(main_view=ExampleMainView())
+        app = AsyncViewApp(main_view=QtExampleMainView())
         app.run()
     else:
         msg = f"The example is not available with {API}"

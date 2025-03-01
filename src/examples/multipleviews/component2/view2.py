@@ -1,58 +1,39 @@
-from composeui.core.qt.qtview import QtView
-from examples.multipleviews.component2 import IRightView2, IView2
-
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
+from composeui.core.interfaces.iactionview import IActionView
+from composeui.core.interfaces.iview import IView
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from examples.multipleviews.example import IExampleMainView
 
 
 @dataclass(eq=False)
-class View2(QtView, IView2):
-    view: QWidget = field(init=False, default_factory=QWidget)
-    text_2_label: QLabel = field(init=False, default_factory=QLabel)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        layout = QHBoxLayout()
-        self.view.setLayout(layout)
-        # label
-        font = self.text_2_label.font()
-        font.setPointSize(24)
-        self.text_2_label.setFont(font)
-        layout.addStretch()
-        layout.addWidget(self.text_2_label)
-        layout.addStretch()
-
-    @property  # type: ignore[misc]
-    def text_2(self) -> str:
-        return str(self.text_2_label.text())
-
-    @text_2.setter
-    def text_2(self, text: str) -> None:
-        self.text_2_label.setText(text)
+class IView2(IView):
+    text_2: str = field(init=False, default="")
 
 
 @dataclass(eq=False)
-class RightView2(QtView, IRightView2):
-    view: QWidget = field(init=False, default_factory=QWidget)
-    text_2_label: QLabel = field(init=False, default_factory=QLabel)
+class IRightView2(IView):
+    right_text_2: str = field(init=False, default="")
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        layout = QHBoxLayout()
-        self.view.setLayout(layout)
-        # label
-        font = self.text_2_label.font()
-        font.setPointSize(24)
-        self.text_2_label.setFont(font)
-        layout.addStretch()
-        layout.addWidget(self.text_2_label)
-        layout.addStretch()
 
-    @property  # type: ignore[misc]
-    def right_text_2(self) -> str:
-        return str(self.text_2_label.text())
-
-    @right_text_2.setter
-    def right_text_2(self, text: str) -> None:
-        self.text_2_label.setText(text)
+def initialize_component2(
+    toolbar_action: IActionView,
+    view: IView2,
+    right_view: IRightView2,
+    main_view: "IExampleMainView",
+) -> None:
+    # toolbar action
+    toolbar_action.text = "View 2"
+    toolbar_action.visible_views = [
+        main_view.view_2,
+        main_view.right_dock,
+        main_view.right_dock.view_2,
+    ]
+    # central view
+    view.is_visible = False
+    view.text_2 = "VIEW 2"
+    # right view
+    right_view.is_visible = False
+    right_view.right_text_2 = "RIGHT VIEW 2"

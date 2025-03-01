@@ -10,23 +10,23 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(QtMainMenu, IMainMenu): ...
+class QtExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(QtMainToolBar, IMainToolBar): ...
+class QtExampleMainToolBar(QtMainToolBar, IMainToolBar): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(QtMainView, IExampleMainView):
+class QtExampleMainView(QtMainView, IExampleMainView):
 
-    menu: ExampleMainMenu = field(init=False)
-    toolbar: ExampleToolBar = field(init=False)
+    menu: QtExampleMainMenu = field(init=False)
+    toolbar: QtExampleMainToolBar = field(init=False)
     batman: BatmanView = field(init=False)
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
-        self.menu = ExampleMainMenu(self.view)
-        self.toolbar = ExampleToolBar(self.view)
+        self.menu = QtExampleMainMenu(self.view)
+        self.toolbar = QtExampleMainToolBar(self.view)
         self.batman = BatmanView()
         self.central_layout.addWidget(self.batman.view)

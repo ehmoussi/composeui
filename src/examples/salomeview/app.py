@@ -56,9 +56,9 @@ class Module1App(SalomeModuleApp[IModule1MainView, Model]):
         if self.is_testing:
             self._main_view = IModule1MainView(self.get_module_name())
         else:
-            from examples.salomeview.mainview1 import Module1MainView
+            from examples.salomeview.qtmainview1 import QtModule1MainView
 
-            self._main_view = Module1MainView(self.get_module_name())
+            self._main_view = QtModule1MainView(self.get_module_name())
 
     def get_module_name(self) -> str:
         return "Example"
@@ -82,9 +82,9 @@ class Module2App(SalomeModuleApp[IModule2MainView, Model]):
         if self.is_testing:
             self._main_view = IModule2MainView(self.get_module_name())
         else:
-            from examples.salomeview.mainview2 import Module2MainView
+            from examples.salomeview.qtmainview2 import QtModule2MainView
 
-            self._main_view = Module2MainView(self.get_module_name())
+            self._main_view = QtModule2MainView(self.get_module_name())
 
     def get_module_name(self) -> str:
         return "Example2"

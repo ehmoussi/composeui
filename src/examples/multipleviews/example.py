@@ -3,9 +3,9 @@ from composeui.mainview.interfaces.idockview import IDockView
 from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
 from composeui.mainview.interfaces.imainview import IMainView
 from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
-from examples.multipleviews.component1 import ILeftView1, IView1
-from examples.multipleviews.component2 import IRightView2, IView2
-from examples.multipleviews.component3 import IView3
+from examples.multipleviews.component1.view1 import ILeftView1, IView1
+from examples.multipleviews.component2.view2 import IRightView2, IView2
+from examples.multipleviews.component3.view3 import IView3
 
 from dataclasses import dataclass, field
 

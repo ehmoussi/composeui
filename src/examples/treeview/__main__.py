@@ -1,7 +1,7 @@
 """Main of the TreeView example."""
 
 from examples.treeview.app import TreeViewApp
-from examples.treeview.examplemainview import ExampleMainView
+from examples.treeview.qtexample import ExampleMainView
 
 
 def main() -> None:

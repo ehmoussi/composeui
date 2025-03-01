@@ -1,9 +1,9 @@
 from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.basemodel import BaseModel
-from examples.multipleviews.component1 import initialize_component1
-from examples.multipleviews.component2 import initialize_component2
-from examples.multipleviews.component3 import initialize_component3
+from examples.multipleviews.component1.view1 import initialize_component1
+from examples.multipleviews.component2.view2 import initialize_component2
+from examples.multipleviews.component3.view3 import initialize_component3
 from examples.multipleviews.example import IExampleMainView, initialize_dockviews
 
 
