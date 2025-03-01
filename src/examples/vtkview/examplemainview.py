@@ -1,12 +1,12 @@
-from composeui.core.qt.groupview import GroupView
-from composeui.core.qt.view import View
-from composeui.form.formview import GroupBoxApplyFormView
+from composeui.core.qt.qtgroupview import QtGroupView
+from composeui.core.qt.qtview import QtView
+from composeui.form.qtformview import QtGroupBoxApplyFormView
 from composeui.mainview.interfaces.imainmenu import IMainMenu
 from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
-from composeui.mainview.qt.mainmenu import MainMenu
-from composeui.mainview.qt.maintoolbar import MainToolBar
-from composeui.mainview.qt.mainview import MainView
-from composeui.vtk.qt.vtkview import VTKView
+from composeui.mainview.qt.qtmainmenu import QtMainMenu
+from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
+from composeui.mainview.qt.qtmainview import QtMainView
+from composeui.vtk.qt.qtvtkview import QtVTKView
 from examples.vtkview.example import (
     IExampleMainView,
     IVTKConfigView,
@@ -22,19 +22,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class VTKMainMenu(MainMenu, IMainMenu): ...
+class VTKMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class VTKMainToolBar(MainToolBar, IMainToolBar): ...
+class VTKMainToolBar(QtMainToolBar, IMainToolBar): ...
 
 
 @dataclass(eq=False)
-class VTKConfigView(GroupBoxApplyFormView[VTKConfigFormItems], IVTKConfigView): ...
+class VTKConfigView(QtGroupBoxApplyFormView[VTKConfigFormItems], IVTKConfigView): ...
 
 
 @dataclass(eq=False)
-class VTKInfosView(GroupView, IVTKInfosView):
+class VTKInfosView(QtGroupView, IVTKInfosView):
 
     _text_edit: QTextEdit = field(init=False, default_factory=QTextEdit)
 
@@ -55,11 +55,11 @@ class VTKInfosView(GroupView, IVTKInfosView):
 
 
 @dataclass(eq=False)
-class VTKExampleView(View, IVTKExampleView):
+class VTKExampleView(QtView, IVTKExampleView):
     view: QSplitter = field(init=False, default_factory=lambda: QSplitter(Qt.Vertical))
 
     configuration: VTKConfigView = field(init=False, default_factory=VTKConfigView)
-    vtk_view: VTKView = field(init=False, default_factory=VTKView)
+    vtk_view: QtVTKView = field(init=False, default_factory=QtVTKView)
     informations: VTKInfosView = field(init=False, default_factory=VTKInfosView)
 
     def __post_init__(self) -> None:
@@ -75,7 +75,7 @@ class VTKExampleView(View, IVTKExampleView):
 
 
 @dataclass(eq=False)
-class ExampleMainView(MainView, IExampleMainView):
+class ExampleMainView(QtMainView, IExampleMainView):
     menu: VTKMainMenu = field(init=False)
     toolbar: VTKMainToolBar = field(init=False)
 

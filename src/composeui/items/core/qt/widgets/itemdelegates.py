@@ -5,7 +5,7 @@ from composeui.items.core.itemsutils import ComboBoxDelegateProps, FloatDelegate
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.qt.widgets.tableitemmodel import TableItemModel
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
-from composeui.items.tree.qt.treeitemmodel import TreeItemModel
+from composeui.items.tree.qt.widgets.treeitemmodel import TreeItemModel
 
 from qtpy.QtCore import QModelIndex
 from qtpy.QtGui import QDoubleValidator

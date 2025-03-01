@@ -1,10 +1,10 @@
-from composeui.form.formview import FormView
+from composeui.form.qtformview import QtFormView
 from composeui.mainview.interfaces.idockview import DockArea
 from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.qt.dockview import DockView
-from composeui.salomewrapper.core.qt.salomemaintoolbar import SalomeMainToolBar
-from composeui.salomewrapper.mainview.qt.salomemainmenu import SalomeMainMenu
-from composeui.salomewrapper.mainview.qt.salomemainview import SalomeMainView
+from composeui.mainview.qt.qtdockview import QtDockView
+from composeui.salomewrapper.core.qt.qtsalomemaintoolbar import QtSalomeMainToolBar
+from composeui.salomewrapper.mainview.qt.qtsalomemainmenu import QtSalomeMainMenu
+from composeui.salomewrapper.mainview.qt.qtsalomemainview import QtSalomeMainView
 from examples.salomeview.cubedefinition import CubeDefinitionItems, ICubeDefinitionView
 from examples.salomeview.module1 import ILeftDockView, IModule1MainToolBar, IModule1MainView
 
@@ -14,19 +14,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(SalomeMainMenu, IMainMenu): ...
+class ExampleMainMenu(QtSalomeMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class Module1ToolBar(SalomeMainToolBar, IModule1MainToolBar): ...
+class Module1ToolBar(QtSalomeMainToolBar, IModule1MainToolBar): ...
 
 
 @dataclass(eq=False)
-class CubeDefinitionView(FormView[CubeDefinitionItems], ICubeDefinitionView): ...
+class CubeDefinitionView(QtFormView[CubeDefinitionItems], ICubeDefinitionView): ...
 
 
 @dataclass(eq=False)
-class LeftDockView(DockView, ILeftDockView):
+class LeftDockView(QtDockView, ILeftDockView):
     cube_definition: CubeDefinitionView = field(init=False)
 
     def __post_init__(self) -> None:
@@ -36,7 +36,7 @@ class LeftDockView(DockView, ILeftDockView):
 
 
 @dataclass(eq=False)
-class Module1MainView(SalomeMainView, IModule1MainView):
+class Module1MainView(QtSalomeMainView, IModule1MainView):
     menu: ExampleMainMenu = field(init=False)
     left_dock: LeftDockView = field(init=False)
     toolbar: Module1ToolBar = field(init=False)

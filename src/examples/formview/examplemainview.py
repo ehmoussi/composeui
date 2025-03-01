@@ -1,7 +1,7 @@
 from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.qt.mainmenu import MainMenu
-from composeui.mainview.qt.maintoolbar import MainToolBar
-from composeui.mainview.qt.mainview import MainView
+from composeui.mainview.qt.qtmainmenu import QtMainMenu
+from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
+from composeui.mainview.qt.qtmainview import QtMainView
 from examples.formview.example import IExampleMainToolBar, IExampleMainView
 from examples.formview.pipeview import PipeApplyFormView, PipeFormView
 
@@ -9,15 +9,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(MainMenu, IMainMenu): ...
+class ExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(MainToolBar, IExampleMainToolBar): ...
+class ExampleToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(MainView, IExampleMainView):
+class ExampleMainView(QtMainView, IExampleMainView):
     menu: ExampleMainMenu = field(init=False)
     toolbar: ExampleToolBar = field(init=False)
     pipe_view: PipeFormView = field(init=False)

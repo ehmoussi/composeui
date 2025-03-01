@@ -5,8 +5,8 @@ from composeui.items.core.itemsutils import (
     FloatDelegateProps,
     IntDelegateProps,
 )
-from composeui.items.core.qt.filtertableview import FilterTableView
-from composeui.items.core.qt.paginationview import PaginationView
+from composeui.items.core.qt.qtfiltertableview import QtFilterTableView
+from composeui.items.core.qt.qtpaginationview import QtPaginationView
 from composeui.items.core.qt.widgets.itemdelegates import ComboBoxDelegate, FloatDelegate
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
@@ -105,7 +105,7 @@ class ItemsWidget(QWidget):
         self.remove_button.setToolTip("Remove")
         self.options_buttons.addWidget(self.remove_button)
         # Filter View
-        self.filter_view = FilterTableView()
+        self.filter_view = QtFilterTableView()
         self._layout.addWidget(self.filter_view.view)
         self.filter_view.view.setVisible(False)
         # Table
@@ -118,7 +118,7 @@ class ItemsWidget(QWidget):
         self.table.setSelectionBehavior(QTableView.SelectItems)
         self._layout.addWidget(self.table)
         # Pagination
-        self.pagination_view = PaginationView()
+        self.pagination_view = QtPaginationView()
         self.pagination_view.is_visible = False
         self._layout.addWidget(self.pagination_view.view)
         # Connect to slots

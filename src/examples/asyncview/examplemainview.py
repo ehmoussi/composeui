@@ -1,6 +1,6 @@
-from composeui.form.formview import GroupBoxApplyFormView
-from composeui.mainview.qt.maintoolbar import MainToolBar
-from composeui.mainview.qt.mainview import MainView
+from composeui.form.qtformview import QtGroupBoxApplyFormView
+from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
+from composeui.mainview.qt.qtmainview import QtMainView
 from examples.asyncview.example import IExampleMainToolBar, IExampleMainView
 from examples.asyncview.filereader import FileReaderItems, IFileReaderView
 
@@ -8,15 +8,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainToolBar(MainToolBar, IExampleMainToolBar): ...
+class ExampleMainToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class FileReaderView(GroupBoxApplyFormView[FileReaderItems], IFileReaderView): ...
+class FileReaderView(QtGroupBoxApplyFormView[FileReaderItems], IFileReaderView): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(MainView, IExampleMainView):
+class ExampleMainView(QtMainView, IExampleMainView):
     toolbar: ExampleMainToolBar = field(init=False)
     file_reader: FileReaderView = field(init=False)
 

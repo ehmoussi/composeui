@@ -1,5 +1,5 @@
 from composeui.commontypes import AnyFormItems
-from composeui.form.formview import GroupBoxApplyFormView, GroupBoxFormView
+from composeui.form.qtformview import QtGroupBoxApplyFormView, QtGroupBoxFormView
 from examples.formview.pipeapplyform import IPipeApplyFormView, PipeApplyFormItems
 from examples.formview.pipeform import (
     IChamferDimensionView,
@@ -13,24 +13,26 @@ from dataclasses import dataclass
 
 
 @dataclass(eq=False)
-class PipeDimensionView(GroupBoxFormView[AnyFormItems], IPipeDimensionView[AnyFormItems]): ...
+class PipeDimensionView(
+    QtGroupBoxFormView[AnyFormItems], IPipeDimensionView[AnyFormItems]
+): ...
 
 
 @dataclass(eq=False)
 class ChamferDimensionView(
-    GroupBoxFormView[AnyFormItems], IChamferDimensionView[AnyFormItems]
+    QtGroupBoxFormView[AnyFormItems], IChamferDimensionView[AnyFormItems]
 ): ...
 
 
 @dataclass(eq=False)
 class FilletDimensionView(
-    GroupBoxFormView[AnyFormItems], IFilletDimensionView[AnyFormItems]
+    QtGroupBoxFormView[AnyFormItems], IFilletDimensionView[AnyFormItems]
 ): ...
 
 
 @dataclass(eq=False)
-class PipeFormView(GroupBoxFormView[PipeFormItems], IPipeFormView): ...
+class PipeFormView(QtGroupBoxFormView[PipeFormItems], IPipeFormView): ...
 
 
 @dataclass(eq=False)
-class PipeApplyFormView(GroupBoxApplyFormView[PipeApplyFormItems], IPipeApplyFormView): ...
+class PipeApplyFormView(QtGroupBoxApplyFormView[PipeApplyFormItems], IPipeApplyFormView): ...

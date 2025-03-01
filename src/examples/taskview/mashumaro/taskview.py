@@ -1,6 +1,6 @@
-from composeui.core.qt.progressview import ProgressView
-from composeui.core.qt.view import View
-from composeui.form.formview import GroupBoxFormView
+from composeui.core.qt.qtprogressview import QtProgressView
+from composeui.core.qt.qtview import QtView
+from composeui.form.qtformview import QtGroupBoxFormView
 from examples.taskview.mashumaro.task import ITaskConfigForm, ITaskView, Task, TaskConfigItems
 
 from qtpy.QtCore import Qt
@@ -11,15 +11,15 @@ from typing import List
 
 
 @dataclass(eq=False)
-class TaskConfigForm(GroupBoxFormView[TaskConfigItems], ITaskConfigForm): ...
+class TaskConfigForm(QtGroupBoxFormView[TaskConfigItems], ITaskConfigForm): ...
 
 
 @dataclass(eq=False)
-class TaskView(View, ITaskView):
+class TaskView(QtView, ITaskView):
 
     view: QWidget = field(init=False, default_factory=QWidget)
     config: TaskConfigForm = field(init=False, default_factory=TaskConfigForm)
-    progress: ProgressView[Task] = field(init=False, default_factory=ProgressView[Task])
+    progress: QtProgressView[Task] = field(init=False, default_factory=QtProgressView[Task])
 
     labels: List[QLabel] = field(init=False, default_factory=list)
     _status_tasks: List[str] = field(default_factory=list)

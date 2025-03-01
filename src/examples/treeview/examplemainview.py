@@ -1,8 +1,8 @@
-from composeui.items.tree.qt.treeview import TreeGroupView
+from composeui.items.tree.qt.qttreeview import TreeGroupView
 from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.qt.mainmenu import MainMenu
-from composeui.mainview.qt.maintoolbar import MainToolBar
-from composeui.mainview.qt.mainview import MainView
+from composeui.mainview.qt.qtmainmenu import QtMainMenu
+from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
+from composeui.mainview.qt.qtmainview import QtMainView
 from examples.treeview.example import IExampleMainView, IExampleToolBar
 from examples.treeview.lines import LinesItems
 
@@ -10,15 +10,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(MainMenu, IMainMenu): ...
+class ExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(MainToolBar, IExampleToolBar): ...
+class ExampleToolBar(QtMainToolBar, IExampleToolBar): ...
 
 
 @dataclass(eq=False)
-class ExampleMainView(MainView, IExampleMainView):
+class ExampleMainView(QtMainView, IExampleMainView):
     menu: ExampleMainMenu = field(init=False)
     toolbar: ExampleToolBar = field(init=False)
 

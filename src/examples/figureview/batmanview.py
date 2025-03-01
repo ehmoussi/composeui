@@ -1,5 +1,5 @@
-from composeui.core.qt.view import View
-from composeui.figure.figureview import FigureView
+from composeui.core.qt.qtview import QtView
+from composeui.figure.qtfigureview import QtFigureView
 from examples.figureview.batman import IBatmanView
 
 from qtpy.QtCore import Qt
@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class BatmanView(View, IBatmanView):
+class BatmanView(QtView, IBatmanView):
     view: QWidget = field(init=False)
-    figure: FigureView = field(init=False)
+    figure: QtFigureView = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -23,7 +23,7 @@ class BatmanView(View, IBatmanView):
         self.text_label.setStyleSheet("font-weight: bold; font-size: 16pt")
         self.layout.addWidget(self.text_label)
         # figure
-        self.figure = FigureView()
+        self.figure = QtFigureView()
         self.layout.addWidget(self.figure.view)
         self.view.setLayout(self.layout)
 

@@ -1,4 +1,4 @@
-from composeui.core.qt.view import View
+from composeui.core.qt.qtview import QtView
 from examples.multipleviews.component3 import IView3
 
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QWidget
@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class View3(View, IView3):
+class View3(QtView, IView3):
     view: QWidget = field(init=False, default_factory=QWidget)
 
     text_3_label: QLabel = field(init=False, default_factory=QLabel)

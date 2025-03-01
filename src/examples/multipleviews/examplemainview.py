@@ -1,8 +1,8 @@
 from composeui.mainview.interfaces.imainmenu import IMainMenu
-from composeui.mainview.qt.dockview import DockView
-from composeui.mainview.qt.mainmenu import MainMenu
-from composeui.mainview.qt.maintoolbar import MainToolBar
-from composeui.mainview.qt.mainview import MainView
+from composeui.mainview.qt.qtdockview import QtDockView
+from composeui.mainview.qt.qtmainmenu import QtMainMenu
+from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
+from composeui.mainview.qt.qtmainview import QtMainView
 from examples.multipleviews.component1.view1 import LeftView1, View1
 from examples.multipleviews.component2.view2 import RightView2, View2
 from examples.multipleviews.component3.view3 import View3
@@ -19,15 +19,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(eq=False)
-class ExampleMainMenu(MainMenu, IMainMenu): ...
+class ExampleMainMenu(QtMainMenu, IMainMenu): ...
 
 
 @dataclass(eq=False)
-class ExampleToolBar(MainToolBar, IExampleMainToolBar): ...
+class ExampleToolBar(QtMainToolBar, IExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class LeftExampleDockView(DockView, ILeftExampleDockView):
+class LeftExampleDockView(QtDockView, ILeftExampleDockView):
     view_1: LeftView1 = field(init=False)
 
     def __post_init__(self) -> None:
@@ -37,7 +37,7 @@ class LeftExampleDockView(DockView, ILeftExampleDockView):
 
 
 @dataclass(eq=False)
-class RightExampleDockView(DockView, IRightExampleDockView):
+class RightExampleDockView(QtDockView, IRightExampleDockView):
     view_2: RightView2 = field(init=False)
 
     def __post_init__(self) -> None:
@@ -47,7 +47,7 @@ class RightExampleDockView(DockView, IRightExampleDockView):
 
 
 @dataclass(eq=False)
-class ExampleMainView(MainView, IExampleMainView):
+class ExampleMainView(QtMainView, IExampleMainView):
     menu: ExampleMainMenu = field(init=False)
     toolbar: ExampleToolBar = field(init=False)
 
