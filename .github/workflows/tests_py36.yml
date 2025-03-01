@@ -1,0 +1,18 @@
+name: Tests (== 3.6)
+
+on: push
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: python:3.6.15-slim-buster
+    steps:
+      - name: Install xclip and xvfb
+        run: sudo apt install -y xclip xvfb
+      - uses: actions/checkout@v4
+      - name: Install
+        run: python3 -m pip install -e .[dev_maestro,all]
+      - name: Run the tests
+        run: xvfb-run --auto-servernum maestro test
