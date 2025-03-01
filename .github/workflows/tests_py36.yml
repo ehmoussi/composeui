@@ -7,12 +7,15 @@ permissions:
 
 jobs:
   tests:
-    runs-on: python:3.6.15-slim-buster
+    runs-on: ubuntu-20.04
     steps:
       - name: Install xclip and xvfb
         run: sudo apt install -y xclip xvfb
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.6"
       - name: Install
-        run: python3 -m pip install -e .[dev_maestro,all]
+        run: python -m pip install -e .[dev_maestro,all]
       - name: Run the tests
         run: xvfb-run --auto-servernum maestro test
