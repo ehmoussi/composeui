@@ -1,7 +1,7 @@
 """Disconnect all callbacks connected to signals of the views."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 
 from collections import deque
 from dataclasses import fields

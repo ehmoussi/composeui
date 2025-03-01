@@ -1,7 +1,7 @@
 """OCC view."""
 
 from composeui.salomewrapper.core import displayer
-from composeui.salomewrapper.core.ioccview import IOCCView
+from composeui.salomewrapper.core.views.ioccview import IOCCView
 from composeui.salomewrapper.core.qt.qtsalomeview import QtSalomeView
 
 from dataclasses import dataclass

@@ -1,5 +1,5 @@
 from composeui.commontypes import AnyTableItems
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.figure.ifigureview import IFigureView
 from composeui.items.table.itableview import ITableView
 

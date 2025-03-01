@@ -1,7 +1,7 @@
 from composeui.core import tools
 from composeui.items.core import pagination
-from composeui.items.core.iitemsview import IItemsView
-from composeui.items.core.ipaginationview import IPaginationView
+from composeui.items.core.views.iitemsview import IItemsView
+from composeui.items.core.views.ipaginationview import IPaginationView
 
 from functools import partial
 

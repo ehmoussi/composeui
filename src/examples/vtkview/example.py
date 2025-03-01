@@ -1,6 +1,6 @@
 from composeui import form
 from composeui.core import tools
-from composeui.core.interfaces.iview import IGroupView, IView
+from composeui.core.views.iview import IGroupView, IView
 from composeui.form.abstractformitems import AbstractFormItems
 from composeui.form.iformview import (
     IGroupBoxApplyFormView,

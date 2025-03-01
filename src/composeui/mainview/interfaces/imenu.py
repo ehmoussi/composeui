@@ -1,5 +1,5 @@
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iactionview import IActionView
+from composeui.core.views.iview import IView
 
 from dataclasses import dataclass, field
 

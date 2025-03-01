@@ -4,8 +4,8 @@ from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems, AnyM
 from composeui.core import selectfiles, tools
 from composeui.core.tasks.tasks import Tasks
 from composeui.items.linkedtable.exportfilelinkedtabletask import ExportFileLinkedTableTask
-from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
 from composeui.items.linkedtable.importfilelinkedtabletask import ImportFileLinkedTableTask
+from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
 from composeui.items.table.itableview import ITableGroupView
 from composeui.items.tree.itreeview import ExportTreeOptions
 from composeui.mainview import progresspopup

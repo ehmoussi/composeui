@@ -2,7 +2,7 @@ r"""View the filter of a table."""
 
 from composeui.core.qt.qtview import QtView
 from composeui.core.qt.widgets.checkablemenubutton import CheckableMenuButton
-from composeui.items.core.ifiltertableview import IFilterTableView
+from composeui.items.core.views.ifiltertableview import IFilterTableView
 
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QGridLayout, QLabel, QLineEdit, QPushButton, QWidget

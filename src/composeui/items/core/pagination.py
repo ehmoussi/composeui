@@ -6,7 +6,7 @@ import typing
 from typing import Any, Union
 
 if typing.TYPE_CHECKING:
-    from composeui.items.core.ipaginationview import IPaginationView
+    from composeui.items.core.views.ipaginationview import IPaginationView
     from composeui.items.table.abstracttableitems import AbstractTableItems
     from composeui.items.table.itableview import ITableView
     from composeui.items.tree.abstracttreeitems import AbstractTreeItems

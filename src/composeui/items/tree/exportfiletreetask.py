@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyTreeItems
 from composeui.core.tasks.abstracttask import AbstractTask
-from composeui.items.core.iitemsview import FormatExtension
+from composeui.items.core.views.iitemsview import FormatExtension
 from composeui.items.tree.itreeview import ExportTreeOptions
 
 from pathlib import Path

@@ -10,7 +10,7 @@ import typing
 if typing.TYPE_CHECKING:
     from composeui.model.basemodel import BaseModel
     from composeui.form.iformview import IFormView
-    from composeui.core.interfaces.iview import IView
+    from composeui.core.views.iview import IView
 
 from typing_extensions import ParamSpec, TypeAlias
 

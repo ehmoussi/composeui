@@ -1,4 +1,4 @@
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.mainview.interfaces.imenu import IFileMenu, IMenu
 
 from typing_extensions import OrderedDict

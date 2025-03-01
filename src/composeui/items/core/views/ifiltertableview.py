@@ -1,5 +1,5 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 
 from dataclasses import dataclass, field
 from typing import Tuple

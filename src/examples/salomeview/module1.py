@@ -1,6 +1,6 @@
 """Example salome view."""
 
-from composeui.core.interfaces.iactionview import IActionView
+from composeui.core.views.iactionview import IActionView
 from composeui.mainview.interfaces.idockview import IDockView
 from composeui.mainview.interfaces.imaintoolbar import IMainToolBar
 from composeui.mainview.interfaces.itoolbar import ICheckableToolBar

@@ -1,7 +1,7 @@
 r"""View of an action."""
 
-from composeui.core.interfaces.iactionview import IActionView
 from composeui.core.qt.qtview import QtView
+from composeui.core.views.iactionview import IActionView
 
 from qtpy.QtGui import QIcon, QKeySequence
 from qtpy.QtWidgets import QAction

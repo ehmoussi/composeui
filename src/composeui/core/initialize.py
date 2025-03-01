@@ -1,12 +1,12 @@
 r"""Initialization of views."""
 
-from composeui.core.interfaces.iactionview import IActionView
-from composeui.core.interfaces.ipopuptextview import DialogChoices, IPopupTextView
-from composeui.core.interfaces.iprogressview import IProgressView
-from composeui.core.interfaces.iselectpathview import ISelectPathView
-from composeui.core.interfaces.iview import IGroupView, IView
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
+from composeui.core.views.iactionview import IActionView
+from composeui.core.views.ipopuptextview import DialogChoices, IPopupTextView
+from composeui.core.views.iprogressview import IProgressView
+from composeui.core.views.iselectpathview import ISelectPathView
+from composeui.core.views.iview import IGroupView, IView
 from composeui.figure import initialize_figure_view
 from composeui.figure.ifigureview import IFigureView
 from composeui.items.core.initialize import initialize_items_view

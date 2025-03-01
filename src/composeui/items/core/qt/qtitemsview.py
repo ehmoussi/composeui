@@ -3,10 +3,10 @@ r"""Items view."""
 from composeui.core.pendingupdate import pending_until_visible
 from composeui.core.qt.qtgroupview import QtGroupView
 from composeui.core.qt.qtview import QtView
-from composeui.items.core.iitemsview import IItemsView
 from composeui.items.core.qt.qtfiltertableview import QtFilterTableView
 from composeui.items.core.qt.qtpaginationview import QtPaginationView
 from composeui.items.core.qt.widgets.itemswidget import ItemsWidget
+from composeui.items.core.views.iitemsview import IItemsView
 
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QKeySequence

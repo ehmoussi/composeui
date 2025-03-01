@@ -1,8 +1,8 @@
 r"""Salome Toolbar View."""
 
-from composeui.core.interfaces.iactionview import IActionView
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
+from composeui.core.views.iactionview import IActionView
 from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IToolBar
 
 from PyQt5.QtWidgets import QToolBar  # need the real QToolbar or the findChildren may fail :/

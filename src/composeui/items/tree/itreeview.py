@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyTreeItems
-from composeui.core.interfaces.iview import IGroupView
-from composeui.items.core.iitemsview import IItemsView
+from composeui.core.views.iview import IGroupView
+from composeui.items.core.views.iitemsview import IItemsView
 
 import enum
 from dataclasses import dataclass, field

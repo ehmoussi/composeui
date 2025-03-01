@@ -1,6 +1,6 @@
 r"""Common tools."""
 
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.form.iformview import IFormView, IRowView
 from composeui.items.table.itableview import ITableView
 from composeui.mainview.interfaces.ifileview import IFileView

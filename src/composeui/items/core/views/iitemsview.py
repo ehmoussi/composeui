@@ -1,7 +1,7 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.ipendingview import IPendingView
-from composeui.items.core.ifiltertableview import IFilterTableView
-from composeui.items.core.ipaginationview import IPaginationView
+from composeui.core.views.ipendingview import IPendingView
+from composeui.items.core.views.ifiltertableview import IFilterTableView
+from composeui.items.core.views.ipaginationview import IPaginationView
 
 from typing_extensions import OrderedDict
 

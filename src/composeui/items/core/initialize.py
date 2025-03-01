@@ -1,5 +1,5 @@
-from composeui.items.core.iitemsview import FormatExtension, IItemsView
-from composeui.items.core.ipaginationview import IPaginationView
+from composeui.items.core.views.iitemsview import FormatExtension, IItemsView
+from composeui.items.core.views.ipaginationview import IPaginationView
 
 from collections import OrderedDict
 

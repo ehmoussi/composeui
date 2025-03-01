@@ -1,7 +1,7 @@
 """Interface to the VTK view."""
 
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 
 import enum
 import typing

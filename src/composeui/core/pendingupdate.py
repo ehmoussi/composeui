@@ -1,4 +1,4 @@
-from composeui.core.interfaces.ipendingview import IPendingView
+from composeui.core.views.ipendingview import IPendingView
 
 from functools import wraps
 from typing import Callable, TypeVar

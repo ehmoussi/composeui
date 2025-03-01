@@ -1,6 +1,6 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.ipendingview import IPendingView
-from composeui.core.interfaces.iview import IGroupView
+from composeui.core.views.ipendingview import IPendingView
+from composeui.core.views.iview import IGroupView
 
 import typing
 from dataclasses import dataclass, field

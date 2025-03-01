@@ -1,8 +1,8 @@
 r"""Slots for the progress view."""
 
 from composeui.core import tools
-from composeui.core.interfaces.iprogressview import IProgress, IProgressView
 from composeui.core.tasks.abstracttask import AbstractTask, TaskStatus
+from composeui.core.views.iprogressview import IProgress, IProgressView
 from composeui.mainview.interfaces.imainview import IMainView
 
 from typing import TypeVar

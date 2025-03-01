@@ -1,4 +1,4 @@
-from composeui.salomewrapper.core.isalomeview import ISalomeView
+from composeui.salomewrapper.core.views.isalomeview import ISalomeView
 
 from dataclasses import dataclass
 from typing import List

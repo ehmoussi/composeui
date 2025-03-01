@@ -1,7 +1,7 @@
 """Utilitary functions for the objects of Salome"""
 
 from composeui.core.qt.qtview import QtView
-from composeui.salomewrapper.core.isalometree import ISalomeTree
+from composeui.salomewrapper.core.views.isalometree import ISalomeTree
 from composeui.salomewrapper.core.qt.widgets.salometreesignals import SalomeTreeSignals
 
 import salome

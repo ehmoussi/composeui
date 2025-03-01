@@ -1,10 +1,10 @@
 r"""View for a worker."""
 
-from composeui.core.interfaces.iworkerview import IWorkerView
 from composeui.core.qt.qtview import QtView
 from composeui.core.qt.widgets.worker import Worker
 from composeui.core.tasks.abstracttask import AbstractTask
 from composeui.core.tasks.tasks import Tasks
+from composeui.core.views.iworkerview import IWorkerView
 
 from dataclasses import dataclass, field
 from typing import Optional, TypeVar, cast

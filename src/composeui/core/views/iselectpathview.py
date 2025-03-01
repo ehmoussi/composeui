@@ -1,5 +1,5 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 
 from typing_extensions import Literal
 

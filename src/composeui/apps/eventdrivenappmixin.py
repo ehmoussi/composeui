@@ -3,7 +3,7 @@ from composeui.core import disconnect
 from composeui.core.basesignal import BaseSignal
 from composeui.core.connect import connect_by_default
 from composeui.core.initialize import initialize_default_view
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.form.iformview import IFormView, IRowItemView
 from composeui.model.basemodel import BaseModel
 

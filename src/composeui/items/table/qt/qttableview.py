@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyModel, AnyTableItems
 from composeui.items.core.qt.qtitemsview import ItemsGroupView, QtItemsView
-from composeui.items.simpletable import ISimpleTableView
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
+from composeui.items.simpletable.isimpletableview import ISimpleTableView
 from composeui.items.table.itableview import ITableGroupView, ITableView
 from composeui.items.table.qt.widgets.tableitemmodel import TableItemModel
 from composeui.items.table.qt.widgets.tablewidget import TableWidget

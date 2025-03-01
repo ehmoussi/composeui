@@ -1,7 +1,7 @@
 """View to Select File View."""
 
-from composeui.core.interfaces.iselectpathview import ISelectPathView
 from composeui.core.qt.qtview import QtView
+from composeui.core.views.iselectpathview import ISelectPathView
 
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 

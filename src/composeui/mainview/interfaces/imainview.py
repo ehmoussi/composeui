@@ -1,5 +1,5 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.mainview.interfaces.ifileview import IFileView
 from composeui.mainview.interfaces.imainmenu import IMainMenu
 from composeui.mainview.interfaces.imaintoolbar import IMainToolBar

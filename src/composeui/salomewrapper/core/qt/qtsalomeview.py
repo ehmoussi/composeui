@@ -1,4 +1,4 @@
-from composeui.salomewrapper.core.isalomeview import ISalomeView
+from composeui.salomewrapper.core.views.isalomeview import ISalomeView
 
 from qtpy.QtWidgets import QWidget
 from salome.gui import helper  # noqa: F811, RUF100

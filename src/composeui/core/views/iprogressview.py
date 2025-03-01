@@ -1,6 +1,6 @@
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iworkerview import IWorkerView
 from composeui.core.tasks.abstracttask import AbstractTask
+from composeui.core.views.iworkerview import IWorkerView
 
 from dataclasses import dataclass, field
 from typing import TypeVar

@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.iview import IView
-from composeui.items.core.iitemsview import FormatExtension
+from composeui.core.views.iview import IView
+from composeui.items.core.views.iitemsview import FormatExtension
 from composeui.items.table.itableview import ITableGroupView
 from composeui.items.tree.itreeview import ExportTreeOptions
 

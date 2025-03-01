@@ -1,5 +1,5 @@
-from composeui.core.interfaces.iprogressview import IProgress
 from composeui.core.tasks.abstracttask import AbstractTask
+from composeui.core.views.iprogressview import IProgress
 
 from dataclasses import dataclass, field
 

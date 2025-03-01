@@ -1,6 +1,6 @@
 r"""Toolbar utilities."""
 
-from composeui.core.interfaces.iactionview import IActionView
+from composeui.core.views.iactionview import IActionView
 from composeui.mainview.interfaces.imainview import IMainView
 from composeui.mainview.interfaces.itoolbar import ICheckableToolBar
 

@@ -1,7 +1,7 @@
 """View."""
 
-from composeui.core.interfaces.iview import IGroupView
 from composeui.core.qt.qtview import QtView
+from composeui.core.views.iview import IGroupView
 
 from qtpy.QtWidgets import QGroupBox
 

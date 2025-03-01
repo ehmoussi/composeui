@@ -1,9 +1,9 @@
 r"""Main view."""
 
 from composeui.mainview.interfaces.imainview import IMainView
-from composeui.salomewrapper.core.isalometree import ISalomeTree
-from composeui.salomewrapper.core.isalomeview import ISalomeView
-from composeui.salomewrapper.core.isalomeviews import ISalomeViews
+from composeui.salomewrapper.core.views.isalometree import ISalomeTree
+from composeui.salomewrapper.core.views.isalomeview import ISalomeView
+from composeui.salomewrapper.core.views.isalomeviews import ISalomeViews
 
 from dataclasses import dataclass, field
 

@@ -1,8 +1,8 @@
 from composeui import form
-from composeui.core.interfaces.iprogressview import IProgressView
-from composeui.core.interfaces.iview import IView
 from composeui.core.tasks.abstracttask import AbstractTask
 from composeui.core.tasks.tasks import Tasks
+from composeui.core.views.iprogressview import IProgressView
+from composeui.core.views.iview import IView
 from composeui.form.abstractformitems import AbstractFormItems
 from composeui.form.iformview import IGroupBoxFormView, ILabelSpinBoxView
 

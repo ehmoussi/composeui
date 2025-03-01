@@ -2,7 +2,7 @@ r"""Slots of the FormView."""
 
 from composeui.commontypes import AnyFormItems
 from composeui.core import selectfiles, tools
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.form.iformview import (
     IButtonsGroupView,
     ICheckBoxView,

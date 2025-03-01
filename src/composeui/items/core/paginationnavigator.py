@@ -2,7 +2,7 @@ import typing
 from typing import Any, Generator, Optional
 
 if typing.TYPE_CHECKING:
-    from composeui.items.core.ipaginationview import IPaginationView
+    from composeui.items.core.views.ipaginationview import IPaginationView
     from composeui.items.table.abstracttableitems import AbstractTableItems
 
 

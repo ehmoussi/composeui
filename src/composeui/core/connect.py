@@ -2,11 +2,11 @@ r"""Connect the signals to the default slots."""
 
 from composeui.commontypes import AnyModel
 from composeui.core import selectfiles
-from composeui.core.interfaces.iprogressview import IProgressView
-from composeui.core.interfaces.iselectpathview import ISelectPathView
-from composeui.core.interfaces.iview import IView
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
+from composeui.core.views.iprogressview import IProgressView
+from composeui.core.views.iselectpathview import ISelectPathView
+from composeui.core.views.iview import IView
 from composeui.form import connect_apply_form_view, connect_form_view
 from composeui.form.iformview import IApplyFormView, IFormView
 from composeui.items.linkedtable import connect_linked_table, connect_linked_table_view

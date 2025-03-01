@@ -1,6 +1,6 @@
 """Dock View."""
 
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 
 import enum
 from dataclasses import dataclass, field

@@ -1,8 +1,8 @@
 from composeui.commontypes import AnyFormItems
 from composeui.core.basesignal import BaseSignal
-from composeui.core.interfaces.ipendingview import IPendingView
-from composeui.core.interfaces.iselectpathview import FileMode
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.ipendingview import IPendingView
+from composeui.core.views.iselectpathview import FileMode
+from composeui.core.views.iview import IView
 from composeui.form.abstractcomboboxitems import AbstractComboboxItems
 
 from typing_extensions import OrderedDict

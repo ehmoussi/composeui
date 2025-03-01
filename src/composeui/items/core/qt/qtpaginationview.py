@@ -1,8 +1,8 @@
 """View for the pagination of a table/tree."""
 
 from composeui.core.qt.qtview import QtView
-from composeui.items.core.ipaginationview import IPaginationView
 from composeui.items.core.qt.widgets.paginationwidget import PaginationWidget
+from composeui.items.core.views.ipaginationview import IPaginationView
 
 from dataclasses import dataclass, field
 from typing import List

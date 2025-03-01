@@ -1,5 +1,5 @@
-from composeui.core.interfaces.iview import IView
-from composeui.salomewrapper.core.ioccview import IOCCView
+from composeui.core.views.iview import IView
+from composeui.salomewrapper.core.views.ioccview import IOCCView
 
 from dataclasses import dataclass, field
 

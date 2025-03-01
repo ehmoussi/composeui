@@ -1,6 +1,6 @@
 from composeui.commontypes import AnyDetailTableItems, AnyMasterTableItems
-from composeui.items.core.iitemsview import FormatExtension
 from composeui.items.core.initialize import initialize_items_view
+from composeui.items.core.views.iitemsview import FormatExtension
 from composeui.items.linkedtable import linkedtable
 from composeui.items.linkedtable.ilinkedtableview import ILinkedTableView
 from composeui.items.table import connect_table

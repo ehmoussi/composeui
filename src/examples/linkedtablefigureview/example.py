@@ -1,5 +1,5 @@
 from composeui import figure, linkedtablefigure
-from composeui.core.interfaces.iactionview import IActionView
+from composeui.core.views.iactionview import IActionView
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
 from composeui.linkedtablefigure.ilinkedtablefigureview import ILinkedTableFigureView
 from composeui.mainview.interfaces.imaintoolbar import IMainToolBar

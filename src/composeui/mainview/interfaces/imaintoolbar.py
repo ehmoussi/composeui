@@ -1,4 +1,4 @@
-from composeui.core.interfaces.iview import IView
+from composeui.core.views.iview import IView
 from composeui.mainview.interfaces.itoolbar import ICheckableToolBar, IFileToolBar
 
 from dataclasses import dataclass, field

@@ -1,8 +1,8 @@
 r"""Toolbar View."""
 
-from composeui.core.interfaces.iactionview import IActionView
 from composeui.core.qt.qtactionview import QtActionView
 from composeui.core.qt.qtview import QtView
+from composeui.core.views.iactionview import IActionView
 from composeui.mainview.interfaces.imenu import IMenu
 from composeui.mainview.qt.qtmenu import QtMenu
 
