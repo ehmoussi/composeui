@@ -21,7 +21,7 @@ class QtFileView(QtView, FileView):
                 self.parent,
                 "Open File",
                 "",
-                self.filter_path,
+                filter=self.filter_path,
             )[0]
         )
 
@@ -30,7 +30,7 @@ class QtFileView(QtView, FileView):
             QFileDialog.getSaveFileName(
                 self.parent,
                 "",
-                self.filter_path,
+                filter=self.filter_path,
             )[0]
         )
 
