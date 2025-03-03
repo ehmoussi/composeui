@@ -1,6 +1,5 @@
 r"""Connect the signals to the default slots."""
 
-from composeui.commontypes import AnyModel, AnyMainView
 from composeui.core import selectfiles
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
@@ -33,7 +32,6 @@ from typing_extensions import Concatenate, ParamSpec
 
 from functools import wraps
 from typing import Callable, TypeVar
-
 
 Ttask = TypeVar("Ttask", bound=AbstractTask)
 

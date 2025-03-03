@@ -1,6 +1,6 @@
 r"""Slots of the study management."""
 
-from composeui.commontypes import AnyModel, AnyMainView
+from composeui.commontypes import AnyMainView, AnyModel
 from composeui.core import selectfiles, tools
 from composeui.core.tasks.tasks import Tasks
 from composeui.mainview import progresspopup
@@ -9,8 +9,6 @@ from composeui.mainview.views.mainview import MainView
 
 from functools import partial
 from pathlib import Path
-
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

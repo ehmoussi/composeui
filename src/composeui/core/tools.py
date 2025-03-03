@@ -1,7 +1,7 @@
 r"""Common tools."""
 
-from composeui.form import form
 from composeui.core.views.view import View
+from composeui.form import form
 from composeui.form.formview import FormView, RowView
 from composeui.items.table.tableview import TableView
 from composeui.mainview.views.fileview import FileView

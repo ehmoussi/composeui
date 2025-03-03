@@ -11,6 +11,7 @@ if typing.TYPE_CHECKING:
     from composeui.model.basemodel import BaseModel
     from composeui.form.formview import FormView
     from composeui.core.views.view import View
+    from composeui.mainview.views.mainview import MainView
 
 from typing_extensions import ParamSpec, TypeAlias
 
@@ -43,8 +44,9 @@ else:
 P = ParamSpec("P")
 
 if typing.TYPE_CHECKING:
-    from qtpy.QtCore import QObject, SignalInstance  # type: ignore[attr-defined]
     from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
+
+    from qtpy.QtCore import QObject, SignalInstance  # type: ignore[attr-defined]
 
 
 SIGNAL_LOGGER = logging.getLogger("SIGNAL")
@@ -231,7 +233,7 @@ class BaseSignal(MutableSequence[Callback]):
         self.main_view: Optional[ReferenceType[View]] = None
         self.model: Optional[ReferenceType[BaseModel]] = None
         self.event_driven_app: Optional[
-            ReferenceType[EventDrivenAppMixin[View, BaseModel]]
+            ReferenceType[EventDrivenAppMixin[MainView, BaseModel]]
         ] = None
 
     def _signal_log(self, callback: Callback, *args: Any, **kwargs: Any) -> None:
