@@ -32,10 +32,8 @@ from composeui.vtk.vtkview import VTKView
 from typing_extensions import Concatenate, ParamSpec
 
 from functools import wraps
-from typing import Callable, TypeVar, TYPE_CHECKING
+from typing import Callable, TypeVar
 
-if TYPE_CHECKING:
-    from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
 
 Ttask = TypeVar("Ttask", bound=AbstractTask)
 
@@ -59,11 +57,7 @@ def connect_explorer(
 
 
 @connect_explorer
-def connect_by_default(
-    view: View,
-    main_view: MainView,
-    app: "EventDrivenAppMixin[AnyMainView, AnyModel]",
-) -> bool:
+def connect_by_default(view: View, main_view: MainView) -> bool:
     r"""Apply default connections to the view.
 
     Returns True if it needs to explore also its children.
@@ -71,7 +65,7 @@ def connect_by_default(
     if isinstance(view, MainView):
         return connect_main_view(view)
     elif isinstance(view, (FileMenu, FileToolBar)):
-        connect_file_menu_toolbar(view, main_view, app)
+        connect_file_menu_toolbar(view, main_view)
         if isinstance(view, FileMenu):
             connect_file_menu(view)
         return False

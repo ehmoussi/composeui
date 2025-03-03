@@ -44,6 +44,7 @@ P = ParamSpec("P")
 
 if typing.TYPE_CHECKING:
     from qtpy.QtCore import QObject, SignalInstance  # type: ignore[attr-defined]
+    from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
 
 
 SIGNAL_LOGGER = logging.getLogger("SIGNAL")
@@ -229,6 +230,9 @@ class BaseSignal(MutableSequence[Callback]):
         )
         self.main_view: Optional[ReferenceType[View]] = None
         self.model: Optional[ReferenceType[BaseModel]] = None
+        self.event_driven_app: Optional[
+            ReferenceType[EventDrivenAppMixin[View, BaseModel]]
+        ] = None
 
     def _signal_log(self, callback: Callback, *args: Any, **kwargs: Any) -> None:
         if callable(callback):
@@ -418,6 +422,7 @@ class BaseSignal(MutableSequence[Callback]):
                 "form_view": self.current_form_view,
                 "main_view": self.main_view,
                 "model": self.model,
+                "app": self.event_driven_app,
             }
             kwargs = {}
             index_positional_arg = 0

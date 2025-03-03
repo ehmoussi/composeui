@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
 
 
-def new(app: "EventDrivenAppMixin[AnyMainView, AnyModel]", *, main_view: MainView) -> None:
+def new(*, main_view: MainView, app: "EventDrivenAppMixin[AnyMainView, AnyModel]") -> None:
     r"""Create a new study after asking a confirmation."""
     if ask_confirmation(main_view, "clear"):
         app.new_study()
