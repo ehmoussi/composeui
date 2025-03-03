@@ -1,5 +1,6 @@
 r"""Common tools."""
 
+from composeui.form import form
 from composeui.core.views.view import View
 from composeui.form.formview import FormView, RowView
 from composeui.items.table.tableview import TableView
@@ -21,7 +22,7 @@ def update_all_views(main_view: MainView) -> None:
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view)
+        _update_view(view, update_visibility=False)
 
 
 def update_view_with_dependencies(
@@ -40,7 +41,10 @@ def update_view_with_dependencies(
 
 
 def _update_view(
-    view: View, keep_selection: bool = False, before_validation: bool = False
+    view: View,
+    keep_selection: bool = False,
+    before_validation: bool = False,
+    update_visibility: bool = True,
 ) -> None:
     r"""Update the given view.
 
@@ -58,12 +62,15 @@ def _update_view(
         elif isinstance(view, FormView) and view.items is not None:
             if not before_validation:
                 view.update()
-            view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            if update_visibility:
+                view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
+            form.update_infos(view)
         elif isinstance(view, RowView) and view.items is not None:
             if not before_validation:
                 view.update()
-            view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            if update_visibility:
+                view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
             view.field_view.is_enabled = view.items.is_enabled(
                 view.field_name, view.parent_fields
             )
