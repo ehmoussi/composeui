@@ -9,8 +9,6 @@ from composeui.core.views.selectpathview import SelectPathView
 from composeui.core.views.view import GroupView, View
 from composeui.figure import initialize_figure_view
 from composeui.figure.figureview import FigureView
-from composeui.form import initialize_form_view
-from composeui.form.formview import FormView
 from composeui.items.core.initialize import initialize_items_view
 from composeui.items.linkedtable import initialize_linked_table
 from composeui.items.linkedtable.linkedtableview import LinkedTableView
@@ -79,8 +77,6 @@ def initialize_default_view(view: View) -> bool:
         return initialize_tree_view(view)
     elif isinstance(view, TableView):
         return initialize_items_view(view)
-    elif isinstance(view, FormView):
-        return initialize_form_view(view)
     elif isinstance(view, SelectPathView):
         return initialize_select_path_view(view)
     elif isinstance(view, PopupTextView):

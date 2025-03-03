@@ -22,12 +22,6 @@ from functools import partial
 from typing import Optional
 
 
-def initialize_form_view(view: FormView[AnyFormItems]) -> bool:
-    """Initialize the form view."""
-    form.update_infos(view)
-    return False
-
-
 def initialize_form_view_items(view: FormView[AnyFormItems], form_items: AnyFormItems) -> None:
     """Initialize the form view items."""
     view.items = form_items
