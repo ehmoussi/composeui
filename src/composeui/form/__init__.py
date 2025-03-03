@@ -22,8 +22,14 @@ from functools import partial
 from typing import Optional
 
 
-def initialize_form_view(view: FormView[AnyFormItems], form_items: AnyFormItems) -> None:
+def initialize_form_view(view: FormView[AnyFormItems]) -> bool:
     """Initialize the form view."""
+    form.update_infos(view)
+    return False
+
+
+def initialize_form_view_items(view: FormView[AnyFormItems], form_items: AnyFormItems) -> None:
+    """Initialize the form view items."""
     view.items = form_items
     if view.field_name == "":
         parent_fields = view.parent_fields
@@ -64,7 +70,7 @@ def initialize_form_view(view: FormView[AnyFormItems], form_items: AnyFormItems)
                 else:
                     child_view.field_view.values = OrderedDict()
         elif isinstance(child_view, FormView):
-            initialize_form_view(child_view, form_items)
+            initialize_form_view_items(child_view, form_items)
     tools.update_view_with_dependencies(view)
     form.update_infos(view, with_color=False)
 

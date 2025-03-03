@@ -1,6 +1,6 @@
 r"""Slots of the study management."""
 
-from composeui.commontypes import AnyModel
+from composeui.commontypes import AnyModel, AnyMainView
 from composeui.core import selectfiles, tools
 from composeui.core.tasks.tasks import Tasks
 from composeui.mainview import progresspopup
@@ -11,10 +11,16 @@ from functools import partial
 from pathlib import Path
 
 
-def new(*, main_view: MainView, model: AnyModel) -> None:
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
+
+
+def new(app: "EventDrivenAppMixin[AnyMainView, AnyModel]", *, main_view: MainView) -> None:
     r"""Create a new study after asking a confirmation."""
     if ask_confirmation(main_view, "clear"):
-        clear(main_view, model)
+        app.new_study()
 
 
 def open_file(*, main_view: MainView, model: AnyModel) -> None:

@@ -1,3 +1,4 @@
+from functools import partial
 from composeui.core import study
 from composeui.core.tasks import progresstask
 from composeui.mainview import toolbar
@@ -9,7 +10,11 @@ from composeui.mainview.views.progresspopupview import ProgressPopupView
 from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
 from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
+    from composeui.commontypes import AnyMainView, AnyModel
 
 
 def initialize_main_view(view: MainView) -> bool:
@@ -102,9 +107,13 @@ def connect_file_menu(view: FileMenu) -> bool:
     return False
 
 
-def connect_file_menu_toolbar(view: Union[FileMenu, FileToolBar], main_view: MainView) -> bool:
+def connect_file_menu_toolbar(
+    view: Union[FileMenu, FileToolBar],
+    main_view: MainView,
+    app: "EventDrivenAppMixin[AnyMainView, AnyModel]",
+) -> bool:
     r"""Connect the signals of the identical menu/toolbar actions."""
-    view.new.triggered = [study.new]
+    view.new.triggered = [partial(study.new, app)]
     if isinstance(main_view, SalomeMainView):
         view.open_file.triggered = [study.open_file_without_update]
     else:

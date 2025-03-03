@@ -55,7 +55,7 @@ def initialize_apply_pipe(
     model: "Model",
     is_visible: bool = False,
 ) -> None:
-    form.initialize_form_view(view, PipeApplyFormItems(model, view))
+    form.initialize_form_view_items(view, PipeApplyFormItems(model, view))
     view.is_visible = is_visible
     view.title = "Pipe"
     view.export.field_view.mode = "save_file"

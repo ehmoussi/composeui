@@ -17,8 +17,6 @@ def global_app() -> SimpleTableViewApp:
 def app(global_app: SimpleTableViewApp) -> SimpleTableViewApp:
     global_app.model.is_debug = False
     global_app.main_view.message_view.run = lambda: True  # type: ignore[method-assign]
-    # back to the initial state of the model
+    # back to the initial state of the app
     global_app.main_view.menu.file.new.triggered()
-    # back to the initial state of the view
-    global_app.initialize()
     return global_app

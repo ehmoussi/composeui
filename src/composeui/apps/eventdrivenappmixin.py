@@ -37,12 +37,20 @@ class EventDrivenAppMixin(ABC, Generic[AnyMainView, AnyModel]):
     def connect(self) -> None:
         assert self._main_view is not None
         assert self._model is not None
-        connect_by_default(self._main_view, self._main_view, self._model)
+        connect_by_default(self._main_view, self._main_view, self)
         self.connect_app()
 
     def disconnect(self) -> None:
         assert self._main_view is not None
         disconnect.disconnect(self._main_view)
+
+    def new_study(self) -> None:
+        assert self._main_view is not None
+        assert self._model is not None
+        self._model.new()
+        self.disconnect()
+        self.initialize()
+        self.connect()
 
     @staticmethod
     def _add_app_to_base_signal(main_view: View, model: BaseModel) -> None:

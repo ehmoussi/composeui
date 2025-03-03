@@ -1,6 +1,6 @@
 r"""Connect the signals to the default slots."""
 
-from composeui.commontypes import AnyModel
+from composeui.commontypes import AnyModel, AnyMainView
 from composeui.core import selectfiles
 from composeui.core.tasks import progresstask
 from composeui.core.tasks.abstracttask import AbstractTask
@@ -32,7 +32,10 @@ from composeui.vtk.vtkview import VTKView
 from typing_extensions import Concatenate, ParamSpec
 
 from functools import wraps
-from typing import Callable, Optional, TypeVar
+from typing import Callable, TypeVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
 
 Ttask = TypeVar("Ttask", bound=AbstractTask)
 
@@ -59,8 +62,7 @@ def connect_explorer(
 def connect_by_default(
     view: View,
     main_view: MainView,
-    model: AnyModel,
-    parent_view: Optional[View] = None,
+    app: "EventDrivenAppMixin[AnyMainView, AnyModel]",
 ) -> bool:
     r"""Apply default connections to the view.
 
@@ -69,7 +71,7 @@ def connect_by_default(
     if isinstance(view, MainView):
         return connect_main_view(view)
     elif isinstance(view, (FileMenu, FileToolBar)):
-        connect_file_menu_toolbar(view, main_view)
+        connect_file_menu_toolbar(view, main_view, app)
         if isinstance(view, FileMenu):
             connect_file_menu(view)
         return False

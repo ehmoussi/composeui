@@ -114,7 +114,7 @@ class TaskView(View):
 
 def initialize_task(view: TaskView, main_view: "ExampleMainView", model: "Model") -> None:
     view.config.title = "Configuration"
-    form.initialize_form_view(view.config, TaskConfigItems(model, view.config))
+    form.initialize_form_view_items(view.config, TaskConfigItems(model, view.config))
     view.status_tasks = [""] * 25
     view.progress.tasks = Tasks(
         tuple([Task(j, model) for j in range(len(view.status_tasks))]),

@@ -345,7 +345,7 @@ def build_cube_geometry(
 
 
 def initialize_cube_definition(view: CubeDefinitionView, model: "Model") -> None:
-    form.initialize_form_view(view, CubeDefinitionItems(model, view))
+    form.initialize_form_view_items(view, CubeDefinitionItems(model, view))
     view.cube.field_view.dependencies.append(view.parameters)
 
 
