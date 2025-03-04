@@ -22,7 +22,7 @@ def update_all_views(main_view: MainView) -> None:
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view)
+        _update_view(view, update_visibility=False)
 
 
 def update_view_with_dependencies(
@@ -46,6 +46,7 @@ def _update_view(
     view: View,
     keep_selection: bool = False,
     before_validation: bool = False,
+    update_visibility: bool = True,
 ) -> None:
     r"""Update the given view.
 
@@ -64,14 +65,16 @@ def _update_view(
             if not before_validation:
                 view.update()
             is_visible = view.items.is_visible(view.field_name, view.parent_fields)
-            view.is_visible = is_visible
+            if update_visibility:
+                view.is_visible = is_visible
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
             form.update_infos(view)
         elif isinstance(view, RowView) and view.items is not None:
             if not before_validation:
                 view.update()
             is_visible = view.items.is_visible(view.field_name, view.parent_fields)
-            view.is_visible = is_visible
+            if update_visibility:
+                view.is_visible = is_visible
             view.field_view.is_enabled = view.items.is_enabled(
                 view.field_name, view.parent_fields
             )
