@@ -63,6 +63,7 @@ def initialize_form_view_items(view: FormView[AnyFormItems], form_items: AnyForm
                     child_view.field_view.values = OrderedDict(zip(values, displayed_values))
                 else:
                     child_view.field_view.values = OrderedDict()
+                child_view.field_view.current_index = 0
         elif isinstance(child_view, FormView):
             initialize_form_view_items(child_view, form_items)
     tools.update_view_with_dependencies(view)
