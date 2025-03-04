@@ -38,9 +38,9 @@ class QtBaseApp(BaseApp, EventDrivenAppMixin[AnyMainView, AnyModel]):
     def model(self) -> AnyModel:
         return self._model
 
-    def run(self) -> None:
+    def run(self, log_signals: bool = False) -> None:
         super().run()
-        if self._args is not None and self._args.log_signals:
+        if log_signals or (self._args is not None and self._args.log_signals):
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         self.initialize()
         self.connect()
