@@ -1,3 +1,4 @@
+from pathlib import Path
 from examples.formview.app import FormViewApp
 from examples.formview.pipeform import EdgeType
 
@@ -74,3 +75,35 @@ def test_update_visibility_with_incorrect_data(app_apply_pipe: FormViewApp) -> N
     assert view.items.is_enabled("chamfer") is True
     assert view.chamfer.is_visible is True
     assert model.apply_pipe_query.get_edge_type() == EdgeType.Normal
+
+
+def test_save_open_file(app_apply_pipe: FormViewApp, tmpdir: Path) -> None:
+    view, main_view = app_apply_pipe.main_view.apply_pipe_view, app_apply_pipe.main_view
+    study_filepath = Path(tmpdir, "mystudy.qtexample")
+    # default values
+    assert view.name.field_view.text == "PipeTShape"
+    assert view.main.radius.field_view.value == 80.0
+    # modify values
+    view.name.field_view.text = "New name"
+    view.name.field_view.editing_finished()
+    view.main.radius.field_view.value = 50.0
+    view.main.radius.field_view.editing_finished()
+    view.apply_clicked()
+    # save the study
+    main_view.file_view.save_file = lambda: str(study_filepath)  # type: ignore[method-assign]
+    main_view.menu.file.save_as.triggered()
+    # clean
+    main_view.menu.file.new.triggered()
+    assert view.name.field_view.text == "PipeTShape"
+    assert view.main.radius.field_view.value == 80.0
+    # open the study
+    main_view.file_view.open_file = lambda: str(study_filepath)  # type: ignore[method-assign]
+    main_view.menu.file.open_file.triggered()
+    main_view.progress_popup_view.finished()
+    assert view.is_visible is False  # when opening a study the visible view is the default one
+    assert app_apply_pipe.model.filepath == study_filepath
+    assert view.items is not None
+    assert view.p_id.field_view.text == "2"
+    assert view.items.get_value("name") == "New name"
+    assert view.name.field_view.text == "New name"
+    assert view.main.radius.field_view.value == 50.0
