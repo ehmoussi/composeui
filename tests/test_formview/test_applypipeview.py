@@ -1,8 +1,9 @@
-from pathlib import Path
 from examples.formview.app import FormViewApp
 from examples.formview.pipeform import EdgeType
 
 import pytest
+
+from pathlib import Path
 
 
 @pytest.fixture()

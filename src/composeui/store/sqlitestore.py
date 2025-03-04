@@ -1,6 +1,5 @@
 """Data managing state using sqlite."""
 
-import warnings
 from composeui.store.abstractstore import AbstractStore
 
 import contextlib
@@ -9,6 +8,7 @@ import queue
 import sqlite3
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Generator, List, Optional, Sequence
 
