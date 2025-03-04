@@ -203,7 +203,7 @@ def display_informations(*, view: VTKView, parent_view: VTKExampleView) -> None:
 def initialize_vtk_example(view: VTKExampleView, model: "Model") -> None:
     """Initialize the vtk view."""
     # configuration
-    form.initialize_form_view(
+    form.initialize_form_view_items(
         view.configuration, VTKConfigFormItems(model, view.configuration)
     )
     view.configuration.title = "Configuration"

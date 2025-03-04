@@ -76,7 +76,7 @@ class FileReaderView(GroupBoxApplyFormView[FileReaderItems]):
 
 
 def initialize_file_reader(*, view: FileReaderView, model: "Model") -> None:
-    form.initialize_form_view(view, FileReaderItems(model, view))
+    form.initialize_form_view_items(view, FileReaderItems(model, view))
     view.title = "File Reader"
     view.content.field_view.is_read_only = True
     view.output_filepath.field_view.mode = "save_file"

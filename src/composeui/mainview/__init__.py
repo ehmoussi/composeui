@@ -102,7 +102,10 @@ def connect_file_menu(view: FileMenu) -> bool:
     return False
 
 
-def connect_file_menu_toolbar(view: Union[FileMenu, FileToolBar], main_view: MainView) -> bool:
+def connect_file_menu_toolbar(
+    view: Union[FileMenu, FileToolBar],
+    main_view: MainView,
+) -> bool:
     r"""Connect the signals of the identical menu/toolbar actions."""
     view.new.triggered = [study.new]
     if isinstance(main_view, SalomeMainView):

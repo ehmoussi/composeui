@@ -59,14 +59,3 @@ def check(*, view: ProgressView[T], main_view: MainView) -> None:
             tools.display_error_message(main_view, tasks.join_error_messages())
         elif tasks.status == TaskStatus.WARNING:
             tools.display_warning_message(main_view, tasks.join_warning_messages())
-
-
-# def notify_task_errors(main_view: IProgressView[T], view_path: Tuple[str, ...]) -> None:
-#     r"""Notify the error message of the task."""
-#     view = tools.find_view(main_view, view_path)
-#     warning_message = view["task"].warning_message
-#     if warning_message != "":
-#         tools.display_warning_message(main_view, warning_message)
-#     error_message = view["task"].error_message
-#     if error_message != "":
-#         tools.display_error_message(main_view, error_message)

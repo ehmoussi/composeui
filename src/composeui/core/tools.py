@@ -1,6 +1,7 @@
 r"""Common tools."""
 
 from composeui.core.views.view import View
+from composeui.form import form
 from composeui.form.formview import FormView, RowView
 from composeui.items.table.tableview import TableView
 from composeui.mainview.views.fileview import FileView
@@ -13,16 +14,6 @@ from collections import deque
 from typing import List, Optional, Set, Tuple
 
 
-def find_view(view: View, view_path: Tuple[str, ...]) -> View:
-    r"""Find the view at the given path."""
-    current_view_path = deque(view_path)
-    current_view = view
-    while len(current_view_path) > 0:
-        child_name = current_view_path.popleft()
-        current_view = getattr(current_view, child_name)
-    return current_view
-
-
 def update_all_views(main_view: MainView) -> None:
     r"""Update all the views."""
     # call the slots associated with the update all signal
@@ -31,7 +22,7 @@ def update_all_views(main_view: MainView) -> None:
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view)
+        _update_view(view, update_visibility=False)
 
 
 def update_view_with_dependencies(
@@ -42,29 +33,20 @@ def update_view_with_dependencies(
     updated_dependencies: Set[View] = set()
     while len(dependencies) > 0:
         dependent_view = dependencies.popleft()
-        _update_view(dependent_view, keep_selection, before_validation)
+        _update_view(
+            dependent_view, keep_selection=keep_selection, before_validation=before_validation
+        )
         updated_dependencies.add(dependent_view)
         for dependent_child_view in dependent_view.dependencies:
             if dependent_child_view not in updated_dependencies:
                 dependencies.append(dependent_child_view)
 
 
-# def update_tables_views(
-#     main_view: IMainView, view_path: Tuple[str, ...], keep_selection=False
-# ) -> None:
-#     r"""Update the table and related tables views."""
-#     view = find_view(main_view, view_path)
-#     _update_view(view, keep_selection)
-#     table_dependencies = main_view.table_dependencies
-#     for dependant_view_path in table_dependencies.get(view_path, []):
-#         dependant_view = find_view(main_view, dependant_view_path)
-#         if isinstance(view, ISelectItemModifyDatasView) and dependant_view is view.selection:
-#             disable_datas_table(view, main_view)
-#         update_tables_views(main_view, dependant_view_path)
-
-
 def _update_view(
-    view: View, keep_selection: bool = False, before_validation: bool = False
+    view: View,
+    keep_selection: bool = False,
+    before_validation: bool = False,
+    update_visibility: bool = True,
 ) -> None:
     r"""Update the given view.
 
@@ -82,12 +64,17 @@ def _update_view(
         elif isinstance(view, FormView) and view.items is not None:
             if not before_validation:
                 view.update()
-            view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            if update_visibility:
+                view.is_visible = is_visible
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
+            form.update_infos(view)
         elif isinstance(view, RowView) and view.items is not None:
             if not before_validation:
                 view.update()
-            view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            if update_visibility:
+                view.is_visible = is_visible
             view.field_view.is_enabled = view.items.is_enabled(
                 view.field_name, view.parent_fields
             )

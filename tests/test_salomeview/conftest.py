@@ -29,7 +29,7 @@ if is_salome_running():
         for module in global_app.modules:
             assert isinstance(module, (Module1App, Module2App))
             module.main_view.message_view.run = lambda: True  # type: ignore[method-assign]
-            # back to the initial state of the model
+            # back to the initial state of the app
             module.main_view.menu.file.new.triggered()
             # back to the initial state of the view
             module.initialize()

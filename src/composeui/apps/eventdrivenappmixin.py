@@ -30,22 +30,32 @@ class EventDrivenAppMixin(ABC, Generic[AnyMainView, AnyModel]):
     def initialize(self) -> None:
         assert self._main_view is not None
         assert self._model is not None
-        self._add_app_to_base_signal(self._main_view, self._model)
+        self._add_app_to_base_signal(self._main_view, self._model, self)
         initialize_default_view(self._main_view)
         self.initialize_app()
 
     def connect(self) -> None:
         assert self._main_view is not None
         assert self._model is not None
-        connect_by_default(self._main_view, self._main_view, self._model)
+        connect_by_default(self._main_view, self._main_view)
         self.connect_app()
 
     def disconnect(self) -> None:
         assert self._main_view is not None
         disconnect.disconnect(self._main_view)
 
+    def new_study(self) -> None:
+        assert self._main_view is not None
+        assert self._model is not None
+        self._model.new()
+        self.disconnect()
+        self.initialize()
+        self.connect()
+
     @staticmethod
-    def _add_app_to_base_signal(main_view: View, model: BaseModel) -> None:
+    def _add_app_to_base_signal(
+        main_view: View, model: BaseModel, app: "EventDrivenAppMixin[AnyMainView, AnyModel]"
+    ) -> None:
         views: deque[  # type:ignore[type-arg]
             Tuple[Optional[FormView], Optional[View], View]
         ] = deque()
@@ -72,6 +82,7 @@ class EventDrivenAppMixin(ABC, Generic[AnyMainView, AnyModel]):
                     current_field.current_view = weakref.ref(current_view)
                     current_field.main_view = weakref.ref(main_view)
                     current_field.model = weakref.ref(model)
+                    current_field.event_driven_app = weakref.ref(app)
                 elif isinstance(current_field, View):
                     if isinstance(current_field, RowItemView) and isinstance(
                         current_parent_view, FormView

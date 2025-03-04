@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Ty
 
 if TYPE_CHECKING:
     from examples.formview.app import Model
-    from examples.formview.example import ExampleMainView
 
 
 class EdgeType(Enum):
@@ -93,11 +92,10 @@ class PipeFormView(GroupBoxFormView["PipeFormItems"]):
 
 def initialize_pipe(
     view: PipeFormView,
-    main_view: "ExampleMainView",
     model: "Model",
     is_visible: bool = False,
 ) -> None:
-    form.initialize_form_view(view, PipeFormItems(model, view))
+    form.initialize_form_view_items(view, PipeFormItems(model, view))
     view.is_visible = is_visible
     view.title = "Pipe"
     view.export.field_view.mode = "save_file"
