@@ -85,15 +85,6 @@ dev = [
     "types-aiofiles",
     "pytest-asyncio",
 ]
-dev_maestro = [
-    "maestro@git+https://github.com/ehmoussi/maestro.git",
-    "pandas_stubs",
-    "PyQt5-stubs",
-    "types-markdown",
-    "types-openpyxl",
-    "types-aiofiles",
-    "pytest-asyncio",
-]
 
 [tool.setuptools_scm]
 
