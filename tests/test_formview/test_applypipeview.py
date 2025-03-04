@@ -68,12 +68,17 @@ def test_update_visibility_with_incorrect_data(
     app_apply_pipe: Tuple[PipeApplyFormView, ExampleMainView, Model],
 ) -> None:
     view, _, model = app_apply_pipe
+    assert view.items is not None
+    assert view.items.is_visible("chamfer") is False
+    assert view.chamfer.is_visible is False
     view.main.radius.field_view.value = 500
     view.main.radius.field_view.editing_finished()
     assert model.apply_pipe_query.get_edge_type() == EdgeType.Normal
     assert view.edge_type.field_view.current_index == 0
+    assert view.items.is_visible("chamfer") is False
     assert view.chamfer.is_visible is False
     view.edge_type.field_view.current_index = 1
     view.edge_type.field_view.current_index_changed()
+    assert view.items.is_enabled("chamfer") is True
     assert view.chamfer.is_visible is True
     assert model.apply_pipe_query.get_edge_type() == EdgeType.Normal
