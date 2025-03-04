@@ -22,7 +22,7 @@ def update_all_views(main_view: MainView) -> None:
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view, update_visibility=False)
+        _update_view(view)
 
 
 def update_view_with_dependencies(
@@ -33,7 +33,9 @@ def update_view_with_dependencies(
     updated_dependencies: Set[View] = set()
     while len(dependencies) > 0:
         dependent_view = dependencies.popleft()
-        _update_view(dependent_view, keep_selection, before_validation)
+        _update_view(
+            dependent_view, keep_selection=keep_selection, before_validation=before_validation
+        )
         updated_dependencies.add(dependent_view)
         for dependent_child_view in dependent_view.dependencies:
             if dependent_child_view not in updated_dependencies:
@@ -44,7 +46,6 @@ def _update_view(
     view: View,
     keep_selection: bool = False,
     before_validation: bool = False,
-    update_visibility: bool = True,
 ) -> None:
     r"""Update the given view.
 
@@ -62,15 +63,15 @@ def _update_view(
         elif isinstance(view, FormView) and view.items is not None:
             if not before_validation:
                 view.update()
-            if update_visibility:
-                view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            view.is_visible = is_visible
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
             form.update_infos(view)
         elif isinstance(view, RowView) and view.items is not None:
             if not before_validation:
                 view.update()
-            if update_visibility:
-                view.is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            is_visible = view.items.is_visible(view.field_name, view.parent_fields)
+            view.is_visible = is_visible
             view.field_view.is_enabled = view.items.is_enabled(
                 view.field_name, view.parent_fields
             )
