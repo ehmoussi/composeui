@@ -30,7 +30,7 @@ jobs:
       - name: Set up Python
         run: uv python install
       - name: Install maestro
-        run: uv pip install maestro@git+https://github.com/ehmoussi/maestro.git
+        run: uv add maestro@git+https://github.com/ehmoussi/maestro.git
       - name: Install composeui
         run: uv sync --extra dev --extra all
       - name: Install composeui
