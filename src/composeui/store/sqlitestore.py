@@ -1,5 +1,6 @@
 """Data managing state using sqlite."""
 
+import warnings
 from composeui.store.abstractstore import AbstractStore
 
 import contextlib
@@ -81,6 +82,17 @@ class SqliteStore(AbstractStore):
                 self.create_pool()
                 with self.get_connection() as db_conn:
                     filepath_con.backup(db_conn)
+        try:
+            self.create_tables()
+        except Exception as e:  # noqa: BLE001
+            warnings.warn(
+                (
+                    f"Failed to execute the sql files because of '{e.args[0]}'. "
+                    "Hint: The definition of tables and triggers "
+                    "should always have 'IF NOT EXISTS'."
+                ),
+                stacklevel=2,
+            )
 
     def create_pool(self) -> None:
         self.close_pool()
