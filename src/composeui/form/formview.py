@@ -240,6 +240,7 @@ class FormView(View, Generic[AnyFormItems]):
 
 @dataclass(eq=False)
 class ApplyFormView(FormView[AnyFormItems]):
+    apply_button_text: str = field(init=False, default="Apply")
     validate_before_apply: bool = field(init=False, default=False)
     apply_clicked: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 

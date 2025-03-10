@@ -5,6 +5,7 @@ from composeui.mainview.views.mainmenu import MainMenu
 from composeui.mainview.views.maintoolbar import MainToolBar
 from composeui.mainview.views.messageview import MessageView
 from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.network.networkview import NetworkView
 
 from dataclasses import dataclass, field
 
@@ -27,3 +28,4 @@ class MainView(View):
     progress_popup_view: ProgressPopupView = field(
         init=False, repr=False, default_factory=ProgressPopupView
     )
+    network_view: NetworkView = field(init=False, repr=False, default_factory=NetworkView)

@@ -848,14 +848,22 @@ class QtApplyFormView(QtFormView[AnyFormItems], ApplyFormView[AnyFormItems]):
     validate_before_apply: bool = field(init=False, default=True)
 
     def __post_init__(self) -> None:
+        self.apply_button = QPushButton("Apply")
         super().__post_init__()
         self.apply_button_layout = QHBoxLayout()
         self.apply_button_layout.addStretch()
-        self.apply_button = QPushButton("Apply")
         self.apply_button_layout.addWidget(self.apply_button)
         # add signals
         self.apply_clicked.add_qt_signals((self.apply_button, self.apply_button.clicked))
         self.add_apply_button()
+
+    @property  # type: ignore[misc]
+    def apply_button_text(self) -> str:
+        return self.apply_button.text()
+
+    @apply_button_text.setter
+    def apply_button_text(self, text: str) -> None:
+        self.apply_button.setText(text)
 
     def add_apply_button(self) -> None:
         self.form_layout.addRow(self.apply_button_layout)
