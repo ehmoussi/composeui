@@ -3,7 +3,7 @@ from composeui.core.views.view import View
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 
 class HttpMethod(enum.Enum):

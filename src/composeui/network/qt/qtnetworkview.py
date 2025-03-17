@@ -1,10 +1,10 @@
-import asyncio
 from composeui.core.qt.qtview import QtView
 from composeui.network.networkview import HttpMethod, NetworkView
 
 from qtpy.QtCore import QUrl
 from qtpy.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional

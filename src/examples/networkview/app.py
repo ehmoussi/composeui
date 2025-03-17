@@ -4,18 +4,13 @@ from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.mashumaromodel import MashumaroModel
 from examples.networkview.example import ExampleMainView, initialize_navigation
-from examples.networkview.llm import (
-    connect_llm,
-    connect_llm_async,
-    initialize_form,
-)
+from examples.networkview.llm import connect_llm, connect_llm_async, initialize_form
 
 from mashumaro.mixins.json import DataClassJSONMixin
+from qtpy import API
 
 from dataclasses import dataclass, field
 from typing import Dict, List
-
-from qtpy import API
 
 
 @dataclass
