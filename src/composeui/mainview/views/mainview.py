@@ -18,6 +18,7 @@ class MainView(View):
     force_close: bool = field(init=False, default=False)
     message_before_closing: str = field(init=False, default="")
 
+    on_start: BaseSignal = field(init=False, repr=False, default=BaseSignal())
     save_before_exit: BaseSignal = field(init=False, repr=False, default=BaseSignal())
     update_all: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 

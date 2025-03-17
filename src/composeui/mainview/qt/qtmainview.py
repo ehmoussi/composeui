@@ -11,6 +11,7 @@ from composeui.network.qt.qtnetworkview import QtNetworkView
 from qtpy import API
 from qtpy.QtCore import QLocale
 from qtpy.QtWidgets import QApplication, QVBoxLayout, QWidget
+from qtpy.QtCore import QTimer
 
 import signal
 import sys
@@ -65,7 +66,9 @@ class QtMainView(QtView, MainView):
         self.network_view = QtNetworkView()
         # assign signals
         self.save_before_exit.add_qt_signals((self.view, self.view.save_before_exit))
+        self.on_start.add_qt_signals((self.view, self.view.on_start))
         # update_all signal is not a qt signal
+        QTimer.singleShot(1, self.view, self.view.on_start.emit)
 
     @property  # type: ignore[misc]
     def title(self) -> str:
