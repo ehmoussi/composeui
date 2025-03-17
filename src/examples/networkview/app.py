@@ -4,12 +4,18 @@ from composeui import get_version
 from composeui.apps.qtbaseapp import QtBaseApp
 from composeui.model.mashumaromodel import MashumaroModel
 from examples.networkview.example import ExampleMainView, initialize_navigation
-from examples.networkview.llm import connect_llm, initialize_llm
+from examples.networkview.llm import (
+    connect_llm,
+    connect_llm_async,
+    initialize_form,
+)
 
 from mashumaro.mixins.json import DataClassJSONMixin
 
 from dataclasses import dataclass, field
 from typing import Dict, List
+
+from qtpy import API
 
 
 @dataclass
@@ -52,7 +58,10 @@ class NetworkViewApp(QtBaseApp[ExampleMainView, Model]):
 
     def initialize_app(self) -> None:
         initialize_navigation(view=self.main_view.toolbar.navigation)
-        initialize_llm(view=self.main_view.llm, main_view=self.main_view, model=self.model)
+        initialize_form(view=self.main_view.llm, model=self.model)
 
     def connect_app(self) -> None:
-        connect_llm(llm_view=self.main_view.llm)
+        if API == "pyside6":
+            connect_llm_async(llm_view=self.main_view.llm, main_view=self.main_view)
+        else:
+            connect_llm(llm_view=self.main_view.llm, main_view=self.main_view)

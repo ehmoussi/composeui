@@ -36,6 +36,19 @@ def clean_network_view(*, main_view: MainView) -> None:
 
 def check_reply(*, main_view: MainView) -> bool:
     if main_view.network_view.received_data is None:
-        tools.display_error_message(main_view, "Http request failed.")
+        tools.display_error_message(main_view, "The fetch request have failed.")
         return False
     return True
+
+
+async def fetch_async(
+    main_view: MainView, url: str, method: HttpMethod, body: Optional[Dict[str, Any]] = None
+) -> Optional[Any]:
+    clean_network_view(main_view=main_view)
+    main_view.network_view.url = url
+    main_view.network_view.method = method
+    if body is not None:
+        main_view.network_view.body = body
+    await main_view.network_view.run_async()
+    check_reply(main_view=main_view)
+    return main_view.network_view.received_data

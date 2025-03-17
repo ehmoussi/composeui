@@ -1,3 +1,4 @@
+import asyncio
 from composeui.core.qt.qtview import QtView
 from composeui.network.networkview import HttpMethod, NetworkView
 
@@ -33,6 +34,7 @@ class QtNetworkView(QtView, NetworkView):
             HttpMethod.POST: self._manager.post,
             HttpMethod.PUT: self._manager.put,
         }
+        self.event = asyncio.Event()
 
     @property  # type: ignore[misc]
     def url(self) -> str:
@@ -55,6 +57,11 @@ class QtNetworkView(QtView, NetworkView):
             self.received_data = None
             self._reply.readyRead.connect(self._read_reply)
 
+    async def run_async(self) -> None:
+        self.run()
+        if self._reply is not None:
+            await self.event.wait()
+
     def _read_reply(self) -> None:
         if self._reply is not None:
             received_bytes = self._reply.readAll().data()
@@ -63,8 +70,10 @@ class QtNetworkView(QtView, NetworkView):
                 self.status_code = self._reply.attribute(
                     QNetworkRequest.HttpStatusCodeAttribute
                 )
+                self.event.set()
             except Exception:  # noqa: BLE001
                 pass
             finally:
                 self._reply.deleteLater()
                 self._reply = None
+                self.event.clear()

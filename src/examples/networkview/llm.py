@@ -69,6 +69,7 @@ def fill_llms(*, main_view: "ExampleMainView", model: "Model") -> None:
         model.root.llms = [
             model_info["name"] for model_info in main_view.network_view.received_data["models"]
         ]
+        model.root.llm = model.root.llms[0]
     tools.update_view_with_dependencies(main_view.llm)
 
 
@@ -86,6 +87,22 @@ def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> N
     )
 
 
+async def run_llm_async(
+    *, view: LLMView, main_view: "ExampleMainView", model: "Model"
+) -> None:
+    await network.fetch_async(
+        main_view,
+        "http://localhost:11434/api/chat",
+        HttpMethod.POST,
+        {
+            "model": "llama3.1",  # model.root.llms[view.llm.field_view.current_index],
+            "messages": model.build_ollama_messages(),
+            "stream": False,
+        },
+    )
+    write_content(view=main_view.network_view, main_view=main_view, model=model)
+
+
 def write_content(*, view: NetworkView, main_view: "ExampleMainView", model: "Model") -> None:
     json_response = view.received_data
     if json_response is not None:
@@ -93,12 +110,15 @@ def write_content(*, view: NetworkView, main_view: "ExampleMainView", model: "Mo
     tools.update_view_with_dependencies(main_view.llm)
 
 
-def initialize_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> None:
+def initialize_form(view: LLMView, model: "Model") -> None:
     form.initialize_form_view_items(view, LLMItems(model, view))
     view.title = "LLM"
     view.conversation.field_view.is_read_only = True
     view.conversation.field_view.text_type = TextEditType.MARKDOWN
     view.apply_button_text = "Ask"
+
+
+def fetch_llms(*, main_view: "ExampleMainView") -> None:
     network.fetch(
         main_view,
         "http://localhost:11434/api/tags",
@@ -107,5 +127,20 @@ def initialize_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model
     )
 
 
-def connect_llm(*, llm_view: LLMView) -> None:
+async def fetch_llms_async(*, main_view: "ExampleMainView", model: "Model") -> None:
+    await network.fetch_async(
+        main_view,
+        "http://localhost:11434/api/tags",
+        HttpMethod.GET,
+    )
+    fill_llms(main_view=main_view, model=model)
+
+
+def connect_llm(*, llm_view: LLMView, main_view: "ExampleMainView") -> None:
+    main_view.on_start.append(fetch_llms)
     llm_view.apply_clicked.append(run_llm)
+
+
+def connect_llm_async(*, llm_view: LLMView, main_view: "ExampleMainView") -> None:
+    main_view.on_start.append(fetch_llms_async)
+    llm_view.apply_clicked.append(run_llm_async)
