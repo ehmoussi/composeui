@@ -60,6 +60,9 @@ class QtNetworkView(QtView, NetworkView):
             received_bytes = self._reply.readAll().data()
             try:
                 self.received_data = json.loads(received_bytes)
+                self.status_code = self._reply.attribute(
+                    QNetworkRequest.HttpStatusCodeAttribute
+                )
             except Exception:  # noqa: BLE001
                 pass
             finally:

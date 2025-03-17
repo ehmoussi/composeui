@@ -22,7 +22,6 @@ class NetworkView(View):
     body: Dict[str, Any] = field(init=False, default_factory=dict)
     # output
     status_code: int = field(init=False, default=0)
-    progress: Tuple[int, int] = field(init=False, default_factory=lambda: (0, 0))
     received_data: Optional[Any] = field(init=False, default=None)
     # signals
     reply_finished: BaseSignal = field(init=False, repr=False, default=BaseSignal())
