@@ -40,15 +40,24 @@ class Model(MashumaroModel[LLMConfig]):
 
     def build_conversation(self) -> str:
         conversation = ""
+        llm = self._clean_llm_name(self.get_current_llm())
         for question, answer in zip(self.root.questions, self.root.answers):
             text = (
-                f"> **You** {' ' * max(len(self.root.llm) - 3, 0)}: "
+                f"> ***You*** {' ' * max(len(llm) - 4, 0)}: "
                 f"*{question if question else 'No question'}*"
                 "\n\n"
-                f"> **{self.root.llm}**: {answer}"
+                f"> **{llm}**: {self._clean_answer(answer)}\n\n"
             )
             conversation += text
         return conversation
+
+    def _clean_answer(self, answer: str) -> str:
+        """Clean the answer of the LLM."""
+        return answer.replace("\n", "\n>> ")
+
+    def _clean_llm_name(self, name: str) -> str:
+        """Clean the name of the LLM to dump the version."""
+        return name.split(":")[0]
 
 
 class NetworkViewApp(QtBaseApp[ExampleMainView, Model]):
