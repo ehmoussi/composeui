@@ -10,15 +10,15 @@ from composeui.form.formview import (
     TextEditType,
 )
 from composeui.network import network
-from composeui.network.networkview import HttpMethod, NetworkView
+from composeui.network.networkmanager import HttpMethod, NetworkManager
 
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence, Tuple
 
 if typing.TYPE_CHECKING:
-    from examples.networkview.app import Model
-    from examples.networkview.example import ExampleMainView
+    from examples.network.app import Model
+    from examples.network.example import ExampleMainView
 
 
 class LLMItems(AbstractFormItems["Model", "LLMView"]):
@@ -65,11 +65,11 @@ class LLMView(GroupBoxApplyFormView[LLMItems]):
 
 
 def fill_llms(*, main_view: "ExampleMainView", model: "Model") -> None:
-    if main_view.network_view.received_data is not None:
+    if main_view.network_manager.received_data is not None:
         model.root.llms = [
-            model_info["name"] for model_info in main_view.network_view.received_data["models"]
+            model_info["name"]
+            for model_info in main_view.network_manager.received_data["models"]
         ]
-        model.root.llm = model.root.llms[0]
     tools.update_view_with_dependencies(main_view.llm)
 
 
@@ -100,10 +100,12 @@ async def run_llm_async(
             "stream": False,
         },
     )
-    write_content(view=main_view.network_view, main_view=main_view, model=model)
+    write_content(view=main_view.network_manager, main_view=main_view, model=model)
 
 
-def write_content(*, view: NetworkView, main_view: "ExampleMainView", model: "Model") -> None:
+def write_content(
+    *, view: NetworkManager, main_view: "ExampleMainView", model: "Model"
+) -> None:
     json_response = view.received_data
     if json_response is not None:
         model.root.answers.append(json_response["message"]["content"])

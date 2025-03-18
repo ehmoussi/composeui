@@ -1,7 +1,7 @@
 """Main of the NetworkView example."""
 
-from examples.networkview.app import NetworkViewApp
-from examples.networkview.qtexample import QtExampleMainView
+from examples.network.app import NetworkViewApp
+from examples.network.qtexample import QtExampleMainView
 
 
 def main() -> None:

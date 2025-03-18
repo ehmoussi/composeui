@@ -1,8 +1,8 @@
 from composeui.form.qtformview import QtGroupBoxApplyFormView
 from composeui.mainview.qt.qtmaintoolbar import QtMainToolBar
 from composeui.mainview.qt.qtmainview import QtMainView
-from examples.networkview.example import ExampleMainToolBar, ExampleMainView
-from examples.networkview.llm import LLMItems, LLMView
+from examples.network.example import ExampleMainToolBar, ExampleMainView
+from examples.network.llm import LLMItems, LLMView
 
 from dataclasses import dataclass, field
 

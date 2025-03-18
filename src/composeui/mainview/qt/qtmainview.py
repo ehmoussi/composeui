@@ -6,7 +6,7 @@ from composeui.mainview.qt.qtmessageview import QtMessageView
 from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.mainview.qt.widgets.mainwindow import MainWindow
 from composeui.mainview.views.mainview import MainView
-from composeui.network.qt.qtnetworkview import QtNetworkView
+from composeui.network.qt.qtnetworkmanager import QtNetworkManager
 
 from qtpy import API
 from qtpy.QtCore import QLocale, QTimer
@@ -62,7 +62,7 @@ class QtMainView(QtView, MainView):
         # progress view
         self.progress_popup_view = QtProgressPopupView(self.view)
         # network view
-        self.network_view = QtNetworkView()
+        self.network_manager = QtNetworkManager()
         # assign signals
         self.save_before_exit.add_qt_signals((self.view, self.view.save_before_exit))
         self.on_start.add_qt_signals((self.view, self.view.on_start))

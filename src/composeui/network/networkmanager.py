@@ -15,7 +15,7 @@ class HttpMethod(enum.Enum):
 
 
 @dataclass(eq=False)
-class NetworkView(View):
+class NetworkManager(View):
     # input
     url: str = field(init=False, default="")
     method: HttpMethod = field(init=False, default=HttpMethod.GET)

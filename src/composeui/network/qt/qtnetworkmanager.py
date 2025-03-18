@@ -1,5 +1,5 @@
 from composeui.core.qt.qtview import QtView
-from composeui.network.networkview import HttpMethod, NetworkView
+from composeui.network.networkmanager import HttpMethod, NetworkManager
 
 from qtpy.QtCore import QUrl
 from qtpy.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
@@ -11,9 +11,10 @@ from typing import Callable, Dict, Optional
 
 
 @dataclass(eq=False)
-class QtNetworkView(QtView, NetworkView):
+class QtNetworkManager(QtView, NetworkManager):
 
     view = None
+
     _manager: QNetworkAccessManager = field(
         init=False, repr=False, default_factory=QNetworkAccessManager
     )
