@@ -67,7 +67,7 @@ class QtMainView(QtView, MainView):
         self.save_before_exit.add_qt_signals((self.view, self.view.save_before_exit))
         self.on_start.add_qt_signals((self.view, self.view.on_start))
         # update_all signal is not a qt signal
-        QTimer.singleShot(1, self.view, self.view.on_start.emit)  # type: ignore[call-overload]
+        QTimer.singleShot(1, self.view.on_start.emit)
 
     @property  # type: ignore[misc]
     def title(self) -> str:
