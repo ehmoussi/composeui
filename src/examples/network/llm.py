@@ -28,10 +28,8 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
     def get_value(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Any:
         if field == "llm":
             return self._model.get_current_llm()
-        elif field == "question":
+        elif field in ("question", "conversation"):
             return ""
-        elif field == "conversation":
-            return self._model.build_conversation()
         return super().get_value(field, parent_fields)
 
     def set_value(self, field: str, value: Any, parent_fields: Tuple[str, ...] = ()) -> bool:
@@ -76,7 +74,13 @@ def fill_llms(*, main_view: "ExampleMainView", model: "Model") -> None:
     tools.update_view_with_dependencies(main_view.llm)
 
 
+def append_last_question(view: LLMView, model: "Model") -> None:
+    view.conversation.field_view.append_text(model.get_last_question())
+    view.question.field_view.text = ""
+
+
 def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> None:
+    append_last_question(main_view.llm, model)
     network.fetch(
         main_view,
         "http://localhost:11434/api/chat",
@@ -93,6 +97,7 @@ def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> N
 async def run_llm_async(
     *, view: LLMView, main_view: "ExampleMainView", model: "Model"
 ) -> None:
+    append_last_question(main_view.llm, model)
     await network.fetch_async(
         main_view,
         "http://localhost:11434/api/chat",
@@ -112,14 +117,14 @@ def write_content(
     json_response = view.received_data
     if json_response is not None:
         model.root.answers.append(json_response["message"]["content"])
-    tools.update_view_with_dependencies(main_view.llm)
+        main_view.llm.conversation.field_view.append_text(model.get_last_answer())
 
 
 def initialize_form(view: LLMView, model: "Model") -> None:
     form.initialize_form_view_items(view, LLMItems(model, view))
     view.title = "LLM"
     view.conversation.field_view.is_read_only = True
-    view.conversation.field_view.text_type = TextEditType.MARKDOWN
+    view.conversation.field_view.text_type = TextEditType.HTML
     view.apply_button_text = "Ask"
 
 

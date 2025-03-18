@@ -33,7 +33,7 @@ from composeui.form.formview import (  # IFormView,; IGroupBoxFormView,
     Vector3DView,
 )
 
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QColor, QTextCursor
 from qtpy.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -210,7 +210,13 @@ class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
 
     def append_text(self, text: str) -> None:
         """Append the given text."""
-        self.view.append(text.rstrip("\n"))
+        if self.text_type == TextEditType.HTML:
+            self.view.moveCursor(QTextCursor.End)
+            self.view.insertHtml(text)
+            self.view.moveCursor(QTextCursor.PreviousBlock)
+            self.view.ensureCursorVisible()
+        else:
+            self.view.append(text.rstrip("\n"))
 
 
 @dataclass(eq=False)

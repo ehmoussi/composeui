@@ -38,22 +38,21 @@ class Model(MashumaroModel[LLMConfig]):
             messages.append({"role": "user", "content": self.root.questions[-1]})
         return messages
 
-    def build_conversation(self) -> str:
-        conversation = ""
+    def get_last_question(self) -> str:
+        question = self.root.questions[-1]
+        return (
+            "<b><i>You</i></b>:"
+            f"<blockquote><i>{question if question else 'No question'}</i></blockquote><br/>"
+        )
+
+    def get_last_answer(self) -> str:
+        answer = self.root.answers[-1]
         llm = self._clean_llm_name(self.get_current_llm())
-        for question, answer in zip(self.root.questions, self.root.answers):
-            text = (
-                f"> ***You*** {' ' * max(len(llm) - 4, 0)}: "
-                f"*{question if question else 'No question'}*"
-                "\n\n"
-                f"> **{llm}**: {self._clean_answer(answer)}\n\n"
-            )
-            conversation += text
-        return conversation
+        return f"<b>{llm}</b>:<blockquote>{self._clean_answer(answer)}</blockquote><br/>"
 
     def _clean_answer(self, answer: str) -> str:
         """Clean the answer of the LLM."""
-        return answer.replace("\n", "\n>> ")
+        return answer.replace("\n", "<br/>")
 
     def _clean_llm_name(self, name: str) -> str:
         """Clean the name of the LLM to dump the version."""
