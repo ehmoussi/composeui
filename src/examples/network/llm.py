@@ -27,7 +27,7 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
 
     def get_value(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Any:
         if field == "llm":
-            return self._model.root.llm
+            return self._model.get_current_llm()
         elif field == "question":
             return ""
         elif field == "conversation":
@@ -36,7 +36,10 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
 
     def set_value(self, field: str, value: Any, parent_fields: Tuple[str, ...] = ()) -> bool:
         if field == "llm":
-            self._model.root.llm = str(value)
+            try:
+                self._model.root.current_index_llm = self._model.root.llms.index(str(value))
+            except ValueError:
+                return False
             return True
         elif field == "question":
             self._model.root.questions.append(str(value))
@@ -48,7 +51,7 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
     ) -> Optional[Sequence[Any]] | None:
         if field == "llm":
             return self._model.root.llms
-        return None
+        return super().acceptable_values(field, parent_fields)
 
 
 @dataclass(eq=False)
@@ -95,7 +98,7 @@ async def run_llm_async(
         "http://localhost:11434/api/chat",
         HttpMethod.POST,
         {
-            "model": "llama3.1",  # model.root.llms[view.llm.field_view.current_index],
+            "model": model.root.llms[view.llm.field_view.current_index],
             "messages": model.build_ollama_messages(),
             "stream": False,
         },

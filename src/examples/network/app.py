@@ -15,13 +15,20 @@ from typing import Dict, List
 
 @dataclass
 class LLMConfig(DataClassJSONMixin):
-    llm: str = "llama3.1"
     questions: List[str] = field(default_factory=list)
     answers: List[str] = field(default_factory=list)
     llms: List[str] = field(default_factory=list)
+    current_index_llm: int = 0
 
 
 class Model(MashumaroModel[LLMConfig]):
+
+    def get_current_llm(self) -> str:
+        """Get the current LLM."""
+        if self.root.current_index_llm < len(self.root.llms):
+            return self.root.llms[self.root.current_index_llm]
+        return ""
+
     def build_ollama_messages(self) -> List[Dict[str, str]]:
         messages = []
         for question, answer in zip(self.root.questions, self.root.answers):
