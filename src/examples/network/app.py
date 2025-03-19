@@ -12,6 +12,8 @@ from qtpy import API
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+import itertools as it
+
 
 @dataclass
 class LLMConfig(DataClassJSONMixin):
@@ -38,18 +40,27 @@ class Model(MashumaroModel[LLMConfig]):
             messages.append({"role": "user", "content": self.root.questions[-1]})
         return messages
 
+    def build_conversation(self) -> str:
+        """Build the whole conversation."""
+        conversation = ""
+        for question, answer in it.zip_longest(
+            self.root.questions, self.root.answers, fillvalue=None
+        ):
+            if question is not None:
+                conversation += self._get_question(question)
+            if answer is not None:
+                conversation += self._get_answer(answer)
+        return conversation
+
     def get_last_question(self) -> str:
-        question = self.root.questions[-1]
-        return (
-            "<br/><p><b><i>You</i></b>:</p>"
-            f"<p><blockquote><i>{question if question else 'No question'}</i></blockquote></p>"
-        )
+        if len(self.root.questions) > 0:
+            return self._get_question(self.root.questions[-1])
+        return ""
 
     def get_last_answer(self) -> str:
-        answer = self.root.answers[-1]
-        return (
-            f"{self.get_answer_header()}{self.clean_answer(answer)}{self.get_answer_footer()}"
-        )
+        if len(self.root.answers) > 0:
+            return self._get_answer(self.root.answers[-1])
+        return ""
 
     def get_answer_header(self) -> str:
         llm = self._clean_llm_name(self.get_current_llm())
@@ -61,6 +72,17 @@ class Model(MashumaroModel[LLMConfig]):
     def clean_answer(self, answer: str) -> str:
         """Clean the answer of the LLM."""
         return answer.replace("\n", "<br/>").replace(" ", "&nbsp;")
+
+    def _get_answer(self, answer: str) -> str:
+        return (
+            f"{self.get_answer_header()}{self.clean_answer(answer)}{self.get_answer_footer()}"
+        )
+
+    def _get_question(self, question: str) -> str:
+        return (
+            "<br/><p><b><i>You</i></b>:</p>"
+            f"<p><blockquote><i>{question if question else 'No question'}</i></blockquote></p>"
+        )
 
     def _clean_llm_name(self, name: str) -> str:
         """Clean the name of the LLM to dump the version."""

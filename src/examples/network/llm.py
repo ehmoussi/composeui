@@ -28,8 +28,10 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
     def get_value(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Any:
         if field == "llm":
             return self._model.get_current_llm()
-        elif field in ("question", "conversation"):
+        elif field == "question":
             return ""
+        elif field == "conversation":
+            return self._model.build_conversation()
         return super().get_value(field, parent_fields)
 
     def set_value(self, field: str, value: Any, parent_fields: Tuple[str, ...] = ()) -> bool:
