@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "composeui"
 description = "Python framework to build user interfaces."
+license = { text = "BSD-3-Clause" }
 readme = "README.md"
 requires-python = ">=3.6.5"
 keywords = ["widgets", "pyqt", "mvp"]
