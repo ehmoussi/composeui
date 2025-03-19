@@ -7,13 +7,7 @@ from qtpy.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    AsyncGenerator,
-    Callable,
-    Dict,
-    Optional,
-)
+from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 
 @dataclass(eq=False)

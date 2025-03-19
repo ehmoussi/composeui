@@ -9,10 +9,9 @@ from examples.network.llm import connect_llm, connect_llm_async, initialize_form
 from mashumaro.mixins.json import DataClassJSONMixin
 from qtpy import API
 
+import itertools as it
 from dataclasses import dataclass, field
 from typing import Dict, List
-
-import itertools as it
 
 
 @dataclass
@@ -33,11 +32,13 @@ class Model(MashumaroModel[LLMConfig]):
 
     def build_ollama_messages(self) -> List[Dict[str, str]]:
         messages = []
-        for question, answer in zip(self.root.questions, self.root.answers):
-            messages.append({"role": "user", "content": question})
-            messages.append({"role": "assistant", "content": answer})
-        if len(self.root.questions) > len(self.root.answers):
-            messages.append({"role": "user", "content": self.root.questions[-1]})
+        for question, answer in it.zip_longest(
+            self.root.questions, self.root.answers, fillvalue=None
+        ):
+            if question is not None:
+                messages.append({"role": "user", "content": question})
+            if answer is not None:
+                messages.append({"role": "assistant", "content": answer})
         return messages
 
     def build_conversation(self) -> str:
@@ -47,38 +48,40 @@ class Model(MashumaroModel[LLMConfig]):
             self.root.questions, self.root.answers, fillvalue=None
         ):
             if question is not None:
-                conversation += self._get_question(question)
+                conversation += self._get_html_question(question)
             if answer is not None:
-                conversation += self._get_answer(answer)
+                conversation += self._get_html_answer(answer)
         return conversation
 
-    def get_last_question(self) -> str:
+    def get_last_html_question(self) -> str:
         if len(self.root.questions) > 0:
-            return self._get_question(self.root.questions[-1])
+            return self._get_html_question(self.root.questions[-1])
         return ""
 
-    def get_last_answer(self) -> str:
+    def get_last_html_answer(self) -> str:
         if len(self.root.answers) > 0:
-            return self._get_answer(self.root.answers[-1])
+            return self._get_html_answer(self.root.answers[-1])
         return ""
 
-    def get_answer_header(self) -> str:
+    def get_answer_html_header(self) -> str:
         llm = self._clean_llm_name(self.get_current_llm())
         return f"<br/><p><b>{llm}</b>:</p><p><blockquote>"
 
-    def get_answer_footer(self) -> str:
+    def get_answer_html_footer(self) -> str:
         return "</blockquote></p>"
 
     def clean_answer(self, answer: str) -> str:
         """Clean the answer of the LLM."""
         return answer.replace("\n", "<br/>").replace(" ", "&nbsp;")
 
-    def _get_answer(self, answer: str) -> str:
+    def _get_html_answer(self, answer: str) -> str:
         return (
-            f"{self.get_answer_header()}{self.clean_answer(answer)}{self.get_answer_footer()}"
+            f"{self.get_answer_html_header()}"
+            f"{self.clean_answer(answer)}"
+            f"{self.get_answer_html_footer()}"
         )
 
-    def _get_question(self, question: str) -> str:
+    def _get_html_question(self, question: str) -> str:
         return (
             "<br/><p><b><i>You</i></b>:</p>"
             f"<p><blockquote><i>{question if question else 'No question'}</i></blockquote></p>"

@@ -77,7 +77,7 @@ def fill_llms(*, main_view: "ExampleMainView", model: "Model") -> None:
 
 
 def append_last_question(view: LLMView, model: "Model") -> None:
-    view.conversation.field_view.append_text(model.get_last_question())
+    view.conversation.field_view.append_text(model.get_last_html_question())
     view.question.field_view.text = ""
 
 
@@ -102,7 +102,7 @@ def write_content(
     json_response = view.received_data
     if json_response is not None:
         model.root.answers.append(json_response["message"]["content"])
-        main_view.llm.conversation.field_view.append_text(model.get_last_answer())
+        main_view.llm.conversation.field_view.append_text(model.get_last_html_answer())
 
 
 async def run_llm_async(
@@ -110,7 +110,7 @@ async def run_llm_async(
 ) -> None:
     append_last_question(main_view.llm, model)
     answer = ""
-    view.conversation.field_view.append_text(model.get_answer_header())
+    view.conversation.field_view.append_text(model.get_answer_html_header())
     async for json_response in network.fetch_stream_async(
         main_view,
         "http://localhost:11434/api/chat",
@@ -125,9 +125,8 @@ async def run_llm_async(
             partial_answer = json_response["message"]["content"]
             answer += partial_answer
             view.conversation.field_view.append_text(model.clean_answer(partial_answer))
-    view.conversation.field_view.append_text(model.get_answer_footer())
+    view.conversation.field_view.append_text(model.get_answer_html_footer())
     model.root.answers.append(answer)
-    # write_content(view=main_view.network_manager, main_view=main_view, model=model)
 
 
 def initialize_form(view: LLMView, model: "Model") -> None:
