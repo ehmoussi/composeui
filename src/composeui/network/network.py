@@ -57,7 +57,7 @@ async def fetch_async(
 
 async def fetch_stream_async(
     main_view: MainView, url: str, method: HttpMethod, body: Optional[Dict[str, Any]] = None
-) -> AsyncGenerator[Any | None, None]:
+) -> AsyncGenerator[Optional[Any], None]:
     clean_network_manager(main_view=main_view)
     main_view.network_manager.url = url
     main_view.network_manager.method = method

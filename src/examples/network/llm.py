@@ -48,7 +48,7 @@ class LLMItems(AbstractFormItems["Model", "LLMView"]):
 
     def acceptable_values(
         self, field: str, parent_fields: Tuple[str, ...] = ()
-    ) -> Optional[Sequence[Any]] | None:
+    ) -> Optional[Sequence[Any]]:
         if field == "llm":
             return self._model.root.llms
         return super().acceptable_values(field, parent_fields)

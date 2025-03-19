@@ -30,5 +30,5 @@ class NetworkManager(View):
 
     async def run_async(self) -> None: ...
 
-    async def stream(self) -> AsyncGenerator[Any | None, None]:
+    async def stream(self) -> AsyncGenerator[Optional[Any], None]:
         yield None

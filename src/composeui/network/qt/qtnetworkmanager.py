@@ -35,7 +35,7 @@ class QtNetworkManager(QtView, NetworkManager):
             HttpMethod.POST: self._manager.post,
             HttpMethod.PUT: self._manager.put,
         }
-        self._queue: asyncio.Queue[Any | None] = asyncio.Queue()
+        self._queue: asyncio.Queue[Optional[Any]] = asyncio.Queue()
         self._lock = asyncio.Lock()
 
     @property  # type: ignore[misc]
@@ -74,7 +74,7 @@ class QtNetworkManager(QtView, NetworkManager):
             if self._reply is None:
                 break
 
-    async def stream(self) -> AsyncGenerator[Any | None, None]:
+    async def stream(self) -> AsyncGenerator[Optional[Any], None]:
         self._run()
         if self._reply is not None:
             self._reply.readyRead.connect(
