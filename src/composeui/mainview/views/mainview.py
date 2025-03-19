@@ -5,6 +5,7 @@ from composeui.mainview.views.mainmenu import MainMenu
 from composeui.mainview.views.maintoolbar import MainToolBar
 from composeui.mainview.views.messageview import MessageView
 from composeui.mainview.views.progresspopupview import ProgressPopupView
+from composeui.network.networkmanager import NetworkManager
 
 from dataclasses import dataclass, field
 
@@ -17,6 +18,7 @@ class MainView(View):
     force_close: bool = field(init=False, default=False)
     message_before_closing: str = field(init=False, default="")
 
+    on_start: BaseSignal = field(init=False, repr=False, default=BaseSignal())
     save_before_exit: BaseSignal = field(init=False, repr=False, default=BaseSignal())
     update_all: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
@@ -26,4 +28,7 @@ class MainView(View):
     file_view: FileView = field(init=False, repr=False, default_factory=FileView)
     progress_popup_view: ProgressPopupView = field(
         init=False, repr=False, default_factory=ProgressPopupView
+    )
+    network_manager: NetworkManager = field(
+        init=False, repr=False, default_factory=NetworkManager
     )

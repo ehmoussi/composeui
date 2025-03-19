@@ -18,6 +18,7 @@ from composeui.form.formview import (
     RowView,
     SelectFileView,
     SpinBoxView,
+    TextEditView,
     Vector3DView,
 )
 from composeui.mainview.views.mainview import MainView
@@ -152,7 +153,8 @@ def update_apply_form(*, view: FormView[AnyFormItems]) -> None:
             elif isinstance(field_view, (ComboBoxView, ComboBoxItemsView, ButtonsGroupView)):
                 update_current_index(view=field_view, with_update=False)
             elif isinstance(
-                field_view, (LabelView, CheckBoxView, LineEditView, SelectFileView)
+                field_view,
+                (LabelView, CheckBoxView, LineEditView, SelectFileView, TextEditView),
             ):
                 update_text(view=field_view, with_update=False)
             elif isinstance(field_view, Vector3DView):

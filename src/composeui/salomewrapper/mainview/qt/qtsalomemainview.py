@@ -100,4 +100,4 @@ class QtSalomeMainView(QtView, SalomeMainView):
                 action.setVisible(is_visible)
 
     def _get_salome_desktop(self) -> QMainWindow:
-        return cast(QMainWindow, helper.sgPyQt.getDesktop())
+        return cast("QMainWindow", helper.sgPyQt.getDesktop())

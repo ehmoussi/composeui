@@ -26,7 +26,7 @@ class QtTableView(QtItemsView, TableView[AnyTableItems]):
     @property  # type: ignore[misc]
     def items(self) -> Optional[AnyTableItems]:
         if self.table_widget.items is not None:
-            return cast(AnyTableItems, self.table_widget.items)
+            return cast("AnyTableItems", self.table_widget.items)
         else:
             return None
 
@@ -60,7 +60,7 @@ class QtTableGroupView(QtItemsGroupView, TableGroupView[AnyTableItems]):
     @property  # type: ignore[misc]
     def items(self) -> Optional[AnyTableItems]:
         if self.table_widget.items is not None:
-            return cast(AnyTableItems, self.table_widget.items)
+            return cast("AnyTableItems", self.table_widget.items)
         else:
             return None
 

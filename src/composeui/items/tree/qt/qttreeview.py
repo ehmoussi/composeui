@@ -24,7 +24,7 @@ class QtTreeView(QtItemsView, TreeView[AnyTreeItems]):
     @property  # type: ignore[misc]
     def items(self) -> Optional[AnyTreeItems]:
         if self.table_widget.items is not None:
-            return cast(AnyTreeItems, self.table_widget.items)
+            return cast("AnyTreeItems", self.table_widget.items)
         else:
             return None
 
@@ -60,7 +60,7 @@ class QtTreeGroupView(
     @property  # type: ignore[misc]
     def items(self) -> Optional[AnyTreeItems]:
         if self.table_widget.items is not None:
-            return cast(AnyTreeItems, self.table_widget.items)
+            return cast("AnyTreeItems", self.table_widget.items)
         else:
             return None
 

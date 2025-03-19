@@ -6,9 +6,10 @@ from composeui.mainview.qt.qtmessageview import QtMessageView
 from composeui.mainview.qt.qtprogresspopupview import QtProgressPopupView
 from composeui.mainview.qt.widgets.mainwindow import MainWindow
 from composeui.mainview.views.mainview import MainView
+from composeui.network.qt.qtnetworkmanager import QtNetworkManager
 
 from qtpy import API
-from qtpy.QtCore import QLocale
+from qtpy.QtCore import QLocale, QTimer
 from qtpy.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 import signal
@@ -60,9 +61,13 @@ class QtMainView(QtView, MainView):
         self.file_view = QtFileView(self.view)
         # progress view
         self.progress_popup_view = QtProgressPopupView(self.view)
+        # network view
+        self.network_manager = QtNetworkManager()
         # assign signals
         self.save_before_exit.add_qt_signals((self.view, self.view.save_before_exit))
+        self.on_start.add_qt_signals((self.view, self.view.on_start))
         # update_all signal is not a qt signal
+        QTimer.singleShot(1, self.view.on_start.emit)
 
     @property  # type: ignore[misc]
     def title(self) -> str:

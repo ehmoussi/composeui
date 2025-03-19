@@ -12,6 +12,7 @@ class MainWindow(QMainWindow):
     r"""Main window with signals for copy/paste."""
 
     save_before_exit = Signal()
+    on_start = Signal()
 
     def __init__(
         self,

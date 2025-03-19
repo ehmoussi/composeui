@@ -33,7 +33,7 @@ from composeui.form.formview import (  # IFormView,; IGroupBoxFormView,
     Vector3DView,
 )
 
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QColor, QTextCursor
 from qtpy.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -210,7 +210,13 @@ class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
 
     def append_text(self, text: str) -> None:
         """Append the given text."""
-        self.view.append(text.rstrip("\n"))
+        if self.text_type == TextEditType.HTML:
+            self.view.moveCursor(QTextCursor.End)
+            self.view.insertHtml(text)
+            self.view.moveCursor(QTextCursor.PreviousBlock)
+            self.view.ensureCursorVisible()
+        else:
+            self.view.append(text.rstrip("\n"))
 
 
 @dataclass(eq=False)
@@ -848,14 +854,22 @@ class QtApplyFormView(QtFormView[AnyFormItems], ApplyFormView[AnyFormItems]):
     validate_before_apply: bool = field(init=False, default=True)
 
     def __post_init__(self) -> None:
+        self.apply_button = QPushButton("Apply")
         super().__post_init__()
         self.apply_button_layout = QHBoxLayout()
         self.apply_button_layout.addStretch()
-        self.apply_button = QPushButton("Apply")
         self.apply_button_layout.addWidget(self.apply_button)
         # add signals
         self.apply_clicked.add_qt_signals((self.apply_button, self.apply_button.clicked))
         self.add_apply_button()
+
+    @property  # type: ignore[misc]
+    def apply_button_text(self) -> str:
+        return self.apply_button.text()
+
+    @apply_button_text.setter
+    def apply_button_text(self, text: str) -> None:
+        self.apply_button.setText(text)
 
     def add_apply_button(self) -> None:
         self.form_layout.addRow(self.apply_button_layout)
