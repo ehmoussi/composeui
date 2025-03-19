@@ -132,6 +132,7 @@ async def run_llm_async(
 def initialize_form(view: LLMView, model: "Model") -> None:
     form.initialize_form_view_items(view, LLMItems(model, view))
     view.title = "LLM"
+    view.conversation.field_view.minimum_height = 400
     view.conversation.field_view.is_read_only = True
     view.conversation.field_view.text_type = TextEditType.HTML
     view.apply_button_text = "Ask"

@@ -39,6 +39,28 @@ class QtView(View):
             self.view.setEnabled(is_enabled)
 
     @property  # type: ignore[misc]
+    def minimum_width(self) -> int:
+        if isinstance(self.view, QWidget):
+            return self.view.minimumWidth()
+        return 0
+
+    @minimum_width.setter
+    def minimum_width(self, width: int) -> None:
+        if isinstance(self.view, QWidget):
+            self.view.setMinimumWidth(width)
+
+    @property  # type: ignore[misc]
+    def minimum_height(self) -> int:
+        if isinstance(self.view, QWidget):
+            return self.view.minimumHeight()
+        return 0
+
+    @minimum_height.setter
+    def minimum_height(self, height: int) -> None:
+        if isinstance(self.view, QWidget):
+            self.view.setMinimumHeight(height)
+
+    @property  # type: ignore[misc]
     def block_signals(self) -> bool:
         return self._block_signals
 

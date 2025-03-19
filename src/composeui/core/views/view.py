@@ -9,6 +9,8 @@ class View:
     view_name: str = field(init=False)
     is_visible: bool = field(init=False, default=False)
     is_enabled: bool = field(init=False, default=False)
+    minimum_width: int = field(init=False, default=0)
+    minimum_height: int = field(init=False, default=0)
     children: MutableMapping[str, "View"] = field(init=False, repr=False, default_factory=dict)
     dependencies: List["View"] = field(init=False, repr=False, default_factory=list)
     block_signals: bool = field(init=False, default=False)

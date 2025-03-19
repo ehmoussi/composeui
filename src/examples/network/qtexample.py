@@ -12,10 +12,7 @@ class QtExampleMainToolBar(QtMainToolBar, ExampleMainToolBar): ...
 
 
 @dataclass(eq=False)
-class QtLLMView(QtGroupBoxApplyFormView[LLMItems], LLMView):
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.conversation.field_view.view.setMinimumHeight(400)  # type: ignore[attr-defined]
+class QtLLMView(QtGroupBoxApplyFormView[LLMItems], LLMView): ...
 
 
 @dataclass(eq=False)
@@ -25,6 +22,7 @@ class QtExampleMainView(QtMainView, ExampleMainView):
 
     def __post_init__(self, with_app: bool) -> None:
         super().__post_init__(with_app)
+        self.view.setMinimumHeight(680)
         self.toolbar = QtExampleMainToolBar(self.view)
         self.llm = QtLLMView()
         self.central_layout.addWidget(self.llm.view)
