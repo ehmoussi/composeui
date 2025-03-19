@@ -27,7 +27,7 @@ class QtWorkerView(QtView, WorkerView[T]):
 
     @property  # type: ignore[misc]
     def tasks(self) -> Optional[Tasks[T]]:
-        return cast(Optional[Tasks[T]], self.worker.tasks)
+        return cast("Optional[Tasks[T]]", self.worker.tasks)
 
     @tasks.setter
     def tasks(self, tasks: Optional[Tasks[T]]) -> None:

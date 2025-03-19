@@ -38,7 +38,7 @@ class QtSalomeToolBar(QtView, ToolBar):
         if self.toolbar_id == -1:
             msg = f"Failed to add the toolbar '{self.name}'"
             raise ValueError(msg)
-        main_window = cast(QMainWindow, helper.sgPyQt.getDesktop())
+        main_window = cast("QMainWindow", helper.sgPyQt.getDesktop())
         toolbars = main_window.findChildren(QToolBar, self._internal_name)
         if len(toolbars) == 0:
             msg = f"Toolbar '{self.name}' ({self._internal_name}) not found"
