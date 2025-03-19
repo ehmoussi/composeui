@@ -41,18 +41,26 @@ class Model(MashumaroModel[LLMConfig]):
     def get_last_question(self) -> str:
         question = self.root.questions[-1]
         return (
-            "<b><i>You</i></b>:"
-            f"<blockquote><i>{question if question else 'No question'}</i></blockquote><br/>"
+            "<br/><p><b><i>You</i></b>:</p>"
+            f"<p><blockquote><i>{question if question else 'No question'}</i></blockquote></p>"
         )
 
     def get_last_answer(self) -> str:
         answer = self.root.answers[-1]
-        llm = self._clean_llm_name(self.get_current_llm())
-        return f"<b>{llm}</b>:<blockquote>{self._clean_answer(answer)}</blockquote><br/>"
+        return (
+            f"{self.get_answer_header()}{self.clean_answer(answer)}{self.get_answer_footer()}"
+        )
 
-    def _clean_answer(self, answer: str) -> str:
+    def get_answer_header(self) -> str:
+        llm = self._clean_llm_name(self.get_current_llm())
+        return f"<br/><p><b>{llm}</b>:</p><p><blockquote>"
+
+    def get_answer_footer(self) -> str:
+        return "</blockquote></p>"
+
+    def clean_answer(self, answer: str) -> str:
         """Clean the answer of the LLM."""
-        return answer.replace("\n", "<br/>")
+        return answer.replace("\n", "<br/>").replace(" ", "&nbsp;")
 
     def _clean_llm_name(self, name: str) -> str:
         """Clean the name of the LLM to dump the version."""

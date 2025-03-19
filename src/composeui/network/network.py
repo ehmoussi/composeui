@@ -5,7 +5,8 @@ from composeui.core.basesignal import CallbackFunc
 from composeui.mainview.views.mainview import MainView
 from composeui.network.networkmanager import HttpMethod
 
-from typing import Any, Dict, Iterable, Optional
+import asyncio
+from typing import Any, AsyncGenerator, Dict, Iterable, Optional
 
 
 def fetch(
@@ -52,3 +53,17 @@ async def fetch_async(
     await main_view.network_manager.run_async()
     check_reply(main_view=main_view)
     return main_view.network_manager.received_data
+
+
+async def fetch_stream_async(
+    main_view: MainView, url: str, method: HttpMethod, body: Optional[Dict[str, Any]] = None
+) -> AsyncGenerator[Any | None, None]:
+    clean_network_manager(main_view=main_view)
+    main_view.network_manager.url = url
+    main_view.network_manager.method = method
+    if body is not None:
+        main_view.network_manager.body = body
+    async for response in main_view.network_manager.stream():
+        check_reply(main_view=main_view)
+        await asyncio.sleep(0.1)
+        yield response

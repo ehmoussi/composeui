@@ -94,23 +94,6 @@ def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> N
     )
 
 
-async def run_llm_async(
-    *, view: LLMView, main_view: "ExampleMainView", model: "Model"
-) -> None:
-    append_last_question(main_view.llm, model)
-    await network.fetch_async(
-        main_view,
-        "http://localhost:11434/api/chat",
-        HttpMethod.POST,
-        {
-            "model": model.root.llms[view.llm.field_view.current_index],
-            "messages": model.build_ollama_messages(),
-            "stream": False,
-        },
-    )
-    write_content(view=main_view.network_manager, main_view=main_view, model=model)
-
-
 def write_content(
     *, view: NetworkManager, main_view: "ExampleMainView", model: "Model"
 ) -> None:
@@ -118,6 +101,31 @@ def write_content(
     if json_response is not None:
         model.root.answers.append(json_response["message"]["content"])
         main_view.llm.conversation.field_view.append_text(model.get_last_answer())
+
+
+async def run_llm_async(
+    *, view: LLMView, main_view: "ExampleMainView", model: "Model"
+) -> None:
+    append_last_question(main_view.llm, model)
+    answer = ""
+    view.conversation.field_view.append_text(model.get_answer_header())
+    async for json_response in network.fetch_stream_async(
+        main_view,
+        "http://localhost:11434/api/chat",
+        HttpMethod.POST,
+        {
+            "model": model.root.llms[view.llm.field_view.current_index],
+            "messages": model.build_ollama_messages(),
+            "stream": True,
+        },
+    ):
+        if json_response is not None:
+            partial_answer = json_response["message"]["content"]
+            answer += partial_answer
+            view.conversation.field_view.append_text(model.clean_answer(partial_answer))
+    view.conversation.field_view.append_text(model.get_answer_footer())
+    model.root.answers.append(answer)
+    # write_content(view=main_view.network_manager, main_view=main_view, model=model)
 
 
 def initialize_form(view: LLMView, model: "Model") -> None:

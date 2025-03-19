@@ -3,7 +3,7 @@ from composeui.core.views.view import View
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 
 class HttpMethod(enum.Enum):
@@ -29,3 +29,6 @@ class NetworkManager(View):
     def run(self) -> None: ...
 
     async def run_async(self) -> None: ...
+
+    async def stream(self) -> AsyncGenerator[Any | None, None]:
+        yield None
