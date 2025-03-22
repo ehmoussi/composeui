@@ -35,3 +35,15 @@ class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
         """Save the current study into a json file."""
         with open(filepath) as f:
             self.root = self.root.from_json(f.read())
+
+    def undo(self) -> None:
+        """Undo the last modification on the store."""
+
+    def redo(self) -> None:
+        """Redo the last undo modification on the store."""
+
+    def activate_history(self) -> None:
+        """Activate the history."""
+
+    def deactivate_history(self) -> None:
+        """Deactivate the history."""

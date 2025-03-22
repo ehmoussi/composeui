@@ -61,6 +61,16 @@ def save_before_exit(*, main_view: MainView, model: AnyModel) -> None:
     save_study(main_view, model, ask_filepath=False, force_close=True)
 
 
+def undo(*, main_view: MainView, model: AnyModel) -> None:
+    model.undo()
+    tools.update_all_views(main_view)
+
+
+def redo(*, main_view: MainView, model: AnyModel) -> None:
+    model.redo()
+    tools.update_all_views(main_view)
+
+
 def forced_exit(*, main_view: MainView, force_close: bool) -> None:
     r"""Force the exit of the application."""
     main_view.force_close = force_close

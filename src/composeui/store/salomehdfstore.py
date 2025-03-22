@@ -1,3 +1,4 @@
+from typing import Generator
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
@@ -33,3 +34,17 @@ class SalomeHDFStore(AbstractStore):
 
         self.is_opening_study = True
         salome.myStudy.Open(str(filepath))
+
+    def undo(self) -> None:
+        """Undo the last modification on the store."""
+
+    def redo(self) -> None:
+        """Redo the last undo modification on the store."""
+
+    def activate_history(self) -> None:
+        """Activate the history."""
+        raise NotImplementedError
+
+    def deactivate_history(self) -> None:
+        """Deactivate the history."""
+        raise NotImplementedError

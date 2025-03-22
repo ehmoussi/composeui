@@ -1,3 +1,4 @@
+import contextlib
 from composeui.store.abstractstore import AbstractStore, DataReadError
 
 import atexit
@@ -5,7 +6,7 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 
 class BaseModel:
@@ -111,6 +112,26 @@ class BaseModel:
             if self._is_debug:
                 raise
             raise ValueError("Something went wrong during the save.") from e
+
+    def undo(self) -> None:
+        for store in self.stores:
+            store.undo()
+
+    def redo(self) -> None:
+        for store in self.stores:
+            store.redo()
+
+    @contextlib.contextmanager
+    def activate_history(self) -> Generator[None, None, None]:
+        for store in self.stores:
+            with contextlib.suppress(NotImplementedError):
+                store.activate_history()
+        try:
+            yield
+        finally:
+            for store in self.stores:
+                with contextlib.suppress(NotImplementedError):
+                    store.deactivate_history()
 
     def clear_stores(self) -> None:
         """Clear all the stores."""

@@ -42,3 +42,15 @@ class MsgspecStore(AbstractStore, Generic[AnyMsgspecStruct]):
         with open(filepath, "rb") as f:
             decoder = msgspec.msgpack.Decoder(type(self.root))
             self.root = decoder.decode(f.read())
+
+    def undo(self) -> None:
+        """Undo the last modification on the store."""
+
+    def redo(self) -> None:
+        """Redo the last undo modification on the store."""
+
+    def activate_history(self) -> None:
+        """Activate the history."""
+
+    def deactivate_history(self) -> None:
+        """Deactivate the history."""

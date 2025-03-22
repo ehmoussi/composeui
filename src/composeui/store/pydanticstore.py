@@ -47,3 +47,15 @@ class PydanticStore(AbstractStore, Generic[AnyPydanticBaseModel]):
                 self.root = self.root.model_validate_json(f.read())
             except AttributeError:  # old version
                 self.root = self.root.parse_raw(f.read())
+
+    def undo(self) -> None:
+        """Undo the last modification on the store."""
+
+    def redo(self) -> None:
+        """Redo the last undo modification on the store."""
+
+    def activate_history(self) -> None:
+        """Activate the history."""
+
+    def deactivate_history(self) -> None:
+        """Deactivate the history."""

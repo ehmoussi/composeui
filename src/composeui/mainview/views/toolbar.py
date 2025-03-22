@@ -26,3 +26,5 @@ class FileToolBar(ToolBar):
     open_file: ActionView = field(init=False, repr=False, default_factory=ActionView)
     save: ActionView = field(init=False, repr=False, default_factory=ActionView)
     save_as: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    undo: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    redo: ActionView = field(init=False, repr=False, default_factory=ActionView)

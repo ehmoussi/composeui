@@ -41,6 +41,11 @@ def initialize_file_menu(view: FileMenu) -> bool:
     view.save_as.text = "Save As"
     view.save_as.icon = "save_as.png"
     view.save_as.shortcut = "Ctrl+Shift+s"
+    view.separator_undo_redo.is_separator = True
+    view.undo.text = "Undo"
+    view.undo.icon = "undo.png"
+    view.redo.text = "Redo"
+    view.redo.icon = "redo.png"
     view.separator_exit.is_separator = True
     view.exit_app.text = "Exit"
     view.exit_app.icon = "exit.png"
@@ -61,6 +66,10 @@ def initialize_file_toolbar(view: FileToolBar) -> bool:
     view.save.icon = "save.png"
     view.save_as.text = "Save As"
     view.save_as.icon = "save_as.png"
+    view.undo.text = "Undo"
+    view.undo.icon = "undo.png"
+    view.redo.text = "Redo"
+    view.redo.icon = "redo.png"
     return False
 
 
@@ -114,6 +123,8 @@ def connect_file_menu_toolbar(
         view.open_file.triggered = [study.open_file]
     view.save.triggered = [study.save]
     view.save_as.triggered = [study.save_as]
+    view.undo.triggered = [study.undo]
+    view.redo.triggered = [study.redo]
     return False
 
 
