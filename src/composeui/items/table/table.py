@@ -21,28 +21,28 @@ AnyTableView: TypeAlias = TableView[AbstractTableItems[Any]]
 
 def add_clicked(*, view: AnyTableView, model: AnyModel) -> None:
     r"""Add an item in the table."""
-    with model.record_history():
-        if view.items is not None:
-            new_selected_row: Optional[int] = None
-            selected_rows = view.items.get_selected_rows()
-            if len(selected_rows) > 0:
-                row = selected_rows[-1]
-            else:
-                row = view.items.get_nb_rows() - 1
+    if view.items is not None:
+        new_selected_row: Optional[int] = None
+        selected_rows = view.items.get_selected_rows()
+        if len(selected_rows) > 0:
+            row = selected_rows[-1]
+        else:
+            row = view.items.get_nb_rows() - 1
+        with model.record_history():
             new_selected_row = view.items.insert(row + 1)
-            # update pagination
-            # update the current page size to get the correct current page
-            # the update of the current page need to be done before the update of the table
-            # to display the correct rows for the new current page
-            pagination.update_current_page_size(view=view.pagination_view, parent_view=view)
-            if new_selected_row is not None:
-                view.items.page_navigator.set_current_page_from_row(new_selected_row)
-            else:
-                view.items.page_navigator.set_current_page_from_row(row + 1)
-            # update table
-            tools.update_view_with_dependencies(view)
-            if new_selected_row is not None:
-                view.items.set_selected_rows([new_selected_row])
+        # update pagination
+        # update the current page size to get the correct current page
+        # the update of the current page need to be done before the update of the table
+        # to display the correct rows for the new current page
+        pagination.update_current_page_size(view=view.pagination_view, parent_view=view)
+        if new_selected_row is not None:
+            view.items.page_navigator.set_current_page_from_row(new_selected_row)
+        else:
+            view.items.page_navigator.set_current_page_from_row(row + 1)
+        # update table
+        tools.update_view_with_dependencies(view)
+        if new_selected_row is not None:
+            view.items.set_selected_rows([new_selected_row])
 
 
 def remove_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
@@ -55,23 +55,23 @@ def remove_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
             new_selected_row: Optional[int] = None
             for row in sorted(view.items.get_selected_rows(), reverse=True):
                 new_selected_row = view.items.remove(row)
-            # remove the selection to force the update of the current indices
-            # of the linked table
-            view.items.set_selected_rows([])
-            # update pagination
-            # update the current page size to get the correct current page
-            # the update of the current page need to be done before the update of the table
-            # to display the correct rows for the new current page
-            pagination.update_current_page_size(view=view.pagination_view, parent_view=view)
-            if new_selected_row is None:
-                view.items.page_navigator.set_current_page_from_row(0)
-            else:
-                view.items.page_navigator.set_current_page_from_row(new_selected_row)
-            # update table
-            tools.update_view_with_dependencies(view)
-            # select eventually the position given by the remove method
-            if new_selected_row is not None:
-                view.items.set_selected_rows([new_selected_row])
+        # remove the selection to force the update of the current indices
+        # of the linked table
+        view.items.set_selected_rows([])
+        # update pagination
+        # update the current page size to get the correct current page
+        # the update of the current page need to be done before the update of the table
+        # to display the correct rows for the new current page
+        pagination.update_current_page_size(view=view.pagination_view, parent_view=view)
+        if new_selected_row is None:
+            view.items.page_navigator.set_current_page_from_row(0)
+        else:
+            view.items.page_navigator.set_current_page_from_row(new_selected_row)
+        # update table
+        tools.update_view_with_dependencies(view)
+        # select eventually the position given by the remove method
+        if new_selected_row is not None:
+            view.items.set_selected_rows([new_selected_row])
 
 
 def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
