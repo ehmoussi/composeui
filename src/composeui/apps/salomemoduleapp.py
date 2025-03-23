@@ -237,7 +237,7 @@ class SalomeModuleApp(EventDrivenAppMixin[V, AnyModel]):
             self._model.version,
         )
         logging.basicConfig(level=logging.INFO)
-        logging.info(  # noqa: LOG015
+        logging.getLogger("salome").info(
             "Generate the module '%s' successfully.", self.get_module_name()
         )
 
