@@ -5,10 +5,13 @@ from typing import Optional
 
 class AbstractHistory(ABC):
 
-    def get_filepath(self) -> Optional[Path]:
+    def open_history(self, filepath: Path) -> None:
         return None
 
-    def open_history(self, filepath: Path) -> None:
+    def save_history(self, filepath: Path) -> None:
+        return None
+
+    def get_extension(self) -> Optional[str]:
         return None
 
     @abstractmethod

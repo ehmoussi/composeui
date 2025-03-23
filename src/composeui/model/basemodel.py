@@ -116,12 +116,14 @@ class BaseModel:
                     # save history
                     history = store.get_history()
                     if history is not None:
-                        history_store_filepath = history.get_filepath()
-                        if history_store_filepath is not None:
+                        history_store_filename = self.get_history_store_filename(index)
+                        if history_store_filename is not None:
+                            history_store_filepath = Path(tmp_dir, history_store_filename)
+                            history.save_history(history_store_filepath)
                             tar.add(
                                 history_store_filepath,
-                                arcname=self.get_history_store_filename(index),
-                                recursive=history_store_filepath.is_dir(),
+                                arcname=history_store_filename,
+                                recursive=False,
                             )
                 # save other files
                 for other_filepath in self.other_files_dir.iterdir():
@@ -182,10 +184,10 @@ class BaseModel:
     def get_history_store_filename(self, index: int) -> Optional[str]:
         history = self.stores[index].get_history()
         if history is not None:
-            history_path = history.get_filepath()
-            if history_path is not None:
-                return f"history_store_{index}" + history_path.suffix
-        return ""
+            extension = history.get_extension()
+            if extension is not None:
+                return f"history_store_{index}{extension}"
+        return None
 
     def create_other_files_directory(self) -> Path:
         """Create a directory for the other files of the study."""

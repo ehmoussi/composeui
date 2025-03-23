@@ -6,18 +6,19 @@ from typing_extensions import Literal, TypeAlias
 import sqlite3
 import typing
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar
 
 if typing.TYPE_CHECKING:
-    from composeui.commontypes import AnyMashumaroDataClass
-    from composeui.store.mashumarostore import MashumaroStore
+    from composeui.store.jsonstore import JsonStore
 
 LogName: TypeAlias = Literal["undo", "redo"]
 
+T = TypeVar("T")
 
-class MashumaroHistory(AbstractHistory):
 
-    def __init__(self, store: "MashumaroStore[AnyMashumaroDataClass]") -> None:
+class JsonHistory(AbstractHistory):
+
+    def __init__(self, store: "JsonStore[T]") -> None:
         self._store = store
         self._history_store = SqliteStore(with_history=False)
         self.create_tables()
@@ -48,11 +49,15 @@ class MashumaroHistory(AbstractHistory):
             )
             db_conn.commit()
 
-    def get_filepath(self) -> Optional[Path]:
-        return self._history_store.get_filepath()
-
     def open_history(self, filepath: Path) -> None:
         self._history_store.open_study(filepath)
+        # self.create_tables()
+
+    def save_history(self, filepath: Path) -> None:
+        self._history_store.save_study(filepath)
+
+    def get_extension(self) -> Optional[str]:
+        return self._history_store.get_extension()
 
     def clear_history(self) -> None:
         self._history_store.clear_study()
@@ -76,7 +81,7 @@ class MashumaroHistory(AbstractHistory):
                 # set the current state to the redo log
                 self._set_state_json(self._get_current_idx(db_conn), "redo", db_conn)
                 # apply the state
-                self._store.root = self._store.root.from_json(state_json)
+                self._store.root = self._store.from_json(state_json)
                 db_conn.commit()
 
     def redo(self) -> None:
@@ -97,7 +102,7 @@ class MashumaroHistory(AbstractHistory):
                 # set the current state to the undo log
                 self._set_state_json(self._get_current_idx(db_conn), "undo", db_conn)
                 # apply the state
-                self._store.root = self._store.root.from_json(state_json)
+                self._store.root = self._store.from_json(state_json)
                 db_conn.commit()
 
     def start_recording(self) -> None:
@@ -153,11 +158,11 @@ class MashumaroHistory(AbstractHistory):
             INSERT INTO _CUI_{log_name.upper()}_LOG(idx, state_json)
             VALUES(:current_idx, :state_json)
             """,
-            {"current_idx": current_idx, "state_json": self._store.root.to_json()},
+            {"current_idx": current_idx, "state_json": self._store.to_json()},
         )
 
     def _has_state_changed(self, current_idx: int, db_conn: sqlite3.Connection) -> bool:
-        current_state = self._store.root.to_json()
+        current_state = self._store.to_json()
         old_state = self._get_state_json(current_idx, "undo", db_conn)
         return old_state != current_state
 
