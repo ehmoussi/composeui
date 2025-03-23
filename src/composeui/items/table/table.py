@@ -89,7 +89,9 @@ def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
             progresspopup.display_view(
                 main_view,
                 tasks=Tasks((task,), print_to_std=True),
-                finished_slots=[partial(tools.update_view_with_dependencies, view)],
+                finished_slots=[
+                    partial(tools.update_view_with_dependencies, view, reset_pagination=True)
+                ],
             )
     else:
         tools.display_error_message(
