@@ -1,10 +1,10 @@
 from composeui.history.abstracthistory import AbstractHistory
 
-from typing_extensions import Literal
+from typing_extensions import Literal, TypeAlias
 
 import sqlite3
 import typing
-from typing import List, Tuple, TypeAlias
+from typing import List, Tuple
 
 if typing.TYPE_CHECKING:
     from composeui.store.sqlitestore import SqliteStore
