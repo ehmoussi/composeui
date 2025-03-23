@@ -98,11 +98,17 @@ class SqliteHistory(AbstractHistory):
         """Stop recording the history."""
         with self._store.get_connection() as db_conn:
             self._drop_all_triggers("undo", db_conn)
-            db_conn.execute(
-                """--sql
-                DELETE FROM _CUI_REDO_LOG
-                """
-            )
+            if self._has_commands("undo", db_conn):
+                # The log of the redo need to be deleted because the future have been modified
+                # so the redo log contains an outdated timeline
+                db_conn.execute(
+                    """--sql
+                    DELETE FROM _CUI_REDO_LOG
+                    """
+                )
+            else:
+                # no commands have been recorded the index doesn't need to be incremented
+                self._decrement_current_idx(db_conn)
             db_conn.commit()
 
     def _increment_current_idx(self, db_conn: sqlite3.Connection) -> None:
@@ -141,13 +147,32 @@ class SqliteHistory(AbstractHistory):
         """Get the commands of the last index of the history."""
         result = db_conn.execute(
             f"""--sql
-            SELECT c_id, cmd FROM _CUI_{log_name.upper()}_LOG
+            SELECT c_id, cmd
+            FROM _CUI_{log_name.upper()}_LOG
             WHERE idx = :current_idx
             ORDER BY ord
             """,
             {"current_idx": current_idx},
         ).fetchall()
         return [(int(row[0]), str(row[1])) for row in result]
+
+    def _has_commands(self, log_name: str, db_conn: sqlite3.Connection) -> bool:
+        """Get the commands of the last index of the history."""
+        result = db_conn.execute(
+            f"""--sql
+            SELECT EXISTS(
+                SELECT 1
+                FROM _CUI_{log_name.upper()}_LOG
+                WHERE idx = :current_idx
+                ORDER BY ord
+                LIMIT 1
+            )
+            """,
+            {"current_idx": self._get_current_idx(db_conn)},
+        ).fetchone()
+        if result is not None:
+            return bool(result[0])
+        return False
 
     def _add_all_triggers(self, log_name: str, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
