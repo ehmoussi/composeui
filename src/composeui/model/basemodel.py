@@ -59,6 +59,7 @@ class BaseModel:
             # read the study in the specific format for each store
             ignore_patterns: List[str] = []
             for index, store in enumerate(self.stores):
+                # open store
                 store_filename = self.get_store_filename(index)
                 store_filepath = Path(tmp_dir, store_filename)
                 if not store_filepath.exists():
@@ -69,6 +70,19 @@ class BaseModel:
                     raise ValueError(msg)
                 store.open_study(store_filepath)
                 ignore_patterns.append(store_filename)
+                # open history (if it has one)
+                history = store.get_history()
+                history_store_filename = self.get_history_store_filename(index)
+                if history is not None and history_store_filename is not None:
+                    history_store_filepath = Path(tmp_dir, history_store_filename)
+                    if not history_store_filepath.exists():
+                        msg = (
+                            "Missing the history file for the store at the index "
+                            f"'{index}' inside {filepath}"
+                        )
+                        raise ValueError(msg)
+                    history.open_history(history_store_filepath)
+                    ignore_patterns.append(history_store_filename)
             # copy the other files in a new 'other files directory'
             new_other_files_dir = self.create_other_files_directory()
             # remove the directory to avoid the raise of an exception by copytree
@@ -99,6 +113,16 @@ class BaseModel:
                     store_filepath = Path(tmp_dir, self.get_store_filename(index))
                     store.save_study(store_filepath)
                     tar.add(store_filepath, arcname=store_filepath.name, recursive=False)
+                    # save history
+                    history = store.get_history()
+                    if history is not None:
+                        history_store_filepath = history.get_filepath()
+                        if history_store_filepath is not None:
+                            tar.add(
+                                history_store_filepath,
+                                arcname=self.get_history_store_filename(index),
+                                recursive=history_store_filepath.is_dir(),
+                            )
                 # save other files
                 for other_filepath in self.other_files_dir.iterdir():
                     tar.add(
@@ -154,6 +178,14 @@ class BaseModel:
 
     def get_store_filename(self, index: int) -> str:
         return f"store_{index}{self.stores[index].get_extension()}"
+
+    def get_history_store_filename(self, index: int) -> Optional[str]:
+        history = self.stores[index].get_history()
+        if history is not None:
+            history_path = history.get_filepath()
+            if history_path is not None:
+                return f"history_store_{index}" + history_path.suffix
+        return ""
 
     def create_other_files_directory(self) -> Path:
         """Create a directory for the other files of the study."""

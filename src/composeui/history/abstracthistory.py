@@ -1,7 +1,15 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Optional
 
 
 class AbstractHistory(ABC):
+
+    def get_filepath(self) -> Optional[Path]:
+        return None
+
+    def open_history(self, filepath: Path) -> None:
+        return None
 
     @abstractmethod
     def undo(self) -> None:

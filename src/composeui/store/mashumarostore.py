@@ -2,6 +2,7 @@
 
 from composeui.commontypes import AnyMashumaroDataClass
 from composeui.history.abstracthistory import AbstractHistory
+from composeui.history.mashumarohistory import MashumaroHistory
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
@@ -12,12 +13,13 @@ class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
     def __init__(self, root: AnyMashumaroDataClass) -> None:
         self.root = root
         self._is_debug = False
+        self._history = MashumaroHistory(self)
 
     def get_extension(self) -> str:
         return ".json"
 
     def get_history(self) -> Optional[AbstractHistory]:
-        return None
+        return self._history
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug
@@ -25,6 +27,7 @@ class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
     def clear_study(self) -> None:
         """Clear all the data."""
         self.root = self.root.from_dict({})
+        self._history.clear_history()
 
     def new_study(self) -> None:
         """Create a new study."""
