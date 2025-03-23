@@ -63,12 +63,12 @@ def save_before_exit(*, main_view: MainView, model: AnyModel) -> None:
 
 def undo(*, main_view: MainView, model: AnyModel) -> None:
     model.undo()
-    tools.update_all_views(main_view)
+    tools.update_all_views(main_view, reset_pagination=True)
 
 
 def redo(*, main_view: MainView, model: AnyModel) -> None:
     model.redo()
-    tools.update_all_views(main_view)
+    tools.update_all_views(main_view, reset_pagination=True)
 
 
 def forced_exit(*, main_view: MainView, force_close: bool) -> None:

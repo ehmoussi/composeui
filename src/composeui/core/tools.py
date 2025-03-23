@@ -3,7 +3,10 @@ r"""Common tools."""
 from composeui.core.views.view import View
 from composeui.form import form
 from composeui.form.formview import FormView, RowView
+from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.tableview import TableView
+from composeui.items.tree.abstracttreeitems import AbstractTreeItems
+from composeui.items.tree.treeview import TreeView
 from composeui.mainview.views.fileview import FileView
 from composeui.mainview.views.mainview import MainView
 from composeui.mainview.views.messageview import MessageView, MessageViewType
@@ -14,7 +17,7 @@ from collections import deque
 from typing import List, Optional, Set, Tuple
 
 
-def update_all_views(main_view: MainView) -> None:
+def update_all_views(main_view: MainView, reset_pagination: bool = False) -> None:
     r"""Update all the views."""
     # call the slots associated with the update all signal
     main_view.update_all()
@@ -22,7 +25,7 @@ def update_all_views(main_view: MainView) -> None:
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view, update_visibility=False)
+        _update_view(view, update_visibility=False, reset_pagination=reset_pagination)
 
 
 def update_view_with_dependencies(
@@ -47,6 +50,7 @@ def _update_view(
     keep_selection: bool = False,
     before_validation: bool = False,
     update_visibility: bool = True,
+    reset_pagination: bool = False,
 ) -> None:
     r"""Update the given view.
 
@@ -54,10 +58,14 @@ def _update_view(
     """
     view.block_signals = True
     try:
-        if isinstance(view, TableView) and view.items is not None:
+        if isinstance(view, (TableView, TreeView)) and view.items is not None:
             selected_items = OrderedDict[Tuple[int, ...], List[int]]()
             if keep_selection:
                 selected_items = view.selected_items
+            if reset_pagination and isinstance(
+                view.items, (AbstractTableItems, AbstractTreeItems)
+            ):
+                view.items.page_navigator.move_to_last_page()
             view.update()
             if keep_selection:
                 view.selected_items = selected_items
