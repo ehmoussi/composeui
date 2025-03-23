@@ -1,10 +1,11 @@
 """Data managing state using mashumaro."""
 
 from composeui.commontypes import AnyMashumaroDataClass
+from composeui.history.abstracthistory import AbstractHistory
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
-from typing import Generic
+from typing import Generic, Optional
 
 
 class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
@@ -14,6 +15,9 @@ class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
 
     def get_extension(self) -> str:
         return ".json"
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        return None
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug
@@ -35,15 +39,3 @@ class MashumaroStore(AbstractStore, Generic[AnyMashumaroDataClass]):
         """Save the current study into a json file."""
         with open(filepath) as f:
             self.root = self.root.from_json(f.read())
-
-    def undo(self) -> None:
-        """Undo the last modification on the store."""
-
-    def redo(self) -> None:
-        """Redo the last undo modification on the store."""
-
-    def activate_history(self) -> None:
-        """Activate the history."""
-
-    def deactivate_history(self) -> None:
-        """Deactivate the history."""

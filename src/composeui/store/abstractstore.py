@@ -1,5 +1,8 @@
+from composeui.history.abstracthistory import AbstractHistory
+
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 
 class AbstractStore(ABC):
@@ -10,6 +13,10 @@ class AbstractStore(ABC):
 
         For example, for sqlite: '.sqlite'
         """
+
+    @abstractmethod
+    def get_history(self) -> Optional[AbstractHistory]:
+        """Get the manager of the undo/redo of the history of the store."""
 
     @abstractmethod
     def set_debug_mode(self, is_debug: bool) -> None:
@@ -34,22 +41,6 @@ class AbstractStore(ABC):
         Return the list of relative path to the files specific to the format.
         The path need to be relative to the tar container.
         """
-
-    @abstractmethod
-    def undo(self) -> None:
-        """Undo the last modification on the store."""
-
-    @abstractmethod
-    def redo(self) -> None:
-        """Redo the last undo modification on the store."""
-
-    @abstractmethod
-    def activate_history(self) -> None:
-        """Activate the history."""
-
-    @abstractmethod
-    def deactivate_history(self) -> None:
-        """Deactivate the history."""
 
 
 class DataReadError(Exception):

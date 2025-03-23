@@ -1,8 +1,9 @@
 from composeui.commontypes import AnyPydanticBaseModel
+from composeui.history.abstracthistory import AbstractHistory
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
-from typing import Generic
+from typing import Generic, Optional
 
 
 class PydanticStore(AbstractStore, Generic[AnyPydanticBaseModel]):
@@ -19,6 +20,9 @@ class PydanticStore(AbstractStore, Generic[AnyPydanticBaseModel]):
 
     def get_extension(self) -> str:
         return ".json"
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        return None
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug
@@ -47,15 +51,3 @@ class PydanticStore(AbstractStore, Generic[AnyPydanticBaseModel]):
                 self.root = self.root.model_validate_json(f.read())
             except AttributeError:  # old version
                 self.root = self.root.parse_raw(f.read())
-
-    def undo(self) -> None:
-        """Undo the last modification on the store."""
-
-    def redo(self) -> None:
-        """Redo the last undo modification on the store."""
-
-    def activate_history(self) -> None:
-        """Activate the history."""
-
-    def deactivate_history(self) -> None:
-        """Deactivate the history."""

@@ -1,10 +1,11 @@
 from composeui.commontypes import AnyMsgspecStruct
+from composeui.history.abstracthistory import AbstractHistory
 from composeui.store.abstractstore import AbstractStore
 
 import msgspec
 
 from pathlib import Path
-from typing import Generic
+from typing import Generic, Optional
 
 
 class MsgspecStore(AbstractStore, Generic[AnyMsgspecStruct]):
@@ -21,6 +22,9 @@ class MsgspecStore(AbstractStore, Generic[AnyMsgspecStruct]):
 
     def get_extension(self) -> str:
         return ".json"
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        return None
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug
@@ -42,15 +46,3 @@ class MsgspecStore(AbstractStore, Generic[AnyMsgspecStruct]):
         with open(filepath, "rb") as f:
             decoder = msgspec.msgpack.Decoder(type(self.root))
             self.root = decoder.decode(f.read())
-
-    def undo(self) -> None:
-        """Undo the last modification on the store."""
-
-    def redo(self) -> None:
-        """Redo the last undo modification on the store."""
-
-    def activate_history(self) -> None:
-        """Activate the history."""
-
-    def deactivate_history(self) -> None:
-        """Deactivate the history."""

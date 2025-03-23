@@ -1,5 +1,6 @@
 """SqlAlchemy store."""
 
+from composeui.history.abstracthistory import AbstractHistory
 from composeui.store.abstractstore import AbstractStore
 
 from sqlalchemy import create_engine, text
@@ -43,6 +44,9 @@ class SqlAlchemyStore(AbstractStore):
             return ".sqlite"
         else:
             raise ValueError("Cannot get an extension for a database that is not sqlite.")
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        return None
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug

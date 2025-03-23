@@ -115,23 +115,29 @@ class BaseModel:
 
     def undo(self) -> None:
         for store in self.stores:
-            store.undo()
+            history = store.get_history()
+            if history is not None:
+                history.undo()
 
     def redo(self) -> None:
         for store in self.stores:
-            store.redo()
+            history = store.get_history()
+            if history is not None:
+                history.redo()
 
     @contextlib.contextmanager
     def activate_history(self) -> Generator[None, None, None]:
         for store in self.stores:
-            with contextlib.suppress(NotImplementedError):
-                store.activate_history()
+            history = store.get_history()
+            if history is not None:
+                history.start_recording()
         try:
             yield
         finally:
             for store in self.stores:
-                with contextlib.suppress(NotImplementedError):
-                    store.deactivate_history()
+                history = store.get_history()
+                if history is not None:
+                    history.stop_recording()
 
     def clear_stores(self) -> None:
         """Clear all the stores."""
