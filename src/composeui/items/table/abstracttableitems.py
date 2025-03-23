@@ -104,6 +104,16 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """
         return False
 
+    def set_data_with_history(self, row: int, column: int, value: str) -> bool:
+        """Set the data at the given row and column.
+
+        It is used to save the history of the modification.
+        If the data saved don't need to be in the history the method can be reimplemented
+        to avoid it.
+        """
+        with self._model.record_history():
+            return self.set_data(row, column, value)
+
     def get_edit_data(self, row: int, column: int) -> Any:
         """Get the data displayed during the edition of an item.
 
@@ -122,6 +132,16 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         don't return None.
         """
         return False
+
+    def set_checked_with_history(self, row: int, column: int, value: bool) -> bool:
+        """Set if the item is checked or not.
+
+        It is used to save the history of the modification.
+        If the check don't need to be in the history the method can be reimplemented
+        to avoid it.
+        """
+        with self._model.record_history():
+            return self.set_checked(row, column, value)
 
     def is_editable(self, row: int, column: int) -> bool:
         """Check if the item is editable."""

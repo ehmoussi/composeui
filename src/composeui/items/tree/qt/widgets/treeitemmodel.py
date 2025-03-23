@@ -200,13 +200,13 @@ class _TreeItemModel(QAbstractItemModel):
         parent_rows, row = rows[:-1], rows[-1]
         column = index.column()
         if role == Qt.EditRole:
-            is_ok = self.items.set_data(row, column, str(value), parent_rows)
+            is_ok = self.items.set_data_with_history(row, column, str(value), parent_rows)
             if is_ok:
                 self._cache_data[parent_rows][row][column] = str(value)
                 self.dataChanged.emit(index, index, [Qt.EditRole])
             return is_ok
         elif role == Qt.CheckStateRole:
-            is_ok = self.items.set_checked(row, column, bool(value), parent_rows)
+            is_ok = self.items.set_checked_with_history(row, column, bool(value), parent_rows)
             if is_ok:
                 self.dataChanged.emit(index, index, [Qt.CheckStateRole])
                 self.item_toggled.emit()
