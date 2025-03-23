@@ -180,13 +180,11 @@ class SqliteHistory(AbstractHistory):
 
     def _add_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
-            if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
-                self._add_triggers(table, log_name, db_conn)
+            self._add_triggers(table, log_name, db_conn)
 
     def _drop_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
-            if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
-                self._drop_triggers(table, log_name, db_conn)
+            self._drop_triggers(table, log_name, db_conn)
 
     def _add_triggers(
         self, table: str, log_name: LogName, db_conn: sqlite3.Connection
@@ -212,8 +210,8 @@ class SqliteHistory(AbstractHistory):
     ) -> None:
         cmd = f"'DELETE FROM {table} WHERE ROWID='||NEW.ROWID"
         db_conn.execute(
-            f"""
-            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
+            f"""--sql
+            CREATE TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
             AFTER INSERT ON {table}
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx,  ord, cmd)
@@ -238,8 +236,8 @@ class SqliteHistory(AbstractHistory):
         cmd += ", ".join(f"{column}='||QUOTE(OLD.{column})||'" for column in columns)
         cmd += " WHERE ROWID='||OLD.ROWID"
         db_conn.execute(
-            f"""
-            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
+            f"""--sql
+            CREATE TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
             AFTER UPDATE ON {table}
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
@@ -266,8 +264,8 @@ class SqliteHistory(AbstractHistory):
         cmd += ",".join(f"'||quote(OLD.{column})||'" for column in columns)
         cmd += ")'"
         db_conn.execute(
-            f"""
-            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
+            f"""--sql
+            CREATE TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
             BEFORE DELETE ON {table}
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
@@ -297,6 +295,7 @@ class SqliteHistory(AbstractHistory):
             FROM sqlite_schema
             WHERE type='table'
                 AND name NOT LIKE 'sqlite_%'
+                AND name NOT LIKE '_CUI_%' -- ignore the internal tables of the undo/redo
             """
         ).fetchall()
         return [str(row[0]) for row in result]
