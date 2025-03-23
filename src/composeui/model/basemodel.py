@@ -126,18 +126,26 @@ class BaseModel:
                 history.redo()
 
     @contextlib.contextmanager
-    def activate_history(self) -> Generator[None, None, None]:
+    def record_history(self) -> Generator[None, None, None]:
+        self.start_recording_history()
+        try:
+            yield
+        finally:
+            self.stop_recording_history()
+
+    def start_recording_history(self) -> None:
+        """Start recording the history."""
         for store in self.stores:
             history = store.get_history()
             if history is not None:
                 history.start_recording()
-        try:
-            yield
-        finally:
-            for store in self.stores:
-                history = store.get_history()
-                if history is not None:
-                    history.stop_recording()
+
+    def stop_recording_history(self) -> None:
+        """Stop recording the history."""
+        for store in self.stores:
+            history = store.get_history()
+            if history is not None:
+                history.stop_recording()
 
     def clear_stores(self) -> None:
         """Clear all the stores."""

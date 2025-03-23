@@ -1,5 +1,6 @@
-from typing_extensions import Literal
 from composeui.history.abstracthistory import AbstractHistory
+
+from typing_extensions import Literal
 
 import sqlite3
 import typing
