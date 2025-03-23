@@ -154,7 +154,7 @@ class SqliteHistory(AbstractHistory):
             SELECT c_id, cmd
             FROM _CUI_{log_name.upper()}_LOG
             WHERE idx = :current_idx
-            ORDER BY ord
+            ORDER BY ord DESC
             """,
             {"current_idx": current_idx},
         ).fetchall()
