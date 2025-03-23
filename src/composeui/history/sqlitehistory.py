@@ -290,13 +290,24 @@ class SqliteHistory(AbstractHistory):
         return [row["name"] for row in result]
 
     def _get_all_tables(self, db_conn: sqlite3.Connection) -> List[str]:
-        result = db_conn.execute(
-            """--sql
-            SELECT name
-            FROM sqlite_schema
-            WHERE type='table'
-                AND name NOT LIKE 'sqlite_%'
-                AND name NOT LIKE '_CUI_%' -- ignore the internal tables of the undo/redo
-            """
-        ).fetchall()
+        try:
+            result = db_conn.execute(
+                """--sql
+                SELECT name
+                FROM sqlite_schema
+                WHERE type='table'
+                    AND name NOT LIKE 'sqlite_%'
+                    AND name NOT LIKE '_CUI_%' -- ignore the internal tables of the undo/redo
+                """
+            ).fetchall()
+        except sqlite3.OperationalError:
+            result = db_conn.execute(
+                """--sql
+                SELECT name
+                FROM sqlite_master
+                WHERE type='table'
+                    AND name NOT LIKE 'sqlite_%'
+                    AND name NOT LIKE '_CUI_%' -- ignore the internal tables of the undo/redo
+                """
+            ).fetchall()
         return [str(row[0]) for row in result]
