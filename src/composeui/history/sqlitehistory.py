@@ -1,11 +1,15 @@
+from typing_extensions import Literal
 from composeui.history.abstracthistory import AbstractHistory
 
 import sqlite3
 import typing
-from typing import List, Tuple
+from typing import List, Tuple, TypeAlias
 
 if typing.TYPE_CHECKING:
     from composeui.store.sqlitestore import SqliteStore
+
+
+LogName: TypeAlias = Literal["undo", "redo"]
 
 
 class SqliteHistory(AbstractHistory):
@@ -142,7 +146,7 @@ class SqliteHistory(AbstractHistory):
         raise ValueError("Unexpected error: can't find the current index of the history")
 
     def _get_commands(
-        self, current_idx: int, log_name: str, db_conn: sqlite3.Connection
+        self, current_idx: int, log_name: LogName, db_conn: sqlite3.Connection
     ) -> List[Tuple[int, str]]:
         """Get the commands of the last index of the history."""
         result = db_conn.execute(
@@ -156,7 +160,7 @@ class SqliteHistory(AbstractHistory):
         ).fetchall()
         return [(int(row[0]), str(row[1])) for row in result]
 
-    def _has_commands(self, log_name: str, db_conn: sqlite3.Connection) -> bool:
+    def _has_commands(self, log_name: LogName, db_conn: sqlite3.Connection) -> bool:
         """Get the commands of the last index of the history."""
         result = db_conn.execute(
             f"""--sql
@@ -174,22 +178,26 @@ class SqliteHistory(AbstractHistory):
             return bool(result[0])
         return False
 
-    def _add_all_triggers(self, log_name: str, db_conn: sqlite3.Connection) -> None:
+    def _add_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
             if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
                 self._add_triggers(table, log_name, db_conn)
 
-    def _drop_all_triggers(self, log_name: str, db_conn: sqlite3.Connection) -> None:
+    def _drop_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
             if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
                 self._drop_triggers(table, log_name, db_conn)
 
-    def _add_triggers(self, table: str, log_name: str, db_conn: sqlite3.Connection) -> None:
+    def _add_triggers(
+        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
+    ) -> None:
         self._add_after_insert_trigger(table, log_name, db_conn)
         self._add_after_update_trigger(table, log_name, db_conn)
         self._add_after_delete_trigger(table, log_name, db_conn)
 
-    def _drop_triggers(self, table: str, log_name: str, db_conn: sqlite3.Connection) -> None:
+    def _drop_triggers(
+        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
+    ) -> None:
         db_conn.executescript(
             f"""--sql
             DROP TRIGGER IF EXISTS _{table}_after_insert_{log_name.lower()}_log;
@@ -200,7 +208,7 @@ class SqliteHistory(AbstractHistory):
         db_conn.commit()
 
     def _add_after_insert_trigger(
-        self, table: str, log_name: str, db_conn: sqlite3.Connection
+        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
     ) -> None:
         cmd = f"'DELETE FROM {table} WHERE ROWID='||NEW.ROWID"
         db_conn.execute(
@@ -223,7 +231,7 @@ class SqliteHistory(AbstractHistory):
         db_conn.commit()
 
     def _add_after_update_trigger(
-        self, table: str, log_name: str, db_conn: sqlite3.Connection
+        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
     ) -> None:
         columns = self._get_columns(table, db_conn)
         cmd = f"'UPDATE {table} SET "
@@ -249,7 +257,7 @@ class SqliteHistory(AbstractHistory):
         db_conn.commit()
 
     def _add_after_delete_trigger(
-        self, table: str, log_name: str, db_conn: sqlite3.Connection
+        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
     ) -> None:
         columns = self._get_columns(table, db_conn)
         cmd = f"'INSERT INTO {table}("
