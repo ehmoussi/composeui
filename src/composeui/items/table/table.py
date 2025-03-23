@@ -95,7 +95,7 @@ def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
                 tasks=Tasks((task,), print_to_std=True),
                 finished_slots=[
                     model.stop_recording_history,
-                    partial(tools.update_view_with_dependencies, view),
+                    partial(tools.update_view_with_dependencies, view, reset_pagination=True),
                 ],
             )
     else:

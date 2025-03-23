@@ -29,7 +29,10 @@ def update_all_views(main_view: MainView, reset_pagination: bool = False) -> Non
 
 
 def update_view_with_dependencies(
-    view: View, keep_selection: bool = False, before_validation: bool = False
+    view: View,
+    keep_selection: bool = False,
+    before_validation: bool = False,
+    reset_pagination: bool = False,
 ) -> None:
     r"""Update the given view and the views which depends on it."""
     dependencies = deque([view])
@@ -37,7 +40,10 @@ def update_view_with_dependencies(
     while len(dependencies) > 0:
         dependent_view = dependencies.popleft()
         _update_view(
-            dependent_view, keep_selection=keep_selection, before_validation=before_validation
+            dependent_view,
+            keep_selection=keep_selection,
+            before_validation=before_validation,
+            reset_pagination=reset_pagination,
         )
         updated_dependencies.add(dependent_view)
         for dependent_child_view in dependent_view.dependencies:
@@ -65,6 +71,9 @@ def _update_view(
             if reset_pagination and isinstance(
                 view.items, (AbstractTableItems, AbstractTreeItems)
             ):
+                view.items.page_navigator.update_current_page_size(
+                    view.pagination_view.current_page_size_index
+                )
                 view.items.page_navigator.move_to_last_page()
             view.update()
             if keep_selection:
