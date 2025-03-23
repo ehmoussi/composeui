@@ -237,7 +237,9 @@ class SalomeModuleApp(EventDrivenAppMixin[V, AnyModel]):
             self._model.version,
         )
         logging.basicConfig(level=logging.INFO)
-        logging.info("Generate the module '%s' successfully.", self.get_module_name())
+        logging.info(  # noqa: LOG015
+            "Generate the module '%s' successfully.", self.get_module_name()
+        )
 
     def _get_log_signals_variable_name(self) -> str:
         """Get the name of the environement variable used for the log signals argument."""

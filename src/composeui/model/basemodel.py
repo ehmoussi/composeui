@@ -1,7 +1,7 @@
-import contextlib
 from composeui.store.abstractstore import AbstractStore, DataReadError
 
 import atexit
+import contextlib
 import shutil
 import tarfile
 import tempfile

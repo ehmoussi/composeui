@@ -1,4 +1,3 @@
-from typing import Generator
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
