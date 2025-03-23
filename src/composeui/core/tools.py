@@ -1,5 +1,6 @@
 r"""Common tools."""
 
+from composeui import linkedtablefigure
 from composeui.core.views.view import View
 from composeui.form import form
 from composeui.form.formview import FormView, RowView
@@ -7,6 +8,7 @@ from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.tableview import TableView
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
 from composeui.items.tree.treeview import TreeView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview.views.fileview import FileView
 from composeui.mainview.views.mainview import MainView
 from composeui.mainview.views.messageview import MessageView, MessageViewType
@@ -78,6 +80,8 @@ def _update_view(
             view.update()
             if keep_selection:
                 view.selected_items = selected_items
+        elif isinstance(view, LinkedTableFigureView):
+            linkedtablefigure.update_figure(parent_view=view)
         elif isinstance(view, FormView) and view.items is not None:
             if not before_validation:
                 view.update()

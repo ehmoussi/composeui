@@ -1,12 +1,19 @@
 from composeui.commontypes import AnyTableItems
+from composeui.figure import initialize_figure_view
+from composeui.items.core.initialize import initialize_items_view
 from composeui.items.table import connect_table
 from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 
 
+def initialize_table_figure_view(view: LinkedTableFigureView[AnyTableItems]) -> bool:
+    initialize_items_view(view.table)
+    initialize_figure_view(view.figure)
+    view.table.dependencies.append(view)
+    return False
+
+
 def connect_table_figure_view(view: LinkedTableFigureView[AnyTableItems]) -> bool:
     connect_table(view.table)
-    view.table.add_clicked += [update_figure]
-    view.table.remove_clicked += [update_figure]
     view.table.item_edited += [update_figure]
     view.figure.clicked += [update_table_selection]
     return False

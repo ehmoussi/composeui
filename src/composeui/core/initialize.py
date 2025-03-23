@@ -15,6 +15,8 @@ from composeui.items.linkedtable.linkedtableview import LinkedTableView
 from composeui.items.table.tableview import TableView
 from composeui.items.tree import initialize_tree_view
 from composeui.items.tree.treeview import TreeView
+from composeui.linkedtablefigure import initialize_table_figure_view
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview import (
     initialize_file_menu,
     initialize_file_toolbar,
@@ -73,6 +75,8 @@ def initialize_default_view(view: View) -> bool:
         view.visible_views.clear()
     elif isinstance(view, LinkedTableView):
         return initialize_linked_table(view)
+    elif isinstance(view, LinkedTableFigureView):
+        return initialize_table_figure_view(view)
     elif isinstance(view, TreeView):
         return initialize_tree_view(view)
     elif isinstance(view, TableView):
