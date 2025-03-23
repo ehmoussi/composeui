@@ -148,10 +148,8 @@ class SqliteStore(AbstractStore):
         self.execute_sql_files(self._sql_trigger_files)
 
     def create_connection(self) -> sqlite3.Connection:
-        print(self._filepath)
         if self._filepath is not None:
             db_conn = sqlite3.connect(str(self._filepath), check_same_thread=False)
-            print("ok")
         else:
             db_conn = sqlite3.connect(str(self._tmp_sqlite_filepath), check_same_thread=False)
         db_conn.row_factory = sqlite3.Row
@@ -187,14 +185,13 @@ class SqliteHistory:
 
     def install_history(self) -> None:
         self._create_tables()
-        # self._add_all_triggers("undo")
 
     def undo(self) -> None:
         """Undo the last index of the history."""
-        self._add_all_triggers("redo")
-        current_idx = self._get_current_idx()
-        try:
-            with self._store.get_connection() as db_conn:
+        with self._store.get_connection() as db_conn:
+            self._add_all_triggers("redo", db_conn)
+            current_idx = self._get_current_idx(db_conn)
+            try:
                 commands = self._get_commands(current_idx, "undo", db_conn)
                 if len(commands) > 0:
                     # decrement the index of the history
@@ -210,15 +207,15 @@ class SqliteHistory:
                         {"c_id": c_id},
                     )
                 db_conn.commit()
-        finally:
-            self._drop_all_triggers("redo")
+            finally:
+                self._drop_all_triggers("redo", db_conn)
 
     def redo(self) -> None:
         """Redo the last index of the history."""
-        self._add_all_triggers("undo")
-        current_idx = self._get_current_idx()
-        try:
-            with self._store.get_connection() as db_conn:
+        with self._store.get_connection() as db_conn:
+            self._add_all_triggers("undo", db_conn)
+            current_idx = self._get_current_idx(db_conn)
+            try:
                 commands = self._get_commands(current_idx, "redo", db_conn)
                 if len(commands) > 0:
                     self._increment_current_idx(db_conn)
@@ -233,19 +230,19 @@ class SqliteHistory:
                         {"c_id": c_id},
                     )
                 db_conn.commit()
-        finally:
-            self._drop_all_triggers("undo")
+            finally:
+                self._drop_all_triggers("undo", db_conn)
 
     def activate(self) -> None:
         """Activate the history."""
-        self._add_all_triggers("undo")
         with self._store.get_connection() as db_conn:
+            self._add_all_triggers("undo", db_conn)
             self._increment_current_idx(db_conn)
             db_conn.commit()
 
     def deactivate(self) -> None:
-        self._drop_all_triggers("undo")
         with self._store.get_connection() as db_conn:
+            self._drop_all_triggers("undo", db_conn)
             db_conn.execute(
                 """--sql
                 DELETE FROM _CUI_REDO_LOG
@@ -271,15 +268,14 @@ class SqliteHistory:
             """
         )
 
-    def _get_current_idx(self) -> int:
-        with self._store.get_connection() as db_conn:
-            result = db_conn.execute(
-                """--sql
-                SELECT current_idx
-                FROM _CUI_INDEX
-                WHERE h_id=1
-                """
-            ).fetchone()
+    def _get_current_idx(self, db_conn: sqlite3.Connection) -> int:
+        result = db_conn.execute(
+            """--sql
+            SELECT current_idx
+            FROM _CUI_INDEX
+            WHERE h_id=1
+            """
+        ).fetchone()
         if result is not None:
             return int(result[0])
         raise ValueError("Unexpected error: can't find the current index of the history")
@@ -326,123 +322,123 @@ class SqliteHistory:
             )
             db_conn.commit()
 
-    def _add_all_triggers(self, log_name: str) -> None:
-        for table in self._get_all_tables():
+    def _add_all_triggers(self, log_name: str, db_conn: sqlite3.Connection) -> None:
+        for table in self._get_all_tables(db_conn):
             if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
-                self._add_triggers(table, log_name)
+                self._add_triggers(table, log_name, db_conn)
 
-    def _drop_all_triggers(self, log_name: str) -> None:
-        for table in self._get_all_tables():
+    def _drop_all_triggers(self, log_name: str, db_conn: sqlite3.Connection) -> None:
+        for table in self._get_all_tables(db_conn):
             if not table.startswith("_CUI_"):  # ignore the internal tables of the undo/redo
-                self._drop_triggers(table, log_name)
+                self._drop_triggers(table, log_name, db_conn)
 
-    def _add_triggers(self, table: str, log_name: str) -> None:
-        self._add_after_insert_trigger(table, log_name)
-        self._add_after_update_trigger(table, log_name)
-        self._add_after_delete_trigger(table, log_name)
+    def _add_triggers(self, table: str, log_name: str, db_conn: sqlite3.Connection) -> None:
+        self._add_after_insert_trigger(table, log_name, db_conn)
+        self._add_after_update_trigger(table, log_name, db_conn)
+        self._add_after_delete_trigger(table, log_name, db_conn)
 
-    def _drop_triggers(self, table: str, log_name: str) -> None:
-        with self._store.get_connection() as db_conn:
-            db_conn.executescript(
-                f"""--sql
-                DROP TRIGGER IF EXISTS _{table}_after_insert_{log_name.lower()}_log;
-                DROP TRIGGER IF EXISTS _{table}_after_update_{log_name.lower()}_log;
-                DROP TRIGGER IF EXISTS _{table}_after_delete_{log_name.lower()}_log;
-                """
-            )
-            db_conn.commit()
+    def _drop_triggers(self, table: str, log_name: str, db_conn: sqlite3.Connection) -> None:
+        db_conn.executescript(
+            f"""--sql
+            DROP TRIGGER IF EXISTS _{table}_after_insert_{log_name.lower()}_log;
+            DROP TRIGGER IF EXISTS _{table}_after_update_{log_name.lower()}_log;
+            DROP TRIGGER IF EXISTS _{table}_after_delete_{log_name.lower()}_log;
+            """
+        )
+        db_conn.commit()
 
-    def _add_after_insert_trigger(self, table: str, log_name: str) -> None:
-        with self._store.get_connection() as db_conn:
-            cmd = f"'DELETE FROM {table} WHERE ROWID='||NEW.ROWID"
-            db_conn.execute(
-                f"""--sql
-                CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
-                AFTER INSERT ON {table}
-                BEGIN
-                    INSERT INTO _CUI_{log_name.upper()}_LOG(idx,  ord, cmd)
-                    VALUES(
-                        (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
-                        COALESCE((
-                            SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
-                            WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
-                        ), 0),
-                        {cmd}
-                    );
-                END;
-                """
-            )
-            db_conn.commit()
+    def _add_after_insert_trigger(
+        self, table: str, log_name: str, db_conn: sqlite3.Connection
+    ) -> None:
+        cmd = f"'DELETE FROM {table} WHERE ROWID='||NEW.ROWID"
+        db_conn.execute(
+            f"""
+            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
+            AFTER INSERT ON {table}
+            BEGIN
+                INSERT INTO _CUI_{log_name.upper()}_LOG(idx,  ord, cmd)
+                VALUES(
+                    (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
+                    COALESCE((
+                        SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
+                        WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
+                    ), 0),
+                    {cmd}
+                );
+            END;
+            """
+        )
+        db_conn.commit()
 
-    def _add_after_update_trigger(self, table: str, log_name: str) -> None:
-        columns = self._get_columns(table)
-        with self._store.get_connection() as db_conn:
-            cmd = f"'UPDATE {table} SET "
-            cmd += ", ".join(f"{column}='||QUOTE(OLD.{column})||'" for column in columns)
-            cmd += " WHERE ROWID='||OLD.ROWID"
-            db_conn.execute(
-                f"""--sql
-                CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
-                AFTER UPDATE ON {table}
-                BEGIN
-                    INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
-                    VALUES(
-                        (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
-                        COALESCE((
-                            SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
-                            WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
-                        ), 0),
-                        {cmd}
-                    );
-                END;
-                """
-            )
-            db_conn.commit()
+    def _add_after_update_trigger(
+        self, table: str, log_name: str, db_conn: sqlite3.Connection
+    ) -> None:
+        columns = self._get_columns(table, db_conn)
+        cmd = f"'UPDATE {table} SET "
+        cmd += ", ".join(f"{column}='||QUOTE(OLD.{column})||'" for column in columns)
+        cmd += " WHERE ROWID='||OLD.ROWID"
+        db_conn.execute(
+            f"""
+            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
+            AFTER UPDATE ON {table}
+            BEGIN
+                INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
+                VALUES(
+                    (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
+                    COALESCE((
+                        SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
+                        WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
+                    ), 0),
+                    {cmd}
+                );
+            END;
+            """
+        )
+        db_conn.commit()
 
-    def _add_after_delete_trigger(self, table: str, log_name: str) -> None:
-        columns = self._get_columns(table)
-        with self._store.get_connection() as db_conn:
-            cmd = f"'INSERT INTO {table}("
-            cmd += ", ".join(columns)
-            cmd += ") VALUES("
-            cmd += ",".join(f"'||quote(OLD.{column})||'" for column in columns)
-            cmd += ")'"
-            db_conn.execute(
-                f"""--sql
-                CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
-                BEFORE DELETE ON {table}
-                BEGIN
-                    INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
-                    VALUES(
-                        (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
-                        COALESCE((
-                            SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
-                            WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
-                        ), 0),
-                        {cmd}
-                    );
-                END;
-                """
-            )
-            db_conn.commit()
+    def _add_after_delete_trigger(
+        self, table: str, log_name: str, db_conn: sqlite3.Connection
+    ) -> None:
+        columns = self._get_columns(table, db_conn)
+        cmd = f"'INSERT INTO {table}("
+        cmd += ", ".join(columns)
+        cmd += ") VALUES("
+        cmd += ",".join(f"'||quote(OLD.{column})||'" for column in columns)
+        cmd += ")'"
+        db_conn.execute(
+            f"""
+            CREATE TEMP TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
+            BEFORE DELETE ON {table}
+            BEGIN
+                INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
+                VALUES(
+                    (SELECT current_idx FROM _CUI_INDEX WHERE h_id=1),
+                    COALESCE((
+                        SELECT MAX(ord) + 1 FROM _CUI_{log_name.upper()}_LOG
+                        WHERE idx=(SELECT current_idx FROM _CUI_INDEX WHERE h_id=1)
+                    ), 0),
+                    {cmd}
+                );
+            END;
+            """
+        )
+        db_conn.commit()
 
-    def _get_columns(self, table: str) -> List[str]:
-        with self._store.get_connection() as db_conn:
-            result = db_conn.execute(
-                f"PRAGMA table_info({table})",
-            ).fetchall()
+    def _get_columns(self, table: str, db_conn: sqlite3.Connection) -> List[str]:
+        result = db_conn.execute(
+            f"PRAGMA table_info({table})",
+        ).fetchall()
         return [row["name"] for row in result]
 
-    def _get_all_tables(self) -> List[str]:
-        with self._store.get_connection() as db_conn:
-            result = db_conn.execute(
-                """--sql
-                SELECT name
-                FROM sqlite_schema
-                WHERE type='table'
-                    AND name NOT LIKE 'sqlite_%'
-                """
-            ).fetchall()
+    def _get_all_tables(self, db_conn: sqlite3.Connection) -> List[str]:
+        result = db_conn.execute(
+            """--sql
+            SELECT name
+            FROM sqlite_schema
+            WHERE type='table'
+                AND name NOT LIKE 'sqlite_%'
+            """
+        ).fetchall()
         return [str(row[0]) for row in result]
 
 
