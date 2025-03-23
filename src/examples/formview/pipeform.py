@@ -263,7 +263,7 @@ class AbstractPipeFormItems(AbstractFormItems["Model", V]):
 
 
 class PipeFormItems(AbstractPipeFormItems[PipeFormView]):
-    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
+    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Optional[bool]:
         if len(parent_fields) == 0:
             if field in ("chamfer", "fillet"):
                 return str(self.query.get_edge_type()) == field

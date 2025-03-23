@@ -16,7 +16,7 @@ from examples.formview.pipeform import (
 )
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from examples.formview.app import Model
@@ -75,7 +75,7 @@ class PipeApplyFormItems(AbstractPipeFormItems[PipeApplyFormView]):
     def query(self) -> PipeQuery:
         return self._model.apply_pipe_query
 
-    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
+    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Optional[bool]:
         """Check if the field is visible.
 
         The visibility must be dependent of the current values of the view.
