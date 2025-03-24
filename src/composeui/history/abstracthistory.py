@@ -10,12 +10,21 @@ class AbstractHistory(ABC):
         return 3  # 100
 
     def open_history(self, filepath: Optional[Path]) -> None:
+        """Open the history file if it exists and/or do the post process actions.
+
+        Useful to create the sqlite tables or triggers for example.
+        """
         return None
 
     def save_history(self, filepath: Path) -> None:
+        """Save the history if the history is saved in an another file than the store."""
         return None
 
     def get_extension(self) -> Optional[str]:
+        """Get the extension of the file where the history is saved.
+
+        Return None if the history is not saved in another file.
+        """
         return None
 
     @abstractmethod
