@@ -130,18 +130,18 @@ def test_undo_redo(app_task: Tuple[TaskView, ExampleMainView, Model]) -> None:
     view.config.percentage_failure.field_view.value = 100
     view.config.percentage_failure.field_view.value_changed()
     # undo
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.config.percentage_failure.field_view.value == 20
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.config.max_duration.field_view.value == 10
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.config.min_duration.field_view.value == 3
     # redo
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.config.min_duration.field_view.value == 1
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.config.max_duration.field_view.value == 5
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.config.percentage_failure.field_view.value == 100
 
 
@@ -158,9 +158,9 @@ def test_undo_redo_open_save(
     view.config.percentage_failure.field_view.value = 100
     view.config.percentage_failure.field_view.value_changed()
     # undo
-    main_view.toolbar.file.undo.triggered()
-    main_view.toolbar.file.undo.triggered()
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.config.min_duration.field_view.value == 3
     assert view.config.max_duration.field_view.value == 10
     assert view.config.percentage_failure.field_view.value == 20
@@ -171,7 +171,7 @@ def test_undo_redo_open_save(
     main_view.toolbar.file.save.triggered()
     # new
     main_view.toolbar.file.new.triggered()
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     # the history and the state is lost when doing new
     assert view.config.percentage_failure.field_view.value == 20
     # open
@@ -180,9 +180,9 @@ def test_undo_redo_open_save(
     )
     main_view.toolbar.file.open_file.triggered()
     # redo
-    main_view.toolbar.file.redo.triggered()
-    main_view.toolbar.file.redo.triggered()
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.config.min_duration.field_view.value == 1
     assert view.config.max_duration.field_view.value == 5
     assert view.config.percentage_failure.field_view.value == 100

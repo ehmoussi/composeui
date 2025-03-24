@@ -3,10 +3,10 @@ from composeui.core.tasks import progresstask
 from composeui.mainview import toolbar
 from composeui.mainview.views.fileview import FileView
 from composeui.mainview.views.mainview import MainView
-from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.menu import EditMenu, FileMenu
 from composeui.mainview.views.messageview import MessageView, MessageViewType
 from composeui.mainview.views.progresspopupview import ProgressPopupView
-from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
+from composeui.mainview.views.toolbar import CheckableToolBar, EditToolBar, FileToolBar
 from composeui.salomewrapper.mainview.salomemainview import SalomeMainView
 
 from typing import Union
@@ -41,15 +41,22 @@ def initialize_file_menu(view: FileMenu) -> bool:
     view.save_as.text = "Save As"
     view.save_as.icon = "save_as.png"
     view.save_as.shortcut = "Ctrl+Shift+s"
-    view.separator_undo_redo.is_separator = True
-    view.undo.text = "Undo"
-    view.undo.icon = "undo.png"
-    view.redo.text = "Redo"
-    view.redo.icon = "redo.png"
     view.separator_exit.is_separator = True
     view.exit_app.text = "Exit"
     view.exit_app.icon = "exit.png"
     view.exit_app.shortcut = "Ctrl+q"
+    return False
+
+
+def initialize_edit_menu(view: EditMenu) -> bool:
+    r"""Initialize the edit menu view."""
+    view.title = "Edit"
+    view.undo.text = "Undo"
+    view.undo.icon = "undo.png"
+    view.undo.shortcut = "Ctrl+z"
+    view.redo.text = "Redo"
+    view.redo.icon = "redo.png"
+    view.redo.shortcut = "Ctrl+y"
     return False
 
 
@@ -66,6 +73,14 @@ def initialize_file_toolbar(view: FileToolBar) -> bool:
     view.save.icon = "save.png"
     view.save_as.text = "Save As"
     view.save_as.icon = "save_as.png"
+    return False
+
+
+def initialize_edit_toolbar(view: EditToolBar) -> bool:
+    r"""Initialize the edit toolbar view."""
+    view.is_visible = True
+    view.is_always_visible = True
+    view.title = "Edit"
     view.undo.text = "Undo"
     view.undo.icon = "undo.png"
     view.redo.text = "Redo"
@@ -115,7 +130,7 @@ def connect_file_menu_toolbar(
     view: Union[FileMenu, FileToolBar],
     main_view: MainView,
 ) -> bool:
-    r"""Connect the signals of the identical menu/toolbar actions."""
+    r"""Connect the signals of the identical menu/toolbar file actions."""
     view.new.triggered = [study.new]
     if isinstance(main_view, SalomeMainView):
         view.open_file.triggered = [study.open_file_without_update]
@@ -123,6 +138,11 @@ def connect_file_menu_toolbar(
         view.open_file.triggered = [study.open_file]
     view.save.triggered = [study.save]
     view.save_as.triggered = [study.save_as]
+    return False
+
+
+def connect_edit_menu_toolbar(view: Union[EditMenu, EditToolBar]) -> bool:
+    r"""Connect the signals of the identical menu/toolbar edit actions."""
     view.undo.triggered = [study.undo]
     view.redo.triggered = [study.redo]
     return False

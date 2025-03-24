@@ -18,6 +18,8 @@ from composeui.items.tree.treeview import TreeView
 from composeui.linkedtablefigure import initialize_table_figure_view
 from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview import (
+    initialize_edit_menu,
+    initialize_edit_toolbar,
     initialize_file_menu,
     initialize_file_toolbar,
     initialize_file_view,
@@ -27,10 +29,10 @@ from composeui.mainview import (
 )
 from composeui.mainview.views.fileview import FileView
 from composeui.mainview.views.mainview import MainView
-from composeui.mainview.views.menu import FileMenu
+from composeui.mainview.views.menu import EditMenu, FileMenu
 from composeui.mainview.views.messageview import MessageView
 from composeui.mainview.views.progresspopupview import ProgressPopupView
-from composeui.mainview.views.toolbar import FileToolBar
+from composeui.mainview.views.toolbar import EditToolBar, FileToolBar
 from composeui.vtk import initialize_vtk_view
 from composeui.vtk.vtkview import VTKView
 
@@ -71,6 +73,10 @@ def initialize_default_view(view: View) -> bool:
         return initialize_file_menu(view)
     elif isinstance(view, FileToolBar):
         return initialize_file_toolbar(view)
+    elif isinstance(view, EditMenu):
+        return initialize_edit_menu(view)
+    elif isinstance(view, EditToolBar):
+        return initialize_edit_toolbar(view)
     elif isinstance(view, ActionView):
         view.visible_views.clear()
     elif isinstance(view, LinkedTableView):

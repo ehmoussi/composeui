@@ -18,13 +18,14 @@ from composeui.linkedtablefigure import connect_table_figure_view
 from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview import (
     connect_checkable_toolbar,
+    connect_edit_menu_toolbar,
     connect_file_menu,
     connect_file_menu_toolbar,
     connect_main_view,
 )
 from composeui.mainview.views.mainview import MainView
-from composeui.mainview.views.menu import FileMenu
-from composeui.mainview.views.toolbar import CheckableToolBar, FileToolBar
+from composeui.mainview.views.menu import EditMenu, FileMenu
+from composeui.mainview.views.toolbar import CheckableToolBar, EditToolBar, FileToolBar
 from composeui.vtk import connect_vtk_view
 from composeui.vtk.vtkview import VTKView
 
@@ -66,6 +67,9 @@ def connect_by_default(view: View, main_view: MainView) -> bool:
         connect_file_menu_toolbar(view, main_view)
         if isinstance(view, FileMenu):
             connect_file_menu(view)
+        return False
+    elif isinstance(view, (EditMenu, EditToolBar)):
+        connect_edit_menu_toolbar(view)
         return False
     elif isinstance(view, CheckableToolBar):
         return connect_checkable_toolbar(view)

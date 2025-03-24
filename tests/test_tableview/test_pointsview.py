@@ -306,22 +306,22 @@ def test_undo_redo(
     view.items.set_data_with_history(3, 0, "P4")
     assert view.items.get_nb_rows() == 4
     # undo
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.items.get_data(3, 0) == "point 4"
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.items.get_nb_rows() == 3
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.items.get_data(2, 0) == "point 3"
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.items.get_nb_rows() == 2
     # redo
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_nb_rows() == 3
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_data(2, 0) == "P3"
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_nb_rows() == 4
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_data(3, 0) == "P4"
 
 
@@ -338,10 +338,10 @@ def test_undo_redo_open_save(
     view.items.set_data_with_history(1, 0, "P2")
     assert view.items.get_nb_rows() == 2
     # undo
-    main_view.toolbar.file.undo.triggered()
-    main_view.toolbar.file.undo.triggered()
-    main_view.toolbar.file.undo.triggered()
-    main_view.toolbar.file.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
     assert view.items.get_nb_rows() == 0
     # save
     main_view.file_view.save_file = (  # type: ignore[method-assign]
@@ -350,7 +350,7 @@ def test_undo_redo_open_save(
     main_view.toolbar.file.save.triggered()
     # new
     main_view.toolbar.file.new.triggered()
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_nb_rows() == 0  # the history and the state is lost when doing new
     # open
     main_view.file_view.open_file = (  # type: ignore[method-assign]
@@ -358,10 +358,10 @@ def test_undo_redo_open_save(
     )
     main_view.toolbar.file.open_file.triggered()
     # redo
-    main_view.toolbar.file.redo.triggered()
-    main_view.toolbar.file.redo.triggered()
-    main_view.toolbar.file.redo.triggered()
-    main_view.toolbar.file.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
     assert view.items.get_nb_rows() == 2
     assert view.items.get_data(0, 0) == "P1"
     assert view.items.get_data(1, 0) == "P2"
