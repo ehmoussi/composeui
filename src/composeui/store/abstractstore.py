@@ -1,5 +1,8 @@
+from composeui.history.abstracthistory import AbstractHistory
+
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 
 class AbstractStore(ABC):
@@ -10,6 +13,10 @@ class AbstractStore(ABC):
 
         For example, for sqlite: '.sqlite'
         """
+
+    @abstractmethod
+    def get_history(self) -> Optional[AbstractHistory]:
+        """Get the manager of the undo/redo of the history of the store."""
 
     @abstractmethod
     def set_debug_mode(self, is_debug: bool) -> None:

@@ -31,11 +31,13 @@ def import_clicked(*, view: AnyTreeView, main_view: MainView, model: AnyModel) -
         if filepath is not None and filepath_extension is not None:
             task = ImportFileTreeTask(view.items, filepath, is_cleaning, filepath_extension)
             task.is_debug = model.is_debug
+            model.start_recording_history()
             progresspopup.display_view(
                 main_view,
                 tasks=Tasks((task,), print_to_std=True),
                 finished_slots=[
-                    partial(tools.update_view_with_dependencies, view, reset_pagination=True)
+                    model.stop_recording_history,
+                    partial(tools.update_view_with_dependencies, view, reset_pagination=True),
                 ],
             )
     else:
@@ -78,7 +80,7 @@ def export_clicked(*, view: AnyTreeView, main_view: MainView, model: AnyModel) -
             progresspopup.display_view(main_view, Tasks((task,), print_to_std=True))
 
 
-def add_clicked(*, view: AnyTreeView) -> None:
+def add_clicked(*, view: AnyTreeView, model: AnyModel) -> None:
     r"""Add an item in the table."""
     if view.items is not None:
         selected_positions = view.items.get_selected_positions()
@@ -91,8 +93,9 @@ def add_clicked(*, view: AnyTreeView) -> None:
             *parent_rows, row = parent_rows
         else:
             row = view.items.get_nb_rows(parent_rows) - 1
-        position = view.items.insert(row + 1, tuple(parent_rows))
-        view.items.set_expanded(row + 1, True, tuple(parent_rows))
+        with model.record_history():
+            position = view.items.insert(row + 1, tuple(parent_rows))
+            view.items.set_expanded(row + 1, True, tuple(parent_rows))
         # update the pagination
         # update the current page size to get the correct current page
         # the update of the current page need to be done before the update of the table
@@ -113,7 +116,7 @@ def add_clicked(*, view: AnyTreeView) -> None:
             view.items.set_selected_positions(selected_positions)
 
 
-def remove_clicked(*, view: AnyTreeView, main_view: MainView) -> None:
+def remove_clicked(*, view: AnyTreeView, main_view: MainView, model: AnyModel) -> None:
     r"""Remove an item in the tree."""
     if view.items is not None and (
         view.items.get_confirmation_message() == ""
@@ -126,9 +129,10 @@ def remove_clicked(*, view: AnyTreeView, main_view: MainView) -> None:
             view.items.get_selected_positions(), key=lambda p: len(p), reverse=True
         ):
             positions[tuple(parent_rows)].append(row)
-        for parent_rows, rows in positions.items():
-            for row in sorted(rows, reverse=True):
-                position = view.items.remove(row, tuple(parent_rows))
+        with model.record_history():
+            for parent_rows, rows in positions.items():
+                for row in sorted(rows, reverse=True):
+                    position = view.items.remove(row, tuple(parent_rows))
         # remove the selection to force the update of the current indices
         # of the linked tables
         view.items.set_selected_positions([])
@@ -148,29 +152,31 @@ def remove_clicked(*, view: AnyTreeView, main_view: MainView) -> None:
             view.items.set_selected_positions([position])
 
 
-def clear_items(*, view: AnyTreeView) -> None:
+def clear_items(*, view: AnyTreeView, model: AnyModel) -> None:
     """Clear the data of the selected items."""
     items = view.items
     if items is not None:
         selected_items = view.selected_items
-        for rows, columns in selected_items.items():
-            for column in columns:
-                row = rows[-1]
-                parent_rows = rows[:-1]
-                items.set_data(row, column, "", parent_rows)
+        with model.record_history():
+            for rows, columns in selected_items.items():
+                for column in columns:
+                    row = rows[-1]
+                    parent_rows = rows[:-1]
+                    items.set_data(row, column, "", parent_rows)
         tools.update_view_with_dependencies(view)
 
 
-def check_all_items(*, view: AnyTreeView) -> None:
+def check_all_items(*, view: AnyTreeView, model: AnyModel) -> None:
     r"""Un/Check all the items."""
     # TODO: Update to manage the trees properly
     items = view.items
     if items is not None:
         nb_rows = items.get_nb_rows()
         nb_columns = items.get_nb_columns()
-        for column in range(nb_columns):
-            if all(items.is_checked(row, column) is not None for row in range(nb_rows)):
-                all_checked = all(items.is_checked(row, column) for row in range(nb_rows))
-                for row in range(nb_rows):
-                    items.set_checked(row, column, not all_checked)
+        with model.record_history():
+            for column in range(nb_columns):
+                if all(items.is_checked(row, column) is not None for row in range(nb_rows)):
+                    all_checked = all(items.is_checked(row, column) for row in range(nb_rows))
+                    for row in range(nb_rows):
+                        items.set_checked(row, column, not all_checked)
         tools.update_view_with_dependencies(view)

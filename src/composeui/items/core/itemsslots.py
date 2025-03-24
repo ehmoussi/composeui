@@ -21,11 +21,12 @@ ITableTreeView: TypeAlias = Union[
 ]
 
 
-def copy_items(*, view: ITableTreeView) -> None:
+def copy_items(*, view: ITableTreeView, model: AnyModel) -> None:
     """Copy the data of the selected items."""
     if view.items is not None:
         copy_paste_manager = CopyPasteItems(view.items)
-        copy_paste_manager.copy()
+        with model.record_history():
+            copy_paste_manager.copy()
 
 
 def paste_items(*, view: ITableTreeView, main_view: MainView, model: AnyModel) -> None:
@@ -33,7 +34,8 @@ def paste_items(*, view: ITableTreeView, main_view: MainView, model: AnyModel) -
     if view.items is not None and not is_sorting_enabled(view, main_view):
         copy_paste_manager = CopyPasteItems(view.items)
         try:
-            copy_paste_manager.paste()
+            with model.record_history():
+                copy_paste_manager.paste()
         except ValueError as e:
             error_message = str(e)
             if model.is_debug:

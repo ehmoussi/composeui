@@ -19,7 +19,7 @@ from typing import Any, Optional
 AnyTableView: TypeAlias = TableView[AbstractTableItems[Any]]
 
 
-def add_clicked(*, view: AnyTableView) -> None:
+def add_clicked(*, view: AnyTableView, model: AnyModel) -> None:
     r"""Add an item in the table."""
     if view.items is not None:
         new_selected_row: Optional[int] = None
@@ -28,7 +28,8 @@ def add_clicked(*, view: AnyTableView) -> None:
             row = selected_rows[-1]
         else:
             row = view.items.get_nb_rows() - 1
-        new_selected_row = view.items.insert(row + 1)
+        with model.record_history():
+            new_selected_row = view.items.insert(row + 1)
         # update pagination
         # update the current page size to get the correct current page
         # the update of the current page need to be done before the update of the table
@@ -44,15 +45,16 @@ def add_clicked(*, view: AnyTableView) -> None:
             view.items.set_selected_rows([new_selected_row])
 
 
-def remove_clicked(*, view: AnyTableView, main_view: MainView) -> None:
+def remove_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
     r"""Remove an item in the table."""
     if view.items is not None and (
         view.items.get_confirmation_message() == ""
         or tools.ask_confirmation(main_view, view.items.get_confirmation_message())
     ):
-        new_selected_row: Optional[int] = None
-        for row in sorted(view.items.get_selected_rows(), reverse=True):
-            new_selected_row = view.items.remove(row)
+        with model.record_history():
+            new_selected_row: Optional[int] = None
+            for row in sorted(view.items.get_selected_rows(), reverse=True):
+                new_selected_row = view.items.remove(row)
         # remove the selection to force the update of the current indices
         # of the linked table
         view.items.set_selected_rows([])
@@ -76,7 +78,8 @@ def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
     """Import values from a csv file in the table."""
     if view.items is not None:
         is_cleaning = view.items.get_nb_rows() != 0 and tools.ask_confirmation(
-            main_view, "Do you want to delete all the rows of the table before the import ?"
+            main_view,
+            "Do you want to delete all the rows of the table before the import ?",
         )
         filepath, filepath_extension = selectfiles.select_table_file(
             main_view, view.import_extensions
@@ -86,11 +89,13 @@ def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
                 view.items, filepath, is_cleaning, filepath_extension
             )
             task.is_debug = model.is_debug
+            model.start_recording_history()
             progresspopup.display_view(
                 main_view,
                 tasks=Tasks((task,), print_to_std=True),
                 finished_slots=[
-                    partial(tools.update_view_with_dependencies, view, reset_pagination=True)
+                    model.stop_recording_history,
+                    partial(tools.update_view_with_dependencies, view, reset_pagination=True),
                 ],
             )
     else:
@@ -101,7 +106,7 @@ def import_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
 
 
 def export_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) -> None:
-    """Import values from a csv file in the table."""
+    """Export values to a csv/xls/... file from the table."""
     if view.items is not None:
         filepath, filepath_extension = selectfiles.save_table_file(
             main_view, view.export_extensions
@@ -109,28 +114,33 @@ def export_clicked(*, view: AnyTableView, main_view: MainView, model: AnyModel) 
         if filepath is not None and filepath_extension is not None:
             task = ExportFileTableTask(view.items, filepath, filepath_extension)
             task.is_debug = model.is_debug
-            progresspopup.display_view(main_view, Tasks((task,), print_to_std=True))
+            progresspopup.display_view(
+                main_view,
+                Tasks((task,), print_to_std=True),
+            )
 
 
-def clear_items(*, view: AnyTableView) -> None:
+def clear_items(*, view: AnyTableView, model: AnyModel) -> None:
     """Clear the data of the selected items."""
     if view.items is not None:
-        for rows, columns in view.selected_items.items():
-            for column in columns:
-                row = rows[-1]
-                view.items.set_data(row, column, "")
+        with model.record_history():
+            for rows, columns in view.selected_items.items():
+                for column in columns:
+                    row = rows[-1]
+                    view.items.set_data(row, column, "")
         tools.update_view_with_dependencies(view)
 
 
-def check_all_items(*, view: AnyTableView) -> None:
+def check_all_items(*, view: AnyTableView, model: AnyModel) -> None:
     """Un/Check all the items."""
     items = view.items
     if items is not None:
         nb_rows = items.get_nb_rows()
         nb_columns = items.get_nb_columns()
-        for column in range(nb_columns):
-            if all(items.is_checked(row, column) is not None for row in range(nb_rows)):
-                all_checked = all(items.is_checked(row, column) for row in range(nb_rows))
-                for row in range(nb_rows):
-                    items.set_checked(row, column, not all_checked)
+        with model.record_history():
+            for column in range(nb_columns):
+                if all(items.is_checked(row, column) is not None for row in range(nb_rows)):
+                    all_checked = all(items.is_checked(row, column) for row in range(nb_rows))
+                    for row in range(nb_rows):
+                        items.set_checked(row, column, not all_checked)
         tools.update_view_with_dependencies(view)

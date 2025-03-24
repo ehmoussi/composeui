@@ -142,13 +142,13 @@ class _TableItemModel(QAbstractTableModel):
         column = index.column()
         if role == Qt.EditRole:
             value_str = str(value)
-            is_ok = self.items.set_data(row, column, value_str)
+            is_ok = self.items.set_data_with_history(row, column, value_str)
             if is_ok:
                 self._cache_data[column][row] = value_str
                 self.dataChanged.emit(index, index, [Qt.EditRole])
             return is_ok
         elif role == Qt.CheckStateRole:
-            is_ok = self.items.set_checked(row, column, bool(value))
+            is_ok = self.items.set_checked_with_history(row, column, bool(value))
             if is_ok:
                 self.dataChanged.emit(index, index, [Qt.CheckStateRole])
                 self.item_toggled.emit()

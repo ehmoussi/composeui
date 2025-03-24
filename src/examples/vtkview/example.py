@@ -23,7 +23,7 @@ if typing.TYPE_CHECKING:
 
 
 class VTKConfigFormItems(AbstractFormItems["Model", "VTKConfigView"]):
-    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
+    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Optional[bool]:
         if field == "edge_width":
             return self._view.edge.field_view.current_index == 0
         elif field == "warp_scale":

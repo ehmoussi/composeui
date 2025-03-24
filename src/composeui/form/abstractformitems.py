@@ -31,7 +31,15 @@ class AbstractFormItems(ABC, Generic[AnyModel, AnyFormView]):
         """Get the label for the item of the form with the given field."""
         return field.replace("_", " ").title()
 
-    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:
+    def is_visible(self, field: str, parent_fields: Tuple[str, ...] = ()) -> Optional[bool]:
+        """Check if the field is visible.
+
+        Modify these behaviour with care:
+        The highest level parent of the forms should return None to avoid messing
+        with its visibility during an update.
+        """
+        if field == "":
+            return None
         return True
 
     def is_enabled(self, field: str, parent_fields: Tuple[str, ...] = ()) -> bool:

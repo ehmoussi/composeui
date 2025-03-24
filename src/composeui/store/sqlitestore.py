@@ -1,5 +1,7 @@
 """Data managing state using sqlite."""
 
+from composeui.history.abstracthistory import AbstractHistory
+from composeui.history.sqlitehistory import SqliteHistory
 from composeui.store.abstractstore import AbstractStore
 
 import contextlib
@@ -16,7 +18,15 @@ from typing import Generator, List, Optional, Sequence
 class SqliteStore(AbstractStore):
     """Managing state using sqlite3 python db api interface."""
 
-    def __init__(self, filepath: Optional[Path] = None, capacity: int = 20) -> None:
+    def __init__(
+        self,
+        filepath: Optional[Path] = None,
+        capacity: int = 20,
+        with_history: bool = True,
+    ) -> None:
+        self._history: Optional[SqliteHistory] = None
+        if with_history:
+            self._history = SqliteHistory(self)
         self._capacity = capacity
         self._is_debug = False
         self._pool: queue.Queue[sqlite3.Connection] = queue.Queue(capacity)
@@ -40,6 +50,18 @@ class SqliteStore(AbstractStore):
 
     def get_extension(self) -> str:
         return ".sqlite"
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        """Get the manager of the undo/redo of the history of the store."""
+        return self._history
+
+    def get_filepath(self) -> Path:
+        if self._filepath is not None:
+            return self._filepath
+        elif self._tmp_sqlite_filepath is not None:
+            return self._tmp_sqlite_filepath
+        else:
+            raise ValueError("Unexpected error: the store don't have a filepath")
 
     def set_debug_mode(self, is_debug: bool) -> None:
         """Set the status of the debug mode."""
@@ -136,6 +158,8 @@ class SqliteStore(AbstractStore):
         """Create the tables and the triggers."""
         self.execute_sql_files(self._sql_table_files)
         self.execute_sql_files(self._sql_trigger_files)
+        if self._history is not None:
+            self._history.create_tables()
 
     def create_only_tables(self) -> None:
         """Create only the tables without the triggers"""

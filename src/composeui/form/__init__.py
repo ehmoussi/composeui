@@ -106,8 +106,8 @@ def connect_form_row_view(
                 ]
             ]
         # Be careful the order is important
-        # e.g a field of type ISelectFileView will be considered as a ILineEditView
-        # because all the attributes of ILineEditView are available into ISelectFileView
+        # e.g a field of type SelectFileView will be considered as a LineEditView
+        # because all the attributes of LineEditView are available into SelectFileView
         if isinstance(view.field_view, SelectFileView):
             view.field_view.editing_finished = [
                 [
@@ -210,8 +210,8 @@ def connect_apply_form_row_view(
                 ]
             ]
         # Be careful the order is important
-        # e.g a field of type ISelectFileView will be considered as a ILineEditView
-        # because all the attributes of ILineEditView are available into ISelectFileView
+        # e.g a field of type SelectFileView will be considered as a LineEditView
+        # because all the attributes of LineEditView are available into SelectFileView
         if isinstance(view.field_view, SelectFileView):
             view.field_view.clicked = [
                 [

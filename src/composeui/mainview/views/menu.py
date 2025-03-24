@@ -17,3 +17,9 @@ class FileMenu(Menu):
     save_as: ActionView = field(init=False, repr=False, default_factory=ActionView)
     separator_exit: ActionView = field(init=False, repr=False, default_factory=ActionView)
     exit_app: ActionView = field(init=False, repr=False, default_factory=ActionView)
+
+
+@dataclass(eq=False)
+class EditMenu(Menu):
+    undo: ActionView = field(init=False, repr=False, default_factory=ActionView)
+    redo: ActionView = field(init=False, repr=False, default_factory=ActionView)

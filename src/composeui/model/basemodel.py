@@ -1,11 +1,12 @@
 from composeui.store.abstractstore import AbstractStore, DataReadError
 
 import atexit
+import contextlib
 import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 
 class BaseModel:
@@ -58,6 +59,7 @@ class BaseModel:
             # read the study in the specific format for each store
             ignore_patterns: List[str] = []
             for index, store in enumerate(self.stores):
+                # open store
                 store_filename = self.get_store_filename(index)
                 store_filepath = Path(tmp_dir, store_filename)
                 if not store_filepath.exists():
@@ -68,6 +70,23 @@ class BaseModel:
                     raise ValueError(msg)
                 store.open_study(store_filepath)
                 ignore_patterns.append(store_filename)
+                # open history (if it has one)
+                history = store.get_history()
+                history_store_filename = self.get_history_store_filename(index)
+                if history is not None:
+                    history_store_filepath: Optional[Path] = None
+                    if history_store_filename is not None:
+                        history_store_filepath = Path(tmp_dir, history_store_filename)
+                        if not history_store_filepath.exists():
+                            msg = (
+                                "Missing the history file for the store at the index "
+                                f"'{index}' inside {filepath}"
+                            )
+                            raise ValueError(msg)
+                        ignore_patterns.append(history_store_filename)
+                    # call open_history even without a file if some action need to be
+                    # done like create tables and triggers for the sqlite store
+                    history.open_history(history_store_filepath)
             # copy the other files in a new 'other files directory'
             new_other_files_dir = self.create_other_files_directory()
             # remove the directory to avoid the raise of an exception by copytree
@@ -95,6 +114,19 @@ class BaseModel:
             ) as tmp_dir:
                 # save the stores
                 for index, store in enumerate(self.stores):
+                    # save the store history
+                    history = store.get_history()
+                    if history is not None:
+                        history_store_filename = self.get_history_store_filename(index)
+                        if history_store_filename is not None:
+                            history_store_filepath = Path(tmp_dir, history_store_filename)
+                            history.save_history(history_store_filepath)
+                            tar.add(
+                                history_store_filepath,
+                                arcname=history_store_filename,
+                                recursive=False,
+                            )
+                    # save the store
                     store_filepath = Path(tmp_dir, self.get_store_filename(index))
                     store.save_study(store_filepath)
                     tar.add(store_filepath, arcname=store_filepath.name, recursive=False)
@@ -112,6 +144,40 @@ class BaseModel:
                 raise
             raise ValueError("Something went wrong during the save.") from e
 
+    def undo(self) -> None:
+        for store in self.stores:
+            history = store.get_history()
+            if history is not None:
+                history.undo()
+
+    def redo(self) -> None:
+        for store in self.stores:
+            history = store.get_history()
+            if history is not None:
+                history.redo()
+
+    @contextlib.contextmanager
+    def record_history(self) -> Generator[None, None, None]:
+        self.start_recording_history()
+        try:
+            yield
+        finally:
+            self.stop_recording_history()
+
+    def start_recording_history(self) -> None:
+        """Start recording the history."""
+        for store in self.stores:
+            history = store.get_history()
+            if history is not None:
+                history.start_recording()
+
+    def stop_recording_history(self) -> None:
+        """Stop recording the history."""
+        for store in self.stores:
+            history = store.get_history()
+            if history is not None:
+                history.stop_recording()
+
     def clear_stores(self) -> None:
         """Clear all the stores."""
         for store in self.stores:
@@ -119,6 +185,14 @@ class BaseModel:
 
     def get_store_filename(self, index: int) -> str:
         return f"store_{index}{self.stores[index].get_extension()}"
+
+    def get_history_store_filename(self, index: int) -> Optional[str]:
+        history = self.stores[index].get_history()
+        if history is not None:
+            extension = history.get_extension()
+            if extension is not None:
+                return f"history_store_{index}{extension}"
+        return None
 
     def create_other_files_directory(self) -> Path:
         """Create a directory for the other files of the study."""

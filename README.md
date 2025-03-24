@@ -11,6 +11,7 @@ Useful components are available to ease the build of GUIs:
     * [`pydantic`](https://github.com/pydantic/pydantic) for the model and to export into json.
     * SQLite via Python's built-in [`sqlite3`](https://docs.python.org/3/library/sqlite3.html) library.
     * [`SQLAlchemy`](https://github.com/sqlalchemy/sqlalchemy) for ORM-based storage in an SQLite database.
+- An undo/redo mechanism
 - Simplify form creation using various field types such as text, float, and integer inputs; checkboxes; spinboxes; large text inputs; radio buttons; file selectors; etc...
 - TableView and TreeView: Easily create tables or trees with features like:
     * Add/remove row buttons
@@ -52,6 +53,7 @@ The folder [`src/examples`](src/examples/) contains multiple examples demonstrat
 * LinkedTableFigureView: Demonstrates a linked table and figure where selecting a point in the table highlights it in the figure.
 * Mainview: Provides an empty interface that can serve as a starting point for new projects.
 * MultipleViews: Illustrates how to combine a navigation toolbar with different views, updating the display based on toolbar selections.
+* Network: An example of fetching a JSON api using the network manager.
 * SalomeView: An example of module integration within the Salome platform.
 * SimpleTableView: Demonstrates how to create a table using an SQL table.
 * TableView/TreeView: An example showcasing both table and tree components.

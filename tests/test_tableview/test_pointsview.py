@@ -288,6 +288,85 @@ def test_shortcut_delete(
     assert view.items.get_nb_rows() == 0
 
 
+def test_undo_redo(
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
+) -> None:
+    """Test the undo/redo mechanism."""
+    view, main_view, _ = app_points
+    assert view.items is not None
+    # set up add rows
+    view.add_clicked()
+    view.items.set_data_with_history(0, 0, "P1")
+    view.add_clicked()
+    view.items.set_data_with_history(1, 0, "P2")
+    view.add_clicked()
+    view.items.set_data_with_history(2, 0, "P3")
+    view.add_clicked()
+    assert view.items.get_data(3, 0) == "point 4"
+    view.items.set_data_with_history(3, 0, "P4")
+    assert view.items.get_nb_rows() == 4
+    # undo
+    main_view.toolbar.edit.undo.triggered()
+    assert view.items.get_data(3, 0) == "point 4"
+    main_view.toolbar.edit.undo.triggered()
+    assert view.items.get_nb_rows() == 3
+    main_view.toolbar.edit.undo.triggered()
+    assert view.items.get_data(2, 0) == "point 3"
+    main_view.toolbar.edit.undo.triggered()
+    assert view.items.get_nb_rows() == 2
+    # redo
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_nb_rows() == 3
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_data(2, 0) == "P3"
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_nb_rows() == 4
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_data(3, 0) == "P4"
+
+
+def test_undo_redo_open_save(
+    app_points: Tuple[TableView[PointsItems], ExampleMainView, Model], tmpdir: Path
+) -> None:
+    """Test the undo/redo mechanism and its persistence after saving and opening a study."""
+    view, main_view, _ = app_points
+    assert view.items is not None
+    # set up add rows
+    view.add_clicked()
+    view.items.set_data_with_history(0, 0, "P1")
+    view.add_clicked()
+    view.items.set_data_with_history(1, 0, "P2")
+    assert view.items.get_nb_rows() == 2
+    # undo
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    main_view.toolbar.edit.undo.triggered()
+    assert view.items.get_nb_rows() == 0
+    # save
+    main_view.file_view.save_file = (  # type: ignore[method-assign]
+        lambda: str(Path(tmpdir, "study.example"))
+    )
+    main_view.toolbar.file.save.triggered()
+    # new
+    main_view.toolbar.file.new.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_nb_rows() == 0  # the history and the state is lost when doing new
+    # open
+    main_view.file_view.open_file = (  # type: ignore[method-assign]
+        lambda: str(Path(tmpdir, "study.example"))
+    )
+    main_view.toolbar.file.open_file.triggered()
+    # redo
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    main_view.toolbar.edit.redo.triggered()
+    assert view.items.get_nb_rows() == 2
+    assert view.items.get_data(0, 0) == "P1"
+    assert view.items.get_data(1, 0) == "P2"
+
+
 def test_copy_paste(
     app_points: Tuple[TableView[PointsItems], ExampleMainView, Model],
 ) -> None:

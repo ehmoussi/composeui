@@ -1,6 +1,6 @@
 r"""Slots of the FormView."""
 
-from composeui.commontypes import AnyFormItems
+from composeui.commontypes import AnyFormItems, AnyModel
 from composeui.core import selectfiles, tools
 from composeui.core.views.view import View
 from composeui.form.formview import (
@@ -46,53 +46,62 @@ def update_row_view(
 
 
 @update_row_view
-def update_text(*, view: RowItemTextView[AnyFormItems], with_update: bool = True) -> bool:
+def update_text(
+    *, view: RowItemTextView[AnyFormItems], model: AnyModel, with_update: bool = True
+) -> bool:
     r"""Update the text in the form items.
 
     If with update is False then return False to avoid update the row view.
     Useful for the apply button that need to update only after updating all fields.
     """
     if view.items is not None:
-        return (
+        if with_update:
+            with model.record_history():
+                return view.items.set_value(view.field_name, view.text, view.parent_fields)
+        else:
             view.items.set_value(view.field_name, view.text, view.parent_fields)
-            and with_update
-        )
     return False
 
 
 @update_row_view
-def update_vector(*, view: Vector3DView[AnyFormItems], with_update: bool = True) -> bool:
+def update_vector(
+    *, view: Vector3DView[AnyFormItems], model: AnyModel, with_update: bool = True
+) -> bool:
     r"""Update the values in the form items.
 
     If with update is False then return False to avoid update the row view.
     Useful for the apply button that need to update only after updating all fields.
     """
     if view.items is not None:
-        return (
+        if with_update:
+            with model.record_history():
+                return view.items.set_value(view.field_name, view.values, view.parent_fields)
+        else:
             view.items.set_value(view.field_name, view.values, view.parent_fields)
-            and with_update
-        )
     return False
 
 
 @update_row_view
-def update_value(*, view: RowItemValueView[AnyFormItems], with_update: bool = True) -> bool:
+def update_value(
+    *, view: RowItemValueView[AnyFormItems], model: AnyModel, with_update: bool = True
+) -> bool:
     r"""Update the value in the form items.
 
     If with update is False then return False to avoid update the row view.
     Useful for the apply button that need to update only after updating all fields.
     """
     if view.items is not None:
-        return (
+        if with_update:
+            with model.record_history():
+                return view.items.set_value(view.field_name, view.value, view.parent_fields)
+        else:
             view.items.set_value(view.field_name, view.value, view.parent_fields)
-            and with_update
-        )
     return False
 
 
 @update_row_view
 def update_current_index(
-    *, view: RowItemIndexView[AnyFormItems], with_update: bool = True
+    *, view: RowItemIndexView[AnyFormItems], model: AnyModel, with_update: bool = True
 ) -> bool:
     r"""Update the current index in the form items.
 
@@ -100,25 +109,33 @@ def update_current_index(
     Useful for the apply button that need to update only after updating all fields
     """
     if view.items is not None:
-        return (
+        if with_update:
+            with model.record_history():
+                return view.items.set_current_index(
+                    view.field_name,
+                    view.current_index,
+                    view.parent_fields,
+                )
+        else:
             view.items.set_current_index(
                 view.field_name,
                 view.current_index,
                 view.parent_fields,
             )
-            and with_update
-        )
     return False
 
 
 @update_row_view
-def open_select_path_view(*, view: SelectFileView[AnyFormItems], main_view: MainView) -> bool:
+def open_select_path_view(
+    *, view: SelectFileView[AnyFormItems], main_view: MainView, model: AnyModel
+) -> bool:
     """Open the select path view."""
     path = selectfiles.select_file(main_view, view.extensions, view.mode)
     if path is not None:
         view.text = str(path)
         if view.items is not None:
-            return view.items.set_value(view.field_name, view.text, view.parent_fields)
+            with model.record_history():
+                return view.items.set_value(view.field_name, view.text, view.parent_fields)
     return False
 
 
@@ -132,35 +149,36 @@ def open_select_path_view_without_saving(
 
 
 @update_row_view
-def set_field_available(*, view: CheckBoxView[AnyFormItems]) -> bool:
+def set_field_available(*, view: CheckBoxView[AnyFormItems], model: AnyModel) -> bool:
     """Set if the field is available or not."""
     if view.items is not None:
-        view.items.set_field_available(
-            view.field_name,
-            view.is_checked,
-            view.parent_fields,
-        )
+        with model.record_history():
+            view.items.set_field_available(
+                view.field_name,
+                view.is_checked,
+                view.parent_fields,
+            )
     return False
 
 
-def update_apply_form(*, view: FormView[AnyFormItems]) -> None:
+def update_apply_form(*, view: FormView[AnyFormItems], model: AnyModel) -> None:
     """Update the model when the button apply is clicked."""
     for child_view in view.children.values():
         if isinstance(child_view, RowView):
             field_view = child_view.field_view
             if isinstance(field_view, (DoubleLineEditView, SpinBoxView)):
-                update_value(view=field_view, with_update=False)
+                update_value(view=field_view, model=model, with_update=False)
             elif isinstance(field_view, (ComboBoxView, ComboBoxItemsView, ButtonsGroupView)):
-                update_current_index(view=field_view, with_update=False)
+                update_current_index(view=field_view, model=model, with_update=False)
             elif isinstance(
                 field_view,
                 (LabelView, CheckBoxView, LineEditView, SelectFileView, TextEditView),
             ):
-                update_text(view=field_view, with_update=False)
+                update_text(view=field_view, model=model, with_update=False)
             elif isinstance(field_view, Vector3DView):
-                update_vector(view=field_view, with_update=False)
+                update_vector(view=field_view, model=model, with_update=False)
         elif isinstance(child_view, FormView):
-            update_apply_form(view=child_view)
+            update_apply_form(view=child_view, model=model)
 
 
 def update_infos(

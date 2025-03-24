@@ -14,6 +14,7 @@ class _FileTask(AbstractTask, Generic[AnyModel]):
         super().__init__(capture_exceptions_as_errors=True)
         self._model: AnyModel = model
         self._filepath: Path = filepath
+        self.is_debug = model.is_debug
 
 
 class SaveTask(_FileTask[AnyModel]):

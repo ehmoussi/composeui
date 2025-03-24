@@ -1,12 +1,15 @@
 r"""Common tools."""
 
+from composeui import linkedtablefigure
 from composeui.core.views.view import View
 from composeui.form import form
+from composeui.form.abstractformitems import AbstractFormItems
 from composeui.form.formview import FormView, RowView
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.tableview import TableView
 from composeui.items.tree.abstracttreeitems import AbstractTreeItems
 from composeui.items.tree.treeview import TreeView
+from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 from composeui.mainview.views.fileview import FileView
 from composeui.mainview.views.mainview import MainView
 from composeui.mainview.views.messageview import MessageView, MessageViewType
@@ -25,7 +28,7 @@ def update_all_views(main_view: MainView, reset_pagination: bool = False) -> Non
     while len(views) > 0:
         view = views.pop()
         views.extendleft(view.children.values())
-        _update_view(view, update_visibility=False, reset_pagination=reset_pagination)
+        _update_view(view, reset_pagination=reset_pagination)
 
 
 def update_view_with_dependencies(
@@ -55,12 +58,14 @@ def _update_view(
     view: View,
     keep_selection: bool = False,
     before_validation: bool = False,
-    update_visibility: bool = True,
     reset_pagination: bool = False,
 ) -> None:
     r"""Update the given view.
 
-    if keep_selection is true, the current selection is preserverd.
+    - if keep_selection is true, the current selection is preserverd.
+    - if before_validation is true, the view is not updated. It is used for the "ApplyForm"
+        which needs to click on the apply button before applying the values
+    - if reset_pagination is true, the view is moved to the last page
     """
     view.block_signals = True
     try:
@@ -78,11 +83,17 @@ def _update_view(
             view.update()
             if keep_selection:
                 view.selected_items = selected_items
-        elif isinstance(view, FormView) and view.items is not None:
+        elif isinstance(view, LinkedTableFigureView):
+            linkedtablefigure.update_figure(parent_view=view)
+        elif (
+            isinstance(view, FormView)
+            and view.items is not None
+            and isinstance(view.items, AbstractFormItems)
+        ):
             if not before_validation:
                 view.update()
             is_visible = view.items.is_visible(view.field_name, view.parent_fields)
-            if update_visibility:
+            if is_visible is not None:
                 view.is_visible = is_visible
             view.is_enabled = view.items.is_enabled(view.field_name, view.parent_fields)
             form.update_infos(view)
@@ -90,7 +101,7 @@ def _update_view(
             if not before_validation:
                 view.update()
             is_visible = view.items.is_visible(view.field_name, view.parent_fields)
-            if update_visibility:
+            if is_visible is not None:
                 view.is_visible = is_visible
             view.field_view.is_enabled = view.items.is_enabled(
                 view.field_name, view.parent_fields

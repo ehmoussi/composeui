@@ -35,4 +35,5 @@ class QtMainToolBar(QtView):
                 toolbar = QtToolBar.from_itoolbar(itoolbar)
                 setattr(self, toolbar_field.name, toolbar)
                 self.main_view.addToolBar(toolbar.view)
-                self.main_view.addToolBarBreak()
+                if toolbar_field.name != "file":
+                    self.main_view.addToolBarBreak()

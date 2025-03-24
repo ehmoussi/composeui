@@ -27,5 +27,7 @@
     <file>previous_page.png</file>
     <file>next_page.png</file>
     <file>last_page.png</file>
+    <file>undo.png</file>
+    <file>redo.png</file>
   </qresource>
 </RCC>

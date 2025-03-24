@@ -1,6 +1,8 @@
+from composeui.history.abstracthistory import AbstractHistory
 from composeui.store.abstractstore import AbstractStore
 
 from pathlib import Path
+from typing import Optional
 
 
 class SalomeHDFStore(AbstractStore):
@@ -10,6 +12,9 @@ class SalomeHDFStore(AbstractStore):
 
     def get_extension(self) -> str:
         return ".hdf"
+
+    def get_history(self) -> Optional[AbstractHistory]:
+        return None
 
     def set_debug_mode(self, is_debug: bool) -> None:
         self._is_debug = is_debug
