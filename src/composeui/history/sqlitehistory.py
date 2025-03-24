@@ -129,6 +129,13 @@ class SqliteHistory(AbstractHistory):
                     DELETE FROM _CUI_REDO_LOG
                     """
                 )
+                # Remove the old actions to not exceed the capacity of the history
+                db_conn.execute(
+                    f"""--sql
+                    DELETE FROM _CUI_UNDO_LOG
+                    WHERE idx<={self._get_current_idx(db_conn) - self.get_capacity()}
+                    """
+                )
             else:
                 # no commands have been recorded the index doesn't need to be incremented
                 self._decrement_current_idx(db_conn)

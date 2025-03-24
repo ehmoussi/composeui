@@ -124,8 +124,15 @@ class JsonHistory(AbstractHistory):
                     DELETE FROM _CUI_REDO_LOG
                     """
                 )
+                # Remove the old actions to not exceed the capacity of the history
+                db_conn.execute(
+                    f"""--sql
+                    DELETE FROM _CUI_UNDO_LOG
+                    WHERE idx<={self._get_current_idx(db_conn) - self.get_capacity()}
+                    """
+                )
             else:
-                # the state doesn't have changed so it doesn't need to be saved
+                # the state don't changed so it doesn't need to be saved
                 db_conn.execute(
                     """--sql
                     DELETE FROM _CUI_UNDO_LOG WHERE idx = :current_idx
