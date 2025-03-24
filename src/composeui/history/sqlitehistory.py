@@ -21,12 +21,6 @@ class SqliteHistory(AbstractHistory):
     def open_history(self, filepath: Optional[Path]) -> None:
         self.create_tables()
 
-    def save_history(self, filepath: Path) -> None:
-        # the triggers are removed before saving the database
-        with self._store.get_connection() as db_conn:
-            self._drop_all_triggers("undo", db_conn)
-            self._drop_all_triggers("redo", db_conn)
-
     def create_tables(self) -> None:
         with self._store.get_connection() as db_conn:
             db_conn.execute(
@@ -209,6 +203,7 @@ class SqliteHistory(AbstractHistory):
     ) -> None:
         triggers = ""
         if is_active:
+            self._add_all_triggers(log_name, db_conn)
             triggers = log_name
         db_conn.execute(
             """--sql
@@ -223,10 +218,6 @@ class SqliteHistory(AbstractHistory):
         for table in self._get_all_tables(db_conn):
             self._add_triggers(table, log_name, db_conn)
 
-    def _drop_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
-        for table in self._get_all_tables(db_conn):
-            self._drop_triggers(table, log_name, db_conn)
-
     def _add_triggers(
         self, table: str, log_name: LogName, db_conn: sqlite3.Connection
     ) -> None:
@@ -234,25 +225,13 @@ class SqliteHistory(AbstractHistory):
         self._add_after_update_trigger(table, log_name, db_conn)
         self._add_after_delete_trigger(table, log_name, db_conn)
 
-    def _drop_triggers(
-        self, table: str, log_name: LogName, db_conn: sqlite3.Connection
-    ) -> None:
-        db_conn.executescript(
-            f"""--sql
-            DROP TRIGGER IF EXISTS _{table}_after_insert_{log_name.lower()}_log;
-            DROP TRIGGER IF EXISTS _{table}_after_update_{log_name.lower()}_log;
-            DROP TRIGGER IF EXISTS _{table}_after_delete_{log_name.lower()}_log;
-            """
-        )
-        db_conn.commit()
-
     def _add_after_insert_trigger(
         self, table: str, log_name: LogName, db_conn: sqlite3.Connection
     ) -> None:
         cmd = f"'DELETE FROM {table} WHERE ROWID='||NEW.ROWID"
         db_conn.execute(
             f"""--sql
-            CREATE TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
+            CREATE TEMPORARY TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
             AFTER INSERT ON {table}
             WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
@@ -279,7 +258,7 @@ class SqliteHistory(AbstractHistory):
         cmd += " WHERE ROWID='||OLD.ROWID"
         db_conn.execute(
             f"""--sql
-            CREATE TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
+            CREATE TEMPORARY TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
             AFTER UPDATE ON {table}
             WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
@@ -308,7 +287,7 @@ class SqliteHistory(AbstractHistory):
         cmd += ")'"
         db_conn.execute(
             f"""--sql
-            CREATE TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
+            CREATE TEMPORARY TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
             BEFORE DELETE ON {table}
             WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
