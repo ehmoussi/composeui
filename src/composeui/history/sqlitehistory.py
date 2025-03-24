@@ -4,7 +4,8 @@ from typing_extensions import Literal, TypeAlias
 
 import sqlite3
 import typing
-from typing import List, Tuple
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 if typing.TYPE_CHECKING:
     from composeui.store.sqlitestore import SqliteStore
@@ -17,12 +18,27 @@ class SqliteHistory(AbstractHistory):
     def __init__(self, store: "SqliteStore") -> None:
         self._store = store
 
+    def open_history(self, filepath: Optional[Path]) -> None:
+        self.create_tables()
+
+    def save_history(self, filepath: Path) -> None:
+        # the triggers are removed before saving the database
+        with self._store.get_connection() as db_conn:
+            self._drop_all_triggers("undo", db_conn)
+            self._drop_all_triggers("redo", db_conn)
+
     def create_tables(self) -> None:
         with self._store.get_connection() as db_conn:
             db_conn.execute(
-                "CREATE TABLE IF NOT EXISTS _CUI_INDEX(h_id PRIMARY KEY, current_idx)"
+                """--sql
+                CREATE TABLE IF NOT EXISTS _CUI_INDEX(
+                    h_id INTEGER PRIMARY KEY NOT NULL,
+                    current_idx INTEGER,
+                    triggers TEXT DEFAULT ""
+                )
+                """
             )
-            db_conn.execute("INSERT OR IGNORE INTO _CUI_INDEX VALUES(1, 0)")
+            db_conn.execute("INSERT OR IGNORE INTO _CUI_INDEX VALUES(1, 0, 1)")
             db_conn.execute(
                 """--sql
                 CREATE TABLE IF NOT EXISTS _CUI_UNDO_LOG(
@@ -43,12 +59,14 @@ class SqliteHistory(AbstractHistory):
                 )
                 """
             )
+            self._add_all_triggers("undo", db_conn)
+            self._add_all_triggers("redo", db_conn)
             db_conn.commit()
 
     def undo(self) -> None:
         """Undo the last index of the history."""
         with self._store.get_connection() as db_conn:
-            self._add_all_triggers("redo", db_conn)
+            self._active_triggers("redo", True, db_conn)
             current_idx = self._get_current_idx(db_conn)
             try:
                 commands = self._get_commands(current_idx, "undo", db_conn)
@@ -67,12 +85,12 @@ class SqliteHistory(AbstractHistory):
                     )
                 db_conn.commit()
             finally:
-                self._drop_all_triggers("redo", db_conn)
+                self._active_triggers("redo", False, db_conn)
 
     def redo(self) -> None:
         """Redo the last index of the history."""
         with self._store.get_connection() as db_conn:
-            self._add_all_triggers("undo", db_conn)
+            self._active_triggers("undo", True, db_conn)
             current_idx = self._get_current_idx(db_conn)
             try:
                 commands = self._get_commands(current_idx, "redo", db_conn)
@@ -90,19 +108,19 @@ class SqliteHistory(AbstractHistory):
                     )
                 db_conn.commit()
             finally:
-                self._drop_all_triggers("undo", db_conn)
+                self._active_triggers("undo", False, db_conn)
 
     def start_recording(self) -> None:
         """Start recording the history."""
         with self._store.get_connection() as db_conn:
-            self._add_all_triggers("undo", db_conn)
+            self._active_triggers("undo", True, db_conn)
             self._increment_current_idx(db_conn)
             db_conn.commit()
 
     def stop_recording(self) -> None:
         """Stop recording the history."""
         with self._store.get_connection() as db_conn:
-            self._drop_all_triggers("undo", db_conn)
+            self._active_triggers("undo", False, db_conn)
             if self._has_commands("undo", db_conn):
                 # The log of the redo need to be deleted because the future have been modified
                 # so the redo log contains an outdated timeline
@@ -179,6 +197,21 @@ class SqliteHistory(AbstractHistory):
             return bool(result[0])
         return False
 
+    def _active_triggers(
+        self, log_name: LogName, is_active: bool, db_conn: sqlite3.Connection
+    ) -> None:
+        triggers = ""
+        if is_active:
+            triggers = log_name
+        db_conn.execute(
+            """--sql
+            UPDATE _CUI_INDEX
+            SET triggers=:triggers
+            WHERE h_id=1
+            """,
+            {"triggers": triggers},
+        )
+
     def _add_all_triggers(self, log_name: LogName, db_conn: sqlite3.Connection) -> None:
         for table in self._get_all_tables(db_conn):
             self._add_triggers(table, log_name, db_conn)
@@ -214,6 +247,7 @@ class SqliteHistory(AbstractHistory):
             f"""--sql
             CREATE TRIGGER IF NOT EXISTS _{table}_after_insert_{log_name.lower()}_log
             AFTER INSERT ON {table}
+            WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx,  ord, cmd)
                 VALUES(
@@ -240,6 +274,7 @@ class SqliteHistory(AbstractHistory):
             f"""--sql
             CREATE TRIGGER IF NOT EXISTS _{table}_after_update_{log_name.lower()}_log
             AFTER UPDATE ON {table}
+            WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
                 VALUES(
@@ -268,6 +303,7 @@ class SqliteHistory(AbstractHistory):
             f"""--sql
             CREATE TRIGGER IF NOT EXISTS _{table}_after_delete_{log_name.lower()}_log
             BEFORE DELETE ON {table}
+            WHEN (SELECT 1 FROM _CUI_INDEX WHERE h_id=1 AND triggers='{log_name}')
             BEGIN
                 INSERT INTO _CUI_{log_name.upper()}_LOG(idx, ord, cmd)
                 VALUES(

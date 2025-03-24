@@ -73,16 +73,20 @@ class BaseModel:
                 # open history (if it has one)
                 history = store.get_history()
                 history_store_filename = self.get_history_store_filename(index)
-                if history is not None and history_store_filename is not None:
-                    history_store_filepath = Path(tmp_dir, history_store_filename)
-                    if not history_store_filepath.exists():
-                        msg = (
-                            "Missing the history file for the store at the index "
-                            f"'{index}' inside {filepath}"
-                        )
-                        raise ValueError(msg)
+                if history is not None:
+                    history_store_filepath: Optional[Path] = None
+                    if history_store_filename is not None:
+                        history_store_filepath = Path(tmp_dir, history_store_filename)
+                        if not history_store_filepath.exists():
+                            msg = (
+                                "Missing the history file for the store at the index "
+                                f"'{index}' inside {filepath}"
+                            )
+                            raise ValueError(msg)
+                        ignore_patterns.append(history_store_filename)
+                    # call open_history even without a file if some action need to be
+                    # done like create tables and triggers for the sqlite store
                     history.open_history(history_store_filepath)
-                    ignore_patterns.append(history_store_filename)
             # copy the other files in a new 'other files directory'
             new_other_files_dir = self.create_other_files_directory()
             # remove the directory to avoid the raise of an exception by copytree
@@ -110,10 +114,7 @@ class BaseModel:
             ) as tmp_dir:
                 # save the stores
                 for index, store in enumerate(self.stores):
-                    store_filepath = Path(tmp_dir, self.get_store_filename(index))
-                    store.save_study(store_filepath)
-                    tar.add(store_filepath, arcname=store_filepath.name, recursive=False)
-                    # save history
+                    # save the store history
                     history = store.get_history()
                     if history is not None:
                         history_store_filename = self.get_history_store_filename(index)
@@ -125,6 +126,10 @@ class BaseModel:
                                 arcname=history_store_filename,
                                 recursive=False,
                             )
+                    # save the store
+                    store_filepath = Path(tmp_dir, self.get_store_filename(index))
+                    store.save_study(store_filepath)
+                    tar.add(store_filepath, arcname=store_filepath.name, recursive=False)
                 # save other files
                 for other_filepath in self.other_files_dir.iterdir():
                     tar.add(

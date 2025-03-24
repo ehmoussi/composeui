@@ -5,7 +5,7 @@ from typing import Optional
 
 class AbstractHistory(ABC):
 
-    def open_history(self, filepath: Path) -> None:
+    def open_history(self, filepath: Optional[Path]) -> None:
         return None
 
     def save_history(self, filepath: Path) -> None:

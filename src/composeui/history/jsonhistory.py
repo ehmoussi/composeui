@@ -49,9 +49,9 @@ class JsonHistory(AbstractHistory):
             )
             db_conn.commit()
 
-    def open_history(self, filepath: Path) -> None:
+    def open_history(self, filepath: Optional[Path]) -> None:
+        assert filepath is not None
         self._history_store.open_study(filepath)
-        # self.create_tables()
 
     def save_history(self, filepath: Path) -> None:
         self._history_store.save_study(filepath)
