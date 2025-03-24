@@ -7,7 +7,7 @@ class AbstractHistory(ABC):
 
     def get_capacity(self) -> int:
         """Get the maxumum number of actions of undo/redo to store."""
-        return 3  # 100
+        return 100
 
     def open_history(self, filepath: Optional[Path]) -> None:
         """Open the history file if it exists and/or do the post process actions.
