@@ -211,9 +211,8 @@ class QtTextEditView(QtRowItemView[AnyFormItems], TextEditView[AnyFormItems]):
     def append_text(self, text: str) -> None:
         """Append the given text."""
         if self.text_type == TextEditType.HTML:
-            self.view.moveCursor(QTextCursor.End)
             self.view.insertHtml(text)
-            self.view.moveCursor(QTextCursor.PreviousBlock)
+            self.view.moveCursor(QTextCursor.End)
             self.view.ensureCursorVisible()
         else:
             self.view.append(text.rstrip("\n"))

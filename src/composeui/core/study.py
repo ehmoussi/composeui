@@ -15,13 +15,15 @@ if TYPE_CHECKING:
     from composeui.apps.eventdrivenappmixin import EventDrivenAppMixin
 
 
-def new(*, main_view: MainView, app: "EventDrivenAppMixin[AnyMainView, AnyModel]") -> None:
+def new(*, main_view: MainView, app: "EventDrivenAppMixin[AnyMainView, AnyModel]") -> bool:
     r"""Create a new study after asking a confirmation."""
     if ask_confirmation(main_view, "clear"):
         app.new_study()
+        return True
+    return False
 
 
-def open_file(*, main_view: MainView, model: AnyModel) -> None:
+def open_file(*, main_view: MainView, model: AnyModel) -> bool:
     r"""Open the study."""
     filepath = selectfiles.select_study_file(main_view)
     if filepath is not None:
@@ -30,9 +32,11 @@ def open_file(*, main_view: MainView, model: AnyModel) -> None:
             Tasks([OpenTask(model, filepath)], print_to_std=True, name="Open Study"),
             finished_slots=[partial(tools.update_all_views, main_view)],
         )
+        return True
+    return False
 
 
-def open_file_without_update(*, main_view: MainView, model: AnyModel) -> None:
+def open_file_without_update(*, main_view: MainView, model: AnyModel) -> bool:
     r"""Open the study without an update of the views.
 
     Useful for example with Salome where opening a study destroy some views.
@@ -44,6 +48,8 @@ def open_file_without_update(*, main_view: MainView, model: AnyModel) -> None:
             main_view,
             Tasks([OpenTask(model, filepath)], print_to_std=True, name="Open Study"),
         )
+        return True
+    return False
 
 
 def save(*, main_view: MainView, model: AnyModel) -> None:
@@ -51,14 +57,14 @@ def save(*, main_view: MainView, model: AnyModel) -> None:
     save_study(main_view, model, ask_filepath=False)
 
 
-def save_as(*, main_view: MainView, model: AnyModel) -> None:
+def save_as(*, main_view: MainView, model: AnyModel) -> bool:
     r"""Save the study as."""
-    save_study(main_view, model, ask_filepath=True)
+    return save_study(main_view, model, ask_filepath=True)
 
 
-def save_before_exit(*, main_view: MainView, model: AnyModel) -> None:
+def save_before_exit(*, main_view: MainView, model: AnyModel) -> bool:
     r"""Save before exiting the application."""
-    save_study(main_view, model, ask_filepath=False, force_close=True)
+    return save_study(main_view, model, ask_filepath=False, force_close=True)
 
 
 def undo(*, main_view: MainView, model: AnyModel) -> None:
@@ -86,7 +92,7 @@ def save_study(
     model: AnyModel,
     ask_filepath: bool = True,
     force_close: bool = False,
-) -> None:
+) -> bool:
     r"""Save the study."""
     if ask_filepath or model.filepath is None:
         filepath = selectfiles.save_study_file(main_view)
@@ -102,6 +108,8 @@ def save_study(
             tasks,
             finished_slots=[partial(forced_exit, force_close=force_close)],
         )
+        return True
+    return False
 
 
 def clear(main_view: MainView, model: AnyModel) -> None:

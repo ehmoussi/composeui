@@ -158,9 +158,13 @@ async def fetch_llms_async(*, main_view: "ExampleMainView", model: "Model") -> N
 
 def connect_llm(*, llm_view: LLMView, main_view: "ExampleMainView") -> None:
     main_view.on_start.append(fetch_llms)
+    main_view.toolbar.file.new.triggered.append_final_callback(fetch_llms)
+    main_view.menu.file.new.triggered.append_final_callback(fetch_llms)
     llm_view.apply_clicked.append(run_llm)
 
 
 def connect_llm_async(*, llm_view: LLMView, main_view: "ExampleMainView") -> None:
     main_view.on_start.append(fetch_llms_async)
+    main_view.toolbar.file.new.triggered.append_final_callback(fetch_llms_async)
+    main_view.menu.file.new.triggered.append_final_callback(fetch_llms_async)
     llm_view.apply_clicked.append(run_llm_async)

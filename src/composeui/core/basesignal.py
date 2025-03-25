@@ -293,6 +293,28 @@ class BaseSignal(MutableSequence[Callback]):
         self._initial_callbacks.clear()
         self._callbacks.clear()
 
+    def append_final_callback(self, callback: CallbackFunc) -> None:
+        """Append a callback function as the final callback in the execution sequence.
+
+        This method first flattens the current list of callbacks to ensure they execute
+        sequentially. It then appends the provided callback so that it is guaranteed to run
+        last.
+        """
+        flatten_callbacks = self._flatten_callback_list(self._initial_callbacks)
+        flatten_callbacks.append(callback)
+        self.clear()
+        self.append(flatten_callbacks)
+
+    def _flatten_callback_list(self, callbacks: List[Callback]) -> List[CallbackFunc]:
+        """Flatten the callback list to ensure it is a list of callback function."""
+        flatten_callbacks = []
+        for callback in callbacks:
+            if isinstance(callback, list):
+                flatten_callbacks.extend(callback)
+            else:
+                flatten_callbacks.append(callback)
+        return flatten_callbacks
+
     @overload
     def __getitem__(self, index: int) -> Callback: ...
     @overload
