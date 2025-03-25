@@ -3,7 +3,7 @@ from composeui.core.views.view import View
 
 import enum
 from dataclasses import dataclass, field
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Mapping
 
 
 class HttpMethod(enum.Enum):
@@ -19,6 +19,7 @@ class NetworkManager(View):
     # input
     url: str = field(init=False, default="")
     method: HttpMethod = field(init=False, default=HttpMethod.GET)
+    header: Mapping[bytes, bytes] = field(init=False, default_factory=dict)
     body: bytes = field(init=False, default=b"")
     # output
     status_code: int = field(init=False, default=0)

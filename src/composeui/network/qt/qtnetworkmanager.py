@@ -46,10 +46,18 @@ class QtNetworkManager(QtView, NetworkManager):
 
     def _run(self) -> None:
         if self.method in self._run_method:
-            self._request.setRawHeader(b"accept", b"application/json")
+            if len(self.header) == 0:
+                self._request.setRawHeader(b"accept", b"application/json")
+            else:
+                for name, value in self.header.items():
+                    self._request.setRawHeader(name, value)
             self._reply = self._run_method[self.method](self._request)
         else:
-            self._request.setRawHeader(b"content-type", b"application/json")
+            if len(self.header) == 0:
+                self._request.setRawHeader(b"content-type", b"application/json")
+            else:
+                for name, value in self.header.items():
+                    self._request.setRawHeader(name, value)
             self._reply = self._run_with_payload[self.method](self._request, self.body)
         if self._reply is not None:
             self.response = b""
