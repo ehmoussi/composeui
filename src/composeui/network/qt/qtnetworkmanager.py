@@ -7,7 +7,7 @@ from qtpy.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Callable, Dict, Optional
+from typing import AsyncGenerator, Callable, Dict, Optional
 
 
 @dataclass(eq=False)
@@ -35,8 +35,7 @@ class QtNetworkManager(QtView, NetworkManager):
             HttpMethod.POST: self._manager.post,
             HttpMethod.PUT: self._manager.put,
         }
-        self._queue: asyncio.Queue[Optional[Any]] = asyncio.Queue()
-        self._lock = asyncio.Lock()
+        self._event = asyncio.Event()
 
     @property  # type: ignore[misc]
     def url(self) -> str:
@@ -56,7 +55,7 @@ class QtNetworkManager(QtView, NetworkManager):
                 self._request, json.dumps(self.body).encode()
             )
         if self._reply is not None:
-            self.received_data = None
+            self.response = b""
 
     def run(self) -> None:
         self._run()
@@ -66,37 +65,44 @@ class QtNetworkManager(QtView, NetworkManager):
     async def run_async(self) -> None:
         self._run()
         if self._reply is not None:
-            self._reply.readyRead.connect(
-                lambda: asyncio.ensure_future(self._read_reply_async())
-            )
+            self._event.clear()
+            self._reply.readyRead.connect(self._event.set)
         while True:
-            await self._queue.get()
+            await self._event.wait()
+            self._event.clear()
+            self._read_reply()
             if self._reply is None:
                 break
 
-    async def stream(self) -> AsyncGenerator[Optional[Any], None]:
+    async def stream(self, chunk_size: int) -> AsyncGenerator[bytes, None]:
         self._run()
         if self._reply is not None:
-            self._reply.readyRead.connect(
-                lambda: asyncio.ensure_future(self._read_reply_async())
-            )
+            self._event.clear()
+            self._reply.readyRead.connect(self._event.set)
         while True:
-            response = await self._queue.get()
-            yield response
-            await asyncio.sleep(0.1)
-            if self._reply is None:
+            if self._reply is None or (
+                self._reply.bytesAvailable() == 0 and self._reply.isFinished()
+            ):
+                if self._reply is not None:
+                    self.status_code = self._reply.attribute(
+                        QNetworkRequest.HttpStatusCodeAttribute
+                    )
                 break
+            elif self._reply.bytesAvailable() > 0:
+                # Pyside6 `read` returns a QByteArray not bytes but mypy doesn't know that :')
+                response = self._reply.read(chunk_size).data()  # type: ignore[attr-defined]
+                yield response
+            else:
+                await self._event.wait()
+                self._event.clear()
 
-    def _read_reply(self) -> None:
+    def _read_reply(self) -> bytes:
         if self._reply is not None:
-            received_bytes = self._reply.readAll().data()
-            self.received_data = json.loads(received_bytes)
-            self.status_code = self._reply.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+            self.response += self._reply.readAll().data()
             if self._reply.isFinished():
+                self.status_code = self._reply.attribute(
+                    QNetworkRequest.HttpStatusCodeAttribute
+                )
                 self._reply.deleteLater()
                 self._reply = None
-
-    async def _read_reply_async(self) -> None:
-        async with self._lock:
-            self._read_reply()
-            await self._queue.put(self.received_data)
+        return self.response

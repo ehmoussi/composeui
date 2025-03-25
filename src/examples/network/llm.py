@@ -12,6 +12,7 @@ from composeui.form.formview import (
 from composeui.network import network
 from composeui.network.networkmanager import HttpMethod, NetworkManager
 
+import json
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Optional, Sequence, Tuple
@@ -68,11 +69,9 @@ class LLMView(GroupBoxApplyFormView[LLMItems]):
 
 
 def fill_llms(*, main_view: "ExampleMainView", model: "Model") -> None:
-    if main_view.network_manager.received_data is not None:
-        model.root.llms = [
-            model_info["name"]
-            for model_info in main_view.network_manager.received_data["models"]
-        ]
+    if main_view.network_manager.response != b"":
+        json_response = json.loads(main_view.network_manager.response)
+        model.root.llms = [model_info["name"] for model_info in json_response["models"]]
     tools.update_view_with_dependencies(main_view.llm)
 
 
@@ -92,15 +91,16 @@ def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> N
             "messages": model.build_ollama_messages(),
             "stream": False,
         },
-        reply_callback=[write_content],
+        reply_callbacks=[write_content],
     )
 
 
 def write_content(
     *, view: NetworkManager, main_view: "ExampleMainView", model: "Model"
 ) -> None:
-    json_response = view.received_data
-    if json_response is not None:
+    response = view.response
+    if response != b"":
+        json_response = json.loads(response)
         model.root.answers.append(json_response["message"]["content"])
         main_view.llm.conversation.field_view.append_text(model.get_last_html_answer())
 
@@ -111,7 +111,8 @@ async def run_llm_async(
     append_last_question(main_view.llm, model)
     answer = ""
     view.conversation.field_view.append_text(model.get_answer_html_header())
-    async for json_response in network.fetch_stream_async(
+    response = b""
+    async for chunk_response in network.fetch_stream_async(
         main_view,
         "http://localhost:11434/api/chat",
         HttpMethod.POST,
@@ -121,10 +122,15 @@ async def run_llm_async(
             "stream": True,
         },
     ):
-        if json_response is not None:
+        response += chunk_response
+        index = response.find(b"\n")
+        while index >= 0:
+            json_response = json.loads(response[: index + 1])
             partial_answer = json_response["message"]["content"]
             answer += partial_answer
             view.conversation.field_view.append_text(model.clean_answer(partial_answer))
+            response = response[index + 1 :]
+            index = response.find(b"\n")
     view.conversation.field_view.append_text(model.get_answer_html_footer())
     model.root.answers.append(answer)
 
@@ -143,7 +149,7 @@ def fetch_llms(*, main_view: "ExampleMainView") -> None:
         main_view,
         "http://localhost:11434/api/tags",
         HttpMethod.GET,
-        reply_callback=[fill_llms],
+        reply_callbacks=[fill_llms],
     )
 
 

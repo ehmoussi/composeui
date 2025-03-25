@@ -3,7 +3,7 @@ from composeui.core.views.view import View
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict
 
 
 class HttpMethod(enum.Enum):
@@ -22,7 +22,7 @@ class NetworkManager(View):
     body: Dict[str, Any] = field(init=False, default_factory=dict)
     # output
     status_code: int = field(init=False, default=0)
-    received_data: Optional[Any] = field(init=False, default=None)
+    response: bytes = field(init=False, default=b"")
     # signals
     reply_finished: BaseSignal = field(init=False, repr=False, default=BaseSignal())
 
@@ -30,5 +30,5 @@ class NetworkManager(View):
 
     async def run_async(self) -> None: ...
 
-    async def stream(self) -> AsyncGenerator[Optional[Any], None]:
-        yield None
+    async def stream(self, chunk_size: int) -> AsyncGenerator[bytes, None]:
+        yield b""
