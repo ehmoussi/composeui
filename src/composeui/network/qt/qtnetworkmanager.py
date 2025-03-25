@@ -5,7 +5,6 @@ from qtpy.QtCore import QUrl
 from qtpy.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 import asyncio
-import json
 from dataclasses import dataclass, field
 from typing import AsyncGenerator, Callable, Dict, Optional
 
@@ -51,9 +50,7 @@ class QtNetworkManager(QtView, NetworkManager):
             self._reply = self._run_method[self.method](self._request)
         else:
             self._request.setRawHeader(b"content-type", b"application/json")
-            self._reply = self._run_with_payload[self.method](
-                self._request, json.dumps(self.body).encode()
-            )
+            self._reply = self._run_with_payload[self.method](self._request, self.body)
         if self._reply is not None:
             self.response = b""
 

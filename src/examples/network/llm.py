@@ -86,11 +86,13 @@ def run_llm(*, view: LLMView, main_view: "ExampleMainView", model: "Model") -> N
         main_view,
         "http://localhost:11434/api/chat",
         HttpMethod.POST,
-        {
-            "model": model.root.llms[view.llm.field_view.current_index],
-            "messages": model.build_ollama_messages(),
-            "stream": False,
-        },
+        json.dumps(
+            {
+                "model": model.root.llms[view.llm.field_view.current_index],
+                "messages": model.build_ollama_messages(),
+                "stream": False,
+            }
+        ).encode(),
         reply_callbacks=[write_content],
     )
 
@@ -116,11 +118,13 @@ async def run_llm_async(
         main_view,
         "http://localhost:11434/api/chat",
         HttpMethod.POST,
-        {
-            "model": model.root.llms[view.llm.field_view.current_index],
-            "messages": model.build_ollama_messages(),
-            "stream": True,
-        },
+        json.dumps(
+            {
+                "model": model.root.llms[view.llm.field_view.current_index],
+                "messages": model.build_ollama_messages(),
+                "stream": True,
+            }
+        ).encode(),
     ):
         response += chunk_response
         index = response.find(b"\n")
