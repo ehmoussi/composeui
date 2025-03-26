@@ -25,6 +25,9 @@ class ProbaModelApp(DjangoApp):
             is_debug=is_debug,
             allowed_hosts=["*"],
             installed_apps=[
-                "examples.probamodelapp.variables.apps.VariablesConfig",
+                "examples.probamodelapp.variables",
             ],
         )
+
+
+app = ProbaModelApp(is_debug=True)

@@ -1,6 +1,4 @@
-from examples.probamodelapp.app import ProbaModelApp
-
-app = ProbaModelApp(is_debug=True)
+from examples.probamodelapp.app import app
 
 
 if __name__ == "__main__":

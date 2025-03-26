@@ -15,13 +15,13 @@ if typing.TYPE_CHECKING:
 
 
 class DjangoORMStore(AbstractStore):
-    def __init__(self, engine: Optional[str] = None, filepath: Optional[Path] = None) -> None:
+    def __init__(self, filepath: Path, engine: Optional[str] = None) -> None:
         super().__init__()
         self._is_debug = False
         self.databases = {
             "default": {
                 "ENGINE": engine if engine is not None else "django.db.backends.sqlite3",
-                "NAME": filepath if filepath is not None else ":memory",
+                "NAME": filepath,
             }
         }
 

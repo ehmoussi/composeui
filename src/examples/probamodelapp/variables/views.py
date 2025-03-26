@@ -1,10 +1,33 @@
 from composeui.items.table.tableview import TableView
-from .models import Variable
 
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.model.djangoormmodel import DjangoORMModel
 
 from typing import List, Optional
+from django.db import models
+
+from django.contrib import admin
+
+
+class Variable(models.Model):
+
+    class Meta:
+        app_label = "variables"
+
+    class Distribution(models.TextChoices):
+        Normal = "Normal"
+        Uniform = "Uniform"
+
+    v_id = models.IntegerField(primary_key=True)
+    name = models.TextField(null=True)
+    distribution = models.CharField(choices=Distribution, null=True, max_length=100)
+    mean = models.FloatField(default=0.0)
+    sigma = models.FloatField(default=1.0)
+    lower = models.FloatField(default=0.0)
+    upper = models.FloatField(default=1.0)
+
+
+admin.site.register(Variable)
 
 
 class VariablesItems(AbstractTableItems[DjangoORMModel]):

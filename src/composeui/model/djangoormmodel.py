@@ -10,11 +10,11 @@ class DjangoORMModel(BaseModel):
         self,
         app_name: str,
         version: str,
+        filepath: Path,
         engine: Optional[str] = None,
-        filepath: Optional[Path] = None,
         is_debug: bool = False,
     ) -> None:
-        self._django_orm = DjangoORMStore(engine=engine, filepath=filepath)
+        self._django_orm = DjangoORMStore(filepath=filepath, engine=engine)
         super().__init__(
             app_name,
             version,
