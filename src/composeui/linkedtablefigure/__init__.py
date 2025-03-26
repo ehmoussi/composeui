@@ -1,7 +1,7 @@
 from composeui.commontypes import AnyTableItems
 from composeui.figure import initialize_figure_view
 from composeui.items.core.initialize import initialize_items_view
-from composeui.items.table import connect_table
+from composeui.items.table.connecttable import connect_table
 from composeui.linkedtablefigure.linkedtablefigureview import LinkedTableFigureView
 
 

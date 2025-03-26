@@ -15,6 +15,7 @@ dependencies = [
     "typing_extensions>=4.6.0;python_version>='3.8'",
     "typing_extensions;python_version<'3.8'",
     "pyperclip",
+    "django>=3.2.25",
 ]
 dynamic = ["version"]
 [[project.authors]]
@@ -54,6 +55,7 @@ sqlalchemy = ["sqlalchemy"]
 markdown = ["markdown", "tabulate"]
 vtk = ["vtk<=9.3.1;python_version<'3.8'", "vtk;python_version>='3.8'"]
 async = ["aiofiles"]
+django = ["django", "dotenv"]
 all = [
     "matplotlib",
     "pandas",
@@ -68,6 +70,8 @@ all = [
     "vtk<=9.3.1;python_version<'3.8'",
     "vtk;python_version>='3.8'",
     "aiofiles",
+    "django",
+    "dotenv",
 ]
 dev = [
     "pytest",
@@ -84,6 +88,7 @@ dev = [
     "types-openpyxl",
     "types-aiofiles",
     "pytest-asyncio",
+    "django-stubs",
 ]
 
 [tool.setuptools_scm]
@@ -194,7 +199,7 @@ fixture-parentheses = true
 "src/composeui/core/icons/*.py" = ["N802", "ANN201", "UP009"]
 
 [tool.mypy]
-plugins = ["sqlalchemy.ext.mypy.plugin"]
+plugins = ["sqlalchemy.ext.mypy.plugin", "mypy_django_plugin.main"]
 exclude = ["src/composeui/core/icons"]
 strict = true
 warn_unreachable = true
@@ -261,3 +266,6 @@ exclude_lines = ["pragma: no cover", "def __repr__", "def __str__"]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.django-stubs]
+django_settings_module = "composeui.apps.djangoapp"
