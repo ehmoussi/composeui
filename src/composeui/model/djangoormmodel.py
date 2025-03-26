@@ -14,14 +14,18 @@ class DjangoORMModel(BaseModel):
         engine: Optional[str] = None,
         is_debug: bool = False,
     ) -> None:
-        self._django_orm = DjangoORMStore(filepath=filepath, engine=engine)
+        self._django_store = DjangoORMStore(filepath=filepath, engine=engine)
         super().__init__(
             app_name,
             version,
-            self._django_orm,
+            self._django_store,
             is_debug=is_debug,
         )
 
     @property
+    def django_store(self) -> DjangoORMStore:
+        return self._django_store
+
+    @property
     def databases(self) -> Dict[str, Dict[str, Any]]:
-        return self._django_orm.databases
+        return self._django_store.databases

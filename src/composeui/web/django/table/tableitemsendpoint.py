@@ -212,14 +212,18 @@ class TableItemsEndPoint(View):
             row = nb_rows
         try:
             current_row = self._items.insert(row)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            if self._items.is_debug():
+                message = str(e)
+            else:
+                message = "An unexpected error occurred while processing the insertion."
             return (
                 row,
                 None,
                 Status(
                     status=StatusType.FAILED,
                     status_code=StatusCode.INTERNAL_SERVER_ERROR,
-                    message=("An unexpected error occurred while processing the insertion."),
+                    message=message,
                 ),
             )
         else:

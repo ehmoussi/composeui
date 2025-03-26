@@ -24,6 +24,9 @@ class AbstractItems(ABC, Generic[V, AnyModel]):
         self._dependencies: List[AbstractItems[AnyItemsView, AnyModel]] = []
         self._is_view_selection_suspended = False
 
+    def is_debug(self) -> bool:
+        return self._model.is_debug
+
     def get_dependencies(self) -> Tuple["AbstractItems[AnyItemsView, AnyModel]", ...]:
         """Get the items that can be used to generate the data of the current items.
 

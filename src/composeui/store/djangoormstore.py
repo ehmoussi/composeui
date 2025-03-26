@@ -2,13 +2,14 @@ from composeui.store.abstractstore import AbstractStore
 
 from django.apps import apps
 from django.db import connection
+from django.db.backends.sqlite3.base import SQLiteCursorWrapper
 
 import contextlib
 import sqlite3
 import sys
 import typing
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 
 if typing.TYPE_CHECKING:
     from composeui.history.abstracthistory import AbstractHistory
@@ -28,6 +29,11 @@ class DjangoORMStore(AbstractStore):
     def get_history(self) -> Optional["AbstractHistory"]:
         """Get the manager of the undo/redo of the history of the store."""
         return None
+
+    @contextlib.contextmanager
+    def get_connection(self) -> Generator[SQLiteCursorWrapper, None, None]:
+        with connection.cursor() as db_conn:
+            yield db_conn
 
     @property
     def is_sqlite(self) -> bool:

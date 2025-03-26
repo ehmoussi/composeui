@@ -1,12 +1,11 @@
 from composeui.items.table.tableview import TableView
 
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from composeui.model.djangoormmodel import DjangoORMModel
-
-from typing import List, Optional
-from django.db import models
-
 from django.contrib import admin
+from django.db import models
+from typing import List, Optional
+
+from examples.probamodelapp.model import Model
 
 
 class Variable(models.Model):
@@ -21,17 +20,17 @@ class Variable(models.Model):
     v_id = models.IntegerField(primary_key=True)
     name = models.TextField(null=True)
     distribution = models.CharField(choices=Distribution, null=True, max_length=100)
-    mean = models.FloatField(default=0.0)
-    sigma = models.FloatField(default=1.0)
-    lower = models.FloatField(default=0.0)
-    upper = models.FloatField(default=1.0)
+    mean = models.FloatField(db_default=0.0)
+    sigma = models.FloatField(db_default=1.0)
+    lower = models.FloatField(db_default=0.0)
+    upper = models.FloatField(db_default=1.0)
 
 
 admin.site.register(Variable)
 
 
-class VariablesItems(AbstractTableItems[DjangoORMModel]):
-    def __init__(self, model: DjangoORMModel) -> None:
+class VariablesItems(AbstractTableItems[Model]):
+    def __init__(self, model: Model) -> None:
         super().__init__(TableView(), model, title="Variables")
         self._titles = ["Name", "Distribution", "Id"]
 
@@ -42,54 +41,38 @@ class VariablesItems(AbstractTableItems[DjangoORMModel]):
         return self._titles[column]
 
     def get_nb_rows(self) -> int:
-        return int(Variable.objects.count())
+        return self._model.variables_query.count()
 
     def insert(self, row: int) -> Optional[int]:
-        variable = Variable(name="Variable", distribution=Variable.Distribution.Normal)
-        variable.save()
+        self._model.variables_query.add("Variable", Variable.Distribution.Normal.name)
         return super().insert(row)
 
     def remove(self, row: int) -> Optional[int]:
-        variable = Variable.objects.order_by("v_id")[row]
-        variable.delete()
+        self._model.variables_query.remove(row)
         return super().remove(row)
 
     def get_data(self, row: int, column: int) -> str:
-        variable = Variable.objects.order_by("v_id")[row]
         if column == 0:
-            return str(variable.name)
+            return self._model.variables_query.get_name(row)
         elif column == 1:
-            return str(variable.distribution)
+            return self._model.variables_query.get_distribution(row)
         elif column == 2:
-            return str(variable.v_id)
+            return str(self._model.variables_query.get_distribution(row))
         return super().get_data(row, column)
 
     def get_data_by_row(self, row: int) -> List[str]:
-        variable = Variable.objects.order_by("v_id")[row]
-        return [
-            variable.name,
-            str(variable.distribution),
-            str(variable.v_id),
-        ]
+        return list(map(str, self._model.variables_query.get_row(row)))
 
     def get_all_datas(self) -> List[List[str]]:
-        variables = Variable.objects.order_by("v_id")
         return [
-            [
-                variable.name,
-                str(variable.distribution),
-                str(variable.v_id),
-            ]
-            for variable in variables
+            [row[0], row[1], str(row[2])] for row in self._model.variables_query.get_data()
         ]
 
     def set_data(self, row: int, column: int, value: str) -> bool:
-        variable = Variable.objects.order_by("v_id")[row]
         if column == 0:
-            variable.name = value
+            self._model.variables_query.set_name(row, value)
         elif column == 1:
-            variable.distribution = Variable.Distribution(value)
+            self._model.variables_query.set_distribution(row, value)
         else:
             return False
-        variable.save()
         return True
