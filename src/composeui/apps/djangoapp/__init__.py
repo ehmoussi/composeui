@@ -18,14 +18,17 @@ class DjangoApp(BaseApp):
         is_debug: bool = True,
         secret_key: Optional[str] = None,
         allowed_hosts: Optional[List[str]] = None,
+        template_dirs: Optional[List[Path]] = None,
         installed_apps: Optional[List[str]] = None,
     ) -> None:
         self.model = model
         self._base_dir = base_dir
+        self._web_path = Path(Path(__file__), "..", "..", "..", "web")
         self._root_urlconf = root_urlconf
         self._is_debug = is_debug
         self._secret_key = secret_key
         self._allowed_hosts = allowed_hosts
+        self._template_dirs = template_dirs if template_dirs is not None else []
         self._installed_apps = installed_apps if installed_apps is not None else []
 
     def _configure(self) -> None:
@@ -60,7 +63,11 @@ class DjangoApp(BaseApp):
             TEMPLATES=[
                 {
                     "BACKEND": "django.template.backends.django.DjangoTemplates",
-                    "DIRS": [],
+                    "DIRS": [
+                        Path(Path(__file__), "..", "templates").resolve(),
+                        Path(self._web_path, "django", "table", "templates"),
+                        *self._template_dirs,
+                    ],
                     "APP_DIRS": True,
                     "OPTIONS": {
                         "context_processors": [
@@ -101,6 +108,10 @@ class DjangoApp(BaseApp):
             # Static files (CSS, JavaScript, Images)
             # https://docs.djangoproject.com/en/5.1/howto/static-files/
             STATIC_URL="static/",
+            STATICFILES_DIRS=[
+                Path(self._web_path, "django", "table", "static"),
+                Path(self._web_path, "django", "table", "dist"),
+            ],
             # Default primary key field type
             # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
             DEFAULT_AUTO_FIELD="django.db.models.BigAutoField",

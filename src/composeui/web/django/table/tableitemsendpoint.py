@@ -2,6 +2,7 @@ from django.http import FileResponse, HttpRequest, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import View
+from composeui.items.core.itemsutils import ComboBoxDelegateProps, DelegateProps
 from composeui.items.core.views.itemsview import FormatExtension
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.exportfiletabletask import ExportFileTableTask
@@ -321,3 +322,40 @@ class FileTableItemsEndpoint(View):
                 as_attachment=True,
                 filename=f"{self._items.get_slug_title()}.{self.extension}",
             )
+
+
+class TableColumnsEndpoint(View):
+    items: Optional[AbstractTableItems[Any]] = None
+
+    def __init__(self, items: AbstractTableItems[Any]) -> None:
+        self._items = items
+
+    def get(self, _: HttpRequest) -> JsonResponse:
+        column_titles = self._items.get_column_titles()
+        column_names = self._items.get_column_names()
+
+        return create_response_from_status(
+            status=Status(status=StatusType.OK, status_code=StatusCode.OK, message=""),
+            content={
+                "columns": [
+                    {
+                        "title": column_title,
+                        "field": column_name,
+                        **self._from_delegate_to_tabulator_editor(
+                            self._items.get_delegate_props(0, i)
+                        ),
+                    }
+                    for i, (column_title, column_name) in enumerate(
+                        zip(column_titles, column_names)
+                    )
+                ]
+            },
+        )
+
+    def _from_delegate_to_tabulator_editor(
+        self, delegate: Optional[DelegateProps]
+    ) -> Dict[str, Any]:
+        if isinstance(delegate, ComboBoxDelegateProps):
+            return {"editor": "list", "editorParams": {"values": [delegate.values]}}
+        else:
+            return {"editor": "input"}

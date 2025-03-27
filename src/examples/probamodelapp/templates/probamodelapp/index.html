@@ -1,0 +1,9 @@
+{% extends "mainview/index.html" %}
+
+
+{% block content %}
+<div>
+    {% url 'variables:api' as variables_url %}
+    {% include "table/table.html" with table_id="variables" url="/variables/api" %}
+</div>
+{% endblock %}

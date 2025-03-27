@@ -3,6 +3,7 @@ from composeui.items.core.views.itemsview import FormatExtension
 from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.web.django.table.tableitemsendpoint import (
     FileTableItemsEndpoint,
+    TableColumnsEndpoint,
     TableItemsEndPoint,
 )
 
@@ -14,6 +15,7 @@ def table_urls(items: AbstractTableItems[Any]) -> Any:
         path(
             "api/",
             TableItemsEndPoint.as_view(items=items),
+            name="api",
         ),
         path(
             "api/<int:row>",
@@ -22,6 +24,11 @@ def table_urls(items: AbstractTableItems[Any]) -> Any:
         path(
             "api/<int:row>",
             TableItemsEndPoint.as_view(items=items),
+        ),
+        path(
+            "api/columns",
+            TableColumnsEndpoint.as_view(items=items),
+            name="columns",
         ),
         path(
             "csv",

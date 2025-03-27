@@ -13,5 +13,4 @@ class Model(DjangoORMModel):
             filepath=base_dir / "db.sqlite3",
             is_debug=is_debug,
         )
-
         self.variables_query = VariablesQuery(self._django_store)

@@ -1,3 +1,4 @@
+from composeui.items.core.itemsutils import ComboBoxDelegateProps, DelegateProps
 from composeui.items.table.tableview import TableView
 
 from composeui.items.table.abstracttableitems import AbstractTableItems
@@ -27,6 +28,9 @@ class Variable(models.Model):
 
 
 admin.site.register(Variable)
+
+
+class DjangoTableView(TableView): ...
 
 
 class VariablesItems(AbstractTableItems[Model]):
@@ -76,3 +80,8 @@ class VariablesItems(AbstractTableItems[Model]):
         else:
             return False
         return True
+
+    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
+        if column == 1:
+            return ComboBoxDelegateProps(list(Variable.Distribution))
+        return super().get_delegate_props(row, column)
