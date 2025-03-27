@@ -61,7 +61,7 @@ class VariablesItems(AbstractTableItems[Model]):
         elif column == 1:
             return self._model.variables_query.get_distribution(row)
         elif column == 2:
-            return str(self._model.variables_query.get_distribution(row))
+            return str(self._model.variables_query.get_id(row))
         return super().get_data(row, column)
 
     def get_data_by_row(self, row: int) -> List[str]:

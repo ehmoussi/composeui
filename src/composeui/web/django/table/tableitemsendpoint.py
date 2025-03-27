@@ -82,6 +82,9 @@ class TableItemsEndPoint(View):
 
     def add(self, request: HttpRequest) -> JsonResponse:
         row, current_row, status = self._insert()
+        data = [
+            self._items.get_data(row, column) for column in range(self._items.get_nb_columns())
+        ]
         if status["status"] != StatusType.FAILED:
             body = request.body
             if len(body) > 0:
@@ -90,15 +93,12 @@ class TableItemsEndPoint(View):
                 if set_row_status["status"] != StatusType.OK:
                     status["status"] = StatusType.PARTIAL
                 if set_row_status["status"] != StatusType.FAILED:
-                    data = [
-                        self._items.get_data(row, column)
-                        for column in range(self._items.get_nb_columns())
-                    ]
+
                     return create_response_from_status(
                         status,
                         {"current_row": current_row, "data": data},
                     )
-        return create_response_from_status(status)
+        return create_response_from_status(status, {"current_row": row, "data": data})
 
     def insert(self, request: HttpRequest, row: int) -> JsonResponse:
         """Insert an item"""

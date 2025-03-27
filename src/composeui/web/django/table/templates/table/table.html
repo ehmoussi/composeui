@@ -73,11 +73,11 @@
         <div class="justify-end card-actions">
             {% csrf_token %}
             <button id="table-{{ table_id }}-add" class="btn btn-neutral">
-                <span class="loading loading-spinner"></span>
+                <span hidden class="loading loading-spinner"></span>
                 Add
             </button>
             <button id="table-{{ table_id }}-remove" class="btn btn-neutral">
-                <span class="loading loading-spinner"></span>
+                <span hidden class="loading loading-spinner"></span>
                 Remove
             </button>
         </div>
@@ -89,19 +89,8 @@
 
 {% block post_extra_js %}
 <script>
-    let table;
     document.addEventListener("DOMContentLoaded", () => {
-        table = createTable("table-{{ table_id }}", "{{ url }}");
-    });
-    const addButton = document.getElementById("table-{{ table_id }}-add");
-    addButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        addTableRow("{{ url }}/");
-    });
-    const removeButton = document.getElementById("table-{{ table_id }}-remove");
-    removeButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        removeTableRow("{{ url }}/");
+        const table = createTable("table-{{ table_id }}", "{{ url }}");
     });
 </script>
 {% endblock %}
