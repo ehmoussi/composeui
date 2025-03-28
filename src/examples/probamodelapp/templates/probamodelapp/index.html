@@ -4,6 +4,6 @@
 {% block content %}
 <div>
     {% url 'variables:api' as variables_url %}
-    {% include "table/table.html" with table_id="variables" url="/variables/api" %}
+    {% include "table/table.html" with table_id="variables" url=variables_url  %}
 </div>
 {% endblock %}

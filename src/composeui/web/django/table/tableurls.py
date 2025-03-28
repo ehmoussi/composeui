@@ -28,7 +28,6 @@ def table_urls(items: AbstractTableItems[Any]) -> Any:
         path(
             "api/columns",
             TableColumnsEndpoint.as_view(items=items),
-            name="columns",
         ),
         path(
             "csv",

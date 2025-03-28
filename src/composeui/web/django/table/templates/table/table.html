@@ -1,7 +1,9 @@
 {% load static %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/tabulator.min.css' %}" />
+{% if extra_css|default_if_none:True %}
+    <link rel="stylesheet" href="{% static 'css/tabulator.min.css' %}" />
+{% endif %}
 <style>
 /* Define styles for the Tabulator table */
 
@@ -62,10 +64,12 @@
 </style>
 {% endblock %}
 
-{% block extra_js %}
-<script type="text/javascript" src="{% static 'js/tabulator.min.js' %}"></script>
-<script type="text/javascript" src="{% static 'js/table.js' %}"></script>
-{% endblock %}
+{% if extra_js|default_if_none:True %}
+    {% block extra_js %}
+        <script type="text/javascript" src="{% static 'js/tabulator.min.js' %}"></script>
+        <script type="text/javascript" src="{% static 'js/table.js' %}"></script>
+    {% endblock %}
+{% endif %}
 
 {% block content %}
 <div class="card bg-base-100 shadow-sm">
@@ -90,7 +94,7 @@
 {% block post_extra_js %}
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        const table = createTable("table-{{ table_id }}", "{{ url }}");
+        createTable("table-{{ table_id }}", "{{ url }}");
     });
 </script>
 {% endblock %}

@@ -21,6 +21,6 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="index"),
-    path("variables/", include("examples.probamodelapp.variables.urls")),
+    path("variables/", include(("examples.probamodelapp.variables.urls", "variables"))),
     path("admin/", admin.site.urls),
 ]

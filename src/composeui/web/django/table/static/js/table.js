@@ -27,7 +27,7 @@ const createTable = (table_id, url) => {
     if (url === undefined) {
         throw new Error("The url is mandatory");
     }
-    fetch(`${url}/columns`)
+    fetch(`${url}columns`)
         .then((response) => { if (response.ok) return response.json() }
         ).then((response) => {
             console.log(response);
@@ -44,7 +44,7 @@ const createTable = (table_id, url) => {
                 const addButton = document.getElementById(`${table_id}-add`);
                 addButton.addEventListener("click", (event) => {
                     event.preventDefault();
-                    addTableRow(addButton, table, `${url}/`, columns);
+                    addTableRow(addButton, table, `${url}`, columns);
                 });
                 const removeButton = document.getElementById(`${table_id}-remove`);
                 removeButton.addEventListener("click", (event) => {
@@ -81,7 +81,7 @@ const removeTableRow = (button, table, url) => {
     const lastSelectedRow = getLastSelectedRow(table);
     console.log(lastSelectedRow);
     if (lastSelectedRow !== undefined) {
-        fetch(`${url}/${lastSelectedRow.getPosition() - 1}`,
+        fetch(`${url}${lastSelectedRow.getPosition() - 1}`,
             {
                 method: "DELETE",
                 headers: { "X-CSRFToken": csrftoken },
@@ -103,7 +103,7 @@ const editCell = (cell, url) => {
     const row = cell.getRow().getPosition() - 1;
     let data = {};
     data[cell.getColumn().getField()] = cell.getValue();
-    fetch(`${url}/${row}`,
+    fetch(`${url}${row}`,
         {
             method: "PUT",
             headers: { "X-CSRFToken": csrftoken },
