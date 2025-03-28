@@ -24,105 +24,96 @@ const getLastSelectedId = () => {
 };
 
 const createTable = (table_id, url) => {
-    if (url === undefined) {
-        throw new Error("The url is mandatory");
-    }
-    fetch(`${url}columns`)
-        .then((response) => { if (response.ok) return response.json() }
-        ).then((response) => {
-            console.log(response);
-            if (response.status == "ok") {
-                const columns = response.content.columns;
-                if (columns === undefined) {
-                    throw new Error("Failed to fetch the columns of the table");
-                }
-                console.log("columns", columns);
-                table = _createTable(table_id, url, columns);
-                // Events
-                table.on("cellEdited", (cell) => editCell(cell, url));
-                // Add/Remove buttons events
-                const addButton = document.getElementById(`${table_id}-add`);
-                addButton.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    addTableRow(addButton, table, `${url}`, columns);
-                });
-                const removeButton = document.getElementById(`${table_id}-remove`);
-                removeButton.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    removeTableRow(removeButton, table, `${url}`);
-                });
-            }
-        });
+    const toastPlaceHolderId = `${table_id}-toast`;
+    const _createTableWithEvents = (response) => {
+        console.log(response);
+        const columns = response.content.columns;
+        if (response.status == "ok" && columns !== undefined) {
+            console.log("columns", columns);
+            table = _createTable(table_id, url, columns);
+            // Events
+            table.on("cellEdited", (cell) => editCell(cell, url, toastPlaceHolderId));
+            // Add/Remove buttons events
+            const addButton = document.getElementById(`${table_id}-add`);
+            addButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                addTableRow(addButton, toastPlaceHolderId, table, `${url}`, columns);
+            });
+            const removeButton = document.getElementById(`${table_id}-remove`);
+            removeButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                removeTableRow(removeButton, toastPlaceHolderId, table, `${url}`);
+            });
+        } else {
+            createAlertError(toastPlaceHolderId, "Failed to fetch the columns of the table");
+        }
+    };
+    fetchWithAlert(`${url}columns`, {}, toastPlaceHolderId, _createTableWithEvents);
 };
 
-const addTableRow = (button, table, url, columns) => {
-    _displaySpinner(button, true);
-    console.log(table);
+const addTableRow = (button, toastPlaceHolderId, table, url, columns) => {
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    fetch(url,
-        {
-            method: "POST",
-            headers: { "X-CSRFToken": csrftoken },
-            mode: "same-origin",
-        }
-    )
-        .then((response) => response.json())
-        .then((row) => {
-            console.log(row.content.data);
-            table.addRow(_buildRowData(row.content, columns), false, row.content.current_row);
-        }).finally(() => {
+    _displaySpinner(button, true);
+    const body = {
+        method: "POST",
+        headers: { "X-CSRFToken": csrftoken },
+        mode: "same-origin",
+    };
+    fetchWithAlert(url, body, toastPlaceHolderId, (row) => {
+        table.addRow(_buildRowData(row.content, columns), false, row.content.current_row);
+    })
+        .finally(() => {
             _displaySpinner(button, false);
         });
 };
 
-const removeTableRow = (button, table, url) => {
-    _displaySpinner(button, true);
-    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+const removeTableRow = (button, toastPlaceHolderId, table, baseUrl) => {
     const lastSelectedRow = getLastSelectedRow(table);
-    console.log(lastSelectedRow);
+    console.log("lastSelectedRow", lastSelectedRow);
     if (lastSelectedRow !== undefined) {
-        fetch(`${url}${lastSelectedRow.getPosition() - 1}`,
-            {
-                method: "DELETE",
-                headers: { "X-CSRFToken": csrftoken },
-                mode: "same-origin",
-            }
-        )
-            .then((response) => response.json())
-            .then((row) => {
-                console.log(row);
-                lastSelectedRow.delete();
-            }).finally(() => {
+        _displaySpinner(button, true);
+        const url = `${baseUrl}${lastSelectedRow.getPosition() - 1}`;
+        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const body = {
+            method: "DELETE",
+            headers: { "X-CSRFToken": csrftoken },
+            mode: "same-origin",
+        };
+        fetchWithAlert(url, body, toastPlaceHolderId, (row) => {
+            lastSelectedRow.delete();
+        })
+            .finally(() => {
                 _displaySpinner(button, false);
             });
+    } else {
+        createAlertWarning(toastPlaceHolderId, "No row have been selected");
     }
 };
 
-const editCell = (cell, url) => {
+const editCell = (cell, baseUrl, toastPlaceHolderId) => {
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const row = cell.getRow().getPosition() - 1;
+    const url = `${baseUrl}${row}`;
     let data = {};
     data[cell.getColumn().getField()] = cell.getValue();
-    fetch(`${url}${row}`,
-        {
-            method: "PUT",
-            headers: { "X-CSRFToken": csrftoken },
-            mode: "same-origin",
-            body: JSON.stringify(data)
-        }
-    ).then((response) => {
-        if (response.status == 200) {
-            return response.json();
-        } else {
+    const body = {
+        method: "PUT",
+        headers: { "X-CSRFToken": csrftoken },
+        mode: "same-origin",
+        body: JSON.stringify(data)
+    }
+    fetchWithAlert(url, body, toastPlaceHolderId, (response) => {
+        if (response === undefined || response.status !== "ok") {
             cell.restoreOldValue();
-        }
-    }).then((response) => {
-        console.log(response);
-        if (response.status !== "ok") {
-            cell.restoreOldValue();
+            let message = response.message;
+            if (message === undefined) {
+                message = "Unexpectedly failed to edit the cell";
+            }
+            createAlertError(toastPlaceHolderId, message);
         }
     }).catch((error) => {
         cell.restoreOldValue();
+        createAlertError(toastPlaceHolderId, "Unexpectedly failed to edit the cell");
     });
 };
 
