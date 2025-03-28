@@ -332,22 +332,18 @@ class TableColumnsEndpoint(View):
 
     def get(self, _: HttpRequest) -> JsonResponse:
         column_titles = self._items.get_column_titles()
-        column_names = self._items.get_column_names()
-
         return create_response_from_status(
             status=Status(status=StatusType.OK, status_code=StatusCode.OK, message=""),
             content={
                 "columns": [
                     {
                         "title": column_title,
-                        "field": column_name,
+                        "field": str(index_column),
                         **self._from_delegate_to_tabulator_editor(
-                            self._items.get_delegate_props(0, i)
+                            self._items.get_delegate_props(0, index_column)
                         ),
                     }
-                    for i, (column_title, column_name) in enumerate(
-                        zip(column_titles, column_names)
-                    )
+                    for index_column, column_title in enumerate(column_titles)
                 ]
             },
         )
@@ -356,6 +352,6 @@ class TableColumnsEndpoint(View):
         self, delegate: Optional[DelegateProps]
     ) -> Dict[str, Any]:
         if isinstance(delegate, ComboBoxDelegateProps):
-            return {"editor": "list", "editorParams": {"values": [delegate.values]}}
+            return {"editor": "list", "editorParams": {"values": delegate.values}}
         else:
             return {"editor": "input"}

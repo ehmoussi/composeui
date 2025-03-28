@@ -27,19 +27,20 @@ const createTable = (table_id, url) => {
     if (url === undefined) {
         throw new Error("The url is mandatory");
     }
-    console.log(`${url}/columns`);
     fetch(`${url}/columns`)
         .then((response) => { if (response.ok) return response.json() }
         ).then((response) => {
             console.log(response);
-            if (response["status"] == "ok") {
-                const columns = response["content"]["columns"];
-                console.log(columns);
+            if (response.status == "ok") {
+                const columns = response.content.columns;
                 if (columns === undefined) {
                     throw new Error("Failed to fetch the columns of the table");
                 }
-                console.log(table_id);
+                console.log("columns", columns);
                 table = _createTable(table_id, url, columns);
+                // Events
+                table.on("cellEdited", (cell) => editCell(cell, url));
+                // Add/Remove buttons events
                 const addButton = document.getElementById(`${table_id}-add`);
                 addButton.addEventListener("click", (event) => {
                     event.preventDefault();
@@ -55,7 +56,7 @@ const createTable = (table_id, url) => {
 };
 
 const addTableRow = (button, table, url, columns) => {
-    displaySpinner(button, true);
+    _displaySpinner(button, true);
     console.log(table);
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     fetch(url,
@@ -70,12 +71,12 @@ const addTableRow = (button, table, url, columns) => {
             console.log(row.content.data);
             table.addRow(_buildRowData(row.content, columns), false, row.content.current_row);
         }).finally(() => {
-            displaySpinner(button, false);
+            _displaySpinner(button, false);
         });
 };
 
 const removeTableRow = (button, table, url) => {
-    displaySpinner(button, true);
+    _displaySpinner(button, true);
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const lastSelectedRow = getLastSelectedRow(table);
     console.log(lastSelectedRow);
@@ -92,12 +93,40 @@ const removeTableRow = (button, table, url) => {
                 console.log(row);
                 lastSelectedRow.delete();
             }).finally(() => {
-                displaySpinner(button, false);
+                _displaySpinner(button, false);
             });
     }
 };
 
-const displaySpinner = (button, isVisible) => {
+const editCell = (cell, url) => {
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const row = cell.getRow().getPosition() - 1;
+    let data = {};
+    data[cell.getColumn().getField()] = cell.getValue();
+    fetch(`${url}/${row}`,
+        {
+            method: "PUT",
+            headers: { "X-CSRFToken": csrftoken },
+            mode: "same-origin",
+            body: JSON.stringify(data)
+        }
+    ).then((response) => {
+        if (response.status == 200) {
+            return response.json();
+        } else {
+            cell.restoreOldValue();
+        }
+    }).then((response) => {
+        console.log(response);
+        if (response.status !== "ok") {
+            cell.restoreOldValue();
+        }
+    }).catch((error) => {
+        cell.restoreOldValue();
+    });
+};
+
+const _displaySpinner = (button, isVisible) => {
     const spanElement = button.querySelector("span");
     spanElement.hidden = !isVisible;
 }
@@ -120,32 +149,16 @@ const _createTable = (table_id, url, columns) => {
     if (Object.keys(columns).length === 0) {
         throw new Error("The table should have at least one column");
     }
-    const extract_data = (url, params, response) => {
+    const extractData = (url, params, response) => {
         return _buildData(url, params, columns, response);
     }
     return new Tabulator(`#${table_id}`, {
         ajaxURL: url,
         ajaxConfig: "GET",
-        ajaxResponse: extract_data,
+        ajaxResponse: extractData,
         layout: "fitDataStretch",
         responsiveLayout: true,
         columns: columns,
-        // [
-        //     // { title: "Id", field: "id", width: 150 },
-        //     // { title: "Index", field: "index", width: 150 },
-        //     {
-        //         title: "Name", field: "name", width: 150, editor: "input",
-        //         // cellEdited: (cell) => { fetchEditVariableName(urlEditName, cell); }
-        //     },
-        //     {
-        //         title: "Distribution", field: "distribution", editor: "list",
-        //         // editorParams: {
-        //         //     valuesURL: `${urlDistribution}`,
-        //         //     placeholderLoading: "Loading Remote Data...",
-        //         // },
-        //         // cellEdited: (cell) => { fetchEditVariableDistribution(urlEditDistribution, cell); }
-        //     },
-        // ],
         // set height of table (in CSS or here), this enables the Virtual DOM and improves 
         // render speed dramatically (can be any valid css height value)
         height: "vh-100",
