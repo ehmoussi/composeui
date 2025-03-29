@@ -12,6 +12,9 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 
+from composeui.mainview.views.mainview import MainView
+from examples.probamodelapp.probamodelapp.mainview import ProbaModelMainView
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,10 +30,15 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# Compose UI definition
+
+CUI_MAIN_VIEW = ProbaModelMainView()
 
 # Application definition
 
 INSTALLED_APPS = [
+    "composeui.django.mainview",
+    # django default
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
