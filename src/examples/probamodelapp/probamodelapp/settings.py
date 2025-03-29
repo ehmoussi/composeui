@@ -51,7 +51,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # composeui
     "composeui.django.mainview",
+    "composeui.django.table",
     # internal
+    "examples.probamodelapp.probamodelapp",
     "examples.probamodelapp.variables.apps.VariablesConfig",
 ]
 

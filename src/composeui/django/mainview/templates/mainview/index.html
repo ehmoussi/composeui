@@ -8,6 +8,7 @@
     <title>{{ title }}</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script type="text/javascript" src="{% static 'js/composeui/tools.js' %}"></script>
     <style>
         .main-content {
             /* 1280px */
@@ -45,6 +46,7 @@
         <main class="main-content">
             {% block content %}
             <!-- Page-specific content will go here -->
+            {{ content }}
             {% endblock %}
         </main>
     </div>

@@ -32,5 +32,6 @@ def index(request: HttpRequest) -> HttpResponse:
         context={
             "title": main_view.title,
             "navigation_actions": navigation_actions,
+            "content": main_view.render(request),
         },
     )

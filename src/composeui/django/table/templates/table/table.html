@@ -1,0 +1,106 @@
+{% load static %}
+
+{% block extra_css %}
+{% if extra_css|default_if_none:True %}
+    <link rel="stylesheet" href="{% static 'css/dist/tabulator.min.css' %}" />
+{% endif %}
+<style>
+/* Define styles for the Tabulator table */
+
+#table-{{ table_id }} {
+    border: 0;
+    width: 100%;
+    background-color: white;
+    margin: 0;
+}
+
+#table-{{ table_id }} .tabulator-tableholder,
+#table-{{ table_id }} .tabulator-table,
+#table-{{ table_id }} .tabulator-header,
+#table-{{ table_id }} .tabulator-col,
+#table-{{ table_id }} .tabulator-row,
+#table-{{ table_id }} .tabulator-cell {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+#table-{{ table_id }} .tabulator-col {
+    background-color: white;
+}
+
+#table-{{ table_id }} .tabulator-header {
+    background-color: #f5f5f5;
+    color: #333;
+    font-weight: bold;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+
+#table-{{ table_id }} .tabulator-row {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+#table-{{ table_id }} .tabulator-row:nth-child(even) {
+    background-color: #fafafa;
+}
+
+
+#table-{{ table_id }} .tabulator-row:hover {
+    background-color: #f1f1f1;
+}
+
+
+
+#table-{{ table_id }} .tabulator-row.tabulator-selected {
+    background-color: #9abcea
+}
+
+#table-{{ table_id }} .tabulator-cell {
+    border-left: 1px solid #e0e0e0;
+    padding: 15px 10px;
+}
+</style>
+{% endblock %}
+
+{% if extra_js|default_if_none:True %}
+    {% block extra_js %}
+        <script type="text/javascript" src="{% static 'js/dist/tabulator.min.js' %}"></script>
+        <script type="text/javascript" src="{% static 'js/composeui/table.js' %}"></script>
+    {% endblock %}
+{% endif %}
+
+{% block content %}
+<div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+        {% comment %} <span class="badge badge-s">{{ title }}</span> {% endcomment %}
+        <div class="flex justify-between">
+            <h3 class="text-2xl font-bold">{{ title }}</h3>
+        </div>
+        <div class="justify-end card-actions">
+            {% csrf_token %}
+            <button id="table-{{ table_id }}-add" class="btn btn-neutral">
+                <span hidden class="loading loading-spinner"></span>
+                Add
+            </button>
+            <button id="table-{{ table_id }}-remove" class="btn btn-neutral">
+                <span hidden class="loading loading-spinner"></span>
+                Remove
+            </button>
+        </div>
+        <div id="table-{{ table_id }}-alert"></div>
+        <div class="card card-border bg-base-100 shadow-sm">
+            <div id="table-{{ table_id }}"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block post_extra_js %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        createTable("table-{{ table_id }}", "{{ url }}");
+    });
+</script>
+{% endblock %}

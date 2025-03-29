@@ -1,0 +1,4 @@
+<div>
+    {% url 'variables:api' as variables_url %}
+    {% include "table/table.html" with table_id="variables" url=variables_url  %}
+</div>
