@@ -1,17 +1,16 @@
 from dataclasses import dataclass, field
 from composeui.core.views.actionview import ActionView
+from composeui.items.table.tableview import TableView
 from composeui.mainview.views.maintoolbar import MainToolBar
 from composeui.mainview.views.mainview import MainView
 from composeui.mainview.views.toolbar import CheckableToolBar
+from examples.probamodelapp.probamodelapp.model import Model
+from examples.probamodelapp.variables.variablesitems import VariablesItems
 
 
 @dataclass(eq=False)
 class ProbaModelNavigation(CheckableToolBar):
     definition: ActionView = field(init=False, default_factory=ActionView)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.definition.text = "Definition"
 
 
 @dataclass(eq=False)
@@ -23,3 +22,10 @@ class ProbaModelMainToolBar(MainToolBar):
 class ProbaModelMainView(MainView):
     title = "ProbaModelApp"
     toolbar: ProbaModelMainToolBar = field(init=False, default_factory=ProbaModelMainToolBar)
+    variables: TableView = field(init=False, default_factory=TableView)
+
+
+def initialize_mainview(main_view: ProbaModelMainView, model: Model) -> None:
+    main_view.title = "ProbaModelApp"
+    main_view.toolbar.navigation.definition.text = "Definition"
+    main_view.variables.items = VariablesItems(model)
