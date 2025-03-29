@@ -20,5 +20,6 @@ from django.urls import include, path
 
 urlpatterns = [
     path("", include("composeui.django.mainview.urls")),
+    path("variables", include("examples.probamodelapp.variables.urls")),
     path("admin/", admin.site.urls),
 ]

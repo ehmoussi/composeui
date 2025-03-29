@@ -42,10 +42,6 @@ initialize_mainview(CUI_MAIN_VIEW, CUI_MODEL)
 # Application definition
 
 INSTALLED_APPS = [
-    # app
-    "examples.probamodelapp.variables.apps.VariablesConfig",
-    # composeui
-    "composeui.django.mainview",
     # django default
     "django.contrib.admin",
     "django.contrib.auth",
@@ -53,6 +49,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # composeui
+    "composeui.django.mainview",
+    # internal
+    "examples.probamodelapp.variables.apps.VariablesConfig",
 ]
 
 MIDDLEWARE = [

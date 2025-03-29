@@ -3,12 +3,15 @@ from composeui.items.core.abstractitems import AbstractItems
 from composeui.items.core.itemsconverter import ItemsConverter
 from composeui.items.core.itemsutils import BackgroundType, DelegateProps
 from composeui.items.core.paginationnavigator import PaginationNavigator
-from composeui.items.core.tabletotreeitems import TableToTreeItems
 
 from typing_extensions import OrderedDict
 
 from abc import abstractmethod
 from typing import Any, List, Optional
+import typing
+
+if typing.TYPE_CHECKING:
+    from composeui.items.core.tabletotreeitems import TableToTreeItems
 
 
 class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
@@ -33,8 +36,26 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """
         return ""
 
+    def get_data_by_row(self, row: int) -> List[str]:
+        """Get the data for the entire row.
+
+        The method is implemented using the method get_data.
+        When performance is crucial please reimplement the method.
+        For example, when using an sql database multiple SELECT for each columns
+        are slower than getting all the columns at once.
+
+        The data is returned as a string.
+        Use the helper method display_float for transforming a float value into a string.
+        """
+        return [self.get_data(row, column) for column in range(self.get_nb_columns())]
+
     def get_all_datas(self) -> List[List[str]]:
         """Get all the displayed data of the table.
+
+        The method is implemented using the method get_data.
+        When performance is crucial please reimplement the method.
+        For example, when using an sql database multiple SELECT for each columns
+        are slower than getting all the columns at once.
 
         The data is returned as a string.
         Use the helper method display_float for transforming a float value into a string.
@@ -47,6 +68,10 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def get_title(self) -> str:
         """Get the title of the table."""
         return self._title
+
+    def get_slug_title(self) -> str:
+        """Get the slug title of the table."""
+        return self._title.replace(" ", "_").lower().strip()
 
     def get_exported_column_indices(self) -> List[int]:
         """Get the indices of the columns that should be exported.
@@ -215,12 +240,14 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """
         return OrderedDict()
 
-    def converter(self) -> ItemsConverter[TableToTreeItems[AnyModel]]:
+    def converter(self) -> ItemsConverter["TableToTreeItems[AnyModel]"]:
         """Return the table items converter.
 
         Can be used to convert the table to a pandas dataframe or a markdown table
         or an html table.
         """
+        from composeui.items.core.tabletotreeitems import TableToTreeItems
+
         return ItemsConverter(TableToTreeItems(self))
 
     def _is_on_current_page(self, row: int) -> bool:
