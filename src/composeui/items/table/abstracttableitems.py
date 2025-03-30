@@ -8,7 +8,7 @@ from composeui.items.core.tabletotreeitems import TableToTreeItems
 from typing_extensions import OrderedDict
 
 from abc import abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Iterator, List, Optional, cast
 
 
 class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
@@ -24,9 +24,44 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """Get the number of rows."""
         return 0
 
-    @abstractmethod
+    def iter_row_ids(self) -> Iterator[Any]:
+        """Iterate over the row ids of the table.
+
+        By default the row ids are the row of the table but this could be override to use
+        something else as a key of a dictionary or an id of an sql table or whatever else.
+        """
+        yield from range(self.get_nb_rows())
+
+    def get_row_from_id(self, rid: Any) -> int:
+        """Get the row index for the given row id.
+
+        By default the row id is the row of the table but this could be override to use
+        something else as a key of a dictionary or an id of an sql table or whatever else.
+        """
+        return cast(int, rid)
+
+    def get_id_from_row(self, row: int) -> Any:
+        """Get the row id for the given row index.
+
+        By default the row id is the row of the table but this could be override to use
+        something else as a key of a dictionary or an id of an sql table or whatever else.
+        """
+        return row
+
     def get_data(self, row: int, column: int) -> str:
-        """Get the displayed data.
+        """Get the displayed data of the item at the given row and column.
+
+        The data is returned as a string.
+        Use the helper method display_float for transforming a float value into a string.
+        """
+        return self.get_data_by_id(row, column)
+
+    @abstractmethod
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        """Get the displayed data of the item at the given row id and column.
+
+        By default the row id is the row of the table but this could be override to use
+        something else as a key of a dictionary or an id of an sql table or whatever else.
 
         The data is returned as a string.
         Use the helper method display_float for transforming a float value into a string.
@@ -36,11 +71,16 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def get_all_datas(self) -> List[List[str]]:
         """Get all the displayed data of the table.
 
-        The data is returned as a string.
+        The method is implemented using the method get_data.
+        When performance is crucial you should reimplement the method.
+        For example, when using an sql database multiple SELECT for each columns
+        are slower than getting all the columns at once.
+
+        The data are returned as strings.
         Use the helper method display_float for transforming a float value into a string.
         """
         return [
-            [self.get_data(row, column) for row in range(self.get_nb_rows())]
+            [self.get_data_by_id(rid, column) for rid in self.iter_row_ids()]
             for column in range(self.get_nb_columns())
         ]
 
@@ -65,7 +105,15 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
         None means no selection afterwards.
         """
-        return row
+        new_rid = self.insert_by_id(self.get_id_from_row(row))
+        return self.get_row_from_id(new_rid)
+
+    def insert_by_id(self, rid: Any) -> Optional[Any]:
+        """Insert a row at the table and return the row id to be selected afterwards.
+
+        None means no selection afterwards.
+        """
+        return rid
 
     def remove(self, row: int) -> Optional[int]:
         """Remove the given row of the table.
@@ -74,22 +122,45 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
             - the row to be selected afterwards.
             - None if there is no selection afterwards.
         """
+        rid = self.remove_by_id(self.get_id_from_row(row))
+        if rid is not None:
+            return self.get_row_from_id(rid)
+        return None
+
+    def remove_by_id(self, rid: int) -> Optional[Any]:
+        """Remove the given row id of the table.
+
+        Override to remove the row from the model and call the parent method to return:
+            - the row to be selected afterwards.
+            - None if there is no selection afterwards.
+        """
+        row = self.get_row_from_id(rid)
+        self._remove_by_id(rid)
         nb_rows = self.get_nb_rows()
-        # select the next item if available
-        if row < nb_rows:
-            return row
-        # if none select the previous item
-        elif row > 0:
-            return row - 1
-        # otherwise no selection
+        if row < nb_rows:  # select the next item if available
+            return self.get_id_from_row(row)
+        elif row > 0:  # if there is not item available select the previous item
+            return self.get_id_from_row(row - 1)
+        else:  # if there is not item available select nothing
+            return None
+
+    def _remove_by_id(self, rid: Any) -> None:
+        """Remove the given row id of the table."""
         return None
 
     def remove_all(self) -> None:
-        """Remove all the rows of the table/tree."""
+        """Remove all the rows of the table."""
         for row in range(self.get_nb_rows() - 1, -1, -1):
-            self.remove(row)
+            self._remove_by_id(self.get_id_from_row(row))
 
     def move(self, from_row: int, to_row: int) -> bool:
+        """Move an item to another position, return True if succeded, False otherwise.
+
+        Works only if the option of drag_drop_enabled of the table is set to True.
+        """
+        return self.move_by_id(self.get_id_from_row(from_row), self.get_id_from_row(to_row))
+
+    def move_by_id(self, from_rid: int, to_rid: int) -> bool:
         """Move an item to another position, return True if succeded, False otherwise.
 
         Works only if the option of drag_drop_enabled of the table is set to True.
@@ -97,7 +168,15 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         return False
 
     def set_data(self, row: int, column: int, value: str) -> bool:
-        r"""Set the data at the given row and column.
+        """Set the data at the given row and column.
+
+        Use the helper method to_float_value to transform the value to a float
+        Use the helper method to_int_value to transform the value to an int
+        """
+        return self.set_data_by_id(self.get_id_from_row(row), column, value)
+
+    def set_data_by_id(self, rid: Any, column: int, value: str) -> bool:
+        """Set the data at the given row id and column.
 
         Use the helper method to_float_value to transform the value to a float
         Use the helper method to_int_value to transform the value to an int
@@ -119,13 +198,32 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
         By default the value is the same as the value displayed.
         """
-        return self.get_data(row, column)
+        return self.get_edit_data_by_id(self.get_id_from_row(row), column)
+
+    def get_edit_data_by_id(self, rid: Any, column: int) -> Any:
+        """Get the data displayed during the edition of an item.
+
+        By default the value is the same as the value displayed.
+        """
+        return self.get_data_by_id(rid, column)
 
     def is_checked(self, row: int, column: int) -> Optional[bool]:
+        """Check if the item is checked or return None if there is no checkbox."""
+        return self.is_checked_by_id(self.get_id_from_row(row), column)
+
+    def is_checked_by_id(self, rid: Any, column: int) -> Optional[bool]:
         """Check if the item is checked or return None if there is no checkbox."""
         return None
 
     def set_checked(self, row: int, column: int, value: bool) -> bool:
+        """Set if the item is checked or not.
+
+        Only works if the item has a checkbox which means the method is_checked
+        don't return None.
+        """
+        return self.set_checked_by_id(self.get_id_from_row(row), column, value)
+
+    def set_checked_by_id(self, rid: Any, column: int, value: bool) -> bool:
         """Set if the item is checked or not.
 
         Only works if the item has a checkbox which means the method is_checked
@@ -140,14 +238,31 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         If the check don't need to be in the history the method can be reimplemented
         to avoid it.
         """
+        return self.set_checked_by_id_with_history(self.get_id_from_row(row), column, value)
+
+    def set_checked_by_id_with_history(self, rid: Any, column: int, value: bool) -> bool:
+        """Set if the item is checked or not.
+
+        It is used to save the history of the modification.
+        If the check don't need to be in the history the method can be reimplemented
+        to avoid it.
+        """
         with self._model.record_history():
-            return self.set_checked(row, column, value)
+            return self.set_checked_by_id(rid, column, value)
 
     def is_editable(self, row: int, column: int) -> bool:
+        """Check if the item is editable."""
+        return self.is_editable_by_id(self.get_id_from_row(row), column)
+
+    def is_editable_by_id(self, rid: Any, column: int) -> bool:
         """Check if the item is editable."""
         return False
 
     def is_enabled(self, row: int, column: int) -> bool:
+        """Check if the item is enabled."""
+        return self.is_enabled_by_id(self.get_id_from_row(row), column)
+
+    def is_enabled_by_id(self, rid: int, column: int) -> bool:
         """Check if the item is enabled."""
         return True
 
@@ -162,9 +277,26 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         - IntDelegateProps: A Spinbox with the given properties
         - None: normal display
         """
+        return self.get_delegate_props_by_id(self.get_id_from_row(row), column)
+
+    def get_delegate_props_by_id(self, rid: Any, column: int) -> Optional[DelegateProps]:
+        """Get the delegate properties of the item.
+
+        The type should be the same for all the rows of the same column.
+        Only the properties can be different but not necesarilly.
+
+        - ComboBoxDelegateProps: A combobox will be displayed with its values to choose
+        - FloatDelegateProps: A LineEdit with a double validator with the given properties
+        - IntDelegateProps: A Spinbox with the given properties
+        - None: normal display
+        """
         return None
 
     def get_background(self, row: int, column: int) -> BackgroundType:
+        """Get the background for the given row and column."""
+        return self.get_background_by_id(self.get_id_from_row(row), column)
+
+    def get_background_by_id(self, rid: Any, column: int) -> BackgroundType:
         """Get the background for the given row and column."""
         # TODO: increase the posibilities of this method
         return BackgroundType.NONE
@@ -173,10 +305,21 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """Get the selected rows."""
         return [position[-1] for position in self._view.selected_items]
 
+    def get_selected_ids(self) -> List[Any]:
+        """Get the selected rows."""
+        return [self.get_id_from_row(position[-1]) for position in self._view.selected_items]
+
     def set_selected_rows(self, rows: List[int]) -> None:
         """Set the selected rows."""
         columns = list(range(self.get_nb_columns()))
         self._view.selected_items = OrderedDict(((row,), columns) for row in rows)
+
+    def set_selected_ids(self, rids: List[Any]) -> None:
+        """Set the selected ids."""
+        columns = list(range(self.get_nb_columns()))
+        self._view.selected_items = OrderedDict(
+            ((self.get_row_from_id(rid),), columns) for rid in rids
+        )
 
     def get_selected_row_items(self) -> OrderedDict[int, List[int]]:
         """Get the selected items by row.
@@ -185,6 +328,16 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """
         return OrderedDict(
             (row, columns) for (*_, row), columns in self._view.selected_items.items()
+        )
+
+    def get_selected_id_items(self) -> OrderedDict[Any, List[int]]:
+        """Get the selected items by row id.
+
+        Same as get_selected_items but use the row id directly instead of the path of rows.
+        """
+        return OrderedDict(
+            (self.get_id_from_row(row), columns)
+            for (*_, row), columns in self._view.selected_items.items()
         )
 
     def set_selected_row_items(self, selected_row_items: OrderedDict[int, List[int]]) -> None:
@@ -196,6 +349,16 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
             ((row,), columns) for row, columns in selected_row_items.items()
         )
 
+    def set_selected_id_items(self, selected_id_items: OrderedDict[Any, List[int]]) -> None:
+        """Set the selected items by row id.
+
+        Same as set_selected_items but use the row directly instead of the path of rows.
+        """
+        self._view.selected_items = OrderedDict(
+            ((self.get_row_from_id(rid),), columns)
+            for rid, columns in selected_id_items.items()
+        )
+
     def is_filtered(self, row: int) -> bool:
         """Check if the row is filtered or not."""
         return not self._is_on_current_page(row) or (
@@ -203,6 +366,18 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
             and self.filter_manager.has_pattern
             and all(
                 not self.filter_manager.match(self.get_data(row, column))
+                for column in self.filter_column_indices
+            )
+        )
+
+    def is_filtered_by_id(self, rid: Any) -> bool:
+        """Check if the row id is filtered or not."""
+        row = self.get_row_from_id(rid)
+        return not self._is_on_current_page(row) or (
+            len(self.filter_column_indices) > 0
+            and self.filter_manager.has_pattern
+            and all(
+                not self.filter_manager.match(self.get_data_by_id(rid, column))
                 for column in self.filter_column_indices
             )
         )

@@ -206,9 +206,9 @@ class PointsItems(AbstractTableItems["Model"]):
         self._model.points_query.insert(row)
         return row
 
-    def remove(self, row: int) -> Optional[int]:
+    def _remove_by_id(self, rid: Any) -> None:
+        row = self.get_row_from_id(rid)
         self._model.points_query.remove(row)
-        return super().remove(row)
 
     def get_data(self, row: int, column: int) -> str:
         if column == 0:
@@ -222,6 +222,9 @@ class PointsItems(AbstractTableItems["Model"]):
         elif column == 4:
             return str(self._model.points_query.get_id(row))
         return super().get_data(row, column)
+
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        return self.get_data(self.get_row_from_id(rid), column)
 
     def get_edit_data(self, row: int, column: int) -> Any:
         if column == 1:

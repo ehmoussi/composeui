@@ -320,19 +320,22 @@ class LinesItems(AbstractTableItems["Model"]):
         self._model.lines_query.insert_line(row)
         return row
 
-    def remove(self, row: int) -> Optional[int]:
+    def _remove_by_id(self, rid: Any) -> None:
+        row = self.get_row_from_id(rid)
         self._model.lines_query.remove_line(row)
-        return super().remove(row)
 
     def remove_all(self) -> None:
         self._model.lines_query.remove_all()
 
-    def get_data(self, row: int, column: int) -> Any:
+    def get_data(self, row: int, column: int) -> str:
         if column == 0:
             return self._model.lines_query.get_line_name(row)
         elif column == 1:
-            return self._model.lines_query.get_line_id(row)
+            return str(self._model.lines_query.get_line_id(row))
         return super().get_data(row, column)
+
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        return self.get_data(self.get_row_from_id(rid), column)
 
     def is_editable(self, row: int, column: int) -> bool:
         return column == 0
@@ -390,9 +393,9 @@ class PointsItems(AbstractTableItems["Model"]):
         self._model.lines_query.insert_point(self.get_current_line_index(), row)
         return row
 
-    def remove(self, row: int) -> Optional[int]:
+    def _remove_by_id(self, rid: int) -> None:
+        row = self.get_row_from_id(rid)
         self._model.lines_query.remove_point(self.get_current_line_index(), row)
-        return super().remove(row)
 
     def get_data(self, row: int, column: int) -> str:
         line_row = self.get_current_line_index()
@@ -409,6 +412,9 @@ class PointsItems(AbstractTableItems["Model"]):
         elif column == 4:
             return str(self._model.lines_query.get_point_id(line_row, row))
         return super().get_data(row, column)
+
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        return self.get_data(self.get_row_from_id(rid), column)
 
     def get_edit_data(self, row: int, column: int) -> Any:
         line_row = self.get_current_line_index()

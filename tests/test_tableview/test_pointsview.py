@@ -176,6 +176,7 @@ def test_import_export_excel_json(
         assert filepath.exists()
         # clean the table
         view.items.remove_all()
+        assert view.items.get_nb_rows() == 0
         # import the exported file
         main_view.file_view.open_file = lambda: str(filepath)  # type: ignore[method-assign]
         view.import_clicked()

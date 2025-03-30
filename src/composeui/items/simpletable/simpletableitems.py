@@ -143,7 +143,8 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
             db_conn.commit()
         return row
 
-    def remove(self, row: int) -> Optional[int]:
+    def _remove_by_id(self, rid: Any) -> None:
+        row = self.get_row_from_id(rid)
         with self._store.get_connection() as db_conn:
             if self._order_column is not None:
                 db_conn.execute(
@@ -176,7 +177,6 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                     db_conn.rollback()
                     msg = f"No row with index {row} in table {self._db_table_name}"
                     raise IndexError(msg)
-        return super().remove(row)
 
     def get_data(self, row: int, column: int) -> str:
         value = self.get_edit_data(row, column)
@@ -190,6 +190,10 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
         if value is not None:
             return str(value)
         return super().get_data(row, column)
+
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        row = self.get_row_from_id(rid)
+        return self.get_data(row, column)
 
     def get_edit_data(self, row: int, column: int) -> Any:
         if self._model.is_debug and column == self.get_nb_columns() - 1:

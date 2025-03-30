@@ -47,6 +47,10 @@ class TreeToTableItems(AbstractTableItems[AnyModel]):
     def get_data(self, row: int, column: int) -> str:
         return self._tree_items.get_data(row, column, self.parent_rows)
 
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        row = self.get_row_from_id(rid)
+        return self._tree_items.get_data(row, column, self.parent_rows)
+
     def get_title(self) -> str:
         return self._tree_items.get_title(self.parent_rows)
 
