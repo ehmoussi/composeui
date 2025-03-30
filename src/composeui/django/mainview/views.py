@@ -1,11 +1,10 @@
-from dataclasses import fields
-from typing import List, Optional
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
-from django.views import View
-
 from composeui.core.views.actionview import ActionView
 from composeui.mainview.views.mainview import MainView
+
+from django.http import HttpRequest, HttpResponse
+from django.views import View
+
+from typing import List, Optional
 
 
 def get_main_view() -> MainView:

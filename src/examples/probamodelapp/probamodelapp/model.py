@@ -1,6 +1,7 @@
 from composeui import get_version
 from composeui.model.djangoormmodel import DjangoORMModel
 from examples.probamodelapp.variables.variablesquery import VariablesQuery
+
 from pathlib import Path
 
 

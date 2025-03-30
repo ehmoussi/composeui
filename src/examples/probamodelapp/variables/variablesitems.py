@@ -1,10 +1,9 @@
 from composeui.items.core.itemsutils import ComboBoxDelegateProps, DelegateProps
-from composeui.items.table.tableview import TableView
-
 from composeui.items.table.abstracttableitems import AbstractTableItems
-from typing import List, Optional
-
+from composeui.items.table.tableview import TableView
 from examples.probamodelapp.probamodelapp.model import Model
+
+from typing import List, Optional
 
 
 class VariablesItems(AbstractTableItems[Model]):

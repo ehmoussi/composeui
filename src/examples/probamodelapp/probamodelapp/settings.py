@@ -10,13 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
-from pathlib import Path
-
 from examples.probamodelapp.probamodelapp.mainview import (
     ProbaModelMainView,
     initialize_mainview,
 )
 from examples.probamodelapp.probamodelapp.model import Model
+
+from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

@@ -108,6 +108,7 @@ ensure_newline_before_comments = true
 [tool.ruff]
 target-version = "py37"
 line-length = 95
+exclude = ["src/examples/probamodelapp/variables/migrations/*.py"]
 
 [tool.ruff.lint]
 select = [
@@ -195,7 +196,11 @@ fixture-parentheses = true
 
 [tool.mypy]
 plugins = ["sqlalchemy.ext.mypy.plugin"]
-exclude = ["src/composeui/core/icons"]
+exclude = [
+    "src/composeui/core/icons",
+    "src/examples/probamodelapp/variables/migrations/*.py",
+    "src/examples/probamodelapp/probamodelapp/settings.py",
+]
 strict = true
 warn_unreachable = true
 disallow_any_unimported = true

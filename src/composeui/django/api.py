@@ -1,11 +1,8 @@
 # can't use StrEnum for python < 3.11
+from django.http import JsonResponse
 from typing_extensions import TypedDict
 
 import enum
-
-
-from django.http import JsonResponse
-
 from typing import Any, Optional
 
 

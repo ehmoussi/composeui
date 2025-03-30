@@ -1,5 +1,6 @@
-from typing import Any, List, Tuple
 from composeui.store.djangoormstore import DjangoORMStore
+
+from typing import Any, List, Tuple
 
 
 class VariablesQuery:

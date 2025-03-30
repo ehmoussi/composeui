@@ -9,7 +9,7 @@ import sqlite3
 import sys
 import typing
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator, Optional, cast
 
 if typing.TYPE_CHECKING:
     from composeui.history.abstracthistory import AbstractHistory
@@ -33,7 +33,7 @@ class DjangoORMStore(AbstractStore):
     @contextlib.contextmanager
     def get_connection(self) -> Generator[SQLiteCursorWrapper, None, None]:
         with connection.cursor() as db_conn:
-            yield db_conn
+            yield cast(SQLiteCursorWrapper, db_conn)
 
     @property
     def is_sqlite(self) -> bool:

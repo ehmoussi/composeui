@@ -1,6 +1,6 @@
-from django.urls import path
-
 from composeui.django.mainview.views import MainViewEndpoint, get_main_view
+
+from django.urls import path
 
 main_view = get_main_view()
 

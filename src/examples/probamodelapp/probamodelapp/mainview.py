@@ -1,7 +1,3 @@
-from dataclasses import dataclass, field, fields
-from typing import List
-
-from django.http import HttpRequest
 from composeui.core.views.actionview import ActionView
 from composeui.items.table.tableview import TableView
 from composeui.mainview.views.maintoolbar import MainToolBar
@@ -10,7 +6,11 @@ from composeui.mainview.views.toolbar import CheckableToolBar
 from examples.probamodelapp.probamodelapp.model import Model
 from examples.probamodelapp.variables.variablesitems import VariablesItems
 
+from django.http import HttpRequest
 from django.template.loader import render_to_string
+
+from dataclasses import dataclass, field, fields
+from typing import List
 
 
 @dataclass(eq=False)
