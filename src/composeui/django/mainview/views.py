@@ -1,7 +1,8 @@
 from dataclasses import fields
-from typing import List
+from typing import List, Optional
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
+from django.views import View
 
 from composeui.core.views.actionview import ActionView
 from composeui.mainview.views.mainview import MainView
@@ -13,25 +14,15 @@ def get_main_view() -> MainView:
     return getattr(settings, "CUI_MAIN_VIEW", MainView())
 
 
-def get_navigation_actions(main_view: MainView) -> List[str]:
-    actions = []
-    for nav_field in fields(main_view.toolbar.navigation):
-        if nav_field.type is ActionView:
-            nav_action = getattr(main_view.toolbar.navigation, nav_field.name)
-            assert isinstance(nav_action, ActionView)
-            actions.append(nav_action.text)
-    return actions
+def get_navigation_actions(main_view: MainView) -> List[ActionView]:
+    return main_view.toolbar.navigation.get_actions()
 
 
-def index(request: HttpRequest) -> HttpResponse:
+class MainViewEndpoint(View):
+    current_action: Optional[ActionView] = None
     main_view = get_main_view()
-    navigation_actions = get_navigation_actions(main_view)
-    return render(
-        request,
-        "mainview/index.html",
-        context={
-            "title": main_view.title,
-            "navigation_actions": navigation_actions,
-            "content": main_view.render(request),
-        },
-    )
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        if self.current_action is not None:
+            self.current_action.is_checked = True
+        return HttpResponse(self.main_view.render(request))
