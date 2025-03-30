@@ -16,6 +16,7 @@ from django.template.loader import render_to_string
 @dataclass(eq=False)
 class ProbaModelNavigation(CheckableToolBar):
     definition: ActionView = field(init=False, default_factory=ActionView)
+    doe: ActionView = field(init=False, default_factory=ActionView)
 
     def get_actions(self) -> List[ActionView]:
         actions = []
@@ -63,4 +64,6 @@ def initialize_mainview(main_view: ProbaModelMainView, model: Model) -> None:
     main_view.title = "ProbaModel"
     main_view.toolbar.navigation.definition.text = "Definition"
     main_view.toolbar.navigation.definition.data = "definition"
+    main_view.toolbar.navigation.doe.text = "Design Of Experiment"
+    main_view.toolbar.navigation.doe.data = "doe"
     main_view.variables.items = VariablesItems(model)

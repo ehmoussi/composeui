@@ -23,6 +23,8 @@ class MainViewEndpoint(View):
     main_view = get_main_view()
 
     def get(self, request: HttpRequest) -> HttpResponse:
+        for action in get_navigation_actions(self.main_view):
+            action.is_checked = False
         if self.current_action is not None:
             self.current_action.is_checked = True
         return HttpResponse(self.main_view.render(request))
