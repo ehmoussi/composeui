@@ -26,10 +26,8 @@ const getLastSelectedId = () => {
 const createTable = (table_id, url) => {
     const toastPlaceHolderId = `${table_id}-toast`;
     const _createTableWithEvents = (response) => {
-        console.log(response);
         const columns = response.content.columns;
         if (response.status == "ok" && columns !== undefined) {
-            console.log("columns", columns);
             table = _createTable(table_id, url, columns);
             // Events
             table.on("cellEdited", (cell) => editCell(cell, url, toastPlaceHolderId));
@@ -69,7 +67,6 @@ const addTableRow = (button, toastPlaceHolderId, table, url, columns) => {
 
 const removeTableRow = (button, toastPlaceHolderId, table, baseUrl) => {
     const lastSelectedRow = getLastSelectedRow(table);
-    console.log("lastSelectedRow", lastSelectedRow);
     if (lastSelectedRow !== undefined) {
         _displaySpinner(button, true);
         const url = `${baseUrl}${lastSelectedRow.getPosition() - 1}`;
