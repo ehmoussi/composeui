@@ -69,7 +69,7 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         The data is returned as a string.
         Use the helper method display_float for transforming a float value into a string.
         """
-        return self.get_data_by_id(row, column)
+        return self.get_data_by_id(self.get_id_from_row(row), column)
 
     @abstractmethod
     def get_data_by_id(self, rid: Any, column: int) -> str:
@@ -120,15 +120,7 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
         None means no selection afterwards.
         """
-        new_rid = self.insert_by_id(self.get_id_from_row(row))
-        return self.get_row_from_id(new_rid)
-
-    def insert_by_id(self, rid: Any) -> Optional[Any]:
-        """Insert a row at the table and return the row id to be selected afterwards.
-
-        None means no selection afterwards.
-        """
-        return rid
+        return row
 
     def remove(self, row: int) -> Optional[int]:
         """Remove the given row of the table.
