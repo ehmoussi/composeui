@@ -1,12 +1,13 @@
 """Test the SimpleTableItems class without an order column."""
 
-from pathlib import Path
-from typing import Any
-import pytest
-
 from composeui.items.simpletable.simpletableitems import SimpleTableItems
 from composeui.items.table.tableview import TableView
 from composeui.model.sqlitemodel import SqliteModel
+
+import pytest
+
+from pathlib import Path
+from typing import Any
 
 
 @pytest.fixture()

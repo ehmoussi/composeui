@@ -125,7 +125,7 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                                 WHERE ROWID < :row_id
                             )
                         ELSE
-                            -- if the rowid is missing then return NULL to raise an IndexError 
+                            -- if the rowid is missing then return NULL to raise an IndexError
                             NULL
                         END
                     """,

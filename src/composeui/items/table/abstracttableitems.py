@@ -6,9 +6,9 @@ from composeui.items.core.paginationnavigator import PaginationNavigator
 
 from typing_extensions import OrderedDict
 
+import typing
 from abc import abstractmethod
 from typing import Any, Iterator, List, Optional, cast
-import typing
 
 if typing.TYPE_CHECKING:
     from composeui.items.core.tabletotreeitems import TableToTreeItems
