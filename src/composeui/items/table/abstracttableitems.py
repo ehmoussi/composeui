@@ -3,12 +3,15 @@ from composeui.items.core.abstractitems import AbstractItems
 from composeui.items.core.itemsconverter import ItemsConverter
 from composeui.items.core.itemsutils import BackgroundType, DelegateProps
 from composeui.items.core.paginationnavigator import PaginationNavigator
-from composeui.items.core.tabletotreeitems import TableToTreeItems
 
 from typing_extensions import OrderedDict
 
 from abc import abstractmethod
 from typing import Any, Iterator, List, Optional, cast
+import typing
+
+if typing.TYPE_CHECKING:
+    from composeui.items.core.tabletotreeitems import TableToTreeItems
 
 
 class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
@@ -29,6 +32,22 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         super().__init__(view, model, title=title)
         # self._view: ITableView[Self]
         self.page_navigator = PaginationNavigator(self._view.pagination_view, self)
+
+    def get_cached_data(self) -> Optional[List[List[str]]]:
+        """Get the cached data of the table or returns None if there is no cache
+
+        By default, there is no cache the method should be reimplemented to use a cache.
+        In the implementation be careful to invalidate the cache when the table is modified.
+        """
+        return None
+
+    def update_cache(self) -> None:
+        """Called to update the cache.
+
+        This method should be implemented to update the cache when the data have been modified.
+        By default the method does nothing.
+        """
+        return None
 
     @abstractmethod
     def get_nb_rows(self) -> int:
@@ -95,7 +114,7 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         Use the helper method display_float for transforming a float value into a string.
         """
         return [
-            [self.get_data_by_id(rid, column) for rid in self.iter_row_ids()]
+            [self.get_data(row, column) for row in range(self.get_nb_rows())]
             for column in range(self.get_nb_columns())
         ]
 
@@ -164,13 +183,6 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
             self._remove_by_id(self.get_id_from_row(row))
 
     def move(self, from_row: int, to_row: int) -> bool:
-        """Move an item to another position, return True if succeded, False otherwise.
-
-        Works only if the option of drag_drop_enabled of the table is set to True.
-        """
-        return self.move_by_id(self.get_id_from_row(from_row), self.get_id_from_row(to_row))
-
-    def move_by_id(self, from_rid: int, to_rid: int) -> bool:
         """Move an item to another position, return True if succeded, False otherwise.
 
         Works only if the option of drag_drop_enabled of the table is set to True.
@@ -280,7 +292,9 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """Check if the item is enabled."""
         return True
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
+    def get_delegate_props(
+        self, column: int, *, row: Optional[int] = None
+    ) -> Optional[DelegateProps]:
         """Get the delegate properties of the item.
 
         The type should be the same for all the rows of the same column.
@@ -291,9 +305,14 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         - IntDelegateProps: A Spinbox with the given properties
         - None: normal display
         """
-        return self.get_delegate_props_by_id(self.get_id_from_row(row), column)
+        rid = None
+        if row is not None:
+            rid = self.get_id_from_row(row)
+        return self.get_delegate_props_by_id(column, rid=rid)
 
-    def get_delegate_props_by_id(self, rid: Any, column: int) -> Optional[DelegateProps]:
+    def get_delegate_props_by_id(
+        self, column: int, *, rid: Optional[Any] = None
+    ) -> Optional[DelegateProps]:
         """Get the delegate properties of the item.
 
         The type should be the same for all the rows of the same column.
@@ -430,7 +449,7 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """
         return OrderedDict()
 
-    def converter(self) -> ItemsConverter[TableToTreeItems[AnyModel]]:
+    def converter(self) -> "ItemsConverter[TableToTreeItems[AnyModel]]":
         """Return the table items converter.
 
         This method should not be reimplemented or do it with care.
@@ -438,6 +457,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         Can be used to convert the table to a pandas dataframe or a markdown table
         or an html table.
         """
+        from composeui.items.core.tabletotreeitems import TableToTreeItems
+
         return ItemsConverter(TableToTreeItems(self))
 
     def _is_on_current_page(self, row: int) -> bool:

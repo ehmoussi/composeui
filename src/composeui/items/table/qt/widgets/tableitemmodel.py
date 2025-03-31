@@ -89,83 +89,90 @@ class _TableItemModel(QAbstractTableModel):
         super().__init__(parent)
         self.items = items
         self.highlight_indices: Set[Tuple[int, int, bool]] = set()
-        self._cache_data: List[List[str]] = []
-        self.update_cache()
 
     def update_cache(self) -> None:
-        self._cache_data = self.items.get_all_datas()
+        self.items.update_cache()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802, B008
         r"""Get the number of rows under the given parent."""
-        if parent.isValid() or len(self._cache_data) == 0:
+        cached_data = self.items.get_cached_data()
+        if parent.isValid() or (cached_data is not None and len(cached_data) == 0):
             return 0
-        return len(self._cache_data[0])
+        return len(cached_data[0]) if cached_data is not None else self.items.get_nb_rows()
 
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802, B008
         r"""Get the number of columns for the children of the given parent."""
         if parent.isValid():
             return 0
-        return len(self._cache_data)
+        cached_data = self.items.get_cached_data()
+        return len(cached_data) if cached_data is not None else self.items.get_nb_columns()
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
         r"""Get the data stored under the given role for the given index."""
-        row = index.row()
-        if role == Qt.DisplayRole:
-            return self._cache_data[index.column()][row]
-        elif role == Qt.EditRole:
-            return self.items.get_edit_data(row, index.column())
-        elif role == Qt.BackgroundRole:
-            background = self.items.get_background(row, index.column())
-            style = Qt.SolidPattern
-            if BackgroundType.STRIPED in background:
-                style = Qt.BDiagPattern
-            if (row, index.column(), False) in self.highlight_indices:
-                return QBrush(QColor(255, 0, 0, 30), style)
-            elif (row, index.column(), True) in self.highlight_indices:
-                return QBrush(QColor(186, 216, 0, 30), style)
-            if BackgroundType.STRIPED in background:
-                return QBrush(style)
-        elif role == Qt.CheckStateRole:
-            is_checked = self.items.is_checked(row, index.column())
-            if is_checked is not None:
-                if is_checked:
-                    return Qt.Checked
+        if index.isValid():
+            row = index.row()
+            column = index.column()
+            if role == Qt.DisplayRole:
+                cached_data = self.items.get_cached_data()
+                if cached_data is not None:
+                    return cached_data[column][row]
                 else:
-                    return Qt.Unchecked
+                    return self.items.get_data(row, column)
+            elif role == Qt.EditRole:
+                return self.items.get_edit_data(row, column)
+            elif role == Qt.BackgroundRole:
+                background = self.items.get_background(row, column)
+                style = Qt.SolidPattern
+                if BackgroundType.STRIPED in background:
+                    style = Qt.BDiagPattern
+                if (row, column, False) in self.highlight_indices:
+                    return QBrush(QColor(255, 0, 0, 30), style)
+                elif (row, column, True) in self.highlight_indices:
+                    return QBrush(QColor(186, 216, 0, 30), style)
+                if BackgroundType.STRIPED in background:
+                    return QBrush(style)
+            elif role == Qt.CheckStateRole:
+                is_checked = self.items.is_checked(row, column)
+                if is_checked is not None:
+                    if is_checked:
+                        return Qt.Checked
+                    else:
+                        return Qt.Unchecked
         return None
 
     def setData(  # noqa: N802
         self, index: QModelIndex, value: Any, role: int = Qt.EditRole
     ) -> bool:
         r"""Set the data of the given index."""
-        row = index.row()
-        column = index.column()
-        if role == Qt.EditRole:
-            value_str = str(value)
-            is_ok = self.items.set_data_with_history(row, column, value_str)
-            if is_ok:
-                self._cache_data[column][row] = value_str
-                self.dataChanged.emit(index, index, [Qt.EditRole])
-            return is_ok
-        elif role == Qt.CheckStateRole:
-            is_ok = self.items.set_checked_with_history(row, column, bool(value))
-            if is_ok:
-                self.dataChanged.emit(index, index, [Qt.CheckStateRole])
-                self.item_toggled.emit()
-            return is_ok
+        if index.isValid():
+            row = index.row()
+            column = index.column()
+            if role == Qt.EditRole:
+                value_str = str(value)
+                is_ok = self.items.set_data_with_history(row, column, value_str)
+                if is_ok:
+                    self.dataChanged.emit(index, index, [Qt.EditRole])
+                return is_ok
+            elif role == Qt.CheckStateRole:
+                is_ok = self.items.set_checked_with_history(row, column, bool(value))
+                if is_ok:
+                    self.dataChanged.emit(index, index, [Qt.CheckStateRole])
+                    self.item_toggled.emit()
+                return is_ok
         return super().setData(index, value, role)
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         r"""Get the item flags for the given index."""
         flags = Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled | Qt.ItemIsSelectable
-        row = index.row()
-        column = index.column()
-        if self.items.is_checked(row, column) is not None:
-            flags |= Qt.ItemIsUserCheckable
-        if self.items.is_enabled(row, column):
-            flags |= Qt.ItemIsEnabled
-        if self.items.is_editable(row, column):
-            flags |= Qt.ItemIsEditable
+        if index.isValid():
+            row = index.row()
+            column = index.column()
+            if self.items.is_checked(row, column) is not None:
+                flags |= Qt.ItemIsUserCheckable
+            if self.items.is_enabled(row, column):
+                flags |= Qt.ItemIsEnabled
+            if self.items.is_editable(row, column):
+                flags |= Qt.ItemIsEditable
         return flags
 
     def headerData(  # noqa: N802
@@ -208,6 +215,7 @@ class _TableItemModel(QAbstractTableModel):
             for index, from_row in enumerate(rows):
                 is_ok &= self.items.move(from_row, to_row + index)
             self.beginResetModel()
+            self.update_cache()
             self.endResetModel()
             return is_ok
         return False

@@ -3,7 +3,7 @@ from composeui.items.core.initialize import initialize_items_view
 from composeui.items.core.views.itemsview import FormatExtension
 from composeui.items.linkedtable import linkedtable
 from composeui.items.linkedtable.linkedtableview import LinkedTableView
-from composeui.items.table import connect_table
+from composeui.items.table.connecttable import connect_table
 from composeui.items.table.tableview import TableGroupView
 from composeui.items.tree.treeview import ExportTreeOptions
 

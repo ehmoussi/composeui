@@ -106,8 +106,12 @@ class TreeToTableItems(AbstractTableItems[AnyModel]):
     def is_enabled(self, row: int, column: int) -> bool:
         return self._tree_items.is_enabled(row, column, self.parent_rows)
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
-        return self._tree_items.get_delegate_props(row, column, self.parent_rows)
+    def get_delegate_props(
+        self, column: int, *, row: Optional[int] = None
+    ) -> Optional[DelegateProps]:
+        return self._tree_items.get_delegate_props(
+            column, row=row, parent_rows=self.parent_rows
+        )
 
     def get_background(self, row: int, column: int) -> BackgroundType:
         return self._tree_items.get_background(row, column, self.parent_rows)

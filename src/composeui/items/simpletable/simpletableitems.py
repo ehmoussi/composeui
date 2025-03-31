@@ -24,6 +24,19 @@ class _TableInfo(TypedDict):
 
 
 class SimpleTableItems(AbstractTableItems[AnyModel]):
+    """Implement an AbstractTableItems for an sqlite table.
+
+    - By default all the columns are displayed, otherwise provide the `columns` argument
+    - By default the order used is by sorting by the column ROWID, otherwise provide
+        the `order_column` argument
+    - By default when an insert is done the default values are used. If there is columns that
+        need to have there default values incremented they can be provided by
+        the `increment_columns` argument. For example a default name `point` can be incremented
+        automatically like `point 1`, `point 2`, ... at each insertion
+    - By default the table can't be modified, to activate the insertion/removing/modification
+        the argument `is_read_only` can be set to false.
+    """
+
     def __init__(
         self,
         view: "TableView[Self]",
@@ -56,14 +69,93 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                     raise ValueError(msg)
             self._column_names = list(columns)
         self._column_titles = columns
+        self._cached_data = self.get_all_datas()
+
+    def get_cached_data(self) -> Optional[List[List[str]]]:
+        return self._cached_data
+
+    def update_cache(self) -> None:
+        self._cached_data = self.get_all_datas()
+
+    def get_id_from_row(self, row: int) -> Any:
+        if self._order_column is None:
+            with self._store.get_connection() as db_conn:
+                result = db_conn.execute(
+                    f"""--sql
+                    SELECT ROWID
+                    FROM {self._db_table_name}
+                    ORDER BY ROWID LIMIT 1 OFFSET :row
+                    """,
+                    {"row": row},
+                ).fetchone()
+            if result is not None:
+                return int(result[0])
+        else:
+            with self._store.get_connection() as db_conn:
+                result = db_conn.execute(
+                    f"""--sql
+                    SELECT ROWID
+                    FROM {self._db_table_name}
+                    WHERE {self._order_column} = :row
+                    """,
+                    {"row": row},
+                ).fetchone()
+            if result is not None:
+                return int(result[0])
+        raise IndexError("index out of range")
+
+    def get_row_from_id(self, rid: Any) -> int:
+        if self._order_column is None:
+            with self._store.get_connection() as db_conn:
+                result = db_conn.execute(
+                    f"""--sql
+                    SELECT
+                        CASE
+                            -- Check if the rowid exists
+                            WHEN EXISTS(
+                                SELECT 1 FROM {self._db_table_name}
+                                WHERE ROWID = :row_id
+                            )
+                            THEN(
+                                -- if the rowid exists the count the number of rows that
+                                -- have a rowid less than the given rowid since the ROWID
+                                -- column is used to order the column
+                                SELECT COUNT(*)
+                                FROM {self._db_table_name}
+                                WHERE ROWID < :row_id
+                            )
+                        ELSE
+                            -- if the rowid is missing then return NULL to raise an IndexError 
+                            NULL
+                        END
+                    """,
+                    {"row_id": rid},
+                ).fetchone()
+            if result is not None and result[0] is not None:
+                return int(result[0])
+        else:
+            with self._store.get_connection() as db_conn:
+                result = db_conn.execute(
+                    f"""--sql
+                    SELECT {self._order_column}
+                    FROM {self._db_table_name}
+                    WHERE ROWID=:row_id
+                    """,
+                    {"row_id": rid},
+                ).fetchone()
+            if result is not None:
+                return int(result[0])
+        raise IndexError("index out of range")
 
     def get_column_names(self) -> List[str]:
+        """Get the names of the column and add the ROWID column in debug mode."""
         if self._model.is_debug:
             return [*self._column_names, "Id"]
         else:
             return self._column_names
 
     def get_nb_columns(self) -> int:
+        """Get the number of columns of the table."""
         if self._column_titles is not None:
             nb_columns = len(self._column_titles)
         else:
@@ -73,6 +165,7 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
         return nb_columns
 
     def get_column_title(self, column: int) -> str:
+        """Get the title of the column that is used to display in the UI."""
         if self._column_titles is not None and column < len(self._column_titles):
             return next(it.islice(self._column_titles.values(), column, column + 1))
         elif column < len(self._column_names):
@@ -84,6 +177,7 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
             raise IndexError(msg)
 
     def get_nb_rows(self) -> int:
+        """Get the number of rows of the table."""
         with self._store.get_connection() as db_conn:
             result = db_conn.execute(
                 f"SELECT COUNT(*) FROM {self._db_table_name}",
@@ -93,6 +187,14 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
         return 0
 
     def insert(self, row: int) -> Optional[int]:
+        """Insert a row in the table and returns eventually the next selected row.
+
+        The sql table should have default values for all the columns otherwise the insertion
+        will fail.
+
+        If `order_column` has been provided then the rows after the given row will
+        be incremented to keep the order of the table.
+        """
         with self._store.get_connection() as db_conn:
             if self._order_column is not None:
                 # Update the order of all rows after the new row.
@@ -126,7 +228,7 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                 )
             elif cursor.lastrowid is None:
                 db_conn.rollback()
-                msg = f"The insert into {self._db_table_name} failed"
+                msg = f"The insert into {self._db_table_name} failed unexpectedly"
                 raise ValueError(msg) from None
             for increment_column in self._increment_columns:
                 db_conn.execute(
@@ -141,16 +243,20 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                     {"rowid": cursor.lastrowid},
                 )
             db_conn.commit()
+        self.update_cache()
         return row
 
     def _remove_by_id(self, rid: Any) -> None:
-        row = self.get_row_from_id(rid)
+        """Remove the row with the give id."""
         with self._store.get_connection() as db_conn:
+            row = None
             if self._order_column is not None:
-                db_conn.execute(
-                    f"DELETE FROM {self._db_table_name} WHERE {self._order_column}=:row",
-                    {"row": row},
-                )
+                row = self.get_row_from_id(rid)
+            db_conn.execute(
+                f"DELETE FROM {self._db_table_name} WHERE ROWID=:row_id",
+                {"row_id": rid},
+            )
+            if self._order_column is not None and row is not None:
                 # Update the order of all rows after the "about to be deleted" row
                 db_conn.execute(
                     f"""
@@ -160,26 +266,35 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                     """,
                     {"row": row},
                 )
-                db_conn.commit()
-            else:
-                result = db_conn.execute(
-                    "SELECT ROWID FROM {self._db_table_name} LIMIT 1 OFFSET :offset",
-                    {"offset": row},
-                ).fetchone()
-                if result is not None:
-                    row_id = int(result[0])
-                    db_conn.execute(
-                        "DELETE FROM {self._db_table_name} WHERE ROWID=:row_id",
-                        {"row_id": row_id},
-                    )
-                    db_conn.commit()
-                else:
-                    db_conn.rollback()
-                    msg = f"No row with index {row} in table {self._db_table_name}"
-                    raise IndexError(msg)
+            db_conn.commit()
+        self.update_cache()
 
-    def get_data(self, row: int, column: int) -> str:
-        value = self.get_edit_data(row, column)
+    def get_data_by_id(self, rid: Any, column: int) -> str:
+        """Get the data to be displayed by the UI at the given row id and column."""
+        value = self.get_edit_data_by_id(rid, column)
+        return self._get_display_value(value, column)
+
+    def get_all_datas(self) -> List[List[str]]:
+        """Get all the data of the table."""
+        with self._store.get_connection() as db_conn:
+            columns = self.get_column_names()
+            order_column = "ROWID"
+            if self._order_column is not None:
+                order_column = self._order_column
+            result = db_conn.execute(
+                f"""--sql
+                SELECT {','.join(columns)}, ROWID
+                FROM {self._db_table_name}
+                ORDER BY {order_column}
+                """
+            ).fetchall()
+        return [
+            [self._get_display_value(row[column], column) for row in result]
+            for column, _ in enumerate(columns)
+        ]
+
+    def _get_display_value(self, value: Any, column: int) -> str:
+        """Get the value displayed as a string."""
         if value is not None and (
             (self._model.is_debug and column < (self.get_nb_columns() - 1))
             or (not self._model.is_debug and column < self.get_nb_columns())
@@ -189,13 +304,10 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                 return self.display_float(value, 2)
         if value is not None:
             return str(value)
-        return super().get_data(row, column)
+        return ""
 
-    def get_data_by_id(self, rid: Any, column: int) -> str:
-        row = self.get_row_from_id(rid)
-        return self.get_data(row, column)
-
-    def get_edit_data(self, row: int, column: int) -> Any:
+    def get_edit_data_by_id(self, rid: Any, column: int) -> Any:
+        """Get the data as stored in the sqlite table for the given row id and column."""
         if self._model.is_debug and column == self.get_nb_columns() - 1:
             column_name = "ROWID"
             column_type = "INTEGER"
@@ -204,17 +316,13 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
             column_name = self._column_names[column]
             column_type = self._db_table_infos[column_name]["type"]
             default_value = self._db_table_infos[column_name]["dflt_value"]
-        if self._order_column is not None:
-            order_column = self._order_column
-        else:
-            order_column = "ROWID"
         statement = f"""
                 SELECT {column_name}
                 FROM {self._db_table_name}
-                ORDER BY {order_column} LIMIT 1 OFFSET :offset
+                WHERE ROWID=:rid
                 """
         with self._store.get_connection() as db_conn:
-            result = db_conn.execute(statement, {"offset": row}).fetchone()
+            result = db_conn.execute(statement, {"rid": rid}).fetchone()
         if result is not None:
             value = result[0]
             if column_type == "INTEGER":
@@ -233,6 +341,15 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
         return None
 
     def move(self, from_row: int, to_row: int) -> bool:
+        """Move the id from the given from_row to the given to_row.
+
+        It returns True if the move is a success.
+
+        If the `order_column` is provided then the column is updated to respect the new order
+        after the move.
+        Otherwise the move doesn't have any meaning so the function does nothing and returns
+        False.
+        """
         if self._order_column is not None:
             with self._store.get_connection() as db_conn:
                 # put the item at the beginning of the table
@@ -272,10 +389,18 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                     {"row": to_row},
                 )
                 db_conn.commit()
+            self.update_cache()
             return True
         return super().move(from_row, to_row)
 
-    def set_data(self, row: int, column: int, value: str) -> bool:
+    def set_data_by_id(self, rid: Any, column: int, value: str) -> bool:
+        """Set the given value at the given row id and column.
+
+        The value is casted as an int or a float according to the type of the sqlite table.
+        If the given value can't be casted to the correct type the value is not set and the
+        function returns False.
+
+        """
         column_name = self._column_names[column]
         column_type = self._db_table_infos[column_name]["type"]
         default_value = self._db_table_infos[column_name]["dflt_value"]
@@ -310,7 +435,7 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
         statement = f"""
             UPDATE {self._db_table_name}
             SET {column_name} = :value
-            WHERE {order_column}=:row
+            WHERE ROWID=:row_id
             """
         with self._store.get_connection() as db_conn:
             db_conn.execute(
@@ -318,26 +443,44 @@ class SimpleTableItems(AbstractTableItems[AnyModel]):
                 {
                     "value": value,
                     "order_column": order_column,
-                    "row": row,
+                    "row_id": rid,
                 },
             )
             db_conn.commit()
+        self._cached_data[column][self.get_row_from_id(rid)] = value
         return True
 
     def is_editable(self, row: int, column: int) -> bool:
+        return self._is_editable(column)
+
+    def is_editable_by_id(self, rid: Any, column: int) -> bool:
+        return self._is_editable(column)
+
+    def _is_editable(self, column: int) -> bool:
+        """Check if the column is editable.
+
+        The id column is not editable.
+        The other columns are only editable only if the `is_read_only` is set to False.
+        """
         if self._model.is_debug and column == len(self._column_names):
             return False
         return not self._is_read_only
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
-        r"""Get the delegate type for the given column."""
+    def get_delegate_props(
+        self, column: int, *, row: Optional[int] = None
+    ) -> Optional[DelegateProps]:
+        """Get the delegate type for the given column.
+
+        If the column of the sqlite table is of type REAL then the FloatDelegateProps is used.
+        """
         if column < len(self._column_names):
             column_type = self._db_table_infos[self._column_names[column]]["type"]
             if column_type == "REAL":
                 return FloatDelegateProps()
-        return super().get_delegate_props(row, column)
+        return super().get_delegate_props(column, row=row)
 
     def _get_column_infos(self) -> Dict[str, _TableInfo]:
+        """Extract column informations from the sqlite table needed to implement the items."""
         with self._store.get_connection() as db_conn:
             result = db_conn.execute(
                 f"PRAGMA table_info({self._db_table_name})",

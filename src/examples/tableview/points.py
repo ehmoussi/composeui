@@ -254,10 +254,12 @@ class PointsItems(AbstractTableItems["Model"]):
                 return True
         return False
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
+    def get_delegate_props(
+        self, column: int, *, row: Optional[int] = None
+    ) -> Optional[DelegateProps]:
         if 1 <= column <= 3:
             return FloatDelegateProps()
-        return super().get_delegate_props(row, column)
+        return super().get_delegate_props(column, row=row)
 
 
 def initialize_points(view: IPointsView, main_view: "ExampleMainView", model: "Model") -> None:

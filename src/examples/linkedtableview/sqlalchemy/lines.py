@@ -340,6 +340,13 @@ class LinesItems(AbstractTableItems["Model"]):
     def __init__(self, view: TableView["LinesItems"], model: "Model") -> None:
         super().__init__(view, model)
         self._titles = ["Name", "Id"]
+        self._cached_data: List[List[str]] = []
+
+    def get_cached_data(self) -> Optional[List[List[str]]]:
+        return self._cached_data
+
+    def update_cache(self) -> None:
+        self._cached_data = self.get_all_datas()
 
     def get_nb_columns(self) -> int:
         if self._model.is_debug:
@@ -355,11 +362,13 @@ class LinesItems(AbstractTableItems["Model"]):
 
     def insert(self, row: int) -> Optional[int]:
         self._model.lines_query.insert_line(row)
+        self.update_cache()
         return row
 
     def _remove_by_id(self, rid: int) -> None:
         row = self.get_row_from_id(rid)
         self._model.lines_query.remove_line(row)
+        self.update_cache()
 
     def remove_all(self) -> None:
         self._model.lines_query.remove_all_lines()
@@ -380,6 +389,7 @@ class LinesItems(AbstractTableItems["Model"]):
     def set_data(self, row: int, column: int, value: str) -> bool:
         if column == 0:
             self._model.lines_query.set_line_name(row, str(value))
+            self.update_cache()
             return True
         return False
 
@@ -388,6 +398,13 @@ class PointsItems(AbstractTableItems["Model"]):
     def __init__(self, view: TableView["PointsItems"], model: "Model") -> None:
         super().__init__(view, model)
         self._titles = ["Name", "X", "Y", "Z", "Id"]
+        self._cached_data: List[List[str]] = []
+
+    def get_cached_data(self) -> List[List[str]] | None:
+        return self._cached_data
+
+    def update_cache(self) -> None:
+        self._cached_data = self.get_all_datas()
 
     def get_lines_items(self) -> LinesItems:
         assert len(self._dependencies) == 1, "LinesItems is missing as a dependency"
@@ -427,11 +444,13 @@ class PointsItems(AbstractTableItems["Model"]):
 
     def insert(self, row: int) -> Optional[int]:
         self._model.lines_query.insert_point(self.get_current_line_index(), row)
+        self.update_cache()
         return row
 
     def _remove_by_id(self, rid: Any) -> None:
         row = self.get_row_from_id(rid)
         self._model.lines_query.remove_point(self.get_current_line_index(), row)
+        self.update_cache()
 
     def get_data(self, row: int, column: int) -> str:
         line_row = self.get_current_line_index()
@@ -469,6 +488,7 @@ class PointsItems(AbstractTableItems["Model"]):
         line_row = self.get_current_line_index()
         if column == 0:
             self._model.lines_query.set_point_name(line_row, row, str(value))
+            self.update_cache()
             return True
         elif 1 <= column <= 3:
             float_value = self.to_float_value(value, 0.0)
@@ -479,13 +499,16 @@ class PointsItems(AbstractTableItems["Model"]):
                     self._model.lines_query.set_y(line_row, row, float_value)
                 elif column == 3:
                     self._model.lines_query.set_z(line_row, row, float_value)
+                self.update_cache()
                 return True
         return False
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
+    def get_delegate_props(
+        self, column: int, *, row: Optional[int] = None
+    ) -> Optional[DelegateProps]:
         if 1 <= column <= 3:
             return FloatDelegateProps()
-        return super().get_delegate_props(row, column)
+        return super().get_delegate_props(column, row=row)
 
     def get_title(self) -> str:
         line_index = self.get_current_line_index()

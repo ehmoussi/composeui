@@ -40,15 +40,17 @@ class ComboBoxDelegate(QItemDelegate):
         model = self.table.model()
         if isinstance(model, (TreeItemModel, TableItemModel)):
             source_index = model.mapToSource(index)
-            delegat_props = None
+            delegate_props = None
             if isinstance(self.items, AbstractTableItems):
-                delegat_props = self.items.get_delegate_props(index.row(), index.column())
+                delegate_props = self.items.get_delegate_props(index.column(), row=index.row())
             else:
-                delegat_props = self.items.get_delegate_props(
-                    index.row(), index.column(), source_index.internalPointer()
+                delegate_props = self.items.get_delegate_props(
+                    index.column(), row=index.row(), parent_rows=source_index.internalPointer()
                 )
-            if delegat_props is not None and isinstance(delegat_props, ComboBoxDelegateProps):
-                editor.addItems(delegat_props.values)
+            if delegate_props is not None and isinstance(
+                delegate_props, ComboBoxDelegateProps
+            ):
+                editor.addItems(delegate_props.values)
         return editor
 
     def updateEditorGeometry(  # noqa: N802
@@ -75,10 +77,10 @@ class FloatDelegate(QItemDelegate):
         r"""Get the widget used to edit the item specified by index for editing."""
         delegate_props = None
         if isinstance(self.items, AbstractTableItems):
-            delegate_props = self.items.get_delegate_props(index.row(), index.column())
+            delegate_props = self.items.get_delegate_props(index.column(), row=index.row())
         else:
             delegate_props = self.items.get_delegate_props(
-                index.row(), index.column(), index.internalPointer()
+                index.column(), row=index.row(), parent_rows=index.internalPointer()
             )
         if delegate_props is not None and isinstance(delegate_props, FloatDelegateProps):
             editor = QLineEdit(parent)
