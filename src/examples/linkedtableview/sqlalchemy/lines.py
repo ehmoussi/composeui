@@ -400,7 +400,7 @@ class PointsItems(AbstractTableItems["Model"]):
         self._titles = ["Name", "X", "Y", "Z", "Id"]
         self._cached_data: List[List[str]] = []
 
-    def get_cached_data(self) -> List[List[str]] | None:
+    def get_cached_data(self) -> Optional[List[List[str]]]:
         return self._cached_data
 
     def update_cache(self) -> None:
