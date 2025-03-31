@@ -12,7 +12,18 @@ from typing import Any, Iterator, List, Optional, cast
 
 
 class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
-    r"""Abstract of the items of a table."""
+    """Abstract of the items of a table.
+
+    There is two way to subclass it:
+        - implement the methods that uses the row index of the table. Therefore the methods
+        with the row id as an argument can be ignored because the row id will be the row index
+        of the table.
+        - implement the methods that uses the row id of the table. Therefore the methods
+        get_id_by_row and get_row_by_id need to be implemented because they are essential to
+        navigate between the row id and the row. Implementing these two methods are enough
+        to make the methods using the rows usable.
+
+    """
 
     def __init__(self, view: AnyItemsView, model: AnyModel, *, title: str = "") -> None:
         super().__init__(view, model, title=title)
@@ -35,6 +46,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def get_row_from_id(self, rid: Any) -> int:
         """Get the row index for the given row id.
 
+        For the opposite call get_id_from_row.
+
         By default the row id is the row of the table but this could be override to use
         something else as a key of a dictionary or an id of an sql table or whatever else.
         """
@@ -42,6 +55,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
     def get_id_from_row(self, row: int) -> Any:
         """Get the row id for the given row index.
+
+        For the opposite call get_row_from_id.
 
         By default the row id is the row of the table but this could be override to use
         something else as a key of a dictionary or an id of an sql table or whatever else.
@@ -145,8 +160,11 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
             return None
 
     def _remove_by_id(self, rid: Any) -> None:
-        """Remove the given row id of the table."""
-        return None
+        """Remove the given row id of the table.
+
+        This method should be implemented when the rows of the table can be removed.
+        """
+        raise NotImplementedError
 
     def remove_all(self) -> None:
         """Remove all the rows of the table."""
@@ -170,6 +188,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def set_data(self, row: int, column: int, value: str) -> bool:
         """Set the data at the given row and column.
 
+        Returns True if the value is valid and has been set, False otherwise.
+
         Use the helper method to_float_value to transform the value to a float
         Use the helper method to_int_value to transform the value to an int
         """
@@ -177,6 +197,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
     def set_data_by_id(self, rid: Any, column: int, value: str) -> bool:
         """Set the data at the given row id and column.
+
+        Returns True if the value is valid and has been set, False otherwise.
 
         Use the helper method to_float_value to transform the value to a float
         Use the helper method to_int_value to transform the value to an int
@@ -262,7 +284,7 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         """Check if the item is enabled."""
         return self.is_enabled_by_id(self.get_id_from_row(row), column)
 
-    def is_enabled_by_id(self, rid: int, column: int) -> bool:
+    def is_enabled_by_id(self, rid: Any, column: int) -> bool:
         """Check if the item is enabled."""
         return True
 
@@ -298,24 +320,35 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
     def get_background_by_id(self, rid: Any, column: int) -> BackgroundType:
         """Get the background for the given row and column."""
-        # TODO: increase the posibilities of this method
         return BackgroundType.NONE
 
     def get_selected_rows(self) -> List[int]:
-        """Get the selected rows."""
+        """Get the selected rows.
+
+        This method should not be reimplemented or do it with care.
+        """
         return [position[-1] for position in self._view.selected_items]
 
     def get_selected_ids(self) -> List[Any]:
-        """Get the selected rows."""
+        """Get the selected rows.
+
+        This method should not be reimplemented or do it with care.
+        """
         return [self.get_id_from_row(position[-1]) for position in self._view.selected_items]
 
     def set_selected_rows(self, rows: List[int]) -> None:
-        """Set the selected rows."""
+        """Set the selected rows.
+
+        This method should not be reimplemented or do it with care.
+        """
         columns = list(range(self.get_nb_columns()))
         self._view.selected_items = OrderedDict(((row,), columns) for row in rows)
 
     def set_selected_ids(self, rids: List[Any]) -> None:
-        """Set the selected ids."""
+        """Set the selected ids.
+
+        This method should not be reimplemented or do it with care.
+        """
         columns = list(range(self.get_nb_columns()))
         self._view.selected_items = OrderedDict(
             ((self.get_row_from_id(rid),), columns) for rid in rids
@@ -323,6 +356,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
     def get_selected_row_items(self) -> OrderedDict[int, List[int]]:
         """Get the selected items by row.
+
+        This method should not be reimplemented or do it with care.
 
         Same as get_selected_items but use the row directly instead of the path of rows.
         """
@@ -332,6 +367,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
 
     def get_selected_id_items(self) -> OrderedDict[Any, List[int]]:
         """Get the selected items by row id.
+
+        This method should not be reimplemented or do it with care.
 
         Same as get_selected_items but use the row id directly instead of the path of rows.
         """
@@ -343,6 +380,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def set_selected_row_items(self, selected_row_items: OrderedDict[int, List[int]]) -> None:
         """Set the selected items by row.
 
+        This method should not be reimplemented or do it with care.
+
         Same as set_selected_items but use the row directly instead of the path of rows.
         """
         self._view.selected_items = OrderedDict(
@@ -352,6 +391,8 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def set_selected_id_items(self, selected_id_items: OrderedDict[Any, List[int]]) -> None:
         """Set the selected items by row id.
 
+        This method should not be reimplemented or do it with care.
+
         Same as set_selected_items but use the row directly instead of the path of rows.
         """
         self._view.selected_items = OrderedDict(
@@ -360,7 +401,13 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         )
 
     def is_filtered(self, row: int) -> bool:
-        """Check if the row is filtered or not."""
+        """Check if the row is filtered or not.
+
+        This method should not be reimplemented or do it with care.
+
+        If the row id is not on the current page then it is considered as filtered otherwise
+        it uses the configuration of the filter to determine if the row id is filtered or not.
+        """
         return not self._is_on_current_page(row) or (
             len(self.filter_column_indices) > 0
             and self.filter_manager.has_pattern
@@ -371,20 +418,21 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         )
 
     def is_filtered_by_id(self, rid: Any) -> bool:
-        """Check if the row id is filtered or not."""
+        """Check if the row id is filtered or not.
+
+        This method should not be reimplemented or do it with care.
+
+        If the row id is not on the current page then it is considered as filtered otherwise
+        it uses the configuration of the filter to determine if the row id is filtered or not.
+        """
         row = self.get_row_from_id(rid)
-        return not self._is_on_current_page(row) or (
-            len(self.filter_column_indices) > 0
-            and self.filter_manager.has_pattern
-            and all(
-                not self.filter_manager.match(self.get_data_by_id(rid, column))
-                for column in self.filter_column_indices
-            )
-        )
+        return self.is_filtered(row)
 
     def get_infos(self) -> OrderedDict[str, Any]:
         """Get the informations that can be added to the export in Markdown/HTML.
 
+        This method sould be reimplemented only if the export of the table in markdown or html
+        is used to display more informations about the table.
         The informations will appear as a list in the following format:
         - **{key}**: {value}
         """
@@ -393,12 +441,21 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
     def converter(self) -> ItemsConverter[TableToTreeItems[AnyModel]]:
         """Return the table items converter.
 
+        This method should not be reimplemented or do it with care.
+
         Can be used to convert the table to a pandas dataframe or a markdown table
         or an html table.
         """
         return ItemsConverter(TableToTreeItems(self))
 
     def _is_on_current_page(self, row: int) -> bool:
+        """Check if the given row is on the current page of the table.
+
+        This method should not be reimplemented or do it with care.
+
+        If the pagination is not active, it will always return True because all the rows
+        are on the page.
+        """
         return not self._view.has_pagination or (
             self.page_navigator.get_current_min_row()
             <= row

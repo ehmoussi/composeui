@@ -46,7 +46,9 @@ DelegateProps: TypeAlias = Union[ComboBoxDelegateProps, FloatDelegateProps, IntD
 
 
 class BackgroundType(enum.Flag):
-    r"""Define the background type."""
+    """Define the background type."""
+
+    # TODO: increase the posibilities
 
     NONE = 0
     STRIPED = enum.auto()
