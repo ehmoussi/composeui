@@ -426,11 +426,11 @@ class LinesItems(AbstractTreeItems["Model"]):
         return False
 
     def get_delegate_props(
-        self, row: int, column: int, parent_rows: Tuple[int, ...] = ()
+        self, column: int, *, row: Optional[int] = None, parent_rows: Tuple[int, ...] = ()
     ) -> Optional[DelegateProps]:
         if 1 <= column <= 3:
             return FloatDelegateProps()
-        return super().get_delegate_props(row, column, parent_rows)
+        return super().get_delegate_props(column, row=row, parent_rows=parent_rows)
 
     def get_expand_positions(self) -> List[Tuple[int, ...]]:
         return [

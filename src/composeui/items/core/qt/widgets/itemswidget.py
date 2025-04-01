@@ -186,7 +186,7 @@ def set_delegates(
     items: Union[AbstractTableItems[Any], AbstractTreeItems[Any]],
 ) -> None:
     for j in range(items.get_nb_columns()):
-        delegate_type = items.get_delegate_props(0, j)
+        delegate_type = items.get_delegate_props(j)
         if isinstance(delegate_type, ComboBoxDelegateProps):
             table.setItemDelegateForColumn(j, ComboBoxDelegate(items, table))
         elif isinstance(delegate_type, FloatDelegateProps):

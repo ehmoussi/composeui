@@ -101,6 +101,24 @@ class CubeQuery:
             return int(result[0])
         raise IndexError("index out of range")
 
+    def get_index(self, c_id: int) -> int:
+        """Get the row from the given id."""
+        with self._data.get_connection() as db_conn:
+            result = db_conn.execute(
+                """--sql
+                SELECT COUNT(*)
+                FROM cube
+                ORDER BY ROWID
+                WHERE ROWID < (
+                    SELECT ROWID FROM cube WHERE c_id = :c_id
+                )
+                """,
+                {"c_id": c_id},
+            ).fetchone()
+        if result is not None:
+            return int(result[0])
+        raise IndexError("index out of range")
+
     def get_ids(self) -> List[int]:
         """Get the ids of all the cubes."""
         with self._data.get_connection() as db_conn:

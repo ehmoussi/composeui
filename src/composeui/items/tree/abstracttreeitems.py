@@ -202,7 +202,7 @@ class AbstractTreeItems(AbstractItems[AnyItemsView, AnyModel]):
         return True
 
     def get_delegate_props(
-        self, row: int, column: int, parent_rows: Tuple[int, ...] = ()
+        self, column: int, *, row: Optional[int] = None, parent_rows: Tuple[int, ...] = ()
     ) -> Optional[DelegateProps]:
         """Get the delegate properties of the item.
 
