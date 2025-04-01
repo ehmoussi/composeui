@@ -3,13 +3,19 @@ from composeui.items.table.abstracttableitems import AbstractTableItems
 from composeui.items.table.tableview import TableView
 from examples.probamodelapp.probamodelapp.model import Model
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
 class VariablesItems(AbstractTableItems[Model]):
     def __init__(self, model: Model) -> None:
         super().__init__(TableView(), model, title="Variables")
         self._titles = ["Name", "Distribution", "Id"]
+
+    def get_row_from_id(self, rid: Any) -> int:
+        return self._model.variables_query.get_row_index(rid)
+
+    def get_id_from_row(self, row: int) -> Any:
+        return self._model.variables_query.get_v_id(row)
 
     def get_nb_columns(self) -> int:
         return len(self._titles)
@@ -26,21 +32,20 @@ class VariablesItems(AbstractTableItems[Model]):
         self._model.variables_query.add("Variable", Variable.Distribution.Normal.name)
         return super().insert(row)
 
-    def remove(self, row: int) -> Optional[int]:
-        self._model.variables_query.remove(row)
-        return super().remove(row)
+    def _remove_by_id(self, rid: Any) -> None:
+        self._model.variables_query.remove(rid)
 
-    def get_data(self, row: int, column: int) -> str:
+    def get_data_by_id(self, rid: Any, column: int) -> str:
         if column == 0:
-            return self._model.variables_query.get_name(row)
+            return self._model.variables_query.get_name(rid)
         elif column == 1:
-            return self._model.variables_query.get_distribution(row)
+            return self._model.variables_query.get_distribution(rid)
         elif column == 2:
-            return str(self._model.variables_query.get_id(row))
-        return super().get_data(row, column)
+            return str(self._model.variables_query.get_id(rid))
+        return super().get_data_by_id(rid, column)
 
-    def get_data_by_row(self, row: int) -> List[str]:
-        return list(map(str, self._model.variables_query.get_row(row)))
+    def get_data_by_row_id(self, rid: Any) -> List[str]:
+        return list(map(str, self._model.variables_query.get_row_data_by_id(rid)))
 
     def get_all_datas(self) -> List[List[str]]:
         return [
@@ -56,9 +61,11 @@ class VariablesItems(AbstractTableItems[Model]):
             return False
         return True
 
-    def get_delegate_props(self, row: int, column: int) -> Optional[DelegateProps]:
+    def get_delegate_props_by_id(
+        self, column: int, *, rid: Optional[Any] = None
+    ) -> Optional[DelegateProps]:
         from examples.probamodelapp.variables.models import Variable
 
         if column == 1:
             return ComboBoxDelegateProps(list(Variable.Distribution))
-        return super().get_delegate_props(row, column)
+        return super().get_delegate_props_by_id(column, rid=rid)

@@ -373,7 +373,7 @@ class TableColumnsEndpoint(View):
                         "title": column_title,
                         "field": str(index_column),
                         **self._from_delegate_to_tabulator_editor(
-                            self._items.get_delegate_props(0, index_column)
+                            self._items.get_delegate_props_by_id(index_column)
                         ),
                     }
                     for index_column, column_title in enumerate(column_titles)
