@@ -8,7 +8,7 @@ from examples.salomeview.module2 import Module2MainView
 from typing_extensions import Self, TypeAlias
 
 import typing
-from typing import Optional
+from typing import Any
 
 if typing.TYPE_CHECKING:
     from examples.salomeview.app import Model
@@ -31,25 +31,28 @@ class CubeTableItems(AbstractTableItems["Model"]):
     def get_nb_rows(self) -> int:
         return self._model.cube_query.count()
 
-    def remove(self, row: int) -> Optional[int]:
-        c_id = self._model.cube_query.get_id(row)
-        self._model.cube_query.remove_cube(c_id)
-        return super().remove(row)
+    def _remove_by_id(self, rid: Any) -> None:
+        self._model.cube_query.remove_cube(rid)
 
-    def get_data(self, row: int, column: int) -> str:
-        c_id = self._model.cube_query.get_id(row)
+    def get_id_from_row(self, row: int) -> Any:
+        return self._model.cube_query.get_id(row)
+
+    def get_row_from_id(self, rid: Any) -> int:
+        return self._model.cube_query.get_index(rid)
+
+    def get_data_by_id(self, rid: Any, column: int) -> str:
         if column == 0:
-            return self._model.cube_query.get_name(c_id)
+            return self._model.cube_query.get_name(rid)
         elif column == 1:
-            return str(self._model.cube_query.get_point_1(c_id))
+            return str(self._model.cube_query.get_point_1(rid))
         elif column == 2:
-            return str(self._model.cube_query.get_point_2(c_id))
+            return str(self._model.cube_query.get_point_2(rid))
         elif column == 3:
-            entry = self._model.cube_query.get_entry(c_id)
+            entry = self._model.cube_query.get_entry(rid)
             if entry is not None:
                 return entry
             return ""
-        return super().get_data(row, column)
+        return super().get_data_by_id(rid, column)
 
 
 def remove_selected_cubes(*, view: CubeTable, model: "Model") -> None:

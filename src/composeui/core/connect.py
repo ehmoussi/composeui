@@ -10,7 +10,7 @@ from composeui.form import connect_apply_form_view, connect_form_view
 from composeui.form.formview import ApplyFormView, FormView
 from composeui.items.linkedtable import connect_linked_table, connect_linked_table_view
 from composeui.items.linkedtable.linkedtableview import LinkedTableView
-from composeui.items.table import connect_table
+from composeui.items.table.connecttable import connect_table
 from composeui.items.table.tableview import TableView
 from composeui.items.tree import connect_tree
 from composeui.items.tree.treeview import TreeView
