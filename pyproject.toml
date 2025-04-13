@@ -84,6 +84,7 @@ dev = [
     "types-openpyxl",
     "types-aiofiles",
     "pytest-asyncio",
+    "pytest-django",
 ]
 
 [tool.setuptools_scm]
@@ -266,3 +267,4 @@ exclude_lines = ["pragma: no cover", "def __repr__", "def __str__"]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+DJANGO_SETTINGS_MODULE = "examples.probamodelapp.probamodelapp.settings"

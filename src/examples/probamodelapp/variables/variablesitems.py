@@ -12,7 +12,7 @@ class VariablesItems(AbstractTableItems[Model]):
         self._titles = ["Name", "Distribution", "Id"]
 
     def get_row_from_id(self, rid: Any) -> int:
-        return self._model.variables_query.get_row_index(rid)
+        return self._model.variables_query.get_row_index(int(rid))
 
     def get_id_from_row(self, row: int) -> Any:
         return self._model.variables_query.get_v_id(row)
@@ -29,7 +29,7 @@ class VariablesItems(AbstractTableItems[Model]):
     def insert(self, row: int) -> Optional[int]:
         from examples.probamodelapp.variables.models import Variable
 
-        self._model.variables_query.add("Variable", Variable.Distribution.Normal.name)
+        self._model.variables_query.insert(row, "Variable", Variable.Distribution.Normal.name)
         return super().insert(row)
 
     def _remove_by_id(self, rid: Any) -> None:
@@ -52,11 +52,16 @@ class VariablesItems(AbstractTableItems[Model]):
             [row[0], row[1], str(row[2])] for row in self._model.variables_query.get_data()
         ]
 
-    def set_data(self, row: int, column: int, value: str) -> bool:
+    def set_data_by_id(self, rid: Any, column: int, value: str) -> bool:
         if column == 0:
-            self._model.variables_query.set_name(row, value)
+            if value == "":
+                return False
+            self._model.variables_query.set_name(int(rid), value)
         elif column == 1:
-            self._model.variables_query.set_distribution(row, value)
+            try:
+                self._model.variables_query.set_distribution(int(rid), value)
+            except ValueError:
+                return False
         else:
             return False
         return True

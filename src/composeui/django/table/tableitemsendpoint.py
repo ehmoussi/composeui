@@ -58,24 +58,24 @@ def get_urls(items: AbstractTableItems[Any]) -> List[URLPattern]:
         path(
             "api/<int:row>",
             TableItemsEndPoint.as_view(items=items),
-        ),
-        path(
-            "api/<int:row>",
-            TableItemsEndPoint.as_view(items=items),
+            name="api_row",
         ),
         path(
             "api/columns",
             TableColumnsEndpoint.as_view(items=items),
+            name="api_columns",
         ),
         path(
             "csv",
             FileTableItemsEndpoint.as_view(items=items, format_extension=FormatExtension.CSV),
+            name="api_csv",
         ),
         path(
             "excel",
             FileTableItemsEndpoint.as_view(
                 items=items, format_extension=FormatExtension.EXCEL
             ),
+            name="api_excel",
         ),
     ]
 
@@ -89,25 +89,145 @@ class TableItemsEndPoint(View):
 
     @method_decorator(ensure_csrf_cookie)
     def get(self, _: HttpRequest, row: Optional[int] = None) -> JsonResponse:
+        """HTTP GET method.
+
+        Two cases:
+        - without a row all the data of the table is returned
+            ```
+                {
+                    status: ...
+                    message: ...
+                    content: [
+                        {
+                            row: 0
+                            data: [ # column values
+                                ...
+                            ]
+                        }
+                    ]
+                }
+            ```
+        - with a row only the data of the row is returned
+            - If the row is in the valid range
+                ```
+                    {
+                        status: "ok",
+                        message: "",
+                        content: {
+                            data: [ # column values
+                                ...
+                            ]
+                        }
+                    }
+                ```
+            - Otherwise return a failed response with the current number of rows and given row
+                ```
+                    {
+                        status: "failed",
+                        message: ...,
+                        content: {
+                            "nb_rows": ...,
+                            "row": ...,  # the given row
+                        }
+                    }
+                ```
+        """
         if row is None:
             return self.get_data()
         else:
             return self.get_row(row)
 
+    @method_decorator(ensure_csrf_cookie)
     def post(self, request: HttpRequest, row: Optional[int] = None) -> JsonResponse:
+        """HTTP POST method.
+
+        Four cases:
+        - Without specifying a row index and an empty body request
+            The default values are used and the new row is appended at the end of the table
+            and return in the content the values of the new row and its current row index
+        - Without specifying a row index and with a body request containing the values
+        to use for the new row:
+            ```
+            {
+                "0": ... # 0th column value
+                ...
+                "N": ... # Nth column value
+            }
+            ```
+        - With specifying a row and an empty body
+        - With specifying a row and a body request as above
+
+        For the four case the response is the current row to select and the list of each column
+        values of the row that was inserted.
+        ```
+            {
+                "status": "ok",
+                "message": "",
+                "content": {
+                    "current_row": ..., # the current row to select
+                    "data": [...]  # list of the column values
+                }
+            }
+        ```
+        """
         if row is None:
             return self.add(request)
         else:
             return self.insert(request, row)
 
+    @method_decorator(ensure_csrf_cookie)
     def put(self, request: HttpRequest, row: Optional[int]) -> JsonResponse:
+        """HTTP PUT method.
+
+        One case:
+        - With a row and a body containing the column values to modify
+            ```
+                {
+                    "0": ... # 0th column value
+                    ...
+                    "N": ... # Nth column value
+                }
+            ```
+        It returns the content of the modified row
+            ```
+                {
+                    "status": "ok",
+                    "message": "",
+                    "content": {
+                        "data": [...]  # list of the column values
+                    }
+                }
+            ```
+        """
         if row is not None:
             return self.set_row(request, row)
         return create_response_from_status(
             Status(status=StatusType.FAILED, status_code=StatusCode.BAD_REQUEST, message="")
         )
 
+    @method_decorator(ensure_csrf_cookie)
     def delete(self, request: HttpRequest, row: Optional[int] = None) -> JsonResponse:
+        """HTTP delete method.
+
+        Two cases:
+        - Without row then all the table rows are deleted and return an empty content
+        ```
+            {
+                status: "ok",
+                "message": "",
+                "content": {}
+            }
+        ```
+        - With a row then remove the row at the given index and return the new current row
+        in the content
+        ```
+            {
+                status: "ok",
+                "message": "",
+                "content": {"current_row": ...}
+            }
+        ```
+        """
         if row is None:
             return self.remove_all()
         else:
@@ -115,9 +235,6 @@ class TableItemsEndPoint(View):
 
     def add(self, request: HttpRequest) -> JsonResponse:
         row, current_row, status = self._insert()
-        data = [
-            self._items.get_data(row, column) for column in range(self._items.get_nb_columns())
-        ]
         if status["status"] != StatusType.FAILED:
             body = request.body
             if len(body) > 0:
@@ -125,13 +242,10 @@ class TableItemsEndPoint(View):
                 status["message"] = set_row_status["message"]
                 if set_row_status["status"] != StatusType.OK:
                     status["status"] = StatusType.PARTIAL
-                if set_row_status["status"] != StatusType.FAILED:
-
-                    return create_response_from_status(
-                        status,
-                        {"current_row": current_row, "data": data},
-                    )
-        return create_response_from_status(status, {"current_row": row, "data": data})
+                if set_row_status["status"] == StatusType.FAILED:
+                    current_row = row
+        data = self._items.get_data_by_row(row)
+        return create_response_from_status(status, {"current_row": current_row, "data": data})
 
     def insert(self, request: HttpRequest, row: int) -> JsonResponse:
         """Insert an item"""
@@ -182,27 +296,28 @@ class TableItemsEndPoint(View):
 
     def set_row(self, request: HttpRequest, row: int) -> JsonResponse:
         nb_rows = self._items.get_nb_rows()
+        content = None
         if row < nb_rows:
             body = request.body
             status = self._set_row(row, body)
+            content = {"data": self._items.get_data_by_row(row)}
         else:
             status = Status(
                 status=StatusType.FAILED,
                 status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 message="",
             )
-        return create_response_from_status(status)
+        return create_response_from_status(status, content)
 
     def remove(self, row: int) -> JsonResponse:
         nb_rows = self._items.get_nb_rows()
-        content: Mapping[str, Any]
+        content: Optional[Mapping[str, Any]] = None
         if row >= nb_rows:
             status = Status(
                 status=StatusType.FAILED,
                 status_code=StatusCode.BAD_REQUEST,
                 message="The given row is incorrect",
             )
-            content = {"current_row": None}
         else:
             try:
                 current_row = self._items.remove(row)
@@ -212,7 +327,6 @@ class TableItemsEndPoint(View):
                     status_code=StatusCode.INTERNAL_SERVER_ERROR,
                     message="Unexpected failure",
                 )
-                content = {"current_row": None}
             else:
                 status = Status(
                     status=StatusType.OK,
@@ -276,22 +390,34 @@ class TableItemsEndPoint(View):
         if len(body) > 0:
             content_row = json.loads(body)
         values = self._get_valid_row_content(content_row)
-        if values is not None:
+        if values is not None and len(values) > 0:
             failed_columns = []
             for column, value in values.items():
-                is_success = self._items.set_data(row, column, value)
+                is_success = self._items.set_data(row, column, str(value))
                 if not is_success:
                     failed_columns.append(column)
             if len(failed_columns) == 0:
                 return Status(status=StatusType.OK, status_code=StatusCode.OK, message="")
             else:
+                if len(failed_columns) == 1:
+                    failed_column_name = self._items.get_column_title(failed_columns[0])
+                    message = (
+                        f"The value of the column '{failed_column_name}' "
+                        "have not been processed"
+                    )
+                else:
+                    failed_column_names = tuple(
+                        self._items.get_column_title(failed_column)
+                        for failed_column in failed_columns
+                    )
+                    message = (
+                        f"The value of the columns {failed_column_names} "
+                        "have not been processed"
+                    )
                 return Status(
                     status=StatusType.PARTIAL,
                     status_code=StatusCode.OK,
-                    message=(
-                        f"The value of the column(s) {tuple(failed_columns)} are not valid. "
-                        "They have not been processed"
-                    ),
+                    message=message,
                 )
         return Status(
             status=StatusType.FAILED,

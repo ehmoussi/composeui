@@ -1,6 +1,11 @@
+from django.db import IntegrityError
 from composeui.store.djangoormstore import DjangoORMStore
 
 from typing import Any, List, Tuple
+import typing
+
+if typing.TYPE_CHECKING:
+    from django.db.backends.sqlite3.base import SQLiteCursorWrapper
 
 
 class VariablesQuery:
@@ -10,35 +15,10 @@ class VariablesQuery:
     def get_row_index(self, v_id: int) -> int:
         """Get the index of the row for the given v_id.
 
-        The table is ordered using the id column.
+        The table is ordered using the v_index column.
         """
         with self._store.get_connection() as db_conn:
-            result = db_conn.execute(
-                """--sql
-                SELECT
-                    CASE
-                        -- Check if the rowid exists
-                        WHEN EXISTS(
-                            SELECT 1 FROM variables_variable
-                            WHERE v_id = :v_id
-                        )
-                        THEN(
-                            -- if the rowid exists count the number of rows that
-                            -- have a v_id less than the given v_id
-                            SELECT COUNT(*)
-                            FROM variables_variable
-                            WHERE v_id < :v_id
-                        )
-                    ELSE
-                        -- if the rowid is missing then return NULL to raise an IndexError
-                        NULL
-                    END
-                """,
-                {"v_id": v_id},
-            ).fetchone()
-            if result is not None and result[0] is not None:
-                return int(result[0])
-            raise IndexError("index out of range")
+            return self._get_row_index(db_conn, v_id)
 
     def get_v_id(self, index: int) -> int:
         """Get the v_id from the given index.
@@ -50,9 +30,9 @@ class VariablesQuery:
                 """--sql
                 SELECT v_id
                 FROM variables_variable
-                ORDER BY v_id LIMIT 1 OFFSET :row_index
+                WHERE v_index = :v_index
                 """,
-                {"row_index": index},
+                {"v_index": index},
             ).fetchone()
         if result is not None:
             return int(result[0])
@@ -65,18 +45,20 @@ class VariablesQuery:
             return int(result[0])
         return 0
 
-    def add(self, name: str, distribution: str) -> None:
+    def insert(self, index: int, name: str, distribution: str) -> None:
         with self._store.get_connection() as db_conn:
+            self._increment_index(db_conn, index)
             db_conn.execute(
                 """--sql
-                INSERT INTO variables_variable(name, distribution)
-                VALUES(:name, :distribution)
+                INSERT INTO variables_variable(v_index, name, distribution)
+                VALUES(:v_index, :name, :distribution)
                 """,
-                {"name": name, "distribution": distribution},
+                {"name": name, "distribution": distribution, "v_index": index},
             )
 
     def remove(self, v_id: int) -> None:
         with self._store.get_connection() as db_conn:
+            index = self._get_row_index(db_conn, v_id)
             db_conn.execute(
                 """--sql
                 DELETE FROM variables_variable
@@ -84,6 +66,7 @@ class VariablesQuery:
                 """,
                 {"v_id": v_id},
             )
+            self._decrement_index(db_conn, index)
 
     def get_name(self, v_id: int) -> str:
         return str(self._get_value("name", v_id))
@@ -95,7 +78,11 @@ class VariablesQuery:
         return str(self._get_value("distribution", v_id))
 
     def set_distribution(self, v_id: int, distribution: str) -> None:
-        self._set_value("distribution", v_id, distribution)
+        try:
+            self._set_value("distribution", v_id, distribution)
+        except IntegrityError:
+            msg = f"{distribution} is an invalid distribution"
+            raise ValueError(msg)
 
     def get_id(self, v_id: int) -> int:
         return int(self._get_value("v_id", v_id))
@@ -150,3 +137,38 @@ class VariablesQuery:
             return result[0]
         else:
             raise IndexError("index out of range")
+
+    def _increment_index(self, db_conn: "SQLiteCursorWrapper", index: int) -> None:
+        """Increment index of variables with an index greater or equal to the given one."""
+        db_conn.execute(
+            """--sql
+            UPDATE variables_variable
+            SET v_index = v_index + 1
+            WHERE v_index >= :v_index
+            """,
+            {"v_index": index},
+        )
+
+    def _decrement_index(self, db_conn: "SQLiteCursorWrapper", index: int) -> None:
+        """Decrement index of variables with an index greater or equal to the given one."""
+        db_conn.execute(
+            """--sql
+            UPDATE variables_variable
+            SET v_index = v_index - 1
+            WHERE v_index >= :v_index
+            """,
+            {"v_index": index},
+        )
+
+    def _get_row_index(self, db_conn: "SQLiteCursorWrapper", v_id: int) -> int:
+        result = db_conn.execute(
+            """--sql
+            SELECT v_index
+            FROM variables_variable
+            WHERE v_id = :v_id
+            """,
+            {"v_id": v_id},
+        ).fetchone()
+        if result is not None and result[0] is not None:
+            return int(result[0])
+        raise IndexError("index out of range")
