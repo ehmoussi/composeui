@@ -11,6 +11,8 @@ from django.core.wsgi import get_wsgi_application
 
 import os
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "probamodelapp.settings")
+os.environ.setdefault(
+    "DJANGO_SETTINGS_MODULE", "examples.probamodelapp.probamodelapp.settings"
+)
 
 application = get_wsgi_application()

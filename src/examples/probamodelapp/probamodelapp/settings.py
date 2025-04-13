@@ -67,7 +67,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "probamodelapp.urls"
+ROOT_URLCONF = "examples.probamodelapp.probamodelapp.urls"
 
 TEMPLATES = [
     {
