@@ -36,6 +36,10 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         # self._view: ITableView[Self]
         self.page_navigator = PaginationNavigator(self._view.pagination_view, self)
 
+    def is_debug(self) -> bool:
+        """Check if the items is in debug mode."""
+        return self._model.is_debug
+
     def get_cached_data(self) -> Optional[List[List[str]]]:
         """Get the cached data of the table or returns None if there is no cache
 
@@ -117,6 +121,19 @@ class AbstractTableItems(AbstractItems[AnyItemsView, AnyModel]):
         Use the helper method display_float for transforming a float value into a string.
         """
         return [self.get_data(row, column) for column in range(self.get_nb_columns())]
+
+    def get_data_by_row_id(self, rid: Any) -> List[str]:
+        """Get the data for the entire row id.
+
+        The method is implemented using the method get_data.
+        When performance is crucial please reimplement the method.
+        For example, when using an sql database multiple SELECT for each columns
+        are slower than getting all the columns at once.
+
+        The data is returned as a string.
+        Use the helper method display_float for transforming a float value into a string.
+        """
+        return [self.get_data_by_id(rid, column) for column in range(self.get_nb_columns())]
 
     def get_all_datas(self) -> List[List[str]]:
         """Get all the displayed data of the table.
