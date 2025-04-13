@@ -1,8 +1,9 @@
-from django.db import IntegrityError
 from composeui.store.djangoormstore import DjangoORMStore
 
-from typing import Any, List, Tuple
+from django.db import IntegrityError
+
 import typing
+from typing import Any, List, Tuple
 
 if typing.TYPE_CHECKING:
     from django.db.backends.sqlite3.base import SQLiteCursorWrapper
@@ -80,9 +81,9 @@ class VariablesQuery:
     def set_distribution(self, v_id: int, distribution: str) -> None:
         try:
             self._set_value("distribution", v_id, distribution)
-        except IntegrityError:
+        except IntegrityError as e:
             msg = f"{distribution} is an invalid distribution"
-            raise ValueError(msg)
+            raise ValueError(msg) from e
 
     def get_id(self, v_id: int) -> int:
         return int(self._get_value("v_id", v_id))

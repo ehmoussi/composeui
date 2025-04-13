@@ -1,5 +1,7 @@
 from django.db import models
 
+from typing import ClassVar
+
 
 class Variable(models.Model):
 
@@ -17,7 +19,7 @@ class Variable(models.Model):
     upper = models.FloatField(db_default=1.0)
 
     class Meta:
-        constraints = [
+        constraints: ClassVar = [
             models.CheckConstraint(
                 name="variables_check_distribution",
                 condition=models.Q(distribution__in=["Normal", "Uniform"]),
