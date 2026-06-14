@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import enum
+
 from attrs import Factory, field
 
 from composeui.qtapplication import QtApplication
@@ -8,6 +10,7 @@ from composeui.view import (
     GroupFormView,
     LabelFloatInputRowView,
     LabelInputRowView,
+    LabelRadioGroupRowView,
     LogType,
     MainView,
     define_view,
@@ -55,10 +58,33 @@ class HalfLengthInputView(LabelFloatInputRowView):
 
 
 @define_view
-class PipeDimension(GroupFormView):
+class PipeDimensionView(GroupFormView):
     radius: RadiusInputView = Factory(RadiusInputView)
     width: WidthInputView = Factory(WidthInputView)
     half_length: HalfLengthInputView = Factory(HalfLengthInputView)
+
+
+class EdgeType(enum.Enum):
+    Normal = "Normal"
+    Chamfer = "Chamfer"
+    Fillet = "Fillet"
+
+
+@define_view
+class EdgeTypeView(LabelRadioGroupRowView[EdgeType]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label_view.text = "Edge Type"
+        self.field_view.value = EdgeType.Normal
+        object.__setattr__(
+            self.field_view,
+            "values",
+            {
+                EdgeType.Normal.value: EdgeType.Normal,
+                EdgeType.Chamfer.value: EdgeType.Chamfer,
+                EdgeType.Fillet.value: EdgeType.Fillet,
+            },
+        )
 
 
 @define_view
@@ -102,8 +128,10 @@ class PipeNameRowView(LabelInputRowView):
 @define_view
 class PipeFormView(FormView):
     name: PipeNameRowView = field(factory=PipeNameRowView)
-    main_pipe: PipeDimension = Factory(PipeDimension)
-    incident_pipe: PipeDimension = Factory(PipeDimension)
+    main_pipe: PipeDimensionView = Factory(PipeDimensionView)
+    incident_pipe: PipeDimensionView = Factory(PipeDimensionView)
+
+    edge_type: EdgeTypeView = Factory(EdgeTypeView)
 
     chamfer: ChamferDimensionView = Factory(ChamferDimensionView)
     fillet: FilletDimensionView = Factory(FilletDimensionView)
@@ -127,8 +155,23 @@ class PipeFormView(FormView):
         self.incident_pipe.half_length.field_view.editing_finished.connect(
             self._display_error_message
         )
+        # Edge Type
+        self.edge_type.field_view.value_changed.connect(self._display_edge_options)
+        self._display_edge_options()
         # Fillet
         self.fillet.radius.field_view.value = 20.0
+
+    def _display_edge_options(self) -> None:
+        edge_type = self.edge_type.field_view.value
+        if edge_type == EdgeType.Chamfer:
+            self.chamfer.is_visible = True
+            self.fillet.is_visible = False
+        elif edge_type == EdgeType.Fillet:
+            self.chamfer.is_visible = False
+            self.fillet.is_visible = True
+        else:
+            self.chamfer.is_visible = False
+            self.fillet.is_visible = False
 
     def _display_error_message(self) -> None:
         log_messages: list[str] = []

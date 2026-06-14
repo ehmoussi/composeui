@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
 
 import attrs
-from attr import define, field
 
 from composeui.renderer import Renderer
 from composeui.signal import Signal
@@ -45,7 +44,7 @@ def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
                 kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
             else:
                 kwargs["on_setattr"] = [kwargs["on_setattr"], notify_renderer]
-        return define(cls, on_setattr=[notify_renderer], **kwargs)
+        return attrs.define(cls, on_setattr=[notify_renderer], **kwargs)
 
     if cls is None:
         return wrap
@@ -55,10 +54,10 @@ def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
 @define_view(kw_only=True)
 class View:
     # properties
-    is_visible: bool = field(default=True)
-    is_enabled: bool = field(default=True)
+    is_visible: bool = attrs.field(default=True)
+    is_enabled: bool = attrs.field(default=True)
     # renderer
-    renderer: Renderer[Any, Any] | None = field(default=None)
+    renderer: Renderer[Any, Any] | None = attrs.field(default=None)
 
     @property
     def children_views(self) -> list[View]:
@@ -87,12 +86,12 @@ class View:
 
 @define_view
 class MainView(View):
-    title: str = field(init=False, on_setattr=attrs.setters.frozen)
-    extension: str = field(init=False, on_setattr=attrs.setters.frozen)
+    title: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
+    extension: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
     saved_filepath: Path | None = None
 
-    minimum_width: int = field(default=720)
-    minimum_height: int = field(default=480)
+    minimum_width: int = attrs.field(default=720)
+    minimum_height: int = attrs.field(default=480)
 
     # file_menu: FileMenu = FileMenu(title="File")
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
@@ -110,17 +109,17 @@ class MainView(View):
 @define_view
 class _InputView(View):
     # properties
-    placeholder: str = field(default="")
+    placeholder: str = attrs.field(default="")
     # signals
-    editing_finished: Signal = field(factory=Signal)
-    text_changed: Signal = field(factory=Signal)
-    text_edited: Signal = field(factory=Signal)
+    editing_finished: Signal = attrs.field(factory=Signal)
+    text_changed: Signal = attrs.field(factory=Signal)
+    text_edited: Signal = attrs.field(factory=Signal)
 
 
 @define_view
 class InputView(_InputView):
     # properties
-    text: str = field(default="")
+    text: str = attrs.field(default="")
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
@@ -132,10 +131,10 @@ class InputView(_InputView):
 @define_view
 class FloatInputView(_InputView):
     # properties
-    value: float | None = field(default=None)
-    minimum: float | None = field(default=None)
-    maximum: float | None = field(default=None)
-    decimals: int | None = field(default=None)
+    value: float | None = attrs.field(default=None)
+    minimum: float | None = attrs.field(default=None)
+    maximum: float | None = attrs.field(default=None)
+    decimals: int | None = attrs.field(default=None)
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
@@ -152,8 +151,8 @@ class LogType(enum.Enum):
 
 @define_view
 class LogFormRow(View):
-    log_message: str = field(default="")
-    log_type: LogType = field(default=LogType.ERROR)
+    log_message: str = attrs.field(default="")
+    log_type: LogType = attrs.field(default=LogType.ERROR)
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
@@ -164,7 +163,7 @@ class LogFormRow(View):
 
 @define_view
 class LabelView(View):
-    text: str = field(default="")
+    text: str = attrs.field(default="")
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
@@ -173,13 +172,32 @@ class LabelView(View):
             self.renderer = QtLabelRenderer(self)
 
 
+TValue = TypeVar("TValue")
+
+
+@define_view
+class RadioGroupView(View, Generic[TValue]):
+    value: TValue | None = attrs.field(default=None)
+    values: dict[str, TValue] = attrs.field(
+        factory=dict[str, TValue],
+        on_setattr=attrs.setters.frozen,
+    )
+    value_changed: Signal = attrs.Factory(Signal)
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
+
+            self.renderer = QtRadioGroupRenderer(self)
+
+
 TView = TypeVar("TView", bound=View)
 
 
 @define_view
 class FormRowView(View, Generic[TView]):
-    log_view: LogFormRow = field(factory=LogFormRow)
-    field_view: TView = field(kw_only=True, init=False)
+    log_view: LogFormRow = attrs.field(factory=LogFormRow)
+    field_view: TView = attrs.field(kw_only=True, init=False)
 
     def __attrs_post_init__(self) -> None:
         self.log_view.is_visible = False
@@ -190,7 +208,7 @@ class FormRowView(View, Generic[TView]):
 
 @define_view
 class LabelFormRowView(FormRowView[TView]):
-    label_view: LabelView = field(factory=LabelView)
+    label_view: LabelView = attrs.field(factory=LabelView)
 
 
 @define_view
@@ -208,8 +226,15 @@ class LabelFloatInputRowView(LabelFormRowView[FloatInputView]):
 
 
 @define_view
+class LabelRadioGroupRowView(LabelFormRowView[RadioGroupView[TValue]]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.field_view = RadioGroupView()
+
+
+@define_view
 class FormView(View):
-    log_view: LogFormRow = field(factory=LogFormRow)
+    log_view: LogFormRow = attrs.field(factory=LogFormRow)
 
     def __attrs_post_init__(self) -> None:
         self.log_view.is_visible = False
@@ -232,7 +257,7 @@ class FormView(View):
 
 @define_view
 class GroupFormView(FormView):
-    title: str = field(default="")
+    title: str = attrs.field(default="")
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:

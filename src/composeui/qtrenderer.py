@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from qtpy.QtGui import QDoubleValidator
 from qtpy.QtWidgets import (
@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from composeui.qradiogroup import QRadioGroup
 from composeui.renderer import NoRenderedObjectError, Renderer
 from composeui.view import (
     FloatInputView,
@@ -25,6 +26,7 @@ from composeui.view import (
     LogFormRow,
     LogType,
     MainView,
+    RadioGroupView,
     View,
 )
 
@@ -243,6 +245,47 @@ class QtLabelRenderer(QtWidgetRenderer[LabelView, QLabel]):
     @staticmethod
     def _update_state(view: LabelView, rendered_object: QLabel) -> None:
         view.text = rendered_object.text()
+
+
+TValue = TypeVar("TValue")
+
+
+class QtRadioGroupRenderer(
+    QtWidgetRenderer[RadioGroupView[TValue], QRadioGroup], Generic[TValue]
+):
+    def __init__(self, view: RadioGroupView[TValue]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QRadioGroup(self._view.values)
+            self._rendered_object.value_changed.connect(self._update_value)
+            self._view.value_changed.add_qt_signal(self._rendered_object.value_changed)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(
+        _view: RadioGroupView[TValue], rendered_object: QRadioGroup, value: Any
+    ) -> None:
+        rendered_object.set_value(value)
+
+    @staticmethod
+    def _update_state(
+        view: RadioGroupView[TValue], rendered_object: QRadioGroup
+    ) -> None:
+        view.value = rendered_object.value()
+
+    def _update_value(self, value: TValue | None) -> None:
+        self._is_updating_state = True
+        try:
+            self._view.value = value
+        finally:
+            self._is_updating_state = False
 
 
 class QtLogFormRowRenderer(QtWidgetRenderer[LogFormRow, QLabel]):
