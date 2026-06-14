@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from qtpy.QtGui import QDoubleValidator
 from qtpy.QtWidgets import (
@@ -43,6 +43,15 @@ class NotQWidgetError(Exception):
 
 
 class QtWidgetRenderer(Renderer[TView, TWidget]):
+    def __init__(self, view: TView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_visible,
+                "is_enabled": self._refresh_enabled,
+            }
+        )
+
     @property
     def qt_object(self) -> TWidget | None:
         return self._rendered_object
@@ -51,9 +60,15 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         if self._rendered_object is None:
             raise NoRenderedObjectError
         self._rendered_object.blockSignals(True)  # noqa: FBT003
-        self._refresh(self._view, self._rendered_object)
-        self._rendered_object.setVisible(self._view.is_visible)
-        self._rendered_object.setEnabled(self._view.is_enabled)
+        super().refresh()
+        self._rendered_object.blockSignals(False)  # noqa: FBT003
+
+    def refresh_attribute(self, attr_name: str, value: Any) -> None:
+        """Refresh the framework view object using the view state."""
+        if self._rendered_object is None:
+            raise NoRenderedObjectError
+        self._rendered_object.blockSignals(True)  # noqa: FBT003
+        super().refresh_attribute(attr_name, value)
         self._rendered_object.blockSignals(False)  # noqa: FBT003
 
     def update_state(self) -> None:
@@ -64,8 +79,25 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         self._view.is_visible = self._rendered_object.isVisible()
         self._view.is_enabled = self._rendered_object.isEnabled()
 
+    @staticmethod
+    def _refresh_visible(_view: TView, renderer_object: TWidget, value: bool) -> None:
+        renderer_object.setVisible(value)
+
+    @staticmethod
+    def _refresh_enabled(_view: TView, renderer_object: TWidget, value: bool) -> None:
+        renderer_object.setEnabled(value)
+
 
 class QtInputRenderer(QtWidgetRenderer[InputView, QLineEdit]):
+    def __init__(self, view: InputView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "placeholder": self._refresh_placeholder,
+            }
+        )
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
@@ -78,9 +110,14 @@ class QtInputRenderer(QtWidgetRenderer[InputView, QLineEdit]):
             self.refresh()
 
     @staticmethod
-    def _refresh(view: InputView, rendered_object: QLineEdit) -> None:
-        rendered_object.setText(view.text)
-        rendered_object.setPlaceholderText(view.placeholder)
+    def _refresh_text(_view: InputView, rendered_object: QLineEdit, value: str) -> None:
+        rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: InputView, rendered_object: QLineEdit, value: str
+    ) -> None:
+        rendered_object.setPlaceholderText(value)
 
     @staticmethod
     def _update_state(view: InputView, rendered_object: QLineEdit) -> None:
@@ -92,6 +129,18 @@ class QtInputRenderer(QtWidgetRenderer[InputView, QLineEdit]):
 
 
 class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
+    def __init__(self, view: FloatInputView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._refresh_placeholder,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "decimals": self._refresh_decimals,
+            }
+        )
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
@@ -106,14 +155,40 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
             self.refresh()
 
     @staticmethod
-    def _refresh(view: FloatInputView, rendered_object: QLineEdit) -> None:
-        rendered_object.setText(str(view.value) if view.value is not None else "")
-        rendered_object.setPlaceholderText(view.placeholder)
+    def _refresh_value(
+        _view: FloatInputView, rendered_object: QLineEdit, value: float | None
+    ) -> None:
+        rendered_object.setText(str(value) if value is not None else "")
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: FloatInputView, rendered_object: QLineEdit, value: str
+    ) -> None:
+        rendered_object.setPlaceholderText(value)
+
+    @staticmethod
+    def _refresh_minimum(
+        _view: FloatInputView, rendered_object: QLineEdit, value: float | None
+    ) -> None:
         validator = rendered_object.validator()
         assert isinstance(validator, QDoubleValidator)
-        validator.setBottom(float("-inf") if view.minimum is None else view.minimum)
-        validator.setTop(float("inf") if view.maximum is None else view.maximum)
-        validator.setDecimals(-1 if view.decimals is None else view.decimals)
+        validator.setBottom(float("-inf") if value is None else value)
+
+    @staticmethod
+    def _refresh_maximum(
+        _view: FloatInputView, rendered_object: QLineEdit, value: float | None
+    ) -> None:
+        validator = rendered_object.validator()
+        assert isinstance(validator, QDoubleValidator)
+        validator.setTop(float("inf") if value is None else value)
+
+    @staticmethod
+    def _refresh_decimals(
+        _view: FloatInputView, rendered_object: QLineEdit, value: int | None
+    ) -> None:
+        validator = rendered_object.validator()
+        assert isinstance(validator, QDoubleValidator)
+        validator.setDecimals(-1 if value is None else value)
 
     @staticmethod
     def _update_state(view: FloatInputView, rendered_object: QLineEdit) -> None:
@@ -140,14 +215,22 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
 
 
 class QtLabelRenderer(QtWidgetRenderer[LabelView, QLabel]):
+    def __init__(self, view: LabelView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+            }
+        )
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLabel()
             self.refresh()
 
     @staticmethod
-    def _refresh(view: LabelView, rendered_object: QLabel) -> None:
-        rendered_object.setText(view.text)
+    def _refresh_text(_view: LabelView, rendered_object: QLabel, value: str) -> None:
+        rendered_object.setText(value)
 
     @staticmethod
     def _update_state(view: LabelView, rendered_object: QLabel) -> None:
@@ -155,18 +238,36 @@ class QtLabelRenderer(QtWidgetRenderer[LabelView, QLabel]):
 
 
 class QtLogFormRowRenderer(QtWidgetRenderer[LogFormRow, QLabel]):
+    def __init__(self, view: LogFormRow) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "log_message": self._refresh_log_message,
+                "log_type": self._refresh_log_type,
+            }
+        )
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLabel()
             self.refresh()
 
     @staticmethod
-    def _refresh(view: LogFormRow, rendered_object: QLabel) -> None:
-        rendered_object.setText(view.log_message)
-        if view.log_type == LogType.ERROR:
+    def _refresh_log_message(
+        _view: LogFormRow, rendered_object: QLabel, value: str
+    ) -> None:
+        rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_log_type(
+        _view: LogFormRow, rendered_object: QLabel, value: LogType
+    ) -> None:
+        if value == LogType.ERROR:
             rendered_object.setStyleSheet("QLabel { color : red; }")
-        elif view.log_type == LogType.WARNING:
+        elif value == LogType.WARNING:
             rendered_object.setStyleSheet("QLabel { color : orange; }")
+        else:
+            rendered_object.setStyleSheet("")
 
     @staticmethod
     def _update_state(view: LogFormRow, rendered_object: QLabel) -> None:
@@ -194,7 +295,10 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                         layout.addRow(label_object, field_layout_object)
                     else:
                         layout.addRow(field_layout_object)
-                else:
+                elif (
+                    isinstance(field_row.renderer, QtWidgetRenderer)
+                    and field_row.renderer.qt_object is not None
+                ):
                     layout.addRow(field_row.renderer.qt_object)
             self.refresh()
 
@@ -225,17 +329,37 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
         return label_object
 
     @staticmethod
-    def _refresh(view: FormView, rendered_object: QWidget) -> None:
-        if isinstance(rendered_object, QGroupBox) and isinstance(view, GroupFormView):
-            rendered_object.setTitle(view.title)
-
-    @staticmethod
     def _update_state(view: FormView, rendered_object: QWidget) -> None:
         if isinstance(rendered_object, QGroupBox) and isinstance(view, GroupFormView):
             view.title = rendered_object.title()
 
 
+class QtGroupFormRenderer(QtFormRenderer):
+    def __init__(self, view: GroupFormView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+            }
+        )
+
+    @staticmethod
+    def _refresh_title(view: FormView, rendered_object: QWidget, value: str) -> None:
+        if isinstance(rendered_object, QGroupBox) and isinstance(view, GroupFormView):
+            rendered_object.setTitle(value)
+
+
 class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
+    def __init__(self, view: MainView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "minimum_width": self._refresh_minimum_width,
+                "minimum_height": self._refresh_minimum_height,
+            }
+        )
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QMainWindow()
@@ -255,10 +379,22 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
                     central_layout.addWidget(child_rendered_object)
 
     @staticmethod
-    def _refresh(view: MainView, rendered_object: QMainWindow) -> None:
-        rendered_object.setWindowTitle(view.title)
-        rendered_object.setMinimumWidth(view.minimum_width)
-        rendered_object.setMinimumHeight(view.minimum_height)
+    def _refresh_title(
+        _view: MainView, rendered_object: QMainWindow, value: str
+    ) -> None:
+        rendered_object.setWindowTitle(value)
+
+    @staticmethod
+    def _refresh_minimum_width(
+        _view: MainView, rendered_object: QMainWindow, value: int
+    ) -> None:
+        rendered_object.setMinimumWidth(value)
+
+    @staticmethod
+    def _refresh_minimum_height(
+        _view: MainView, rendered_object: QMainWindow, value: int
+    ) -> None:
+        rendered_object.setMinimumHeight(value)
 
     @staticmethod
     def _update_state(view: MainView, rendered_object: QMainWindow) -> None:

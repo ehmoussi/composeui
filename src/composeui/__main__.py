@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from attrs import Factory, define, field
+from attrs import Factory, field
 
 from composeui.qtapplication import QtApplication
 from composeui.view import (
@@ -9,10 +9,11 @@ from composeui.view import (
     LabelFloatInputRowView,
     LabelInputRowView,
     MainView,
+    define_view,
 )
 
 
-@define
+@define_view
 class RadiusInputView(LabelFloatInputRowView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -22,7 +23,7 @@ class RadiusInputView(LabelFloatInputRowView):
         self.field_view.decimals = 3
 
 
-@define
+@define_view
 class WidthInputView(LabelFloatInputRowView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -32,7 +33,7 @@ class WidthInputView(LabelFloatInputRowView):
         self.field_view.decimals = 3
 
 
-@define
+@define_view
 class HalfLengthInputView(LabelFloatInputRowView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -42,7 +43,7 @@ class HalfLengthInputView(LabelFloatInputRowView):
         self.field_view.decimals = 3
 
 
-@define
+@define_view
 class PipeDimension(GroupFormView):
     radius: RadiusInputView = Factory(RadiusInputView)
     width: WidthInputView = Factory(WidthInputView)
@@ -52,16 +53,31 @@ class PipeDimension(GroupFormView):
         self.title = "Main Pipe"
 
 
-@define
+@define_view
+class PipeNameRowView(LabelInputRowView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label_view.text = "Name"
+        self.field_view.text_edited.connect(self._check_name)
+
+    def _check_name(self, text: str) -> None:
+        if text == "":
+            self.log_view.log_message = "A name is mandatory"
+            self.log_view.log_type = type(self.log_view.log_type).ERROR
+        else:
+            self.log_view.log_message = ""
+            self.log_view.log_type = type(self.log_view.log_type).INFO
+        # if self.log_view.renderer is not None:
+        #     self.log_view.renderer.refresh()
+
+
+@define_view
 class PipeFormView(FormView):
-    name: LabelInputRowView = field(factory=LabelInputRowView)
+    name: PipeNameRowView = field(factory=PipeNameRowView)
     main_pipe: PipeDimension = Factory(PipeDimension)
 
-    def __attrs_post_init__(self) -> None:
-        self.name.label_view.text = "Name"
 
-
-@define
+@define_view
 class PipeMainView(MainView):
     pipe_form: PipeFormView = field(factory=PipeFormView)
 

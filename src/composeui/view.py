@@ -1,24 +1,54 @@
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
 
 import attrs
 from attr import define, field
 
+from composeui.renderer import Renderer
 from composeui.signal import Signal
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
-
-    from composeui.renderer import Renderer
 
 
 class RendererType(enum.Enum):
     QT = enum.auto()
 
 
-@define(kw_only=True)
+def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
+    if hasattr(instance, attribute.name):
+        old_value = getattr(instance, attribute.name)
+        if old_value != value and isinstance(instance.renderer, Renderer):
+            instance.renderer.refresh_attribute(attribute.name, value)
+    return value
+
+
+T = TypeVar("T", bound=type)
+
+
+@overload
+def define_view(cls: T) -> T: ...
+@overload
+def define_view(cls: None = None, **kwargs: Any) -> Callable[[T], T]: ...
+def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
+    def wrap(cls: T) -> T:
+        if "on_setattr" in kwargs:
+            if isinstance(kwargs["on_setattr"], Sequence):
+                kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
+            else:
+                kwargs["on_setattr"] = [kwargs["on_setattr"], notify_renderer]
+        return define(cls, on_setattr=[notify_renderer], **kwargs)
+
+    if cls is None:
+        return wrap
+    return wrap(cls)
+
+
+@define_view(kw_only=True)
 class View:
     # properties
     is_visible: bool = field(default=True)
@@ -51,7 +81,7 @@ class View:
             child_view.render(renderer_type)
 
 
-@define
+@define_view
 class MainView(View):
     title: str = field(init=False, on_setattr=attrs.setters.frozen)
     extension: str = field(init=False, on_setattr=attrs.setters.frozen)
@@ -73,7 +103,7 @@ class MainView(View):
             self.renderer = QtMainRenderer(self)
 
 
-@define
+@define_view
 class _InputView(View):
     # properties
     placeholder: str = field(default="")
@@ -83,7 +113,7 @@ class _InputView(View):
     text_edited: Signal = field(factory=Signal)
 
 
-@define
+@define_view
 class InputView(_InputView):
     # properties
     text: str = field(default="")
@@ -95,7 +125,7 @@ class InputView(_InputView):
             self.renderer = QtInputRenderer(self)
 
 
-@define
+@define_view
 class FloatInputView(_InputView):
     # properties
     value: float | None = field(default=None)
@@ -116,7 +146,7 @@ class LogType(enum.Enum):
     INFO = enum.auto()
 
 
-@define
+@define_view
 class LogFormRow(View):
     log_message: str = field(default="")
     log_type: LogType = field(default=LogType.ERROR)
@@ -128,7 +158,7 @@ class LogFormRow(View):
             self.renderer = QtLogFormRowRenderer(self)
 
 
-@define
+@define_view
 class LabelView(View):
     text: str = field(default="")
 
@@ -142,7 +172,7 @@ class LabelView(View):
 TView = TypeVar("TView", bound=View)
 
 
-@define
+@define_view
 class FormRowView(View, Generic[TView]):
     log_view: LogFormRow = field(factory=LogFormRow)
     field_view: TView = field(kw_only=True, init=False)
@@ -151,24 +181,24 @@ class FormRowView(View, Generic[TView]):
         pass
 
 
-@define
+@define_view
 class LabelFormRowView(FormRowView[TView]):
     label_view: LabelView = field(factory=LabelView)
 
 
-@define
+@define_view
 class LabelInputRowView(LabelFormRowView[InputView]):
     def __attrs_post_init__(self) -> None:
         self.field_view = InputView()
 
 
-@define
+@define_view
 class LabelFloatInputRowView(LabelFormRowView[FloatInputView]):
     def __attrs_post_init__(self) -> None:
         self.field_view = FloatInputView()
 
 
-@define
+@define_view
 class FormView(View):
     @property
     def field_rows(self) -> list[FormRowView[View] | FormView]:
@@ -186,6 +216,12 @@ class FormView(View):
             self.renderer = QtFormRenderer(self)
 
 
-@define
+@define_view
 class GroupFormView(FormView):
     title: str = field(default="")
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtrenderer import QtGroupFormRenderer  # noqa: PLC0415
+
+            self.renderer = QtGroupFormRenderer(self)
