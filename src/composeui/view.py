@@ -22,7 +22,11 @@ class RendererType(enum.Enum):
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
     if hasattr(instance, attribute.name):
         old_value = getattr(instance, attribute.name)
-        if old_value != value and isinstance(instance.renderer, Renderer):
+        if (
+            old_value != value
+            and isinstance(instance.renderer, Renderer)
+            and not instance.renderer.is_updating_state()
+        ):
             instance.renderer.refresh_attribute(attribute.name, value)
     return value
 
@@ -177,6 +181,9 @@ class FormRowView(View, Generic[TView]):
     log_view: LogFormRow = field(factory=LogFormRow)
     field_view: TView = field(kw_only=True, init=False)
 
+    def __attrs_post_init__(self) -> None:
+        self.log_view.is_visible = False
+
     def _create_renderer(self, renderer_type: RendererType) -> None:
         pass
 
@@ -189,17 +196,24 @@ class LabelFormRowView(FormRowView[TView]):
 @define_view
 class LabelInputRowView(LabelFormRowView[InputView]):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.field_view = InputView()
 
 
 @define_view
 class LabelFloatInputRowView(LabelFormRowView[FloatInputView]):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.field_view = FloatInputView()
 
 
 @define_view
 class FormView(View):
+    log_view: LogFormRow = field(factory=LogFormRow)
+
+    def __attrs_post_init__(self) -> None:
+        self.log_view.is_visible = False
+
     @property
     def field_rows(self) -> list[FormRowView[View] | FormView]:
         """Get all the field rows of the form view."""

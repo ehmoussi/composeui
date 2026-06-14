@@ -125,7 +125,11 @@ class QtInputRenderer(QtWidgetRenderer[InputView, QLineEdit]):
         view.placeholder = rendered_object.placeholderText()
 
     def _update_text(self, text: str) -> None:
-        self._view.text = text
+        self._is_updating_state = True
+        try:
+            self._view.text = text
+        finally:
+            self._is_updating_state = False
 
 
 class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
@@ -208,10 +212,14 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
         view.decimals = decimals if decimals != -1 else None
 
     def _update_text(self, text: str) -> None:
-        if text != "":
-            self._view.value = float(text)
-        else:
-            self._view.value = None
+        self._is_updating_state = True
+        try:
+            if text != "":
+                self._view.value = float(text)
+            else:
+                self._view.value = None
+        finally:
+            self._is_updating_state = False
 
 
 class QtLabelRenderer(QtWidgetRenderer[LabelView, QLabel]):
@@ -250,6 +258,7 @@ class QtLogFormRowRenderer(QtWidgetRenderer[LogFormRow, QLabel]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLabel()
+            self._rendered_object.setWordWrap(True)
             self.refresh()
 
     @staticmethod
@@ -300,6 +309,11 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                     and field_row.renderer.qt_object is not None
                 ):
                     layout.addRow(field_row.renderer.qt_object)
+            if (
+                isinstance(self._view.log_view.renderer, QtWidgetRenderer)
+                and self._view.log_view.renderer.qt_object is not None
+            ):
+                layout.addRow(self._view.log_view.renderer.qt_object)
             self.refresh()
 
     def _get_field_object(self, field_row: FormRowView[View]) -> QWidget:

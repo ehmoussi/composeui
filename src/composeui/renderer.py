@@ -34,6 +34,10 @@ class Renderer(ABC, Generic[TView, TObject]):
         self._view = view
         self._rendered_object: TObject | None = None
         self._refresh_dispatcher: dict[str, Callable[[TView, TObject, Any], None]] = {}
+        self._is_updating_state = False
+
+    def is_updating_state(self) -> bool:
+        return self._is_updating_state
 
     @abstractmethod
     def render(self) -> None:
@@ -72,7 +76,11 @@ class Renderer(ABC, Generic[TView, TObject]):
         """Update the state of the view using framework view object."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
-        return self._update_state(self._view, self._rendered_object)
+        self._is_updating_state = True
+        try:
+            self._update_state(self._view, self._rendered_object)
+        finally:
+            self._is_updating_state = False
 
     @staticmethod
     @abstractmethod
