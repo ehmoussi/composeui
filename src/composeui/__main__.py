@@ -222,6 +222,7 @@ class PipeMainView(MainView):
 
 def main() -> None:
     main_view = PipeMainView()
+    # print(attrs.asdict(main_view, filter=attrs.filters.exclude("renderer", Signal)))
     app = QtApplication(main_view)
     app.run()
 

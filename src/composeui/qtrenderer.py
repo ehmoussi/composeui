@@ -127,11 +127,8 @@ class QtInputRenderer(QtWidgetRenderer[InputView, QLineEdit]):
         view.placeholder = rendered_object.placeholderText()
 
     def _update_text(self, text: str) -> None:
-        self._is_updating_state = True
-        try:
+        with self.stop_refresh():
             self._view.text = text
-        finally:
-            self._is_updating_state = False
 
 
 class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
@@ -214,14 +211,11 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputView, QLineEdit]):
         view.decimals = decimals if decimals != -1 else None
 
     def _update_text(self, text: str) -> None:
-        self._is_updating_state = True
-        try:
+        with self.stop_refresh():
             if text != "":
                 self._view.value = float(text)
             else:
                 self._view.value = None
-        finally:
-            self._is_updating_state = False
 
 
 class QtLabelRenderer(QtWidgetRenderer[LabelView, QLabel]):
@@ -281,11 +275,8 @@ class QtRadioGroupRenderer(
         view.value = rendered_object.value()
 
     def _update_value(self, value: TValue | None) -> None:
-        self._is_updating_state = True
-        try:
+        with self.stop_refresh():
             self._view.value = value
-        finally:
-            self._is_updating_state = False
 
 
 class QtLogFormRowRenderer(QtWidgetRenderer[LogFormRow, QLabel]):

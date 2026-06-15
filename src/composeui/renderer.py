@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from composeui.view import View
 
@@ -76,9 +77,14 @@ class Renderer(ABC, Generic[TView, TObject]):
         """Update the state of the view using framework view object."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
+        with self.stop_refresh():
+            self._update_state(self._view, self._rendered_object)
+
+    @contextlib.contextmanager
+    def stop_refresh(self) -> Generator[None]:
         self._is_updating_state = True
         try:
-            self._update_state(self._view, self._rendered_object)
+            yield
         finally:
             self._is_updating_state = False
 
