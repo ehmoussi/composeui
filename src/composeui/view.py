@@ -3,9 +3,10 @@ from __future__ import annotations
 import enum
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 
 import attrs
+from typing_extensions import dataclass_transform
 
 from composeui.renderer import Renderer, RendererContainer
 from composeui.signal import Signal
@@ -13,6 +14,8 @@ from composeui.signal import Signal
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
+
+    from attrs import AttrsInstance
 
 
 class RendererType(enum.Enum):
@@ -38,6 +41,7 @@ T = TypeVar("T", bound=type)
 def define_view(cls: T) -> T: ...
 @overload
 def define_view(cls: None = None, **kwargs: Any) -> Callable[[T], T]: ...
+@dataclass_transform(kw_only_default=True, field_specifiers=(attrs.field,))
 def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
     def wrap(cls: T) -> T:
         if "on_setattr" in kwargs:
@@ -68,7 +72,7 @@ class View:
     def children_views(self) -> list[View]:
         """Get all the field rows of the form view."""
         children_views: list[View] = []
-        for field_row_attr in attrs.fields(type(self)):
+        for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self))):
             view = getattr(self, field_row_attr.name)
             if isinstance(view, View):
                 children_views.append(view)
@@ -339,7 +343,7 @@ class FormView(View):
         """Get all the field rows of the form view."""
         return [
             getattr(self, field_row_attr.name)
-            for field_row_attr in attrs.fields(type(self))
+            for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self)))
             if isinstance(getattr(self, field_row_attr.name), (FormRowView, FormView))
         ]
 
