@@ -16,7 +16,7 @@ class QRadioGroup(QWidget):
 
     def __init__(self, values: dict[str, Any], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.setContentsMargins(0, 0, 0, 0)
+        # self.setContentsMargins(0, 0, 0, 0)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         self._values = values

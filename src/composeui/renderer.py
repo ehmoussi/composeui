@@ -4,13 +4,18 @@ import contextlib
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from typing_extensions import Protocol
+
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
-
-    from composeui.view import View
+    from collections.abc import Callable, Generator, Mapping
 
 
-TView = TypeVar("TView", bound="View")
+class ViewLike(Protocol):
+    is_visible: bool
+    is_enabled: bool
+
+
+TView = TypeVar("TView", bound=ViewLike)
 TObject = TypeVar("TObject")
 
 
@@ -36,6 +41,10 @@ class Renderer(ABC, Generic[TView, TObject]):
         self._rendered_object: TObject | None = None
         self._refresh_dispatcher: dict[str, Callable[[TView, TObject, Any], None]] = {}
         self._is_updating_state = False
+
+    def has_attr(self, attr_name: str) -> bool:
+        """Check if the attribute has an associated refresh function."""
+        return attr_name in self._refresh_dispatcher
 
     def is_updating_state(self) -> bool:
         return self._is_updating_state
@@ -91,3 +100,41 @@ class Renderer(ABC, Generic[TView, TObject]):
     @staticmethod
     @abstractmethod
     def _update_state(view: TView, rendered_object: TObject) -> None: ...
+
+
+class RendererContainer(Generic[TView]):
+    def __init__(
+        self, view: TView, renderers: Mapping[str, Renderer[TView, Any]]
+    ) -> None:
+        self._view = view
+        self._renderers = dict(renderers)
+
+    def get_renderer(self, name: str) -> Renderer[TView, Any]:
+        return self._renderers[name]
+
+    def render(self) -> None:
+        """Render the view in the appropriate framework."""
+        for renderer in self._renderers.values():
+            renderer.render()
+
+    def refresh(self) -> None:
+        """Refresh the framework view object using the view state."""
+        if len(self._renderers) == 0:
+            raise NoRenderedObjectError
+        for renderer in self._renderers.values():
+            renderer.refresh()
+
+    def refresh_attribute(self, attr_name: str, value: Any) -> None:
+        """Refresh the framework view object using the view state."""
+        if len(self._renderers) == 0:
+            raise NoRenderedObjectError
+        for renderer in self._renderers.values():
+            if renderer.has_attr(attr_name):
+                renderer.refresh_attribute(attr_name, value)
+
+    def update_state(self) -> None:
+        """Update the state of the view using framework view object."""
+        if len(self._renderers) == 0:
+            raise NoRenderedObjectError
+        for renderer in self._renderers.values():
+            renderer.update_state()

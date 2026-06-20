@@ -8,9 +8,9 @@ from composeui.qtapplication import QtApplication
 from composeui.view import (
     FormView,
     GroupFormView,
-    LabelFloatInputRowView,
-    LabelInputRowView,
-    LabelRadioGroupRowView,
+    LabelRowFloatInputView,
+    LabelRowInputView,
+    LabelRowRadioGroupView,
     LogType,
     MainView,
     define_view,
@@ -18,43 +18,39 @@ from composeui.view import (
 
 
 @define_view
-class RadiusInputView(LabelFloatInputRowView):
+class RadiusInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Radius"
-        self.field_view.value = 20.0
-        self.field_view.minimum = 0
-        self.field_view.decimals = 3
+        self.label = "Radius"
+        self.value = 20.0
+        self.minimum = 0
+        self.decimals = 3
 
 
 @define_view
-class WidthInputView(LabelFloatInputRowView):
+class WidthInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Width"
-        self.field_view.value = 20.0
-        self.field_view.minimum = 0
-        self.field_view.decimals = 3
+        self.label = "Width"
+        self.value = 20.0
+        self.minimum = 0
+        self.decimals = 3
 
 
 @define_view
-class HeightInputView(LabelFloatInputRowView):
+class HeightInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Height"
-        self.field_view.value = 20.0
-        self.field_view.minimum = 0.0
-        self.field_view.decimals = 3
+        self.label = "Height"
+        self.value = 20.0
+        self.minimum = 0.0
+        self.decimals = 3
 
 
 @define_view
-class HalfLengthInputView(LabelFloatInputRowView):
+class HalfLengthInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Half Length"
-        self.field_view.value = 200.0
-        self.field_view.minimum = 0
-        self.field_view.decimals = 3
+        self.label = "Half Length"
+        self.value = 200.0
+        self.minimum = 0
+        self.decimals = 3
 
 
 @define_view
@@ -71,13 +67,13 @@ class EdgeType(enum.Enum):
 
 
 @define_view
-class EdgeTypeView(LabelRadioGroupRowView[EdgeType]):
+class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Edge Type"
-        self.field_view.value = EdgeType.Normal
+        self.label = "Edge Type"
+        self.value = EdgeType.Normal
+        # Use object.__setattr__ to bypass the frozen attribute restriction.
         object.__setattr__(
-            self.field_view,
+            self,
             "values",
             {
                 EdgeType.Normal.value: EdgeType.Normal,
@@ -107,22 +103,21 @@ class FilletDimensionView(GroupFormView):
 
 
 @define_view
-class PipeNameRowView(LabelInputRowView):
+class PipeNameRowView(LabelRowInputView):
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label_view.text = "Name"
-        self.field_view.text_edited.connect(self._check_name)
-        self._check_name(self.field_view.text)
+        self.label = "Name"
+        self.text_edited.connect(self._check_name)
+        self._check_name(self.text)
 
     def _check_name(self, text: str) -> None:
         if text == "":
-            self.log_view.log_message = "A name is mandatory"
-            self.log_view.log_type = LogType.ERROR
-            self.log_view.is_visible = True
+            self.log_message = "A name is mandatory"
+            self.log_type = LogType.ERROR
+            self.is_visible = True
         else:
-            self.log_view.is_visible = False
-            self.log_view.log_message = ""
-            self.log_view.log_type = LogType.INFO
+            self.is_visible = False
+            self.log_message = ""
+            self.log_type = LogType.INFO
 
 
 @define_view
@@ -140,29 +135,23 @@ class PipeFormView(FormView):
         super().__attrs_post_init__()
         # Main Pipe
         self.main_pipe.title = "Main Pipe"
-        self.main_pipe.radius.field_view.editing_finished.connect(
-            self._display_error_message
-        )
-        self.main_pipe.width.field_view.editing_finished.connect(
-            self._display_error_message
-        )
+        self.main_pipe.radius.editing_finished.connect(self._display_error_message)
+        self.main_pipe.width.editing_finished.connect(self._display_error_message)
         # Incident Pipe
         self.incident_pipe.title = "Incident Pipe"
-        self.incident_pipe.radius.field_view.value = 50.0
-        self.incident_pipe.radius.field_view.editing_finished.connect(
-            self._display_error_message
-        )
-        self.incident_pipe.half_length.field_view.editing_finished.connect(
+        self.incident_pipe.radius.value = 50.0
+        self.incident_pipe.radius.editing_finished.connect(self._display_error_message)
+        self.incident_pipe.half_length.editing_finished.connect(
             self._display_error_message
         )
         # Edge Type
-        self.edge_type.field_view.value_changed.connect(self._display_edge_options)
+        self.edge_type.value_changed.connect(self._display_edge_options)
         self._display_edge_options()
         # Fillet
-        self.fillet.radius.field_view.value = 20.0
+        self.fillet.radius.value = 20.0
 
     def _display_edge_options(self) -> None:
-        edge_type = self.edge_type.field_view.value
+        edge_type = self.edge_type.value
         if edge_type == EdgeType.Chamfer:
             self.chamfer.is_visible = True
             self.fillet.is_visible = False
@@ -175,10 +164,10 @@ class PipeFormView(FormView):
 
     def _display_error_message(self) -> None:
         log_messages: list[str] = []
-        main_radius = self.main_pipe.radius.field_view.value
-        main_width = self.main_pipe.width.field_view.value
-        incident_half_length = self.incident_pipe.half_length.field_view.value
-        incident_radius = self.incident_pipe.radius.field_view.value
+        main_radius = self.main_pipe.radius.value
+        main_width = self.main_pipe.width.value
+        incident_half_length = self.incident_pipe.half_length.value
+        incident_radius = self.incident_pipe.radius.value
         if (
             main_radius is None
             or main_width is None
