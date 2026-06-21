@@ -109,6 +109,8 @@ class StatusBar(View):
         the message is never automatically dismissed.
         """
         self.message = message
+        if self._timer is not None:
+            self._timer.cancel()
         if timeout > 0:
             self._timer = threading.Timer(timeout, self.clear_message)
             self._timer.start()
