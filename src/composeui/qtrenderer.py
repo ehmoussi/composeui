@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from qtpy.QtGui import QDoubleValidator
 from qtpy.QtWidgets import (
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
@@ -28,6 +31,7 @@ from composeui.view import (
     GroupFormView,
     LogType,
     MainView,
+    StatusBar,
     View,
 )
 
@@ -501,13 +505,59 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
             self._create_central_widget(self._view, self._rendered_object)
             self.refresh()
 
+    def open_file(self) -> Path | None:
+        """Return an existing file selected by the user."""
+        if self._rendered_object is None:
+            raise NoQtRendererObjectError
+        filepath_str, selected_filter = QFileDialog.getOpenFileName(
+            self._rendered_object, "Open File", "", self._build_extensions()
+        )
+        return self._build_filepath(filepath_str, selected_filter)
+
+    def save_file(self) -> Path | None:
+        if self._rendered_object is None:
+            raise NoQtRendererObjectError
+        filepath_str, selected_filter = QFileDialog.getSaveFileName(
+            self._rendered_object, "Save File", "", self._build_extensions()
+        )
+        return self._build_filepath(filepath_str, selected_filter)
+
+    def _build_filepath(self, filepath_str: str, selected_filter: str) -> Path | None:
+        if filepath_str == "":
+            return None
+        name_extension = selected_filter.split("(", maxsplit=1)[0].strip()
+        filepath = Path(filepath_str)
+        extensions = self._view.file_view.extensions.get(name_extension)
+        if extensions is not None and all(
+            not self._has_extension(filepath, extension) for extension in extensions
+        ):
+            filepath = Path(filepath_str + extensions[0])
+        return filepath
+
+    @staticmethod
+    def _has_extension(filepath: Path, extension: str) -> bool:
+        parts = [f".{e}" for e in extension.split(".") if e != ""]
+        if len(parts) > 0:
+            return filepath.suffixes[-len(parts) :] == parts
+        return False
+
+    def _build_extensions(self) -> str:
+        extensions: list[str] = []
+        for name, name_extensions in self._view.file_view.extensions.items():
+            extensions.append(f"{name} ({' '.join(name_extensions)})")
+        return ";;".join(extensions)
+
     @staticmethod
     def _create_central_widget(view: MainView, rendered_object: QMainWindow) -> None:
         central_widget = QWidget()
         central_layout = QVBoxLayout()
         central_widget.setLayout(central_layout)
         for child_view in view.children_views:
-            if isinstance(child_view.renderer, QtWidgetRenderer):
+            if isinstance(child_view.renderer, QtStatusBarRenderer):
+                child_rendered_object = child_view.renderer.qt_object
+                if isinstance(child_rendered_object, QStatusBar):
+                    rendered_object.setStatusBar(child_rendered_object)
+            elif isinstance(child_view.renderer, QtWidgetRenderer):
                 child_rendered_object = child_view.renderer.qt_object
                 if isinstance(child_rendered_object, QWidget):
                     central_layout.addWidget(child_rendered_object)
@@ -538,3 +588,31 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         view.title = rendered_object.windowTitle()
         view.minimum_width = rendered_object.minimumWidth()
         view.minimum_height = rendered_object.minimumHeight()
+
+
+class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
+    def __init__(self, view: StatusBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "message": self._refresh_message,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QStatusBar()
+            self._view.message_changed.add_qt_signal(
+                self._rendered_object.messageChanged
+            )
+            self.refresh()
+
+    @staticmethod
+    def _refresh_message(
+        _view: StatusBar, rendered_object: QStatusBar, message: str
+    ) -> None:
+        rendered_object.showMessage(message)
+
+    @staticmethod
+    def _update_state(view: StatusBar, rendered_object: QStatusBar) -> None:
+        view.message = rendered_object.currentMessage()

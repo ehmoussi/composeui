@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import threading
 from abc import abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
@@ -23,8 +24,9 @@ class RendererType(enum.Enum):
 
 
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
-    if hasattr(instance, attribute.name):
-        old_value = getattr(instance, attribute.name)
+    attribute_name = str(attribute.name)
+    if not attribute_name.startswith("_") and hasattr(instance, attribute_name):
+        old_value = getattr(instance, attribute_name)
         if (
             old_value != value
             and isinstance(instance.renderer, Renderer)
@@ -95,6 +97,49 @@ class View:
 
 
 @define_view
+class StatusBar(View):
+    message: str = attrs.field(default="")
+    message_changed: Signal = attrs.Factory(Signal)
+    _timer: threading.Timer | None = attrs.field(default=None)
+
+    def show_message(self, message: str, *, timeout: int = 0) -> None:
+        """Show a message.
+
+        The message is dismissed after timeout seconds. A timeout of 0 means
+        the message is never automatically dismissed.
+        """
+        self.message = message
+        if timeout > 0:
+            self._timer = threading.Timer(timeout, self.clear_message)
+            self._timer.start()
+
+    def clear_message(self) -> None:
+        self.message = ""
+        self._timer = None
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtrenderer import QtStatusBarRenderer  # noqa: PLC0415
+
+            self.renderer = QtStatusBarRenderer(self)
+
+
+# class FileType(enum.Enum):
+#     OpenFile = enum.auto()
+#     SaveFile = enum.auto()
+
+
+@define_view
+class FileView(View):
+    filepath: Path | None = attrs.field(default=None)
+    extensions: dict[str, tuple[str, ...]] = attrs.Factory(dict[str, tuple[str, ...]])
+    # file_type: FileType = attrs.field(default=FileType.OpenFile)
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        return None
+
+
+@define_view
 class MainView(View):
     title: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
     extension: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
@@ -105,9 +150,25 @@ class MainView(View):
 
     # file_menu: FileMenu = FileMenu(title="File")
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
-    # file_view: FileView = FileView()
+    file_view: FileView = attrs.Factory(FileView)
     # message_view: MessageView = MessageView()
-    # status_bar: StatusBar = StatusBar()
+    status_bar: StatusBar = attrs.Factory(StatusBar)
+
+    def open_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+        from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
+
+        self.file_view.extensions = extensions
+        if isinstance(self.renderer, QtMainRenderer):
+            self.file_view.filepath = self.renderer.open_file()
+        return self.file_view.filepath
+
+    def save_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+        from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
+
+        self.file_view.extensions = extensions
+        if isinstance(self.renderer, QtMainRenderer):
+            self.file_view.filepath = self.renderer.save_file()
+        return self.file_view.filepath
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
