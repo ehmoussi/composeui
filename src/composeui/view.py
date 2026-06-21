@@ -4,13 +4,13 @@ import enum
 import threading
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast, overload
 
 import attrs
 from typing_extensions import dataclass_transform
 
 from composeui.renderer import Renderer, RendererContainer
-from composeui.signal import Signal
+from composeui.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -99,7 +99,7 @@ class View:
 @define_view
 class StatusBar(View):
     message: str = attrs.field(default="")
-    message_changed: Signal = attrs.Factory(Signal)
+    message_changed: Signal[str] = attrs.Factory(Signal[str])
     _timer: threading.Timer | None = attrs.field(default=None)
 
     def show_message(self, message: str, *, timeout: int = 0) -> None:
@@ -184,9 +184,9 @@ class _InputView:
     # properties
     placeholder: str = attrs.field(default="")
     # signals
-    editing_finished: Signal = attrs.field(factory=Signal)
-    text_changed: Signal = attrs.field(factory=Signal)
-    text_edited: Signal = attrs.field(factory=Signal)
+    editing_finished: SignalNoArgs = attrs.field(factory=SignalNoArgs)
+    text_changed: Signal[str] = attrs.field(factory=Signal[str])
+    text_edited: Signal[str] = attrs.field(factory=Signal[str])
 
 
 @define_view
@@ -267,7 +267,7 @@ class RadioGroupMixin(Generic[TValue]):
         factory=dict[str, TValue],
         on_setattr=attrs.setters.frozen,
     )
-    value_changed: Signal = attrs.Factory(Signal)
+    value_changed: Signal[TValue | None] = attrs.Factory(Signal[Optional[TValue]])
 
 
 @define_view

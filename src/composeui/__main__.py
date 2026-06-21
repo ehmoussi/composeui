@@ -146,12 +146,11 @@ class PipeFormView(FormView):
         )
         # Edge Type
         self.edge_type.value_changed.connect(self._display_edge_options)
-        self._display_edge_options()
+        self._display_edge_options(self.edge_type.value)
         # Fillet
         self.fillet.radius.value = 20.0
 
-    def _display_edge_options(self) -> None:
-        edge_type = self.edge_type.value
+    def _display_edge_options(self, edge_type: EdgeType | None) -> None:
         if edge_type == EdgeType.Chamfer:
             self.chamfer.is_visible = True
             self.fillet.is_visible = False
@@ -209,8 +208,9 @@ class PipeMainView(MainView):
         object.__setattr__(self, "extension", ".pipe")
         self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
 
-    def _display_message_status_bar(self, value: EdgeType) -> None:
-        self.status_bar.show_message(f"Edge type changed: {value.value}", timeout=3)
+    def _display_message_status_bar(self, value: EdgeType | None) -> None:
+        if value is not None:
+            self.status_bar.show_message(f"Edge type changed: {value.value}", timeout=3)
 
 
 def main() -> None:

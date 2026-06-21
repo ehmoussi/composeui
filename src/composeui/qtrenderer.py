@@ -36,7 +36,7 @@ from composeui.view import (
 )
 
 if TYPE_CHECKING:
-    from composeui.signal import Signal
+    from composeui.signal import Signal, SignalNoArgs
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound=QWidget)
@@ -100,9 +100,9 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
 
 class _InputViewLike(ViewLike, Protocol):
     placeholder: str
-    text_changed: Signal
-    text_edited: Signal
-    editing_finished: Signal
+    text_changed: Signal[str]
+    text_edited: Signal[str]
+    editing_finished: SignalNoArgs
 
 
 class InputViewLike(_InputViewLike, Protocol):
@@ -306,7 +306,7 @@ TValue = TypeVar("TValue")
 class RadioGroupViewLike(ViewLike, Protocol, Generic[TValue]):
     value: TValue | None
     values: dict[str, TValue]
-    value_changed: Signal
+    value_changed: Signal[TValue | None]
 
 
 class QtRadioGroupRenderer(
