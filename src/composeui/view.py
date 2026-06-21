@@ -70,6 +70,12 @@ class View:
         default=None
     )
 
+    def __attrs_post_init__(self) -> None:
+        for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
+            signal = getattr(self, f.name, None)
+            if isinstance(signal, Signal):
+                signal.set_name(f"{type(self).__name__}.{f.name}")
+
     @property
     def children_views(self) -> list[View]:
         """Get all the field rows of the form view."""
@@ -399,6 +405,7 @@ class FormView(View):
     log_view: LogView = attrs.field(factory=LogView)
 
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.log_view.is_visible = False
 
     @property

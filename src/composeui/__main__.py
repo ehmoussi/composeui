@@ -20,6 +20,7 @@ from composeui.view import (
 @define_view
 class RadiusInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Radius"
         self.value = 20.0
         self.minimum = 0
@@ -29,6 +30,7 @@ class RadiusInputView(LabelRowFloatInputView):
 @define_view
 class WidthInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Width"
         self.value = 20.0
         self.minimum = 0
@@ -38,6 +40,7 @@ class WidthInputView(LabelRowFloatInputView):
 @define_view
 class HeightInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Height"
         self.value = 20.0
         self.minimum = 0.0
@@ -47,6 +50,7 @@ class HeightInputView(LabelRowFloatInputView):
 @define_view
 class HalfLengthInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Half Length"
         self.value = 200.0
         self.minimum = 0
@@ -69,6 +73,7 @@ class EdgeType(enum.Enum):
 @define_view
 class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Edge Type"
         self.value = EdgeType.Normal
         # Use object.__setattr__ to bypass the frozen attribute restriction.
@@ -105,6 +110,7 @@ class FilletDimensionView(GroupFormView):
 @define_view
 class PipeNameRowView(LabelRowInputView):
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = "Name"
         self.text_edited.connect(self._check_name)
         self._check_name(self.text)
@@ -203,6 +209,7 @@ class PipeMainView(MainView):
     pipe_form: PipeFormView = field(factory=PipeFormView)
 
     def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         # Use object.__setattr__ to bypass the frozen attribute restriction.
         object.__setattr__(self, "title", "Pipe Form")
         object.__setattr__(self, "extension", ".pipe")
