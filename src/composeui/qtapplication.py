@@ -1,3 +1,4 @@
+import signal
 import sys
 from collections.abc import Generator
 
@@ -9,9 +10,6 @@ from composeui.view import MainView, RendererType
 class QtApplication:
     def __init__(self, main_view: MainView) -> None:
         self._main_view = main_view
-        from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
-
-        self._renderer = QtMainRenderer(self._main_view)
 
     def render(self) -> None:
         self._main_view.is_visible = True
@@ -20,4 +18,6 @@ class QtApplication:
     def run(self) -> Generator[None]:
         app = QApplication(sys.argv)
         self.render()
+
+        signal.signal(signal.SIGINT, signal.SIG_DFL)  # kill the program when Ctr+c
         sys.exit(app.exec())
