@@ -18,50 +18,26 @@ from composeui.view import (
 
 
 @define_view
-class RadiusInputView(LabelRowFloatInputView):
+class DimensionInputView(LabelRowFloatInputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.label = "Radius"
         self.value = 20.0
-        self.minimum = 0
-        self.decimals = 3
-
-
-@define_view
-class WidthInputView(LabelRowFloatInputView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label = "Width"
-        self.value = 20.0
-        self.minimum = 0
-        self.decimals = 3
-
-
-@define_view
-class HeightInputView(LabelRowFloatInputView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label = "Height"
-        self.value = 20.0
-        self.minimum = 0.0
-        self.decimals = 3
-
-
-@define_view
-class HalfLengthInputView(LabelRowFloatInputView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label = "Half Length"
-        self.value = 200.0
         self.minimum = 0
         self.decimals = 3
 
 
 @define_view
 class PipeDimensionView(GroupFormView):
-    radius: RadiusInputView = Factory(RadiusInputView)
-    width: WidthInputView = Factory(WidthInputView)
-    half_length: HalfLengthInputView = Factory(HalfLengthInputView)
+    radius: DimensionInputView = Factory(DimensionInputView)
+    width: DimensionInputView = Factory(DimensionInputView)
+    half_length: DimensionInputView = Factory(DimensionInputView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.radius.label = "Radius"
+        self.width.label = "Width"
+        self.half_length.label = "Half Length"
+        self.half_length.value = 200.0
 
 
 class EdgeType(enum.Enum):
@@ -90,21 +66,24 @@ class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
 
 @define_view
 class ChamferDimensionView(GroupFormView):
-    height: HeightInputView = Factory(HeightInputView)
-    width: WidthInputView = Factory(WidthInputView)
+    height: DimensionInputView = Factory(DimensionInputView)
+    width: DimensionInputView = Factory(DimensionInputView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Chamfer"
+        self.height.label = "Height"
+        self.width.label = "Width"
 
 
 @define_view
 class FilletDimensionView(GroupFormView):
-    radius: RadiusInputView = Factory(RadiusInputView)
+    radius: DimensionInputView = Factory(DimensionInputView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Fillet"
+        self.radius.label = "Radius"
 
 
 @define_view
