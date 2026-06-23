@@ -51,9 +51,7 @@ def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
                 kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
             else:
                 kwargs["on_setattr"] = [kwargs["on_setattr"], notify_renderer]
-        return attrs.define(
-            cls, on_setattr=[notify_renderer], kw_only=True, slots=False, **kwargs
-        )
+        return attrs.define(cls, on_setattr=[notify_renderer], kw_only=True, slots=False, **kwargs)
 
     if cls is None:
         return wrap
@@ -66,9 +64,7 @@ class View:
     is_visible: bool = attrs.field(default=True)
     is_enabled: bool = attrs.field(default=True)
     # renderer
-    renderer: Renderer[Any, Any] | RendererContainer[Any] | None = attrs.field(
-        default=None
-    )
+    renderer: Renderer[Any, Any] | RendererContainer[Any] | None = attrs.field(default=None)
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -293,14 +289,10 @@ class FormRowView(LogMixin, View):
             from composeui.qtrenderer import QtLogRenderer  # noqa: PLC0415
 
             log_renderer = QtLogRenderer(self)
-            self.renderer = RendererContainer(
-                self, {"field": field_renderer, "log": log_renderer}
-            )
+            self.renderer = RendererContainer(self, {"field": field_renderer, "log": log_renderer})
 
     @abstractmethod
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None: ...
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None: ...
 
 
 @define_view
@@ -323,16 +315,12 @@ class FormLabelRowView(FormRowView):
             )
 
     @abstractmethod
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None: ...
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None: ...
 
 
 @define_view
 class RowInputView(FormRowView, InputMixin):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
@@ -342,9 +330,7 @@ class RowInputView(FormRowView, InputMixin):
 
 @define_view
 class LabelRowInputView(FormLabelRowView, InputMixin):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
@@ -354,9 +340,7 @@ class LabelRowInputView(FormLabelRowView, InputMixin):
 
 @define_view
 class RowFloatInputView(FormRowView, FloatInputMixin):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
@@ -366,9 +350,7 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
 
 @define_view
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
@@ -378,9 +360,7 @@ class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
 
 @define_view
 class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
@@ -390,9 +370,7 @@ class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
 
 @define_view
 class LabelRowRadioGroupView(FormLabelRowView, RadioGroupMixin[TValue]):
-    def _create_field_renderer(
-        self, renderer_type: RendererType
-    ) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
             from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 

@@ -59,10 +59,7 @@ class Renderer(ABC, Generic[TView, TObject]):
             raise NoRenderedObjectError
         for attr_name in self._refresh_dispatcher:
             if not hasattr(self._view, attr_name):
-                msg = (
-                    f"{attr_name} is not an attribute of the view "
-                    f"{type(self._view).__name__}"
-                )
+                msg = f"{attr_name} is not an attribute of the view {type(self._view).__name__}"
                 raise AttributeError(msg)
             refresh = self._refresh_dispatcher[attr_name]
             value = getattr(self._view, attr_name)
@@ -103,9 +100,7 @@ class Renderer(ABC, Generic[TView, TObject]):
 
 
 class RendererContainer(Generic[TView]):
-    def __init__(
-        self, view: TView, renderers: Mapping[str, Renderer[TView, Any]]
-    ) -> None:
+    def __init__(self, view: TView, renderers: Mapping[str, Renderer[TView, Any]]) -> None:
         self._view = view
         self._renderers = dict(renderers)
 

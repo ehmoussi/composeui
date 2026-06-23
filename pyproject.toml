@@ -10,17 +10,16 @@ authors = [
     { name = "El Hadi Moussi", email = "50993404+ehmoussi@users.noreply.github.com" },
 ]
 requires-python = ">=3.9"
-dependencies = [
-    "attrs>=26.1.0",
-    "qtpy>=2.4.3",
-    "typing-extensions>=4.15.0",
-]
+dependencies = ["attrs>=26.1.0", "qtpy>=2.4.3", "typing-extensions>=4.15.0"]
 dynamic = ["version"]
 
 [dependency-groups]
 dev = ["mypy>=1.19.1", "pytest>=8.4.2", "pytest-coverage>=0.0", "ruff>=0.15.17"]
 pyside6 = ["pyside6>=6.10.3"]
 
+
+[tool.ruff]
+line-length = 100
 
 [tool.ruff.lint]
 select = ["ALL"]

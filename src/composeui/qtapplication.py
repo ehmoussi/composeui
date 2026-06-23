@@ -74,10 +74,7 @@ class QtApplication(Generic[MainViewT]):
         def wrapper(
             callback: _ViewOnlyCallback[ViewT, Unpack[Ts]]
             | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]],
-        ) -> (
-            _ViewOnlyCallback[ViewT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]]
-        ):
+        ) -> _ViewOnlyCallback[ViewT, Unpack[Ts]] | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]]:
             raw = cast("Callable[..., None]", callback)
             if _accepts_main_view(callback):
                 bound = functools.partial(raw, view=view, main_view=self._main_view)

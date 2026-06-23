@@ -15,9 +15,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
-_STREAM_HANDLER.setFormatter(
-    logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S")
-)
+_STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
 _LOGGER.addHandler(_STREAM_HANDLER)
 _LOGGER.setLevel(logging.DEBUG)
 
@@ -78,9 +76,7 @@ class _QtSignal:
     def __init__(self) -> None:
         self._qt_signals: list[SignalInstance] = []
 
-    def add_signal(
-        self, signal: SignalInstance, callbacks: Sequence[Callable[..., None]]
-    ) -> None:
+    def add_signal(self, signal: SignalInstance, callbacks: Sequence[Callable[..., None]]) -> None:
         """Add the qt signal."""
         self._qt_signals.append(signal)
         for callback in callbacks:
@@ -99,9 +95,8 @@ class _QtSignal:
 def _get_function_name(callback: Callable[..., None]) -> str:
     if isinstance(callback, functools.partial):
         inner = _get_function_name(callback.func)
-        args = ", ".join(map(repr, callback.args))
-        return f"{inner}({args})"
-    name = getattr(callback, "__qualname__", None) or getattr(
-        callback, "__name__", None
-    )
+        args = list(map(repr, callback.args))
+        kwargs = [f"{n}={type(arg).__name__}" for n, arg in callback.keywords.items()]
+        return f"{inner}({', '.join(args + kwargs)})"
+    name = getattr(callback, "__qualname__", None) or getattr(callback, "__name__", None)
     return name or type(callback).__name__

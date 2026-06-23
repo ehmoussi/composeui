@@ -123,23 +123,17 @@ class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
             self._rendered_object.textChanged.connect(self._update_text)
-            self._view.editing_finished.add_qt_signal(
-                self._rendered_object.editingFinished
-            )
+            self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
             self.refresh()
 
     @staticmethod
-    def _refresh_text(
-        _view: InputViewLike, rendered_object: QLineEdit, value: str
-    ) -> None:
+    def _refresh_text(_view: InputViewLike, rendered_object: QLineEdit, value: str) -> None:
         rendered_object.setText(value)
 
     @staticmethod
-    def _refresh_placeholder(
-        _view: InputViewLike, rendered_object: QLineEdit, value: str
-    ) -> None:
+    def _refresh_placeholder(_view: InputViewLike, rendered_object: QLineEdit, value: str) -> None:
         rendered_object.setPlaceholderText(value)
 
     @staticmethod
@@ -178,9 +172,7 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
             validator = QDoubleValidator()
             self._rendered_object.setValidator(validator)
             self._rendered_object.textChanged.connect(self._update_text)
-            self._view.editing_finished.add_qt_signal(
-                self._rendered_object.editingFinished
-            )
+            self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
             self.refresh()
@@ -265,9 +257,7 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
             self.refresh()
 
     @staticmethod
-    def _refresh_text(
-        _view: LabelViewLike, rendered_object: QLabel, value: str
-    ) -> None:
+    def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
 
     @staticmethod
@@ -290,9 +280,7 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QLabel]):
             self.refresh()
 
     @staticmethod
-    def _refresh_text(
-        _view: FormLabelRowView, rendered_object: QLabel, value: str
-    ) -> None:
+    def _refresh_text(_view: FormLabelRowView, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
 
     @staticmethod
@@ -334,9 +322,7 @@ class QtRadioGroupRenderer(
         rendered_object.set_value(value)
 
     @staticmethod
-    def _update_state(
-        view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup
-    ) -> None:
+    def _update_state(view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup) -> None:
         view.value = rendered_object.value()
 
     def _update_value(self, value: TValue | None) -> None:
@@ -366,15 +352,11 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
             self.refresh()
 
     @staticmethod
-    def _refresh_log_message(
-        _view: LogViewLike, rendered_object: QLabel, value: str
-    ) -> None:
+    def _refresh_log_message(_view: LogViewLike, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
 
     @staticmethod
-    def _refresh_log_type(
-        _view: LogViewLike, rendered_object: QLabel, value: LogType
-    ) -> None:
+    def _refresh_log_type(_view: LogViewLike, rendered_object: QLabel, value: LogType) -> None:
         if value == LogType.ERROR:
             rendered_object.setStyleSheet("QLabel { color : red; }")
         elif value == LogType.WARNING:
@@ -566,21 +548,15 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         rendered_object.setCentralWidget(central_widget)
 
     @staticmethod
-    def _refresh_title(
-        _view: MainView, rendered_object: QMainWindow, value: str
-    ) -> None:
+    def _refresh_title(_view: MainView, rendered_object: QMainWindow, value: str) -> None:
         rendered_object.setWindowTitle(value)
 
     @staticmethod
-    def _refresh_minimum_width(
-        _view: MainView, rendered_object: QMainWindow, value: int
-    ) -> None:
+    def _refresh_minimum_width(_view: MainView, rendered_object: QMainWindow, value: int) -> None:
         rendered_object.setMinimumWidth(value)
 
     @staticmethod
-    def _refresh_minimum_height(
-        _view: MainView, rendered_object: QMainWindow, value: int
-    ) -> None:
+    def _refresh_minimum_height(_view: MainView, rendered_object: QMainWindow, value: int) -> None:
         rendered_object.setMinimumHeight(value)
 
     @staticmethod
@@ -602,15 +578,11 @@ class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QStatusBar()
-            self._view.message_changed.add_qt_signal(
-                self._rendered_object.messageChanged
-            )
+            self._view.message_changed.add_qt_signal(self._rendered_object.messageChanged)
             self.refresh()
 
     @staticmethod
-    def _refresh_message(
-        _view: StatusBar, rendered_object: QStatusBar, message: str
-    ) -> None:
+    def _refresh_message(_view: StatusBar, rendered_object: QStatusBar, message: str) -> None:
         rendered_object.showMessage(message)
 
     @staticmethod
