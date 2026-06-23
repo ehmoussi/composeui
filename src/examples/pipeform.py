@@ -4,8 +4,7 @@ import enum
 
 from attrs import Factory, field
 
-from composeui.qtapplication import QtApplication
-from composeui.view import (
+from composeui.core.view import (
     FormView,
     GroupFormView,
     LabelRowFloatInputView,
@@ -15,6 +14,7 @@ from composeui.view import (
     MainView,
     define_view,
 )
+from composeui.qtcore.qtapplication import QtApplication
 
 
 @define_view

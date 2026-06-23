@@ -17,14 +17,13 @@ from qtpy.QtWidgets import (
 )
 from typing_extensions import Protocol
 
-from composeui.qradiogroup import QRadioGroup
-from composeui.renderer import (
+from composeui.core.renderer import (
     NoRenderedObjectError,
     Renderer,
     RendererContainer,
     ViewLike,
 )
-from composeui.view import (
+from composeui.core.view import (
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -34,9 +33,10 @@ from composeui.view import (
     StatusBar,
     View,
 )
+from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 
 if TYPE_CHECKING:
-    from composeui.signal import Signal, SignalNoArgs
+    from composeui.core.signal import Signal, SignalNoArgs
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound=QWidget)

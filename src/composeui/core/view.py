@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast, overloa
 import attrs
 from typing_extensions import dataclass_transform
 
-from composeui.renderer import Renderer, RendererContainer
-from composeui.signal import Signal, SignalNoArgs
+from composeui.core.renderer import Renderer, RendererContainer
+from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -123,7 +123,7 @@ class StatusBar(View):
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtStatusBarRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtStatusBarRenderer  # noqa: PLC0415
 
             self.renderer = QtStatusBarRenderer(self)
 
@@ -159,7 +159,7 @@ class MainView(View):
     status_bar: StatusBar = attrs.Factory(StatusBar)
 
     def open_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
-        from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
+        from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
         if isinstance(self.renderer, QtMainRenderer):
@@ -167,7 +167,7 @@ class MainView(View):
         return self.file_view.filepath
 
     def save_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
-        from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
+        from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
         if isinstance(self.renderer, QtMainRenderer):
@@ -176,7 +176,7 @@ class MainView(View):
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtMainRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
             self.renderer = QtMainRenderer(self)
 
@@ -201,7 +201,7 @@ class InputMixin(_InputView):
 class InputView(InputMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             self.renderer = QtInputRenderer(self)
 
@@ -219,7 +219,7 @@ class FloatInputMixin(_InputView):
 class FloatInputView(FloatInputMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             self.renderer = QtFloatInputRenderer(self)
 
@@ -240,7 +240,7 @@ class LogMixin:
 class LogView(LogMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtLogRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtLogRenderer  # noqa: PLC0415
 
             self.renderer = QtLogRenderer(self)
 
@@ -254,7 +254,7 @@ class LabelMixin:
 class LabelView(LabelMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtLabelRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtLabelRenderer  # noqa: PLC0415
 
             self.renderer = QtLabelRenderer(self)
 
@@ -276,7 +276,7 @@ class RadioGroupMixin(Generic[TValue]):
 class RadioGroupView(RadioGroupMixin[TValue], View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             self.renderer = QtRadioGroupRenderer(self)
 
@@ -286,7 +286,7 @@ class FormRowView(LogMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         field_renderer = self._create_field_renderer(renderer_type)
         if renderer_type == RendererType.QT and field_renderer is not None:
-            from composeui.qtrenderer import QtLogRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtLogRenderer  # noqa: PLC0415
 
             log_renderer = QtLogRenderer(self)
             self.renderer = RendererContainer(self, {"field": field_renderer, "log": log_renderer})
@@ -302,7 +302,7 @@ class FormLabelRowView(FormRowView):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         field_renderer = self._create_field_renderer(renderer_type)
         if renderer_type == RendererType.QT and field_renderer is not None:
-            from composeui.qtrenderer import (  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import (  # noqa: PLC0415
                 QtFormLabelRenderer,
                 QtLogRenderer,
             )
@@ -322,7 +322,7 @@ class FormLabelRowView(FormRowView):
 class RowInputView(FormRowView, InputMixin):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             return QtInputRenderer(self)
         return None
@@ -332,7 +332,7 @@ class RowInputView(FormRowView, InputMixin):
 class LabelRowInputView(FormLabelRowView, InputMixin):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             return QtInputRenderer(self)
         return None
@@ -342,7 +342,7 @@ class LabelRowInputView(FormLabelRowView, InputMixin):
 class RowFloatInputView(FormRowView, FloatInputMixin):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             return QtFloatInputRenderer(self)
         return None
@@ -352,7 +352,7 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             return QtFloatInputRenderer(self)
         return None
@@ -362,7 +362,7 @@ class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
 class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             return QtRadioGroupRenderer(self)
         return None
@@ -372,7 +372,7 @@ class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
 class LabelRowRadioGroupView(FormLabelRowView, RadioGroupMixin[TValue]):
     def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             return QtRadioGroupRenderer(self)
         return None
@@ -397,7 +397,7 @@ class FormView(View):
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtFormRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtFormRenderer  # noqa: PLC0415
 
             self.renderer = QtFormRenderer(self)
 
@@ -408,6 +408,6 @@ class GroupFormView(FormView):
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
-            from composeui.qtrenderer import QtGroupFormRenderer  # noqa: PLC0415
+            from composeui.qtcore.qtrenderer import QtGroupFormRenderer  # noqa: PLC0415
 
             self.renderer = QtGroupFormRenderer(self)

@@ -2,20 +2,16 @@ from __future__ import annotations
 
 import functools
 import inspect
-import signal
-import sys
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
 
-from qtpy.QtWidgets import QApplication
 from typing_extensions import TypeVarTuple, Unpack, overload
-
-from composeui.view import RendererType
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Sequence
 
-    from composeui.signal import Signal
-    from composeui.view import MainView, View
+    from composeui.core.signal import Signal
+    from composeui.core.view import MainView, RendererType, View
 
 
 # T = TypeVar("T", bound=MainView)
@@ -60,7 +56,7 @@ def _accepts_main_view(callback: object) -> bool:
         return False
 
 
-class QtApplication(Generic[MainViewT]):
+class Application(ABC, Generic[MainViewT]):
     def __init__(self, main_view: MainViewT) -> None:
         self._main_view = main_view
 
@@ -88,12 +84,9 @@ class QtApplication(Generic[MainViewT]):
 
         return cast("_ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]", wrapper)
 
-    def render(self) -> None:
+    def render(self, renderer_type: RendererType) -> None:
         self._main_view.is_visible = True
-        self._main_view.render(RendererType.QT)
+        self._main_view.render(renderer_type)
 
-    def run(self) -> Generator[None]:
-        app = QApplication(sys.argv)
-        self.render()
-        signal.signal(signal.SIGINT, signal.SIG_DFL)  # kill the program when Ctr+c
-        sys.exit(app.exec())
+    @abstractmethod
+    def run(self) -> Generator[None]: ...
