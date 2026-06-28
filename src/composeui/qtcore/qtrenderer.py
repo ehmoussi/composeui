@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from qtpy.QtGui import QDoubleValidator
+from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
     QFileDialog,
     QFormLayout,
@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -24,22 +25,26 @@ from composeui.core.renderer import (
     ViewLike,
 )
 from composeui.core.view import (
+    ActionView,
     FormLabelRowView,
     FormRowView,
     FormView,
     GroupFormView,
     LogType,
     MainView,
+    Menu,
+    SeparatorAction,
     StatusBar,
     View,
 )
+from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 
 if TYPE_CHECKING:
     from composeui.core.signal import Signal, SignalNoArgs
 
 TView = TypeVar("TView", bound=ViewLike)
-TWidget = TypeVar("TWidget", bound=QWidget)
+TWidget = TypeVar("TWidget", bound="QWidget | QAction")
 
 
 class NoQtRendererObjectError(Exception):
@@ -484,7 +489,7 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
             self._rendered_object.setMinimumSize(
                 self._view.minimum_width, self._view.minimum_height
             )
-            self._create_central_widget(self._view, self._rendered_object)
+            self._add_child_widgets(self._view, self._rendered_object)
             self.refresh()
 
     def open_file(self) -> Path | None:
@@ -530,15 +535,19 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         return ";;".join(extensions)
 
     @staticmethod
-    def _create_central_widget(view: MainView, rendered_object: QMainWindow) -> None:
+    def _add_child_widgets(view: MainView, rendered_object: QMainWindow) -> None:
         central_widget = QWidget()
         central_layout = QVBoxLayout()
         central_widget.setLayout(central_layout)
         for child_view in view.children_views:
-            if isinstance(child_view.renderer, QtStatusBarRenderer):
-                child_rendered_object = child_view.renderer.qt_object
-                if isinstance(child_rendered_object, QStatusBar):
-                    rendered_object.setStatusBar(child_rendered_object)
+            if isinstance(child_view.renderer, QtMenuRenderer):
+                menu_obj = child_view.renderer.qt_object
+                if menu_obj is not None:
+                    rendered_object.menuBar().addMenu(menu_obj)
+            elif isinstance(child_view.renderer, QtStatusBarRenderer):
+                status_bar_obj = child_view.renderer.qt_object
+                if isinstance(status_bar_obj, QStatusBar):
+                    rendered_object.setStatusBar(status_bar_obj)
             elif isinstance(child_view.renderer, QtWidgetRenderer):
                 child_rendered_object = child_view.renderer.qt_object
                 if isinstance(child_rendered_object, QWidget):
@@ -588,3 +597,112 @@ class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
     @staticmethod
     def _update_state(view: StatusBar, rendered_object: QStatusBar) -> None:
         view.message = rendered_object.currentMessage()
+
+
+class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
+    def __init__(self, view: ActionView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "icon": self._refresh_icon,
+                "data": self._refresh_data,
+                "shortcut": self._refresh_shortcut,
+                "is_checkable": self._refresh_is_checkable,
+                "is_checked": self._refresh_is_checked,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QAction()
+            self._view.triggered.add_qt_signal(self._rendered_object.triggered)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: ActionView, rendered_object: QAction) -> None:
+        view.text = rendered_object.text()
+        icon = rendered_object.icon()
+        if isinstance(icon, QIconPath):
+            view.icon = icon.get_path()
+        else:
+            view.icon = None
+        view.data = rendered_object.data()
+        shortcut = rendered_object.shortcut().toString()
+        view.shortcut = None if shortcut == "" else shortcut
+        view.is_checkable = rendered_object.isCheckable()
+        view.is_checked = rendered_object.isChecked()
+
+    @staticmethod
+    def _refresh_text(_view: ActionView, rendered_object: QAction, text: str) -> None:
+        rendered_object.setText(text)
+
+    @staticmethod
+    def _refresh_icon(_view: ActionView, rendered_object: QAction, icon: str | None) -> None:
+        if icon is None:
+            rendered_object.setIcon(QIcon())
+        else:
+            icon_obj = QIconPath(icon)
+            rendered_object.setIcon(icon_obj)
+
+    @staticmethod
+    def _refresh_data(_view: ActionView, rendered_object: QAction, data: Any) -> None:
+        rendered_object.setData(data)
+
+    @staticmethod
+    def _refresh_shortcut(
+        _view: ActionView, rendered_object: QAction, shortcut: str | None
+    ) -> None:
+        if shortcut is None:
+            rendered_object.setShortcut(QKeySequence())
+        else:
+            rendered_object.setShortcut(QKeySequence(shortcut))
+
+    @staticmethod
+    def _refresh_is_checkable(
+        _view: ActionView, rendered_object: QAction, is_checkable: bool
+    ) -> None:
+        rendered_object.setCheckable(is_checkable)
+
+    @staticmethod
+    def _refresh_is_checked(_view: ActionView, rendered_object: QAction, is_checked: bool) -> None:
+        rendered_object.setChecked(is_checked)
+
+
+class QtSeparatorRenderer(QtWidgetRenderer[SeparatorAction, QAction]):
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QAction()
+            self._rendered_object.setSeparator(True)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: SeparatorAction, rendered_object: QAction) -> None: ...
+
+
+class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
+    def __init__(self, view: Menu) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._refresh_title})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QMenu()
+            for child_view in self._view.children_views:
+                if isinstance(child_view, (ActionView, SeparatorAction)) and isinstance(
+                    child_view.renderer, (QtActionRenderer, QtSeparatorRenderer)
+                ):
+                    action = child_view.renderer.qt_object
+                    if action is None:
+                        msg = f"{child_view} don't have a QAction object rendered"
+                        raise ValueError(msg)
+                    self._rendered_object.addAction(action)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: Menu, rendered_object: QMenu) -> None:
+        view.title = rendered_object.title()
+
+    @staticmethod
+    def _refresh_title(_view: Menu, rendered_object: QMenu, title: str) -> None:
+        rendered_object.setTitle(title)

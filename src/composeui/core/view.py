@@ -144,6 +144,128 @@ class FileView(View):
 
 
 @define_view
+class ActionView(View):
+    text: str = attrs.field(default="")
+    icon: str | None = attrs.field(default=None)
+    data: Any = attrs.field(default=None)
+    shortcut: str | None = attrs.field(default=None)
+    is_checkable: bool = attrs.field(default=False)
+    is_checked: bool = attrs.field(default=False)
+
+    triggered: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtcore.qtrenderer import QtActionRenderer  # noqa: PLC0415
+
+            self.renderer = QtActionRenderer(self)
+
+
+@define_view
+class SeparatorAction(View):
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtcore.qtrenderer import QtSeparatorRenderer  # noqa: PLC0415
+
+            self.renderer = QtSeparatorRenderer(self)
+
+
+@define_view
+class Menu(View):
+    title: str = attrs.field(default="")
+
+
+@define_view
+class NewAction(ActionView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.shortcut = "Ctrl+n"
+        self.text = "New"
+        self.is_checkable = False
+        self.icon = None
+        self.data = None
+        self.triggered.connect(self._new_study)
+
+    def _new_study(self) -> None: ...
+
+
+@define_view
+class OpenFileAction(ActionView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.text = "Open"
+        self.shortcut = "Ctrl+o"
+        self.is_checkable = False
+        self.icon = None
+        self.data = None
+        self.triggered.connect(self._open_study)
+
+    def _open_study(self) -> None: ...
+
+
+@define_view
+class SaveAction(ActionView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.text = "Save"
+        self.shortcut = "Ctrl+s"
+        self.is_checkable = False
+        self.icon = None
+        self.data = None
+        self.triggered.connect(self._save_study)
+
+    def _save_study(self) -> None: ...
+
+
+@define_view
+class SaveAsAction(ActionView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.text = "Save As"
+        self.shortcut = "Ctrl+Shift+s"
+        self.is_checkable = False
+        self.icon = None
+        self.data = None
+        self.triggered.connect(self._save_new_study)
+
+    def _save_new_study(self) -> None: ...
+
+
+@define_view
+class ExitAppAction(ActionView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.text = "Exit"
+        self.shortcut = "Ctrl+q"
+        self.is_checkable = False
+        self.icon = None
+        self.data = None
+        self.triggered.connect(self._exit_app)
+
+    def _exit_app(self) -> None: ...
+
+
+@define_view
+class FileMenu(Menu):
+    new: NewAction = attrs.Factory(NewAction)
+    open_file: OpenFileAction = attrs.Factory(OpenFileAction)
+    save: SaveAction = attrs.Factory(SaveAction)
+    save_as: SaveAsAction = attrs.Factory(SaveAsAction)
+    separator_exit: SeparatorAction = attrs.Factory(SeparatorAction)
+    exit_app: ExitAppAction = attrs.Factory(ExitAppAction)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "File"
+
+    def _create_renderer(self, renderer_type: RendererType) -> None:
+        if renderer_type == RendererType.QT:
+            from composeui.qtcore.qtrenderer import QtMenuRenderer  # noqa: PLC0415
+
+            self.renderer = QtMenuRenderer(self)
+
+
+@define_view
 class MainView(View):
     title: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
     extension: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
@@ -152,7 +274,7 @@ class MainView(View):
     minimum_width: int = attrs.field(default=720)
     minimum_height: int = attrs.field(default=480)
 
-    # file_menu: FileMenu = FileMenu(title="File")
+    file_menu: FileMenu = FileMenu(title="File")
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
     file_view: FileView = attrs.Factory(FileView)
     # message_view: MessageView = MessageView()
