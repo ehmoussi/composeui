@@ -358,6 +358,7 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
 
     @staticmethod
     def _refresh_log_message(_view: LogViewLike, rendered_object: QLabel, value: str) -> None:
+        rendered_object.setVisible(value != "")
         rendered_object.setText(value)
 
     @staticmethod
@@ -509,6 +510,11 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         )
         return self._build_filepath(filepath_str, selected_filter)
 
+    def close(self) -> None:
+        if self._rendered_object is None:
+            raise NoQtRendererObjectError
+        self._rendered_object.close()
+
     def _build_filepath(self, filepath_str: str, selected_filter: str) -> Path | None:
         if filepath_str == "":
             return None
@@ -541,6 +547,8 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         central_widget.setLayout(central_layout)
         for child_view in view.children_views:
             if isinstance(child_view.renderer, QtMenuRenderer):
+                child_view.renderer.set_parent_rendered_object(rendered_object)
+                child_view.renderer.render()
                 menu_obj = child_view.renderer.qt_object
                 if menu_obj is not None:
                     rendered_object.menuBar().addMenu(menu_obj)
@@ -602,6 +610,7 @@ class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
 class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
     def __init__(self, view: ActionView) -> None:
         super().__init__(view)
+        self._parent_rendered_object: QWidget | None = None
         self._refresh_dispatcher.update(
             {
                 "text": self._refresh_text,
@@ -613,9 +622,12 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
             }
         )
 
+    def set_parent_rendered_object(self, parent: QWidget) -> None:
+        self._parent_rendered_object = parent
+
     def render(self) -> None:
-        if self._rendered_object is None:
-            self._rendered_object = QAction()
+        if self._rendered_object is None and self._parent_rendered_object:
+            self._rendered_object = QAction(self._parent_rendered_object)
             self._view.triggered.add_qt_signal(self._rendered_object.triggered)
             self.refresh()
 
@@ -670,9 +682,16 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
 
 
 class QtSeparatorRenderer(QtWidgetRenderer[SeparatorAction, QAction]):
+    def __init__(self, view: SeparatorAction) -> None:
+        super().__init__(view)
+        self._parent_rendered_object: QWidget | None = None
+
+    def set_parent_rendered_object(self, parent: QWidget) -> None:
+        self._parent_rendered_object = parent
+
     def render(self) -> None:
-        if self._rendered_object is None:
-            self._rendered_object = QAction()
+        if self._rendered_object is None and self._parent_rendered_object is not None:
+            self._rendered_object = QAction(self._parent_rendered_object)
             self._rendered_object.setSeparator(True)
             self.refresh()
 
@@ -684,14 +703,20 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
     def __init__(self, view: Menu) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._refresh_title})
+        self._parent_rendered_object: QWidget | None = None
+
+    def set_parent_rendered_object(self, parent: QWidget) -> None:
+        self._parent_rendered_object = parent
 
     def render(self) -> None:
-        if self._rendered_object is None:
-            self._rendered_object = QMenu()
+        if self._rendered_object is None and self._parent_rendered_object is not None:
+            self._rendered_object = QMenu(self._parent_rendered_object)
             for child_view in self._view.children_views:
                 if isinstance(child_view, (ActionView, SeparatorAction)) and isinstance(
                     child_view.renderer, (QtActionRenderer, QtSeparatorRenderer)
                 ):
+                    child_view.renderer.set_parent_rendered_object(self._rendered_object)
+                    child_view.renderer.render()
                     action = child_view.renderer.qt_object
                     if action is None:
                         msg = f"{child_view} don't have a QAction object rendered"

@@ -104,6 +104,9 @@ class RendererContainer(Generic[TView]):
         self._view = view
         self._renderers = dict(renderers)
 
+    def is_updating_state(self) -> bool:
+        return any(r.is_updating_state() for r in self._renderers.values())
+
     def get_renderer(self, name: str) -> Renderer[TView, Any]:
         return self._renderers[name]
 

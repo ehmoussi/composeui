@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 
-from attrs import Factory, field
+from attrs import Factory
 
 from composeui.core.view import (
     FormView,
@@ -98,16 +98,14 @@ class PipeNameRowView(LabelRowInputView):
         if text == "":
             self.log_message = "A name is mandatory"
             self.log_type = LogType.ERROR
-            self.is_visible = True
         else:
-            self.is_visible = False
             self.log_message = ""
             self.log_type = LogType.INFO
 
 
 @define_view
 class PipeFormView(FormView):
-    name: PipeNameRowView = field(factory=PipeNameRowView)
+    name: PipeNameRowView = Factory(PipeNameRowView)
     main_pipe: PipeDimensionView = Factory(PipeDimensionView)
     incident_pipe: PipeDimensionView = Factory(PipeDimensionView)
 
@@ -143,13 +141,13 @@ class PipeFormView(FormView):
 
 @define_view
 class PipeMainView(MainView):
-    pipe_form: PipeFormView = field(factory=PipeFormView)
+    pipe_form: PipeFormView = Factory(PipeFormView)
 
     def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        # Use object.__setattr__ to bypass the frozen attribute restriction.
         object.__setattr__(self, "title", "Pipe Form")
         object.__setattr__(self, "extension", ".pipe")
+        super().__attrs_post_init__()
+        # Use object.__setattr__ to bypass the frozen attribute restriction.
         self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
@@ -158,7 +156,7 @@ class PipeMainView(MainView):
 
 
 _MAIN_VIEW = PipeMainView()
-APP = QtApplication(_MAIN_VIEW)
+APP = QtApplication(main_view=_MAIN_VIEW)
 
 
 @APP.connect(
@@ -204,7 +202,6 @@ def display_error_message(*, view: PipeFormView) -> None:
 
 
 def main() -> None:
-    # print(attrs.asdict(main_view, filter=attrs.filters.exclude("renderer", Signal)))
     APP.run()
 
 

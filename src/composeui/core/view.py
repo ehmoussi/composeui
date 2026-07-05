@@ -29,7 +29,7 @@ def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
         old_value = getattr(instance, attribute_name)
         if (
             old_value != value
-            and isinstance(instance.renderer, Renderer)
+            and isinstance(instance.renderer, (Renderer, RendererContainer))
             and not instance.renderer.is_updating_state()
         ):
             instance.renderer.refresh_attribute(attribute.name, value)
@@ -174,6 +174,11 @@ class SeparatorAction(View):
 class Menu(View):
     title: str = attrs.field(default="")
 
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        # the menu should be visible only when triggered
+        self.is_visible = False
+
 
 @define_view
 class NewAction(ActionView):
@@ -240,9 +245,10 @@ class ExitAppAction(ActionView):
         self.is_checkable = False
         self.icon = None
         self.data = None
-        self.triggered.connect(self._exit_app)
+        self.triggered.connect2(self._exit_app)
 
-    def _exit_app(self) -> None: ...
+    def _exit_app(self, *, main_view: MainView) -> None:
+        main_view.close()
 
 
 @define_view
@@ -295,6 +301,12 @@ class MainView(View):
         if isinstance(self.renderer, QtMainRenderer):
             self.file_view.filepath = self.renderer.save_file()
         return self.file_view.filepath
+
+    def close(self) -> None:
+        from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
+
+        if isinstance(self.renderer, QtMainRenderer):
+            self.renderer.close()
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:

@@ -1,0 +1,4 @@
+"""Model."""
+
+
+class Model: ...
