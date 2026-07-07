@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import logging
 import sys
 import weakref
-from typing import TYPE_CHECKING, Generic, TypeVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, overload
 
-from typing_extensions import Protocol, TypeVarTuple, Unpack
+from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
+    from types import CodeType
     from weakref import ReferenceType
 
     from qtpy.QtCore import SignalInstance
@@ -31,17 +34,37 @@ _ModelT_contra = TypeVar("_ModelT_contra", contravariant=True)
 
 
 class _MainViewCallback(Protocol[_MainViewT_contra, Unpack[Ts]]):
+    __code__: CodeType
+
     def __call__(self, *args: Unpack[Ts], main_view: _MainViewT_contra) -> None: ...
 
 
 class _ModelCallback(Protocol[_ModelT_contra, Unpack[Ts]]):
+    __code__: CodeType
+
     def __call__(self, *args: Unpack[Ts], model: _ModelT_contra) -> None: ...
 
 
 class _BoundCallback(Protocol[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
+    __code__: CodeType
+
     def __call__(
         self, *args: Unpack[Ts], main_view: _MainViewT_contra, model: _ModelT_contra
     ) -> None: ...
+
+
+CallbackT = TypeAliasType(
+    "CallbackT",
+    (
+        Union[
+            Callable[[Unpack[Ts]], None],
+            _MainViewCallback["MainView", Unpack[Ts]],
+            _ModelCallback["Model", Unpack[Ts]],
+            _BoundCallback["MainView", "Model", Unpack[Ts]],
+        ]
+    ),
+    type_params=(Ts,),
+)
 
 
 class Signal(Generic[Unpack[Ts]]):
@@ -59,40 +82,36 @@ class Signal(Generic[Unpack[Ts]]):
     def set_main_view(self, main_view: MainView) -> None:
         self._main_view = weakref.ref(main_view)
         for callback in self._callbacks:
-            if isinstance(callback, (MainViewBoundCallback, BoundCallback)):
+            if isinstance(callback, InjectedCallback):
                 callback.set_main_view(self._main_view)
 
     def set_model(self, model: Model) -> None:
         self._model = weakref.ref(model)
         for callback in self._callbacks:
-            if isinstance(callback, (ModelBoundCallback, BoundCallback)):
+            if isinstance(callback, InjectedCallback):
                 callback.set_model(self._model)
 
     def add_qt_signal(self, signal: SignalInstance) -> None:
         """Add the qt signal."""
         self._qt_signal.add_signal(signal, self._callbacks)
 
-    def connect(self, callback: Callable[[Unpack[Ts]], None]) -> None:
-        self._callbacks.append(callback)
-        self._qt_signal.connect(callback)
-
-    def connect2(self, callback: _MainViewCallback[MainView, Unpack[Ts]]) -> None:
-        bound_callback = MainViewBoundCallback(callback=callback, main_view=self._main_view)
-        self.connect(bound_callback)
-
-    def connect3(self, callback: _ModelCallback[Model, Unpack[Ts]]) -> None:
-        bound_callback = ModelBoundCallback(callback=callback, model=self._model)
-        self.connect(bound_callback)
-
-    def connect4(self, callback: _BoundCallback[MainView, Model, Unpack[Ts]]) -> None:
-        bound_callback = BoundCallback(
-            callback=callback, main_view=self._main_view, model=self._model
-        )
-        self.connect(bound_callback)
+    @overload
+    def connect(self, callback: Callable[[Unpack[Ts]], None]) -> None: ...
+    @overload
+    def connect(self, callback: _MainViewCallback[MainView, Unpack[Ts]]) -> None: ...
+    @overload
+    def connect(self, callback: _ModelCallback[Model, Unpack[Ts]]) -> None: ...
+    @overload
+    def connect(self, callback: _BoundCallback[MainView, Model, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: CallbackT[Unpack[Ts]]) -> None:
+        injected_callback = self._inject_callback(callback)
+        self._callbacks.append(injected_callback)
+        self._qt_signal.connect(injected_callback)
 
     def disconnect(self) -> None:
         self._qt_signal.disconnect(self._callbacks)
-        self._callbacks.clear()
+        self._callbacks = [self._log_signal]
+        self._qt_signal.connect(self._log_signal)
 
     def emit(self, *args: Unpack[Ts]) -> None:
         for callback in self._callbacks:
@@ -104,18 +123,60 @@ class Signal(Generic[Unpack[Ts]]):
         nb_callbacks = 0
         for callback in self._callbacks:
             if callback != self._log_signal:
-                callback_name = _get_function_name(callback)
-                callback_file = _get_function_file(callback)
+                callback_name = self.get_function_name(callback)
+                callback_file = self.get_function_file(callback)
                 if len(args) > 0:
                     log_msgs.append("  -> CALL %s(%s)\n          %s")
                 else:
                     log_msgs.append("  -> CALL %s()\n          %s")
                 log_args.append(callback_name)
-                log_args.extend(str(arg) for arg in args)
+                log_args.extend(",".join(str(arg) for arg in args))
                 log_args.append(callback_file)
                 nb_callbacks += 1
         if nb_callbacks > 0:
             self._logger.debug("\n".join(log_msgs), *log_args)
+
+    def _inject_callback(
+        self, callback: CallbackT[Unpack[Ts]]
+    ) -> Callable[[Unpack[Ts]], None] | InjectedCallback[Unpack[Ts]]:
+        requested_bounds = self._requested_bounds(callback)
+        if len(requested_bounds) > 0:
+            return InjectedCallback(
+                callback=callback,
+                requested_bounds=requested_bounds,
+                main_view=self._main_view,
+                model=self._model,
+            )
+        return cast("Callable[[Unpack[Ts]], None]", callback)
+
+    @staticmethod
+    def _requested_bounds(callback: CallbackT[Unpack[Ts]]) -> frozenset[str]:
+        names = ("main_view", "model")
+        try:
+            params = inspect.signature(callback).parameters
+        except (TypeError, ValueError):
+            return frozenset()
+        return frozenset(name for name in names if name in params)
+
+    @staticmethod
+    def get_function_name(callback: CallbackT[Any]) -> str:
+        if isinstance(callback, InjectedCallback):
+            return Signal.get_function_name(callback.get_callback())  # type: ignore[arg-type]
+        if isinstance(callback, functools.partial):
+            inner = Signal.get_function_name(callback.func)
+            args = list(map(repr, callback.args))
+            kwargs = [f"{n}={type(arg).__name__}" for n, arg in callback.keywords.items()]
+            return f"{inner}({', '.join(args + kwargs)})"
+        name = getattr(callback, "__qualname__", None) or getattr(callback, "__name__", None)
+        return name or type(callback).__name__
+
+    @staticmethod
+    def get_function_file(callback: CallbackT[Any]) -> str:
+        if isinstance(callback, InjectedCallback):
+            return Signal.get_function_file(callback.get_callback())  # type: ignore[arg-type]
+        if isinstance(callback, functools.partial):
+            return Signal.get_function_file(callback.func)
+        return f'File "{callback.__code__.co_filename}", line {callback.__code__.co_firstlineno}'
 
 
 if TYPE_CHECKING:
@@ -144,91 +205,49 @@ class _QtSignal:
                 qt_signal.disconnect(callback)
 
 
-def _get_function_name(callback: Callable[..., None]) -> str:
-    if isinstance(callback, MainViewBoundCallback):
-        return _get_function_name(callback._callback)  # noqa: SLF001
-    if isinstance(callback, functools.partial):
-        inner = _get_function_name(callback.func)
-        args = list(map(repr, callback.args))
-        kwargs = [f"{n}={type(arg).__name__}" for n, arg in callback.keywords.items()]
-        return f"{inner}({', '.join(args + kwargs)})"
-    name = getattr(callback, "__qualname__", None) or getattr(callback, "__name__", None)
-    return name or type(callback).__name__
-
-
-def _get_function_file(callback: Callable[..., None]) -> str:
-    if isinstance(callback, MainViewBoundCallback):
-        return _get_function_file(callback._callback)  # noqa: SLF001
-    if isinstance(callback, functools.partial):
-        return _get_function_file(callback.func)
-    return f'File "{callback.__code__.co_filename}", line {callback.__code__.co_firstlineno}'
-
-
-class MainViewBoundCallback(Generic[_MainViewT_contra, Unpack[Ts]]):
-    def __init__(
-        self,
-        callback: _MainViewCallback[_MainViewT_contra, Unpack[Ts]],
-        main_view: ReferenceType[_MainViewT_contra] | None,
-    ) -> None:
-        self._callback = callback
-        self._main_view = main_view
-
-    def set_main_view(self, main_view: ReferenceType[_MainViewT_contra]) -> None:
-        self._main_view = main_view
-
-    def __call__(self, *args: Unpack[Ts]) -> None:
-        main_view = None if self._main_view is None else self._main_view()
-        if main_view is None:
-            msg = "The main view is missing."
-            raise ValueError(msg)
-        return self._callback(*args, main_view=main_view)
-
-
-class ModelBoundCallback(Generic[_ModelT_contra, Unpack[Ts]]):
-    def __init__(
-        self,
-        callback: _ModelCallback[_ModelT_contra, Unpack[Ts]],
-        model: ReferenceType[_ModelT_contra] | None,
-    ) -> None:
-        self._callback = callback
-        self._model = model
-
-    def set_model(self, model: ReferenceType[_ModelT_contra]) -> None:
-        self._model = model
-
-    def __call__(self, *args: Unpack[Ts]) -> None:
-        model = None if self._model is None else self._model()
-        if model is None:
-            msg = "The model is missing."
-            raise ValueError(msg)
-        return self._callback(*args, model=model)
-
-
-class BoundCallback(Generic[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
+class InjectedCallback(Generic[Unpack[Ts]]):
     def __init__(
         self,
         *,
-        callback: _BoundCallback[_MainViewT_contra, _ModelT_contra, Unpack[Ts]],
-        main_view: ReferenceType[_MainViewT_contra] | None,
-        model: ReferenceType[_ModelT_contra] | None,
+        callback: CallbackT[Unpack[Ts]],
+        requested_bounds: frozenset[str],
+        main_view: ReferenceType[MainView] | None,
+        model: ReferenceType[Model] | None,
     ) -> None:
-        self._callback = callback
+        self._callback = weakref.WeakMethod(callback)
+        self._requested_bounds = requested_bounds
         self._main_view = main_view
         self._model = model
 
-    def set_main_view(self, main_view: ReferenceType[_MainViewT_contra]) -> None:
+    def set_main_view(self, main_view: ReferenceType[MainView]) -> None:
         self._main_view = main_view
 
-    def set_model(self, model: ReferenceType[_ModelT_contra]) -> None:
+    def set_model(self, model: ReferenceType[Model]) -> None:
         self._model = model
+
+    def get_callback(self) -> CallbackT[Unpack[Ts]]:
+        callback = self._callback()
+        if callback is None:
+            msg = "callback has been garbage collected"
+            raise ValueError(msg)
+        return callback
 
     def __call__(self, *args: Unpack[Ts]) -> None:
-        main_view = None if self._main_view is None else self._main_view()
-        if main_view is None:
-            msg = "The main view is missing."
+        callback = self._callback()
+        if callback is None:
+            msg = "callback has been garbage collected"
             raise ValueError(msg)
-        model = None if self._model is None else self._model()
-        if model is None:
-            msg = "The model is missing."
-            raise ValueError(msg)
-        return self._callback(*args, main_view=main_view, model=model)
+        kwargs: dict[str, MainView | Model] = {}
+        if "main_view" in self._requested_bounds:
+            main_view = None if self._main_view is None else self._main_view()
+            if main_view is None:
+                msg = "The main view is missing."
+                raise ValueError(msg)
+            kwargs["main_view"] = main_view
+        if "model" in self._requested_bounds:
+            model = None if self._model is None else self._model()
+            if model is None:
+                msg = "The model is missing."
+                raise ValueError(msg)
+            kwargs["model"] = model
+        return callback(*args, **kwargs)  # type: ignore[arg-type]

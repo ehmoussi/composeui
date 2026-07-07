@@ -245,7 +245,7 @@ class ExitAppAction(ActionView):
         self.is_checkable = False
         self.icon = None
         self.data = None
-        self.triggered.connect2(self._exit_app)
+        self.triggered.connect(self._exit_app)
 
     def _exit_app(self, *, main_view: MainView) -> None:
         main_view.close()

@@ -160,12 +160,12 @@ class Application(ABC, Generic[MainViewT]):
     def run(self) -> Generator[None]: ...
 
     @staticmethod
-    def _requested_kwargs(callback: object, names: tuple[str, ...]) -> set[str]:
+    def _requested_kwargs(callback: object, names: tuple[str, ...]) -> frozenset[str]:
         try:
             params = inspect.signature(callback).parameters  # type: ignore[arg-type]
         except (TypeError, ValueError):
-            return set()
-        return {name for name in names if name in params}
+            return frozenset()
+        return frozenset(name for name in names if name in params)
 
 
 class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
