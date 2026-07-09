@@ -118,14 +118,50 @@ class PipeFormView(FormView):
         super().__attrs_post_init__()
         # Main Pipe
         self.main_pipe.title = "Main Pipe"
+        self.main_pipe.radius.editing_finished.connect(self._display_error_message)
+        self.main_pipe.width.editing_finished.connect(self._display_error_message)
         # Incident Pipe
         self.incident_pipe.title = "Incident Pipe"
         self.incident_pipe.radius.value = 50.0
+        self.incident_pipe.radius.editing_finished.connect(self._display_error_message)
+        self.incident_pipe.half_length.editing_finished.connect(self._display_error_message)
         # Edge Type
         self.edge_type.value_changed.connect(self._display_edge_options)
         self._display_edge_options(self.edge_type.value)
         # Fillet
         self.fillet.radius.value = 20.0
+
+    def _display_error_message(self) -> None:
+        log_messages: list[str] = []
+        main_radius = self.main_pipe.radius.value
+        main_width = self.main_pipe.width.value
+        incident_half_length = self.incident_pipe.half_length.value
+        incident_radius = self.incident_pipe.radius.value
+        if (
+            main_radius is None
+            or main_width is None
+            or incident_half_length is None
+            or (main_radius + main_width) > incident_half_length
+        ):
+            log_messages.append(
+                "The sum of the radius and width of the main pipe "
+                "can't be greater than the half length of the incident pipe: "
+                f"({main_radius} + {main_width} > "
+                f"{incident_half_length})"
+            )
+        if incident_radius is None or main_radius is None or incident_radius > main_radius:
+            log_messages.append(
+                "The incident radius cant'be greater than the main radius: "
+                f"({incident_radius} > {main_radius})"
+            )
+        if len(log_messages) > 0:
+            self.log_view.log_message = "- " + "\n- ".join(log_messages)
+            self.log_view.log_type = LogType.ERROR
+            self.log_view.is_visible = True
+        else:
+            self.log_view.is_visible = False
+            self.log_view.log_message = ""
+            self.log_view.log_type = LogType.INFO
 
     def _display_edge_options(self, edge_type: EdgeType | None) -> None:
         if edge_type == EdgeType.Chamfer:
@@ -152,53 +188,16 @@ class PipeMainView(MainView):
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
         if value is not None:
-            self.status_bar.show_message(f"Edge type changed: {value.value}", timeout=3)
+            self.status_bar.show_message(f"Edge type changed: {value.value}")
 
 
-_MAIN_VIEW = PipeMainView()
-APP = QtApplication(main_view=_MAIN_VIEW)
+class PipeApp(QtApplication[PipeMainView]):
+    def __init__(self) -> None:
+        main_view = PipeMainView()
+        super().__init__(main_view=main_view)
 
 
-@APP.connect(
-    view=APP.main_view.pipe_form,
-    signals=[
-        APP.main_view.pipe_form.main_pipe.radius.editing_finished,
-        APP.main_view.pipe_form.main_pipe.width.editing_finished,
-        APP.main_view.pipe_form.incident_pipe.radius.editing_finished,
-        APP.main_view.pipe_form.incident_pipe.half_length.editing_finished,
-    ],
-)
-def display_error_message(*, view: PipeFormView) -> None:
-    log_messages: list[str] = []
-    main_radius = view.main_pipe.radius.value
-    main_width = view.main_pipe.width.value
-    incident_half_length = view.incident_pipe.half_length.value
-    incident_radius = view.incident_pipe.radius.value
-    if (
-        main_radius is None
-        or main_width is None
-        or incident_half_length is None
-        or (main_radius + main_width) > incident_half_length
-    ):
-        log_messages.append(
-            "The sum of the radius and width of the main pipe "
-            "can't be greater than the half length of the incident pipe: "
-            f"({main_radius} + {main_width} > "
-            f"{incident_half_length})"
-        )
-    if incident_radius is None or main_radius is None or incident_radius > main_radius:
-        log_messages.append(
-            "The incident radius cant'be greater than the main radius: "
-            f"({incident_radius} > {main_radius})"
-        )
-    if len(log_messages) > 0:
-        view.log_view.log_message = "- " + "\n- ".join(log_messages)
-        view.log_view.log_type = LogType.ERROR
-        view.log_view.is_visible = True
-    else:
-        view.log_view.is_visible = False
-        view.log_view.log_message = ""
-        view.log_view.log_type = LogType.INFO
+APP = PipeApp()
 
 
 def main() -> None:
