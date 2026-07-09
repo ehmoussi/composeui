@@ -180,10 +180,10 @@ class PipeMainView(MainView):
     pipe_form: PipeFormView = Factory(PipeFormView)
 
     def __attrs_post_init__(self) -> None:
-        object.__setattr__(self, "title", "Pipe Form")
-        object.__setattr__(self, "extension", ".pipe")
         super().__attrs_post_init__()
         # Use object.__setattr__ to bypass the frozen attribute restriction.
+        object.__setattr__(self, "title", "Pipe Form")
+        object.__setattr__(self, "extension", ".pipe")
         self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
@@ -197,11 +197,9 @@ class PipeApp(QtApplication[PipeMainView]):
         super().__init__(main_view=main_view)
 
 
-APP = PipeApp()
-
-
 def main() -> None:
-    APP.run()
+    app = PipeApp()
+    app.run()
 
 
 if __name__ == "__main__":

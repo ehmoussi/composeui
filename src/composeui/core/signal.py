@@ -21,11 +21,10 @@ if TYPE_CHECKING:
     from composeui.core.view import MainView
 
 
-_LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
+LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
 _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
-_LOGGER.addHandler(_STREAM_HANDLER)
-_LOGGER.setLevel(logging.DEBUG)
+LOGGER.addHandler(_STREAM_HANDLER)
 
 Ts = TypeVarTuple("Ts")
 
@@ -72,7 +71,7 @@ class Signal(Generic[Unpack[Ts]]):
         self._name = ""
         self._qt_signal = _QtSignal()
         self._callbacks: list[Callable[[Unpack[Ts]], None]] = [self._log_signal]
-        self._logger = _LOGGER
+        self._logger = LOGGER
         self._main_view: ReferenceType[MainView] | None = None
         self._model: ReferenceType[Model] | None = None
 

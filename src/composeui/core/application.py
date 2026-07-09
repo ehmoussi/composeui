@@ -1,23 +1,32 @@
 from __future__ import annotations
 
+import argparse
 import functools
 import inspect
-from abc import ABC, abstractmethod
+import logging
+import sys
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
 
 import attrs
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.view import View
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Sequence
+    from collections.abc import Callable, Sequence
 
     from composeui.core.model import Model
     from composeui.core.view import MainView, RendererType
 
+
+LOGGER = logging.getLogger("COMPOSEUI")
+_STREAM_HANDLER = logging.StreamHandler(sys.stdout)
+_STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
+LOGGER.addHandler(_STREAM_HANDLER)
 
 # T = TypeVar("T", bound=MainView)
 Ts = TypeVarTuple("Ts")
@@ -117,9 +126,18 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
                     child.set_model(model)
 
 
-class Application(ABC, Generic[MainViewT]):
+class Application(Generic[MainViewT]):
     def __init__(self, *, main_view: MainViewT) -> None:
         self._main_view = main_view
+        self._parser = argparse.ArgumentParser()
+        self._parser.add_argument("--debug", help="Run the app in debug mode", action="store_true")
+        # self._parser.add_argument(
+        #     "-f", metavar="FILE", help="Open the app with the FILE study", type=Path
+        # )
+        self._parser.add_argument("--log", help="Display the debug Log.", action="store_true")
+        self._parser.add_argument(
+            "--log-signals", help="Log all the emitted signals.", action="store_true"
+        )
         self._add_reference_to_signals()
 
     def _add_reference_to_signals(self) -> None:
@@ -156,8 +174,32 @@ class Application(ABC, Generic[MainViewT]):
         self._main_view.is_visible = True
         self._main_view.render(renderer_type)
 
-    @abstractmethod
-    def run(self) -> Generator[None]: ...
+    def run(self) -> None:
+        args = self._parse_arguments()
+        if args.log or args.debug:
+            LOGGER.setLevel(level=logging.DEBUG)
+        else:
+            LOGGER.setLevel(level=logging.INFO)
+        if args.log_signals or args.debug:
+            SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
+        else:
+            SIGNAL_LOGGER.setLevel(level=logging.INFO)
+
+    def _parse_arguments(self) -> argparse.Namespace:
+        args = self._parser.parse_args()
+        # if (
+        #     args.f is not None
+        #     and isinstance(args.f, Path)
+        #     and args.f.is_file()
+        #     and args.f.suffix != self.main_view.extension
+        # ):
+        #     msg = (
+        #         f"Invalid file extension: '{args.f.suffix}'. "
+        #         f"Expected extension: '{self.main_view.extension}'. "
+        #         "Please provide a file with the correct extension."
+        #     )
+        #     raise ValueError(msg)
+        return args
 
     @staticmethod
     def _requested_kwargs(callback: object, names: tuple[str, ...]) -> frozenset[str]:
