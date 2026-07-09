@@ -102,9 +102,10 @@ class View:
 class StatusBar(View):
     message: str = attrs.field(default="")
     message_changed: Signal[str] = attrs.Factory(Signal[str])
+    timeout: float = attrs.field(default=3.0)
     _timer: threading.Timer | None = attrs.field(default=None)
 
-    def show_message(self, message: str, *, timeout: int = 0) -> None:
+    def show_message(self, message: str) -> None:
         """Show a message.
 
         The message is dismissed after timeout seconds. A timeout of 0 means
@@ -113,8 +114,8 @@ class StatusBar(View):
         self.message = message
         if self._timer is not None:
             self._timer.cancel()
-        if timeout > 0:
-            self._timer = threading.Timer(timeout, self.clear_message)
+        if self.timeout > 0:
+            self._timer = threading.Timer(self.timeout, self.clear_message)
             self._timer.start()
 
     def clear_message(self) -> None:
