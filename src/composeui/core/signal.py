@@ -130,7 +130,8 @@ class Signal(Generic[Unpack[Ts]]):
                 else:
                     log_msgs.append("  -> CALL %s()\n          %s")
                 log_args.append(callback_name)
-                log_args.extend(",".join(str(arg) for arg in args))
+                if len(args) > 0:
+                    log_args.append(",".join(repr(arg) for arg in args))
                 log_args.append(callback_file)
                 nb_callbacks += 1
         if nb_callbacks > 0:
