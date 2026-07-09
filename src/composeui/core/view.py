@@ -287,7 +287,7 @@ class MainView(View):
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
 
-    def open_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+    def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
@@ -295,7 +295,7 @@ class MainView(View):
             self.file_view.filepath = self.renderer.open_file()
         return self.file_view.filepath
 
-    def save_file(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+    def ask_save_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
