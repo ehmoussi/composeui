@@ -111,6 +111,12 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+pyside6 = [
+    { name = "pyside6", version = "6.10.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "pyside6", version = "6.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy", version = "1.19.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -120,18 +126,16 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-pyside6 = [
-    { name = "pyside6", version = "6.10.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "pyside6", version = "6.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "cattrs", specifier = ">=25.3.0" },
+    { name = "pyside6", marker = "extra == 'pyside6'", specifier = ">=6.10.3" },
     { name = "qtpy", specifier = ">=2.4.3" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
+provides-extras = ["pyside6"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -140,7 +144,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.15.17" },
 ]
-pyside6 = [{ name = "pyside6", specifier = ">=6.10.3" }]
 
 [[package]]
 name = "coverage"

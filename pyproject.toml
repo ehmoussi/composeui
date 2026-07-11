@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "composeui"
 description = "Add your description here"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "El Hadi Moussi", email = "50993404+ehmoussi@users.noreply.github.com" },
 ]
@@ -18,9 +20,11 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+pyside6 = ["pyside6>=6.10.3"]
+
 [dependency-groups]
 dev = ["mypy>=1.19.1", "pytest>=8.4.2", "pytest-cov>=7.1.0", "ruff>=0.15.17"]
-pyside6 = ["pyside6>=6.10.3"]
 
 
 [tool.ruff]
