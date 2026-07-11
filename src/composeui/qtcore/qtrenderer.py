@@ -537,7 +537,7 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
     def _build_extensions(self) -> str:
         extensions: list[str] = []
         for name, name_extensions in self._view.file_view.extensions.items():
-            extensions.append(f"{name} ({' '.join(name_extensions)})")
+            extensions.append(f"{name} ({' '.join(f'*{n}' for n in name_extensions)})")
         return ";;".join(extensions)
 
     @staticmethod
