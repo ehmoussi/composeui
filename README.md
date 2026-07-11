@@ -100,7 +100,7 @@ available building blocks.
 
 ## Saving and loading state
 
-`MainView.save_state(path)` and `MainView.open_state(path)` (de)serialize the full view tree
+`MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
 to JSON via `cattrs`, automatically skipping `Signal`/`Renderer` fields and, on load, updating
 the live view tree in place so renderer bindings and signal connections survive the reload.
 
