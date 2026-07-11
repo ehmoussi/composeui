@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "composeui"
-description = "Add your description here"
+description = "A framework-agnostic MVVM layer for building desktop UIs, with a Qt renderer"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -12,6 +12,23 @@ authors = [
     { name = "El Hadi Moussi", email = "50993404+ehmoussi@users.noreply.github.com" },
 ]
 requires-python = ">=3.9"
+keywords = ["mvvm", "gui", "qt", "pyside6", "attrs", "cattrs", "reactive"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Environment :: X11 Applications :: Qt",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: User Interfaces",
+    "Typing :: Typed",
+]
 dependencies = [
     "attrs>=26.1.0",
     "cattrs>=25.3.0",
