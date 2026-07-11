@@ -10,7 +10,12 @@ authors = [
     { name = "El Hadi Moussi", email = "50993404+ehmoussi@users.noreply.github.com" },
 ]
 requires-python = ">=3.9"
-dependencies = ["attrs>=26.1.0", "qtpy>=2.4.3", "typing-extensions>=4.15.0"]
+dependencies = [
+    "attrs>=26.1.0",
+    "cattrs>=25.3.0",
+    "qtpy>=2.4.3",
+    "typing-extensions>=4.15.0",
+]
 dynamic = ["version"]
 
 [dependency-groups]
@@ -24,6 +29,7 @@ line-length = 100
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
+    "FA100",
     # ----- below are the rules that should be deactivated only for qt
     "ANN401",
     "ARG002",

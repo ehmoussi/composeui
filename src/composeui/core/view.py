@@ -1,29 +1,107 @@
-from __future__ import annotations
+# from __future__ import annotations
 
 import enum
+import json
 import threading
 from abc import abstractmethod
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast, overload
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    overload,
+)
 
 import attrs
+import cattrs
+from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import dataclass_transform
 
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from pathlib import Path
-
     from attrs import AttrsInstance
+
+
+CONVERTER = cattrs.Converter()
+
+_OMITTED_TYPES = (Signal, Renderer, RendererContainer)
+
+
+def _is_omitted_type(tp: Any) -> bool:
+    """Check whether a (possibly generic/Optional/Union) type is or wraps an omitted type."""
+    origin = get_origin(tp)
+    if origin is Union:
+        return any(_is_omitted_type(arg) for arg in get_args(tp))
+    cls = origin if origin is not None else tp
+    return isinstance(cls, type) and issubclass(cls, _OMITTED_TYPES)
+
+
+@CONVERTER.register_unstructure_hook_factory(attrs.has)
+def _omit_renderer_and_signals(
+    cls: "type[AttrsInstance]",
+) -> Callable[[Any], dict[str, Any]]:
+    attrs.resolve_types(cls)
+    overrides: dict[str, AttributeOverride] = {
+        str(f.name): override(omit=True) for f in attrs.fields(cls) if _is_omitted_type(f.type)
+    }
+    # mypy can't verify **overrides won't collide with the leading
+    # _cattrs_* bool kwargs, even though its keys are attrs field names.
+    return make_dict_unstructure_fn(cls, CONVERTER, **overrides)  # type: ignore[arg-type]
+
+
+def _contains_typevar(tp: Any) -> bool:
+    """Check whether a type (possibly nested in Optional/Union/generics) is an unbound TypeVar.
+
+    Generic mixins (e.g. ``RadioGroupMixin[TValue]``) declare fields typed with their
+    own TypeVar, which cattrs cannot structure statically since it is never resolved
+    to a concrete type at the mixin's own class definition.
+    """
+    if isinstance(tp, TypeVar):
+        return True
+    return any(_contains_typevar(arg) for arg in get_args(tp))
+
+
+def _apply_state(view: "View", data: dict[str, Any]) -> None:
+    """Update a live view tree in place from previously saved state.
+
+    A fresh ``CONVERTER.structure(data, type(view))`` would build new nested
+    view instances, losing their bound renderers and connected signals. Setting
+    the existing attributes instead lets the normal ``notify_renderer``
+    on_setattr hook refresh the UI as each value is applied.
+    """
+    cls = cast("type[AttrsInstance]", type(view))
+    attrs.resolve_types(cls)
+    for f in attrs.fields(cls):
+        if f.name not in data or _is_omitted_type(f.type) or f.on_setattr is attrs.setters.frozen:
+            continue
+        value = data[f.name]
+        current = getattr(view, f.name, None)
+        if isinstance(current, View) and isinstance(value, dict):
+            _apply_state(current, value)
+            continue
+        target_type = f.type
+        if _contains_typevar(target_type):
+            if current is None:
+                # the concrete type can't be resolved statically nor from a live value
+                continue
+            target_type = type(current)
+        setattr(view, f.name, CONVERTER.structure(value, target_type))
 
 
 class RendererType(enum.Enum):
     QT = enum.auto()
 
 
-def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
+def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
     attribute_name = str(attribute.name)
     if not attribute_name.startswith("_") and hasattr(instance, attribute_name):
         old_value = getattr(instance, attribute_name)
@@ -44,7 +122,7 @@ def define_view(cls: T) -> T: ...
 @overload
 def define_view(cls: None = None, **kwargs: Any) -> Callable[[T], T]: ...
 @dataclass_transform(kw_only_default=True, field_specifiers=(attrs.field,))
-def define_view(cls: T | None = None, **kwargs: Any) -> T | Callable[[T], T]:
+def define_view(cls: Union[T, None] = None, **kwargs: Any) -> Union[T, Callable[[T], T]]:
     def wrap(cls: T) -> T:
         if "on_setattr" in kwargs:
             if isinstance(kwargs["on_setattr"], Sequence):
@@ -64,7 +142,9 @@ class View:
     is_visible: bool = attrs.field(default=True)
     is_enabled: bool = attrs.field(default=True)
     # renderer
-    renderer: Renderer[Any, Any] | RendererContainer[Any] | None = attrs.field(default=None)
+    renderer: Optional[Union[Renderer[Any, Any], RendererContainer[Any]]] = attrs.field(
+        default=None
+    )
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -73,7 +153,7 @@ class View:
                 signal.set_name(f"{type(self).__name__}.{f.name}")
 
     @property
-    def children_views(self) -> list[View]:
+    def children_views(self) -> list["View"]:
         """Get all the field rows of the form view."""
         children_views: list[View] = []
         for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -103,7 +183,7 @@ class StatusBar(View):
     message: str = attrs.field(default="")
     message_changed: Signal[str] = attrs.Factory(Signal[str])
     timeout: float = attrs.field(default=3.0)
-    _timer: threading.Timer | None = attrs.field(default=None)
+    _timer: Optional[threading.Timer] = attrs.field(default=None)
 
     def show_message(self, message: str) -> None:
         """Show a message.
@@ -136,7 +216,7 @@ class StatusBar(View):
 
 @define_view
 class FileView(View):
-    filepath: Path | None = attrs.field(default=None)
+    filepath: Optional[Path] = attrs.field(default=None)
     extensions: dict[str, tuple[str, ...]] = attrs.Factory(dict[str, tuple[str, ...]])
     # file_type: FileType = attrs.field(default=FileType.OpenFile)
 
@@ -147,9 +227,9 @@ class FileView(View):
 @define_view
 class ActionView(View):
     text: str = attrs.field(default="")
-    icon: str | None = attrs.field(default=None)
+    icon: Optional[str] = attrs.field(default=None)
     data: Any = attrs.field(default=None)
-    shortcut: str | None = attrs.field(default=None)
+    shortcut: Optional[str] = attrs.field(default=None)
     is_checkable: bool = attrs.field(default=False)
     is_checked: bool = attrs.field(default=False)
 
@@ -248,7 +328,7 @@ class ExitAppAction(ActionView):
         self.data = None
         self.triggered.connect(self._exit_app)
 
-    def _exit_app(self, *, main_view: MainView) -> None:
+    def _exit_app(self, *, main_view: "MainView") -> None:
         main_view.close()
 
 
@@ -264,6 +344,8 @@ class FileMenu(Menu):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "File"
+        self.save.triggered.connect(self._save_state)
+        self.open_file.triggered.connect(self._load_state)
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         if renderer_type == RendererType.QT:
@@ -271,12 +353,26 @@ class FileMenu(Menu):
 
             self.renderer = QtMenuRenderer(self)
 
+    def _load_state(self, *, main_view: "MainView") -> None:
+        filepath = main_view.ask_open_filepath(
+            extensions={main_view.extension: (f"{main_view.extension}",)}
+        )
+        if filepath is not None:
+            main_view.load_state(filepath)
+
+    def _save_state(self, *, main_view: "MainView") -> None:
+        filepath = main_view.ask_save_filepath(
+            extensions={main_view.extension: (f"{main_view.extension}",)}
+        )
+        if filepath is not None:
+            main_view.save_state(filepath)
+
 
 @define_view
 class MainView(View):
     title: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
     extension: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
-    saved_filepath: Path | None = None
+    state_filepath: Optional[Path] = None
 
     minimum_width: int = attrs.field(default=720)
     minimum_height: int = attrs.field(default=480)
@@ -287,7 +383,20 @@ class MainView(View):
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
 
-    def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+    def load_state(self, filepath: Path) -> None:
+        """Load the current state saved in a json file."""
+        with filepath.open() as f:
+            data = json.load(f)
+        _apply_state(self, data)
+        self.state_filepath = filepath
+
+    def save_state(self, filepath: Path) -> None:
+        """Save the current state into a json file."""
+        with filepath.open("w") as f:
+            json.dump(CONVERTER.unstructure(self), f)
+        self.state_filepath = filepath
+
+    def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
@@ -295,7 +404,7 @@ class MainView(View):
             self.file_view.filepath = self.renderer.open_file()
         return self.file_view.filepath
 
-    def ask_save_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Path | None:
+    def ask_save_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
@@ -344,10 +453,10 @@ class InputView(InputMixin, View):
 @define_view
 class FloatInputMixin(_InputView):
     # properties
-    value: float | None = attrs.field(default=None)
-    minimum: float | None = attrs.field(default=None)
-    maximum: float | None = attrs.field(default=None)
-    decimals: int | None = attrs.field(default=None)
+    value: Optional[float] = attrs.field(default=None)
+    minimum: Optional[float] = attrs.field(default=None)
+    maximum: Optional[float] = attrs.field(default=None)
+    decimals: Optional[int] = attrs.field(default=None)
 
 
 @define_view
@@ -399,12 +508,12 @@ TValue = TypeVar("TValue")
 
 @define_view
 class RadioGroupMixin(Generic[TValue]):
-    value: TValue | None = attrs.field(default=None)
+    value: Optional[TValue] = attrs.field(default=None)
     values: dict[str, TValue] = attrs.field(
         factory=dict[str, TValue],
         on_setattr=attrs.setters.frozen,
     )
-    value_changed: Signal[TValue | None] = attrs.Factory(Signal[Optional[TValue]])
+    value_changed: Signal[Optional[TValue]] = attrs.Factory(Signal[Optional[TValue]])
 
 
 @define_view
@@ -427,7 +536,9 @@ class FormRowView(LogMixin, View):
             self.renderer = RendererContainer(self, {"field": field_renderer, "log": log_renderer})
 
     @abstractmethod
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None: ...
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]: ...
 
 
 @define_view
@@ -450,12 +561,16 @@ class FormLabelRowView(FormRowView):
             )
 
     @abstractmethod
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None: ...
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]: ...
 
 
 @define_view
 class RowInputView(FormRowView, InputMixin):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
@@ -465,7 +580,9 @@ class RowInputView(FormRowView, InputMixin):
 
 @define_view
 class LabelRowInputView(FormLabelRowView, InputMixin):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
@@ -475,7 +592,9 @@ class LabelRowInputView(FormLabelRowView, InputMixin):
 
 @define_view
 class RowFloatInputView(FormRowView, FloatInputMixin):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
@@ -485,7 +604,9 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
 
 @define_view
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
@@ -495,7 +616,9 @@ class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
 
 @define_view
 class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
@@ -505,7 +628,9 @@ class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
 
 @define_view
 class LabelRowRadioGroupView(FormLabelRowView, RadioGroupMixin[TValue]):
-    def _create_field_renderer(self, renderer_type: RendererType) -> Renderer[Any, Any] | None:
+    def _create_field_renderer(
+        self, renderer_type: RendererType
+    ) -> Union[Renderer[Any, Any], None]:
         if renderer_type == RendererType.QT:
             from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
@@ -522,7 +647,7 @@ class FormView(View):
         self.log_view.is_visible = False
 
     @property
-    def field_rows(self) -> list[FormRowView | FormView]:
+    def field_rows(self) -> list[Union[FormRowView, "FormView"]]:
         """Get all the field rows of the form view."""
         return [
             getattr(self, field_row_attr.name)

@@ -131,9 +131,9 @@ class Application(Generic[MainViewT]):
         self._main_view = main_view
         self._parser = argparse.ArgumentParser()
         self._parser.add_argument("--debug", help="Run the app in debug mode", action="store_true")
-        # self._parser.add_argument(
-        #     "-f", metavar="FILE", help="Open the app with the FILE study", type=Path
-        # )
+        self._parser.add_argument(
+            "-f", metavar="FILE", help="Open the app with the FILE study", type=Path
+        )
         self._parser.add_argument("--log", help="Display the debug Log.", action="store_true")
         self._parser.add_argument(
             "--log-signals", help="Log all the emitted signals.", action="store_true"
@@ -184,21 +184,23 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
+        if args.f is not None:
+            self.main_view.load_state(args.f)
 
     def _parse_arguments(self) -> argparse.Namespace:
         args = self._parser.parse_args()
-        # if (
-        #     args.f is not None
-        #     and isinstance(args.f, Path)
-        #     and args.f.is_file()
-        #     and args.f.suffix != self.main_view.extension
-        # ):
-        #     msg = (
-        #         f"Invalid file extension: '{args.f.suffix}'. "
-        #         f"Expected extension: '{self.main_view.extension}'. "
-        #         "Please provide a file with the correct extension."
-        #     )
-        #     raise ValueError(msg)
+        if (
+            args.f is not None
+            and isinstance(args.f, Path)
+            and args.f.is_file()
+            and args.f.suffix != self.main_view.extension
+        ):
+            msg = (
+                f"Invalid file extension: '{args.f.suffix}'. "
+                f"Expected extension: '{self.main_view.extension}'. "
+                "Please provide a file with the correct extension."
+            )
+            raise ValueError(msg)
         return args
 
     @staticmethod

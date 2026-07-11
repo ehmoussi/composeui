@@ -479,6 +479,7 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
         self._refresh_dispatcher.update(
             {
                 "title": self._refresh_title,
+                "state_filepath": self._refresh_state_filepath,
                 "minimum_width": self._refresh_minimum_width,
                 "minimum_height": self._refresh_minimum_height,
             }
@@ -567,6 +568,11 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
     @staticmethod
     def _refresh_title(_view: MainView, rendered_object: QMainWindow, value: str) -> None:
         rendered_object.setWindowTitle(value)
+
+    @staticmethod
+    def _refresh_state_filepath(
+        _view: MainView, rendered_object: QMainWindow, value: Path
+    ) -> None: ...
 
     @staticmethod
     def _refresh_minimum_width(_view: MainView, rendered_object: QMainWindow, value: int) -> None:
