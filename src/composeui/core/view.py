@@ -2,6 +2,8 @@
 
 import enum
 import json
+import logging
+import sys
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
@@ -31,6 +33,12 @@ if TYPE_CHECKING:
     from attrs import AttrsInstance
 
 
+LOGGER = logging.getLogger("COMPOSEUI_VIEW")
+_STREAM_HANDLER = logging.StreamHandler(sys.stdout)
+_STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
+LOGGER.addHandler(_STREAM_HANDLER)
+
+
 CONVERTER = cattrs.Converter()
 
 _OMITTED_TYPES = (Signal, Renderer, RendererContainer)
@@ -55,19 +63,21 @@ def _omit_renderer_and_signals(
     }
     # mypy can't verify **overrides won't collide with the leading
     # _cattrs_* bool kwargs, even though its keys are attrs field names.
-    return make_dict_unstructure_fn(cls, CONVERTER, **overrides)  # type: ignore[arg-type]
+    unstructure = make_dict_unstructure_fn(
+        cls,
+        CONVERTER,
+        _cattrs_omit_if_default=True,
+        **overrides,
+    )  # type: ignore[arg-type]
+    if not issubclass(cls, RadioGroupMixin):
+        return unstructure
 
+    def unstructure_radio_group(obj: "RadioGroupMixin[Any]") -> dict[str, Any]:
+        data = unstructure(cast("AttrsInstance", obj))
+        data["value"] = obj.serialize_value()
+        return data
 
-def _contains_typevar(tp: Any) -> bool:
-    """Check whether a type (possibly nested in Optional/Union/generics) is an unbound TypeVar.
-
-    Generic mixins (e.g. ``RadioGroupMixin[TValue]``) declare fields typed with their
-    own TypeVar, which cattrs cannot structure statically since it is never resolved
-    to a concrete type at the mixin's own class definition.
-    """
-    if isinstance(tp, TypeVar):
-        return True
-    return any(_contains_typevar(arg) for arg in get_args(tp))
+    return unstructure_radio_group
 
 
 def _apply_state(view: "View", data: dict[str, Any]) -> None:
@@ -77,24 +87,30 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
     view instances, losing their bound renderers and connected signals. Setting
     the existing attributes instead lets the normal ``notify_renderer``
     on_setattr hook refresh the UI as each value is applied.
+
+    ``RadioGroupMixin.value`` is handled separately: its declared type is an
+    unresolved generic ``TypeVar`` that cattrs can't structure statically, so it is
+    restored through `RadioGroupMixin.deserialize_value` instead, which resolves it
+    via the mixin's own `values` label lookup.
     """
     cls = cast("type[AttrsInstance]", type(view))
     attrs.resolve_types(cls)
+    if isinstance(view, RadioGroupMixin) and "value" in data:
+        view.value = view.deserialize_value(data["value"])
     for f in attrs.fields(cls):
-        if f.name not in data or _is_omitted_type(f.type) or f.on_setattr is attrs.setters.frozen:
+        if (
+            f.name not in data
+            or _is_omitted_type(f.type)
+            or f.on_setattr is attrs.setters.frozen
+            or (f.name == "value" and isinstance(view, RadioGroupMixin))
+        ):
             continue
         value = data[f.name]
         current = getattr(view, f.name, None)
         if isinstance(current, View) and isinstance(value, dict):
             _apply_state(current, value)
             continue
-        target_type = f.type
-        if _contains_typevar(target_type):
-            if current is None:
-                # the concrete type can't be resolved statically nor from a live value
-                continue
-            target_type = type(current)
-        setattr(view, f.name, CONVERTER.structure(value, target_type))
+        setattr(view, f.name, CONVERTER.structure(value, f.type))
 
 
 class RendererType(enum.Enum):
@@ -514,6 +530,36 @@ class RadioGroupMixin(Generic[TValue]):
         on_setattr=attrs.setters.frozen,
     )
     value_changed: Signal[Optional[TValue]] = attrs.Factory(Signal[Optional[TValue]])
+
+    def serialize_value(self) -> Optional[str]:
+        """Serialize `value` as its label, the key it has in `values`.
+
+        `TValue` is never bound to a concrete type on this mixin, so cattrs can't
+        structure `value` back from JSON on its own; going through the label instead
+        of the raw `TValue` sidesteps that entirely. Subclasses whose `TValue` needs
+        custom matching (e.g. no meaningful `__eq__`) can override this.
+        """
+        if self.value is None:
+            return None
+        for label, candidate in self.values.items():
+            if candidate == self.value:
+                return label
+        return None
+
+    def deserialize_value(self, label: Optional[str]) -> Optional[TValue]:
+        """Look up a label previously produced by `serialize_value` back into a TValue."""
+        if label is None:
+            return None
+        if label not in self.values:
+            LOGGER.warning(
+                "Cannot restore %s.value from saved state: label %r is not among "
+                "the current options %r.",
+                type(self).__name__,
+                label,
+                list(self.values),
+            )
+            return None
+        return self.values[label]
 
 
 @define_view
