@@ -63,10 +63,7 @@ class HelloMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        # title/extension are frozen after construction, so they're set once
-        # here via object.__setattr__.
-        object.__setattr__(self, "title", "Hello ComposeUI")
-        object.__setattr__(self, "extension", ".hello")
+        self._init_app_info(title="Hello ComposeUI", extension=".hello")
 
 
 class HelloApp(QtApplication[HelloMainView]):

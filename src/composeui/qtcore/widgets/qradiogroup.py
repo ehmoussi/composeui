@@ -16,18 +16,26 @@ class QRadioGroup(QWidget):
 
     def __init__(self, values: dict[str, Any], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # self.setContentsMargins(0, 0, 0, 0)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self._values = values
+        self._layout = QHBoxLayout()
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self._layout)
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
         self._button_group.idClicked.connect(self._emit_value_changed_signal)
+        self._values: dict[str, Any] = {}
+        self.set_values(values)
+
+    def set_values(self, values: dict[str, Any]) -> None:
+        """Rebuild the radio buttons for a new set of options."""
+        for button in self._button_group.buttons():
+            self._button_group.removeButton(button)
+            self._layout.removeWidget(button)
+            button.deleteLater()
+        self._values = values
         for i, value_text in enumerate(self._values):
             button = QRadioButton(value_text)
-            layout.addWidget(button)
+            self._layout.addWidget(button)
             self._button_group.addButton(button, i)
-        self.setLayout(layout)
 
     def set_value(self, value: Any) -> None:
         for button_id, value_raw in enumerate(self._values.values()):

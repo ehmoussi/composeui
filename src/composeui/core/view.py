@@ -6,6 +6,7 @@ import logging
 import sys
 import threading
 from abc import abstractmethod
+from collections import deque
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import (
@@ -61,14 +62,15 @@ def _omit_renderer_and_signals(
     overrides: dict[str, AttributeOverride] = {
         str(f.name): override(omit=True) for f in attrs.fields(cls) if _is_omitted_type(f.type)
     }
-    # mypy can't verify **overrides won't collide with the leading
-    # _cattrs_* bool kwargs, even though its keys are attrs field names.
     unstructure = make_dict_unstructure_fn(
         cls,
         CONVERTER,
         _cattrs_omit_if_default=True,
+        _cattrs_use_linecache=True,
+        _cattrs_use_alias="from_converter",
+        _cattrs_include_init_false=False,
         **overrides,
-    )  # type: ignore[arg-type]
+    )
     if not issubclass(cls, RadioGroupMixin):
         return unstructure
 
@@ -91,26 +93,32 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
     ``RadioGroupMixin.value`` is handled separately: its declared type is an
     unresolved generic ``TypeVar`` that cattrs can't structure statically, so it is
     restored through `RadioGroupMixin.deserialize_value` instead, which resolves it
-    via the mixin's own `values` label lookup.
+    via the mixin's own `values` label lookup. ``RadioGroupMixin.values`` is included
+    in saved state (for inspection/debugging) but never restored from it on load: it's
+    app-defined config, not persisted user data, and has the same unresolved-`TValue`
+    structuring problem `value` has, without an equivalent label-based workaround.
     """
-    cls = cast("type[AttrsInstance]", type(view))
-    attrs.resolve_types(cls)
-    if isinstance(view, RadioGroupMixin) and "value" in data:
-        view.value = view.deserialize_value(data["value"])
-    for f in attrs.fields(cls):
-        if (
-            f.name not in data
-            or _is_omitted_type(f.type)
-            or f.on_setattr is attrs.setters.frozen
-            or (f.name == "value" and isinstance(view, RadioGroupMixin))
-        ):
-            continue
-        value = data[f.name]
-        current = getattr(view, f.name, None)
-        if isinstance(current, View) and isinstance(value, dict):
-            _apply_state(current, value)
-            continue
-        setattr(view, f.name, CONVERTER.structure(value, f.type))
+    states = deque([(view, data)])
+    while len(states) > 0:
+        current_view, new_data = states.popleft()
+        current_cls = cast("type[AttrsInstance]", type(current_view))
+        attrs.resolve_types(current_cls)
+        if isinstance(current_view, RadioGroupMixin) and "value" in new_data:
+            current_view.value = current_view.deserialize_value(new_data["value"])
+        for f in attrs.fields(current_cls):
+            if (
+                f.name not in new_data
+                or _is_omitted_type(f.type)
+                or f.on_setattr is attrs.setters.frozen
+                or (f.name in ("value", "values") and isinstance(current_view, RadioGroupMixin))
+            ):
+                continue
+            new_value = new_data[f.name]
+            current_field = getattr(current_view, f.name, None)
+            if isinstance(current_field, View) and isinstance(new_value, dict):
+                states.append((current_field, new_value))
+            else:
+                setattr(current_view, f.name, CONVERTER.structure(new_value, f.type))
 
 
 class RendererType(enum.Enum):
@@ -145,7 +153,13 @@ def define_view(cls: Union[T, None] = None, **kwargs: Any) -> Union[T, Callable[
                 kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
             else:
                 kwargs["on_setattr"] = [kwargs["on_setattr"], notify_renderer]
-        return attrs.define(cls, on_setattr=[notify_renderer], kw_only=True, slots=False, **kwargs)
+        return attrs.define(
+            cls,
+            on_setattr=[attrs.setters.validate, notify_renderer],
+            kw_only=True,
+            slots=False,
+            **kwargs,
+        )
 
     if cls is None:
         return wrap
@@ -399,6 +413,11 @@ class MainView(View):
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
 
+    def _init_app_info(self, *, title: str, extension: str) -> None:
+        """Set `title`/`extension` once, meant to be called from `__attrs_post_init__`."""
+        object.__setattr__(self, "title", title)
+        object.__setattr__(self, "extension", extension)
+
     def load_state(self, filepath: Path) -> None:
         """Load the current state saved in a json file."""
         with filepath.open() as f:
@@ -524,21 +543,54 @@ TValue = TypeVar("TValue")
 
 @define_view
 class RadioGroupMixin(Generic[TValue]):
-    value: Optional[TValue] = attrs.field(default=None)
+    def _check_value(self, _attribute: "attrs.Attribute[Any]", value: Optional[TValue]) -> None:
+        """Reject a `value` that isn't `None` or one of the current `values`.
+
+        Runs both at construction and on every later assignment (`define_view` wires
+        `attrs.setters.validate` into the on_setattr pipeline). Set `values` before
+        assigning `value`, or the check would always fail.
+        """
+        if value is not None and value not in self.values.values():
+            if len(self.values) == 0:
+                msg = (
+                    f"Cannot set {type(self).__name__}.value to {value!r}: `values` is "
+                    "empty. Set `values` before setting `value`."
+                )
+            else:
+                msg = (
+                    f"Cannot set {type(self).__name__}.value to {value!r}: not one of "
+                    f"the available values {list(self.values)}."
+                )
+            raise ValueError(msg)
+
+    def _reconcile_values(
+        self, attribute: "attrs.Attribute[Any]", values: dict[str, TValue]
+    ) -> dict[str, TValue]:
+        """Clear `value` if it won't be a member of the new `values`, then notify the renderer.
+
+        A dedicated on_setattr hook rather than a `validator=`: unlike `_check_value`, it
+        has the side effect of resetting `value` when `values` changes out from under it,
+        not just rejecting an invalid assignment. It replaces the class-level on_setattr
+        pipeline for this field, so it calls `notify_renderer` itself at the end.
+        """
+        if self.value is not None and self.value not in values.values():
+            LOGGER.warning(
+                "%s.values no longer contains %r (the current value); clearing it.",
+                type(self).__name__,
+                self.value,
+            )
+            self.value = None
+        return notify_renderer(cast("View", self), attribute, values)
+
+    value: Optional[TValue] = attrs.field(default=None, validator=[_check_value])
     values: dict[str, TValue] = attrs.field(
         factory=dict[str, TValue],
-        on_setattr=attrs.setters.frozen,
+        on_setattr=_reconcile_values,
     )
     value_changed: Signal[Optional[TValue]] = attrs.Factory(Signal[Optional[TValue]])
 
     def serialize_value(self) -> Optional[str]:
-        """Serialize `value` as its label, the key it has in `values`.
-
-        `TValue` is never bound to a concrete type on this mixin, so cattrs can't
-        structure `value` back from JSON on its own; going through the label instead
-        of the raw `TValue` sidesteps that entirely. Subclasses whose `TValue` needs
-        custom matching (e.g. no meaningful `__eq__`) can override this.
-        """
+        """Serialize `value` as its label, the key it has in `values`."""
         if self.value is None:
             return None
         for label, candidate in self.values.items():

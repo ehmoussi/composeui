@@ -310,6 +310,7 @@ class QtRadioGroupRenderer(
         self._refresh_dispatcher.update(
             {
                 "value": self._refresh_value,
+                "values": self._refresh_values,
             }
         )
 
@@ -325,6 +326,15 @@ class QtRadioGroupRenderer(
         _view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup, value: Any
     ) -> None:
         rendered_object.set_value(value)
+
+    @staticmethod
+    def _refresh_values(
+        view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup, values: dict[str, Any]
+    ) -> None:
+        # rebuilding leaves nothing checked, even if `view.value` didn't itself change
+        # (and so wouldn't otherwise trigger its own refresh) - reapply it explicitly
+        rendered_object.set_values(values)
+        rendered_object.set_value(view.value)
 
     @staticmethod
     def _update_state(view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup) -> None:

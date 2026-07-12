@@ -51,17 +51,12 @@ class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Edge Type"
+        self.values = {
+            EdgeType.Normal.value: EdgeType.Normal,
+            EdgeType.Chamfer.value: EdgeType.Chamfer,
+            EdgeType.Fillet.value: EdgeType.Fillet,
+        }
         self.value = EdgeType.Normal
-        # Use object.__setattr__ to bypass the frozen attribute restriction.
-        object.__setattr__(
-            self,
-            "values",
-            {
-                EdgeType.Normal.value: EdgeType.Normal,
-                EdgeType.Chamfer.value: EdgeType.Chamfer,
-                EdgeType.Fillet.value: EdgeType.Fillet,
-            },
-        )
 
 
 @define_view
@@ -181,9 +176,7 @@ class PipeMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        # Use object.__setattr__ to bypass the frozen attribute restriction.
-        object.__setattr__(self, "title", "Pipe Form")
-        object.__setattr__(self, "extension", ".pipe")
+        self._init_app_info(title="Pipe Form", extension=".pipe")
         self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:

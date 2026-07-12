@@ -26,7 +26,7 @@ from composeui.core.view import (
 class _StrRadioGroupView(RadioGroupView[str]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        object.__setattr__(self, "values", {"a": "a", "b": "b"})
+        self.values = {"a": "a", "b": "b"}
 
 
 @define_view
@@ -35,8 +35,7 @@ class _RadioMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        object.__setattr__(self, "title", "Radio")
-        object.__setattr__(self, "extension", ".radio")
+        self._init_app_info(title="Radio", extension=".radio")
 
 
 def test_is_omitted_type_detects_signal_renderer_and_container() -> None:
@@ -56,6 +55,65 @@ def test_unstructure_omits_signal_and_renderer_fields() -> None:
     assert "renderer" not in data
     assert "renderer" not in data["radio"]
     assert "value_changed" not in data["radio"]
+
+
+def test_unstructure_includes_radio_group_values() -> None:
+    view = _RadioMainView()
+    data = CONVERTER.unstructure(view)
+    assert data["radio"]["values"] == {"a": "a", "b": "b"}
+
+
+def test_load_state_ignores_values_even_though_saved(tmp_path: Path) -> None:
+    view = _RadioMainView()
+    view.radio.value = "a"
+    filepath = tmp_path / "state.json"
+    view.save_state(filepath)
+    assert filepath.read_text().find('"values"') != -1  # sanity check it's actually there
+
+    fresh = _RadioMainView()
+    fresh.load_state(filepath)  # must not crash on the unresolved-TValue `values` dict
+    assert fresh.radio.values == {"a": "a", "b": "b"}  # untouched, from __attrs_post_init__
+    assert fresh.radio.value == "a"
+
+
+def test_radio_group_rejects_a_value_not_in_values() -> None:
+    view = _RadioMainView()
+    with pytest.raises(ValueError, match="not one of the available values"):
+        view.radio.value = "not-an-option"
+    assert view.radio.value is None  # rejected assignment leaves the field unchanged
+
+
+def test_radio_group_accepts_none_and_members_of_values() -> None:
+    view = _RadioMainView()
+    view.radio.value = "a"
+    assert view.radio.value == "a"
+    view.radio.value = None
+    assert view.radio.value is None
+
+
+def test_radio_group_rejects_a_value_when_values_is_still_empty() -> None:
+    view = RadioGroupView[str]()
+    with pytest.raises(ValueError, match="Set `values` before setting `value`"):
+        view.value = "a"
+
+
+def test_radio_group_clears_value_when_values_no_longer_contains_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    view = _RadioMainView()
+    view.radio.value = "b"
+    with caplog.at_level(logging.WARNING, logger="COMPOSEUI_VIEW"):
+        view.radio.values = {"a": "a"}  # "b" no longer an option
+
+    assert view.radio.value is None
+    assert any("no longer contains" in record.message for record in caplog.records)
+
+
+def test_radio_group_keeps_value_when_still_a_member_of_new_values() -> None:
+    view = _RadioMainView()
+    view.radio.value = "a"
+    view.radio.values = {"a": "a", "c": "c"}
+    assert view.radio.value == "a"
 
 
 def test_unstructure_serializes_radio_group_value_as_its_label() -> None:
@@ -101,7 +159,7 @@ def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
     saved.save_state(filepath)
 
     fresh = _RadioMainView()
-    object.__setattr__(fresh.radio, "values", {"a": "a"})  # "b" option no longer exists
+    fresh.radio.values = {"a": "a"}  # "b" option no longer exists
     with caplog.at_level(logging.WARNING, logger="COMPOSEUI_VIEW"):
         fresh.load_state(filepath)
 
