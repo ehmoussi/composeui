@@ -150,6 +150,18 @@ def test_save_and_load_state_round_trip_preserves_renderer_bindings(tmp_path: Pa
     assert fresh.title == "Radio"  # frozen field untouched
 
 
+def test_save_state_does_not_crash_with_a_live_status_bar_timer(tmp_path: Path) -> None:
+    view = _RadioMainView()
+    view.status_bar.show_message("hi")  # starts a live threading.Timer
+    try:
+        filepath = tmp_path / "state.json"
+        view.save_state(filepath)  # must not raise TypeError: Timer not JSON serializable
+        assert '"_timer"' not in filepath.read_text()
+    finally:
+        if view.status_bar._timer is not None:  # noqa: SLF001
+            view.status_bar._timer.cancel()  # noqa: SLF001
+
+
 def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

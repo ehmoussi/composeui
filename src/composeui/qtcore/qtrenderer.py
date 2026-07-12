@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from qtpy.QtCore import QObject, Qt
+from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
     QFileDialog,
@@ -41,6 +43,8 @@ from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from composeui.core.signal import Signal, SignalNoArgs
 
 TView = TypeVar("TView", bound=ViewLike)
@@ -57,6 +61,23 @@ class NotQWidgetError(Exception):
         super().__init__("Renderer object should be of type QWidget")
 
 
+class _MainThreadInvoker(QObject):
+    """Bridges a call from any thread onto the thread that owns this `QObject`."""
+
+    _invoke = QtSignal(object)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._invoke.connect(self._run, Qt.ConnectionType.QueuedConnection)
+
+    def call(self, callback: Callable[[], None]) -> None:
+        self._invoke.emit(callback)
+
+    @staticmethod
+    def _run(callback: Callable[[], None]) -> None:
+        callback()
+
+
 class QtWidgetRenderer(Renderer[TView, TWidget]):
     def __init__(self, view: TView) -> None:
         super().__init__(view)
@@ -66,6 +87,10 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
                 "is_enabled": self._refresh_enabled,
             }
         )
+        self._main_thread_invoker = _MainThreadInvoker()
+
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        self._main_thread_invoker.call(callback)
 
     @property
     def qt_object(self) -> TWidget | None:

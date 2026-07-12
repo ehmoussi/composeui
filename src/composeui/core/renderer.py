@@ -49,6 +49,16 @@ class Renderer(ABC, Generic[TView, TObject]):
     def is_updating_state(self) -> bool:
         return self._is_updating_state
 
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        """Invoke `callback` on the thread that owns the GUI event loop.
+
+        Default: no real thread affinity to worry about outside a GUI toolkit, so
+        just call it directly. Toolkit-bound renderers (e.g. Qt, whose widgets can
+        only be touched from the thread that created them) must override this to
+        marshal the call onto their main thread instead.
+        """
+        callback()
+
     @abstractmethod
     def render(self) -> None:
         """Render the view in the appropriate framework."""
@@ -106,6 +116,19 @@ class RendererContainer(Generic[TView]):
 
     def is_updating_state(self) -> bool:
         return any(r.is_updating_state() for r in self._renderers.values())
+
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        """Invoke `callback` on the thread that owns the GUI event loop.
+
+        Delegates to a bound renderer, since every renderer in the container shares
+        the same underlying toolkit/thread; falls back to a direct call if none is
+        bound yet.
+        """
+        renderer = next(iter(self._renderers.values()), None)
+        if renderer is not None:
+            renderer.call_on_main_thread(callback)
+        else:
+            callback()
 
     def get_renderer(self, name: str) -> Renderer[TView, Any]:
         return self._renderers[name]

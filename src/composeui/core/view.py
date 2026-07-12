@@ -42,7 +42,7 @@ LOGGER.addHandler(_STREAM_HANDLER)
 
 CONVERTER = cattrs.Converter()
 
-_OMITTED_TYPES = (Signal, Renderer, RendererContainer)
+_OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
 
 
 def _is_omitted_type(tp: Any) -> bool:
@@ -225,8 +225,21 @@ class StatusBar(View):
         if self._timer is not None:
             self._timer.cancel()
         if self.timeout > 0:
-            self._timer = threading.Timer(self.timeout, self.clear_message)
+            self._timer = threading.Timer(self.timeout, self._dispatch_clear_message)
             self._timer.start()
+
+    def _dispatch_clear_message(self) -> None:
+        """Run `clear_message` on the renderer's thread, not the timer's own thread.
+
+        `threading.Timer` calls its target on a dedicated background thread; a bound
+        renderer (e.g. Qt) may only be touched from its GUI thread, so the actual
+        mutation has to be marshaled through `Renderer.call_on_main_thread` instead
+        of calling `clear_message` here directly.
+        """
+        if self.renderer is not None:
+            self.renderer.call_on_main_thread(self.clear_message)
+        else:
+            self.clear_message()
 
     def clear_message(self) -> None:
         self.message = ""
