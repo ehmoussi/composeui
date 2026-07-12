@@ -39,9 +39,19 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 pyside6 = ["pyside6>=6.10.3"]
+tui = [
+    "textual>=8.2.8",
+]
 
 [dependency-groups]
-dev = ["mypy>=1.19.1", "pytest>=8.4.2", "pytest-cov>=7.1.0", "ruff>=0.15.17"]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.17",
+    "textual-dev>=1.8.0",
+]
 
 
 [tool.ruff]

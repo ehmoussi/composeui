@@ -15,6 +15,7 @@ from composeui.core.view import (
     define_view,
 )
 from composeui.qtcore.qtapplication import QtApplication
+from composeui.textualcore.textualapplication import TextualApplication
 
 
 @define_view
@@ -113,11 +114,11 @@ class PipeFormView(FormView):
         super().__attrs_post_init__()
         # Main Pipe
         self.main_pipe.title = "Main Pipe"
+        self.main_pipe.radius.value = 50.0
         self.main_pipe.radius.editing_finished.connect(self._display_error_message)
         self.main_pipe.width.editing_finished.connect(self._display_error_message)
         # Incident Pipe
         self.incident_pipe.title = "Incident Pipe"
-        self.incident_pipe.radius.value = 50.0
         self.incident_pipe.radius.editing_finished.connect(self._display_error_message)
         self.incident_pipe.half_length.editing_finished.connect(self._display_error_message)
         # Edge Type
@@ -184,14 +185,21 @@ class PipeMainView(MainView):
             self.status_bar.show_message(f"Edge type changed: {value.value}")
 
 
-class PipeApp(QtApplication[PipeMainView]):
+class QtPipeApp(QtApplication[PipeMainView]):
+    def __init__(self) -> None:
+        main_view = PipeMainView()
+        super().__init__(main_view=main_view)
+
+
+class TextualPipeApp(TextualApplication[PipeMainView]):
     def __init__(self) -> None:
         main_view = PipeMainView()
         super().__init__(main_view=main_view)
 
 
 def main() -> None:
-    app = PipeApp()
+    # app = QtPipeApp()
+    app = TextualPipeApp()
     app.run()
 
 

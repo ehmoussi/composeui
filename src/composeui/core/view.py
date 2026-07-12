@@ -123,6 +123,7 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
 
 class RendererType(enum.Enum):
     QT = enum.auto()
+    TEXTUAL = enum.auto()
 
 
 def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
@@ -250,6 +251,12 @@ class StatusBar(View):
             from composeui.qtcore.qtrenderer import QtStatusBarRenderer  # noqa: PLC0415
 
             self.renderer = QtStatusBarRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualStatusBarRenderer,
+            )
+
+            self.renderer = TextualStatusBarRenderer(self)
 
 
 # class FileType(enum.Enum):
@@ -462,8 +469,9 @@ class MainView(View):
 
     def close(self) -> None:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
+        from composeui.textualcore.textualrenderer import TextualMainRenderer  # noqa: PLC0415
 
-        if isinstance(self.renderer, QtMainRenderer):
+        if isinstance(self.renderer, (QtMainRenderer, TextualMainRenderer)):
             self.renderer.close()
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
@@ -471,6 +479,12 @@ class MainView(View):
             from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
 
             self.renderer = QtMainRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualMainRenderer,
+            )
+
+            self.renderer = TextualMainRenderer(self)
 
 
 @define_view
@@ -496,6 +510,12 @@ class InputView(InputMixin, View):
             from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             self.renderer = QtInputRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualInputRenderer,
+            )
+
+            self.renderer = TextualInputRenderer(self)
 
 
 @define_view
@@ -514,6 +534,12 @@ class FloatInputView(FloatInputMixin, View):
             from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             self.renderer = QtFloatInputRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualFloatInputRenderer,
+            )
+
+            self.renderer = TextualFloatInputRenderer(self)
 
 
 class LogType(enum.Enum):
@@ -535,6 +561,12 @@ class LogView(LogMixin, View):
             from composeui.qtcore.qtrenderer import QtLogRenderer  # noqa: PLC0415
 
             self.renderer = QtLogRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualLogRenderer,
+            )
+
+            self.renderer = TextualLogRenderer(self)
 
 
 @define_view
@@ -549,6 +581,12 @@ class LabelView(LabelMixin, View):
             from composeui.qtcore.qtrenderer import QtLabelRenderer  # noqa: PLC0415
 
             self.renderer = QtLabelRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualLabelRenderer,
+            )
+
+            self.renderer = TextualLabelRenderer(self)
 
 
 TValue = TypeVar("TValue")
@@ -634,16 +672,30 @@ class RadioGroupView(RadioGroupMixin[TValue], View):
             from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             self.renderer = QtRadioGroupRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualRadioGroupRenderer,
+            )
+
+            self.renderer = TextualRadioGroupRenderer(self)
 
 
 @define_view
 class FormRowView(LogMixin, View):
     def _create_renderer(self, renderer_type: RendererType) -> None:
         field_renderer = self._create_field_renderer(renderer_type)
+        log_renderer: Renderer[Any, Any]
         if renderer_type == RendererType.QT and field_renderer is not None:
             from composeui.qtcore.qtrenderer import QtLogRenderer  # noqa: PLC0415
 
             log_renderer = QtLogRenderer(self)
+            self.renderer = RendererContainer(self, {"field": field_renderer, "log": log_renderer})
+        elif renderer_type == RendererType.TEXTUAL and field_renderer is not None:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualLogRenderer,
+            )
+
+            log_renderer = TextualLogRenderer(self)
             self.renderer = RendererContainer(self, {"field": field_renderer, "log": log_renderer})
 
     @abstractmethod
@@ -658,6 +710,8 @@ class FormLabelRowView(FormRowView):
 
     def _create_renderer(self, renderer_type: RendererType) -> None:
         field_renderer = self._create_field_renderer(renderer_type)
+        log_renderer: Renderer[Any, Any]
+        label_renderer: Renderer[Any, Any]
         if renderer_type == RendererType.QT and field_renderer is not None:
             from composeui.qtcore.qtrenderer import (  # noqa: PLC0415
                 QtFormLabelRenderer,
@@ -666,6 +720,18 @@ class FormLabelRowView(FormRowView):
 
             log_renderer = QtLogRenderer(self)
             label_renderer = QtFormLabelRenderer(self)
+            self.renderer = RendererContainer(
+                self,
+                {"label": label_renderer, "field": field_renderer, "log": log_renderer},
+            )
+        elif renderer_type == RendererType.TEXTUAL and field_renderer is not None:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualFormLabelRenderer,
+                TextualLogRenderer,
+            )
+
+            log_renderer = TextualLogRenderer(self)
+            label_renderer = TextualFormLabelRenderer(self)
             self.renderer = RendererContainer(
                 self,
                 {"label": label_renderer, "field": field_renderer, "log": log_renderer},
@@ -686,6 +752,12 @@ class RowInputView(FormRowView, InputMixin):
             from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             return QtInputRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualInputRenderer,
+            )
+
+            return TextualInputRenderer(self)
         return None
 
 
@@ -698,6 +770,12 @@ class LabelRowInputView(FormLabelRowView, InputMixin):
             from composeui.qtcore.qtrenderer import QtInputRenderer  # noqa: PLC0415
 
             return QtInputRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualInputRenderer,
+            )
+
+            return TextualInputRenderer(self)
         return None
 
 
@@ -710,6 +788,12 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
             from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             return QtFloatInputRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualFloatInputRenderer,
+            )
+
+            return TextualFloatInputRenderer(self)
         return None
 
 
@@ -722,6 +806,12 @@ class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
             from composeui.qtcore.qtrenderer import QtFloatInputRenderer  # noqa: PLC0415
 
             return QtFloatInputRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualFloatInputRenderer,
+            )
+
+            return TextualFloatInputRenderer(self)
         return None
 
 
@@ -734,6 +824,12 @@ class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
             from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             return QtRadioGroupRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualRadioGroupRenderer,
+            )
+
+            return TextualRadioGroupRenderer(self)
         return None
 
 
@@ -746,6 +842,12 @@ class LabelRowRadioGroupView(FormLabelRowView, RadioGroupMixin[TValue]):
             from composeui.qtcore.qtrenderer import QtRadioGroupRenderer  # noqa: PLC0415
 
             return QtRadioGroupRenderer(self)
+        if renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualRadioGroupRenderer,
+            )
+
+            return TextualRadioGroupRenderer(self)
         return None
 
 
@@ -771,6 +873,12 @@ class FormView(View):
             from composeui.qtcore.qtrenderer import QtFormRenderer  # noqa: PLC0415
 
             self.renderer = QtFormRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualFormRenderer,
+            )
+
+            self.renderer = TextualFormRenderer(self)
 
 
 @define_view
@@ -782,3 +890,9 @@ class GroupFormView(FormView):
             from composeui.qtcore.qtrenderer import QtGroupFormRenderer  # noqa: PLC0415
 
             self.renderer = QtGroupFormRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualGroupFormRenderer,
+            )
+
+            self.renderer = TextualGroupFormRenderer(self)
