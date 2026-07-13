@@ -14,7 +14,13 @@ from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
 
-from composeui.core.renderer import NoRenderedObjectError, Renderer, RendererContainer, ViewLike
+from composeui.core.renderer import (
+    MainRenderer,
+    NoRenderedObjectError,
+    Renderer,
+    RendererContainer,
+    ViewLike,
+)
 from composeui.core.view import (
     ActionView,
     FormLabelRowView,
@@ -635,7 +641,7 @@ class _ComposeUIApp(App[None]):
             action_view.triggered.emit()
 
 
-class TextualMainRenderer(Renderer[MainView, _ComposeUIApp]):
+class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -754,3 +760,21 @@ class TextualMainRenderer(Renderer[MainView, _ComposeUIApp]):
     @staticmethod
     def _update_state(view: MainView, rendered_object: _ComposeUIApp) -> None:
         view.title = rendered_object.title
+
+
+#: renderer keys of the Textual backend, looked up by `composeui.core.registry.create_renderer`
+RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
+    "action": TextualActionRenderer,
+    "float_input": TextualFloatInputRenderer,
+    "form": TextualFormRenderer,
+    "form_label": TextualFormLabelRenderer,
+    "group_form": TextualGroupFormRenderer,
+    "input": TextualInputRenderer,
+    "label": TextualLabelRenderer,
+    "log": TextualLogRenderer,
+    "main": TextualMainRenderer,
+    "menu": TextualMenuRenderer,
+    "radio_group": TextualRadioGroupRenderer,
+    "separator": TextualSeparatorRenderer,
+    "status_bar": TextualStatusBarRenderer,
+}

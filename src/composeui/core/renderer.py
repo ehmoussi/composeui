@@ -8,6 +8,7 @@ from typing_extensions import Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Mapping
+    from pathlib import Path
 
 
 class ViewLike(Protocol):
@@ -107,6 +108,26 @@ class Renderer(ABC, Generic[TView, TObject]):
     @staticmethod
     @abstractmethod
     def _update_state(view: TView, rendered_object: TObject) -> None: ...
+
+
+class MainRenderer(Renderer[TView, TObject]):
+    """A root-window renderer: the app-level operations a `MainView` relies on.
+
+    Lets `MainView` talk to whichever backend rendered it through `isinstance`
+    checks against this class alone, without importing any backend package.
+    """
+
+    @abstractmethod
+    def close(self) -> None:
+        """Close the application."""
+
+    @abstractmethod
+    def open_file(self) -> Path | None:
+        """Ask the user for an existing file path, blocking until answered."""
+
+    @abstractmethod
+    def save_file(self) -> Path | None:
+        """Ask the user for a file path to save to, blocking until answered."""
 
 
 class RendererContainer(Generic[TView]):

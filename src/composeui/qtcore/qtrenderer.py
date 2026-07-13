@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
 from typing_extensions import Protocol
 
 from composeui.core.renderer import (
+    MainRenderer,
     NoRenderedObjectError,
     Renderer,
     RendererContainer,
@@ -508,7 +509,7 @@ class QtGroupFormRenderer(QtFormRenderer):
             rendered_object.setTitle(value)
 
 
-class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow]):
+class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -772,3 +773,21 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
     @staticmethod
     def _refresh_title(_view: Menu, rendered_object: QMenu, title: str) -> None:
         rendered_object.setTitle(title)
+
+
+#: renderer keys of the Qt backend, looked up by `composeui.core.registry.create_renderer`
+RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
+    "action": QtActionRenderer,
+    "float_input": QtFloatInputRenderer,
+    "form": QtFormRenderer,
+    "form_label": QtFormLabelRenderer,
+    "group_form": QtGroupFormRenderer,
+    "input": QtInputRenderer,
+    "label": QtLabelRenderer,
+    "log": QtLogRenderer,
+    "main": QtMainRenderer,
+    "menu": QtMenuRenderer,
+    "radio_group": QtRadioGroupRenderer,
+    "separator": QtSeparatorRenderer,
+    "status_bar": QtStatusBarRenderer,
+}
