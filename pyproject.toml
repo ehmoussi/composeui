@@ -50,6 +50,7 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.1.0",
+    "pytest-qt>=4.5.0",
     "ruff>=0.15.17",
     "textual-dev>=1.8.0",
 ]
@@ -88,3 +89,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004"]
+# `qtbot` is requested but unused in tests that only need it for QApplication
+# lifecycle/cleanup (see pytest-qt), not for driving an interaction.
+"tests/test_qtrenderer.py" = ["ARG001"]

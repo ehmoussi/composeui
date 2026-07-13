@@ -30,7 +30,7 @@ check: lint mypy
 
 .PHONY: test
 test:
-	uv run pytest tests --cov=src --cov-report=term-missing:skip-covered
+	QT_QPA_PLATFORM=offscreen uv run pytest tests --cov=src --cov-report=term-missing:skip-covered
 
 .PHONY: clean
 clean:
