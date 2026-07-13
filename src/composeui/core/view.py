@@ -409,7 +409,7 @@ class MainView(View):
     minimum_width: int = attrs.field(default=720)
     minimum_height: int = attrs.field(default=480)
 
-    file_menu: FileMenu = FileMenu(title="File")
+    file_menu: FileMenu = attrs.Factory(FileMenu)
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
     file_view: FileView = attrs.Factory(FileView)
     # message_view: MessageView = MessageView()
