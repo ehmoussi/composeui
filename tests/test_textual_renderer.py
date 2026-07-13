@@ -9,13 +9,16 @@ unrelated GUI toolkit.
 import pytest
 
 pytest.importorskip("textual")
+pytest.importorskip("textual_fspicker")
 
+from pathlib import Path
 from typing import Any, Optional, Union
 
 from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Input
+from textual.widgets import Footer, Input
 
+from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import RendererType
 from composeui.textualcore.textualrenderer import (
@@ -191,3 +194,138 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
         scroller.scroll_end(animate=False)
         await pilot.pause()
         assert chamfer_widget.region.y < screen_height  # reachable now
+
+
+@pytest.mark.asyncio
+async def test_group_form_shows_a_border_and_title_separating_it_from_other_groups() -> None:
+    """A `GroupFormView` must be visually set apart from its siblings, not just labelled.
+
+    `TextualGroupFormRenderer` sets `border_title`, but `border_title` has no effect
+    without an actual border style to attach to - without one, every group (e.g.
+    pipeform.py's "Main Pipe"/"Incident Pipe") rendered as a plain, undecorated `Vertical`
+    indistinguishable from the rest of the form, and adjacent groups ran straight into
+    each other with no visible separation at all.
+    """
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        main_pipe_renderer = view.pipe_form.main_pipe.renderer
+        assert isinstance(main_pipe_renderer, TextualWidgetRenderer)
+        main_pipe_widget = main_pipe_renderer.widget
+        assert main_pipe_widget is not None
+        assert main_pipe_widget.styles.border_top[0] != ""  # an actual border is set
+        assert main_pipe_widget.border_title == "Main Pipe"
+
+
+@pytest.mark.asyncio
+async def test_menu_actions_become_key_bindings_shown_in_the_footer() -> None:
+    """`FileMenu`'s actions aren't rendered as widgets (see `TextualMenuRenderer`).
+
+    Instead `_ComposeUIApp` turns each `ActionView` with a shortcut into a key
+    binding, discoverable through a `Footer` - the "key bindings + Footer" style
+    chosen for this backend instead of trying to reproduce a Qt-style menu bar.
+    """
+    view = PipeMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert any(isinstance(w, Footer) for w in app.screen.walk_children())
+        shortcuts = {action.shortcut for action in app.registered_actions.values()}
+        assert shortcuts == {"Ctrl+n", "Ctrl+o", "Ctrl+s", "Ctrl+Shift+s", "Ctrl+q"}
+
+        # a plain action (no file dialog involved) dispatches directly - no
+        # modal, no worker thread, nothing left on the screen stack.
+        await pilot.press("ctrl+n")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+@pytest.mark.asyncio
+async def test_open_file_action_runs_the_picker_on_a_worker_thread_and_loads_state(
+    tmp_path: Path,
+) -> None:
+    """Ctrl+O should show `textual-fspicker`'s modal and load the picked file.
+
+    `ask_open_filepath` blocks waiting for the picked path; blocking the app's own
+    thread while it needs to render and drive that same modal would deadlock, so
+    `_ComposeUIApp.action_trigger` runs file-dialog actions on a worker thread
+    (`TextualMainRenderer.open_file` bridges back to the modal via
+    `App.call_from_thread`). The subsequent `MainView.load_state` call then mutates
+    widgets from that worker thread, which is exactly why `TextualWidgetRenderer.
+    refresh`/`refresh_attribute` marshal onto the main thread instead of applying
+    Textual reactives directly.
+    """
+    donor = PipeMainView()
+    donor.pipe_form.name.text = "loaded_name"
+    filepath = tmp_path / "state.pipe"
+    donor.save_state(filepath)
+
+    view = PipeMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+o")
+        await pilot.pause()
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(filepath)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1  # modal closed
+        assert view.file_view.filepath == filepath
+        assert view.pipe_form.name.text == "loaded_name"
+        name_widget = _field_widget(view.pipe_form.name.renderer)
+        assert isinstance(name_widget, Input)
+        assert name_widget.value == "loaded_name"  # the real widget reflects it too
+
+
+@pytest.mark.asyncio
+async def test_open_file_action_can_be_cancelled_without_hanging() -> None:
+    """Dismissing the picker (Escape) must resolve the worker cleanly, not hang.
+
+    `TextualMainRenderer.open_file` blocks a worker thread on `call_from_thread`;
+    if cancelling the modal didn't unblock it, the app would hang forever waiting
+    for a path that's never coming.
+    """
+    view = PipeMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+o")
+        await pilot.pause()
+        await pilot.pause()
+        assert len(app.screen_stack) == 2
+
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.pause()
+
+        assert len(app.screen_stack) == 1
+        assert view.file_view.filepath is None

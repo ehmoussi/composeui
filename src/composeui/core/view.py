@@ -290,6 +290,12 @@ class ActionView(View):
             from composeui.qtcore.qtrenderer import QtActionRenderer  # noqa: PLC0415
 
             self.renderer = QtActionRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualActionRenderer,
+            )
+
+            self.renderer = TextualActionRenderer(self)
 
 
 @define_view
@@ -299,6 +305,12 @@ class SeparatorAction(View):
             from composeui.qtcore.qtrenderer import QtSeparatorRenderer  # noqa: PLC0415
 
             self.renderer = QtSeparatorRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualSeparatorRenderer,
+            )
+
+            self.renderer = TextualSeparatorRenderer(self)
 
 
 @define_view
@@ -402,6 +414,12 @@ class FileMenu(Menu):
             from composeui.qtcore.qtrenderer import QtMenuRenderer  # noqa: PLC0415
 
             self.renderer = QtMenuRenderer(self)
+        elif renderer_type == RendererType.TEXTUAL:
+            from composeui.textualcore.textualrenderer import (  # noqa: PLC0415
+                TextualMenuRenderer,
+            )
+
+            self.renderer = TextualMenuRenderer(self)
 
     def _load_state(self, *, main_view: "MainView") -> None:
         filepath = main_view.ask_open_filepath(
@@ -453,17 +471,19 @@ class MainView(View):
 
     def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
+        from composeui.textualcore.textualrenderer import TextualMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
-        if isinstance(self.renderer, QtMainRenderer):
+        if isinstance(self.renderer, (QtMainRenderer, TextualMainRenderer)):
             self.file_view.filepath = self.renderer.open_file()
         return self.file_view.filepath
 
     def ask_save_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
         from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415
+        from composeui.textualcore.textualrenderer import TextualMainRenderer  # noqa: PLC0415
 
         self.file_view.extensions = extensions
-        if isinstance(self.renderer, QtMainRenderer):
+        if isinstance(self.renderer, (QtMainRenderer, TextualMainRenderer)):
             self.file_view.filepath = self.renderer.save_file()
         return self.file_view.filepath
 

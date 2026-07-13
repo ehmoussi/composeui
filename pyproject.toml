@@ -41,6 +41,7 @@ dynamic = ["version"]
 pyside6 = ["pyside6>=6.10.3"]
 tui = [
     "textual>=8.2.8",
+    "textual-fspicker>=0.6.0",
 ]
 
 [dependency-groups]
