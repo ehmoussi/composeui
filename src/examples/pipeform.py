@@ -10,7 +10,6 @@ from composeui.core.view import (
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
-    LogType,
     MainView,
     define_view,
 )
@@ -87,16 +86,11 @@ class PipeNameRowView(LabelRowInputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Name"
-        self.text_edited.connect(self._check_name)
-        self._check_name(self.text)
+        self.set_validator(self._check_name, self.text_edited)
+        self.run_validator()
 
-    def _check_name(self, text: str) -> None:
-        if text == "":
-            self.log_message = "A name is mandatory"
-            self.log_type = LogType.ERROR
-        else:
-            self.log_message = ""
-            self.log_type = LogType.INFO
+    def _check_name(self) -> str | None:
+        return "A name is mandatory" if self.text == "" else None
 
 
 @define_view
@@ -115,49 +109,53 @@ class PipeFormView(FormView):
         # Main Pipe
         self.main_pipe.title = "Main Pipe"
         self.main_pipe.radius.value = 50.0
-        self.main_pipe.radius.editing_finished.connect(self._display_error_message)
-        self.main_pipe.width.editing_finished.connect(self._display_error_message)
         # Incident Pipe
         self.incident_pipe.title = "Incident Pipe"
-        self.incident_pipe.radius.editing_finished.connect(self._display_error_message)
-        self.incident_pipe.half_length.editing_finished.connect(self._display_error_message)
+        # two independent cross-field checks, combined into one shared `log_view`
+        self.add_validator(
+            self._check_main_pipe_fits_incident,
+            self.main_pipe.radius.editing_finished,
+            self.main_pipe.width.editing_finished,
+            self.incident_pipe.half_length.editing_finished,
+        )
+        self.add_validator(
+            self._check_incident_radius_not_greater_than_main,
+            self.incident_pipe.radius.editing_finished,
+            self.main_pipe.radius.editing_finished,
+        )
         # Edge Type
         self.edge_type.value_changed.connect(self._display_edge_options)
         self._display_edge_options(self.edge_type.value)
         # Fillet
         self.fillet.radius.value = 20.0
 
-    def _display_error_message(self) -> None:
-        log_messages: list[str] = []
+    def _check_main_pipe_fits_incident(self) -> str | None:
         main_radius = self.main_pipe.radius.value
         main_width = self.main_pipe.width.value
         incident_half_length = self.incident_pipe.half_length.value
-        incident_radius = self.incident_pipe.radius.value
         if (
             main_radius is None
             or main_width is None
             or incident_half_length is None
             or (main_radius + main_width) > incident_half_length
         ):
-            log_messages.append(
+            return (
                 "The sum of the radius and width of the main pipe "
                 "can't be greater than the half length of the incident pipe: "
                 f"({main_radius} + {main_width} > "
                 f"{incident_half_length})"
             )
+        return None
+
+    def _check_incident_radius_not_greater_than_main(self) -> str | None:
+        incident_radius = self.incident_pipe.radius.value
+        main_radius = self.main_pipe.radius.value
         if incident_radius is None or main_radius is None or incident_radius > main_radius:
-            log_messages.append(
+            return (
                 "The incident radius cant'be greater than the main radius: "
                 f"({incident_radius} > {main_radius})"
             )
-        if len(log_messages) > 0:
-            self.log_view.log_message = "- " + "\n- ".join(log_messages)
-            self.log_view.log_type = LogType.ERROR
-            self.log_view.is_visible = True
-        else:
-            self.log_view.is_visible = False
-            self.log_view.log_message = ""
-            self.log_view.log_type = LogType.INFO
+        return None
 
     def _display_edge_options(self, edge_type: EdgeType | None) -> None:
         if edge_type == EdgeType.Chamfer:

@@ -25,7 +25,7 @@ from typing import (
 import attrs
 import cattrs
 from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
-from typing_extensions import dataclass_transform
+from typing_extensions import Unpack, dataclass_transform
 
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
@@ -44,6 +44,10 @@ LOGGER.addHandler(_STREAM_HANDLER)
 CONVERTER = cattrs.Converter()
 
 _OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
+#: Field metadata key for fields that must skip (de)serialization but aren't one of
+#: `_OMITTED_TYPES` - e.g. `Validator` fields, whose type (bare/`Optional`/`list`-
+#: wrapped `Callable`) isn't a single class `_is_omitted_type` can match generically.
+OMIT = "omit"
 
 
 def _is_omitted_type(tp: Any) -> bool:
@@ -55,13 +59,18 @@ def _is_omitted_type(tp: Any) -> bool:
     return isinstance(cls, type) and issubclass(cls, _OMITTED_TYPES)
 
 
+def _is_omitted_field(f: "attrs.Attribute[Any]") -> bool:
+    """Check whether `f` should skip (de)serialization: by type, or by `OMIT` tag."""
+    return _is_omitted_type(f.type) or bool(f.metadata.get(OMIT, False))
+
+
 @CONVERTER.register_unstructure_hook_factory(attrs.has)
 def _omit_renderer_and_signals(
     cls: "type[AttrsInstance]",
 ) -> Callable[[Any], dict[str, Any]]:
     attrs.resolve_types(cls)
     overrides: dict[str, AttributeOverride] = {
-        str(f.name): override(omit=True) for f in attrs.fields(cls) if _is_omitted_type(f.type)
+        str(f.name): override(omit=True) for f in attrs.fields(cls) if _is_omitted_field(f)
     }
     unstructure = make_dict_unstructure_fn(
         cls,
@@ -109,7 +118,7 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
         for f in attrs.fields(current_cls):
             if (
                 f.name not in new_data
-                or _is_omitted_type(f.type)
+                or _is_omitted_field(f)
                 or f.on_setattr is attrs.setters.frozen
                 or (f.name in ("value", "values") and isinstance(current_view, RadioGroupMixin))
             ):
@@ -491,10 +500,43 @@ class LogType(enum.Enum):
     INFO = enum.auto()
 
 
+#: A zero-argument check: reads whatever state it needs itself (e.g. `self.text`
+#: via a bound method) and returns an error message, or None if it passes.
+Validator = Callable[[], Optional[str]]
+
+
 @define_view
 class LogMixin:
     log_message: str = attrs.field(default="")
     log_type: LogType = attrs.field(default=LogType.ERROR)
+    validator: Optional[Validator] = attrs.field(default=None, repr=False, metadata={OMIT: True})
+
+    def set_validator(
+        self, validator: Validator, *signals: Signal[Unpack[tuple[Any, ...]]]
+    ) -> None:
+        """Wire `validator` to run against this row whenever any of `signals` fires.
+
+        A failing (non-None) result is pushed into this row's own `log_message`/
+        `log_type`; a passing (None) one clears them. Doesn't run `validator`
+        immediately - call `run_validator()` afterward for an initial check (e.g. an
+        empty required field should already show its error before the first edit).
+        """
+        self.validator = validator
+        for signal in signals:
+            signal.connect(self.run_validator)
+
+    def run_validator(self, *_args: Any) -> None:
+        """Re-run `validator`, if set, and push its result into the row's own log.
+
+        Takes (and ignores) any positional args so it can be connected directly to
+        signals of any arity - a per-keystroke `text_edited: Signal[str]` or a
+        no-argument `editing_finished: SignalNoArgs` alike.
+        """
+        if self.validator is None:
+            return
+        message = self.validator()
+        self.log_message = message or ""
+        self.log_type = LogType.ERROR if message else LogType.INFO
 
 
 @define_view
@@ -665,6 +707,9 @@ class FormView(View):
     _renderer_key = "form"
 
     log_view: LogView = attrs.field(factory=LogView)
+    _validators: list[Validator] = attrs.field(
+        factory=list, init=False, repr=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -678,6 +723,38 @@ class FormView(View):
             for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self)))
             if isinstance(getattr(self, field_row_attr.name), (FormRowView, FormView))
         ]
+
+    def add_validator(
+        self, validator: Validator, *signals: Signal[Unpack[tuple[Any, ...]]]
+    ) -> None:
+        """Register a cross-field `validator`, re-run whenever any of `signals` fires.
+
+        Unlike `LogMixin.set_validator` (one validator per row, using that row's own
+        log), a form can have several independent cross-field checks - each failing
+        (non-None) result is combined into this form's shared `log_view` instead of
+        the last one winning (see `PipeFormView` in `examples/pipeform.py`, which has
+        two independent checks spanning `main_pipe`/`incident_pipe`). Doesn't run
+        immediately - call `validate()` afterward for an initial check.
+        """
+        self._validators.append(validator)
+        for signal in signals:
+            signal.connect(self.validate)
+
+    def validate(self, *_args: Any) -> None:
+        """Re-run every registered validator and push the combined result to `log_view`.
+
+        Takes (and ignores) any positional args so it can be connected directly to
+        signals of any arity, same as `LogMixin.run_validator`.
+        """
+        messages = [message for validator in self._validators if (message := validator())]
+        if len(messages) > 0:
+            self.log_view.log_message = "- " + "\n- ".join(messages)
+            self.log_view.log_type = LogType.ERROR
+            self.log_view.is_visible = True
+        else:
+            self.log_view.is_visible = False
+            self.log_view.log_message = ""
+            self.log_view.log_type = LogType.INFO
 
 
 @define_view

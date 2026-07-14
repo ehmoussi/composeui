@@ -7,7 +7,6 @@ from composeui.core.view import (
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
-    LogType,
     MainView,
     define_view,
 )
@@ -21,16 +20,11 @@ class NameRowView(LabelRowInputView):
         super().__attrs_post_init__()
         self.label = "Name"
         self.placeholder = "e.g. widget-42"
-        self.text_edited.connect(self._check_name)
-        self._check_name(self.text)
+        self.set_validator(self._check_name, self.text_edited)
+        self.run_validator()
 
-    def _check_name(self, text: str) -> None:
-        if text == "":
-            self.log_message = "A name is mandatory"
-            self.log_type = LogType.ERROR
-        else:
-            self.log_message = ""
-            self.log_type = LogType.INFO
+    def _check_name(self) -> str | None:
+        return "A name is mandatory" if self.text == "" else None
 
 
 @define_view
