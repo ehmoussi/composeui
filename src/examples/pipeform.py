@@ -7,6 +7,7 @@ from attrs import Factory
 from composeui.core.view import (
     FormView,
     GroupFormView,
+    LabelRowComboboxView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -59,6 +60,27 @@ class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
         self.value = EdgeType.Normal
 
 
+class Material(enum.Enum):
+    Steel = "Steel"
+    Copper = "Copper"
+    Aluminum = "Aluminum"
+    Pvc = "PVC"
+
+
+@define_view
+class MaterialView(LabelRowComboboxView[Material]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = "Material"
+        self.values = {
+            Material.Steel.value: Material.Steel,
+            Material.Copper.value: Material.Copper,
+            Material.Aluminum.value: Material.Aluminum,
+            Material.Pvc.value: Material.Pvc,
+        }
+        self.value = Material.Steel
+
+
 @define_view
 class ChamferDimensionView(GroupFormView):
     height: DimensionInputView = Factory(DimensionInputView)
@@ -96,6 +118,8 @@ class PipeNameRowView(LabelRowInputView):
 @define_view
 class PipeFormView(FormView):
     name: PipeNameRowView = Factory(PipeNameRowView)
+    material: MaterialView = Factory(MaterialView)
+
     main_pipe: PipeDimensionView = Factory(PipeDimensionView)
     incident_pipe: PipeDimensionView = Factory(PipeDimensionView)
 
@@ -196,8 +220,8 @@ class TextualPipeApp(TextualApplication[PipeMainView]):
 
 
 def main() -> None:
-    # app = QtPipeApp()
-    app = TextualPipeApp()
+    app = QtPipeApp()
+    # app = TextualPipeApp()
     app.run()
 
 
