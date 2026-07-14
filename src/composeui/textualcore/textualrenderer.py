@@ -37,6 +37,7 @@ from composeui.core.view import (
     StatusBar,
     View,
 )
+from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 
@@ -347,16 +348,16 @@ class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
         pass  # a Label's text isn't user-editable; nothing to read back
 
 
-class RadioGroupViewLike(ViewLike, Protocol, Generic[TValue]):
+class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
     value: TValue | None
     values: dict[str, TValue]
     value_changed: Signal[TValue | None]
 
 
 class TextualRadioGroupRenderer(
-    TextualWidgetRenderer[RadioGroupViewLike[TValue], ComposeRadioSet[TValue]], Generic[TValue]
+    TextualWidgetRenderer[ValuesViewLike[TValue], ComposeRadioSet[TValue]], Generic[TValue]
 ):
-    def __init__(self, view: RadioGroupViewLike[TValue]) -> None:
+    def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -372,7 +373,7 @@ class TextualRadioGroupRenderer(
 
     @staticmethod
     def _refresh_value(
-        _view: RadioGroupViewLike[TValue], rendered_object: ComposeRadioSet[TValue], value: Any
+        _view: ValuesViewLike[TValue], rendered_object: ComposeRadioSet[TValue], value: Any
     ) -> None:
         # `set_values`'s rebuild (remove_children/mount) is asynchronous; selecting
         # synchronously right after races with it and corrupts RadioSet's own
@@ -381,7 +382,7 @@ class TextualRadioGroupRenderer(
 
     @staticmethod
     def _refresh_values(
-        view: RadioGroupViewLike[TValue],
+        view: ValuesViewLike[TValue],
         rendered_object: ComposeRadioSet[TValue],
         values: dict[str, Any],
     ) -> None:
@@ -392,9 +393,53 @@ class TextualRadioGroupRenderer(
 
     @staticmethod
     def _update_state(
-        view: RadioGroupViewLike[TValue], rendered_object: ComposeRadioSet[TValue]
+        view: ValuesViewLike[TValue], rendered_object: ComposeRadioSet[TValue]
     ) -> None:
         view.value = rendered_object.value()
+
+    def _update_value(self, value: TValue | None) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
+
+
+class TextualComboboxRenderer(
+    TextualWidgetRenderer[ValuesViewLike[TValue], ComposeCombobox[TValue]], Generic[TValue]
+):
+    def __init__(self, view: ValuesViewLike[TValue]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "values": self._refresh_values,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeCombobox(self._view.values)
+            self._rendered_object.value_changed.connect(self._update_value)
+
+    @staticmethod
+    def _refresh_value(
+        _view: ValuesViewLike[TValue], rendered_object: ComposeCombobox[TValue], value: Any
+    ) -> None:
+        rendered_object.call_after_refresh(rendered_object.set_value, value)
+
+    @staticmethod
+    def _refresh_values(
+        view: ValuesViewLike[TValue],
+        rendered_object: ComposeCombobox[TValue],
+        values: dict[str, Any],
+    ) -> None:
+        rendered_object.set_values(values)
+        rendered_object.call_after_refresh(rendered_object.set_value, view.value)
+
+    @staticmethod
+    def _update_state(
+        view: ValuesViewLike[TValue], rendered_object: ComposeCombobox[TValue]
+    ) -> None:
+        view.value = rendered_object.current_value()
 
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
@@ -765,6 +810,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 #: renderer keys of the Textual backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
+    "combobox": TextualComboboxRenderer,
     "float_input": TextualFloatInputRenderer,
     "form": TextualFormRenderer,
     "form_label": TextualFormLabelRenderer,

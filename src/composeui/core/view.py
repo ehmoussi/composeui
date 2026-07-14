@@ -81,10 +81,10 @@ def _omit_renderer_and_signals(
         _cattrs_include_init_false=False,
         **overrides,
     )
-    if not issubclass(cls, RadioGroupMixin):
+    if not issubclass(cls, ValuesGroupMixin):
         return unstructure
 
-    def unstructure_radio_group(obj: "RadioGroupMixin[Any]") -> dict[str, Any]:
+    def unstructure_radio_group(obj: "ValuesGroupMixin[Any]") -> dict[str, Any]:
         data = unstructure(cast("AttrsInstance", obj))
         data["value"] = obj.serialize_value()
         return data
@@ -100,7 +100,7 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
     the existing attributes instead lets the normal ``notify_renderer``
     on_setattr hook refresh the UI as each value is applied.
 
-    ``RadioGroupMixin.value`` is handled separately: its declared type is an
+    ``ValuesGroupMixin.value`` is handled separately: its declared type is an
     unresolved generic ``TypeVar`` that cattrs can't structure statically, so it is
     restored through `RadioGroupMixin.deserialize_value` instead, which resolves it
     via the mixin's own `values` label lookup. ``RadioGroupMixin.values`` is included
@@ -113,14 +113,14 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
         current_view, new_data = states.popleft()
         current_cls = cast("type[AttrsInstance]", type(current_view))
         attrs.resolve_types(current_cls)
-        if isinstance(current_view, RadioGroupMixin) and "value" in new_data:
+        if isinstance(current_view, ValuesGroupMixin) and "value" in new_data:
             current_view.value = current_view.deserialize_value(new_data["value"])
         for f in attrs.fields(current_cls):
             if (
                 f.name not in new_data
                 or _is_omitted_field(f)
                 or f.on_setattr is attrs.setters.frozen
-                or (f.name in ("value", "values") and isinstance(current_view, RadioGroupMixin))
+                or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
             ):
                 continue
             new_value = new_data[f.name]
@@ -558,14 +558,9 @@ TValue = TypeVar("TValue")
 
 
 @define_view
-class RadioGroupMixin(Generic[TValue]):
+class ValuesGroupMixin(Generic[TValue]):
     def _check_value(self, _attribute: "attrs.Attribute[Any]", value: Optional[TValue]) -> None:
-        """Reject a `value` that isn't `None` or one of the current `values`.
-
-        Runs both at construction and on every later assignment (`define_view` wires
-        `attrs.setters.validate` into the on_setattr pipeline). Set `values` before
-        assigning `value`, or the check would always fail.
-        """
+        """Reject a `value` that isn't `None` or one of the current `values`."""
         if value is not None and value not in self.values.values():
             if len(self.values) == 0:
                 msg = (
@@ -582,13 +577,7 @@ class RadioGroupMixin(Generic[TValue]):
     def _reconcile_values(
         self, attribute: "attrs.Attribute[Any]", values: dict[str, TValue]
     ) -> dict[str, TValue]:
-        """Clear `value` if it won't be a member of the new `values`, then notify the renderer.
-
-        A dedicated on_setattr hook rather than a `validator=`: unlike `_check_value`, it
-        has the side effect of resetting `value` when `values` changes out from under it,
-        not just rejecting an invalid assignment. It replaces the class-level on_setattr
-        pipeline for this field, so it calls `notify_renderer` itself at the end.
-        """
+        """Clear `value` if it won't be a member of the new `values`, then notify the renderer."""
         if self.value is not None and self.value not in values.values():
             LOGGER.warning(
                 "%s.values no longer contains %r (the current value); clearing it.",
@@ -631,8 +620,13 @@ class RadioGroupMixin(Generic[TValue]):
 
 
 @define_view
-class RadioGroupView(RadioGroupMixin[TValue], View):
+class RadioGroupView(ValuesGroupMixin[TValue], View):
     _renderer_key = "radio_group"
+
+
+@define_view
+class ComboboxView(ValuesGroupMixin[TValue], View):
+    _renderer_key = "combobox"
 
 
 @define_view
@@ -693,13 +687,23 @@ class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
 
 
 @define_view
-class RowRadioGroupView(FormRowView, RadioGroupMixin[TValue]):
+class RowRadioGroupView(FormRowView, ValuesGroupMixin[TValue]):
     _field_renderer_key = "radio_group"
 
 
 @define_view
-class LabelRowRadioGroupView(FormLabelRowView, RadioGroupMixin[TValue]):
+class LabelRowRadioGroupView(FormLabelRowView, ValuesGroupMixin[TValue]):
     _field_renderer_key = "radio_group"
+
+
+@define_view
+class RowComboboxView(FormRowView, ValuesGroupMixin[TValue]):
+    _field_renderer_key = "combobox"
+
+
+@define_view
+class LabelRowComboboxView(FormLabelRowView, ValuesGroupMixin[TValue]):
+    _field_renderer_key = "combobox"
 
 
 @define_view

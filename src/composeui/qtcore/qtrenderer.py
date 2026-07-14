@@ -42,6 +42,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
+from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -322,16 +323,14 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QLabel]):
 TValue = TypeVar("TValue")
 
 
-class RadioGroupViewLike(ViewLike, Protocol, Generic[TValue]):
+class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
     value: TValue | None
     values: dict[str, TValue]
     value_changed: Signal[TValue | None]
 
 
-class QtRadioGroupRenderer(
-    QtWidgetRenderer[RadioGroupViewLike[TValue], QRadioGroup], Generic[TValue]
-):
-    def __init__(self, view: RadioGroupViewLike[TValue]) -> None:
+class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup], Generic[TValue]):
+    def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -349,13 +348,13 @@ class QtRadioGroupRenderer(
 
     @staticmethod
     def _refresh_value(
-        _view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup, value: Any
+        _view: ValuesViewLike[TValue], rendered_object: QRadioGroup, value: Any
     ) -> None:
         rendered_object.set_value(value)
 
     @staticmethod
     def _refresh_values(
-        view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup, values: dict[str, Any]
+        view: ValuesViewLike[TValue], rendered_object: QRadioGroup, values: dict[str, Any]
     ) -> None:
         # rebuilding leaves nothing checked, even if `view.value` didn't itself change
         # (and so wouldn't otherwise trigger its own refresh) - reapply it explicitly
@@ -363,8 +362,53 @@ class QtRadioGroupRenderer(
         rendered_object.set_value(view.value)
 
     @staticmethod
-    def _update_state(view: RadioGroupViewLike[TValue], rendered_object: QRadioGroup) -> None:
+    def _update_state(view: ValuesViewLike[TValue], rendered_object: QRadioGroup) -> None:
         view.value = rendered_object.value()
+
+    def _update_value(self, value: TValue | None) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+
+
+class QtComboboxRenderer(
+    QtWidgetRenderer[ValuesViewLike[TValue], QValueComboBox[TValue]], Generic[TValue]
+):
+    def __init__(self, view: ValuesViewLike[TValue]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "values": self._refresh_values,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QValueComboBox(self._view.values)
+            self._rendered_object.current_value_changed.connect(self._update_value)
+            self._view.value_changed.add_qt_signal(self._rendered_object.current_value_changed)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(
+        _view: ValuesViewLike[TValue], rendered_object: QValueComboBox[TValue], value: TValue
+    ) -> None:
+        rendered_object.set_current_value(value)
+
+    @staticmethod
+    def _refresh_values(
+        view: ValuesViewLike[TValue],
+        rendered_object: QValueComboBox[TValue],
+        values: dict[str, TValue],
+    ) -> None:
+        rendered_object.set_values(values)
+        rendered_object.set_current_value(view.value)
+
+    @staticmethod
+    def _update_state(
+        view: ValuesViewLike[TValue], rendered_object: QValueComboBox[TValue]
+    ) -> None:
+        view.value = rendered_object.current_value()
 
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
@@ -778,6 +822,7 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
 #: renderer keys of the Qt backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
+    "combobox": QtComboboxRenderer,
     "float_input": QtFloatInputRenderer,
     "form": QtFormRenderer,
     "form_label": QtFormLabelRenderer,
