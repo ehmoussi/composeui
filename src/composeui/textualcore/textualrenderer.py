@@ -11,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
-from textual.widgets import DataTable, Footer, Label, Static
+from textual.widgets import ContentSwitcher, DataTable, Footer, Label, Static
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
@@ -33,6 +33,8 @@ from composeui.core.view import (
     MainView,
     Menu,
     OpenFileAction,
+    PageView,
+    Router,
     SaveAction,
     SaveAsAction,
     SeparatorAction,
@@ -43,6 +45,7 @@ from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -64,6 +67,14 @@ class NoTextualRendererObjectError(Exception):
 
 def _has_any_extension(filepath: Path, extensions: tuple[str, ...]) -> bool:
     return any(filepath.name.endswith(extension) for extension in extensions)
+
+
+def _app_of(widget: Widget) -> App[Any] | None:
+    """Get the app running `widget`, or None before it is mounted."""
+    try:
+        return widget.app
+    except NoActiveAppError:
+        return None
 
 
 def _call_on_app_thread(app: App[Any] | None, callback: Callable[[], None]) -> None:
@@ -119,10 +130,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
     def _get_app(self) -> App[Any] | None:
         if self._rendered_object is None:
             return None
-        try:
-            return self._rendered_object.app
-        except NoActiveAppError:
-            return None
+        return _app_of(self._rendered_object)
 
     def refresh(self) -> None:
         # Textual widgets aren't thread-safe (see `App.call_from_thread`'s own
@@ -191,24 +199,34 @@ class _TextualNoopRenderer(Renderer[TNoopView, TNoopView]):
 
 
 class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
-    """No visual widget: `_ComposeUIApp` turns actions into key bindings + `Footer` entries."""
+    """No widget of its own: key bindings + `Footer` entries, or toolbar buttons.
+
+    `_ComposeUIApp` turns actions with a shortcut into key bindings, and a router's
+    toolbar shows its pages' actions as buttons.
+    """
 
     def __init__(self, view: ActionView) -> None:
         super().__init__(view)
         #: set once `_register_actions` has bound the action to a key
         self.app: _ComposeUIApp | None = None
+        #: set by `TextualRouterRenderer` for a page's action: its toolbar button
+        self.button: ComposeToolbarButton | None = None
         self._refresh_dispatcher.update(
             {
                 name: functools.partial(self._refresh_label, name)
                 for name in ("text", "is_checkable", "is_checked")
             }
         )
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_button_visible,
+                "is_enabled": self._refresh_button_enabled,
+            }
+        )
 
     def _refresh_label(
         self, name: str, view: ActionView, _rendered_object: ActionView, value: Any
     ) -> None:
-        if self.app is None:
-            return
         # called before the view stores `value`: the other fields come from the view
         state: dict[str, Any] = {
             "text": view.text,
@@ -216,8 +234,37 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
             "is_checked": view.is_checked,
             name: value,
         }
+        if self.button is not None:
+            button = self.button
+            _call_on_app_thread(
+                _app_of(button), functools.partial(_show_on_button, button, **state)
+            )
+        if self.app is None:
+            return
         label = _action_label(**state)
         _call_on_app_thread(self.app, functools.partial(self.app.refresh_action, view, label))
+
+    def _refresh_button_visible(
+        self, _view: ActionView, _rendered_object: ActionView, value: bool
+    ) -> None:
+        if self.button is not None:
+            button = self.button
+            _call_on_app_thread(_app_of(button), lambda: setattr(button, "display", value))
+
+    def _refresh_button_enabled(
+        self, _view: ActionView, _rendered_object: ActionView, value: bool
+    ) -> None:
+        if self.button is not None:
+            button = self.button
+            _call_on_app_thread(_app_of(button), lambda: setattr(button, "disabled", not value))
+
+
+def _show_on_button(
+    button: ComposeToolbarButton, *, text: str, is_checkable: bool, is_checked: bool
+) -> None:
+    """Show an action on its toolbar button: its text, highlighted while checked."""
+    button.label = text
+    button.variant = "primary" if is_checkable and is_checked else "default"
 
 
 def _action_label(*, text: str, is_checkable: bool, is_checked: bool) -> str:
@@ -764,6 +811,76 @@ class TextualGroupFormRenderer(TextualFormRenderer):
             rendered_object.border_title = value
 
 
+class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
+    """A page's views in a column, like the screen's own."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets = [
+                view.renderer.widget
+                for view in self._view.content_views
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            self._rendered_object = Vertical(*widgets)
+            self._rendered_object.styles.height = "auto"
+
+    @staticmethod
+    def _update_state(view: PageView, rendered_object: Vertical) -> None:
+        pass  # a page has no user-editable state of its own
+
+
+class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
+    """The pages, one shown at a time, and a toolbar of their actions docked at the top.
+
+    Each page sits in a slot of its own: the switcher shows and hides its slots, which
+    leaves the page's own `is_visible` to the page.
+    """
+
+    def __init__(self, view: Router) -> None:
+        super().__init__(view)
+        #: the toolbar of the pages' actions, docked by the main renderer
+        self.toolbar: ComposeToolbar | None = None
+        self._refresh_dispatcher.update({"current_route": self._refresh_current_route})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            buttons: list[Widget] = []
+            slots: list[Widget] = []
+            for page in self._view.pages:
+                if isinstance(page.action.renderer, TextualActionRenderer):
+                    button = ComposeToolbarButton()
+                    button.triggered.connect(page.action.triggered.emit)
+                    page.action.renderer.button = button
+                    buttons.append(button)
+                page_widgets = (
+                    [page.renderer.widget]
+                    if isinstance(page.renderer, TextualPageRenderer)
+                    and page.renderer.widget is not None
+                    else []
+                )
+                slot = Vertical(*page_widgets, id=_slot_id(page.route))
+                slot.styles.height = "auto"
+                slots.append(slot)
+            self.toolbar = ComposeToolbar(*buttons)
+            self._rendered_object = ContentSwitcher(
+                *slots, initial=_slot_id(self._view.current_route)
+            )
+
+    @staticmethod
+    def _refresh_current_route(_view: Router, rendered_object: ContentSwitcher, value: str) -> None:
+        rendered_object.current = _slot_id(value)
+
+    @staticmethod
+    def _update_state(view: Router, rendered_object: ContentSwitcher) -> None:
+        pass  # navigation goes through the pages' actions, never the switcher itself
+
+
+def _slot_id(route: str) -> str:
+    """Id of a page's slot in its router's switcher (routes are valid ids)."""
+    return f"page-{route}"
+
+
 def _refresh_tree(root: View) -> None:
     """Push each view's current state into its already-built (default) widget.
 
@@ -895,6 +1012,11 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                 widget = child_view.renderer.widget
                 if isinstance(child_view, StatusBar):
                     docked.append(widget)
+                elif isinstance(child_view.renderer, TextualRouterRenderer):
+                    # docked at the top (see `ComposeToolbar`), clear of the scrolling
+                    if child_view.renderer.toolbar is not None:
+                        docked.append(child_view.renderer.toolbar)
+                    scrollable.append(widget)
                 else:
                     scrollable.append(widget)
             root = Vertical(VerticalScroll(*scrollable), *docked)
@@ -996,7 +1118,9 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "log": TextualLogRenderer,
     "main": TextualMainRenderer,
     "menu": TextualMenuRenderer,
+    "page": TextualPageRenderer,
     "radio_group": TextualRadioGroupRenderer,
+    "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,

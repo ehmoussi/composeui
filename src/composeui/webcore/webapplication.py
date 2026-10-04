@@ -25,6 +25,7 @@ from composeui.core.signal import Signal
 from composeui.core.view import View
 from composeui.webcore.routes import (
     homepage,
+    page,
     state_download,
     state_upload,
     widget_event,
@@ -100,6 +101,8 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
                 app=StaticFiles(directory=Path(__file__).parent / "static"),
                 name="static",
             ),
+            # last: a page's address takes any first segment the others leave
+            Route("/{route}", page),
         ],
         middleware=[
             # A per-process signing key is enough: sessions live in this process only,

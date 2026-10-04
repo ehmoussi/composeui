@@ -26,6 +26,7 @@ from playwright.sync_api import Error, expect, sync_playwright
 from composeui.webcore.webapplication import WebApplication
 from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
+from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -79,6 +80,13 @@ def pipe_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def pages_base_url() -> Iterator[str]:
+    """Serve an app with two pages, for the whole module."""
+    with _serve(WebApplication(build_main_view=PagesMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -102,6 +110,15 @@ def page(browser: Browser, base_url: str) -> Iterator[Page]:
 def pipe_page(browser: Browser, pipe_base_url: str) -> Iterator[Page]:
     """Open the pipe form like `page`, in a session of its own."""
     context = browser.new_context(base_url=pipe_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def pages_page(browser: Browser, pages_base_url: str) -> Iterator[Page]:
+    """Open the app with two pages like `page`, in a session of its own."""
+    context = browser.new_context(base_url=pages_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -259,3 +276,31 @@ def test_checking_and_unchecking_the_box_reaches_the_server(pipe_page: Page) -> 
         insulated.uncheck()
     expect(thickness).to_be_disabled()
     expect(insulated).not_to_be_checked()
+
+
+def test_back_and_forward_go_through_the_pages_shown(pages_page: Page, pages_base_url: str) -> None:
+    page = pages_page
+    page.goto("/")
+    expect(page).to_have_url(f"{pages_base_url}/inputs")
+    name = page.get_by_role("textbox")
+    with _posted(page):
+        name.press_sequentially("pipe")
+    total = page.get_by_text("Total: 0")
+    expect(total).to_be_hidden()
+
+    with _posted(page):
+        page.get_by_role("link", name="Results").click()
+    expect(page).to_have_url(f"{pages_base_url}/results")
+    expect(total).to_be_visible()
+    expect(name).to_be_hidden()
+    expect(page.get_by_role("link", name="Results")).to_have_attribute("aria-current", "page")
+
+    page.go_back()
+    expect(page).to_have_url(f"{pages_base_url}/inputs")
+    expect(name).to_be_visible()
+    expect(name).to_have_value("pipe")  # the server's state, not a stale copy
+    expect(total).to_be_hidden()
+
+    page.go_forward()
+    expect(page).to_have_url(f"{pages_base_url}/results")
+    expect(total).to_be_visible()

@@ -34,11 +34,32 @@ def _session(request: Request) -> WebSession | None:
     return _store(request).get(request.session.get(SESSION_KEY))
 
 
-def homepage(request: Request) -> HTMLResponse:
+def _session_or_new(request: Request) -> WebSession:
     session = _session(request)
     if session is None:
         session_id, session = _store(request).create()
         request.session[SESSION_KEY] = session_id
+    return session
+
+
+def homepage(request: Request) -> Response:
+    """Show the app; one with pages is sent to its first page's address."""
+    session = _session_or_new(request)
+    path = session.home_path()
+    if path is not None:
+        return RedirectResponse(path, status_code=303, headers=_NO_STORE)
+    return HTMLResponse(session.page_html(), headers=_NO_STORE)
+
+
+def page(request: Request) -> Response:
+    """Show the app on the page of the address's route (`/<route>`).
+
+    An address no page has is not found, rather than sent to a page: a browser asks
+    for addresses of its own (e.g. `/favicon.ico`), which must not navigate.
+    """
+    session = _session_or_new(request)
+    if not session.open_route(request.path_params["route"]):
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
     return HTMLResponse(session.page_html(), headers=_NO_STORE)
 
 
@@ -53,16 +74,19 @@ async def widget_event(request: Request) -> Response:
     widget_id = request.path_params["widget_id"]
     try:
         # view callbacks are plain sync code: keep them off the event loop
-        body = await run_in_threadpool(session.handle_event, widget_id, event, fields)
+        result = await run_in_threadpool(session.handle_event, widget_id, event, fields)
     except UnsupportedEventError as e:
         return PlainTextResponse(str(e), status_code=400)
-    if body is None:
+    if result is None:
         return PlainTextResponse("Unknown widget", status_code=404)
+    body, path = result
     if session.closed:
         # e.g. Exit: end the session; the page it lands on starts a fresh one
         _store(request).drop(request.session.get(SESSION_KEY))
         return Response(headers={**_NO_STORE, "HX-Redirect": "/"})
-    return HTMLResponse(body, headers=_NO_STORE)
+    # a navigation puts the new page's address in the browser's history
+    headers = _NO_STORE if path is None else {**_NO_STORE, "HX-Push-Url": path}
+    return HTMLResponse(body, headers=headers)
 
 
 def widget_fragment(request: Request) -> Response:
