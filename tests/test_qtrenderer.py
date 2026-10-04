@@ -69,28 +69,28 @@ def test_label_renderer_pushes_view_state_to_the_widget(qtbot: QtBot) -> None:
 def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    name_widget = _field_widget(view.pipe_form.name)
+    name_widget = _field_widget(view.pages.inputs.pipe_form.name)
     assert isinstance(name_widget, QLineEdit)
     assert name_widget.text() == ""
 
     name_widget.show()
     name_widget.setFocus()
     qtbot.keyClicks(name_widget, "PipeTShape")
-    assert view.pipe_form.name.text == "PipeTShape"
-    assert view.pipe_form.name.log_message == ""  # _check_name ran via text_edited
+    assert view.pages.inputs.pipe_form.name.text == "PipeTShape"
+    assert view.pages.inputs.pipe_form.name.log_message == ""  # _check_name ran via text_edited
 
     # `update_state` (the other direction: widget -> view) is exercised too.
     name_widget.setText("direct")
-    field_renderer = view.pipe_form.name.renderer
+    field_renderer = view.pages.inputs.pipe_form.name.renderer
     assert isinstance(field_renderer, RendererContainer)
     field_renderer.get_renderer("field").update_state()
-    assert view.pipe_form.name.text == "direct"
+    assert view.pages.inputs.pipe_form.name.text == "direct"
 
 
 def test_a_failing_pipe_check_outlines_the_fields_it_names(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    form = view.pipe_form
+    form = view.pages.inputs.pipe_form
     radius_widget = _field_widget(form.main_pipe.radius)
     assert isinstance(radius_widget, QLineEdit)
     named = [form.main_pipe.radius, form.main_pipe.width, form.incident_pipe.half_length]
@@ -117,7 +117,7 @@ def test_a_failing_pipe_check_outlines_the_fields_it_names(qtbot: QtBot) -> None
 def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    radius_widget = _field_widget(view.pipe_form.main_pipe.radius)
+    radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius)
     assert isinstance(radius_widget, QLineEdit)
 
     radius_widget.show()
@@ -125,8 +125,8 @@ def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbo
     radius_widget.selectAll()
     qtbot.keyClicks(radius_widget, "2000")
     qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
-    assert view.pipe_form.main_pipe.radius.value == 2000.0
-    assert view.pipe_form.log_view.is_visible is True  # tripped the pipe validation
+    assert view.pages.inputs.pipe_form.main_pipe.radius.value == 2000.0
+    assert view.pages.inputs.pipe_form.log_view.is_visible is True  # tripped the pipe validation
 
     radius_widget.selectAll()
     qtbot.keyClicks(radius_widget, "abc")
@@ -142,7 +142,7 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     # fires against this test's already-destroyed `QStatusBar`.
     view.status_bar.timeout = 0
     view.render(RendererType.QT)
-    edge_widget = _field_widget(view.pipe_form.edge_type)
+    edge_widget = _field_widget(view.pages.inputs.pipe_form.edge_type)
 
     # rendering rebuilds the buttons (`refresh` re-applies `values`): the first set is
     # gone at once, not left on screen until the event loop deletes it
@@ -151,10 +151,10 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     chamfer_button = next(b for b in buttons if b.text() == EdgeType.Chamfer.value)
     chamfer_button.click()
 
-    assert view.pipe_form.edge_type.value == EdgeType.Chamfer
+    assert view.pages.inputs.pipe_form.edge_type.value == EdgeType.Chamfer
     assert "Chamfer" in view.status_bar.message  # value_changed -> status bar
 
-    chamfer_renderer = view.pipe_form.chamfer.renderer
+    chamfer_renderer = view.pages.inputs.pipe_form.chamfer.renderer
     assert isinstance(chamfer_renderer, QtWidgetRenderer)
     chamfer_widget = chamfer_renderer.qt_object
     assert chamfer_widget is not None
@@ -164,7 +164,7 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
 def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    edge_widget = _field_widget(view.pipe_form.edge_type)
+    edge_widget = _field_widget(view.pages.inputs.pipe_form.edge_type)
     edge_widget.resize(600, 40)
     edge_widget.show()
     # rendering already rebuilt them once (`refresh` re-applies `values`)
@@ -180,11 +180,11 @@ def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> N
 def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    insulated = view.pipe_form.insulated
+    insulated = view.pages.inputs.pipe_form.insulated
     checkbox = _field_widget(insulated)
     assert isinstance(checkbox, QCheckBox)
     assert checkbox.text() == "Insulated pipe"
-    thickness_widget = _field_widget(view.pipe_form.insulation_thickness)
+    thickness_widget = _field_widget(view.pages.inputs.pipe_form.insulation_thickness)
     assert not thickness_widget.isEnabled()
     toggled: list[bool] = []
     insulated.toggled.connect(toggled.append)
@@ -204,12 +204,12 @@ def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot)
 def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    assert isinstance(view.summary.renderer, QtWidgetRenderer)
-    table = view.summary.renderer.qt_object
+    assert isinstance(view.pages.results.summary.renderer, QtWidgetRenderer)
+    table = view.pages.results.summary.renderer.qt_object
     assert isinstance(table, QTableView)
     model = table.model()
     assert model.headerData(3, Qt.Orientation.Horizontal) == "Half Length"
-    radius_widget = _field_widget(view.pipe_form.main_pipe.radius)
+    radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius)
     assert isinstance(radius_widget, QLineEdit)
 
     radius_widget.show()
@@ -227,16 +227,18 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     window.resize(900, 1100)
     window.show()
     qtbot.waitExposed(window)
-    # as tall as its rows in the window: no empty block under them
-    rows_height = model.rowCount() * table.rowHeight(0)
-    assert 0 <= table.viewport().height() - rows_height < table.rowHeight(0)
-    # lined up with the form above it, whose labels start its rows
-    name_renderer = view.pipe_form.name.renderer
+    name_renderer = view.pages.inputs.pipe_form.name.renderer
     assert isinstance(name_renderer, RendererContainer)
     name_label = name_renderer.get_renderer("label")
     assert isinstance(name_label, QtWidgetRenderer)
     assert isinstance(name_label.qt_object, QLabel)
     label_left = name_label.qt_object.mapTo(window, QPoint(0, 0)).x()
+    view.pages.navigate("results")
+    qtbot.waitUntil(table.isVisible)
+    # as tall as its rows in the window: no empty block under them
+    rows_height = model.rowCount() * table.rowHeight(0)
+    assert 0 <= table.viewport().height() - rows_height < table.rowHeight(0)
+    # lined up with the form of the other page, whose labels start its rows
     assert table.mapTo(window, QPoint(0, 0)).x() == label_left
     table.setCurrentIndex(model.index(0, 1))
     table.setFocus()
@@ -247,7 +249,7 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
 def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    renderer = view.pipe_form.edge_type.renderer
+    renderer = view.pages.inputs.pipe_form.edge_type.renderer
     assert isinstance(renderer, RendererContainer)
     label_renderer = renderer.get_renderer("label")
     assert isinstance(label_renderer, QtWidgetRenderer)
@@ -259,7 +261,7 @@ def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:
 def test_group_form_renderer_sets_the_qgroupbox_title(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    renderer = view.pipe_form.main_pipe.renderer
+    renderer = view.pages.inputs.pipe_form.main_pipe.renderer
     assert isinstance(renderer, QtWidgetRenderer)
     widget = renderer.qt_object
     assert isinstance(widget, QGroupBox)
@@ -345,7 +347,7 @@ def test_open_file_action_runs_the_native_dialog_and_loads_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     donor = PipeMainView()
-    donor.pipe_form.name.text = "loaded_name"
+    donor.pages.inputs.pipe_form.name.text = "loaded_name"
     filepath = tmp_path / "state.pipe"
     donor.save_state(filepath)
 
@@ -367,8 +369,8 @@ def test_open_file_action_runs_the_native_dialog_and_loads_state(
     action.trigger()
 
     assert view.file_view.filepath == filepath
-    assert view.pipe_form.name.text == "loaded_name"
-    name_widget = _field_widget(view.pipe_form.name)
+    assert view.pages.inputs.pipe_form.name.text == "loaded_name"
+    name_widget = _field_widget(view.pages.inputs.pipe_form.name)
     assert isinstance(name_widget, QLineEdit)
     assert name_widget.text() == "loaded_name"
 
@@ -383,7 +385,7 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     view.render(RendererType.QT)
     assert isinstance(view.renderer, MainRenderer)
 
-    view.pipe_form.name.text = "saved_name"
+    view.pages.inputs.pipe_form.name.text = "saved_name"
     target = tmp_path / "out"  # no extension - the renderer must add one
     monkeypatch.setattr(
         QFileDialog,
@@ -401,7 +403,7 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     assert saved_path.exists()
     assert view.file_view.filepath == saved_path
     data = json.loads(saved_path.read_text())
-    assert data["pipe_form"]["name"]["text"] == "saved_name"
+    assert data["pages"]["inputs"]["pipe_form"]["name"]["text"] == "saved_name"
 
 
 def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:

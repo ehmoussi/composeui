@@ -363,7 +363,7 @@ def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> 
 def test_a_changed_field_inside_a_changed_group_is_swapped_once(
     pipe_main_view: PipeMainView,
 ) -> None:
-    main_pipe = pipe_main_view.pipe_form.main_pipe
+    main_pipe = pipe_main_view.pages.inputs.pipe_form.main_pipe
     group, radius = main_pipe.renderer, _part(main_pipe.radius, "field")
     assert isinstance(group, WebRenderer)
 
@@ -728,7 +728,7 @@ def pipe_main_view(pipe_views: list[PipeMainView], pipe_client: TestClient) -> P
 def test_clearing_the_name_shows_its_row_message(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
-    name = pipe_main_view.pipe_form.name
+    name = pipe_main_view.pages.inputs.pipe_form.name
     name_id = _field_id(name)
     pipe_client.post(f"/widget/{name_id}", data={"value": "Tee", "event": "input"})
 
@@ -741,7 +741,7 @@ def test_clearing_the_name_shows_its_row_message(
 def test_the_checkbox_is_named_by_its_text_and_its_group_by_the_row_label(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
-    insulated = pipe_main_view.pipe_form.insulated
+    insulated = pipe_main_view.pages.inputs.pipe_form.insulated
     label_id, field_id = _widget_id(_part(insulated, "label")), _field_id(insulated)
 
     page = pipe_client.get("/").text
@@ -761,7 +761,7 @@ def test_the_checkbox_is_named_by_its_text_and_its_group_by_the_row_label(
 def test_toggling_the_checkbox_enables_its_row_without_swapping_the_box(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
-    form = pipe_main_view.pipe_form
+    form = pipe_main_view.pages.inputs.pipe_form
     field_id = _field_id(form.insulated)
     thickness_id = _field_id(form.insulation_thickness)
     toggled: list[bool] = []
@@ -785,7 +785,7 @@ def test_toggling_the_checkbox_enables_its_row_without_swapping_the_box(
 
 
 def test_checking_the_box_on_the_server_swaps_it_checked(pipe_main_view: PipeMainView) -> None:
-    insulated = pipe_main_view.pipe_form.insulated
+    insulated = pipe_main_view.pages.inputs.pipe_form.insulated
     field = _part(insulated, "field")
 
     with collect_dirty() as dirty:
@@ -798,8 +798,8 @@ def test_checking_the_box_on_the_server_swaps_it_checked(pipe_main_view: PipeMai
 def test_finishing_a_dimension_edit_swaps_the_summary_table(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
-    radius_id = _field_id(pipe_main_view.pipe_form.main_pipe.radius)
-    summary_id = _widget_id(pipe_main_view.summary.renderer)
+    radius_id = _field_id(pipe_main_view.pages.inputs.pipe_form.main_pipe.radius)
+    summary_id = _widget_id(pipe_main_view.pages.results.summary.renderer)
 
     body = pipe_client.post(f"/widget/{radius_id}", data={"value": "35", "event": "change"}).text
 
@@ -809,7 +809,7 @@ def test_finishing_a_dimension_edit_swaps_the_summary_table(
 
 
 def test_disabling_a_group_disables_its_whole_fieldset(pipe_main_view: PipeMainView) -> None:
-    main_pipe = pipe_main_view.pipe_form.main_pipe
+    main_pipe = pipe_main_view.pages.inputs.pipe_form.main_pipe
 
     with collect_dirty() as dirty:
         main_pipe.is_enabled = False
@@ -1013,7 +1013,7 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     study = PipeMainView()
-    study.pipe_form.name.text = "Main line"
+    study.pages.inputs.pipe_form.name.text = "Main line"
     state_file = tmp_path / "study.pipe"
     study.save_state(state_file)
     served: list[tuple[str, dict[str, Any]]] = []
@@ -1403,7 +1403,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
     with TestClient(pipe_web, headers=htmx) as alice, TestClient(pipe_web, headers=htmx) as bob:
         page = alice.get("/").text
         (view,) = pipe_views
-        form = view.pipe_form
+        form = view.pages.inputs.pipe_form
         name_id, material_id = _field_id(form.name), _field_id(form.material)
         edge_id, radius_id = _field_id(form.edge_type), _field_id(form.main_pipe.radius)
         name_log_id = _widget_id(_part(form.name, "log"))
@@ -1468,7 +1468,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         # saved, then opened in another browser's session
         saved = alice.get("/state").content
         bob.get("/")
-        reopened = pipe_views[1].pipe_form
+        reopened = pipe_views[1].pages.inputs.pipe_form
         assert (
             bob.post("/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"] == "true"
         )
@@ -1523,8 +1523,12 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
     }
     stylesheet = client.get("/static/app.css").text
 
+    def selector(name: str) -> str:
+        # a variant's colon is escaped in its selector, e.g. `.sm\:w-auto`
+        return "." + re.escape(name.replace(":", "\\:"))
+
     missing = sorted(
-        name for name in classes if not re.search(rf"\.{re.escape(name)}(?![\w-])", stylesheet)
+        name for name in classes if not re.search(rf"{selector(name)}(?![\w-])", stylesheet)
     )
     assert len(classes) > 40
     assert missing == []
