@@ -86,9 +86,9 @@ There is no CI: every check depends on someone running `make check test` locally
 5. ~~**`make css` beyond Linux x64.** The Makefile downloads `tailwindcss-linux-x64` only.
    Pick the binary from `uname -s`/`uname -m` (macOS arm64/x64, Linux arm64) so
    contributors on other machines can rebuild the stylesheet.~~ *(`TAILWIND_PLATFORM`, from `uname`, overridable, e.g. `linux-x64-musl` on Alpine; anything else stops with the list. Windows through Git Bash, MSYS2 or Cygwin (`windows-x64`, untested there); WSL is Linux; native cmd/PowerShell can't run the Makefile at all.)*
-6. **Open's file picker filters by extension.** Actions don't know their main view's
+6. ~~**Open's file picker filters by extension.** Actions don't know their main view's
    extension; pass it down (e.g. the main renderer adds `accept` when it renders the
-   menus) so the picker only offers matching files. Small; the server already checks.
+   menus) so the picker only offers matching files. Small; the server already checks.~~ *(`WebMainRenderer.render` sets `accept` on every Open action's renderer, which keeps it for later re-renders of the action alone.)*
 7. **Optional: keep sessions across restarts.** Persist each session's `save_state` JSON
    (a directory, or Redis later) and reload it when a cookie for an unknown session
    arrives; needs a fixed signing key from the environment. Only worth it for a deployed
