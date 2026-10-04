@@ -17,6 +17,7 @@ from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtStatusBarRenderer
 from composeui.textualcore.textualrenderer import RENDERERS as TEXTUAL_RENDERERS
 from composeui.textualcore.textualrenderer import TextualStatusBarRenderer
+from composeui.webcore.webrenderer import RENDERERS as WEB_RENDERERS
 
 
 def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
@@ -33,7 +34,7 @@ def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
 
 def test_every_backend_registers_the_same_renderer_keys() -> None:
     """A view rendering under one backend should render under all of them."""
-    assert set(QT_RENDERERS) == set(TEXTUAL_RENDERERS)
+    assert set(QT_RENDERERS) == set(TEXTUAL_RENDERERS) == set(WEB_RENDERERS)
 
 
 def test_create_renderer_resolves_a_key_to_the_backend_renderer() -> None:
