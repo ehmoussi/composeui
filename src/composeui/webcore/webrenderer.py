@@ -447,6 +447,39 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
         self._view.toggled.emit(is_checked)
 
 
+class TableViewLike(ViewLike, Protocol):
+    headers: list[str]
+    rows: list[list[str]]
+
+
+class WebTableRenderer(WebRenderer[TableViewLike]):
+    """A read-only table, scrolling sideways on its own when wider than the page."""
+
+    _role = "table"
+
+    def __init__(self, view: TableViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "headers": self._mark_dirty,
+                "rows": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        headers = "".join(f"<th>{html.escape(header)}</th>" for header in self._view.headers)
+        rows = "".join(
+            f"<tr>{''.join(f'<td>{html.escape(cell)}</td>' for cell in row)}</tr>"
+            for row in self._view.rows
+        )
+        return (
+            f"<div {self._root_attributes(oob=oob)}"
+            ' class="overflow-x-auto rounded-box border border-base-300">'
+            '<table class="table table-zebra table-sm">'
+            f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
+        )
+
+
 TValue = TypeVar("TValue")
 
 
@@ -1112,4 +1145,5 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "radio_group": WebRadioGroupRenderer,
     "separator": WebSeparatorRenderer,
     "status_bar": WebStatusBarRenderer,
+    "table": WebTableRenderer,
 }

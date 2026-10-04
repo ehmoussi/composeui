@@ -43,6 +43,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
+from composeui.qtcore.widgets.qtexttable import QTextTableView
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 
 if TYPE_CHECKING:
@@ -391,6 +392,43 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
     def _update_checked(self, is_checked: bool) -> None:
         with self.stop_refresh():
             self._view.is_checked = is_checked
+
+
+class TableViewLike(ViewLike, Protocol):
+    headers: list[str]
+    rows: list[list[str]]
+
+
+class QtTableRenderer(QtWidgetRenderer[TableViewLike, QTextTableView]):
+    def __init__(self, view: TableViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "headers": self._refresh_headers,
+                "rows": self._refresh_rows,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QTextTableView()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_headers(
+        view: TableViewLike, rendered_object: QTextTableView, value: list[str]
+    ) -> None:
+        rendered_object.set_table(value, view.rows)
+
+    @staticmethod
+    def _refresh_rows(
+        view: TableViewLike, rendered_object: QTextTableView, value: list[list[str]]
+    ) -> None:
+        rendered_object.set_table(view.headers, value)
+
+    @staticmethod
+    def _update_state(view: TableViewLike, rendered_object: QTextTableView) -> None:
+        pass  # read-only: the user can't change anything to read back
 
 
 TValue = TypeVar("TValue")
@@ -913,4 +951,5 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "radio_group": QtRadioGroupRenderer,
     "separator": QtSeparatorRenderer,
     "status_bar": QtStatusBarRenderer,
+    "table": QtTableRenderer,
 }

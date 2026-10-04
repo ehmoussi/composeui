@@ -17,7 +17,7 @@ from typing import Any, Optional, Union
 from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Checkbox, Footer, Input
+from textual.widgets import Checkbox, DataTable, Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -189,6 +189,35 @@ async def test_pressing_the_checkbox_checks_the_view_and_enables_its_row() -> No
         await pilot.pause()
         assert checkbox.value is False
         assert toggled == [True]
+
+
+@pytest.mark.asyncio
+async def test_the_summary_table_shows_each_edit_as_plain_text() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(100, 60)) as pilot:
+        await pilot.pause()
+        assert isinstance(view.summary.renderer, TextualWidgetRenderer)
+        table = view.summary.renderer.widget
+        assert isinstance(table, DataTable)
+
+        def lines() -> list[str]:
+            return [table.render_line(y).text.strip() for y in range(table.size.height)]
+
+        radius = _field_widget(view.pipe_form.main_pipe.radius.renderer)
+        radius.focus()
+        await pilot.press("end", *["backspace"] * 10, *"35", "tab")
+        await pilot.pause()
+        assert lines()[1].split() == ["Main", "Pipe", "35", "20", "200"]
+
+        # shown as typed, not read as Rich markup (which would drop "[red]")
+        view.summary.rows = [["[red]", "1", "2", "3"]]
+        await pilot.pause()
+        assert lines()[1].split() == ["[red]", "1", "2", "3"]
 
 
 @pytest.mark.asyncio

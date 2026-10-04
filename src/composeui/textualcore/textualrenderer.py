@@ -6,11 +6,12 @@ import functools
 from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
-from textual.widgets import Footer, Label, Static
+from textual.widgets import DataTable, Footer, Label, Static
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
@@ -455,6 +456,49 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
         with self.stop_refresh():
             self._view.is_checked = is_checked
         self._view.toggled.emit(is_checked)
+
+
+class TableViewLike(ViewLike, Protocol):
+    headers: list[str]
+    rows: list[list[str]]
+
+
+class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, "DataTable[Text]"]):
+    def __init__(self, view: TableViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "headers": self._refresh_headers,
+                "rows": self._refresh_rows,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = DataTable(cursor_type="none", zebra_stripes=True)
+
+    @staticmethod
+    def _refresh_headers(
+        view: TableViewLike, rendered_object: DataTable[Text], value: list[str]
+    ) -> None:
+        TextualTableRenderer._fill(rendered_object, value, view.rows)
+
+    @staticmethod
+    def _refresh_rows(
+        view: TableViewLike, rendered_object: DataTable[Text], value: list[list[str]]
+    ) -> None:
+        TextualTableRenderer._fill(rendered_object, view.headers, value)
+
+    @staticmethod
+    def _fill(table: DataTable[Text], headers: list[str], rows: list[list[str]]) -> None:
+        """Rebuild the whole table, as plain text: a string cell would be read as markup."""
+        table.clear(columns=True)
+        table.add_columns(*(Text(header) for header in headers))
+        table.add_rows([Text(cell) for cell in row] for row in rows)
+
+    @staticmethod
+    def _update_state(view: TableViewLike, rendered_object: DataTable[Text]) -> None:
+        pass  # read-only: the user can't change anything to read back
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
@@ -955,4 +999,5 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "radio_group": TextualRadioGroupRenderer,
     "separator": TextualSeparatorRenderer,
     "status_bar": TextualStatusBarRenderer,
+    "table": TextualTableRenderer,
 }

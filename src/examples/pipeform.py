@@ -17,6 +17,7 @@ from composeui.core.view import (
     LabelRowInputView,
     LabelRowRadioGroupView,
     MainView,
+    TableView,
     define_view,
 )
 
@@ -220,11 +221,32 @@ class PipeFormView(FormView):
 @define_view
 class PipeMainView(MainView):
     pipe_form: PipeFormView = Factory(PipeFormView)
+    #: both pipes' dimensions side by side, read-only
+    summary: TableView = Factory(TableView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_app_info(title="Pipe Form", extension=".pipe")
         self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
+        self.summary.headers = ["Pipe", "Radius", "Width", "Half Length"]
+        for pipe in (self.pipe_form.main_pipe, self.pipe_form.incident_pipe):
+            for dimension in (pipe.radius, pipe.width, pipe.half_length):
+                dimension.editing_finished.connect(self._update_summary)
+        self._update_summary()
+
+    def _update_summary(self) -> None:
+        def text(value: float | None) -> str:
+            return "" if value is None else f"{value:g}"
+
+        self.summary.rows = [
+            [
+                pipe.title,
+                text(pipe.radius.value),
+                text(pipe.width.value),
+                text(pipe.half_length.value),
+            ]
+            for pipe in (self.pipe_form.main_pipe, self.pipe_form.incident_pipe)
+        ]
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
         if value is not None:

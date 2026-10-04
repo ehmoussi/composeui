@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QFileDialog,
     QGroupBox,
@@ -25,6 +26,7 @@ from qtpy.QtWidgets import (
     QMenu,
     QRadioButton,
     QStatusBar,
+    QTableView,
 )
 
 from composeui.core.application import _add_reference_to_signals
@@ -195,6 +197,41 @@ def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot)
     insulated.is_checked = False
     assert not checkbox.isChecked()
     assert toggled == [True]
+
+
+def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.summary.renderer, QtWidgetRenderer)
+    table = view.summary.renderer.qt_object
+    assert isinstance(table, QTableView)
+    model = table.model()
+    assert model.headerData(3, Qt.Orientation.Horizontal) == "Half Length"
+    radius_widget = _field_widget(view.pipe_form.main_pipe.radius)
+    assert isinstance(radius_widget, QLineEdit)
+
+    radius_widget.show()
+    radius_widget.setFocus()
+    radius_widget.selectAll()
+    qtbot.keyClicks(radius_widget, "35")
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
+
+    cells = [model.index(0, column).data() for column in range(model.columnCount())]
+    assert cells == ["Main Pipe", "35", "20", "200"]
+
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    window.resize(900, 1100)
+    window.show()
+    qtbot.waitExposed(window)
+    # as tall as its rows in the window: no empty block under them
+    rows_height = model.rowCount() * table.rowHeight(0)
+    assert 0 <= table.viewport().height() - rows_height < table.rowHeight(0)
+    table.setCurrentIndex(model.index(0, 1))
+    table.setFocus()
+    qtbot.keyClick(table, Qt.Key.Key_F2)  # the edit key
+    assert table.state() is not QAbstractItemView.State.EditingState
 
 
 def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:

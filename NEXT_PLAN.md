@@ -99,7 +99,8 @@ There is no CI: every check depends on someone running `make check test` locally
 One widget at a time, each on all three backends with tests (the consistency test from
 1.2 enforces this): ~~`CheckBoxView` first (the most common missing form field)~~ *(with
 `RowCheckBoxView`/`LabelRowCheckBoxView`; pipeform's "Insulated pipe" enables its
-thickness)*, then a read-only `TableView`, tabs, simple dialogs (message/confirm), and a progress bar. The
+thickness)*, then ~~a read-only `TableView`~~ *(text cells the app formats; pipeform's
+summary under the form)*, tabs, simple dialogs (message/confirm), and a progress bar. The
 web versions follow the same rules: the focus rule, OOB updates, `aria-*` links, and a
 `make css` rebuild when new classes appear.
 

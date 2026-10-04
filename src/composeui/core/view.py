@@ -667,6 +667,23 @@ class CheckBoxView(CheckBoxMixin, View):
     _renderer_key = "checkbox"
 
 
+@define_view
+class TableMixin:
+    """A read-only table of text: the app formats each cell itself.
+
+    Each row has one cell per header. Assign new lists to update the table: changing a
+    list in place doesn't reach the renderer.
+    """
+
+    headers: list[str] = attrs.Factory(list[str])
+    rows: list[list[str]] = attrs.Factory(list[list[str]])
+
+
+@define_view
+class TableView(TableMixin, View):
+    _renderer_key = "table"
+
+
 TValue = TypeVar("TValue")
 
 

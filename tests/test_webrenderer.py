@@ -44,6 +44,7 @@ from composeui.core.view import (
     SaveAsAction,
     SeparatorAction,
     StatusBar,
+    TableView,
     define_view,
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -56,6 +57,7 @@ from composeui.webcore.webrenderer import (
     WebRadioGroupRenderer,
     WebRenderer,
     WebStatusBarRenderer,
+    WebTableRenderer,
     collect_dirty,
     handle_event,
     render_dirty,
@@ -341,15 +343,19 @@ def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> 
     hostile = '"><script>alert(1)</script>'
     main_view.form.name.text = hostile
     rows.note.text = hostile
+    rows.table.headers = [hostile]
+    rows.table.rows = [[hostile]]
 
     field = _part(main_view.form.name, "field")
-    label = rows.note.renderer
+    label, table = rows.note.renderer, rows.table.renderer
     assert isinstance(label, WebLabelRenderer)
-    for fragment in (field.to_html(), label.to_html()):
+    assert isinstance(table, WebTableRenderer)
+    for fragment in (field.to_html(), label.to_html(), table.to_html()):
         assert "<script>" not in fragment
     # escaped, not dropped: the browser shows exactly the view's text
     assert _element(field.to_html(), field.widget_id).attributes["value"] == hostile
     assert _element(label.to_html(), label.widget_id).text == hostile
+    assert _element(table.to_html(), table.widget_id).text == hostile * 2
 
 
 def test_a_changed_field_inside_a_changed_group_is_swapped_once(
@@ -410,6 +416,7 @@ class _RowsMainView(MainView):
     note: LabelView = Factory(LabelView)
     form_log: LogView = Factory(LogView)
     shape: _ShapeRowView = Factory(_ShapeRowView)
+    table: TableView = Factory(TableView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -784,6 +791,19 @@ def test_checking_the_box_on_the_server_swaps_it_checked(pipe_main_view: PipeMai
 
     assert field.widget_id in dirty
     assert _selected(_swapped(render_dirty(dirty), field.widget_id)) == ["on"]
+
+
+def test_finishing_a_dimension_edit_swaps_the_summary_table(
+    pipe_main_view: PipeMainView, pipe_client: TestClient
+) -> None:
+    radius_id = _field_id(pipe_main_view.pipe_form.main_pipe.radius)
+    summary_id = _widget_id(pipe_main_view.summary.renderer)
+
+    body = pipe_client.post(f"/widget/{radius_id}", data={"value": "35", "event": "change"}).text
+
+    summary = _swapped(body, summary_id)
+    assert [tag for tag, _ in summary.descendants].count("th") == 4
+    assert "Main Pipe352020" in summary.text  # the main pipe's row, cell after cell
 
 
 def test_disabling_a_group_disables_its_whole_fieldset(pipe_main_view: PipeMainView) -> None:
