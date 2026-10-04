@@ -104,7 +104,7 @@ the live view tree in place so renderer bindings and signal connections survive 
 ## Development
 
 ```bash
-uv sync --group dev --extra pyside6
+uv sync --group dev --all-extras   # every backend: the tests cover Qt, Textual and web
 make lint    # ruff format + check --fix
 make mypy    # project-wide mypy (Qt bindings resolved to PySide6)
 make test    # pytest with coverage

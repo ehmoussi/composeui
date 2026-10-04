@@ -13,7 +13,8 @@ import enum
 import json
 import re
 import time
-from typing import TYPE_CHECKING, Any
+from html.parser import HTMLParser
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pytest
 
@@ -108,6 +109,89 @@ def _part(row: Any, name: str) -> WebRenderer[Any]:
 
 def _field_id(row: Any) -> str:
     return _part(row, "field").widget_id
+
+
+#: elements with no closing tag
+_VOID_TAGS = frozenset({"input", "br", "hr", "img", "meta", "link"})
+
+
+class _Element(NamedTuple):
+    """An element found by `_element`: its tag, attributes, text and descendant tags."""
+
+    tag: str
+    attributes: dict[str, str | None]
+    text: str
+    descendants: list[tuple[str, dict[str, str | None]]]
+
+
+class _ElementFinder(HTMLParser):
+    def __init__(self, element_id: str) -> None:
+        super().__init__()
+        self._id = element_id
+        self._depth = 0
+        self._text: list[str] = []
+        self._descendants: list[tuple[str, dict[str, str | None]]] = []
+        self._root: tuple[str, dict[str, str | None]] | None = None
+        self.found: _Element | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if self._root is None and attributes.get("id") == self._id:
+            self._root = (tag, attributes)
+            if tag in _VOID_TAGS:
+                self._finish()
+            else:
+                self._depth = 1
+        elif self._depth > 0:
+            self._descendants.append((tag, attributes))
+            if tag not in _VOID_TAGS:
+                self._depth += 1
+
+    def handle_endtag(self, tag: str) -> None:  # well-formed fragments: any end tag closes
+        if self._depth > 0:
+            self._depth -= 1
+            if self._depth == 0:
+                self._finish()
+
+    def handle_data(self, data: str) -> None:
+        if self._depth > 0:
+            self._text.append(data)
+
+    def _finish(self) -> None:
+        if self.found is None and self._root is not None:
+            tag, attributes = self._root
+            self.found = _Element(tag, attributes, "".join(self._text), self._descendants)
+
+
+def _find(markup: str, element_id: str) -> _Element | None:
+    """Parse `markup` and return the element with `element_id` (text unescaped), or None."""
+    finder = _ElementFinder(element_id)
+    finder.feed(markup)
+    finder.close()
+    return finder.found
+
+
+def _element(markup: str, element_id: str) -> _Element:
+    element = _find(markup, element_id)
+    assert element is not None, f"no element with id {element_id!r}"
+    return element
+
+
+def _swapped(markup: str, element_id: str) -> _Element:
+    """Return the element, which must arrive as an htmx out-of-band swap."""
+    element = _element(markup, element_id)
+    assert element.attributes.get("hx-swap-oob") == "true"
+    return element
+
+
+def _selected(element: _Element) -> list[str | None]:
+    """Values of the checked radios / selected options inside `element`."""
+    return [
+        attributes.get("value")
+        for tag, attributes in element.descendants
+        if (tag == "input" and "checked" in attributes)
+        or (tag == "option" and "selected" in attributes)
+    ]
 
 
 def test_page_renders_the_input_and_the_status_bar(
@@ -677,7 +761,8 @@ def pipe_views() -> list[PipeMainView]:
 
 
 @pytest.fixture
-def pipe_client(pipe_views: list[PipeMainView]) -> Iterator[TestClient]:
+def pipe_web(pipe_views: list[PipeMainView]) -> Starlette:
+    """Build the pipeform web app, keeping each session's main view in `pipe_views`."""
     # pipeform also builds its Qt and Textual apps, so it needs those extras too
     pipeform = pytest.importorskip("examples.pipeform")
 
@@ -686,7 +771,13 @@ def pipe_client(pipe_views: list[PipeMainView]) -> Iterator[TestClient]:
             main_view.status_bar.timeout = 0
             pipe_views.append(main_view)
 
-    with TestClient(PipeApp().create_starlette_app()) as client:
+    web: Starlette = PipeApp().create_starlette_app()
+    return web
+
+
+@pytest.fixture
+def pipe_client(pipe_web: Starlette) -> Iterator[TestClient]:
+    with TestClient(pipe_web) as client:
         client.get("/")  # starts the session
         yield client
 
@@ -1172,3 +1263,85 @@ def test_new_clears_the_form_in_place(
         assert f'id="{widget_id}" hx-swap-oob="true"' in response.text
     assert "Nobody hasn&#x27;t said how old they are." in response.text
     assert len(app.session_views) == 1
+
+
+def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
+    pipe_web: Starlette, pipe_views: list[PipeMainView]
+) -> None:
+    """One study through the whole web stack, the way a user drives it.
+
+    Every step checks both what the browser receives (each changed fragment out of band,
+    never the field being edited) and the views behind it.
+    """
+    htmx = {"HX-Request": "true"}
+    with TestClient(pipe_web, headers=htmx) as alice, TestClient(pipe_web, headers=htmx) as bob:
+        page = alice.get("/").text
+        (view,) = pipe_views
+        form = view.pipe_form
+        name_id, material_id = _field_id(form.name), _field_id(form.material)
+        edge_id, radius_id = _field_id(form.edge_type), _field_id(form.main_pipe.radius)
+        name_log_id = _widget_id(_part(form.name, "log"))
+        fillet_id, chamfer_id = _widget_id(form.fillet.renderer), _widget_id(form.chamfer.renderer)
+        form_log_id = _widget_id(form.log_view.renderer)
+
+        def post(widget_id: str, data: dict[str, str]) -> str:
+            response = alice.post(f"/widget/{widget_id}", data=data)
+            assert response.status_code == 200
+            assert _find(response.text, widget_id) is None  # never the edited field
+            return response.text
+
+        # the page as first served
+        assert _element(page, name_log_id).text == "A name is mandatory"
+        assert _selected(_element(page, material_id)) == ["Steel"]
+        assert _selected(_element(page, edge_id)) == ["Normal"]
+        assert "hidden" in _element(page, fillet_id).attributes
+
+        # a name clears its row's message
+        body = post(name_id, {"value": "Tee", "event": "input"})
+        assert form.name.text == "Tee"
+        assert "hidden" in _swapped(body, name_log_id).attributes
+
+        # another material changes nothing else on the page
+        assert post(material_id, {material_id: "Copper", "event": "change"}) == ""
+        assert form.material.value is not None
+        assert form.material.value.value == "Copper"
+
+        # Fillet shows its group and says so in the status bar
+        body = post(edge_id, {edge_id: "Fillet", "event": "change"})
+        assert "hidden" not in _swapped(body, fillet_id).attributes
+        assert _swapped(body, _widget_id(view.status_bar.renderer)).text == (
+            "Edge type changed: Fillet"
+        )
+        assert _find(body, chamfer_id) is None  # still hidden: unchanged
+
+        # a main radius below the incident one fails the cross-field check...
+        post(radius_id, {"value": "5", "event": "input"})
+        log = _swapped(post(radius_id, {"value": "5", "event": "change"}), form_log_id)
+        assert "hidden" not in log.attributes
+        assert "incident radius" in log.text
+        # ...until it is fixed
+        post(radius_id, {"value": "60", "event": "input"})
+        assert (
+            "hidden"
+            in _swapped(post(radius_id, {"value": "60", "event": "change"}), form_log_id).attributes
+        )
+        assert form.log_view.log_message == ""
+
+        # saved, then opened in another browser's session
+        saved = alice.get("/state").content
+        bob.get("/")
+        reopened = pipe_views[1].pipe_form
+        assert (
+            bob.post("/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"] == "true"
+        )
+        page = bob.get("/").text
+
+        assert _element(page, _field_id(reopened.name)).attributes["value"] == "Tee"
+        assert "hidden" in _element(page, _widget_id(_part(reopened.name, "log"))).attributes
+        assert _selected(_element(page, _field_id(reopened.material))) == ["Copper"]
+        assert _selected(_element(page, _field_id(reopened.edge_type))) == ["Fillet"]
+        assert "hidden" not in _element(page, _widget_id(reopened.fillet.renderer)).attributes
+        assert _element(page, _field_id(reopened.main_pipe.radius)).attributes["value"] == "60.0"
+        assert "hidden" in _element(page, _widget_id(reopened.log_view.renderer)).attributes
+        assert reopened.name.text == "Tee"
+        assert reopened.main_pipe.radius.value == 60.0
