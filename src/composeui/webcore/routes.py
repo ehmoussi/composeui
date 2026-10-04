@@ -16,9 +16,14 @@ from composeui.webcore.webrenderer import (
 if TYPE_CHECKING:
     from starlette.requests import Request
 
+#: Every page and fragment reflects live server state: a browser reusing a cached copy
+#: (or restoring the fields of one) would show values the server no longer has, e.g.
+#: after a server restart.
+_NO_STORE = {"Cache-Control": "no-store"}
+
 
 def homepage(request: Request) -> HTMLResponse:
-    return HTMLResponse(render_page(request.app.state.main_view))
+    return HTMLResponse(render_page(request.app.state.main_view), headers=_NO_STORE)
 
 
 async def widget_event(request: Request) -> Response:
@@ -34,7 +39,7 @@ async def widget_event(request: Request) -> Response:
         body = await run_in_threadpool(handle_event, renderer, event, fields)
     except UnsupportedEventError as e:
         return PlainTextResponse(str(e), status_code=400)
-    return HTMLResponse(body)
+    return HTMLResponse(body, headers=_NO_STORE)
 
 
 def widget_fragment(request: Request) -> Response:
@@ -42,4 +47,4 @@ def widget_fragment(request: Request) -> Response:
     renderer = get_renderer(request.path_params["widget_id"])
     if renderer is None:
         return PlainTextResponse("Unknown widget", status_code=404)
-    return HTMLResponse(render_fragment(renderer))
+    return HTMLResponse(render_fragment(renderer), headers=_NO_STORE)

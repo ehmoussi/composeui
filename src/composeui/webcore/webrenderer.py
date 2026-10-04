@@ -192,6 +192,8 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
             f' hx-post="/widget/{self.widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
             ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            # the browser must not refill the field on reload: the server's value wins
+            ' autocomplete="off"'
             f"{disabled}>"
         )
 
@@ -389,7 +391,8 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
         options = "".join(
             '<label class="label cursor-pointer gap-2 text-base-content">'
             f'<input type="radio" class="radio radio-sm" value="{html.escape(label)}"'
-            f"{' checked' if label == selected else ''}{self._htmx_attributes()}{disabled}>"
+            f"{' checked' if label == selected else ''}{self._htmx_attributes()}"
+            f' autocomplete="off"{disabled}>'
             f"{html.escape(label)}</label>"
             for label in self._view.values
         )
@@ -414,7 +417,7 @@ class WebComboboxRenderer(_WebValuesRenderer[TValue]):
         )
         return (
             f'<select {self._root_attributes(oob=oob)} class="select w-full"'
-            f"{self._htmx_attributes()}{disabled}>{empty}{options}</select>"
+            f'{self._htmx_attributes()} autocomplete="off"{disabled}>{empty}{options}</select>'
         )
 
 
