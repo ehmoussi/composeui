@@ -16,6 +16,28 @@ and confirm dialogs.
    routes.
 2. **Progress bar** (`ProgressBarView`).
 3. **Tree view** (`TreeView`), and editable table cells if an app needs them.
+4. **Charts** (`ChartView`): curves first (one or more series of x/y points, e.g. a
+   result against a swept dimension), then scatter and bar charts. The view holds data
+   and labels only (title, axis titles and units, a legend name per series), no toolkit
+   styling; like a table, assigning new series updates it. Interaction (zoom, hover
+   values) only where a backend gives it for free. Candidates: QtCharts (part of PySide6,
+   reached through `qtpy`) on Qt, `textual-plotext` on Textual.
+
+   On the web, [ECharts](https://echarts.apache.org/) (Apache 2.0): line, scatter and bar
+   charts with zoom (`dataZoom`), hover values (`tooltip`) and a legend as options, an
+   SVG renderer, point sampling for long curves, and an `aria` text description. Its full
+   build is about 1 MB minified, so vendor a custom one into `static/` (only those charts
+   and components, the SVG renderer; no CDN, the page works offline), and load it only on
+   a page with a chart. The glue, in the dialogs' manner:
+   - the renderer puts the series in a `data-` attribute of a `<div>` as JSON, through
+     `html.escape` like any view text;
+   - `page.py` starts a chart on each such `<div>` swapped in, and disposes of the chart
+     of one swapped out (`echarts.dispose`), which would leak otherwise;
+   - two themes matching the daisyUI ones, the chart redrawn when the Theme menu or the
+     browser's preference changes, and resized with the window.
+
+   A chart is drawn in the browser: `tests/test_webrenderer.py` checks the JSON it gets,
+   `tests/test_browser.py` that it draws, follows the theme and survives a swap.
 
 The web versions follow the same rules as the existing ones: the element that sent the
 request is never swapped back (the focus rule), changes elsewhere arrive as OOB updates,
