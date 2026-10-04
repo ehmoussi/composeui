@@ -12,7 +12,13 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from composeui.core.application import Application, _add_reference_to_signals
-from composeui.webcore.routes import homepage, widget_event, widget_fragment
+from composeui.webcore.routes import (
+    homepage,
+    state_download,
+    state_upload,
+    widget_event,
+    widget_fragment,
+)
 from composeui.webcore.session import SessionStore
 
 if TYPE_CHECKING:
@@ -29,6 +35,8 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/", homepage),
             Route("/widget/{widget_id}", widget_event, methods=["POST"]),
             Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
+            Route("/state", state_download, methods=["GET"]),
+            Route("/state", state_upload, methods=["POST"]),
             Mount(
                 "/static",
                 app=StaticFiles(directory=Path(__file__).parent / "static"),

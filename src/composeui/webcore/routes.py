@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import HTMLResponse, PlainTextResponse, Response
+from starlette.datastructures import UploadFile
+from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 
+from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
@@ -68,3 +70,38 @@ def widget_fragment(request: Request) -> Response:
     if body is None:
         return PlainTextResponse("Unknown widget", status_code=404)
     return HTMLResponse(body, headers=_NO_STORE)
+
+
+def state_download(request: Request) -> Response:
+    """Download the session's state as a file, the web side of `MainView.save_state`.
+
+    A plain link, not htmx (htmx can't start downloads); without a session, the
+    browser is sent to the page, which starts one.
+    """
+    session = _session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=303)
+    filename, body = session.save_state()
+    headers = {**_NO_STORE, "Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(body, media_type="application/json", headers=headers)
+
+
+async def state_upload(request: Request) -> Response:
+    """Load an uploaded state file, the web side of `MainView.load_state`.
+
+    A load can change any part of the tree, so instead of collecting fragments the page
+    reloads; a rejected file leaves the state alone and says why in the status bar.
+    """
+    session = _session(request)
+    if session is None:
+        return Response(headers=_RELOAD)
+    form = await request.form(max_files=1)
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile):
+        return PlainTextResponse("No file uploaded", status_code=400)
+    # one byte over the limit is enough to know the file is too large
+    content = await upload.read(MAX_STATE_SIZE + 1)
+    status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
+    if status_bar is None:
+        return Response(headers=_RELOAD)
+    return HTMLResponse(status_bar, headers=_NO_STORE)
