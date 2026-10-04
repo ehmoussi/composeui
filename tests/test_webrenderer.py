@@ -26,6 +26,7 @@ from starlette.testclient import TestClient
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
+    ActionView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -1005,3 +1006,111 @@ def test_an_uploaded_file_name_cannot_reach_the_download_header(
     assert '"' in main_view.state_filepath.name  # the hostile name did reach the server
     disposition = client.get("/state").headers["content-disposition"]
     assert re.fullmatch(r'attachment; filename="[A-Za-z0-9._-]+\.hello"', disposition)
+
+
+def _action_id(action: Any) -> str:
+    return _widget_id(action.renderer)
+
+
+def _count(signal: Any) -> list[None]:
+    """Record each emission of a no-argument signal."""
+    emitted: list[None] = []
+
+    def on_triggered() -> None:
+        emitted.append(None)
+
+    signal.connect(on_triggered)
+    return emitted
+
+
+def test_the_file_menu_sits_in_the_header(main_view: HelloMainView, client: TestClient) -> None:
+    menu = main_view.file_menu
+    assert not menu.is_visible  # "popped up" in Qt terms; a dropdown is always shown
+
+    page = client.get("/").text
+
+    header = page[page.index("<header") : page.index("</header>")]
+    assert f'<div id="{_widget_id(menu.renderer)}" class="dropdown">' in header
+    assert '<kbd class="kbd kbd-sm">Ctrl+Shift+S</kbd>' in header
+    assert 'role="separator"' in header
+    assert f'href="/state?trigger={_action_id(menu.save)}" download' in header
+    assert 'type="file" name="file"' in header
+    assert f'hx-post="/widget/{_action_id(menu.new)}"' in header
+
+
+def test_a_menu_action_fires_its_triggered(main_view: HelloMainView, client: TestClient) -> None:
+    new = main_view.file_menu.new
+    triggered = _count(new.triggered)
+
+    response = client.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+
+    assert response.status_code == 200
+    assert len(triggered) == 1
+
+    new.is_enabled = False
+    refused = client.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+
+    assert refused.status_code == 400
+    assert len(triggered) == 1
+
+
+def test_exit_ends_the_session(
+    app: _HelloApp, main_view: HelloMainView, client: TestClient
+) -> None:
+    field_id = _field_id(main_view.form.name)
+
+    response = client.post(
+        f"/widget/{_action_id(main_view.file_menu.exit_app)}", data={"event": "triggered"}
+    )
+
+    assert response.headers["hx-redirect"] == "/"
+    stale = client.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
+    assert stale.headers["hx-refresh"] == "true"
+    client.get("/")
+    assert len(app.session_views) == 2  # the redirect lands on a fresh session
+
+
+@pytest.mark.parametrize("action", ["save", "save_as"])
+def test_a_save_link_fires_its_action_then_downloads(
+    main_view: HelloMainView, client: TestClient, action: str
+) -> None:
+    save = getattr(main_view.file_menu, action)
+    triggered = _count(save.triggered)
+    _type_name(client, main_view, "Bob")
+
+    response = client.get(f"/state?trigger={_action_id(save)}")
+
+    assert len(triggered) == 1
+    assert "attachment" in response.headers["content-disposition"]
+    assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+
+
+def test_the_open_upload_fires_its_action_then_loads(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    open_file = main_view.file_menu.open_file
+    triggered = _count(open_file.triggered)
+    saved = json.dumps({"form": {"name": {"text": "Zoe"}}}).encode()
+
+    response = client.post(
+        "/state",
+        files={"file": ("study.hello", saved)},
+        data={"trigger": _action_id(open_file)},
+    )
+
+    assert len(triggered) == 1
+    assert response.headers["hx-refresh"] == "true"
+    assert main_view.form.name.text == "Zoe"
+
+
+def test_a_checked_action_shows_its_check_mark() -> None:
+    action = ActionView(text="Wrap", is_checkable=True, is_checked=True)
+    action.render(RendererType.WEB)
+    renderer = action.renderer
+    assert isinstance(renderer, WebRenderer)
+
+    assert "<span>✓ Wrap</span>" in renderer.to_html()
+
+    action.is_checked = False
+
+    assert "<span>Wrap</span>" in renderer.to_html()

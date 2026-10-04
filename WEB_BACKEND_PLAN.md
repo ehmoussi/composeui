@@ -675,14 +675,14 @@ with stdlib `html.escape`.
 9. **M8 — Menu / ActionView.** A daisyUI navbar/dropdown for `FileMenu`, with
    `triggered` signals posted to endpoints.
 
-   1. `WebMenuRenderer` (`"menu"`): `<div class="dropdown"><div tabindex="0"
+   1. ~~`WebMenuRenderer` (`"menu"`): `<div class="dropdown"><div tabindex="0"
       role="button" class="btn btn-ghost">{title}</div><ul class="menu dropdown-content
       ...">children</ul></div>`, walking `children_views` the same way the form walks
       rows. `Menu.__attrs_post_init__` sets `is_visible = False` ("visible only when
       triggered", a Qt popup notion), so the web renderer **ignores** `is_visible` for
       menus (no-op dispatcher entry, like `_TextualNoopRenderer`). Otherwise the menu
-      would always be `hidden`.
-   2. `WebActionRenderer` (`"action"`): `<li><button hx-post="/widget/{id}"
+      would always be `hidden`.~~
+   2. ~~`WebActionRenderer` (`"action"`): `<li><button hx-post="/widget/{id}"
       hx-vals='{"event": "triggered"}' hx-swap="none">{text}<kbd
       class="kbd kbd-sm">{shortcut}</kbd></button></li>`. `dispatch("triggered")` →
       `view.triggered.emit()`. `WebSeparatorRenderer` (`"separator"`): an `<li>`
@@ -690,19 +690,42 @@ with stdlib `html.escape`.
       download link (`<a href="/state" download>`), and `OpenFileAction` renders as the
       M7 file input. The `GET /state` handler still emits `triggered` first, so user
       callbacks connected to it run; core's `FileMenu._save_state` then just gets
-      `None` from `ask_save_filepath`, which is harmless.
-   3. Keyboard shortcuts: display only for v1. Chrome reserves Ctrl+N/Ctrl+W/Ctrl+T, and
+      `None` from `ask_save_filepath`, which is harmless.~~
+   3. ~~Keyboard shortcuts: display only for v1. Chrome reserves Ctrl+N/Ctrl+W/Ctrl+T, and
       Ctrl+Q quits Firefox on Linux, so faithful bindings are impossible. Ctrl+S/Ctrl+O
       *can* be intercepted (`keydown` + `preventDefault`), but that needs a few lines
-      of JS. Note it as a follow-up.
-   4. `WebMainRenderer`: render the main view's menus in a top `navbar bg-base-100`
+      of JS. Note it as a follow-up.~~
+   4. ~~`WebMainRenderer`: render the main view's menus in a top `navbar bg-base-100`
       before the content. `close()` sets a `closed` flag on the session; after
       dispatch, the route sees it, drops the session (M6), and answers with
       `HX-Redirect: /` (a fresh session). New stays generic: `NewAction._new_study` is a
-      no-op hook in core, the same as on Qt/Textual.
-   5. Tests: `GET /` contains the navbar with New/Open/Save/Save As/Exit and their
+      no-op hook in core, the same as on Qt/Textual.~~
+   5. ~~Tests: `GET /` contains the navbar with New/Open/Save/Save As/Exit and their
       `kbd` shortcuts; POSTing Exit drops the session and returns `HX-Redirect`;
-      a user callback connected to `new.triggered` runs on POST. `make check`.
+      a user callback connected to `new.triggered` runs on POST. `make check`.~~
+
+   *Implementation notes (M8 as built), where it differs from the steps above:*
+   - **Save, Save As and Open still fire their own `triggered`.** The Save/Save As
+     links are `/state?trigger={action id}`, and the Open file input posts a `trigger`
+     field with the upload. `WebSession.trigger_action` fires that action's
+     `triggered` (only for an action id of this session) before the download or the
+     load, so user code connected to those signals still runs. Core's
+     `FileMenu._save_state`/`_load_state` then get `None` from `ask_*_filepath`,
+     which is harmless.
+   - **Checkable actions show `is_checked` (a ✓) but triggering doesn't toggle it.**
+     That matches Qt, whose `QAction` toggles its own check mark without writing it
+     back to the view. Disabled actions render as `menu-disabled` and refuse
+     `triggered` (400). `icon` and `data` mark the item dirty but aren't displayed.
+   - The Open file input has no `accept` filter: an action doesn't know its main
+     view's extension. The server checks the extension instead (M7). Items close the
+     dropdown on click (`hx-on:click` blurs the focused element, since daisyUI keeps a
+     dropdown open while something inside it has focus).
+   - **Exit** sets `WebMainRenderer.is_closed` from `close()`. After the request,
+     `widget_event` sees `WebSession.closed`, drops the session from the store, and
+     answers `HX-Redirect: /`, which lands on a fresh session.
+   - Checked in Chromium: the menu sits in the header with its shortcuts; Save
+     downloads `hello-composeui.hello` and closes the dropdown; Exit lands on an empty
+     form; Open with the saved file brings the name back.
 
 10. **M9 — Tests.** By now each milestone has added its own tests to
     `tests/test_webrenderer.py` (AGENTS.md: every behavior change needs a test). M9 is

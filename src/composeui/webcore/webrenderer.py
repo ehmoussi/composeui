@@ -26,12 +26,18 @@ from composeui.core.renderer import (
     ViewLike,
 )
 from composeui.core.view import (
+    ActionView,
     FormLabelRowView,
     FormRowView,
     FormView,
     GroupFormView,
     LogType,
     MainView,
+    Menu,
+    OpenFileAction,
+    SaveAction,
+    SaveAsAction,
+    SeparatorAction,
     StatusBar,
 )
 from composeui.webcore.page import get_page
@@ -626,11 +632,128 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
         )
 
 
+#: closes an open daisyUI dropdown (it stays open while something in it has focus)
+_CLOSE_DROPDOWN = 'hx-on:click="document.activeElement.blur()"'
+
+
+def _shortcut_label(shortcut: str) -> str:
+    """Show a Qt-style shortcut the way menus do: `Ctrl+Shift+s` → `Ctrl+Shift+S`."""
+    *modifiers, key = shortcut.split("+")
+    return "+".join([*modifiers, key.upper()])
+
+
+class WebMenuRenderer(WebRenderer[Menu]):
+    """A navbar dropdown of the menu's actions.
+
+    `Menu.is_visible` means "popped up" (it starts False, a Qt notion): a dropdown is
+    always shown and opens on click, so it is ignored here.
+    """
+
+    _role = "menu"
+
+    def __init__(self, view: Menu) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._ignore,
+                "title": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        oob_attribute = ' hx-swap-oob="true"' if oob else ""
+        items = "".join(
+            child.renderer.to_html()
+            for child in self._view.children_views
+            if isinstance(child.renderer, WebRenderer)
+        )
+        return (
+            f'<div id="{self.widget_id}"{oob_attribute} class="dropdown">'
+            f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm">'
+            f"{html.escape(self._view.title)}</div>"
+            '<ul tabindex="0" class="menu dropdown-content z-10 w-56 rounded-box bg-base-100'
+            f' p-2 shadow-sm">{items}</ul></div>'
+        )
+
+    def _ignore(self, _view: Menu, _rendered_object: str, _value: Any) -> None:
+        pass
+
+
+class WebActionRenderer(WebRenderer[ActionView]):
+    """A menu item posting `triggered`; Save/Open are a download link and an upload.
+
+    Those two can't go through the generic widget event: a download has to be a plain
+    link, and a file has to be uploaded. Both name the action (`trigger`), so its
+    `triggered` still fires first, for whatever user code is connected to it.
+    """
+
+    _role = "action"
+
+    def __init__(self, view: ActionView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("text", "icon", "data", "shortcut", "is_checkable", "is_checked"),
+                self._mark_dirty,
+            )
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        view = self._view
+        # like Qt, the check mark shows `is_checked`; triggering doesn't toggle it
+        check = "✓ " if view.is_checkable and view.is_checked else ""
+        shortcut = (
+            f'<kbd class="kbd kbd-sm">{html.escape(_shortcut_label(view.shortcut))}</kbd>'
+            if view.shortcut
+            else ""
+        )
+        label = f"<span>{check}{html.escape(view.text)}</span>{shortcut}"
+        if not view.is_enabled:
+            item = f'<button type="button" class="justify-between" disabled>{label}</button>'
+        elif isinstance(view, (SaveAction, SaveAsAction)):
+            item = (
+                f'<a class="justify-between" href="/state?trigger={self.widget_id}" download'
+                f" {_CLOSE_DROPDOWN}>{label}</a>"
+            )
+        elif isinstance(view, OpenFileAction):
+            item = (
+                f'<label class="justify-between">{label}<input type="file" name="file"'
+                ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
+                f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
+                f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}></label>'
+            )
+        else:
+            item = (
+                f'<button type="button" class="justify-between"'
+                f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
+                f' hx-swap="none" {_CLOSE_DROPDOWN}>{label}</button>'
+            )
+        menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
+        return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "triggered" or not self._view.is_enabled:
+            super().dispatch(event, form)
+        self._view.triggered.emit()
+
+
+class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
+    _role = "separator"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        return (
+            f'<li {self._root_attributes(oob=oob)} role="separator">'
+            '<hr class="my-1 border-base-300 p-0"></li>'
+        )
+
+
 class WebMainRenderer(MainRenderer[MainView, str]):
     """Renders the whole page; never swapped itself, so its attributes are no-ops."""
 
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
+        #: set by `MainView.close()` (the Exit action); the route then ends the session
+        self.is_closed = False
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 (
@@ -649,6 +772,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             self._rendered_object = f"cui-{id(self._view)}-main"
 
     def page_html(self) -> str:
+        menus: list[str] = []
         content: list[str] = []
         status_bar = ""
         for child_view in self._view.children_views:
@@ -656,12 +780,15 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 continue
             if isinstance(child_view, StatusBar):
                 status_bar = child_view.renderer.to_html()
+            elif isinstance(child_view, Menu):
+                menus.append(child_view.renderer.to_html())
             else:
                 content.append(child_view.renderer.to_html())
         # bottom padding keeps the last row clear of the fixed status bar
         return get_page(
             self._view.title,
-            '<header class="navbar bg-base-100 px-4 shadow-sm">'
+            '<header class="navbar gap-2 bg-base-100 px-4 shadow-sm">'
+            f"{''.join(menus)}"
             f'<h1 class="text-lg font-semibold">{html.escape(self._view.title)}</h1>'
             "</header>"
             '<main class="mx-auto max-w-3xl p-4 pb-16">'
@@ -672,7 +799,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         )
 
     def close(self) -> None:
-        pass  # closing a session lands with the Exit action (M8)
+        self.is_closed = True
 
     def open_file(self) -> Path | None:
         # no browser-side path to return: the web backend uploads instead (M7), and
@@ -693,6 +820,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 
 #: renderer keys of the web backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
+    "action": WebActionRenderer,
     "combobox": WebComboboxRenderer,
     "float_input": WebFloatInputRenderer,
     "form": WebFormRenderer,
@@ -702,6 +830,8 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "label": WebLabelRenderer,
     "log": WebLogRenderer,
     "main": WebMainRenderer,
+    "menu": WebMenuRenderer,
     "radio_group": WebRadioGroupRenderer,
+    "separator": WebSeparatorRenderer,
     "status_bar": WebStatusBarRenderer,
 }

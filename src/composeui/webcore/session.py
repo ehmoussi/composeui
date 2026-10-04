@@ -23,6 +23,7 @@ from composeui.core.renderer import NoRenderedObjectError
 from composeui.core.view import CONVERTER, _apply_state
 from composeui.webcore.webrenderer import (
     RenderTarget,
+    WebActionRenderer,
     WebMainRenderer,
     collect_dirty,
     handle_event,
@@ -63,6 +64,20 @@ class WebSession(RenderTarget):
         self.main_view = main_view
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
+
+    @property
+    def closed(self) -> bool:
+        """Whether the app asked to close (`MainView.close()`, e.g. the Exit action)."""
+        renderer = self.main_view.renderer
+        return isinstance(renderer, WebMainRenderer) and renderer.is_closed
+
+    def trigger_action(self, widget_id: str) -> None:
+        """Fire the `triggered` of one of this session's actions; ignore any other id."""
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+            if isinstance(renderer, WebActionRenderer):
+                # its fragments are dropped: the caller answers with a download or a reload
+                handle_event(renderer, "triggered", {})
 
     def page_html(self) -> str:
         with self.lock:
@@ -160,6 +175,10 @@ class SessionStore:
         with self._lock:
             self._sessions[session_id] = (session, time.monotonic())
         return session_id, session
+
+    def drop(self, session_id: Any) -> None:
+        with self._lock:
+            self._sessions.pop(session_id, None)
 
     def _drop_expired(self) -> None:
         now = time.monotonic()
