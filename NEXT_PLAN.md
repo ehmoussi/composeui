@@ -63,12 +63,12 @@ There is no CI: every check depends on someone running `make check test` locally
 
 ## 4 — Web backend follow-ups
 
-1. **Make `app.connect` work per session.** Today it only wires the template
+1. ~~**Make `app.connect` work per session.** Today it only wires the template
    `app.main_view`, which no browser displays: the web backend's biggest surprise.
    Record each `connect(view=..., signals=...)` made against the template, resolve the
    view by its attribute path from the main view, and replay it on every session's main
    view (in `_new_session_view`, before `setup_session`). Test with a callback connected
-   through `app.connect` reacting in two browsers.
+   through `app.connect` reacting in two browsers.~~ *(Also fixed in core: `app.connect` crashed on any backend when the callback asked for `main_view`, because `Signal` held every injected callback as a `WeakMethod`.)*
 2. **Web `ModelApplication`.** Decide per-session versus shared models: a
    `build_model` factory per session matches how main views work, while one shared
    `Model` would need its own locking. Implement the chosen one with
