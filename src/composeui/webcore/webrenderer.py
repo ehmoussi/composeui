@@ -15,7 +15,7 @@ import threading
 import weakref
 from abc import abstractmethod
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
 
 from typing_extensions import Protocol
 
@@ -50,6 +50,8 @@ _REGISTRY: weakref.WeakValueDictionary[str, WebRenderer[Any]] = weakref.WeakValu
 _LOCK = threading.RLock()
 
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
+#: seconds a status bar waits past its message's timeout before fetching itself again
+_AUTO_CLEAR_MARGIN = 0.25
 
 
 class UnsupportedEventError(Exception):
@@ -95,6 +97,12 @@ def handle_event(renderer: WebRenderer[Any], event: str, form: Mapping[str, str]
         return render_dirty(dirty)
 
 
+def render_fragment(renderer: WebRenderer[Any]) -> str:
+    """Render one fragment's current state, for a widget refreshing itself."""
+    with _LOCK:
+        return renderer.to_html()
+
+
 def render_page(main_view: MainView) -> str:
     with _LOCK:
         if not isinstance(main_view.renderer, WebMainRenderer):
@@ -105,6 +113,8 @@ def render_page(main_view: MainView) -> str:
 class WebRenderer(Renderer[TView, str]):
     #: distinguishes the renderers a `RendererContainer` binds to one same view
     _role: ClassVar[str]
+    #: whether a `<label for=...>` can point at the root element (a `<div>` can't)
+    is_labelable: ClassVar[bool] = True
 
     def __init__(self, view: TView) -> None:
         super().__init__(view)
@@ -176,7 +186,7 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
         # `change` from being dropped behind an in-flight debounced edit.
         disabled = "" if self._view.is_enabled else " disabled"
         return (
-            f'<input {self._root_attributes(oob=oob)} class="input validator w-full" type="text"'
+            f'<input {self._root_attributes(oob=oob)} class="input w-full" type="text"'
             f' name="value" value="{html.escape(self._text())}"'
             f' placeholder="{html.escape(self._view.placeholder)}"{self._extra_attributes()}'
             f' hx-post="/widget/{self.widget_id}"'
@@ -252,6 +262,17 @@ class FloatInputViewLike(TextFieldViewLike, Protocol):
 _DECIMAL_PATTERN = r"[+\-]?[0-9]*([.][0-9]*)?([eE][+\-]?[0-9]*)?"
 
 
+def _is_float(text: str) -> bool:
+    """Whether `text` is an acceptable float field value ("" meaning no value)."""
+    if text == "":
+        return True
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
 class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
     """A decimal text field.
 
@@ -259,6 +280,10 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
     "-", indistinguishable from a cleared field. A text field posts the raw text and
     unparsable text is ignored, the same as the Qt/Textual float inputs. Like Textual,
     `minimum`/`maximum`/`decimals` are tracked on the view but not enforced on input.
+
+    Leaving the field (`change`) with unparsable text puts the value back: Qt's
+    validator never lets such text in at all, and a field showing "4a" while the
+    view (and its validators) still sees 4 would contradict every message around it.
     """
 
     _role = "float_input"
@@ -275,6 +300,15 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
                 "decimals": self._mark_dirty,
             }
         )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event == "change" and not _is_float(form.get("value", "")):
+            # no `editing_finished`, as Qt doesn't emit it for unacceptable text; the
+            # field itself is swapped back, which is safe now that it has been left
+            self._last_posted_text = None
+            self._mark_dirty(self._view, self.widget_id, self._view.value)
+            return
+        super().dispatch(event, form)
 
     def _refresh_value(self, view: FloatInputViewLike, rendered_object: str, value: Any) -> None:
         self._last_posted_text = None  # the server's value wins over what was typed
@@ -294,6 +328,94 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
 
     def _extra_attributes(self) -> str:
         return f' inputmode="decimal" pattern="{_DECIMAL_PATTERN}"'
+
+
+TValue = TypeVar("TValue")
+
+
+class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
+    value: TValue | None
+    values: dict[str, TValue]
+    value_changed: Signal[TValue | None]
+
+    def serialize_value(self) -> str | None: ...
+
+    def deserialize_value(self, label: str | None) -> TValue | None: ...
+
+
+class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
+    """A choice among `values`, identified on the wire by its label (its `values` key).
+
+    Labels, not `str(value)`: the same convention as `serialize_value`/
+    `deserialize_value`, which also turn a stale or bogus label into `None` with a
+    warning instead of the `ValueError` `_check_value` would raise.
+    """
+
+    def __init__(self, view: ValuesViewLike[TValue]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._mark_dirty,
+                "values": self._mark_dirty,
+            }
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "change":
+            super().dispatch(event, form)
+        # the field is named after the widget id, so two groups never share a radio set
+        label = form.get(self.widget_id, "")
+        value = None if label == "" else self._view.deserialize_value(label)
+        if value == self._view.value:
+            return
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
+
+    def _htmx_attributes(self) -> str:
+        return (
+            f' name="{self.widget_id}" hx-post="/widget/{self.widget_id}" hx-trigger="change"'
+            ' hx-vals=\'{"event": "change"}\' hx-swap="none"'
+        )
+
+
+class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
+    _role = "radio_group"
+    is_labelable = False
+
+    def to_html(self, *, oob: bool = False) -> str:
+        selected = self._view.serialize_value()
+        disabled = "" if self._view.is_enabled else " disabled"
+        options = "".join(
+            '<label class="label cursor-pointer gap-2 text-base-content">'
+            f'<input type="radio" class="radio radio-sm" value="{html.escape(label)}"'
+            f"{' checked' if label == selected else ''}{self._htmx_attributes()}{disabled}>"
+            f"{html.escape(label)}</label>"
+            for label in self._view.values
+        )
+        return (
+            f'<div {self._root_attributes(oob=oob)} role="radiogroup"'
+            f' class="flex flex-wrap gap-x-6 gap-y-2">{options}</div>'
+        )
+
+
+class WebComboboxRenderer(_WebValuesRenderer[TValue]):
+    _role = "combobox"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        selected = self._view.serialize_value()
+        disabled = "" if self._view.is_enabled else " disabled"
+        # an empty choice only while nothing is selected, as Qt's combobox shows nothing
+        empty = '<option value="" selected></option>' if selected is None else ""
+        options = "".join(
+            f'<option value="{html.escape(label)}"'
+            f"{' selected' if label == selected else ''}>{html.escape(label)}</option>"
+            for label in self._view.values
+        )
+        return (
+            f'<select {self._root_attributes(oob=oob)} class="select w-full"'
+            f"{self._htmx_attributes()}{disabled}>{empty}{options}</select>"
+        )
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -321,18 +443,21 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         self._refresh_dispatcher.update({"label": self._mark_dirty})
 
     def to_html(self, *, oob: bool = False) -> str:
+        field = self._field_renderer()
+        # a radio group isn't labelable: its `role="radiogroup"` names itself instead
+        target = f' for="{field.widget_id}"' if field.is_labelable else ""
         return (
-            f'<label {self._root_attributes(oob=oob)} for="{self._field_id()}"'
+            f"<label {self._root_attributes(oob=oob)}{target}"
             f' class="label text-sm font-medium">{html.escape(self._view.label)}</label>'
         )
 
-    def _field_id(self) -> str:
+    def _field_renderer(self) -> WebRenderer[Any]:
         if not isinstance(self._view.renderer, RendererContainer):
             raise NoRenderedObjectError
         field_renderer = self._view.renderer.get_renderer("field")
         if not isinstance(field_renderer, WebRenderer):
             raise NoRenderedObjectError
-        return field_renderer.widget_id
+        return field_renderer
 
 
 class LogViewLike(ViewLike, Protocol):
@@ -363,9 +488,10 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
         attributes = self._root_attributes(oob=oob)
         if self._view.is_visible and self._view.log_message == "":
             attributes += " hidden"  # same as Qt/Textual: an empty log takes no room
-        # `pre-line`: `FormView.validate` joins its messages with newlines
+        # `pre-line`: `FormView.validate` joins its messages with newlines.
+        # `data-log`: the page's stylesheet marks the field just before an error log
         return (
-            f'<p {attributes} aria-live="polite"'
+            f'<p {attributes} aria-live="polite" data-log="{self._view.log_type.name.lower()}"'
             f' class="text-sm whitespace-pre-line {_LOG_CLASSES[self._view.log_type]}">'
             f"{html.escape(self._view.log_message)}</p>"
         )
@@ -386,11 +512,30 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
     def to_html(self, *, oob: bool = False) -> str:
         # docked like Qt/Textual's status bar; an empty message leaves a quiet empty line
         return (
-            f'<footer {self._root_attributes(oob=oob)} role="status" aria-live="polite"'
+            f"<footer {self._root_attributes(oob=oob)}{self._auto_clear_attributes()}"
+            ' role="status" aria-live="polite"'
             ' class="fixed inset-x-0 bottom-0 min-h-8 border-t border-base-300 bg-base-100'
             ' px-4 py-1 text-sm">'
             f"{html.escape(self._view.message)}"
             "</footer>"
+        )
+
+    def _auto_clear_attributes(self) -> str:
+        """Fetch the bar again once its message has timed out.
+
+        `show_message`'s timer clears the message on the server outside any request,
+        so no response ever tells the browser. Instead, a bar showing a message asks
+        for its own current state once, just after `timeout`; by then the timer has
+        cleared it. A message that was replaced or re-shown meanwhile comes back with
+        its own fresh delay, so a stale fetch is harmless.
+        """
+        if self._view.message == "" or self._view.timeout <= 0:
+            return ""
+        # margin: the browser's delay starts after the server's timer did, but not by much
+        delay_ms = round((self._view.timeout + _AUTO_CLEAR_MARGIN) * 1000)
+        return (
+            f' hx-get="/widget/{self.widget_id}" hx-trigger="load delay:{delay_ms}ms"'
+            ' hx-swap="outerHTML"'
         )
 
 
@@ -461,11 +606,13 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 
 #: renderer keys of the web backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
+    "combobox": WebComboboxRenderer,
     "float_input": WebFloatInputRenderer,
     "form_label": WebFormLabelRenderer,
     "input": WebInputRenderer,
     "label": WebLabelRenderer,
     "log": WebLogRenderer,
     "main": WebMainRenderer,
+    "radio_group": WebRadioGroupRenderer,
     "status_bar": WebStatusBarRenderer,
 }

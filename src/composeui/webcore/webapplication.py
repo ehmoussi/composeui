@@ -10,7 +10,7 @@ from starlette.staticfiles import StaticFiles
 
 from composeui.core.application import Application
 from composeui.core.registry import RendererType
-from composeui.webcore.routes import homepage, widget_event
+from composeui.webcore.routes import homepage, widget_event, widget_fragment
 
 if TYPE_CHECKING:
     from composeui.core.view import MainView
@@ -25,6 +25,7 @@ def create_starlette_app(main_view: MainView) -> Starlette:
         routes=[
             Route("/", homepage),
             Route("/widget/{widget_id}", widget_event, methods=["POST"]),
+            Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
             Mount(
                 "/static",
                 app=StaticFiles(directory=Path(__file__).parent / "static"),

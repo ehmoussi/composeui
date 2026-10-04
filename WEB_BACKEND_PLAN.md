@@ -393,9 +393,19 @@ with stdlib `html.escape`.
      ignored, exactly like Qt/Textual. So `minimum`/`maximum`/`decimals` are tracked
      (they mark the field dirty) but, as in Textual, not enforced on input. A
      `pattern` (checked in Chromium: accepts `-`, `1.`, `1e3`; rejects `abc`,
-     `1.2.3`) plus daisyUI's `validator` class shows a red border on malformed text.
+     `1.2.3`) marks malformed text red once the user has interacted with the field.
      Values render with `str(value)`, the same as Qt, instead of `format(v, "g")`,
      which turns `1234567.0` into `1.23457e+06`.
+   - **Revised after M4 (field ↔ message):** daisyUI's `validator` class was dropped.
+     It painted a field *green* from the browser's own rules alone, even when the
+     server-side message next to it said "A name is mandatory". Instead, the page's
+     stylesheet turns a field red when the log right after it shows an error
+     (`.input:has(+ [data-log="error"]:not([hidden]))`; logs carry `data-log`), so
+     the field never needs swapping while being typed in. Leaving a float field
+     (`change`) with unparsable text swaps the field back to the view's value without
+     emitting `editing_finished` (Qt's validator never accepts such text), so the
+     field never shows `4a` while the validators judge 4. Both were checked in Chromium.
+     M5's form rows put each field right before its log, so the same rule applies there.
    - **Shared `_WebTextFieldRenderer` base** for both text fields, typed with a
      `TextFieldViewLike` Protocol (placeholder + the three signals). A `change` that
      follows an `input` with the same text does not re-emit `text_changed`/
@@ -411,34 +421,56 @@ with stdlib `html.escape`.
 5. **M4 — RadioGroupView / ComboboxView (`ValuesGroupMixin`).** Render as daisyUI
    `radio`/`select` components and wire `value_changed`.
 
-   1. Shared wire format: options are identified by their **label** (the `values` key),
+   1. ~~Shared wire format: options are identified by their **label** (the `values` key),
       never by `str(value)`, the same convention as `serialize_value`/
       `deserialize_value`. The route turns the posted label back into a value with
       `view.deserialize_value(label)`. An unknown label gives `None` plus a warning
       log, and **never** `ValueError` from `_check_value`, because a stale page posting
-      an old label must not 500.
-   2. `WebRadioGroupRenderer` (`"radio_group"`): a `<div id role="radiogroup"
+      an old label must not 500.~~
+   2. ~~`WebRadioGroupRenderer` (`"radio_group"`): a `<div id role="radiogroup"
       hx-post="/widget/{id}" hx-trigger="change" hx-vals='js:{"event": "change"}'
       hx-swap="none" hx-include="this">` wrapping one `<label><input type="radio"
       class="radio" name="value" value="{label}" checked?> {label}</label>` per entry.
       The radio `name` must also be unique per group, otherwise two groups on one page
       share a radio set. Either use `name="{id}"` and read that field, or keep
       `name="value"` with each group wrapped in its own `<form>`. **Pick `name="{id}"`**
-      and have `dispatch` read `form[self._rendered_object]`.
-   3. `WebComboboxRenderer` (`"combobox"`): `<select class="select" name="value"
+      and have `dispatch` read `form[self._rendered_object]`.~~
+   3. ~~`WebComboboxRenderer` (`"combobox"`): `<select class="select" name="value"
       hx-post ... hx-trigger="change">`, with a leading empty `<option value="">` only
-      when `value is None` (Qt's `QValueComboBox` shows nothing selected in that case).
-   4. Both renderers: dispatcher `value`, `values` → `_mark_dirty`. A `values` change
+      when `value is None` (Qt's `QValueComboBox` shows nothing selected in that case).~~
+   4. ~~Both renderers: dispatcher `value`, `values` → `_mark_dirty`. A `values` change
       re-renders the whole option set, and `_reconcile_values` has already cleared a
       no-longer-valid `value`. `dispatch("change")` →
       `with stop_refresh(): view.value = deserialize_value(label)`, then
       `value_changed.emit(view.value)`, the same shape as `_update_value` in both other
-      backends.
-   5. Tests (direct renderer level, as in M3): select a label → `view.value` is the enum
+      backends.~~
+   5. ~~Tests (direct renderer level, as in M3): select a label → `view.value` is the enum
       member and `value_changed` fires once; replacing `values` marks the group dirty and
       the new HTML has the new options with the right one `checked`/`selected`; a bogus
       label → `value is None` and no exception; two radio groups render distinct
-      `name`s. `make check`.
+      `name`s. `make check`.~~
+
+   *Implementation notes (M4 as built), where it differs from the steps above:*
+   - **htmx attributes sit on each radio `<input>`, not on the wrapping `<div>`.**
+     htmx always sends the triggering element's named value, and a radio is checked by
+     the time its `change` fires. That avoids relying on `hx-include="this"` pulling
+     inputs out of a non-form container. The radio group and the `<select>` are named
+     after the widget id, and `dispatch` reads `form[widget_id]`.
+   - **Choosing the current value again does nothing**, so `value_changed` only fires
+     on a real change. The empty `<option>` posts `""`, which means `None` directly,
+     without going through `deserialize_value`'s unknown-label warning. That makes
+     the empty choice a way to clear the combobox, and it stays in the browser's list
+     after a pick, because the source `<select>` is never swapped back (re-rendering it
+     would drop keyboard focus mid-arrowing).
+   - **A form label doesn't use `for=` on a radio group** (a `<div>` isn't labelable).
+     A public `is_labelable` class flag on `WebRenderer` lets `WebFormLabelRenderer`
+     skip it. Ideally the group would get an `aria-labelledby` (M10 accessibility pass).
+   - Tests run mostly over HTTP rather than at the renderer level, through the hello
+     example, which gained a greeting-style radio group (Casual/Formal re-greets in the
+     status bar) and a favourite-colour combobox that starts empty and feeds the
+     summary. A radio *row* (`LabelRowRadioGroupView`) is covered at renderer level.
+     Checked in headless Chromium: clicking Formal and picking Blue update the status
+     bar and summary, and neither the radio group nor the select is swapped back.
 
 6. **M5 — FormView / FormRowView / GroupFormView.** Assemble `examples/pipeform.py` as
    the acceptance target, as it already is for `qtrenderer`/`textualrenderer`. Nested
@@ -615,14 +647,19 @@ with stdlib `html.escape`.
        point Tailwind's `@source` at `src/composeui/webcore/**/*.py`. Add a
        `make css` target. Also vendor or drop the CDN dependency entirely, so the
        backend works offline.
-    2. `StatusBar` auto-clear: **use a one-shot fetch, not polling.** When `message`
+    2. ~~`StatusBar` auto-clear: **use a one-shot fetch, not polling.** When `message`
        is non-empty and `timeout > 0`, render the status bar with
        `hx-get="/widget/{id}" hx-trigger="load delay:{timeout}s" hx-swap="outerHTML"`.
        Add a `GET /widget/{id}` route that returns the fragment's current HTML. The
        server's own `threading.Timer` will have cleared the message by then, so the
        swap shows the cleared state at the right time, with no every-2s traffic and no
        SSE. A new message re-renders the bar, and the new fragment carries a fresh
-       trigger, so an older pending fetch just returns current state harmlessly.
+       trigger, so an older pending fetch just returns current state harmlessly.~~ *(Done early, after M4:
+       before this, the browser kept showing a message the server had already
+       cleared, even across unrelated updates, because the timer clears it outside any
+       request. Built as described, plus a 0.25 s margin on the delay, since the browser's
+       delay starts slightly after the server's timer. Checked in Chromium: a message is
+       gone by ~3.3 s, and one re-shown before then keeps its own full delay.)*
     3. Accessibility pass: `aria-live="polite"` on the status bar and logs,
        `aria-invalid`/`aria-describedby` linking an input to its row log, and `<label
        for>` everywhere (M3 step 1).
