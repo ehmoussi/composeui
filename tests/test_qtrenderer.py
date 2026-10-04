@@ -6,14 +6,6 @@ assert on the real widget's state, and drive interactions through the widget lay
 (typed keystrokes, a real radio-button click, a triggered `QAction`) to prove the
 round trip back into the view - the same style `tests/test_textual_renderer.py`
 already uses for the Textual backend.
-
-`_process_events()` flushes Qt's deferred-delete queue right after `render()`:
-`QtRadioGroupRenderer.render()` constructs a `QRadioGroup` (which builds its initial
-buttons), then calls `self.refresh()`, which re-applies "values" and rebuilds them a
-second time - the first set's `deleteLater()`'d buttons stay real `QObject` children
-until the event loop actually processes that delete, so `findChildren` sees both
-sets until this runs. A real running app never notices (its event loop processes
-this before a user can click anything); a synchronous test does.
 """
 
 from __future__ import annotations
@@ -21,10 +13,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from qtpy.QtCore import QEvent, Qt
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
-    QApplication,
     QFileDialog,
     QGroupBox,
     QLabel,
@@ -47,11 +38,6 @@ if TYPE_CHECKING:
     import pytest
     from pytestqt.qtbot import QtBot
     from qtpy.QtWidgets import QWidget
-
-
-def _process_events() -> None:
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    QApplication.processEvents()
 
 
 def _field_widget(view: object) -> QWidget:
@@ -151,9 +137,10 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     # fires against this test's already-destroyed `QStatusBar`.
     view.status_bar.timeout = 0
     view.render(RendererType.QT)
-    _process_events()
     edge_widget = _field_widget(view.pipe_form.edge_type)
 
+    # rendering rebuilds the buttons (`refresh` re-applies `values`): the first set is
+    # gone at once, not left on screen until the event loop deletes it
     buttons = edge_widget.findChildren(QRadioButton)
     assert len(buttons) == 3
     chamfer_button = next(b for b in buttons if b.text() == EdgeType.Chamfer.value)

@@ -30,6 +30,9 @@ class QRadioGroup(QWidget):
         for button in self._button_group.buttons():
             self._button_group.removeButton(button)
             self._layout.removeWidget(button)
+            # detached at once: `deleteLater` alone leaves it a visible child, drawn
+            # next to the new buttons until the event loop gets to deleting it
+            button.setParent(None)
             button.deleteLater()
         self._values = values
         for i, value_text in enumerate(self._values):
