@@ -90,13 +90,12 @@ class WebApplication(Application[MainViewT]):
         assert self._args is not None
         uvicorn.run(self.create_starlette_app(), host=self._args.host, port=self._args.port)
 
-    def _new_session_view(self, *, blank: bool = False) -> MainViewT:
+    def _new_session_view(self) -> MainViewT:
         main_view = self._build_main_view()
         _add_reference_to_signals(main_view, None)
         main_view.is_visible = True
         self.setup_session(main_view)
-        # after the wiring, like Qt/Textual apps loading `-f` once everything is connected;
-        # not for New's blank view
-        if not blank and self._args is not None and self._args.f is not None:
+        # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
+        if self._args is not None and self._args.f is not None:
             main_view.load_state(self._args.f)
         return main_view

@@ -131,6 +131,42 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
                 setattr(current_view, f.name, CONVERTER.structure(new_value, f.type))
 
 
+def _reset_state(view: "View", initial: "View") -> None:
+    """Set a live view tree back to `initial`'s state, in place.
+
+    `initial` is a freshly built instance of the same class: copying from it, rather than
+    from attrs defaults, also restores whatever its `__attrs_post_init__` set up (titles,
+    `values`, an initial validator message...). Like `_apply_state`, it sets the existing
+    attributes, so renderers and connected signals stay bound and only what actually
+    changed is pushed to the UI. Fields `_apply_state` never restores are skipped the
+    same way (omitted, frozen); `ValuesGroupMixin.values` is reset before `value`, which
+    must be one of them.
+    """
+    states: deque[tuple[View, View]] = deque([(view, initial)])
+    while len(states) > 0:
+        current_view, initial_view = states.popleft()
+        current_cls = cast("type[AttrsInstance]", type(current_view))
+        attrs.resolve_types(current_cls)
+        for f in attrs.fields(current_cls):
+            if (
+                _is_omitted_field(f)
+                or f.on_setattr is attrs.setters.frozen
+                or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
+            ):
+                continue
+            current_field = getattr(current_view, f.name)
+            initial_field = getattr(initial_view, f.name)
+            if isinstance(current_field, View) and isinstance(initial_field, View):
+                states.append((current_field, initial_field))
+            else:
+                setattr(current_view, f.name, initial_field)
+        if isinstance(current_view, ValuesGroupMixin) and isinstance(
+            initial_view, ValuesGroupMixin
+        ):
+            current_view.values = initial_view.values
+            current_view.value = initial_view.value
+
+
 def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
     attribute_name = str(attribute.name)
     if not attribute_name.startswith("_") and hasattr(instance, attribute_name):
@@ -317,7 +353,8 @@ class NewAction(ActionView):
         self.data = None
         self.triggered.connect(self._new_study)
 
-    def _new_study(self) -> None: ...
+    def _new_study(self, *, main_view: "MainView") -> None:
+        main_view.reset_state()
 
 
 @define_view
@@ -435,6 +472,14 @@ class MainView(View):
             data = json.load(f)
         _apply_state(self, data)
         self.state_filepath = filepath
+
+    def reset_state(self) -> None:
+        """Set every view back to the state of a newly built main view (a new study).
+
+        The tree is reset in place, as `load_state` loads into it, so renderers and
+        connected signals keep working.
+        """
+        _reset_state(self, type(self)())
 
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file."""
