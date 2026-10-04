@@ -194,32 +194,25 @@ def _selected(element: _Element) -> list[str | None]:
     ]
 
 
-def test_page_renders_the_input_and_the_status_bar(
+def test_page_shows_the_form_and_docks_an_empty_status_bar(
     main_view: HelloMainView, client: TestClient
 ) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "<title>Hello ComposeUI</title>" in response.text
-    assert f'id="{_field_id(main_view.form.name)}"' in response.text
-    assert 'placeholder="Type your name..."' in response.text
-    assert f'id="{_widget_id(main_view.status_bar.renderer)}"' in response.text
-
-
-def test_page_shows_the_title_and_docks_an_empty_status_bar(
-    main_view: HelloMainView, client: TestClient
-) -> None:
-    response = client.get("/")
-
-    assert '<h1 class="text-lg font-semibold">Hello ComposeUI</h1>' in response.text
-    assert '<meta name="viewport"' in response.text
-    status_bar_id = _widget_id(main_view.status_bar.renderer)
-    status_bar = response.text[response.text.index(f'<footer id="{status_bar_id}"') :]
-    status_bar = status_bar[: status_bar.index("</footer>")]
-    # a status line, not a coloured callout: an empty message must not show a bar
-    assert "alert" not in status_bar
-    assert "fixed inset-x-0 bottom-0" in status_bar
-    assert status_bar.endswith(">")
+    page = response.text
+    assert "<title>Hello ComposeUI</title>" in page
+    assert '<meta name="viewport"' in page
+    assert '<h1 class="text-lg font-semibold">Hello ComposeUI</h1>' in page
+    name = _element(page, _field_id(main_view.form.name))
+    assert name.attributes["placeholder"] == "Type your name..."
+    status_bar = _element(page, _widget_id(main_view.status_bar.renderer))
+    classes = set((status_bar.attributes["class"] or "").split())
+    assert status_bar.tag == "footer"
+    assert status_bar.text == ""
+    # a status line docked at the bottom, not a coloured callout showing even when empty
+    assert {"fixed", "inset-x-0", "bottom-0"} <= classes
+    assert "alert" not in classes
 
 
 def test_the_browser_never_shows_a_stale_copy_of_the_page(
@@ -355,14 +348,19 @@ def test_hidden_and_disabled_views_keep_their_id(main_view: HelloMainView) -> No
     assert fragment.endswith(" disabled>")
 
 
-def test_view_text_is_escaped(main_view: HelloMainView) -> None:
-    name = main_view.form.name
+def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> None:
+    hostile = '"><script>alert(1)</script>'
+    main_view.form.name.text = hostile
+    rows.note.text = hostile
 
-    name.text = '"><script>alert(1)</script>'
-
-    fragment = _part(name, "field").to_html()
-    assert "<script>" not in fragment
-    assert 'value="&quot;&gt;&lt;script&gt;' in fragment
+    field = _part(main_view.form.name, "field")
+    label = rows.note.renderer
+    assert isinstance(label, WebLabelRenderer)
+    for fragment in (field.to_html(), label.to_html()):
+        assert "<script>" not in fragment
+    # escaped, not dropped: the browser shows exactly the view's text
+    assert _element(field.to_html(), field.widget_id).attributes["value"] == hostile
+    assert _element(label.to_html(), label.widget_id).text == hostile
 
 
 class _ContainerRenderer(WebRenderer[StatusBar]):
@@ -540,17 +538,6 @@ def test_log_is_hidden_when_empty_and_coloured_by_type(rows: _RowsMainView) -> N
     assert 'data-log="warning"' in fragment
     assert "whitespace-pre-line" in fragment
     assert "- first\n- second" in fragment
-
-
-def test_label_renders_escaped_text(rows: _RowsMainView) -> None:
-    renderer = rows.note.renderer
-    assert isinstance(renderer, WebLabelRenderer)
-
-    with collect_dirty() as dirty:
-        rows.note.text = "<b>bold</b>"
-
-    assert list(dirty) == [renderer.widget_id]
-    assert renderer.to_html() == f'<span id="{renderer.widget_id}">&lt;b&gt;bold&lt;/b&gt;</span>'
 
 
 def test_page_renders_the_choices(main_view: HelloMainView, client: TestClient) -> None:
@@ -741,41 +728,6 @@ def pipe_main_view(pipe_views: list[PipeMainView], pipe_client: TestClient) -> P
     pipe_client.get("/")  # the client's own session: still the one view built so far
     (main_view,) = pipe_views
     return main_view
-
-
-def test_pipeform_renders_its_rows_groups_and_hidden_edge_options(
-    pipe_main_view: PipeMainView, pipe_client: TestClient
-) -> None:
-    form = pipe_main_view.pipe_form
-
-    page = pipe_client.get("/").text
-
-    for label in ("Name", "Material", "Radius", "Half Length", "Edge Type"):
-        assert f">{label}</label>" in page
-    assert '<legend class="fieldset-legend">Main Pipe</legend>' in page
-    assert f'value="Normal" checked name="{_field_id(form.edge_type)}"' in page
-    assert '<option value="Steel" selected>' in page
-    for group in (form.chamfer, form.fillet):
-        assert f'<fieldset id="{_widget_id(group.renderer)}" hidden' in page
-    # the cross-field log has nothing to say yet
-    assert f'<p id="{_widget_id(form.log_view.renderer)}" hidden' in page
-
-
-def test_a_cross_field_check_runs_once_editing_finishes(
-    pipe_main_view: PipeMainView, pipe_client: TestClient
-) -> None:
-    form = pipe_main_view.pipe_form
-    radius_id = _field_id(form.main_pipe.radius)
-    log_id = _widget_id(form.log_view.renderer)
-
-    typed = pipe_client.post(f"/widget/{radius_id}", data={"value": "5", "event": "input"}).text
-    # wired to `editing_finished`: typing alone doesn't run the form's checks
-    assert log_id not in typed
-
-    body = pipe_client.post(f"/widget/{radius_id}", data={"value": "5", "event": "change"}).text
-
-    assert f'<p id="{log_id}" hx-swap-oob="true" aria-live' in body
-    assert "The incident radius cant&#x27;be greater than the main radius" in body
 
 
 def test_clearing_the_name_shows_its_row_message(
@@ -1228,11 +1180,16 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
             assert _find(response.text, widget_id) is None  # never the edited field
             return response.text
 
-        # the page as first served
+        # the page as first served: rows, titled groups, edge options hidden
+        for label in ("Name", "Material", "Radius", "Half Length", "Edge Type"):
+            assert f">{label}</label>" in page
+        assert '<legend class="fieldset-legend">Main Pipe</legend>' in page
         assert _element(page, name_log_id).text == "A name is mandatory"
         assert _selected(_element(page, material_id)) == ["Steel"]
         assert _selected(_element(page, edge_id)) == ["Normal"]
-        assert "hidden" in _element(page, fillet_id).attributes
+        for group_id in (fillet_id, chamfer_id):
+            assert "hidden" in _element(page, group_id).attributes
+        assert "hidden" in _element(page, form_log_id).attributes
 
         # a name clears its row's message
         body = post(name_id, {"value": "Tee", "event": "input"})
@@ -1252,8 +1209,9 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         )
         assert _find(body, chamfer_id) is None  # still hidden: unchanged
 
-        # a main radius below the incident one fails the cross-field check...
-        post(radius_id, {"value": "5", "event": "input"})
+        # a main radius below the incident one fails the cross-field check, which is
+        # wired to `editing_finished`: typing alone doesn't run it...
+        assert _find(post(radius_id, {"value": "5", "event": "input"}), form_log_id) is None
         log = _swapped(post(radius_id, {"value": "5", "event": "change"}), form_log_id)
         assert "hidden" not in log.attributes
         assert "incident radius" in log.text
@@ -1272,14 +1230,17 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         assert (
             bob.post("/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"] == "true"
         )
-        page = bob.get("/").text
+        _assert_shows_the_tee_study(bob.get("/").text, reopened)
 
-        assert _element(page, _field_id(reopened.name)).attributes["value"] == "Tee"
-        assert "hidden" in _element(page, _widget_id(_part(reopened.name, "log"))).attributes
-        assert _selected(_element(page, _field_id(reopened.material))) == ["Copper"]
-        assert _selected(_element(page, _field_id(reopened.edge_type))) == ["Fillet"]
-        assert "hidden" not in _element(page, _widget_id(reopened.fillet.renderer)).attributes
-        assert _element(page, _field_id(reopened.main_pipe.radius)).attributes["value"] == "60.0"
-        assert "hidden" in _element(page, _widget_id(reopened.log_view.renderer)).attributes
-        assert reopened.name.text == "Tee"
-        assert reopened.main_pipe.radius.value == 60.0
+
+def _assert_shows_the_tee_study(page: str, form: Any) -> None:
+    """Check a page and its pipe form hold the study the end-to-end test built."""
+    assert _element(page, _field_id(form.name)).attributes["value"] == "Tee"
+    assert "hidden" in _element(page, _widget_id(_part(form.name, "log"))).attributes
+    assert _selected(_element(page, _field_id(form.material))) == ["Copper"]
+    assert _selected(_element(page, _field_id(form.edge_type))) == ["Fillet"]
+    assert "hidden" not in _element(page, _widget_id(form.fillet.renderer)).attributes
+    assert _element(page, _field_id(form.main_pipe.radius)).attributes["value"] == "60.0"
+    assert "hidden" in _element(page, _widget_id(form.log_view.renderer)).attributes
+    assert form.name.text == "Tee"
+    assert form.main_pipe.radius.value == 60.0
