@@ -48,6 +48,20 @@ _OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
 #: `_OMITTED_TYPES` - e.g. `Validator` fields, whose type (bare/`Optional`/`list`-
 #: wrapped `Callable`) isn't a single class `_is_omitted_type` can match generically.
 OMIT = "omit"
+#: what applying structurally wrong state can raise (from cattrs or a field's own
+#: conversion, e.g. `float("abc")`)
+_BAD_STATE_ERRORS = (
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    cattrs.BaseValidationError,
+    cattrs.StructureHandlerNotFoundError,
+)
+
+
+class InvalidStateError(ValueError):
+    """Saved state that can't be loaded into a main view; the view is left unchanged."""
 
 
 def _is_omitted_type(tp: Any) -> bool:
@@ -437,8 +451,12 @@ class FileMenu(Menu):
         filepath = main_view.ask_open_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
-        if filepath is not None:
+        if filepath is None:
+            return
+        try:
             main_view.load_state(filepath)
+        except InvalidStateError as error:
+            main_view.status_bar.show_message(f"Can't open {filepath.name!r}: {error}.")
 
     def _save_state(self, *, main_view: "MainView") -> None:
         filepath = main_view.ask_save_filepath(
@@ -472,11 +490,32 @@ class MainView(View):
         object.__setattr__(self, "extension", extension)
 
     def load_state(self, filepath: Path) -> None:
-        """Load the current state saved in a json file."""
-        with filepath.open() as f:
-            data = json.load(f)
-        _apply_state(self, data)
+        """Load the state saved in a json file; see `load_state_data`."""
+        with filepath.open("rb") as f:
+            try:
+                data = json.load(f)
+            except ValueError as error:  # also covers bytes that aren't text
+                msg = f"it isn't a valid {self.extension} file"
+                raise InvalidStateError(msg) from error
+        self.load_state_data(data)
         self.state_filepath = filepath
+
+    def load_state_data(self, data: Any) -> None:
+        """Load state, as `save_state` writes it once parsed from json.
+
+        The data is first applied to a newly built main view: applying sets fields one by
+        one, so data failing halfway would otherwise leave this view half loaded. Raises
+        `InvalidStateError`, leaving this view unchanged, when the data doesn't fit it.
+        """
+        if not isinstance(data, dict):
+            msg = f"it isn't a valid {self.extension} file"
+            raise InvalidStateError(msg)
+        try:
+            _apply_state(type(self)(), data)
+        except _BAD_STATE_ERRORS as error:
+            msg = "it doesn't match this application"
+            raise InvalidStateError(msg) from error
+        _apply_state(self, data)
 
     def reset_state(self) -> None:
         """Set every view back to the state of a newly built main view (a new study).

@@ -12,6 +12,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    InvalidStateError,
     LabelView,
     MainView,
     RadioGroupView,
@@ -253,3 +254,29 @@ def test_load_state_restores_values_equal_to_attrs_defaults(tmp_path: Path) -> N
 
     assert loaded.note.text == ""
     assert loaded.radio.is_visible is True
+
+
+def test_load_state_failing_halfway_leaves_the_view_unchanged(tmp_path: Path) -> None:
+    view = _StudyMainView()
+    filepath = tmp_path / "bad.study"
+    # `minimum_width` is valid and applied before the timeout fails to convert
+    filepath.write_text('{"minimum_width": 1, "status_bar": {"timeout": "abc"}}')
+
+    with pytest.raises(InvalidStateError, match="doesn't match this application"):
+        view.load_state(filepath)
+
+    assert view.minimum_width == 720
+    assert view.state_filepath is None
+
+
+def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> None:
+    view = _StudyMainView()
+    view.status_bar.timeout = 0  # no auto-clear timer left running after the test
+    _add_reference_to_signals(view, None)
+    filepath = tmp_path / "bad.study"
+    filepath.write_text("{not json")
+    view.file_view.filepath = filepath  # the answer a file dialog would give
+
+    view.file_menu.open_file.triggered.emit()
+
+    assert view.status_bar.message == "Can't open 'bad.study': it isn't a valid .study file."
