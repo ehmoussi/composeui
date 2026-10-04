@@ -63,9 +63,16 @@ The README's "Web backend" section covers what users see.
   would hide them). The browser opens a modal `<dialog>` only from a script: `page.py`
   opens each one swapped in shown, once. A button closes its dialog in the browser
   first, so focus returns where it was, then posts its answer; the server swaps it closed.
+- **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are
+  buttons of their own (Save As and Exit left out), and any other menu is a dropdown
+  under its title, marked with a chevron so it reads apart from the buttons. A dropdown
+  is as wide as its longest item, the shortcut a faded hint beside it. On a phone the
+  buttons keep only their icon and the app's title is cut short, so the header holds on
+  one line, the pages' toolbar on a row of its own.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown); action `data`
   isn't displayed; Ctrl shortcuts become Alt+Shift; an unknown page address is a 404, not
   a redirect (browsers ask for addresses of their own, like `/favicon.ico`).
 - **Tests** drive the examples over HTTP with Starlette's `TestClient`
   (`tests/test_webrenderer.py`); browser-only behaviour (caret, shortcuts, `aria-invalid`
-  sync, offline page, history) is in `tests/test_browser.py` (`make browser-test`).
+  sync, offline page, history, opening dialogs) is in `tests/test_browser.py`
+  (`make browser-test`).
