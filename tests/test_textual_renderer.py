@@ -14,13 +14,14 @@ pytest.importorskip("textual_fspicker")
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
-from composeui.core.view import RendererType
+from composeui.core.view import ActionView, MainView, RendererType, define_view
 from composeui.textualcore.textualrenderer import (
     TextualMainRenderer,
     TextualWidgetRenderer,
@@ -248,6 +249,40 @@ async def test_menu_actions_become_key_bindings_shown_in_the_footer() -> None:
         await pilot.press("ctrl+n")
         await pilot.pause()
         assert len(app.screen_stack) == 1
+
+
+@define_view
+class _WrapMainView(MainView):
+    wrap: ActionView = Factory(
+        lambda: ActionView(text="Wrap", shortcut="Ctrl+e", is_checkable=True)
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Wrap", extension=".wrap")
+
+
+@pytest.mark.asyncio
+async def test_a_checkable_action_shows_its_check_mark_in_the_footer() -> None:
+    view = _WrapMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def descriptions() -> list[str]:
+        bindings = app.screen.active_bindings.values()
+        return [b.binding.description for b in bindings if "Wrap" in b.binding.description]
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert descriptions() == ["Wrap"]
+
+        await pilot.press("ctrl+e")
+        await pilot.pause()
+
+        assert view.wrap.is_checked is True
+        assert descriptions() == ["✓ Wrap"]
 
 
 @pytest.mark.asyncio
