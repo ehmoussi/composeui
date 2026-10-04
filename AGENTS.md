@@ -89,7 +89,8 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
   widgets (`qtbot` for Qt, `App.run_test()` for Textual, `httpx`/Starlette test client for web).
 - Tests for optional backends guard with `pytest.importorskip(...)`.
-- `make check test` must be clean before committing; there is no CI yet.
+- `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
+  same checks on Python 3.9 to 3.14 for every push and pull request.
 
 ## Commits
 
