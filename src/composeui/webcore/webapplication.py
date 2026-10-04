@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import functools
-import importlib
-import inspect
+import importlib.abc
+import importlib.util
 import os
 import secrets
 import sys
+import types
 from collections import deque
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
 
@@ -49,8 +51,12 @@ ViewT = TypeVar("ViewT", bound="View")
 #: attribute names leading from a main view to one of its views or signals
 _AttributePath = tuple[str, ...]
 
-#: environment variable telling a reloaded server process which app class to rebuild
-_RELOAD_APP_VARIABLE = "COMPOSEUI_WEB_APP"
+#: environment variable naming the program a reloaded server process runs again
+_RELOAD_ENTRY_VARIABLE = "COMPOSEUI_WEB_ENTRY"
+#: set while `create_reloaded_starlette_app` runs the program: the apps it ran, unserved
+_RELOADED_APPS: ContextVar[list[WebApplication[Any]] | None] = ContextVar(
+    "composeui_web_reloaded_apps", default=None
+)
 
 
 class _Connection(NamedTuple):
@@ -107,50 +113,60 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
     return app
 
 
-def _app_import_string(app_class: type) -> str:
-    """Return the `module:Class` a new process can import `app_class` from."""
-    if "<locals>" in app_class.__qualname__ or not _builds_without_arguments(app_class):
-        msg = (
-            f"--reload rebuilds the app from its class in a new server process: make "
-            f"{app_class.__qualname__!r} a module-level WebApplication subclass whose "
-            "__init__ takes no arguments"
-        )
-        raise ValueError(msg)
-    module = app_class.__module__
-    spec = getattr(sys.modules.get(module), "__spec__", None)
-    # `python -m package.module` runs it as `__main__`, which another process can't import
-    # by that name. A script has no spec: the reloader's spawned process re-runs the script
-    # as its own `__main__`, so the name still resolves there.
-    if module == "__main__" and spec is not None:
-        module = spec.name
-    return f"{module}:{app_class.__qualname__}"
-
-
-def _builds_without_arguments(app_class: type) -> bool:
-    try:
-        inspect.signature(app_class).bind()
-    except TypeError:
-        return False
-    return True
+def _entry_point() -> str:
+    """Name the program that started this server, so another process can run it again."""
+    main = sys.modules["__main__"]
+    spec = getattr(main, "__spec__", None)
+    if spec is not None:  # `python -m package.module`
+        return f"module:{spec.name}"
+    path = getattr(main, "__file__", None)
+    if path is not None:  # `python script.py`
+        return f"path:{Path(path).resolve()}"
+    msg = "--reload re-runs the program serving the app: start it as a script or with -m"
+    raise ValueError(msg)
 
 
 def create_reloaded_starlette_app() -> Starlette:
-    """Build the app named by `_RELOAD_APP_VARIABLE`: the factory `--reload` serves.
+    """Build the app of the program named by `_RELOAD_ENTRY_VARIABLE`: `--reload`'s factory.
 
-    uvicorn's reloader serves from a new process, rebuilt from scratch after every change,
-    which never runs the script that started the server; so it rebuilds the app from
-    its class, with the command line the process inherited (`-f`, `--debug`, ...).
+    uvicorn's reloader serves from a new process, started again after every change,
+    which doesn't run the program that started the server. So this runs it again, with
+    the command line the process inherited (`-f`, `--debug`, ...), and keeps the app
+    whose `run` it reaches instead of serving it: an app built inline, connected or
+    configured by the program's `main()` comes back just as it was.
     """
-    module_name, _, qualname = os.environ[_RELOAD_APP_VARIABLE].partition(":")
-    module = cast("object", importlib.import_module(module_name))
-    # `run` checked that the class builds without arguments before serving
-    app_class = cast(
-        "Callable[[], WebApplication[Any]]",
-        functools.reduce(getattr, qualname.split("."), module),
+    kind, _, name = os.environ[_RELOAD_ENTRY_VARIABLE].partition(":")
+    spec = (
+        importlib.util.find_spec(name)
+        if kind == "module"
+        else importlib.util.spec_from_file_location("__main__", name)
     )
-    app = app_class()
-    app._configure()  # noqa: SLF001
-    return app.create_starlette_app()
+    if spec is None or not isinstance(spec.loader, importlib.abc.InspectLoader):
+        msg = f"can't find {name} to run it again"
+        raise RuntimeError(msg)
+    code = spec.loader.get_code(spec.name)
+    if code is None:
+        msg = f"{name} has no code to run"
+        raise RuntimeError(msg)
+    # as its process's `__main__`, for good, not in a scratch module like `runpy`'s:
+    # its classes' string annotations (`from __future__ import annotations`) are
+    # resolved later, through `sys.modules[cls.__module__]`, when sessions are served
+    program = types.ModuleType("__main__")
+    program.__spec__ = spec
+    program.__file__ = spec.origin
+    program.__loader__ = spec.loader
+    program.__package__ = spec.parent
+    sys.modules["__main__"] = program
+    apps: list[WebApplication[Any]] = []
+    token = _RELOADED_APPS.set(apps)
+    try:
+        exec(code, program.__dict__)  # noqa: S102
+    finally:
+        _RELOADED_APPS.reset(token)
+    if len(apps) == 0:
+        msg = f"{name} didn't run a WebApplication"
+        raise RuntimeError(msg)
+    return apps[0].create_starlette_app()
 
 
 class WebApplication(Application[MainViewT]):
@@ -217,11 +233,15 @@ class WebApplication(Application[MainViewT]):
         """Build and serve the app."""
         super().run()
         assert self._args is not None
+        reloaded_apps = _RELOADED_APPS.get()
+        if reloaded_apps is not None:  # the program is run again by the reloader's process
+            reloaded_apps.append(self)
+            return
         if not self._args.reload:
             uvicorn.run(self.create_starlette_app(), host=self._args.host, port=self._args.port)
             return
         # uvicorn reloads only an app it can import by name, in a process of its own
-        os.environ[_RELOAD_APP_VARIABLE] = _app_import_string(type(self))
+        os.environ[_RELOAD_ENTRY_VARIABLE] = _entry_point()
         uvicorn.run(
             f"{__name__}:{create_reloaded_starlette_app.__name__}",
             factory=True,

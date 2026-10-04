@@ -129,9 +129,9 @@ How it differs from a desktop window:
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
   Ctrl ones for themselves.
 - **`--reload` restarts the server when a Python file under the current directory
-  changes,** for development. The reloader rebuilds the app in a new process from its
-  class, so it needs a module-level `WebApplication` subclass whose `__init__` takes no
-  arguments, like `WebHelloApp` above. Every restart drops the sessions.
+  changes,** for development. The new server process runs the program again (the script,
+  or the `-m` module) to rebuild its app, with the same command line. Every restart
+  drops the sessions.
 - Single process only, and no push from the server: the page changes in response to the
   user's own actions (a status bar message still clears itself after its timeout).
 

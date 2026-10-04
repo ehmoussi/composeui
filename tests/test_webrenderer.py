@@ -12,8 +12,11 @@ from __future__ import annotations
 import enum
 import json
 import re
+import sys
 import time
+import types
 from html.parser import HTMLParser
+from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pytest
@@ -54,6 +57,7 @@ from composeui.webcore.webrenderer import (
     handle_event,
     render_dirty,
 )
+from examples import pipeform
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 
@@ -923,23 +927,29 @@ def test_a_state_file_opens_in_every_new_session(
     assert all('value="Bob"' in page for page in pages)
 
 
-def test_reload_serves_a_factory_rebuilding_the_app_with_the_same_command_line(
+def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    study = HelloMainView()
-    study.form.name.text = "Bob"
-    state_file = tmp_path / "study.hello"
+    study = PipeMainView()
+    study.pipe_form.name.text = "Main line"
+    state_file = tmp_path / "study.pipe"
     study.save_state(state_file)
     served: list[tuple[str, dict[str, Any]]] = []
-    monkeypatch.setattr("sys.argv", ["webhello", "--reload", "-f", str(state_file)])
+    # `python -m examples.pipeform --backend web --reload -f study.pipe`, whose app is
+    # built inline by `main()`, which also takes `--backend` out of the command line
+    monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))
+    monkeypatch.setattr(sys.modules["__main__"], "__spec__", find_spec("examples.pipeform"))
+    monkeypatch.setattr(
+        "sys.argv", ["pipeform", "--backend", "web", "--reload", "-f", str(state_file)]
+    )
     monkeypatch.setattr(
         "composeui.webcore.webapplication.uvicorn.run",
         lambda app, **kwargs: served.append((app, kwargs)),
     )
     # restores the variable `run` sets for the reloaded process
-    monkeypatch.setenv("COMPOSEUI_WEB_APP", "")
+    monkeypatch.setenv("COMPOSEUI_WEB_ENTRY", "")
 
-    _HelloApp().run()
+    pipeform.main()
 
     ((import_string, options),) = served
     assert options["reload"] is True
@@ -947,19 +957,9 @@ def test_reload_serves_a_factory_rebuilding_the_app_with_the_same_command_line(
     # what uvicorn's reloaded process does with it, without spawning one
     factory = import_from_string(import_string)
     with TestClient(factory()) as client:
-        assert 'value="Bob"' in client.get("/").text
-
-
-def test_reload_refuses_an_app_it_cannot_rebuild(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["webhello", "--reload"])
-    monkeypatch.setattr(
-        "composeui.webcore.webapplication.uvicorn.run",
-        lambda *_, **__: pytest.fail("served an app the reloader can't rebuild"),
-    )
-    monkeypatch.setenv("COMPOSEUI_WEB_APP", "")
-
-    with pytest.raises(ValueError, match="takes no arguments"):
-        WebApplication(build_main_view=HelloMainView).run()
+        page = client.get("/").text
+    assert "<title>Pipe Form</title>" in page
+    assert 'value="Main line"' in page
 
 
 class _SlowGreetingApp(_HelloApp):
