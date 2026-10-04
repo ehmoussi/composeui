@@ -15,21 +15,21 @@ out a step's line when it's done.
 
 There is no CI: every check depends on someone running `make check test` locally.
 
-1. **GitHub Actions workflow** running `make check` and `make test` on every push and PR:
+1. ~~**GitHub Actions workflow** running `make check` and `make test` on every push and PR:
    `uv sync --group dev --all-extras`, `QT_QPA_PLATFORM=offscreen`, the Ubuntu packages
    offscreen Qt needs (e.g. `libegl1`, `libxkbcommon0`, `libgl1`), uv cache keyed on
    `uv.lock`. Python 3.9 (the floor, `.python-version`) plus the newest supported
    version. The stylesheet-staleness test then also fails a PR that adds a CSS class
-   without `make css`.
-2. **Include the web backend in the registry consistency test.**
+   without `make css`.~~ *(`.github/workflows/ci.yml`; runs `ruff format --check` and `ruff check` instead of `make lint`, which rewrites files.)*
+2. ~~**Include the web backend in the registry consistency test.**
    `test_every_backend_registers_the_same_renderer_keys` compares Qt with Textual only;
    all three register the same 14 keys today, so a widget added to one backend and
-   forgotten in another should fail it.
-3. **Fix `Signal._log_signal` crashing on callbacks without `__code__`.** Connecting a
+   forgotten in another should fail it.~~
+3. ~~**Fix `Signal._log_signal` crashing on callbacks without `__code__`.** Connecting a
    built-in (e.g. `list.append`) or any callable object raises `AttributeError` as soon
    as the signal emits, from `get_function_file`. Found in M2 and worked around in the
    web tests. Fall back to `repr`/`type` when there's no code object; add a core test
-   connecting a built-in and a callable instance.
+   connecting a built-in and a callable instance.~~
 
 ## 2 — Core: make what the web backend learned available to every backend
 
