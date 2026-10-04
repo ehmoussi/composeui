@@ -53,7 +53,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from examples.pipeform import PipeMainView
-from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView
+from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -752,6 +752,34 @@ def test_each_browser_gets_its_own_main_view(app: _HelloApp) -> None:
         assert bob_view.form.name.text == ""
         assert 'value="Alice"' in alice.get("/").text
         assert 'value="Alice"' not in bob.get("/").text
+
+
+def test_app_connect_reacts_in_each_browser_on_its_own_views(app: _HelloApp) -> None:
+    name = app.main_view.form.name
+
+    @app.connect(view=name, signals=[name.text_edited])
+    def echo(_text: str, *, view: NameRowView, main_view: HelloMainView) -> None:
+        # connected after the view's own summary update, so it has the last word
+        main_view.summary.text = f"Echo: {view.text}"
+
+    web = app.create_starlette_app()
+    with TestClient(web) as alice, TestClient(web) as bob:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = app.session_views
+
+        def type_name(client: TestClient, view: HelloMainView, text: str) -> str:
+            """Type `text` as the name; return the summary as swapped into the page."""
+            field_id = _field_id(view.form.name)
+            response = client.post(f"/widget/{field_id}", data={"value": text, "event": "input"})
+            assert response.status_code == 200
+            return _swapped(response.text, _widget_id(view.summary.renderer)).text
+
+        assert type_name(alice, alice_view, "Alice") == "Echo: Alice"
+        assert bob_view.summary.text != "Echo: Alice"
+        assert type_name(bob, bob_view, "Bob") == "Echo: Bob"
+        assert alice_view.summary.text == "Echo: Alice"
+    assert app.main_view.summary.text != "Echo: Alice"  # the template is never wired
 
 
 def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None:
