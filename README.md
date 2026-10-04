@@ -117,9 +117,10 @@ How it differs from a desktop window:
 - **One app state per browser.** A signed session cookie gives each browser its own main
   view; tabs of the same browser share it. Sessions live in the server's memory: a restart
   starts them all over, and idle ones are dropped after an hour (`session_ttl`).
-- **Wire behavior inside the views,** as above, or in `WebApplication.setup_session`, which
-  runs for each new session's main view. `app.connect(view=app.main_view...)` only reaches
-  a template instance that no browser displays.
+- **Wire behavior inside the views,** as above, with `app.connect`, or in
+  `WebApplication.setup_session`, which runs for each new session's main view.
+  `app.connect(view=app.main_view...)` is replayed on every new session: the callback gets
+  that session's own `view` and `main_view`, never the template no browser displays.
 - **Save and Open** download the state as a file and upload one; the File menu sits in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
   Ctrl ones for themselves.
