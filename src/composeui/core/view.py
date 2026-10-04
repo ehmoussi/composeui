@@ -120,8 +120,8 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
 
     ``ValuesGroupMixin.value`` is handled separately: its declared type is an
     unresolved generic ``TypeVar`` that cattrs can't structure statically, so it is
-    restored through `RadioGroupMixin.deserialize_value` instead, which resolves it
-    via the mixin's own `values` label lookup. ``RadioGroupMixin.values`` is included
+    restored through `ValuesGroupMixin.deserialize_value` instead, which resolves it
+    via the mixin's own `values` label lookup. ``ValuesGroupMixin.values`` is included
     in saved state (for inspection/debugging) but never restored from it on load: it's
     app-defined config, not persisted user data, and has the same unresolved-`TValue`
     structuring problem `value` has, without an equivalent label-based workaround.
