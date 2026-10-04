@@ -626,11 +626,11 @@ with stdlib `html.escape`.
    port. Decided (see M1 follow-ups): `WebMainRenderer.open_file`/`save_file` return
    `None`, and the real work happens in two endpoints.
 
-   1. `GET /state` (Save): `json.dumps(CONVERTER.unstructure(main_view))` with
+   1. ~~`GET /state` (Save): `json.dumps(CONVERTER.unstructure(main_view))` with
       `Content-Disposition: attachment; filename="{name}"`, where the name is
       `state_filepath.name` if set, else `f"{slug(title)}{extension}"`. A plain
-      `<a href="/state" download>`, *not* htmx: htmx can't trigger downloads.
-   2. `POST /state` (Open): `<input type="file" name="file" accept="{extension}"
+      `<a href="/state" download>`, *not* htmx: htmx can't trigger downloads.~~
+   2. ~~`POST /state` (Open): `<input type="file" name="file" accept="{extension}"
       hx-post="/state" hx-encoding="multipart/form-data" hx-trigger="change"
       hx-swap="none">`. The handler reads the upload, rejects the wrong extension or bad
       JSON with a `status_bar.show_message(...)` OOB fragment (and a 200, so htmx swaps
@@ -639,15 +639,38 @@ with stdlib `html.escape`.
       core private is acceptable here, and tests already do it. Note a possible public
       `MainView.load_state_data(dict)` as a follow-up rather than changing core now.
       Set `state_filepath = Path(upload.filename)` (name only) so the next Save offers
-      the same name.
-   3. A load touches arbitrarily many attributes, so skip the dirty set entirely and
+      the same name.~~
+   3. ~~A load touches arbitrarily many attributes, so skip the dirty set entirely and
       respond with `HX-Refresh: true`. `GET /` re-renders from the session's (now
-      loaded) state.
-   4. Tests: round trip. Change Name/edge type, `GET /state`, check headers + JSON, build
+      loaded) state.~~
+   4. ~~Tests: round trip. Change Name/edge type, `GET /state`, check headers + JSON, build
       a fresh session, `POST /state` with that JSON, then check that the view state is
       restored (edge type value is `EdgeType.Chamfer`, chamfer group visible in the next
       `GET /`). A bad extension or invalid JSON gives a status bar error and no state
-      change. `make check`.
+      change. `make check`.~~
+
+   *Implementation notes (M7 as built), where it differs from the steps above:*
+   - **Endpoints only; the Save link and Open file input arrive with M8's menu.**
+     M7 checked them over HTTP: in tests, and with curl against a real server (save in
+     one cookie session, upload into a fresh one, the page shows the loaded name).
+   - **A rejected file never half-loads.** `_apply_state` sets fields one by one, so a
+     file failing halfway (a valid name, then an age of `"abc"`) used to leave the name
+     applied. The upload is first applied to a scratch instance of the main view's
+     class, and the session is only touched if that succeeds. Rejections, each with a
+     status-bar message and no state change: wrong extension, more than 5 MB, invalid
+     JSON, JSON that isn't an object, a file that doesn't structure into the view (the
+     cattrs/conversion errors listed in `session._BAD_STATE_ERRORS`).
+   - **File names are sanitized** to `[A-Za-z0-9._-]` before reaching the download's
+     `Content-Disposition`: an uploaded name is attacker-controlled, and a raw quote
+     there could break out of the header value. The test builds its multipart body by
+     hand, because httpx percent-encodes the quote before it would reach the server.
+     The default download name is the lowercased title plus the extension
+     (`hello-composeui.hello`).
+   - Without a session, `GET /state` redirects to `/` (a plain link, so no `HX-*`
+     header would work) and `POST /state` answers `HX-Refresh`. Both live in
+     `WebSession.save_state`/`load_state` under the session lock. Tests use the hello
+     example (name and greeting style round-trip through a download and an upload into
+     another browser's session) rather than pipeform.
 
 9. **M8 — Menu / ActionView.** A daisyUI navbar/dropdown for `FileMenu`, with
    `triggered` signals posted to endpoints.

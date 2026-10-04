@@ -10,6 +10,7 @@ directly through `handle_event`, the function the route calls.
 from __future__ import annotations
 
 import enum
+import json
 import re
 import time
 from typing import TYPE_CHECKING, Any
@@ -819,11 +820,16 @@ def test_a_request_without_a_live_session_reloads_the_page(
     with TestClient(app.create_starlette_app()) as stale:
         posted = stale.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
         fetched = stale.get(f"/widget/{field_id}")
+        uploaded = stale.post("/state", files={"file": ("s.hello", b"{}")})
+        # a plain download link isn't htmx: it is sent to the page, which starts a session
+        downloaded = stale.get("/state", follow_redirects=False)
 
-    for response in (posted, fetched):
+    for response in (posted, fetched, uploaded):
         assert response.status_code == 200
         assert response.headers["hx-refresh"] == "true"
         assert response.text == ""
+    assert downloaded.status_code == 303
+    assert downloaded.headers["location"] == "/"
 
 
 def test_a_session_is_built_once_and_kept_across_reloads(app: _HelloApp) -> None:
@@ -915,3 +921,87 @@ def test_a_message_timer_waits_for_the_request_holding_the_session() -> None:
         while main_view.status_bar.message and time.monotonic() < deadline:
             time.sleep(0.01)
         assert main_view.status_bar.message == ""
+
+
+def test_saving_downloads_the_session_state(main_view: HelloMainView, client: TestClient) -> None:
+    _type_name(client, main_view, "Bob")
+
+    response = client.get("/state")
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="hello-composeui.hello"'
+    )
+    assert response.headers["cache-control"] == "no-store"
+    assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+
+
+def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
+    web = app.create_starlette_app()
+    with TestClient(web) as alice, TestClient(web) as bob:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = app.session_views
+        _type_name(alice, alice_view, "Alice")
+        style_id = _field_id(alice_view.form.style)
+        alice.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"})
+        saved = alice.get("/state").content
+
+        response = bob.post("/state", files={"file": ("study.hello", saved)})
+
+        # a load can change anything: the page reloads instead of swapping fragments
+        assert response.headers["hx-refresh"] == "true"
+        assert bob_view.form.name.text == "Alice"
+        assert bob_view.form.style.value is GreetingStyle.FORMAL
+        assert 'value="Alice"' in bob.get("/").text
+        # the next save offers the name the state was opened from
+        assert 'filename="study.hello"' in bob.get("/state").headers["content-disposition"]
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "reason"),
+    [
+        ("study.pipe", b"{}", "expected a .hello file"),
+        ("study.hello", b"{not json", "isn&#x27;t a valid .hello file"),
+        ("study.hello", b"[1, 2]", "isn&#x27;t a valid .hello file"),
+        ("study.hello", b" " * (5 * 1024 * 1024 + 1), "the file is too large"),
+        # fails halfway: the valid name must not be applied before the bad age fails
+        (
+            "study.hello",
+            b'{"form": {"name": {"text": "Eve"}, "age": {"value": "abc"}}}',
+            "doesn&#x27;t match this application",
+        ),
+    ],
+)
+def test_a_rejected_state_file_changes_nothing_and_says_why(
+    main_view: HelloMainView, client: TestClient, filename: str, content: bytes, reason: str
+) -> None:
+    _type_name(client, main_view, "Bob")
+
+    response = client.post("/state", files={"file": (filename, content)})
+
+    assert "hx-refresh" not in response.headers
+    status_bar_id = _widget_id(main_view.status_bar.renderer)
+    assert f'<footer id="{status_bar_id}" hx-swap-oob="true"' in response.text
+    assert reason in response.text
+    assert main_view.form.name.text == "Bob"
+    assert main_view.state_filepath is None
+
+
+def test_an_uploaded_file_name_cannot_reach_the_download_header(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    # built by hand: httpx would percent-encode the quote before it reached the server
+    body = (
+        b"--b\r\n"
+        b'Content-Disposition: form-data; name="file"; filename="evil\\"; x=1; my study.hello"\r\n'
+        b"Content-Type: application/octet-stream\r\n\r\n"
+        b"{}\r\n--b--\r\n"
+    )
+
+    client.post("/state", content=body, headers={"Content-Type": "multipart/form-data; boundary=b"})
+
+    assert main_view.state_filepath is not None
+    assert '"' in main_view.state_filepath.name  # the hostile name did reach the server
+    disposition = client.get("/state").headers["content-disposition"]
+    assert re.fullmatch(r'attachment; filename="[A-Za-z0-9._-]+\.hello"', disposition)
