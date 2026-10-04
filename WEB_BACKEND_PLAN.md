@@ -486,7 +486,7 @@ with stdlib `html.escape`.
    the acceptance target, as it already is for `qtrenderer`/`textualrenderer`. Nested
    rows and groups are styled with daisyUI `fieldset`.
 
-   1. `WebFormRenderer` (`"form"`, `_role="form"`): `<div id class="flex flex-col
+   1. ~~`WebFormRenderer` (`"form"`, `_role="form"`): `<div id class="flex flex-col
       gap-2">`. For each `view.field_rows`:
       - a `FormRowView` with a `RendererContainer` renders as a row wrapper (`<div
         class="flex flex-col">`, *no* id of its own) containing `label` (if
@@ -499,10 +499,10 @@ with stdlib `html.escape`.
       Dispatcher: `is_visible`, `is_enabled` only, because a form's rows are not
       attributes that change. Row *visibility*: a `FormRowView`'s `is_visible` reaches
       every renderer in its container, so each of the three hides itself, and no row
-      wrapper id is needed.
-   2. `WebGroupFormRenderer` (`"group_form"`): the same, wrapped in `<fieldset id
+      wrapper id is needed.~~
+   2. ~~`WebGroupFormRenderer` (`"group_form"`): the same, wrapped in `<fieldset id
       class="fieldset bg-base-200 border-base-300 rounded-box border p-4"><legend
-      class="fieldset-legend">{title}</legend>…`. Dispatcher adds `title`.
+      class="fieldset-legend">{title}</legend>…`. Dispatcher adds `title`.~~
    3. ~~`WebMainRenderer.page_html()`: the main content first, then the status bar pinned
       at the bottom (`fixed bottom-0` / daisyUI `footer`), mirroring Textual's docked
       status bar. `title` already goes into `<title>`.~~ *(Done early, after M2: a
@@ -511,11 +511,11 @@ with stdlib `html.escape`.
       always-visible `alert`. `page.py` gained `lang`, charset and viewport meta tags,
       and has no `data-theme`, so daisyUI follows the browser's light/dark preference.
       M8's menu goes in the header.)*
-   4. `pipeform.py`: add `class WebPipeApp(WebApplication[PipeMainView])` next to the
+   4. ~~`pipeform.py`: add `class WebPipeApp(WebApplication[PipeMainView])` next to the
       Qt and Textual apps, with `build_main_view=PipeMainView`. The module already
       imports both other backends unconditionally, so a third import matches the
-      existing convention.
-   5. Acceptance over HTTP (TestClient), in `tests/test_webrenderer.py`:
+      existing convention.~~
+   5. ~~Acceptance over HTTP (TestClient), in `tests/test_webrenderer.py`:
       - `GET /` renders every row label, the Normal radio `checked`, Steel `selected`,
         and the chamfer/fillet groups present but `hidden`;
       - selecting `Chamfer` returns OOB fragments for the chamfer group (no longer
@@ -523,8 +523,29 @@ with stdlib `html.escape`.
         fan-out from one click, and nothing is emitted for the radio group itself;
       - setting main-pipe radius to `5` then `change` makes the form-level log appear
         with the incident-radius message (validator wired to `editing_finished`);
-      - clearing Name makes that row's log show `A name is mandatory`.
-   6. Manual browser pass over the whole form, then `make check`.
+      - clearing Name makes that row's log show `A name is mandatory`.~~
+   6. ~~Manual browser pass over the whole form, then `make check`.~~
+
+   *Implementation notes (M5 as built), where it differs from the steps above:*
+   - **A plain form is a `<fieldset>` too, not a `<div>`.** A disabled fieldset
+     natively disables every control inside it, the way disabling a Qt container
+     disables its children, so `is_enabled` on a form or group needs no propagation
+     code. `WebGroupFormRenderer` subclasses `WebFormRenderer` and adds the daisyUI
+     `fieldset` styling and the `<legend>` title. Rows render label, field, log in
+     that order (field right before log, which the field-error CSS rule relies on).
+     The row wrapper has no id, and a row whose field the backend doesn't support
+     renders nothing.
+   - **The hello example became a real form** (`HelloFormView` with name, age,
+     greeting-style and colour rows, each owning its label and log), plus a summary
+     label after it. The age row's validity for the summary is read from its own log
+     instead of re-running the check. Its tests moved to the row-based views.
+   - The pipeform tests skip if Qt/Textual are missing, because `pipeform.py` imports
+     all three apps. The form-level cross-field log (pipeform's radius checks) isn't
+     tied to one field, so it doesn't turn any field red; only a row's own log does.
+   - Checked in headless Chromium: both forms render with each label above its field;
+     Chamfer/Fillet groups reveal and hide; shrinking the main radius to 5 and leaving
+     the field shows the form-level radius message. (Pipeform's own message text
+     reads "cant'be", a pre-existing typo in the example, left alone.)
 
 7. **M6 — Real session handling.** Move off a single global `MainView` (fine for manual
    testing through M5) to the per-session cookie-backed registry, so two browser tabs

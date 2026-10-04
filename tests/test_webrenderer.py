@@ -2,9 +2,9 @@
 
 Editing a field posts the browser event to `/widget/{id}`; the response carries every
 fragment the event changed as an htmx out-of-band swap, except the field itself, which
-is never swapped back while the user is typing in it. The hello example is driven over
-HTTP; form rows have no place on a page until the form renderer exists (M5), so their
-renderers are driven directly through `handle_event`, the function the route calls.
+is never swapped back while the user is typing in it. The hello example and
+`examples/pipeform.py` are driven over HTTP; a few renderer-level cases drive rows
+directly through `handle_event`, the function the route calls.
 """
 
 from __future__ import annotations
@@ -51,6 +51,8 @@ from examples.webhello import Colour, GreetingStyle, HelloApp
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from examples.pipeform import WebPipeApp
+
 
 @pytest.fixture
 def app() -> HelloApp:
@@ -71,12 +73,24 @@ def _widget_id(renderer: Any) -> str:
     return renderer.widget_id
 
 
+def _part(row: Any, name: str) -> WebRenderer[Any]:
+    """One of a form row's renderers: "label", "field" or "log"."""
+    assert isinstance(row.renderer, RendererContainer)
+    renderer = row.renderer.get_renderer(name)
+    assert isinstance(renderer, WebRenderer)
+    return renderer
+
+
+def _field_id(row: Any) -> str:
+    return _part(row, "field").widget_id
+
+
 def test_page_renders_the_input_and_the_status_bar(app: HelloApp, client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
     assert "<title>Hello ComposeUI</title>" in response.text
-    assert f'id="{_widget_id(app.main_view.greeting.renderer)}"' in response.text
+    assert f'id="{_field_id(app.main_view.form.name)}"' in response.text
     assert 'placeholder="Type your name..."' in response.text
     assert f'id="{_widget_id(app.main_view.status_bar.renderer)}"' in response.text
 
@@ -108,7 +122,7 @@ def test_the_browser_never_shows_a_stale_copy_of_the_page(
     page = client.get("/")
     controls = re.findall(r"<(?:input|select)\b[^>]*>", page.text)
     status_bar_id = _widget_id(app.main_view.status_bar.renderer)
-    input_id = _widget_id(app.main_view.greeting.renderer)
+    input_id = _field_id(app.main_view.form.name)
 
     assert len(controls) >= 4  # name, age, two radios, colour
     assert all('autocomplete="off"' in control for control in controls)
@@ -120,12 +134,12 @@ def test_the_browser_never_shows_a_stale_copy_of_the_page(
 
 def test_typing_updates_the_status_bar_out_of_band(app: HelloApp, client: TestClient) -> None:
     main_view = app.main_view
-    input_id = _widget_id(main_view.greeting.renderer)
+    input_id = _field_id(main_view.form.name)
 
     response = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
 
     assert response.status_code == 200
-    assert main_view.greeting.text == "Bob"
+    assert main_view.form.name.text == "Bob"
     assert main_view.status_bar.message == "Hello, Bob!"
     status_bar_id = _widget_id(main_view.status_bar.renderer)
     assert f'<footer id="{status_bar_id}" hx-swap-oob="true"' in response.text
@@ -138,15 +152,15 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     app: HelloApp, client: TestClient
 ) -> None:
     main_view = app.main_view
-    assert main_view.name_log.log_message == "A name is mandatory"
-    input_id = _widget_id(main_view.greeting.renderer)
+    assert main_view.form.name.log_message == "A name is mandatory"
+    input_id = _field_id(main_view.form.name)
 
     body = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"}).text
 
     swapped = {
         renderer.widget_id
         for renderer in (
-            main_view.name_log.renderer,
+            _part(main_view.form.name, "log"),
             main_view.summary.renderer,
             main_view.status_bar.renderer,
         )
@@ -161,16 +175,16 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
 
 def test_age_is_validated_and_summarised(app: HelloApp, client: TestClient) -> None:
     main_view = app.main_view
-    age_id = _widget_id(main_view.age.renderer)
+    age_id = _field_id(main_view.form.age)
 
     body = client.post(f"/widget/{age_id}", data={"value": "-3", "event": "input"}).text
 
-    assert main_view.age.value == -3.0
+    assert main_view.form.age.value == -3.0
     assert "An age can&#x27;t be negative" in body
 
     client.post(f"/widget/{age_id}", data={"value": "41", "event": "input"})
 
-    assert main_view.age_log.log_message == ""
+    assert main_view.form.age.log_message == ""
     assert main_view.summary.text == "Nobody is 41 years old."
 
 
@@ -178,20 +192,20 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
     app: HelloApp, client: TestClient
 ) -> None:
     main_view = app.main_view
-    age_id = _widget_id(main_view.age.renderer)
+    age_id = _field_id(main_view.form.age)
     finished: list[None] = []
 
     def on_finished() -> None:
         finished.append(None)
 
-    main_view.age.editing_finished.connect(on_finished)
+    main_view.form.age.editing_finished.connect(on_finished)
     client.post(f"/widget/{age_id}", data={"value": "4", "event": "input"})
     client.post(f"/widget/{age_id}", data={"value": "4a", "event": "input"})
 
     body = client.post(f"/widget/{age_id}", data={"value": "4a", "event": "change"}).text
 
     # the field, otherwise never swapped back, now shows the age its messages describe
-    assert main_view.age.value == 4.0
+    assert main_view.form.age.value == 4.0
     assert f'<input id="{age_id}" hx-swap-oob="true"' in body
     assert 'value="4.0"' in body
     assert finished == []
@@ -200,7 +214,7 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
 def test_change_event_applies_the_text_and_finishes_editing_once(
     app: HelloApp, client: TestClient
 ) -> None:
-    greeting = app.main_view.greeting
+    greeting = app.main_view.form.name
     finished: list[None] = []
     edited: list[str] = []
     greeting.editing_finished.connect(lambda: finished.append(None))
@@ -210,7 +224,7 @@ def test_change_event_applies_the_text_and_finishes_editing_once(
         edited.append(text)
 
     greeting.text_edited.connect(on_edited)
-    input_id = _widget_id(greeting.renderer)
+    input_id = _field_id(greeting)
 
     # a `change` can overtake a still-debounced `input` carrying the same value
     client.post(f"/widget/{input_id}", data={"value": "Ann", "event": "change"})
@@ -223,7 +237,7 @@ def test_change_event_applies_the_text_and_finishes_editing_once(
 
 def test_unknown_widget_or_event_is_rejected(app: HelloApp, client: TestClient) -> None:
     assert client.post("/widget/cui-0-input", data={"event": "input"}).status_code == 404
-    input_id = _widget_id(app.main_view.greeting.renderer)
+    input_id = _field_id(app.main_view.form.name)
     assert client.post(f"/widget/{input_id}", data={"event": "click"}).status_code == 400
 
 
@@ -239,36 +253,36 @@ def test_changes_outside_a_request_are_not_collected(app: HelloApp) -> None:
 
 def test_changes_inside_a_request_mark_the_renderer_dirty_once(app: HelloApp) -> None:
     app.create_starlette_app()
-    greeting = app.main_view.greeting
+    name = app.main_view.form.name
 
     with collect_dirty() as dirty:
-        greeting.placeholder = "Name"
-        greeting.text = "Zoe"
+        name.placeholder = "Name"
+        name.text = "Zoe"
 
-    assert list(dirty.values()) == [greeting.renderer]
+    assert list(dirty.values()) == [_part(name, "field")]
 
 
 def test_hidden_and_disabled_views_keep_their_id(app: HelloApp) -> None:
     app.create_starlette_app()
-    greeting = app.main_view.greeting
-    assert isinstance(greeting.renderer, WebInputRenderer)
+    name = app.main_view.form.name
+    field = _part(name, "field")
+    assert isinstance(field, WebInputRenderer)
 
-    greeting.is_visible = False
-    greeting.is_enabled = False
+    name.is_visible = False
+    name.is_enabled = False
 
-    fragment = greeting.renderer.to_html()
-    assert f'id="{greeting.renderer.widget_id}" hidden' in fragment
+    fragment = field.to_html()
+    assert f'id="{field.widget_id}" hidden' in fragment
     assert fragment.endswith(" disabled>")
 
 
 def test_view_text_is_escaped(app: HelloApp) -> None:
     app.create_starlette_app()
-    greeting = app.main_view.greeting
-    assert isinstance(greeting.renderer, WebInputRenderer)
+    name = app.main_view.form.name
 
-    greeting.text = '"><script>alert(1)</script>'
+    name.text = '"><script>alert(1)</script>'
 
-    fragment = greeting.renderer.to_html()
+    fragment = _part(name, "field").to_html()
     assert "<script>" not in fragment
     assert 'value="&quot;&gt;&lt;script&gt;' in fragment
 
@@ -352,14 +366,6 @@ def rows() -> _RowsMainView:
     main_view = _RowsMainView()
     main_view.render(RendererType.WEB)
     return main_view
-
-
-def _part(row: Any, name: str) -> WebRenderer[Any]:
-    """One of a form row's renderers: "label", "field" or "log"."""
-    assert isinstance(row.renderer, RendererContainer)
-    renderer = row.renderer.get_renderer(name)
-    assert isinstance(renderer, WebRenderer)
-    return renderer
 
 
 def test_clearing_a_validated_input_dirties_its_log_but_not_the_input(
@@ -490,8 +496,8 @@ def test_label_renders_escaped_text(rows: _RowsMainView) -> None:
 
 def test_page_renders_the_choices(app: HelloApp, client: TestClient) -> None:
     page = client.get("/").text
-    style_id = _widget_id(app.main_view.style.renderer)
-    colour_id = _widget_id(app.main_view.colour.renderer)
+    style_id = _field_id(app.main_view.form.style)
+    colour_id = _field_id(app.main_view.form.colour)
 
     assert f'<div id="{style_id}" role="radiogroup"' in page
     assert page.count('type="radio" class="radio radio-sm" value="') == 2
@@ -506,13 +512,13 @@ def test_choosing_a_style_regreets_without_swapping_the_radio_group(
     app: HelloApp, client: TestClient
 ) -> None:
     main_view = app.main_view
-    input_id = _widget_id(main_view.greeting.renderer)
-    style_id = _widget_id(main_view.style.renderer)
+    input_id = _field_id(main_view.form.name)
+    style_id = _field_id(main_view.form.style)
     client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
 
     body = client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"}).text
 
-    assert main_view.style.value is GreetingStyle.FORMAL
+    assert main_view.form.style.value is GreetingStyle.FORMAL
     assert main_view.status_bar.message == "Good day, Bob."
     assert "Good day, Bob." in body
     assert style_id not in body
@@ -520,18 +526,18 @@ def test_choosing_a_style_regreets_without_swapping_the_radio_group(
 
 def test_choosing_a_colour_updates_the_summary(app: HelloApp, client: TestClient) -> None:
     main_view = app.main_view
-    colour_id = _widget_id(main_view.colour.renderer)
+    colour_id = _field_id(main_view.form.colour)
 
     body = client.post(f"/widget/{colour_id}", data={colour_id: "Blue", "event": "change"}).text
 
-    assert main_view.colour.value is Colour.BLUE
+    assert main_view.form.colour.value is Colour.BLUE
     assert "and likes blue." in body
     assert colour_id not in body
 
     # the empty choice clears the colour again
     client.post(f"/widget/{colour_id}", data={colour_id: "", "event": "change"})
 
-    assert main_view.colour.value is None
+    assert main_view.form.colour.value is None
     assert main_view.summary.text == "Nobody hasn't said how old they are."
 
 
@@ -539,20 +545,20 @@ def test_an_unknown_label_clears_the_value_instead_of_failing(
     app: HelloApp, client: TestClient
 ) -> None:
     main_view = app.main_view
-    colour_id = _widget_id(main_view.colour.renderer)
-    main_view.colour.value = Colour.RED
+    colour_id = _field_id(main_view.form.colour)
+    main_view.form.colour.value = Colour.RED
 
     response = client.post(f"/widget/{colour_id}", data={colour_id: "Purple", "event": "change"})
 
     assert response.status_code == 200
-    assert main_view.colour.value is None
+    assert main_view.form.colour.value is None
 
 
 def test_choosing_the_current_value_again_does_not_re_emit(
     app: HelloApp, client: TestClient
 ) -> None:
-    style = app.main_view.style
-    style_id = _widget_id(style.renderer)
+    style = app.main_view.form.style
+    style_id = _field_id(style)
     emitted: list[GreetingStyle | None] = []
 
     def on_changed(value: GreetingStyle | None) -> None:
@@ -568,8 +574,8 @@ def test_choosing_the_current_value_again_does_not_re_emit(
 
 def test_replacing_the_values_rerenders_the_options(app: HelloApp) -> None:
     app.create_starlette_app()
-    style = app.main_view.style
-    renderer = style.renderer
+    style = app.main_view.form.style
+    renderer = _part(style, "field")
     assert isinstance(renderer, WebRadioGroupRenderer)
     style.value = GreetingStyle.FORMAL
 
@@ -586,12 +592,13 @@ def test_replacing_the_values_rerenders_the_options(app: HelloApp) -> None:
 
 def test_a_disabled_radio_group_disables_every_radio(app: HelloApp) -> None:
     app.create_starlette_app()
-    style = app.main_view.style
-    assert isinstance(style.renderer, WebRadioGroupRenderer)
+    style = app.main_view.form.style
+    field = _part(style, "field")
+    assert isinstance(field, WebRadioGroupRenderer)
 
     style.is_enabled = False
 
-    assert style.renderer.to_html().count(" disabled>") == 2
+    assert field.to_html().count(" disabled>") == 2
 
 
 def test_a_radio_row_label_does_not_point_at_the_group(rows: _RowsMainView) -> None:
@@ -642,3 +649,97 @@ def test_fetching_a_widget_returns_its_current_fragment(app: HelloApp, client: T
     assert "Hello, Bob!" not in response.text
     assert "hx-get" not in response.text
     assert client.get("/widget/cui-0-status_bar").status_code == 404
+
+
+@pytest.fixture
+def pipe_app() -> WebPipeApp:
+    # pipeform also builds its Qt and Textual apps, so it needs those extras too
+    pipeform = pytest.importorskip("examples.pipeform")
+    app: WebPipeApp = pipeform.WebPipeApp()
+    app.main_view.status_bar.timeout = 0
+    return app
+
+
+@pytest.fixture
+def pipe_client(pipe_app: WebPipeApp) -> Iterator[TestClient]:
+    with TestClient(pipe_app.create_starlette_app()) as client:
+        yield client
+
+
+def test_pipeform_renders_its_rows_groups_and_hidden_edge_options(
+    pipe_app: WebPipeApp, pipe_client: TestClient
+) -> None:
+    form = pipe_app.main_view.pipe_form
+
+    page = pipe_client.get("/").text
+
+    for label in ("Name", "Material", "Radius", "Half Length", "Edge Type"):
+        assert f">{label}</label>" in page
+    assert '<legend class="fieldset-legend">Main Pipe</legend>' in page
+    assert f'value="Normal" checked name="{_field_id(form.edge_type)}"' in page
+    assert '<option value="Steel" selected>' in page
+    for group in (form.chamfer, form.fillet):
+        assert f'<fieldset id="{_widget_id(group.renderer)}" hidden' in page
+    # the cross-field log has nothing to say yet
+    assert f'<p id="{_widget_id(form.log_view.renderer)}" hidden' in page
+
+
+def test_choosing_chamfer_reveals_its_group_and_reports_it(
+    pipe_app: WebPipeApp, pipe_client: TestClient
+) -> None:
+    main_view = pipe_app.main_view
+    form = main_view.pipe_form
+    edge_id = _field_id(form.edge_type)
+    chamfer_id = _widget_id(form.chamfer.renderer)
+
+    body = pipe_client.post(f"/widget/{edge_id}", data={edge_id: "Chamfer", "event": "change"}).text
+
+    assert form.chamfer.is_visible
+    assert f'<fieldset id="{chamfer_id}" hx-swap-oob="true" class=' in body
+    assert "Edge type changed: Chamfer" in body
+    assert edge_id not in body
+    assert _widget_id(form.fillet.renderer) not in body  # still hidden: unchanged
+
+
+def test_a_cross_field_check_runs_once_editing_finishes(
+    pipe_app: WebPipeApp, pipe_client: TestClient
+) -> None:
+    form = pipe_app.main_view.pipe_form
+    radius_id = _field_id(form.main_pipe.radius)
+    log_id = _widget_id(form.log_view.renderer)
+
+    typed = pipe_client.post(f"/widget/{radius_id}", data={"value": "5", "event": "input"}).text
+    # wired to `editing_finished`: typing alone doesn't run the form's checks
+    assert log_id not in typed
+
+    body = pipe_client.post(f"/widget/{radius_id}", data={"value": "5", "event": "change"}).text
+
+    assert f'<p id="{log_id}" hx-swap-oob="true" aria-live' in body
+    assert "The incident radius cant&#x27;be greater than the main radius" in body
+
+
+def test_clearing_the_name_shows_its_row_message(
+    pipe_app: WebPipeApp, pipe_client: TestClient
+) -> None:
+    name = pipe_app.main_view.pipe_form.name
+    name_id = _field_id(name)
+    pipe_client.post(f"/widget/{name_id}", data={"value": "Tee", "event": "input"})
+
+    body = pipe_client.post(f"/widget/{name_id}", data={"value": "", "event": "input"}).text
+
+    assert "A name is mandatory" in body
+    assert f'id="{_widget_id(_part(name, "log"))}" hx-swap-oob="true"' in body
+
+
+def test_disabling_a_group_disables_its_whole_fieldset(pipe_app: WebPipeApp) -> None:
+    pipe_app.create_starlette_app()
+    main_pipe = pipe_app.main_view.pipe_form.main_pipe
+
+    with collect_dirty() as dirty:
+        main_pipe.is_enabled = False
+
+    group = main_pipe.renderer
+    assert isinstance(group, WebRenderer)
+    assert list(dirty.values()) == [group]
+    # a disabled fieldset disables every control inside it, like a disabled Qt container
+    assert re.match(r'<fieldset id="[^"]+" class="[^"]+" disabled>', group.to_html())
