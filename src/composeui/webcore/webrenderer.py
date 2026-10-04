@@ -9,6 +9,7 @@ fragment as an htmx out-of-band swap (`render_dirty`).
 from __future__ import annotations
 
 import contextlib
+import enum
 import html
 import re
 import threading
@@ -27,6 +28,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    ExitAppAction,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -35,6 +37,7 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    NewAction,
     OpenFileAction,
     SaveAction,
     SaveAsAction,
@@ -695,8 +698,53 @@ def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
     return f"Alt+Shift+{key}", code
 
 
+#: a header button's icon, by the kind of action it runs (Lucide's, inlined: no CDN)
+_ICONS: Final[dict[str, str]] = {
+    "new": '<path d="M12 5v14M5 12h14"/>',
+    "open": '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    "save": '<path d="M12 3v12M7 10l5 5 5-5"/>'
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    "more": '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/>'
+    '<circle cx="19" cy="12" r="1"/>',
+}
+
+
+def _icon(name: str) -> str:
+    return (
+        '<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        f"{_ICONS[name]}</svg>"
+    )
+
+
+class Placement(enum.Enum):
+    """Where a menu's action shows in the header (see `WebMenuRenderer`)."""
+
+    ITEM = "item"  # an item of a dropdown
+    BUTTON = "button"  # a button of its own
+    OMITTED = "omitted"  # not shown: Save As next to Save (both download), Exit
+
+
+def _between_items(items: list[tuple[bool, str]]) -> list[tuple[bool, str]]:
+    """Keep only the separators between two items: the others separated buttons."""
+    kept: list[tuple[bool, str]] = []
+    for is_separator, item in items:
+        if is_separator and (len(kept) == 0 or kept[-1][0]):
+            continue
+        kept.append((is_separator, item))
+    if len(kept) > 0 and kept[-1][0]:
+        kept.pop()
+    return kept
+
+
 class WebMenuRenderer(WebRenderer[Menu]):
-    """A navbar dropdown of the menu's actions.
+    """A menu in the header, shaped like a web app's rather than a desktop menu bar.
+
+    A menu with New, Open or Save actions (`FileMenu`) puts them in plain sight as
+    header buttons, Save highlighted, and any other action in a "⋯" dropdown named after
+    the menu. Save As is left out next to Save, as in a browser both download the same
+    file, and so is Exit: a web page is left by closing its tab, and New already starts
+    over. Any other menu is a dropdown under its title.
 
     `Menu.is_visible` means "popped up" (it starts False, a Qt notion): a dropdown is
     always shown and opens on click, so it is ignored here.
@@ -715,25 +763,58 @@ class WebMenuRenderer(WebRenderer[Menu]):
 
     def to_html(self, *, oob: bool = False) -> str:
         oob_attribute = ' hx-swap-oob="true"' if oob else ""
-        items = "".join(
-            child.renderer.to_html()
-            for child in self._view.children_views
-            if isinstance(child.renderer, WebRenderer)
+        has_save = any(isinstance(child, SaveAction) for child in self._view.children_views)
+        buttons: list[str] = []
+        items: list[tuple[bool, str]] = []  # (is a separator, its html)
+        for child in self._view.children_views:
+            renderer = child.renderer
+            if not isinstance(renderer, WebRenderer):
+                continue
+            if isinstance(renderer, WebActionRenderer):
+                renderer.placement = self._placement(child, has_save=has_save)
+                if renderer.placement is not Placement.ITEM:
+                    buttons.append(renderer.to_html())
+                    continue
+            items.append((isinstance(child, SeparatorAction), renderer.to_html()))
+        items = _between_items(items)
+        title = html.escape(self._view.title)
+        if len(buttons) == 0:
+            trigger = f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm">{title}</div>'
+        else:
+            trigger = (
+                '<div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square"'
+                f' aria-label="{title}" title="{title}">{_icon("more")}</div>'
+            )
+        dropdown = (
+            '<div class="dropdown dropdown-end">'
+            f"{trigger}"
+            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-60 rounded-box border'
+            f' border-base-300 bg-base-100 p-2 shadow-lg">'
+            f"{''.join(item for _, item in items)}</ul></div>"
+            if len(items) > 0
+            else ""
         )
         return (
-            f'<div id="{self.widget_id}"{oob_attribute} class="dropdown">'
-            f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm font-medium">'
-            f"{html.escape(self._view.title)}</div>"
-            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-60 rounded-box border'
-            f' border-base-300 bg-base-100 p-2 shadow-lg">{items}</ul></div>'
+            f'<div id="{self.widget_id}"{oob_attribute} class="flex items-center gap-1">'
+            f"{''.join(buttons)}{dropdown}</div>"
         )
+
+    @staticmethod
+    def _placement(action: View, *, has_save: bool) -> Placement:
+        if isinstance(action, SaveAsAction):
+            return Placement.OMITTED if has_save else Placement.BUTTON
+        if isinstance(action, ExitAppAction):
+            return Placement.OMITTED
+        if isinstance(action, (NewAction, SaveAction, OpenFileAction)):
+            return Placement.BUTTON
+        return Placement.ITEM
 
     def _ignore(self, _view: Menu, _rendered_object: str, _value: Any) -> None:
         pass
 
 
 class WebActionRenderer(WebRenderer[ActionView]):
-    """A menu item posting `triggered`; Save/Open are a download link and an upload.
+    """A menu action posting `triggered`; Save/Open are a download link and an upload.
 
     Those two can't go through the generic widget event: a download has to be a plain
     link, and a file has to be uploaded. Both name the action (`trigger`), so its
@@ -747,6 +828,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
         #: the file types Open's picker offers, e.g. ".hello"; an action doesn't know its
         #: main view, so `WebMainRenderer.render` sets it
         self.accept: str | None = None
+        #: set by its menu: kept for when the action is swapped on its own
+        self.placement = Placement.ITEM
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 ("text", "icon", "data", "shortcut", "is_checkable", "is_checked"),
@@ -755,36 +838,64 @@ class WebActionRenderer(WebRenderer[ActionView]):
         )
 
     def to_html(self, *, oob: bool = False) -> str:
+        if self.placement is Placement.OMITTED:
+            return f"<span {self._root_attributes(oob=oob)} hidden></span>"
+        if self.placement is Placement.BUTTON:
+            return self._button_html(oob=oob)
         view = self._view
         check = "✓ " if view.is_checkable and view.is_checked else ""
         shortcut = _web_shortcut(view.shortcut)
         kbd = f'<kbd class="kbd kbd-sm">{shortcut[0]}</kbd>' if shortcut else ""
         label = f"<span>{check}{html.escape(view.text)}</span>{kbd}"
-        # on the element a click activates: the page's key handler clicks it
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         if not view.is_enabled:
             item = f'<button type="button" class="justify-between" disabled>{label}</button>'
-        elif isinstance(view, (SaveAction, SaveAsAction)):
-            item = (
-                f'<a class="justify-between" href="/state?trigger={self.widget_id}" download'
+        else:
+            item = self._active_html('class="justify-between"', label, key)
+        menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
+        return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
+
+    def _button_html(self, *, oob: bool) -> str:
+        """Render a header button: Save the highlighted one, its shortcut in the tooltip."""
+        view = self._view
+        shortcut = _web_shortcut(view.shortcut)
+        text = html.escape(view.text)
+        tooltip = f"{text} ({shortcut[0]})" if shortcut else text
+        style = "btn-primary" if isinstance(view, SaveAction) else "btn-ghost"
+        if isinstance(view, NewAction):
+            icon = _icon("new")
+        else:
+            icon = _icon("open" if isinstance(view, OpenFileAction) else "save")
+        attributes = (
+            f'{self._root_attributes(oob=oob)} class="btn btn-sm {style}" title="{tooltip}"'
+        )
+        label = f'{icon}<span class="toolbar-label">{text}</span>'
+        if not view.is_enabled:
+            return f'<button {attributes} type="button" disabled>{label}</button>'
+        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+        return self._active_html(attributes, label, key)
+
+    def _active_html(self, attributes: str, label: str, key: str) -> str:
+        """Render the element a click (or the page's key handler, through `key`) activates."""
+        view = self._view
+        if isinstance(view, (SaveAction, SaveAsAction)):
+            return (
+                f'<a {attributes} href="/state?trigger={self.widget_id}" download'
                 f" {_CLOSE_DROPDOWN}{key}>{label}</a>"
             )
-        elif isinstance(view, OpenFileAction):
+        if isinstance(view, OpenFileAction):
             accept = "" if self.accept is None else f' accept="{html.escape(self.accept)}"'
-            item = (
-                f'<label class="justify-between">{label}<input type="file" name="file"{accept}'
+            return (
+                f'<label {attributes}>{label}<input type="file" name="file"{accept}'
                 ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
                 f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
                 f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}{key}></label>'
             )
-        else:
-            item = (
-                f'<button type="button" class="justify-between"'
-                f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
-                f' hx-swap="none" {_CLOSE_DROPDOWN}{key}>{label}</button>'
-            )
-        menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
-        return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
+        return (
+            f'<button {attributes} type="button"'
+            f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
+            f' hx-swap="none" {_CLOSE_DROPDOWN}{key}>{label}</button>'
+        )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "triggered" or not self._view.is_enabled:
@@ -813,7 +924,7 @@ def _theme_option(choice: str, text: str) -> str:
 #: the header's Theme menu: Light, Dark, or System (the browser's preference). Its button
 #: shows the theme in use, the sun or the moon, however it was chosen
 _THEME_MENU: Final = (
-    '<div class="dropdown dropdown-end ml-auto">'
+    '<div class="dropdown dropdown-end">'
     '<div tabindex="0" role="button" class="theme-toggle btn btn-ghost btn-sm btn-square"'
     ' aria-label="Theme" title="Theme">'
     '<svg class="icon-sun size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -882,7 +993,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             '<header class="navbar sticky top-0 z-20 min-h-14 gap-3 border-b border-base-300'
             ' bg-base-100 px-4">'
             f"{self._brand_html()}"
-            '<nav class="flex items-center gap-1 border-l border-base-300 pl-3">'
+            '<nav class="ml-auto flex items-center gap-1">'
             f"{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
             "</header>"

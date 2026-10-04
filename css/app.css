@@ -100,6 +100,13 @@ body {
   grid-column: 1 / -1;
 }
 
+/* the header's buttons keep only their icon on a phone, their text in the tooltip */
+@media (width < 40rem) {
+  .toolbar-label {
+    display: none;
+  }
+}
+
 /* the header's Theme button shows the theme in use: the sun in the light theme, the
    moon in the dark one, whether picked in its menu or followed from the browser */
 .theme-toggle .icon-moon,

@@ -40,6 +40,9 @@ from composeui.core.view import (
     LogType,
     LogView,
     MainView,
+    Menu,
+    SaveAsAction,
+    SeparatorAction,
     StatusBar,
     define_view,
 )
@@ -1096,46 +1099,93 @@ def _count(signal: Any) -> list[None]:
     return emitted
 
 
-def test_the_file_menu_sits_in_the_header(main_view: HelloMainView, client: TestClient) -> None:
+def test_the_file_menu_is_buttons_in_the_header(
+    main_view: HelloMainView, client: TestClient
+) -> None:
     menu = main_view.file_menu
-    assert not menu.is_visible  # "popped up" in Qt terms; a dropdown is always shown
+    assert not menu.is_visible  # "popped up" in Qt terms; ignored, the buttons always show
 
     page = client.get("/").text
 
     header = page[page.index("<header") : page.index("</header>")]
-    assert f'<div id="{_widget_id(menu.renderer)}" class="dropdown">' in header
-    assert 'role="separator"' in header
-    assert f'href="/state?trigger={_action_id(menu.save)}" download' in header
-    assert 'type="file" name="file"' in header
-    assert f'hx-post="/widget/{_action_id(menu.new)}"' in header
+    assert _element(header, _widget_id(menu.renderer)).tag == "div"
+    new = _element(header, _action_id(menu.new))
+    assert new.attributes["hx-post"] == f"/widget/{_action_id(menu.new)}"
+    open_file = _element(header, _action_id(menu.open_file))
+    assert ("input", "file") in [(tag, attrs.get("type")) for tag, attrs in open_file.descendants]
+    save = _element(header, _action_id(menu.save))
+    assert (save.tag, save.attributes["href"]) == ("a", f"/state?trigger={_action_id(menu.save)}")
+    assert "download" in save.attributes
+    # nothing left for a dropdown: the separator only set Exit apart
+    menu_html = header[header.index(f'id="{_widget_id(menu.renderer)}"') :]
+    assert "<ul" not in menu_html[: menu_html.index(f'id="{_action_id(menu.save)}"')]
+    assert 'role="separator"' not in header
 
 
-@pytest.mark.parametrize(
-    ("action", "key"), [("new", "N"), ("open_file", "O"), ("save", "S"), ("exit_app", "Q")]
-)
+def test_another_menu_is_a_dropdown_under_its_title() -> None:
+    @define_view
+    class ViewMenu(Menu):
+        zoom_in: ActionView = Factory(lambda: ActionView(text="Zoom in"))
+        separator: SeparatorAction = Factory(SeparatorAction)
+        zoom_out: ActionView = Factory(lambda: ActionView(text="Zoom out"))
+
+    menu = ViewMenu(title="View")
+    menu.render(RendererType.WEB)
+    assert isinstance(menu.renderer, WebRenderer)
+
+    markup = menu.renderer.to_html()
+
+    assert '<div tabindex="0" role="button" class="btn btn-ghost btn-sm">View</div>' in markup
+    dropdown = markup[markup.index("<ul") : markup.index("</ul>")]
+    for action in (menu.zoom_in, menu.zoom_out):
+        assert _element(dropdown, _action_id(action)).tag == "li"
+    assert 'role="separator"' in dropdown
+
+
+@pytest.mark.parametrize(("action", "key"), [("new", "N"), ("open_file", "O"), ("save", "S")])
 def test_menu_shortcuts_avoid_the_browsers_own(
     main_view: HelloMainView, client: TestClient, action: str, key: str
 ) -> None:
-    """Ctrl+N/O/S/Q belong to the browser (new window, open, save page, quit Firefox)."""
+    """Ctrl+N/O/S belong to the browser (new window, open file, save page)."""
     page = client.get("/").text
-    item_id = _action_id(getattr(main_view.file_menu, action))
-    item = page[page.index(f'<li id="{item_id}"') :]
-    item = item[: item.index("</li>")]
+    button = _element(page, _action_id(getattr(main_view.file_menu, action)))
+    elements = [(button.tag, button.attributes), *button.descendants]
 
-    assert f'<kbd class="kbd kbd-sm">Alt+Shift+{key}</kbd>' in item
+    assert f"(Alt+Shift+{key})" in str(button.attributes.get("title"))
     # what the page's key handler clicks when Alt+Shift+<key> is pressed
-    assert f'data-shortcut="Key{key}"' in item
+    assert f"Key{key}" in [attributes.get("data-shortcut") for _, attributes in elements]
     assert "Ctrl" not in page[page.index("<header") : page.index("</header>")]
 
 
-def test_save_as_has_no_web_shortcut(main_view: HelloMainView, client: TestClient) -> None:
-    # in a browser it downloads just like Save, whose Alt+Shift+S it would collide with
+@pytest.mark.parametrize("action", ["save_as", "exit_app"])
+def test_actions_a_browser_already_has_are_left_out(
+    main_view: HelloMainView, client: TestClient, action: str
+) -> None:
+    """Save As downloads just like Save; a web page is left by closing its tab."""
     page = client.get("/").text
-    item = page[page.index(f'<li id="{_action_id(main_view.file_menu.save_as)}"') :]
-    item = item[: item.index("</li>")]
+    left_out = _element(page, _action_id(getattr(main_view.file_menu, action)))
 
-    assert "<kbd" not in item
-    assert "data-shortcut" not in item
+    # kept as a hidden placeholder, so a later change to the action still has a target
+    assert "hidden" in left_out.attributes
+    assert left_out.descendants == []
+    assert "data-shortcut" not in left_out.attributes
+
+
+def test_save_as_alone_in_its_menu_is_its_download_button() -> None:
+    @define_view
+    class ExportMenu(Menu):
+        save_as: SaveAsAction = Factory(SaveAsAction)
+
+    export = ExportMenu(title="Export")
+    export.render(RendererType.WEB)
+    assert isinstance(export.renderer, WebRenderer)
+
+    button = _element(export.renderer.to_html(), _action_id(export.save_as))
+
+    assert button.tag == "a"
+    assert "download" in button.attributes
+    # no Alt+Shift+S: Save's, wherever Save is
+    assert "data-shortcut" not in button.attributes
 
 
 def test_an_action_fires_its_triggered_unless_disabled() -> None:
