@@ -1,0 +1,15 @@
+/* Source of src/composeui/webcore/static/app.css: rebuild it with `make css`.
+   Every class the web backend uses is written in its Python renderers, so those are
+   the only files scanned. */
+@import "tailwindcss" source(none);
+@source "../src/composeui/webcore";
+@plugin "./vendor/daisyui.mjs";
+
+/* A field followed by a log showing an error is invalid too; text the browser itself
+   rejects (a float field's pattern) as well, once the user has interacted with it. */
+.input:has(+ [data-log="error"]:not([hidden])),
+.select:has(+ [data-log="error"]:not([hidden])),
+.input:user-invalid {
+  --input-color: var(--color-error);
+  border-color: var(--color-error);
+}

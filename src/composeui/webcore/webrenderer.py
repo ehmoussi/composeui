@@ -31,6 +31,7 @@ from composeui.core.view import (
     FormRowView,
     FormView,
     GroupFormView,
+    LogMixin,
     LogType,
     MainView,
     Menu,
@@ -183,6 +184,38 @@ class WebRenderer(Renderer[TView, str]):
             attributes.append('hx-swap-oob="true"')
         return " ".join(attributes)
 
+    def _row_attributes(self) -> str:
+        """ARIA links from a form row's field to the row's log and label.
+
+        The field is described by the log, read out with the field, and is
+        `aria-invalid` while the log shows an error (the page script keeps that in step
+        when only the log is swapped, see `page.py`). A field a `<label for>` can't name,
+        a radio group, is labelled by the row's label instead. Nothing outside a row.
+        """
+        attributes: list[str] = []
+        log_id = self._row_part_id("log")
+        if log_id is not None:
+            attributes.append(f'aria-describedby="{log_id}"')
+            view = self._view
+            if isinstance(view, LogMixin) and view.log_message and view.log_type is LogType.ERROR:
+                attributes.append('aria-invalid="true"')
+        label_id = None if self.is_labelable else self._row_part_id("label")
+        if label_id is not None:
+            attributes.append(f'aria-labelledby="{label_id}"')
+        return "".join(f" {attribute}" for attribute in attributes)
+
+    def _row_part_id(self, part: str) -> str | None:
+        container = self._view.renderer  # type: ignore[attr-defined]
+        if not isinstance(container, RendererContainer):
+            return None
+        try:
+            renderer = container.get_renderer(part)
+        except KeyError:
+            return None
+        if not isinstance(renderer, WebRenderer) or renderer is self:
+            return None
+        return renderer.widget_id
+
     def _mark_dirty(self, _view: TView, _rendered_object: str, _value: Any) -> None:
         dirty = _DIRTY.get()
         if dirty is not None:
@@ -212,7 +245,8 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
         # `change` from being dropped behind an in-flight debounced edit.
         disabled = "" if self._view.is_enabled else " disabled"
         return (
-            f'<input {self._root_attributes(oob=oob)} class="input w-full" type="text"'
+            f"<input {self._root_attributes(oob=oob)}{self._row_attributes()}"
+            ' class="input w-full" type="text"'
             f' name="value" value="{html.escape(self._text())}"'
             f' placeholder="{html.escape(self._view.placeholder)}"{self._extra_attributes()}'
             f' hx-post="/widget/{self.widget_id}"'
@@ -423,7 +457,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
             for label in self._view.values
         )
         return (
-            f'<div {self._root_attributes(oob=oob)} role="radiogroup"'
+            f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="radiogroup"'
             f' class="flex flex-wrap gap-x-6 gap-y-2">{options}</div>'
         )
 
@@ -442,7 +476,8 @@ class WebComboboxRenderer(_WebValuesRenderer[TValue]):
             for label in self._view.values
         )
         return (
-            f'<select {self._root_attributes(oob=oob)} class="select w-full"'
+            f"<select {self._root_attributes(oob=oob)}{self._row_attributes()}"
+            ' class="select w-full"'
             f'{self._htmx_attributes()} autocomplete="off"{disabled}>{empty}{options}</select>'
         )
 
