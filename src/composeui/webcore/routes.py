@@ -58,6 +58,10 @@ async def widget_event(request: Request) -> Response:
         return PlainTextResponse(str(e), status_code=400)
     if body is None:
         return PlainTextResponse("Unknown widget", status_code=404)
+    if session.closed:
+        # e.g. Exit: end the session; the page it lands on starts a fresh one
+        _store(request).drop(request.session.get(SESSION_KEY))
+        return Response(headers={**_NO_STORE, "HX-Redirect": "/"})
     return HTMLResponse(body, headers=_NO_STORE)
 
 
@@ -81,6 +85,9 @@ def state_download(request: Request) -> Response:
     session = _session(request)
     if session is None:
         return RedirectResponse("/", status_code=303)
+    trigger = request.query_params.get("trigger")
+    if trigger is not None:
+        session.trigger_action(trigger)  # e.g. Save's own `triggered`, before the download
     filename, body = session.save_state()
     headers = {**_NO_STORE, "Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(body, media_type="application/json", headers=headers)
@@ -99,6 +106,10 @@ async def state_upload(request: Request) -> Response:
     upload = form.get("file")
     if not isinstance(upload, UploadFile):
         return PlainTextResponse("No file uploaded", status_code=400)
+    trigger = form.get("trigger")
+    if isinstance(trigger, str):
+        # e.g. Open's own `triggered`, before the file is loaded
+        await run_in_threadpool(session.trigger_action, trigger)
     # one byte over the limit is enough to know the file is too large
     content = await upload.read(MAX_STATE_SIZE + 1)
     status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
