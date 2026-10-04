@@ -338,10 +338,10 @@ with stdlib `html.escape`.
        - `view.text == "Bob"` afterwards;
        - an unknown id gives 404;
        - setting a view attribute outside a request does not raise and records nothing.~~
-   11. *(Done over real HTTP with curl: `GET /` serves the htmx input, a POST answers
-       with only the status bar OOB fragment. Still to do by hand: the in-browser caret
-       check.)* Manual check in a browser: type in the field, watch the status bar update, and
-       confirm the caret is never reset mid-typing. Then run `make check`.
+   11. ~~Manual check in a browser: type in the field, watch the status bar update, and
+       confirm the caret is never reset mid-typing. Then run `make check`.~~ *(Done: in headless Chromium driven by
+       Playwright, typing `Bob` shows `Hello, Bob!` while the input keeps focus, and
+       typing on to `Bobby` lands at the end, so no caret reset.)*
 
    *Implementation notes (M2 as built):* tests build the app with
    `WebApplication.create_starlette_app()`. The route is `async` only to await the form
@@ -356,12 +356,12 @@ with stdlib `html.escape`.
    to more leaf widgets, and prove that a validator-driven log update joins the same
    multi-widget OOB fan-out (more than M2's 2-widget case).
 
-   1. `WebLabelRenderer` (`"label"`): `<span id class="label-text">`; dispatcher
+   1. ~~`WebLabelRenderer` (`"label"`): `<span id class="label-text">`; dispatcher
       `text`. `WebFormLabelRenderer` (`"form_label"`, `_role="form_label"`):
       `<label for="{field id}" class="label">` reading `view.label`. To build `for=`
       it derives the field id from the same view plus the field renderer's role (pass
-      the field role in at construction or compute it from `_field_renderer_key`).
-   2. `WebFloatInputRenderer` (`"float_input"`): `<input type="number" inputmode="decimal"
+      the field role in at construction or compute it from `_field_renderer_key`).~~
+   2. ~~`WebFloatInputRenderer` (`"float_input"`): `<input type="number" inputmode="decimal"
       min max step>`, with `step = 10**-decimals` when `decimals` is set, `"any"`
       otherwise. This gives client-side min/max enforcement for free, which is more
       than Textual does for `decimals`. Same triggers/`dispatch` as the input. On
@@ -369,21 +369,44 @@ with stdlib `html.escape`.
       `contextlib.suppress(ValueError)`, exactly like `TextualFloatInputRenderer`;
       `""` → `None`. Dispatcher: `value`, `placeholder`, `minimum`, `maximum`,
       `decimals`. Render `value` with `repr`-free formatting (`format(v, "g")`) so
-      `20.0` doesn't come back as `20.000000001`.
-   3. `WebLogRenderer` (`"log"`, `_role="log"`): `<p id class="text-sm whitespace-pre-line
+      `20.0` doesn't come back as `20.000000001`.~~
+   3. ~~`WebLogRenderer` (`"log"`, `_role="log"`): `<p id class="text-sm whitespace-pre-line
       text-error|text-warning|text-info">`. `pre-line` because `FormView.validate`
       joins messages with `\n- `. It is `hidden` when `log_message == ""` (matches
       `TextualLogRenderer`) or when `is_visible` is False. Dispatcher:
-      `log_message`, `log_type`.
-   4. Test at the renderer level, not over HTTP: rows only get a page position once
+      `log_message`, `log_type`.~~
+   4. ~~Test at the renderer level, not over HTTP: rows only get a page position once
       the form renderer exists (M5). Render a `LabelRowInputView` (validator on
       `text_edited`), a `LabelRowFloatInputView` and a `LabelView` directly, then assert
       on `to_html()` before and after attribute changes and on `dispatch()` inside
-      `collect_dirty()`. Full-page HTTP coverage comes in M5/M9.
-   5. Tests: clearing a validated input in one dispatch dirties the row's *log*, but not
+      `collect_dirty()`. Full-page HTTP coverage comes in M5/M9.~~
+   5. ~~Tests: clearing a validated input in one dispatch dirties the row's *log*, but not
       its input; typing `"1."` into the float input leaves `value` unchanged and doesn't
       raise; a `change` event fires `editing_finished` exactly once; escaping (a
-      `<script>` label renders inert). `make check`.
+      `<script>` label renders inert). `make check`.~~
+
+   *Implementation notes (M3 as built), where it differs from the steps above:*
+   - **Float input is `type="text" inputmode="decimal"`, not `type="number"`.** A
+     number input reports `""` for transient text such as the `-` of `-5`, which is
+     indistinguishable from a cleared field, so the server would briefly set `value`
+     to `None` and emit. A text field posts the raw text and unparsable text is
+     ignored, exactly like Qt/Textual. So `minimum`/`maximum`/`decimals` are tracked
+     (they mark the field dirty) but, as in Textual, not enforced on input. A
+     `pattern` (checked in Chromium: accepts `-`, `1.`, `1e3`; rejects `abc`,
+     `1.2.3`) plus daisyUI's `validator` class shows a red border on malformed text.
+     Values render with `str(value)`, the same as Qt, instead of `format(v, "g")`,
+     which turns `1234567.0` into `1.23457e+06`.
+   - **Shared `_WebTextFieldRenderer` base** for both text fields, typed with a
+     `TextFieldViewLike` Protocol (placeholder + the three signals). A `change` that
+     follows an `input` with the same text does not re-emit `text_changed`/
+     `text_edited`. The float field compares against the last *posted* text, and a
+     server-side `value` change resets that, so the server's value wins.
+   - `WebFormLabelRenderer` finds its field id through the row's public
+     `RendererContainer.get_renderer("field")` at render time, not through
+     `_field_renderer_key`. `label-text` was dropped (daisyUI 5 removed it); the label
+     uses `label text-sm font-medium`.
+   - "1." from step 5 parses fine in Python (`float("1.") == 1.0`); the test uses
+     `-` for transient text instead.
 
 5. **M4 — RadioGroupView / ComboboxView (`ValuesGroupMixin`).** Render as daisyUI
    `radio`/`select` components and wire `value_changed`.
