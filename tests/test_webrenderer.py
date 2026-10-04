@@ -23,6 +23,7 @@ pytest.importorskip("httpx")
 
 from attrs import Factory
 from starlette.testclient import TestClient
+from uvicorn.importer import import_from_string
 
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
@@ -920,6 +921,45 @@ def test_a_state_file_opens_in_every_new_session(
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in app.session_views] == ["Bob", "Bob"]
     assert all('value="Bob"' in page for page in pages)
+
+
+def test_reload_serves_a_factory_rebuilding_the_app_with_the_same_command_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study = HelloMainView()
+    study.form.name.text = "Bob"
+    state_file = tmp_path / "study.hello"
+    study.save_state(state_file)
+    served: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr("sys.argv", ["webhello", "--reload", "-f", str(state_file)])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **kwargs: served.append((app, kwargs)),
+    )
+    # restores the variable `run` sets for the reloaded process
+    monkeypatch.setenv("COMPOSEUI_WEB_APP", "")
+
+    _HelloApp().run()
+
+    ((import_string, options),) = served
+    assert options["reload"] is True
+    assert options["factory"] is True
+    # what uvicorn's reloaded process does with it, without spawning one
+    factory = import_from_string(import_string)
+    with TestClient(factory()) as client:
+        assert 'value="Bob"' in client.get("/").text
+
+
+def test_reload_refuses_an_app_it_cannot_rebuild(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["webhello", "--reload"])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda *_, **__: pytest.fail("served an app the reloader can't rebuild"),
+    )
+    monkeypatch.setenv("COMPOSEUI_WEB_APP", "")
+
+    with pytest.raises(ValueError, match="takes no arguments"):
+        WebApplication(build_main_view=HelloMainView).run()
 
 
 class _SlowGreetingApp(_HelloApp):

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import functools
+import importlib
+import inspect
+import os
 import secrets
+import sys
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
 
 import attrs
 import uvicorn
@@ -44,6 +48,9 @@ ViewT = TypeVar("ViewT", bound="View")
 
 #: attribute names leading from a main view to one of its views or signals
 _AttributePath = tuple[str, ...]
+
+#: environment variable telling a reloaded server process which app class to rebuild
+_RELOAD_APP_VARIABLE = "COMPOSEUI_WEB_APP"
 
 
 class _Connection(NamedTuple):
@@ -100,6 +107,52 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
     return app
 
 
+def _app_import_string(app_class: type) -> str:
+    """Return the `module:Class` a new process can import `app_class` from."""
+    if "<locals>" in app_class.__qualname__ or not _builds_without_arguments(app_class):
+        msg = (
+            f"--reload rebuilds the app from its class in a new server process: make "
+            f"{app_class.__qualname__!r} a module-level WebApplication subclass whose "
+            "__init__ takes no arguments"
+        )
+        raise ValueError(msg)
+    module = app_class.__module__
+    spec = getattr(sys.modules.get(module), "__spec__", None)
+    # `python -m package.module` runs it as `__main__`, which another process can't import
+    # by that name. A script has no spec: the reloader's spawned process re-runs the script
+    # as its own `__main__`, so the name still resolves there.
+    if module == "__main__" and spec is not None:
+        module = spec.name
+    return f"{module}:{app_class.__qualname__}"
+
+
+def _builds_without_arguments(app_class: type) -> bool:
+    try:
+        inspect.signature(app_class).bind()
+    except TypeError:
+        return False
+    return True
+
+
+def create_reloaded_starlette_app() -> Starlette:
+    """Build the app named by `_RELOAD_APP_VARIABLE`: the factory `--reload` serves.
+
+    uvicorn's reloader serves from a new process, rebuilt from scratch after every change,
+    which never runs the script that started the server; so it rebuilds the app from
+    its class, with the command line the process inherited (`-f`, `--debug`, ...).
+    """
+    module_name, _, qualname = os.environ[_RELOAD_APP_VARIABLE].partition(":")
+    module = cast("object", importlib.import_module(module_name))
+    # `run` checked that the class builds without arguments before serving
+    app_class = cast(
+        "Callable[[], WebApplication[Any]]",
+        functools.reduce(getattr, qualname.split("."), module),
+    )
+    app = app_class()
+    app._configure()  # noqa: SLF001
+    return app.create_starlette_app()
+
+
 class WebApplication(Application[MainViewT]):
     """Serve the app over HTTP, building one `MainView` per browser session.
 
@@ -123,6 +176,11 @@ class WebApplication(Application[MainViewT]):
         )
         self._parser.add_argument(
             "--port", metavar="PORT", help="Port to serve on.", type=int, default=8000
+        )
+        self._parser.add_argument(
+            "--reload",
+            help="Restart the server when a Python file under the current directory changes.",
+            action="store_true",
         )
 
     def connect(
@@ -159,7 +217,18 @@ class WebApplication(Application[MainViewT]):
         """Build and serve the app."""
         super().run()
         assert self._args is not None
-        uvicorn.run(self.create_starlette_app(), host=self._args.host, port=self._args.port)
+        if not self._args.reload:
+            uvicorn.run(self.create_starlette_app(), host=self._args.host, port=self._args.port)
+            return
+        # uvicorn reloads only an app it can import by name, in a process of its own
+        os.environ[_RELOAD_APP_VARIABLE] = _app_import_string(type(self))
+        uvicorn.run(
+            f"{__name__}:{create_reloaded_starlette_app.__name__}",
+            factory=True,
+            reload=True,
+            host=self._args.host,
+            port=self._args.port,
+        )
 
     def _new_session_view(self) -> MainViewT:
         main_view = self._build_main_view()

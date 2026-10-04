@@ -128,6 +128,10 @@ How it differs from a desktop window:
 - **Save and Open** download the state as a file and upload one; the File menu sits in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
   Ctrl ones for themselves.
+- **`--reload` restarts the server when a Python file under the current directory
+  changes,** for development. The reloader rebuilds the app in a new process from its
+  class, so it needs a module-level `WebApplication` subclass whose `__init__` takes no
+  arguments, like `WebHelloApp` above. Every restart drops the sessions.
 - Single process only, and no push from the server: the page changes in response to the
   user's own actions (a status bar message still clears itself after its timeout).
 
