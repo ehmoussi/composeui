@@ -79,10 +79,10 @@ There is no CI: every check depends on someone running `make check test` locally
    when Playwright or a browser isn't installed (`pytest.importorskip`), with a
    `make browser-test` target, and run them in CI (step 1.1) with `playwright install
    chromium`.~~ *(`tests/test_browser.py`, marker `browser`, Playwright in a `browser` dependency group; `make test` excludes them; CI runs them in a separate `browser` job on Python 3.13.)*
-4. **Development reload.** `--reload` was removed because uvicorn's reloader needs an
+4. ~~**Development reload.** `--reload` was removed because uvicorn's reloader needs an
    import string. Support it via a module-level app factory (e.g.
    `WebApplication.run()` accepting `"package.module:AppClass"`), or document
-   `uvicorn --reload --factory` against such a factory.
+   `uvicorn --reload --factory` against such a factory.~~ *(`--reload` is back: `run()` serves `create_reloaded_starlette_app`, which rebuilds the app from its class, named in `COMPOSEUI_WEB_APP`, with the inherited command line. The class must be module-level and build without arguments, so pipeform's inline `WebApplication(...)` refuses it; webhello reloads.)*
 5. **`make css` beyond Linux x64.** The Makefile downloads `tailwindcss-linux-x64` only.
    Pick the binary from `uname -s`/`uname -m` (macOS arm64/x64, Linux arm64) so
    contributors on other machines can rebuild the stylesheet.
