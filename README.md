@@ -132,6 +132,11 @@ How it differs from a desktop window:
   changes,** for development. The new server process runs the program again (the script,
   or the `-m` module) to rebuild its app, with the same command line. Every restart
   drops the sessions.
+- **Pages have their own address.** With a router (see [Pages](#pages)), each page is at
+  `/<route>`, and `/` sends the browser to the first page. The pages' toolbar sits in the
+  header; changing pages puts the new address in the browser's history, so back, forward,
+  bookmarks and reloads land on that page. A route can't be `state`, `static` or `widget`,
+  which the backend uses.
 - Single process only, and no push from the server: the page changes in response to the
   user's own actions (a status bar message still clears itself after its timeout).
 
@@ -148,7 +153,48 @@ How it differs from a desktop window:
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`) for the available building blocks.
+`LogMixin`, `LabelMixin`) for the available building blocks, and `PageView`/`Router` for
+an app split into [pages](#pages).
+
+## Pages
+
+A `Router` shows one page at a time and adds a toolbar with an entry per page. Each page
+is a `PageView` with a route, a unique name made of letters, digits, `_` and `-`. Its view
+fields are its content, laid out in a column:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import MainView, PageView, Router, TableView, define_view
+
+
+@define_view
+class ResultsPage(PageView):
+    summary: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_route("results")
+        self.title = "Results"  # its toolbar entry
+
+
+@define_view
+class Pages(Router):
+    form: FormPage = Factory(FormPage)  # another PageView; the first one shows at first
+    results: ResultsPage = Factory(ResultsPage)
+
+
+@define_view
+class AppMainView(MainView):
+    pages: Pages = Factory(Pages)
+```
+
+Clicking a toolbar entry, which triggers the page's `action`, shows its page. Code can do
+the same with `pages.navigate("results")`, and react to it through `pages.route_changed`.
+Which page is shown is navigation, not study data: saving, opening and New leave it alone.
+Qt docks the toolbar as a `QToolBar`, Textual shows a row of buttons at the top, and the
+web puts it in the page header, with a web address per page. See
+[`src/examples/pipeform.py`](src/examples/pipeform.py) for an app with two pages.
 
 ## Saving and loading state
 
