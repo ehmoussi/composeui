@@ -4,16 +4,17 @@ import time
 
 import pytest
 
-from examples.pipeform import EdgeType, QtPipeApp
+from composeui.qtcore.qtapplication import QtApplication
+from examples.pipeform import EdgeType, PipeMainView
 
 
 @pytest.fixture
-def app() -> QtPipeApp:
+def app() -> QtApplication[PipeMainView]:
     """Create app."""
-    return QtPipeApp()
+    return QtApplication(main_view=PipeMainView())
 
 
-def test_check_name(app: QtPipeApp) -> None:
+def test_check_name(app: QtApplication[PipeMainView]) -> None:
     assert app.main_view.pipe_form.name.log_message != ""
     app.main_view.pipe_form.name.text = "PipeTShape"
     app.main_view.pipe_form.name.text_edited.emit("PipeTShape")
@@ -21,7 +22,7 @@ def test_check_name(app: QtPipeApp) -> None:
     assert app.main_view.pipe_form.name.text == "PipeTShape"
 
 
-def test_display_edge_options(app: QtPipeApp) -> None:
+def test_display_edge_options(app: QtApplication[PipeMainView]) -> None:
     assert app.main_view.pipe_form.chamfer.is_visible is False
     assert app.main_view.pipe_form.fillet.is_visible is False
     app.main_view.pipe_form.edge_type.value = EdgeType.Chamfer
@@ -38,7 +39,7 @@ def test_display_edge_options(app: QtPipeApp) -> None:
     assert app.main_view.pipe_form.fillet.is_visible is False
 
 
-def test_display_message_status_bar(app: QtPipeApp) -> None:
+def test_display_message_status_bar(app: QtApplication[PipeMainView]) -> None:
     # change timeout to speed up the test
     timeout = 0.1
     app.main_view.status_bar.timeout = timeout
@@ -50,7 +51,7 @@ def test_display_message_status_bar(app: QtPipeApp) -> None:
     assert app.main_view.status_bar.message == ""
 
 
-def test_display_error_message(app: QtPipeApp) -> None:
+def test_display_error_message(app: QtApplication[PipeMainView]) -> None:
     assert app.main_view.pipe_form.log_view.is_visible is False
     assert app.main_view.pipe_form.log_view.log_message == ""
     # main radius + main width > incident half length

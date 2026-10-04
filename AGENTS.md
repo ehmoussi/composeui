@@ -34,8 +34,8 @@ QT_QPA_PLATFORM=offscreen uv run pytest tests/test_qtrenderer.py -k combobox
 ```
 
 `QT_QPA_PLATFORM=offscreen` is required for Qt tests in a headless environment (CI, WSL,
-agents). Run the examples with `uv run python -m examples.pipeform` (Qt) or
-`uv run python -m examples.textual_demo` (Textual).
+agents). Run the examples with `uv run python -m examples.pipeform --backend qt` (or
+`textual`, or `web`) or `uv run python -m examples.textual_demo` (Textual).
 
 ## Project layout
 
