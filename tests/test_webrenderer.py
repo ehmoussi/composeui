@@ -1206,6 +1206,24 @@ def test_the_open_upload_fires_its_action_then_loads(
     assert main_view.form.name.text == "Zoe"
 
 
+def test_the_open_picker_offers_only_the_apps_files(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    open_file = main_view.file_menu.open_file
+    file_inputs = re.compile(r'<input type="file"[^>]*>')
+
+    page = client.get("/").text
+    # renamed later: the action's fragment is swapped on its own, and keeps the filter
+    open_file.text = "Open study"
+    fragment = client.get(f"/widget/{_action_id(open_file)}").text
+
+    assert [re.findall(r'accept="([^"]*)"', tag) for tag in file_inputs.findall(page)] == [
+        [".hello"]
+    ]
+    assert "Open study" in fragment
+    assert 'accept=".hello"' in "".join(file_inputs.findall(fragment))
+
+
 def test_triggering_a_checkable_action_toggles_its_check_mark() -> None:
     action = ActionView(text="Wrap", is_checkable=True)
     action.render(RendererType.WEB)

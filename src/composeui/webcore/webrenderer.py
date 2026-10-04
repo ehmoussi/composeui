@@ -40,6 +40,7 @@ from composeui.core.view import (
     SaveAsAction,
     SeparatorAction,
     StatusBar,
+    View,
 )
 from composeui.webcore.page import get_page
 
@@ -738,6 +739,9 @@ class WebActionRenderer(WebRenderer[ActionView]):
 
     def __init__(self, view: ActionView) -> None:
         super().__init__(view)
+        #: the file types Open's picker offers, e.g. ".hello"; an action doesn't know its
+        #: main view, so `WebMainRenderer.render` sets it
+        self.accept: str | None = None
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 ("text", "icon", "data", "shortcut", "is_checkable", "is_checked"),
@@ -761,8 +765,9 @@ class WebActionRenderer(WebRenderer[ActionView]):
                 f" {_CLOSE_DROPDOWN}{key}>{label}</a>"
             )
         elif isinstance(view, OpenFileAction):
+            accept = "" if self.accept is None else f' accept="{html.escape(self.accept)}"'
             item = (
-                f'<label class="justify-between">{label}<input type="file" name="file"'
+                f'<label class="justify-between">{label}<input type="file" name="file"{accept}'
                 ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
                 f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
                 f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}{key}></label>'
@@ -815,6 +820,13 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-main"
+        # the children are rendered first: hand the Open actions the file type they load
+        views: list[View] = list(self._view.children_views)
+        while len(views) > 0:
+            view = views.pop()
+            views.extend(view.children_views)
+            if isinstance(view, OpenFileAction) and isinstance(view.renderer, WebActionRenderer):
+                view.renderer.accept = self._view.extension
 
     def page_html(self) -> str:
         menus: list[str] = []
