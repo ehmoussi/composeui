@@ -34,9 +34,10 @@ test:
 
 # the web backend in headless Chromium; skipped unless Chromium is installed:
 # uv run --group browser playwright install chromium
+# No pytest-qt: it refuses to start without a Qt binding, which these tests don't need.
 .PHONY: browser-test
 browser-test:
-	uv run --group browser pytest tests/test_browser.py -m browser
+	uv run --group browser pytest tests/test_browser.py -m browser -p no:pytest-qt
 
 # Tailwind's standalone CLI and daisyUI's plugin files: no Node/npm needed. Downloaded
 # once into css/vendor/ (not committed); the built static/app.css is committed.
