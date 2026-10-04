@@ -3,7 +3,7 @@
 Editing a field posts the browser event to `/widget/{id}`; the response carries every
 fragment the event changed as an htmx out-of-band swap, except the field itself, which
 is never swapped back while the user is typing in it. The hello example and
-`examples/pipeform.py` are driven over HTTP; a few renderer-level cases drive rows
+`examples/pipeform` are driven over HTTP; a few renderer-level cases drive rows
 directly through `handle_event`, the function the route calls.
 """
 
@@ -38,6 +38,7 @@ from composeui.core.view import (
     StatusBar,
     define_view,
 )
+from composeui.webcore.webapplication import WebApplication
 from composeui.webcore.webrenderer import (
     UnsupportedEventError,
     WebFloatInputRenderer,
@@ -51,6 +52,7 @@ from composeui.webcore.webrenderer import (
     handle_event,
     render_dirty,
 )
+from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView
 
 if TYPE_CHECKING:
@@ -58,8 +60,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from starlette.applications import Starlette
-
-    from examples.pipeform import PipeMainView
 
 
 class _HelloApp(HelloApp):
@@ -680,10 +680,11 @@ def pipe_views() -> list[PipeMainView]:
 @pytest.fixture
 def pipe_web(pipe_views: list[PipeMainView]) -> Starlette:
     """Build the pipeform web app, keeping each session's main view in `pipe_views`."""
-    # pipeform also builds its Qt and Textual apps, so it needs those extras too
-    pipeform = pytest.importorskip("examples.pipeform")
 
-    class PipeApp(pipeform.WebPipeApp):  # type: ignore[misc,name-defined]
+    class PipeApp(WebApplication[PipeMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=PipeMainView)
+
         def setup_session(self, main_view: PipeMainView) -> None:
             main_view.status_bar.timeout = 0
             pipe_views.append(main_view)

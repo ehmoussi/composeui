@@ -82,7 +82,8 @@ if __name__ == "__main__":
 Run it with `uv run python hello.py` (requires the `pyside6` extra installed).
 
 For a larger, real-world-shaped example with forms, radio groups, validation, and a file menu
-with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py).
+with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py) (`uv run python -m
+examples.pipeform --backend qt`, or `textual`, or `web`).
 
 ## Web backend
 
@@ -109,7 +110,7 @@ response swaps in every part of the page that changed (here, the status bar), ne
 field being typed in. Styles ([daisyUI](https://daisyui.com/) on Tailwind) and htmx are
 served by the app itself, so it also works offline. For a fuller example, see
 [`src/examples/webhello.py`](src/examples/webhello.py) (`uv run python -m
-examples.webhello`), and `WebPipeApp` in `pipeform.py`.
+examples.webhello`), and `pipeform.py` with `--backend web`.
 
 How it differs from a desktop window:
 

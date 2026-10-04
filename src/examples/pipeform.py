@@ -1,6 +1,10 @@
+"""A pipe form, runnable on every backend: `python -m examples.pipeform --backend qt`."""
+
 from __future__ import annotations
 
+import argparse
 import enum
+import sys
 
 from attrs import Factory
 
@@ -14,9 +18,6 @@ from composeui.core.view import (
     MainView,
     define_view,
 )
-from composeui.qtcore.qtapplication import QtApplication
-from composeui.textualcore.textualapplication import TextualApplication
-from composeui.webcore.webapplication import WebApplication
 
 
 @define_view
@@ -208,28 +209,27 @@ class PipeMainView(MainView):
             self.status_bar.show_message(f"Edge type changed: {value.value}")
 
 
-class QtPipeApp(QtApplication[PipeMainView]):
-    def __init__(self) -> None:
-        main_view = PipeMainView()
-        super().__init__(main_view=main_view)
-
-
-class TextualPipeApp(TextualApplication[PipeMainView]):
-    def __init__(self) -> None:
-        main_view = PipeMainView()
-        super().__init__(main_view=main_view)
-
-
-class WebPipeApp(WebApplication[PipeMainView]):
-    def __init__(self) -> None:
-        super().__init__(build_main_view=PipeMainView)
-
-
 def main() -> None:
-    # app = QtPipeApp()
-    # app = TextualPipeApp()
-    app = WebPipeApp()
-    app.run()
+    # every app parses `sys.argv` itself when it runs (`-f`, `--debug`, `--port`, ...), so
+    # take `--backend` out and leave the rest, `--help` included, to the chosen app
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--backend", choices=["qt", "textual", "web"], default="web")
+    args, rest = parser.parse_known_args()
+    sys.argv = [sys.argv[0], *rest]
+    # imported only once chosen, so importing the views (as the tests do) or running one
+    # backend doesn't need the other backends' extras
+    if args.backend == "qt":
+        from composeui.qtcore.qtapplication import QtApplication  # noqa: PLC0415
+
+        QtApplication(main_view=PipeMainView()).run()
+    elif args.backend == "textual":
+        from composeui.textualcore.textualapplication import TextualApplication  # noqa: PLC0415
+
+        TextualApplication(main_view=PipeMainView()).run()
+    else:
+        from composeui.webcore.webapplication import WebApplication  # noqa: PLC0415
+
+        WebApplication(build_main_view=PipeMainView).run()
 
 
 if __name__ == "__main__":
