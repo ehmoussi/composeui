@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QPoint, Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -228,6 +228,14 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     # as tall as its rows in the window: no empty block under them
     rows_height = model.rowCount() * table.rowHeight(0)
     assert 0 <= table.viewport().height() - rows_height < table.rowHeight(0)
+    # lined up with the form above it, whose labels start its rows
+    name_renderer = view.pipe_form.name.renderer
+    assert isinstance(name_renderer, RendererContainer)
+    name_label = name_renderer.get_renderer("label")
+    assert isinstance(name_label, QtWidgetRenderer)
+    assert isinstance(name_label.qt_object, QLabel)
+    label_left = name_label.qt_object.mapTo(window, QPoint(0, 0)).x()
+    assert table.mapTo(window, QPoint(0, 0)).x() == label_left
     table.setCurrentIndex(model.index(0, 1))
     table.setFocus()
     qtbot.keyClick(table, Qt.Key.Key_F2)  # the edit key

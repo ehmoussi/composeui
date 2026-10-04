@@ -578,6 +578,9 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
             else:
                 self._rendered_object = QWidget()
             layout = QFormLayout()
+            if not isinstance(self._view, GroupFormView):
+                # no frame of its own: its rows line up with the window's other widgets
+                layout.setContentsMargins(0, 0, 0, 0)
             self._rendered_object.setLayout(layout)
             for field_row in self._view.field_rows:
                 if isinstance(field_row, FormRowView) and isinstance(
