@@ -83,9 +83,9 @@ There is no CI: every check depends on someone running `make check test` locally
    import string. Support it via a module-level app factory (e.g.
    `WebApplication.run()` accepting `"package.module:AppClass"`), or document
    `uvicorn --reload --factory` against such a factory.~~ *(`--reload` is back: `run()` serves `create_reloaded_starlette_app`, which rebuilds the app from its class, named in `COMPOSEUI_WEB_APP`, with the inherited command line. The class must be module-level and build without arguments, so pipeform's inline `WebApplication(...)` refuses it; webhello reloads.)*
-5. **`make css` beyond Linux x64.** The Makefile downloads `tailwindcss-linux-x64` only.
+5. ~~**`make css` beyond Linux x64.** The Makefile downloads `tailwindcss-linux-x64` only.
    Pick the binary from `uname -s`/`uname -m` (macOS arm64/x64, Linux arm64) so
-   contributors on other machines can rebuild the stylesheet.
+   contributors on other machines can rebuild the stylesheet.~~ *(`TAILWIND_PLATFORM`, from `uname`, overridable, e.g. `linux-x64-musl` on Alpine; anything else stops with the list. Windows isn't covered: no `uname` outside Git Bash/WSL.)*
 6. **Open's file picker filters by extension.** Actions don't know their main view's
    extension; pass it down (e.g. the main renderer adds `accept` when it renders the
    menus) so the picker only offers matching files. Small; the server already checks.
