@@ -1,8 +1,10 @@
 # from __future__ import annotations
 
 import enum
+import functools
 import json
 import logging
+import re
 import sys
 import threading
 from collections import deque
@@ -947,3 +949,119 @@ class GroupFormView(FormView):
     _renderer_key = "group_form"
 
     title: str = attrs.field(default="")
+
+
+#: what a page's route can be: it also names the page in a web address (`/<route>`)
+_ROUTE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+
+
+@define_view
+class PageView(View):
+    """A page of the app, shown while its `Router` is on the page's `route`.
+
+    Its view fields are its content, laid out in a column. `action` is its entry in the
+    router's toolbar, showing the page's `title` and `icon`; it isn't content, and is
+    navigation, not study data: never saved, loaded or reset.
+    """
+
+    _renderer_key = "page"
+
+    #: names the page in its router; set once, from `__attrs_post_init__`, with
+    #: `_init_route`
+    route: str = attrs.field(default="", on_setattr=attrs.setters.frozen)
+    action: ActionView = attrs.field(factory=ActionView, metadata={OMIT: True})
+
+    def _init_route(self, route: str) -> None:
+        """Set `route` once, meant to be called from `__attrs_post_init__`."""
+        object.__setattr__(self, "route", route)
+
+    @property
+    def title(self) -> str:
+        """The page's name in the toolbar."""
+        return self.action.text
+
+    @title.setter
+    def title(self, title: str) -> None:
+        self.action.text = title
+
+    @property
+    def icon(self) -> Optional[str]:
+        """The page's icon in the toolbar, if the backend shows icons."""
+        return self.action.icon
+
+    @icon.setter
+    def icon(self, icon: Optional[str]) -> None:
+        self.action.icon = icon
+
+    @property
+    def content_views(self) -> list[View]:
+        """Get the views shown on the page, in order."""
+        return [view for view in self.children_views if view is not self.action]
+
+
+@define_view
+class Router(View):
+    """Pages shown one at a time, picked from a toolbar with an entry per page.
+
+    Its page fields are the pages, in toolbar order. It starts on the first page;
+    triggering a page's `action` navigates to the page, and only the shown page's action
+    is checked. Pages can't be added or removed once built.
+    """
+
+    _renderer_key = "router"
+
+    #: the shown page's route; change it with `navigate`. Navigation, not study data:
+    #: never saved, loaded or reset
+    current_route: str = attrs.field(default="", metadata={OMIT: True})
+    #: a different page is shown, by its route
+    route_changed: Signal[str] = attrs.Factory(Signal[str])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        routes: set[str] = set()
+        for page in self.pages:
+            if _ROUTE_PATTERN.fullmatch(page.route) is None:
+                msg = (
+                    f"{type(page).__name__}.route is {page.route!r}: a route is made of "
+                    "letters, digits, '_' and '-' only. Set it with `_init_route`."
+                )
+                raise ValueError(msg)
+            if page.route in routes:
+                msg = f"Two pages of {type(self).__name__} have the route {page.route!r}."
+                raise ValueError(msg)
+            routes.add(page.route)
+            page.action.is_checkable = True
+            page.action.triggered.connect(functools.partial(self.navigate, page.route))
+        if len(self.pages) > 0:
+            self._show(self.pages[0].route)
+
+    @property
+    def pages(self) -> list[PageView]:
+        """Get the pages, in toolbar order."""
+        return [view for view in self.children_views if isinstance(view, PageView)]
+
+    @property
+    def current_page(self) -> Optional[PageView]:
+        """Get the shown page, or None without pages."""
+        return self.page(self.current_route)
+
+    def page(self, route: str) -> Optional[PageView]:
+        """Get the page on `route`, or None if no page has it."""
+        return next((page for page in self.pages if page.route == route), None)
+
+    def navigate(self, route: str) -> None:
+        """Show the page on `route`; raise `ValueError` if no page has it."""
+        if self.page(route) is None:
+            routes = [page.route for page in self.pages]
+            msg = f"{type(self).__name__} has no page on {route!r}, only on {routes}."
+            raise ValueError(msg)
+        is_changed = route != self.current_route
+        self._show(route)
+        if is_changed:
+            self.route_changed.emit(route)
+
+    def _show(self, route: str) -> None:
+        # set even when it's already the route: triggering a checked action unchecks it
+        for page in self.pages:
+            page.action.is_checked = page.route == route
+        self.current_route = route
