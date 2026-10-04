@@ -798,14 +798,14 @@ with stdlib `html.escape`.
       63 web tests became 58; coverage unchanged.
 
 11. **M10 — Polish.**
-    1. Swap the CDN Tailwind/daisyUI tags for a compiled `static/app.css`. Tailwind
+    1. ~~Swap the CDN Tailwind/daisyUI tags for a compiled `static/app.css`. Tailwind
        ships a standalone CLI binary, so the Python project needs no Node/npm: download
        it once, run `tailwindcss -i input.css -o static/app.css` with
        `@plugin "daisyui"` (daisyUI is also available as a standalone `daisyui.mjs` for
        the binary), and commit the output. Classes are built in Python strings, so
        point Tailwind's `@source` at `src/composeui/webcore/**/*.py`. Add a
        `make css` target. Also vendor or drop the CDN dependency entirely, so the
-       backend works offline.
+       backend works offline.~~
     2. ~~`StatusBar` auto-clear: **use a one-shot fetch, not polling.** When `message`
        is non-empty and `timeout > 0`, render the status bar with
        `hx-get="/widget/{id}" hx-trigger="load delay:{timeout}s" hx-swap="outerHTML"`.
@@ -819,14 +819,38 @@ with stdlib `html.escape`.
        request. Built as described, plus a 0.25 s margin on the delay, since the browser's
        delay starts slightly after the server's timer. Checked in Chromium: a message is
        gone by ~3.3 s, and one re-shown before then keeps its own full delay.)*
-    3. Accessibility pass: `aria-live="polite"` on the status bar and logs,
+    3. ~~Accessibility pass: `aria-live="polite"` on the status bar and logs,
        `aria-invalid`/`aria-describedby` linking an input to its row log, and `<label
-       for>` everywhere (M3 step 1).
-    4. README section for the web backend, mirroring the Qt quickstart: the hello
+       for>` everywhere (M3 step 1).~~
+    4. ~~README section for the web backend, mirroring the Qt quickstart: the hello
        example with `WebApplication`, `uv sync --extra web`,
        `uv run python -m examples.webhello`, plus the documented limitations (per-session
        construction and `app.connect`, single process, no unprompted push, save/open
-       through browser download/upload).
+       through browser download/upload).~~
+
+    *Implementation notes (M10 as built):*
+    - **CSS:** `css/app.css` (Tailwind 4.3.3 + daisyUI 5.7.47, scanning only
+      `src/composeui/webcore`, plus the field-error rule moved out of `page.py`'s inline
+      `<style>`) builds the committed `static/app.css` with `make css`. The target
+      downloads the pinned standalone CLI and `daisyui.mjs` into the git-ignored
+      `css/vendor/`. The page loads nothing from another host: checked in Chromium with
+      every external request blocked (none attempted, styling identical). Tests: the
+      page references no other host, and every class found in live hello/pipeform pages
+      (plus each log colour and a disabled menu item) is in the built stylesheet, which
+      catches a class added in Python without `make css`.
+    - **Accessibility:** a form row's field gets `aria-describedby` → its log, and
+      `aria-invalid` while the log shows an error. Because the field isn't swapped while
+      being typed in, a small `MutationObserver` in `page.py` keeps `aria-invalid` in
+      step whenever a log is swapped. A radio group gets `aria-labelledby` → its row's
+      label (`<label for>` can't name a `<div>`). Checked in Chromium's accessibility
+      tree: the name field reads as "Name", described "A name is mandatory", invalid
+      until a name is typed; the radio group is named "Greeting".
+    - **README:** a "Web backend" section (the quickstart's views served by
+      `WebApplication`, run and checked as written, plus how the web differs: sessions,
+      `setup_session`, save/open, Alt+Shift shortcuts, single process and no push), the
+      backends in the intro, the `tui`/`web` install lines, and the quickstart's
+      `main_view: "HelloMainView"` annotation (which fails mypy) changed to `MainView`.
+      AGENTS.md documents `make css` and `css/`.
 
 ## Explicit non-goals for v1
 
