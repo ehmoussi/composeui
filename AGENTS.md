@@ -24,6 +24,7 @@ make mypy    # mypy on packages composeui + examples, Qt binding resolved to PyS
 make test    # QT_QPA_PLATFORM=offscreen pytest tests with coverage
 make check   # lint + mypy
 make all     # clean + check + test
+make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
 ```
 
 Run a single test file or test:
@@ -43,7 +44,8 @@ src/composeui/
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
-  webcore/       # Web backend (Starlette + htmx + daisyUI), work in progress
+  webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
+css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, textual_demo.py, ...), also used by tests
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
 ```

@@ -2,8 +2,10 @@
 
 A small, framework-agnostic MVVM layer for building desktop UIs in Python. Views are
 declared as typed [`attrs`](https://www.attrs.org/) classes; a `Renderer` binds each view to
-a concrete toolkit widget (currently [Qt](https://pypi.org/project/QtPy/) via `qtpy`); `Signal`
-objects carry events between view, model and application code.
+a concrete toolkit widget ([Qt](https://pypi.org/project/QtPy/) via `qtpy`,
+[Textual](https://textual.textualize.io/) in a terminal, or a web page served with
+[Starlette](https://www.starlette.io/) and [htmx](https://htmx.org/)); `Signal` objects
+carry events between view, model and application code.
 
 > **Status:** early-stage / pre-alpha. The API is small and still moving.
 
@@ -30,6 +32,8 @@ git clone https://github.com/ehmoussi/composeui3
 cd composeui3
 uv sync                     # core dependencies
 uv sync --extra pyside6     # + PySide6, needed to actually render a window
+uv sync --extra tui         # + Textual, for the terminal backend
+uv sync --extra web         # + Starlette/uvicorn, for the web backend
 ```
 
 Requires Python >= 3.9.
@@ -53,7 +57,7 @@ class GreetingInputView(InputView):
         self.text_edited.connect(self._on_name_changed)
 
     # `main_view` is injected automatically because it's a requested parameter.
-    def _on_name_changed(self, text: str, *, main_view: "HelloMainView") -> None:
+    def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
         main_view.status_bar.show_message(f"Hello, {text}!" if text else "")
 
 
@@ -79,6 +83,47 @@ Run it with `uv run python hello.py` (requires the `pyside6` extra installed).
 
 For a larger, real-world-shaped example with forms, radio groups, validation, and a file menu
 with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py).
+
+## Web backend
+
+The same views can be served as a web page instead of a window. Only the application
+changes: a `WebApplication` takes a function building the main view, because every
+browser gets its own copy of it.
+
+```python
+from composeui.webcore.webapplication import WebApplication
+
+
+class WebHelloApp(WebApplication[HelloMainView]):
+    def __init__(self) -> None:
+        super().__init__(build_main_view=HelloMainView)
+
+
+if __name__ == "__main__":
+    WebHelloApp().run()  # serves http://127.0.0.1:8000 (--host/--port to change)
+```
+
+Run it with `uv run python hello.py` (requires the `web` extra). Pages are rendered on the
+server and updated with [htmx](https://htmx.org/): editing a field posts it, and the
+response swaps in every part of the page that changed (here, the status bar), never the
+field being typed in. Styles ([daisyUI](https://daisyui.com/) on Tailwind) and htmx are
+served by the app itself, so it also works offline. For a fuller example, see
+[`src/examples/webhello.py`](src/examples/webhello.py) (`uv run python -m
+examples.webhello`), and `WebPipeApp` in `pipeform.py`.
+
+How it differs from a desktop window:
+
+- **One app state per browser.** A signed session cookie gives each browser its own main
+  view; tabs of the same browser share it. Sessions live in the server's memory: a restart
+  starts them all over, and idle ones are dropped after an hour (`session_ttl`).
+- **Wire behavior inside the views,** as above, or in `WebApplication.setup_session`, which
+  runs for each new session's main view. `app.connect(view=app.main_view...)` only reaches
+  a template instance that no browser displays.
+- **Save and Open** download the state as a file and upload one; the File menu sits in the
+  page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
+  Ctrl ones for themselves.
+- Single process only, and no push from the server: the page changes in response to the
+  user's own actions (a status bar message still clears itself after its timeout).
 
 ## Core concepts
 
