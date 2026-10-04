@@ -177,7 +177,7 @@ class PipeFormView(FormView):
         main_radius = self.main_pipe.radius.value
         if incident_radius is None or main_radius is None or incident_radius > main_radius:
             return (
-                "The incident radius cant'be greater than the main radius: "
+                "The incident radius can't be greater than the main radius: "
                 f"({incident_radius} > {main_radius})"
             )
         return None
