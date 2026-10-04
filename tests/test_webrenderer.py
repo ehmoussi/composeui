@@ -1,8 +1,10 @@
-"""Coverage for the web backend (Starlette + htmx), driven over HTTP.
+"""Coverage for the web backend (Starlette + htmx).
 
 Editing a field posts the browser event to `/widget/{id}`; the response carries every
 fragment the event changed as an htmx out-of-band swap, except the field itself, which
-is never swapped back while the user is typing in it.
+is never swapped back while the user is typing in it. The hello example is driven over
+HTTP; form rows have no place on a page until the form renderer exists (M5), so their
+renderers are driven directly through `handle_event`, the function the route calls.
 """
 
 from __future__ import annotations
@@ -14,16 +16,30 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("httpx")
 
+from attrs import Factory
 from starlette.testclient import TestClient
 
 from composeui.core.registry import RendererType
-from composeui.core.renderer import NoRenderedObjectError
-from composeui.core.view import StatusBar
+from composeui.core.renderer import NoRenderedObjectError, RendererContainer
+from composeui.core.view import (
+    LabelRowFloatInputView,
+    LabelRowInputView,
+    LabelView,
+    LogType,
+    LogView,
+    MainView,
+    StatusBar,
+    define_view,
+)
 from composeui.webcore.webrenderer import (
+    WebFloatInputRenderer,
     WebInputRenderer,
+    WebLabelRenderer,
+    WebLogRenderer,
     WebRenderer,
     WebStatusBarRenderer,
     collect_dirty,
+    handle_event,
     render_dirty,
 )
 from examples.webhello import HelloApp
@@ -91,6 +107,46 @@ def test_typing_updates_the_status_bar_out_of_band(app: HelloApp, client: TestCl
     assert "Hello, Bob!" in response.text
     # the field being typed in is never swapped back
     assert input_id not in response.text
+
+
+def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
+    app: HelloApp, client: TestClient
+) -> None:
+    main_view = app.main_view
+    assert main_view.name_log.log_message == "A name is mandatory"
+    input_id = _widget_id(main_view.greeting.renderer)
+
+    body = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"}).text
+
+    swapped = {
+        renderer.widget_id
+        for renderer in (
+            main_view.name_log.renderer,
+            main_view.summary.renderer,
+            main_view.status_bar.renderer,
+        )
+        if isinstance(renderer, WebRenderer)
+    }
+    assert len(swapped) == 3
+    for widget_id in swapped:
+        assert f'id="{widget_id}" hx-swap-oob="true"' in body
+    assert "Bob hasn&#x27;t said how old they are." in body
+    assert input_id not in body
+
+
+def test_age_is_validated_and_summarised(app: HelloApp, client: TestClient) -> None:
+    main_view = app.main_view
+    age_id = _widget_id(main_view.age.renderer)
+
+    body = client.post(f"/widget/{age_id}", data={"value": "-3", "event": "input"}).text
+
+    assert main_view.age.value == -3.0
+    assert "An age can&#x27;t be negative" in body
+
+    client.post(f"/widget/{age_id}", data={"value": "41", "event": "input"})
+
+    assert main_view.age_log.log_message == ""
+    assert main_view.summary.text == "Nobody is 41 years old."
 
 
 def test_change_event_applies_the_text_and_finishes_editing_once(
@@ -200,3 +256,168 @@ def test_widget_id_requires_a_render() -> None:
     renderer = WebStatusBarRenderer(StatusBar())
     with pytest.raises(NoRenderedObjectError):
         _ = renderer.widget_id
+
+
+@define_view
+class _NameRowView(LabelRowInputView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = "Name <required>"
+        self.set_validator(self._check_name, self.text_edited)
+        self.run_validator()
+
+    def _check_name(self) -> str | None:
+        return "A name is mandatory" if self.text == "" else None
+
+
+@define_view
+class _RowsMainView(MainView):
+    name: _NameRowView = Factory(_NameRowView)
+    length: LabelRowFloatInputView = Factory(LabelRowFloatInputView)
+    note: LabelView = Factory(LabelView)
+    form_log: LogView = Factory(LogView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Rows", extension=".rows")
+        self.length.label = "Length"
+        self.length.value = 20.0
+
+
+@pytest.fixture
+def rows() -> _RowsMainView:
+    main_view = _RowsMainView()
+    main_view.render(RendererType.WEB)
+    return main_view
+
+
+def _part(row: Any, name: str) -> WebRenderer[Any]:
+    """One of a form row's renderers: "label", "field" or "log"."""
+    assert isinstance(row.renderer, RendererContainer)
+    renderer = row.renderer.get_renderer(name)
+    assert isinstance(renderer, WebRenderer)
+    return renderer
+
+
+def test_clearing_a_validated_input_dirties_its_log_but_not_the_input(
+    rows: _RowsMainView,
+) -> None:
+    field, log = _part(rows.name, "field"), _part(rows.name, "log")
+    assert rows.name.log_message == "A name is mandatory"
+
+    body = handle_event(field, "input", {"value": "Al"})
+
+    assert rows.name.text == "Al"
+    assert rows.name.log_message == ""
+    assert f'<p id="{log.widget_id}" hx-swap-oob="true" hidden' in body
+    assert field.widget_id not in body
+
+    body = handle_event(field, "input", {"value": ""})
+
+    assert "A name is mandatory" in body
+    assert f'id="{log.widget_id}" hx-swap-oob="true" aria-live' in body
+
+
+def test_float_input_ignores_transient_text(rows: _RowsMainView) -> None:
+    field = _part(rows.length, "field")
+
+    handle_event(field, "input", {"value": "-"})
+    assert rows.length.value == 20.0
+
+    handle_event(field, "input", {"value": "-5.5"})
+    assert rows.length.value == -5.5
+
+    handle_event(field, "input", {"value": ""})
+    assert rows.length.value is None
+
+
+def test_change_after_input_finishes_editing_without_re_emitting(rows: _RowsMainView) -> None:
+    field = _part(rows.length, "field")
+    edited: list[str] = []
+    finished: list[None] = []
+
+    def on_edited(text: str) -> None:
+        edited.append(text)
+
+    def on_finished() -> None:
+        finished.append(None)
+
+    rows.length.text_edited.connect(on_edited)
+    rows.length.editing_finished.connect(on_finished)
+
+    handle_event(field, "input", {"value": "3"})
+    handle_event(field, "change", {"value": "3"})
+
+    assert rows.length.value == 3.0
+    assert edited == ["3"]
+    assert len(finished) == 1
+
+
+def test_a_server_side_value_wins_over_the_last_typed_text(rows: _RowsMainView) -> None:
+    field = _part(rows.length, "field")
+    assert isinstance(field, WebFloatInputRenderer)
+    edited: list[str] = []
+
+    def on_edited(text: str) -> None:
+        edited.append(text)
+
+    rows.length.text_edited.connect(on_edited)
+    handle_event(field, "input", {"value": "-"})
+
+    with collect_dirty() as dirty:
+        rows.length.value = 7.0
+
+    assert list(dirty) == [field.widget_id]
+    assert 'value="7.0"' in field.to_html()
+    # "-" again is a new edit against the server's 7.0, not a duplicate post
+    handle_event(field, "input", {"value": "-"})
+    assert edited == ["-", "-"]
+
+
+def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
+    fragment = _part(rows.length, "field").to_html()
+
+    assert 'type="text"' in fragment
+    assert 'inputmode="decimal"' in fragment
+    assert 'pattern="' in fragment
+    assert 'value="20.0"' in fragment
+
+
+def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:
+    label, field = _part(rows.name, "label"), _part(rows.name, "field")
+
+    fragment = label.to_html()
+
+    assert f'for="{field.widget_id}"' in fragment
+    assert "Name &lt;required&gt;" in fragment
+
+    with collect_dirty() as dirty:
+        rows.name.label = "Full name"
+
+    assert list(dirty) == [label.widget_id]
+
+
+def test_log_is_hidden_when_empty_and_coloured_by_type(rows: _RowsMainView) -> None:
+    renderer = rows.form_log.renderer
+    assert isinstance(renderer, WebLogRenderer)
+    assert " hidden " in renderer.to_html()
+
+    rows.form_log.log_message = "- first\n- second"
+    rows.form_log.log_type = LogType.WARNING
+
+    fragment = renderer.to_html()
+    assert "hidden" not in fragment
+    assert "text-warning" in fragment
+    assert "whitespace-pre-line" in fragment
+    assert "- first\n- second" in fragment
+
+
+def test_label_renders_escaped_text(rows: _RowsMainView) -> None:
+    renderer = rows.note.renderer
+    assert isinstance(renderer, WebLabelRenderer)
+
+    with collect_dirty() as dirty:
+        rows.note.text = "<b>bold</b>"
+
+    assert list(dirty) == [renderer.widget_id]
+    assert renderer.to_html() == f'<span id="{renderer.widget_id}">&lt;b&gt;bold&lt;/b&gt;</span>'
