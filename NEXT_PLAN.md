@@ -49,17 +49,17 @@ There is no CI: every check depends on someone running `make check test` locally
 
 ## 3 — Examples and packaging
 
-1. **Keep `examples` out of the wheel.** `uv build` ships a top-level `examples` package
+1. ~~**Keep `examples` out of the wheel.** `uv build` ships a top-level `examples` package
    (and `examples/py.typed`) to anyone installing ComposeUI. Exclude it in
    `[tool.setuptools.packages.find]`, or rename it `composeui_examples` if it should
    stay installable. Check that the static files keep shipping (they do today, through
-   setuptools-scm).
-2. **Split `pipeform.py`'s views from its apps.** The module imports the Qt, Textual and
+   setuptools-scm).~~ *(`include = ["composeui*"]`; the sdist still carries `src/examples` for the tests, and the editable install keeps it importable.)*
+2. ~~**Split `pipeform.py`'s views from its apps.** The module imports the Qt, Textual and
    web apps at the top, so the web tests skip entirely without Qt and Textual installed.
    Move the views to `examples/pipeform/views.py`, with one small app module per backend
    (`main()` choosing by a `--backend` flag), so each backend's tests only need its own
-   extra.
-3. Fix pipeform's "cant'be" typo in the cross-field message (and the test asserting it).
+   extra.~~ *(Kept in one file instead: `main()` imports the chosen backend's `Application` only once `--backend qt|textual|web` picks it.)*
+3. ~~Fix pipeform's "cant'be" typo in the cross-field message (and the test asserting it).~~ *(No test asserted the typo; they match "incident radius" only.)*
 
 ## 4 — Web backend follow-ups
 
