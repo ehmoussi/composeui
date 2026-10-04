@@ -12,7 +12,6 @@ import contextlib
 import html
 import re
 import threading
-import weakref
 from abc import abstractmethod
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
@@ -50,12 +49,10 @@ TView = TypeVar("TView", bound=ViewLike)
 _DIRTY: ContextVar[dict[str, WebRenderer[Any]] | None] = ContextVar(
     "composeui_web_dirty", default=None
 )
-#: Fragment id -> renderer, filled at render time. Single served `MainView` for now;
-#: becomes per session in M6.
-_REGISTRY: weakref.WeakValueDictionary[str, WebRenderer[Any]] = weakref.WeakValueDictionary()
-#: Serializes requests against the view tree, and the `StatusBar` timer thread with
-#: them (see `WebRenderer.call_on_main_thread`).
-_LOCK = threading.RLock()
+#: The session whose view tree is being rendered (see `rendering_into`).
+_RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
+    "composeui_web_render_target", default=None
+)
 
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
 #: seconds a status bar waits past its message's timeout before fetching itself again
@@ -94,28 +91,36 @@ def render_dirty(dirty: Mapping[str, WebRenderer[Any]]) -> str:
     return "".join(fragment for widget_id, fragment in fragments.items() if widget_id not in nested)
 
 
-def get_renderer(widget_id: str) -> WebRenderer[Any] | None:
-    return _REGISTRY.get(widget_id)
-
-
 def handle_event(renderer: WebRenderer[Any], event: str, form: Mapping[str, str]) -> str:
     """Apply a browser event to `renderer`'s view and return the resulting OOB fragments."""
-    with _LOCK, collect_dirty() as dirty:
+    with collect_dirty() as dirty:
         renderer.dispatch(event, form)
         return render_dirty(dirty)
 
 
-def render_fragment(renderer: WebRenderer[Any]) -> str:
-    """Render one fragment's current state, for a widget refreshing itself."""
-    with _LOCK:
-        return renderer.to_html()
+class RenderTarget:
+    """One session's view tree: its renderers by fragment id, and the lock guarding it.
+
+    Renderers register here as they render (see `rendering_into`), so a widget id only
+    resolves within the session that rendered it: ids derive from `id()` and are
+    guessable, and must not reach another session's views.
+    """
+
+    def __init__(self) -> None:
+        self.renderers: dict[str, WebRenderer[Any]] = {}
+        #: serializes requests against the tree, and the `StatusBar` timer thread with
+        #: them (see `WebRenderer.call_on_main_thread`)
+        self.lock = threading.RLock()
 
 
-def render_page(main_view: MainView) -> str:
-    with _LOCK:
-        if not isinstance(main_view.renderer, WebMainRenderer):
-            raise NoRenderedObjectError
-        return main_view.renderer.page_html()
+@contextlib.contextmanager
+def rendering_into(target: RenderTarget) -> Generator[None]:
+    """Register every renderer rendered while the block runs into `target`."""
+    token = _RENDER_TARGET.set(target)
+    try:
+        yield
+    finally:
+        _RENDER_TARGET.reset(token)
 
 
 class WebRenderer(Renderer[TView, str]):
@@ -126,6 +131,7 @@ class WebRenderer(Renderer[TView, str]):
 
     def __init__(self, view: TView) -> None:
         super().__init__(view)
+        self._lock: threading.RLock | None = None
         self._refresh_dispatcher.update(
             {
                 "is_visible": self._mark_dirty,
@@ -142,10 +148,16 @@ class WebRenderer(Renderer[TView, str]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-{self._role}"
-            _REGISTRY[self._rendered_object] = self
+            target = _RENDER_TARGET.get()
+            if target is not None:
+                target.renderers[self._rendered_object] = self
+                self._lock = target.lock
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
-        with _LOCK:
+        if self._lock is None:
+            callback()  # rendered outside any session: nothing else touches the tree
+            return
+        with self._lock:
             callback()
 
     @abstractmethod
@@ -660,7 +672,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         )
 
     def close(self) -> None:
-        pass  # sessions land in M6; nothing to close until then
+        pass  # closing a session lands with the Exit action (M8)
 
     def open_file(self) -> Path | None:
         # no browser-side path to return: the web backend uploads instead (M7), and
