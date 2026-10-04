@@ -297,11 +297,7 @@ def test_change_event_applies_the_text_and_finishes_editing_once(
     edited: list[str] = []
     greeting.editing_finished.connect(lambda: finished.append(None))
 
-    # a def, not `edited.append`: signal logging needs the callback's `__code__`
-    def on_edited(text: str) -> None:
-        edited.append(text)
-
-    greeting.text_edited.connect(on_edited)
+    greeting.text_edited.connect(edited.append)
     input_id = _field_id(greeting)
 
     # a `change` can overtake a still-debounced `input` carrying the same value
@@ -438,13 +434,10 @@ def test_change_after_input_finishes_editing_without_re_emitting(rows: _RowsMain
     edited: list[str] = []
     finished: list[None] = []
 
-    def on_edited(text: str) -> None:
-        edited.append(text)
-
     def on_finished() -> None:
         finished.append(None)
 
-    rows.length.text_edited.connect(on_edited)
+    rows.length.text_edited.connect(edited.append)
     rows.length.editing_finished.connect(on_finished)
 
     handle_event(field, "input", {"value": "3"})
@@ -460,10 +453,7 @@ def test_a_server_side_value_wins_over_the_last_typed_text(rows: _RowsMainView) 
     assert isinstance(field, WebFloatInputRenderer)
     edited: list[str] = []
 
-    def on_edited(text: str) -> None:
-        edited.append(text)
-
-    rows.length.text_edited.connect(on_edited)
+    rows.length.text_edited.connect(edited.append)
     handle_event(field, "input", {"value": "-"})
 
     with collect_dirty() as dirty:
@@ -587,10 +577,7 @@ def test_choosing_the_current_value_again_does_not_re_emit(
     style_id = _field_id(style)
     emitted: list[GreetingStyle | None] = []
 
-    def on_changed(value: GreetingStyle | None) -> None:
-        emitted.append(value)
-
-    style.value_changed.connect(on_changed)
+    style.value_changed.connect(emitted.append)
 
     for _ in range(2):
         client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"})
