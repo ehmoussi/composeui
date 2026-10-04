@@ -753,21 +753,43 @@ with stdlib `html.escape`.
     `tests/test_webrenderer.py` (AGENTS.md: every behavior change needs a test). M9 is
     the consolidation pass, the same shape as `tests/test_qtrenderer.py`'s module
     docstring + pipeform-driven flow:
-    1. One end-to-end pipeform scenario through `TestClient` with `HX-Request: true`:
+    1. ~~One end-to-end pipeform scenario through `TestClient` with `HX-Request: true`:
        load the page, edit Name, change material, pick Fillet, fix a dimension until the
        form log clears, save, reload in a new session, confirm the state. Assert on the
        returned HTML (OOB fragments present, source widget absent) *and* on the `View`
-       objects' state after every step.
-    2. A small HTML helper for assertions (`stdlib html.parser`, which finds an element
+       objects' state after every step.~~
+    2. ~~A small HTML helper for assertions (`stdlib html.parser`, which finds an element
        by id and returns its attributes/text) so tests don't do brittle substring
-       matching on markup. No new dependency.
+       matching on markup. No new dependency.~~
     3. ~~A thread-safety test in the style of `tests/test_statusbar_thread_safety.py`:
        `show_message` with a tiny timeout, the timer fires while a request holds the
        session lock, and the clear lands after it with no exception.~~ *(Done early in M6:
        `test_a_message_timer_waits_for_the_request_holding_the_session`.)*
-    4. Coverage check: `webcore/` at least on par with `qtrenderer.py`'s 86%.
-    5. Add `--extra web` to the README/AGENTS.md dev sync line if it isn't there yet;
-       `make all` clean.
+    4. ~~Coverage check: `webcore/` at least on par with `qtrenderer.py`'s 86%.~~
+    5. ~~Add `--extra web` to the README/AGENTS.md dev sync line if it isn't there yet;
+       `make all` clean.~~
+
+    *Implementation notes (M9 as built):*
+    - **The end-to-end scenario found a core save/load bug, on every backend.** Saved
+      files left out each field equal to its attrs default (`_cattrs_omit_if_default`),
+      but views set their starting state in `__attrs_post_init__`. So a value changed
+      back to its attrs default loaded as the fresh view's starting value instead: a
+      reopened pipe study with a name still showed "A name is mandatory", and a Fillet
+      study loaded with its Fillet group hidden. Saved files now hold every field,
+      covered by a core regression test (`test_load_state_restores_values_equal_to_
+      attrs_defaults`). Saving every field also exposed `MainView.file_view` (a file
+      dialog's last answer) overwriting the path the dialog had just returned on load.
+      It is now `OMIT`ted from state like validators: never saved, loaded or reset.
+    - Scenario: `test_a_pipe_study_from_first_page_to_reopening_it_elsewhere`, with the
+      helper `_element`/`_swapped`/`_selected` built on `html.parser` (an element by
+      id, its attributes, unescaped text and descendant tags). It fails at the reopened
+      name's message with the old `omit_if_default`. Coverage: `routes.py`/`session.py`
+      99%, `webrenderer.py` 96%, `page.py`/`webapplication.py` 100% (bar: 86%). The
+      README's dev sync line now installs every extra (`--all-extras`), like AGENTS.md;
+      `make all` is clean.
+    - **Not done yet:** rewriting the earlier tests onto the helper and pruning the ones
+      the scenario now duplicates. That is a campaign over all web tests, which the
+      test-audit skill only starts from a per-test inventory approved first.
 
 11. **M10 — Polish.**
     1. Swap the CDN Tailwind/daisyUI tags for a compiled `static/app.css`. Tailwind
