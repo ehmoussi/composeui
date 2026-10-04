@@ -41,13 +41,59 @@ attribute and assert on the toolkit widget, or drive the widget and assert on
 the view or a `Signal` callback. Use `qtbot` for Qt, `App.run_test()` with the
 pilot for Textual, and the Starlette `TestClient` for web. Pure core behavior
 (`Signal` injection, validators, `save_state`/`load_state`, registry) is owned
-by core tests with no backend.
+by core tests with no backend. What happens only once a response reaches a real
+page is owned by Playwright in `tests/test_browser.py`; see
+[Browser tests](#browser-tests-playwright).
 
 Bug regression tests must fail on the pre-fix code for the intended reason and
 pass after the owner-boundary repair. A regression test that never demonstrably
 failed proves the mock, not the fix. One regression at the owner boundary
 covers the bug; do not replay the same scenario in every backend unless each
 backend has its own renderer code path for it.
+
+## Browser tests (Playwright)
+
+`tests/test_browser.py` serves the web app over uvicorn and drives it in headless
+Chromium. Browser tests are slow and opt-in, so the gate is stricter for them:
+
+- **Only what a browser alone can show.** If the markup or the response proves it
+  (an attribute, a fragment, an `HX-*` header, a status code), it belongs in
+  `tests/test_webrenderer.py` with the `TestClient`, even when the user only
+  notices it in a browser: an `accept` attribute, an `aria-describedby` link, an
+  OOB fragment. A browser test owns what happens after the response arrives: the
+  scripts in `webcore/page.py` (Alt+Shift shortcuts, keeping `aria-invalid` in step
+  with a swapped log), htmx swaps leaving the focused field and its caret alone, a
+  fragment fetching itself again (the status bar's auto-clear), the page loading
+  nothing from another host.
+- **Drive it like a user.** Find elements by label or role (`get_by_label`,
+  `get_by_role`, the `footer` landmark), never by `cui-<id>` ids, which come from
+  `id()` and change every run. Act with `press_sequentially`, `press` and
+  `keyboard.press`; `page.evaluate` that sets a value, dispatches an event or
+  calls `htmx.ajax` supplies the event ordering the browser should produce. Use
+  `page.evaluate` only to read what no locator exposes (a computed style,
+  `typeof htmx`).
+- **Wait on events, not time.** `expect(...)` assertions retry on their own; wrap
+  an action that posts in `_posted(page)` to wait for the server's answer. No
+  `time.sleep` or `page.wait_for_timeout`. A test of a timeout derives its wait
+  from the app's own setting (`_MESSAGE_TIMEOUT`), with a margin, rather than a
+  bare number.
+- **The real app, one session per test.** The `page` fixture opens a fresh browser
+  context, so each test gets its own cookie and session; the server and browser
+  are module-scoped and must stay stateless between tests. Configure the app
+  through `setup_session` (as `_BrowserHelloApp` does), not by reaching into
+  sessions. `page.route` may block or record requests to other hosts; never stub
+  the app's own routes, which turns the test into a mock of the server.
+- **One journey per contract.** Prefer one test that types, then checks the
+  field, the caret and the swapped neighbours together, over several tests
+  replaying the same setup. Never repeat a `TestClient` test in the browser.
+- **Keep the guards.** New tests live in `tests/test_browser.py`, which is marked
+  `browser` (`pytestmark`), skips without Playwright (`pytest.importorskip`) and
+  skips without Chromium (the `browser` fixture). `make test` excludes the marker
+  and CI runs them in its own `browser` job.
+
+A skipped browser test proves nothing: when the regression proof needs one,
+check the run reports it passed, not skipped, and break the script or renderer
+it covers to show it fails.
 
 ## Junk patterns
 
@@ -84,7 +130,10 @@ matches one, and audits hunt for existing tests that do.
   because the backend never registered the key, or a 400 from a different guard
   in `webcore/routes.py`;
 - names or fixtures that promise more than the input exercises, such as a
-  "round-trips" test that only checks one direction.
+  "round-trips" test that only checks one direction;
+- browser tests that re-check markup a `TestClient` test can see, wait with
+  fixed sleeps, locate by `cui-<id>` ids, or set values through `page.evaluate`
+  instead of typing (see [Browser tests](#browser-tests-playwright)).
 
 ## Value bar
 
@@ -111,7 +160,8 @@ split discovery into lanes (parallel agents only when the user asks for them):
 - Qt (`src/composeui/qtcore/`, `tests/test_qtrenderer.py`,
   `tests/test_pipeview.py`, `tests/test_statusbar_thread_safety.py`);
 - Textual (`src/composeui/textualcore/`, `tests/test_textual_renderer.py`);
-- web (`src/composeui/webcore/`, `tests/test_webrenderer.py`);
+- web (`src/composeui/webcore/`, `tests/test_webrenderer.py`, and
+  `tests/test_browser.py` for `webcore/page.py`'s scripts and htmx behavior);
 - a cross-cutting pattern sweep (same contract asserted in several backends,
   examples used as fixtures, coverage-only tests).
 
@@ -192,6 +242,9 @@ rewrites), each passing validation on its own.
 3. Run `make lint`, then `git diff --check`.
 4. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
    Compare coverage against the baseline run and explain any drop.
+   When browser tests, `webcore/page.py` or the markup they rely on changed, also
+   run `make browser-test` (once: `uv run --group browser playwright install
+   chromium`) and check they passed rather than skipped; `make test` excludes them.
 5. Inspect `git diff --numstat`; report production/examples separately from
    tests and test support.
 6. After final audit edits, run the `code-review` skill on the diff.
