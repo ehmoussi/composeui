@@ -802,6 +802,7 @@ _ICONS: Final[dict[str, str]] = {
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
     "more": '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/>'
     '<circle cx="19" cy="12" r="1"/>',
+    "chevron": '<path d="m6 9 6 6 6-6"/>',
 }
 
 
@@ -876,7 +877,12 @@ class WebMenuRenderer(WebRenderer[Menu]):
         items = _between_items(items)
         title = html.escape(self._view.title)
         if len(buttons) == 0:
-            trigger = f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm">{title}</div>'
+            # a chevron: it opens a menu, unlike the header buttons next to it
+            trigger = (
+                '<div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1 pr-2"'
+                ' aria-haspopup="menu">'
+                f'{title}<span class="opacity-60">{_icon("chevron")}</span></div>'
+            )
         else:
             trigger = (
                 '<div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square"'
@@ -885,8 +891,9 @@ class WebMenuRenderer(WebRenderer[Menu]):
         dropdown = (
             '<div class="dropdown dropdown-end">'
             f"{trigger}"
-            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-60 rounded-box border'
-            f' border-base-300 bg-base-100 p-2 shadow-lg">'
+            # as wide as its longest item, its text and shortcut on one line
+            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-max min-w-56'
+            ' rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">'
             f"{''.join(item for _, item in items)}</ul></div>"
             if len(items) > 0
             else ""
@@ -946,8 +953,13 @@ class WebActionRenderer(WebRenderer[ActionView]):
         view = self._view
         check = "✓ " if view.is_checkable and view.is_checked else ""
         shortcut = _web_shortcut(view.shortcut)
-        kbd = f'<kbd class="kbd kbd-sm">{shortcut[0]}</kbd>' if shortcut else ""
-        label = f"<span>{check}{html.escape(view.text)}</span>{kbd}"
+        # the shortcut a hint, lighter than the action's text and kept apart from it
+        kbd = (
+            f'<kbd class="ml-6 font-sans text-xs text-base-content/50">{shortcut[0]}</kbd>'
+            if shortcut
+            else ""
+        )
+        label = f'<span class="whitespace-nowrap">{check}{html.escape(view.text)}</span>{kbd}'
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         if not view.is_enabled:
             item = f'<button type="button" class="justify-between" disabled>{label}</button>'
@@ -1316,10 +1328,14 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         title = self._view.title
         initial = html.escape(title.strip()[:1].upper())
         return (
-            '<div class="flex items-center gap-2">'
-            '<span aria-hidden="true" class="grid size-8 place-items-center rounded-field'
-            f' bg-primary text-sm font-bold text-primary-content">{initial}</span>'
-            f'<h1 class="text-lg font-semibold">{html.escape(title)}</h1></div>'
+            # on a narrow screen, the title gives way to the header's buttons rather than
+            # pushing them to a row of their own
+            '<div class="flex min-w-0 flex-1 basis-0 items-center gap-2 sm:flex-none'
+            ' sm:basis-auto">'
+            '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
+            ' rounded-field bg-primary text-sm font-bold text-primary-content">'
+            f"{initial}</span>"
+            f'<h1 class="truncate text-lg font-semibold">{html.escape(title)}</h1></div>'
         )
 
     def close(self) -> None:

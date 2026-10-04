@@ -219,7 +219,7 @@ def test_page_shows_the_form_and_docks_an_empty_status_bar(
     page = response.text
     assert "<title>Hello ComposeUI</title>" in page
     assert '<meta name="viewport"' in page
-    assert '<h1 class="text-lg font-semibold">Hello ComposeUI</h1>' in page
+    assert re.search(r"<h1[^>]*>Hello ComposeUI</h1>", page)
     name = _element(page, _field_id(main_view.form.name))
     assert name.attributes["placeholder"] == "Type your name..."
     status_bar = _element(page, _widget_id(main_view.status_bar.renderer))
@@ -1217,7 +1217,7 @@ def test_another_menu_is_a_dropdown_under_its_title() -> None:
 
     markup = menu.renderer.to_html()
 
-    assert '<div tabindex="0" role="button" class="btn btn-ghost btn-sm">View</div>' in markup
+    assert re.search(r'role="button"[^>]*aria-haspopup="menu">View<', markup)
     dropdown = markup[markup.index("<ul") : markup.index("</ul>")]
     for action in (menu.zoom_in, menu.zoom_out):
         assert _element(dropdown, _action_id(action)).tag == "li"
@@ -1363,8 +1363,8 @@ def test_triggering_a_checkable_action_toggles_its_check_mark() -> None:
     assert isinstance(renderer, WebRenderer)
 
     # the item comes back as an out-of-band fragment, with its check mark toggled
-    assert "<span>✓ Wrap</span>" in handle_event(renderer, "triggered", {})
-    assert "<span>Wrap</span>" in handle_event(renderer, "triggered", {})
+    assert ">✓ Wrap</span>" in handle_event(renderer, "triggered", {})
+    assert ">Wrap</span>" in handle_event(renderer, "triggered", {})
 
 
 def test_new_clears_the_form_in_place(
@@ -1527,8 +1527,9 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
     stylesheet = client.get("/static/app.css").text
 
     def selector(name: str) -> str:
-        # a variant's colon is escaped in its selector, e.g. `.sm\:w-auto`
-        return "." + re.escape(name.replace(":", "\\:"))
+        # a variant's colon and an opacity's slash are escaped in its selector, e.g.
+        # `.sm\:w-auto`, `.text-base-content\/50`
+        return "." + re.escape(name.replace(":", "\\:").replace("/", "\\/"))
 
     missing = sorted(
         name for name in classes if not re.search(rf"{selector(name)}(?![\w-])", stylesheet)
