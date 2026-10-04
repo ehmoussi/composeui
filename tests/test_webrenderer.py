@@ -10,6 +10,7 @@ renderers are driven directly through `handle_event`, the function the route cal
 from __future__ import annotations
 
 import enum
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -94,6 +95,27 @@ def test_page_shows_the_title_and_docks_an_empty_status_bar(
     assert "alert" not in status_bar
     assert "fixed inset-x-0 bottom-0" in status_bar
     assert status_bar.endswith(">")
+
+
+def test_the_browser_never_shows_a_stale_copy_of_the_page(
+    app: HelloApp, client: TestClient
+) -> None:
+    """After a server restart, a reload must show the server's state, not the browser's.
+
+    Without these, Firefox reused the old page (no cache header) or refilled every field
+    of the fresh one with what was typed before, next to messages about empty fields.
+    """
+    page = client.get("/")
+    controls = re.findall(r"<(?:input|select)\b[^>]*>", page.text)
+    status_bar_id = _widget_id(app.main_view.status_bar.renderer)
+    input_id = _widget_id(app.main_view.greeting.renderer)
+
+    assert len(controls) >= 4  # name, age, two radios, colour
+    assert all('autocomplete="off"' in control for control in controls)
+    assert page.headers["cache-control"] == "no-store"
+    event = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
+    assert event.headers["cache-control"] == "no-store"
+    assert client.get(f"/widget/{status_bar_id}").headers["cache-control"] == "no-store"
 
 
 def test_typing_updates_the_status_bar_out_of_band(app: HelloApp, client: TestClient) -> None:

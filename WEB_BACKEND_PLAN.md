@@ -406,6 +406,16 @@ with stdlib `html.escape`.
      emitting `editing_finished` (Qt's validator never accepts such text), so the
      field never shows `4a` while the validators judge 4. Both were checked in Chromium.
      M5's form rows put each field right before its log, so the same rule applies there.
+   - **Revised after M4 (stale page after a restart):** after filling the form,
+     restarting the server and reloading, the browser showed the old values next to
+     messages from the restarted server's empty state ("A name is mandatory",
+     "Nobody…"). Reproduced in Firefox: with no cache header it reused the old page or
+     refilled the fresh page's fields from what was typed. Every HTML response now
+     sends `Cache-Control: no-store`, and every form control has `autocomplete="off"`,
+     so a reload always shows the server's state. A restart still *loses* that state:
+     it lives in memory (see "Session state"). Keeping it across restarts would mean
+     persisting each session's `save_state` JSON (M6+), not trusting the browser's
+     copy.
    - **Shared `_WebTextFieldRenderer` base** for both text fields, typed with a
      `TextFieldViewLike` Protocol (placeholder + the three signals). A `change` that
      follows an `input` with the same text does not re-emit `text_changed`/
