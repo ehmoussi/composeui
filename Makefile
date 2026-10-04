@@ -30,7 +30,13 @@ check: lint mypy
 
 .PHONY: test
 test:
-	QT_QPA_PLATFORM=offscreen uv run pytest tests --cov=src --cov-report=term-missing:skip-covered
+	QT_QPA_PLATFORM=offscreen uv run pytest tests -m "not browser" --cov=src --cov-report=term-missing:skip-covered
+
+# the web backend in headless Chromium; skipped unless Chromium is installed:
+# uv run --group browser playwright install chromium
+.PHONY: browser-test
+browser-test:
+	uv run --group browser pytest tests/test_browser.py -m browser
 
 # Tailwind's standalone CLI and daisyUI's plugin files: no Node/npm needed. Downloaded
 # once into css/vendor/ (not committed); the built static/app.css is committed.

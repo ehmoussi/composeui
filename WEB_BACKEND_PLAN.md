@@ -112,8 +112,9 @@ css/app.css             source of static/app.css
 `TestClient`, reach each session's view through the real `setup_session` hook, and check
 fragments with an `html.parser` helper. They include an end-to-end pipe form scenario
 and a check that every class the renderers emit exists in the built stylesheet.
-Browser-only behaviour (caret, shortcuts, `aria-invalid` sync, offline page) was checked
-by hand in headless Chromium.
+Browser-only behaviour (caret, shortcuts, `aria-invalid` sync, offline page, the status
+bar's auto-clear) is checked in headless Chromium by `tests/test_browser.py`
+(`make browser-test`).
 
 ## Differences from the desktop backends (by design)
 
