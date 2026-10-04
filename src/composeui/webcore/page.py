@@ -21,6 +21,18 @@ _PAGE = Template("""<!DOCTYPE html>
   border-color: var(--color-error);
 }
 </style>
+<script>
+/* menu shortcuts: Alt+Shift+<key> clicks the item marked with that key. Matched on the
+   physical key (`code`), so it works whatever character the keyboard layout, or the
+   Option key on macOS, would type. (No dollar sign in here: this page is a string.Template.) */
+document.addEventListener("keydown", function (event) {
+  if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
+  var item = document.querySelector('[data-shortcut="' + event.code + '"]');
+  if (item === null) return;
+  event.preventDefault();
+  item.click();
+});
+</script>
 </head>
 
 <body class="bg-base-200 min-h-screen">

@@ -62,6 +62,10 @@ async def widget_event(request: Request) -> Response:
         # e.g. Exit: end the session; the page it lands on starts a fresh one
         _store(request).drop(request.session.get(SESSION_KEY))
         return Response(headers={**_NO_STORE, "HX-Redirect": "/"})
+    if session.new_requested:
+        # New: a blank main view in the same session, shown by reloading the page
+        _store(request).start_over(request.session.get(SESSION_KEY))
+        return Response(headers=_RELOAD)
     return HTMLResponse(body, headers=_NO_STORE)
 
 

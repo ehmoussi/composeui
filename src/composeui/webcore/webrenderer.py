@@ -34,6 +34,7 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    NewAction,
     OpenFileAction,
     SaveAction,
     SaveAsAction,
@@ -636,10 +637,22 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
 _CLOSE_DROPDOWN = 'hx-on:click="document.activeElement.blur()"'
 
 
-def _shortcut_label(shortcut: str) -> str:
-    """Show a Qt-style shortcut the way menus do: `Ctrl+Shift+s` → `Ctrl+Shift+S`."""
-    *modifiers, key = shortcut.split("+")
-    return "+".join([*modifiers, key.upper()])
+def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
+    """Map a view's `Ctrl+<letter or digit>` shortcut to one the browser leaves free.
+
+    Browsers keep most Ctrl shortcuts for themselves (Ctrl+N opens a window, Ctrl+O a
+    file, Ctrl+S saves the page, Ctrl+Q quits Firefox on Linux), so `Ctrl+x` becomes
+    `Alt+Shift+X`, the combination web apps use for their own shortcuts. Returns the
+    label to show and the physical key (`KeyboardEvent.code`) the page's key handler
+    matches (see `page.py`); None for any other shortcut, which has no free web
+    equivalent (e.g. `Ctrl+Shift+s` would collide with `Ctrl+s`'s `Alt+Shift+S`).
+    """
+    match = re.fullmatch(r"ctrl\+([a-z0-9])", shortcut or "", flags=re.IGNORECASE)
+    if match is None:
+        return None
+    key = match.group(1).upper()
+    code = f"Key{key}" if key.isalpha() else f"Digit{key}"
+    return f"Alt+Shift+{key}", code
 
 
 class WebMenuRenderer(WebRenderer[Menu]):
@@ -702,34 +715,42 @@ class WebActionRenderer(WebRenderer[ActionView]):
         view = self._view
         # like Qt, the check mark shows `is_checked`; triggering doesn't toggle it
         check = "✓ " if view.is_checkable and view.is_checked else ""
-        shortcut = (
-            f'<kbd class="kbd kbd-sm">{html.escape(_shortcut_label(view.shortcut))}</kbd>'
-            if view.shortcut
-            else ""
-        )
-        label = f"<span>{check}{html.escape(view.text)}</span>{shortcut}"
+        shortcut = _web_shortcut(view.shortcut)
+        kbd = f'<kbd class="kbd kbd-sm">{shortcut[0]}</kbd>' if shortcut else ""
+        label = f"<span>{check}{html.escape(view.text)}</span>{kbd}"
+        # on the element a click activates: the page's key handler clicks it
+        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         if not view.is_enabled:
             item = f'<button type="button" class="justify-between" disabled>{label}</button>'
         elif isinstance(view, (SaveAction, SaveAsAction)):
             item = (
                 f'<a class="justify-between" href="/state?trigger={self.widget_id}" download'
-                f" {_CLOSE_DROPDOWN}>{label}</a>"
+                f" {_CLOSE_DROPDOWN}{key}>{label}</a>"
             )
         elif isinstance(view, OpenFileAction):
             item = (
                 f'<label class="justify-between">{label}<input type="file" name="file"'
                 ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
                 f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
-                f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}></label>'
+                f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}{key}></label>'
             )
         else:
             item = (
                 f'<button type="button" class="justify-between"'
                 f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
-                f' hx-swap="none" {_CLOSE_DROPDOWN}>{label}</button>'
+                f' hx-swap="none" {_CLOSE_DROPDOWN}{key}>{label}</button>'
             )
         menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
         return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
+
+    @property
+    def starts_new_document(self) -> bool:
+        """Whether triggering this action asks for a blank main view (New).
+
+        Core's `NewAction` only fires `triggered`; the web session then swaps in a
+        fresh main view (see `WebSession.new_requested`).
+        """
+        return isinstance(self._view, NewAction)
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "triggered" or not self._view.is_enabled:
