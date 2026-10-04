@@ -33,19 +33,19 @@ There is no CI: every check depends on someone running `make check test` locally
 
 ## 2 — Core: make what the web backend learned available to every backend
 
-1. **Atomic `load_state` in core.** A state file failing halfway (e.g. a valid name, then
+1. ~~**Atomic `load_state` in core.** A state file failing halfway (e.g. a valid name, then
    an age of `"abc"`) leaves the live view half loaded on Qt and Textual. The web backend
    already avoids this by applying uploads to a scratch instance first. Move that into
    core (`load_state` validates on `type(self)()` before applying, raising one clear
-   error type), so Qt/Textual's Open gets it too and can show the error.
-2. **Public "load from data" API.** The web session imports core's private
+   error type), so Qt/Textual's Open gets it too and can show the error.~~
+2. ~~**Public "load from data" API.** The web session imports core's private
    `_apply_state` to load an uploaded dict. Add `MainView.load_state_data(data)` (sharing
-   step 1's validation) and use it from `webcore/session.py`.
-3. **Checkable actions write `is_checked` back.** Qt's `QAction` toggles its own check
+   step 1's validation) and use it from `webcore/session.py`.~~
+3. ~~**Checkable actions write `is_checked` back.** Qt's `QAction` toggles its own check
    mark without updating the view, and the web and Textual don't toggle at all, so
    `is_checked` never reflects a click on any backend. Toggle in core when a checkable
    action triggers (or connect Qt's `toggled`), then render it on all three; one core
-   test plus a web test for the ✓.
+   test plus a web test for the ✓.~~
 
 ## 3 — Examples and packaging
 
