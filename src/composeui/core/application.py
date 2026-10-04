@@ -176,13 +176,6 @@ class Application(Generic[MainViewT]):
         self._main_view.render(renderer_type)
 
     def run(self) -> None:
-        self._configure()
-        assert self._args is not None
-        if self._args.f is not None:
-            self.main_view.load_state(self._args.f)
-
-    def _configure(self) -> None:
-        """Parse the command line and set the log levels it asks for."""
         self._args = self._parse_arguments()
         if self._args.log or self._args.debug:
             LOGGER.setLevel(level=logging.DEBUG)
@@ -192,6 +185,8 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
+        if self._args.f is not None:
+            self.main_view.load_state(self._args.f)
 
     def _parse_arguments(self) -> argparse.Namespace:
         args = self._parser.parse_args()
