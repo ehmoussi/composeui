@@ -218,7 +218,13 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         main_view: ReferenceType[MainView] | None,
         model: ReferenceType[Model] | None,
     ) -> None:
-        self._callback = weakref.WeakMethod(callback)
+        # a view's own method stays weak, so its signals don't keep the view alive; a function
+        # or a partial (e.g. `Application.connect`'s) has no owner that would hold it
+        self._callback: Callable[[], CallbackT[Unpack[Ts]] | None]
+        if inspect.ismethod(callback):
+            self._callback = cast("Callable[[], Any]", weakref.WeakMethod(callback))
+        else:
+            self._callback = lambda: callback
         self._requested_bounds = requested_bounds
         self._main_view = main_view
         self._model = model
