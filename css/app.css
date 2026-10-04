@@ -3,7 +3,102 @@
    the only files scanned. */
 @import "tailwindcss" source(none);
 @source "../src/composeui/webcore";
-@plugin "./vendor/daisyui.mjs";
+@plugin "./vendor/daisyui.mjs" {
+  themes: false;
+}
+
+/* one cool indigo palette, in a light and a dark variant following the browser's
+   preference: tinted greys rather than daisyUI's flat ones, softer fields and boxes */
+@plugin "./vendor/daisyui-theme.mjs" {
+  name: "composeui";
+  default: true;
+  color-scheme: light;
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97.4% 0.006 264);
+  --color-base-300: oklch(91.5% 0.012 264);
+  --color-base-content: oklch(27% 0.03 264);
+  --color-primary: oklch(52% 0.2 268);
+  --color-primary-content: oklch(98% 0.01 268);
+  --color-secondary: oklch(60% 0.15 300);
+  --color-secondary-content: oklch(98% 0.01 300);
+  --color-accent: oklch(70% 0.13 185);
+  --color-accent-content: oklch(25% 0.05 185);
+  --color-neutral: oklch(32% 0.03 264);
+  --color-neutral-content: oklch(96% 0.01 264);
+  --color-info: oklch(58% 0.15 240);
+  --color-info-content: oklch(98% 0.01 240);
+  --color-success: oklch(62% 0.15 155);
+  --color-success-content: oklch(98% 0.01 155);
+  --color-warning: oklch(68% 0.16 65);
+  --color-warning-content: oklch(25% 0.06 65);
+  --color-error: oklch(58% 0.21 22);
+  --color-error-content: oklch(98% 0.01 22);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.875rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+@plugin "./vendor/daisyui-theme.mjs" {
+  name: "composeui-dark";
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: oklch(23.5% 0.018 264);
+  --color-base-200: oklch(19.5% 0.016 264);
+  --color-base-300: oklch(32% 0.022 264);
+  --color-base-content: oklch(93% 0.012 264);
+  --color-primary: oklch(70% 0.15 268);
+  --color-primary-content: oklch(20% 0.05 268);
+  --color-secondary: oklch(72% 0.13 300);
+  --color-secondary-content: oklch(20% 0.05 300);
+  --color-accent: oklch(76% 0.12 185);
+  --color-accent-content: oklch(22% 0.04 185);
+  --color-neutral: oklch(30% 0.02 264);
+  --color-neutral-content: oklch(93% 0.012 264);
+  --color-info: oklch(72% 0.13 240);
+  --color-info-content: oklch(20% 0.05 240);
+  --color-success: oklch(74% 0.14 155);
+  --color-success-content: oklch(20% 0.05 155);
+  --color-warning: oklch(80% 0.14 75);
+  --color-warning-content: oklch(22% 0.05 75);
+  --color-error: oklch(70% 0.17 22);
+  --color-error-content: oklch(20% 0.05 22);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.875rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* a faint primary glow at the top of the page, so the card doesn't float on flat grey */
+body {
+  background-image: radial-gradient(
+    60rem 24rem at 50% -6rem,
+    color-mix(in oklch, var(--color-primary) 12%, transparent),
+    transparent
+  );
+  background-repeat: no-repeat;
+}
+
+/* a group's rows side by side while there is room (e.g. a pipe's radius, width and
+   length), one per line on a phone. Plain CSS: a responsive Tailwind class would be
+   escaped in the stylesheet (`sm\:...`) */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  align-items: start;
+}
+/* the group's own log spans the whole group, under its rows */
+.form-grid > [data-log] {
+  grid-column: 1 / -1;
+}
 
 /* A field followed by a log showing an error is invalid too; text the browser itself
    rejects (a float field's pattern) as well, once the user has interacted with it. */

@@ -57,6 +57,7 @@ TAILWIND_SUFFIX := $(if $(filter windows-%,$(TAILWIND_PLATFORM)),.exe)
 # the platform in the name: a checkout shared between machines keeps one binary for each
 TAILWIND := $(CSS_VENDOR)/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX)
 DAISYUI := $(CSS_VENDOR)/daisyui.mjs
+DAISYUI_THEME := $(CSS_VENDOR)/daisyui-theme.mjs
 
 $(TAILWIND):
 	$(if $(filter $(TAILWIND_PLATFORM),$(TAILWIND_PLATFORMS)),,\
@@ -70,8 +71,12 @@ $(DAISYUI):
 	mkdir -p $(CSS_VENDOR)
 	curl -sSfL -o $@ https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui.mjs
 
+$(DAISYUI_THEME):
+	mkdir -p $(CSS_VENDOR)
+	curl -sSfL -o $@ https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui-theme.mjs
+
 .PHONY: css
-css: $(TAILWIND) $(DAISYUI)
+css: $(TAILWIND) $(DAISYUI) $(DAISYUI_THEME)
 	$(TAILWIND) -i css/app.css -o src/composeui/webcore/static/app.css --minify
 
 .PHONY: clean

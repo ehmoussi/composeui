@@ -451,7 +451,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
         disabled = "" if self._view.is_enabled else " disabled"
         options = "".join(
             '<label class="label cursor-pointer gap-2 text-base-content">'
-            f'<input type="radio" class="radio radio-sm" value="{html.escape(label)}"'
+            f'<input type="radio" class="radio radio-sm radio-primary" value="{html.escape(label)}"'
             f"{' checked' if label == selected else ''}{self._htmx_attributes()}"
             f' autocomplete="off"{disabled}>'
             f"{html.escape(label)}</label>"
@@ -513,7 +513,8 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         target = f' for="{field.widget_id}"' if field.is_labelable else ""
         return (
             f"<label {self._root_attributes(oob=oob)}{target}"
-            f' class="label text-sm font-medium">{html.escape(self._view.label)}</label>'
+            ' class="label text-sm font-medium text-base-content"'
+            f">{html.escape(self._view.label)}</label>"
         )
 
     def _field_renderer(self) -> WebRenderer[Any]:
@@ -573,7 +574,7 @@ class WebFormRenderer(WebRenderer[FormView]):
     _role = "form"
 
     def to_html(self, *, oob: bool = False) -> str:
-        return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-4", legend="")
+        return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-5", legend="")
 
     def _fieldset(self, *, oob: bool, classes: str, legend: str) -> str:
         disabled = "" if self._view.is_enabled else " disabled"
@@ -621,8 +622,12 @@ class WebGroupFormRenderer(WebFormRenderer):
         title = self._view.title if isinstance(self._view, GroupFormView) else ""
         return self._fieldset(
             oob=oob,
-            classes="fieldset min-w-0 gap-4 rounded-box border border-base-300 bg-base-200 p-4",
-            legend=f'<legend class="fieldset-legend">{html.escape(title)}</legend>',
+            classes="fieldset form-grid min-w-0 gap-4 rounded-box border border-base-300"
+            " bg-base-200 p-4",
+            legend=(
+                '<legend class="fieldset-legend px-1 text-sm font-semibold text-primary">'
+                f"{html.escape(title)}</legend>"
+            ),
         )
 
 
@@ -717,10 +722,10 @@ class WebMenuRenderer(WebRenderer[Menu]):
         )
         return (
             f'<div id="{self.widget_id}"{oob_attribute} class="dropdown">'
-            f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm">'
+            f'<div tabindex="0" role="button" class="btn btn-ghost btn-sm font-medium">'
             f"{html.escape(self._view.title)}</div>"
-            '<ul tabindex="0" class="menu dropdown-content z-10 w-56 rounded-box bg-base-100'
-            f' p-2 shadow-sm">{items}</ul></div>'
+            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-60 rounded-box border'
+            f' border-base-300 bg-base-100 p-2 shadow-lg">{items}</ul></div>'
         )
 
     def _ignore(self, _view: Menu, _rendered_object: str, _value: Any) -> None:
@@ -844,15 +849,30 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         # bottom padding keeps the last row clear of the fixed status bar
         return get_page(
             self._view.title,
-            '<header class="navbar gap-2 bg-base-100 px-4 shadow-sm">'
-            f"{''.join(menus)}"
-            f'<h1 class="text-lg font-semibold">{html.escape(self._view.title)}</h1>'
+            # sticky: the menus stay at hand however long the form is
+            '<header class="navbar sticky top-0 z-20 min-h-14 gap-3 border-b border-base-300'
+            ' bg-base-100 px-4">'
+            f"{self._brand_html()}"
+            '<nav class="flex items-center gap-1 border-l border-base-300 pl-3">'
+            f"{''.join(menus)}</nav>"
             "</header>"
-            '<main class="mx-auto max-w-3xl p-4 pb-16">'
-            '<div class="card bg-base-100 shadow-sm"><div class="card-body gap-4">'
+            '<main class="mx-auto max-w-3xl px-4 pt-8 pb-20">'
+            '<div class="card border border-base-300 bg-base-100 shadow-md">'
+            '<div class="card-body gap-6 p-6">'
             f"{''.join(content)}"
             "</div></div></main>"
             f"{status_bar}",
+        )
+
+    def _brand_html(self) -> str:
+        """Show the app's title after a badge of its initial, standing in for an app icon."""
+        title = self._view.title
+        initial = html.escape(title.strip()[:1].upper())
+        return (
+            '<div class="flex items-center gap-2">'
+            '<span aria-hidden="true" class="grid size-8 place-items-center rounded-field'
+            f' bg-primary text-sm font-bold text-primary-content">{initial}</span>'
+            f'<h1 class="text-lg font-semibold">{html.escape(title)}</h1></div>'
         )
 
     def close(self) -> None:

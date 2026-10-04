@@ -1290,7 +1290,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         # the page as first served: rows, titled groups, edge options hidden
         for label in ("Name", "Material", "Radius", "Half Length", "Edge Type"):
             assert f">{label}</label>" in page
-        assert '<legend class="fieldset-legend">Main Pipe</legend>' in page
+        assert ">Main Pipe</legend>" in page
         assert _element(page, name_log_id).text == "A name is mandatory"
         assert _selected(_element(page, material_id)) == ["Steel"]
         assert _selected(_element(page, edge_id)) == ["Normal"]
