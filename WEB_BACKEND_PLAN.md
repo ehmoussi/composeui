@@ -225,40 +225,46 @@ with stdlib `html.escape`.
       `message` is empty and nothing is interactive yet.~~
    9. ~~`make check` before starting M2.~~
 
-   **M1 follow-ups found while planning M2.** These are gaps in the M1 code as it stands.
-   Fix them first, as M2 step 0: M2 builds directly on top of them.
-   - `WebStatusBarRenderer` and `WebMainRenderer` have empty `_refresh_dispatcher`s, so
-     setting *any* view attribute after `render()` raises
-     `MissingRefreshAttributeFunctionError` (verified: `status_bar.message = "x"` and
-     `main_view.minimum_width = 3` both raise). M2 step 2 fixes this.
-   - `WebMainRenderer` subclasses `WebRenderer`, not `MainRenderer`, so `MainView.close()`/
-     `ask_*_filepath()` silently skip it. Make it
-     `class WebMainRenderer(MainRenderer[MainView, str])` (with the id/`to_html` logic
-     shared through a small mixin or helper). **Change step 3's decision:**
-     `open_file`/`save_file` should `return None` ("the user picked no path"), not raise.
-     `FileMenu._save_state`/`_load_state` are connected to `save`/`open_file.triggered`
-     in core, so `NotImplementedError` would surface as a 500 the moment M8 dispatches
-     those triggers. `None` is an honest answer, and the existing callbacks already
-     treat it as "cancelled" (resolves the open question in M7).
-   - **There are two `MainView`s.** `WebApplication.__init__` builds one (that's
-     `self.main_view`, the one `Application.connect`, `_add_reference_to_signals` and
-     `-f FILE` act on), and `create_starlette_app`'s lifespan builds and serves a second
-     one, which got none of that. Until M6, serve `self._main_view` itself. M6
-     replaces this with an explicit per-session setup hook (see there).
-   - `uvicorn.run(<lambda>, factory=True, reload=True)` does not reload: uvicorn requires
-     an import string for `reload`/`workers`. Either drop `--reload` or pass an import
-     string to a module-level factory that reads the app from `configure()`'s global.
-     The second option is what the leftover `configure`/`_build_main_view` global was
-     heading towards. Also delete the unused `WebApplication.lifespan` method and the
-     commented-out `uvicorn.Config` code.
-   - `routes.homepage` returns `renderer.to_html()`, and `WebMainRenderer.to_html()`
-     already wraps the page in `get_page()`. That's fine, but then `to_html()` on the main
-     renderer means "full page" while on every other renderer it means "fragment". Rename
-     the main one to `page_html()` (or wrap the page in the route) so M2's OOB assembly
-     can't accidentally emit a whole `<html>` document when the main view is dirty.
-   - Local env: `.venv/.../uvicorn/supervisors/__init__.py` is truncated (an `except
-     ImportError:` with no body → `IndentationError` on `import uvicorn`). Run
-     `uv sync --reinstall-package uvicorn` before M2.
+   **M1 follow-ups (fixed in M2 step 1).** These were gaps in the M1 code, found while
+   planning M2. They were fixed before the rest of M2, which builds directly on them:
+   - ~~**Empty dispatchers.** `WebStatusBarRenderer` and `WebMainRenderer` registered no
+     refresh handlers, so setting *any* view attribute after `render()` raised
+     `MissingRefreshAttributeFunctionError` (`status_bar.message = "x"` and
+     `main_view.minimum_width = 3` both did). *Fixed:* every `WebRenderer` attribute
+     maps to `_mark_dirty` (M2 step 2); `WebMainRenderer`'s attributes are no-ops,
+     because the page itself is never swapped.~~
+   - ~~**`WebMainRenderer` was not a `MainRenderer`**, so `MainView.close()`/
+     `ask_*_filepath()` silently skipped it. *Fixed:* it is now a standalone
+     `MainRenderer[MainView, str]`, not a `WebRenderer`, since it never renders a
+     swappable fragment. **This reverses M1 step 3's decision:** `open_file`/`save_file`
+     return `None` ("the user picked no path") instead of raising. Core's
+     `FileMenu._save_state`/`_load_state` are connected to `save`/`open_file.triggered`,
+     so a `NotImplementedError` would surface as a 500 as soon as M8 dispatches those
+     triggers. `None` is what those callbacks already treat as "cancelled", and it
+     settles the open question in M7. `close()` is a no-op until sessions exist
+     (M6/M8).~~
+   - ~~**Two `MainView`s.** `WebApplication.__init__` built one (`self.main_view`, the
+     instance that `Application.connect`, `_add_reference_to_signals` and `-f FILE` act
+     on), and `create_starlette_app`'s lifespan built and served a second one that got
+     none of that. *Fixed:* `WebApplication.create_starlette_app()` renders and serves
+     `self._main_view`. M6 replaces it with per-session construction and a
+     `setup_session` hook.~~
+   - ~~**`--reload` didn't work.** `uvicorn.run(<lambda>, factory=True, reload=True)`
+     cannot reload: uvicorn needs an import string, and its reloader re-imports the
+     app in a child process that never runs the user's script, so a global set by
+     `configure()` would be empty there too. *Fixed by removal:* `--reload`,
+     `configure()`, the unused `WebApplication.lifespan` and the commented-out
+     `uvicorn.Config` code are gone. `--host` was added. To reload during development,
+     point `uvicorn --reload --factory` at a module-level factory.~~
+   - ~~**`to_html()` meant two things.** On the main renderer it returned a full
+     `<html>` page; everywhere else it returned a fragment. *Fixed:* the main renderer's
+     method is `page_html()` (served through `render_page()`), so OOB assembly can
+     never emit a whole document.~~
+   - ~~**Local env.** `.venv/.../uvicorn/supervisors/__init__.py` was truncated (an
+     `except ImportError:` with no body → `IndentationError` on `import uvicorn`). The
+     corrupt copy came from uv's cache, so `--reinstall-package` alone reinstalled the
+     same broken file. *Fixed:* `uv cache clean uvicorn`, then
+     `uv sync --group dev --all-extras --reinstall-package uvicorn`.~~
 
 3. **M2 — InputView, end to end.** `WebInputRenderer`: `<input>` with `hx-post` and a
    debounced `input` trigger (see the revised endpoint shape above). Build the dirty-set
@@ -268,8 +274,8 @@ with stdlib `html.escape`.
    is the reference). Prove that editing the input updates the *status bar* fragment
    through an OOB swap in the same response, over real HTTP.
 
-   1. Fix the M1 follow-ups above.
-   2. `webrenderer.py`: add a module-level `_DIRTY: ContextVar[dict[str, WebRenderer] |
+   1. ~~Fix the M1 follow-ups above (each entry records its fix).~~
+   2. ~~`webrenderer.py`: add a module-level `_DIRTY: ContextVar[dict[str, WebRenderer] |
       None] = ContextVar("composeui_web_dirty", default=None)`. The dict is keyed by id,
       insertion-ordered and deduplicated. Add a `collect_dirty()` context manager that
       sets it to `{}`, yields the dict, and resets the token. `WebRenderer.__init__`
@@ -277,19 +283,19 @@ with stdlib `html.escape`.
       registers it for each attribute its `to_html()` reads.
       `_mark_dirty(view, rendered_object, value)` adds `self` (so it is a bound method
       rather than a `@staticmethod`; the dispatcher type allows any callable) and does
-      nothing when `_DIRTY.get()` is `None`.
-   3. Base `WebRenderer` HTML conventions, as helpers that every `to_html()` uses:
+      nothing when `_DIRTY.get()` is `None`.~~
+   3. ~~Base `WebRenderer` HTML conventions, as helpers that every `to_html()` uses:
       - always emit the root element with `id`, even when `is_visible` is False. Emit
         the `hidden` attribute instead, so a later "becomes visible" swap still has a
         target (`pipeform.py`'s chamfer/fillet groups depend on this);
       - `is_enabled=False` → `disabled` on the interactive element;
       - all view text through `html.escape(..., quote=True)`, attributes included;
       - an `oob: bool = False` keyword on `to_html()`. When it is True, add
-        `hx-swap-oob="true"` to the root tag. Only the response assembly passes it.
-   4. `_role: ClassVar[str]` on each renderer class plus the id scheme
+        `hx-swap-oob="true"` to the root tag. Only the response assembly passes it.~~
+   4. ~~`_role: ClassVar[str]` on each renderer class plus the id scheme
       `f"cui-{id(view)}-{role}"` (see the revised mapping section). Update
-      `WebStatusBarRenderer` to it.
-   5. `WebInputRenderer(WebRenderer[InputViewLike])`. Define the `InputViewLike`
+      `WebStatusBarRenderer` to it.~~
+   5. ~~`WebInputRenderer(WebRenderer[InputViewLike])`. Define the `InputViewLike`
       Protocol locally, the same way `textualrenderer.py` does. The output is a daisyUI
       `<input class="input" type="text" name="value" value=... placeholder=...
       hx-post="/widget/{id}" hx-trigger="input changed delay:300ms, change"
@@ -301,13 +307,13 @@ with stdlib `html.escape`.
       `"input"` → `with self.stop_refresh(): view.text = value`, then emit
       `text_changed` and `text_edited`; `"change"` → emit `editing_finished`. Same
       shape as `TextualInputRenderer._update_text`/`_editing_finished`. Register
-      `"input": WebInputRenderer`.
-   6. Widget lookup: a module-level `weakref.WeakValueDictionary[str, WebRenderer]`,
+      `"input": WebInputRenderer`.~~
+   6. ~~Widget lookup: a module-level `weakref.WeakValueDictionary[str, WebRenderer]`,
       filled by `WebRenderer.render()`. It is good enough for the single served
       `MainView` and is replaced per session in M6. Doing it at render time avoids
       having to reach into `RendererContainer._renderers` (private) to find row
-      renderers.
-   7. `routes.py`: `def widget_event(request)` must be sync, so view callbacks run in
+      renderers.~~
+   7. ~~`routes.py`: `def widget_event(request)` must be sync, so view callbacks run in
       the threadpool and not on the event loop. It looks up the renderer (unknown id →
       404), parses the form (`python-multipart`), and runs
       `with collect_dirty() as dirty: renderer.dispatch(event, form)`. It returns
@@ -316,14 +322,14 @@ with stdlib `html.escape`.
       emitting both would swap the child twice. Drop any fragment whose `id="..."` also
       appears inside another emitted fragment. A string check is enough here; renderers
       don't know their parents. Register `Route("/widget/{widget_id}", widget_event,
-      methods=["POST"])`.
-   8. Thread safety, simple version: one `threading.Lock` around dispatch plus render
+      methods=["POST"])`.~~
+   8. ~~Thread safety, simple version: one `threading.Lock` around dispatch plus render
       (per session from M6 on). Override `WebRenderer.call_on_main_thread` to take that
       same lock, so `StatusBar`'s timer thread can't mutate the tree in the middle of a
-      request. That is the web equivalent of Qt's "marshal onto the GUI thread".
-   9. Example: `webhello.py` gets the README's `GreetingInputView` (with the
-      `main_view`-injected `show_message` callback) as a `HelloMainView` field.
-   10. Tests: new `tests/test_webrenderer.py` with `pytest.importorskip("starlette")`,
+      request. That is the web equivalent of Qt's "marshal onto the GUI thread".~~
+   9. ~~Example: `webhello.py` gets the README's `GreetingInputView` (with the
+      `main_view`-injected `show_message` callback) as a `HelloMainView` field.~~
+   10. ~~Tests: new `tests/test_webrenderer.py` with `pytest.importorskip("starlette")`,
        using Starlette's `TestClient`:
        - `GET /` contains the input and the status bar ids;
        - `POST /widget/{input id}` with `value=Bob&event=input` returns a body that
@@ -331,9 +337,20 @@ with stdlib `html.escape`.
          *not* contain the input's own id (focus rule);
        - `view.text == "Bob"` afterwards;
        - an unknown id gives 404;
-       - setting a view attribute outside a request does not raise and records nothing.
-   11. Manual check in a browser: type in the field, watch the status bar update, and
+       - setting a view attribute outside a request does not raise and records nothing.~~
+   11. *(Done over real HTTP with curl: `GET /` serves the htmx input, a POST answers
+       with only the status bar OOB fragment. Still to do by hand: the in-browser caret
+       check.)* Manual check in a browser: type in the field, watch the status bar update, and
        confirm the caret is never reset mid-typing. Then run `make check`.
+
+   *Implementation notes (M2 as built):* tests build the app with
+   `WebApplication.create_starlette_app()`. The route is `async` only to await the form
+   body; dispatch itself runs in the threadpool through `handle_event`, which holds the
+   lock and opens the dirty set. The README quickstart's `main_view: "HelloMainView"`
+   annotation fails mypy (`Signal.connect` types the injected `main_view` as
+   `MainView`); `webhello.py` uses `MainView`, and the README should be fixed in M10.
+   Core's `Signal._log_signal` crashes on built-in callbacks such as `list.append` (no
+   `__code__`); that is a separate core bug, worked around in tests.
 
 4. **M3 — LabelView, FloatInputView, LogMixin validation.** Extend the dirty-set pattern
    to more leaf widgets, and prove that a validator-driven log update joins the same
@@ -421,9 +438,14 @@ with stdlib `html.escape`.
    2. `WebGroupFormRenderer` (`"group_form"`): the same, wrapped in `<fieldset id
       class="fieldset bg-base-200 border-base-300 rounded-box border p-4"><legend
       class="fieldset-legend">{title}</legend>…`. Dispatcher adds `title`.
-   3. `WebMainRenderer.page_html()`: the main content first, then the status bar pinned
+   3. ~~`WebMainRenderer.page_html()`: the main content first, then the status bar pinned
       at the bottom (`fixed bottom-0` / daisyUI `footer`), mirroring Textual's docked
-      status bar. `title` already goes into `<title>`.
+      status bar. `title` already goes into `<title>`.~~ *(Done early, after M2: a
+      `navbar` header shows the title; content sits in a centered `max-w-3xl` card; the
+      status bar is a neutral `<footer role="status">` fixed to the bottom instead of an
+      always-visible `alert`. `page.py` gained `lang`, charset and viewport meta tags,
+      and has no `data-theme`, so daisyUI follows the browser's light/dark preference.
+      M8's menu goes in the header.)*
    4. `pipeform.py`: add `class WebPipeApp(WebApplication[PipeMainView])` next to the
       Qt and Textual apps, with `build_main_view=PipeMainView`. The module already
       imports both other backends unconditionally, so a third import matches the
