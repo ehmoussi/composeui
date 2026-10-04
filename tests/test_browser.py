@@ -1,0 +1,160 @@
+"""The web backend in a real browser: what only a browser can show.
+
+The HTTP tests in `test_webrenderer.py` check the markup; these check what the page's
+scripts and htmx do with it. Opt in with `make browser-test`, which needs the `browser`
+dependency group and a Chromium from `uv run --group browser playwright install chromium`;
+without them, these tests are skipped.
+"""
+
+from __future__ import annotations
+
+import socket
+import threading
+import time
+from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
+
+import pytest
+
+pytest.importorskip("starlette")
+pytest.importorskip("playwright.sync_api")
+
+import uvicorn
+from playwright.sync_api import Error, expect, sync_playwright
+
+from examples.webhello import HelloApp, HelloMainView
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from playwright.sync_api import Browser, Page, Route
+
+pytestmark = pytest.mark.browser
+
+#: how long the status bar shows a message, kept short so its auto-clear is quick to see
+_MESSAGE_TIMEOUT = 0.5
+
+
+class _BrowserHelloApp(HelloApp):
+    def setup_session(self, main_view: HelloMainView) -> None:
+        main_view.status_bar.timeout = _MESSAGE_TIMEOUT
+
+
+@pytest.fixture(scope="module")
+def base_url() -> Iterator[str]:
+    """Serve the hello app on a free local port for the whole module."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    config = uvicorn.Config(
+        _BrowserHelloApp().create_starlette_app(), host="127.0.0.1", port=port, log_level="error"
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started:
+        if time.monotonic() > deadline:
+            pytest.fail("the server didn't start")
+        time.sleep(0.01)
+    yield f"http://127.0.0.1:{port}"
+    server.should_exit = True
+    thread.join()
+
+
+@pytest.fixture(scope="module")
+def browser() -> Iterator[Browser]:
+    with sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch()
+        except Error as error:
+            pytest.skip(f"no Chromium for Playwright: {error.message.splitlines()[0]}")
+        yield browser
+        browser.close()
+
+
+@pytest.fixture
+def page(browser: Browser, base_url: str) -> Iterator[Page]:
+    """Open a page in a fresh context: its own cookies, so its own session."""
+    context = browser.new_context(base_url=base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+def _posted(page: Page) -> object:
+    """Wait for the page's next widget POST to be answered."""
+    return page.expect_response(
+        lambda response: response.request.method == "POST" and "/widget/" in response.url
+    )
+
+
+def test_typing_keeps_the_caret_where_the_user_put_it(page: Page) -> None:
+    page.goto("/")
+    name = page.get_by_label("Name")
+    with _posted(page):
+        name.press_sequentially("Alce")
+    name.press("ArrowLeft")
+    name.press("ArrowLeft")
+    with _posted(page):
+        name.press("i")
+    # the response updated the page (the greeting) but left the field alone
+    expect(page.locator("footer")).to_have_text("Hello, Alice!")
+    expect(name).to_have_value("Alice")
+    expect(name).to_be_focused()
+    expect(name).to_have_js_property("selectionStart", 3)
+
+
+def test_alt_shift_runs_a_menu_shortcut(page: Page) -> None:
+    page.goto("/")
+    name = page.get_by_label("Name")
+    with _posted(page):
+        name.press_sequentially("Alice")
+    # New is Ctrl+N on the desktop: browsers keep that one, so it's Alt+Shift+N here
+    with _posted(page):
+        page.keyboard.press("Alt+Shift+KeyN")
+    expect(name).to_have_value("")
+
+
+def test_a_field_is_invalid_exactly_while_its_log_shows_an_error(page: Page) -> None:
+    page.goto("/")
+    name = page.get_by_label("Name")
+    expect(name).to_have_attribute("aria-invalid", "true")  # "A name is mandatory"
+    with _posted(page):
+        name.press_sequentially("A")
+    expect(name).not_to_have_attribute("aria-invalid", "true")
+    with _posted(page):
+        name.press("Backspace")
+    expect(name).to_have_attribute("aria-invalid", "true")
+
+
+def test_the_page_needs_nothing_from_another_host(page: Page, base_url: str) -> None:
+    app_host = urlsplit(base_url).netloc
+    elsewhere: list[str] = []
+
+    def block_other_hosts(route: Route) -> None:
+        if urlsplit(route.request.url).netloc == app_host:
+            route.continue_()
+        else:
+            elsewhere.append(route.request.url)
+            route.abort()
+
+    page.route("**/*", block_other_hosts)
+    page.goto("/")
+    page.wait_for_load_state("networkidle")
+
+    assert elsewhere == []
+    assert page.evaluate("typeof htmx") == "object"
+    # styled by the app's own stylesheet: the body has daisyUI's background, not none
+    background = page.evaluate("getComputedStyle(document.body).backgroundColor")
+    assert background not in ("", "rgba(0, 0, 0, 0)", "transparent")
+
+
+def test_the_status_bar_clears_itself_once_its_message_times_out(page: Page) -> None:
+    page.goto("/")
+    status_bar = page.locator("footer")
+    with _posted(page):
+        page.get_by_label("Name").press_sequentially("Alice")
+    expect(status_bar).to_have_text("Hello, Alice!")
+    # nothing else is sent: the bar asks for its own state once the message has expired
+    expect(status_bar).to_have_text("", timeout=(_MESSAGE_TIMEOUT + 5) * 1000)

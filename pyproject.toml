@@ -57,6 +57,9 @@ where = ["src"]
 include = ["composeui*"]
 
 [dependency-groups]
+browser = [
+    "playwright>=1.60.0",
+]
 dev = [
     "httpx>=0.28.1",
     "mypy>=1.19.1",
@@ -68,6 +71,11 @@ dev = [
     "textual-dev>=1.8.0",
 ]
 
+
+[tool.pytest.ini_options]
+markers = [
+    "browser: drives the web backend in a real browser (Playwright); run by `make browser-test`",
+]
 
 [tool.ruff]
 line-length = 100

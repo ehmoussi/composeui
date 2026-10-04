@@ -21,7 +21,8 @@ overview and quickstart.
 ```bash
 make lint    # ruff format + ruff check --fix
 make mypy    # mypy on packages composeui + examples, Qt binding resolved to PySide6
-make test    # QT_QPA_PLATFORM=offscreen pytest tests with coverage
+make test    # QT_QPA_PLATFORM=offscreen pytest tests with coverage (browser tests excluded)
+make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make check   # lint + mypy
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
@@ -89,6 +90,9 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
   widgets (`qtbot` for Qt, `App.run_test()` for Textual, `httpx`/Starlette test client for web).
 - Tests for optional backends guard with `pytest.importorskip(...)`.
+- What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
+  marked `browser`. It needs the `browser` group and a Chromium:
+  `uv run --group browser playwright install chromium` once, then `make browser-test`.
 - `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`.
 
