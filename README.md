@@ -147,7 +147,7 @@ How it differs from a desktop window:
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
-(`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `RadioGroupMixin`, `LogMixin`,
+(`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `LogMixin`,
 `LabelMixin`) for the available building blocks.
 
 ## Saving and loading state
