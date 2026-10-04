@@ -75,7 +75,11 @@ def _omit_renderer_and_signals(
     unstructure = make_dict_unstructure_fn(
         cls,
         CONVERTER,
-        _cattrs_omit_if_default=True,
+        # every field, even one equal to its attrs default: views set their starting
+        # state in `__attrs_post_init__`, so a default value left out of the file would
+        # load back as that starting state instead (e.g. a validator message, or a
+        # group hidden until an option shows it)
+        _cattrs_omit_if_default=False,
         _cattrs_use_linecache=True,
         _cattrs_use_alias="from_converter",
         _cattrs_include_init_false=False,
@@ -457,7 +461,8 @@ class MainView(View):
 
     file_menu: FileMenu = attrs.Factory(FileMenu)
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
-    file_view: FileView = attrs.Factory(FileView)
+    # a file dialog's last answer, not study data: never saved, loaded or reset
+    file_view: FileView = attrs.field(factory=FileView, metadata={OMIT: True})
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
 
