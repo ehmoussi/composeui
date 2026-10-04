@@ -245,22 +245,11 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     body = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"}).text
 
     assert main_view.form.name.text == "Bob"
-    assert main_view.status_bar.message == "Hello, Bob!"
-
-    swapped = {
-        renderer.widget_id
-        for renderer in (
-            _part(main_view.form.name, "log"),
-            main_view.summary.renderer,
-            main_view.status_bar.renderer,
-        )
-        if isinstance(renderer, WebRenderer)
-    }
-    assert len(swapped) == 3
-    for widget_id in swapped:
-        assert f'id="{widget_id}" hx-swap-oob="true"' in body
-    assert "Bob hasn&#x27;t said how old they are." in body
-    assert input_id not in body
+    assert "hidden" in _swapped(body, _widget_id(_part(main_view.form.name, "log"))).attributes
+    summary = _swapped(body, _widget_id(main_view.summary.renderer))
+    assert summary.text == "Bob hasn't said how old they are."
+    assert _swapped(body, _widget_id(main_view.status_bar.renderer)).text == "Hello, Bob!"
+    assert _find(body, input_id) is None  # the field being typed in is never swapped back
 
 
 def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestClient) -> None:
@@ -287,12 +276,7 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
     main_view: HelloMainView, client: TestClient
 ) -> None:
     age_id = _field_id(main_view.form.age)
-    finished: list[None] = []
-
-    def on_finished() -> None:
-        finished.append(None)
-
-    main_view.form.age.editing_finished.connect(on_finished)
+    finished = _count(main_view.form.age.editing_finished)
     client.post(f"/widget/{age_id}", data={"value": "4", "event": "input"})
     client.post(f"/widget/{age_id}", data={"value": "4a", "event": "input"})
 
@@ -300,8 +284,7 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
 
     # the field, otherwise never swapped back, now shows the age its messages describe
     assert main_view.form.age.value == 4.0
-    assert f'<input id="{age_id}" hx-swap-oob="true"' in body
-    assert 'value="4.0"' in body
+    assert _swapped(body, age_id).attributes["value"] == "4.0"
     assert finished == []
 
 
@@ -343,9 +326,9 @@ def test_hidden_and_disabled_views_keep_their_id(main_view: HelloMainView) -> No
     name.is_visible = False
     name.is_enabled = False
 
-    fragment = field.to_html()
-    assert f'id="{field.widget_id}" hidden' in fragment
-    assert fragment.endswith(" disabled>")
+    element = _element(field.to_html(), field.widget_id)
+    assert "hidden" in element.attributes
+    assert "disabled" in element.attributes
 
 
 def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> None:
@@ -363,31 +346,23 @@ def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> 
     assert _element(label.to_html(), label.widget_id).text == hostile
 
 
-class _ContainerRenderer(WebRenderer[StatusBar]):
-    """A fragment wrapping another one, like a group wrapping its rows."""
+def test_a_changed_field_inside_a_changed_group_is_swapped_once(
+    pipe_main_view: PipeMainView,
+) -> None:
+    main_pipe = pipe_main_view.pipe_form.main_pipe
+    group, radius = main_pipe.renderer, _part(main_pipe.radius, "field")
+    assert isinstance(group, WebRenderer)
 
-    _role = "container"
+    with collect_dirty() as dirty:
+        main_pipe.is_enabled = False
+        main_pipe.radius.value = 1.0
+    body = render_dirty(dirty)
 
-    def __init__(self, view: StatusBar, child: WebRenderer[Any]) -> None:
-        super().__init__(view)
-        self._child = child
-
-    def to_html(self, *, oob: bool = False) -> str:
-        return f"<div {self._root_attributes(oob=oob)}>{self._child.to_html()}</div>"
-
-
-def test_render_dirty_drops_fragments_nested_in_another_dirty_fragment() -> None:
-    child_view = StatusBar(message="child")
-    child_view.render(RendererType.WEB)
-    child = child_view.renderer
-    assert isinstance(child, WebStatusBarRenderer)
-    container = _ContainerRenderer(StatusBar(), child)
-    container.render()
-
-    body = render_dirty({child.widget_id: child, container.widget_id: container})
-
-    assert body.count(f'id="{child.widget_id}"') == 1
-    assert body.startswith(f'<div id="{container.widget_id}" hx-swap-oob="true">')
+    assert set(dirty) == {group.widget_id, radius.widget_id}
+    # htmx would swap it twice otherwise: it only arrives within its group's fragment
+    assert body.count(f'id="{radius.widget_id}"') == 1
+    assert "hx-swap-oob" not in _element(body, radius.widget_id).attributes
+    assert _swapped(body, group.widget_id).tag == "fieldset"
 
 
 def test_widget_id_requires_a_render() -> None:
@@ -501,12 +476,15 @@ def test_a_server_side_value_wins_over_the_last_typed_text(rows: _RowsMainView) 
 
 
 def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
-    fragment = _part(rows.length, "field").to_html()
+    field = _part(rows.length, "field")
 
-    assert 'type="text"' in fragment
-    assert 'inputmode="decimal"' in fragment
-    assert 'pattern="' in fragment
-    assert 'value="20.0"' in fragment
+    attributes = _element(field.to_html(), field.widget_id).attributes
+
+    # text, not `type="number"`: transient "-" must reach the server as typed
+    assert attributes["type"] == "text"
+    assert attributes["inputmode"] == "decimal"
+    assert attributes["pattern"]
+    assert attributes["value"] == "20.0"
 
 
 def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:
@@ -543,48 +521,50 @@ def test_log_is_hidden_when_empty_and_coloured_by_type(rows: _RowsMainView) -> N
 def test_page_renders_the_choices(main_view: HelloMainView, client: TestClient) -> None:
     page = client.get("/").text
     style_id = _field_id(main_view.form.style)
-    colour_id = _field_id(main_view.form.colour)
 
-    assert f'<div id="{style_id}" role="radiogroup"' in page
-    assert page.count('type="radio" class="radio radio-sm" value="') == 2
-    assert f'value="Casual" checked name="{style_id}"' in page
-    assert f'value="Formal" name="{style_id}"' in page
-    # nothing chosen yet: the combobox starts on its empty choice
-    assert f'<select id="{colour_id}"' in page
-    assert '<option value="" selected></option><option value="Red">Red</option>' in page
+    style = _element(page, style_id)
+    radios = [attributes for tag, attributes in style.descendants if tag == "input"]
+    assert style.attributes["role"] == "radiogroup"
+    assert [radio["value"] for radio in radios] == ["Casual", "Formal"]
+    # one radio set per group: named after the group's own id
+    assert {radio["name"] for radio in radios} == {style_id}
+    assert _selected(style) == ["Casual"]
+    colour = _element(page, _field_id(main_view.form.colour))
+    options = [attributes["value"] for tag, attributes in colour.descendants if tag == "option"]
+    assert options == ["", "Red", "Green", "Blue"]
+    assert _selected(colour) == [""]  # nothing chosen yet: the empty choice
 
 
 def test_choosing_a_style_regreets_without_swapping_the_radio_group(
     main_view: HelloMainView, client: TestClient
 ) -> None:
-    input_id = _field_id(main_view.form.name)
     style_id = _field_id(main_view.form.style)
-    client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
+    _type_name(client, main_view, "Bob")
 
     body = client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"}).text
 
     assert main_view.form.style.value is GreetingStyle.FORMAL
-    assert main_view.status_bar.message == "Good day, Bob."
-    assert "Good day, Bob." in body
-    assert style_id not in body
+    assert _swapped(body, _widget_id(main_view.status_bar.renderer)).text == "Good day, Bob."
+    assert _find(body, style_id) is None
 
 
 def test_choosing_a_colour_updates_the_summary(
     main_view: HelloMainView, client: TestClient
 ) -> None:
     colour_id = _field_id(main_view.form.colour)
+    summary_id = _widget_id(main_view.summary.renderer)
 
     body = client.post(f"/widget/{colour_id}", data={colour_id: "Blue", "event": "change"}).text
 
     assert main_view.form.colour.value is Colour.BLUE
-    assert "and likes blue." in body
-    assert colour_id not in body
+    assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are and likes blue."
+    assert _find(body, colour_id) is None
 
     # the empty choice clears the colour again
-    client.post(f"/widget/{colour_id}", data={colour_id: "", "event": "change"})
+    body = client.post(f"/widget/{colour_id}", data={colour_id: "", "event": "change"}).text
 
     assert main_view.form.colour.value is None
-    assert main_view.summary.text == "Nobody hasn't said how old they are."
+    assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are."
 
 
 def test_an_unknown_label_clears_the_value_instead_of_failing(
@@ -629,9 +609,11 @@ def test_replacing_the_values_rerenders_the_options(main_view: HelloMainView) ->
 
     assert list(dirty) == [renderer.widget_id]
     assert style.value is None
-    fragment = renderer.to_html()
-    assert "Formal" not in fragment
-    assert "checked" not in fragment
+    group = _element(renderer.to_html(), renderer.widget_id)
+    assert [
+        attributes["value"] for _, attributes in group.descendants if "value" in attributes
+    ] == ["Casual"]
+    assert _selected(group) == []
 
 
 def test_a_disabled_radio_group_disables_every_radio(main_view: HelloMainView) -> None:
@@ -641,14 +623,17 @@ def test_a_disabled_radio_group_disables_every_radio(main_view: HelloMainView) -
 
     style.is_enabled = False
 
-    assert field.to_html().count(" disabled>") == 2
+    group = _element(field.to_html(), field.widget_id)
+    radios = [attributes for tag, attributes in group.descendants if tag == "input"]
+    assert len(radios) == 2
+    assert all("disabled" in radio for radio in radios)
 
 
 def test_a_radio_row_label_does_not_point_at_the_group(rows: _RowsMainView) -> None:
     label, field = _part(rows.shape, "label"), _part(rows.shape, "field")
 
-    assert "for=" not in label.to_html()
-    assert f'name="{field.widget_id}"' in field.to_html()
+    # a `<div>` isn't labelable: `for=` would point at nothing
+    assert "for" not in _element(label.to_html(), label.widget_id).attributes
 
     handle_event(field, "change", {field.widget_id: "Square"})
 
@@ -663,17 +648,19 @@ def test_a_timed_message_makes_the_status_bar_fetch_itself_after_the_timeout(
     assert isinstance(renderer, WebStatusBarRenderer)
     status_bar.timeout = 3.0
 
-    assert "hx-get" not in renderer.to_html()  # nothing to clear yet
+    def attributes() -> dict[str, str | None]:
+        return _element(renderer.to_html(), renderer.widget_id).attributes
+
+    assert "hx-get" not in attributes()  # nothing to clear yet
 
     status_bar.message = "Saved"
 
-    fragment = renderer.to_html()
-    assert f'hx-get="/widget/{renderer.widget_id}"' in fragment
-    assert 'hx-trigger="load delay:3250ms"' in fragment
-    assert 'hx-swap="outerHTML"' in fragment
+    assert attributes()["hx-get"] == f"/widget/{renderer.widget_id}"
+    assert attributes()["hx-trigger"] == "load delay:3250ms"
+    assert attributes()["hx-swap"] == "outerHTML"
 
     status_bar.timeout = 0  # a message that never times out needs no fetch
-    assert "hx-get" not in renderer.to_html()
+    assert "hx-get" not in attributes()
 
 
 def test_fetching_a_widget_returns_its_current_fragment(
@@ -689,9 +676,11 @@ def test_fetching_a_widget_returns_its_current_fragment(
     response = client.get(f"/widget/{status_bar_id}")
 
     assert response.status_code == 200
-    assert response.text.startswith(f'<footer id="{status_bar_id}" role="status"')
-    assert "Hello, Bob!" not in response.text
-    assert "hx-get" not in response.text
+    element = _element(response.text, status_bar_id)
+    assert element.tag == "footer"
+    assert element.text == ""
+    assert "hx-get" not in element.attributes  # cleared: nothing left to fetch later
+    assert "hx-swap-oob" not in element.attributes  # swapped by its own `outerHTML`
     assert client.get("/widget/cui-0-status_bar").status_code == 404
 
 
