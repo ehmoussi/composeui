@@ -18,6 +18,8 @@ class QRadioGroup(QWidget):
         super().__init__(*args, **kwargs)
         self._layout = QHBoxLayout()
         self._layout.setContentsMargins(0, 0, 0, 0)
+        # the buttons packed at the start, as on the web, not spread over the row
+        self._layout.addStretch()
         self.setLayout(self._layout)
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
@@ -37,7 +39,7 @@ class QRadioGroup(QWidget):
         self._values = values
         for i, value_text in enumerate(self._values):
             button = QRadioButton(value_text)
-            self._layout.addWidget(button)
+            self._layout.insertWidget(self._layout.count() - 1, button)  # before the stretch
             self._button_group.addButton(button, i)
 
     def set_value(self, value: Any) -> None:

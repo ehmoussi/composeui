@@ -156,6 +156,22 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     assert chamfer_widget.isVisible() is True  # edge_type -> group visibility
 
 
+def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    edge_widget = _field_widget(view.pipe_form.edge_type)
+    edge_widget.resize(600, 40)
+    edge_widget.show()
+    # rendering already rebuilt them once (`refresh` re-applies `values`)
+    buttons = edge_widget.findChildren(QRadioButton)
+    qtbot.waitUntil(lambda: all(button.isVisible() for button in buttons))  # laid out
+    buttons.sort(key=lambda button: button.x())
+
+    assert buttons[0].x() == 0
+    # each next to the one before, not spread over the width
+    assert buttons[-1].geometry().right() < edge_widget.width() // 2
+
+
 def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
