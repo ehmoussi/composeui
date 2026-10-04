@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import functools
 from collections import deque
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
@@ -162,6 +163,37 @@ class _TextualNoopRenderer(Renderer[TNoopView, TNoopView]):
 
 class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
     """No visual widget: `_ComposeUIApp` turns actions into key bindings + `Footer` entries."""
+
+    def __init__(self, view: ActionView) -> None:
+        super().__init__(view)
+        #: set once `_register_actions` has bound the action to a key
+        self.app: _ComposeUIApp | None = None
+        self._refresh_dispatcher.update(
+            {
+                name: functools.partial(self._refresh_label, name)
+                for name in ("text", "is_checkable", "is_checked")
+            }
+        )
+
+    def _refresh_label(
+        self, name: str, view: ActionView, _rendered_object: ActionView, value: Any
+    ) -> None:
+        if self.app is None:
+            return
+        # called before the view stores `value`: the other fields come from the view
+        state: dict[str, Any] = {
+            "text": view.text,
+            "is_checkable": view.is_checkable,
+            "is_checked": view.is_checked,
+            name: value,
+        }
+        label = _action_label(**state)
+        _call_on_app_thread(self.app, functools.partial(self.app.refresh_action, view, label))
+
+
+def _action_label(*, text: str, is_checkable: bool, is_checked: bool) -> str:
+    """Describe an action in the footer, with a check mark like the Qt and web menus."""
+    return f"✓ {text}" if is_checkable and is_checked else text
 
 
 class TextualSeparatorRenderer(_TextualNoopRenderer[SeparatorAction]):
@@ -649,8 +681,14 @@ def _register_actions(app: _ComposeUIApp, root: View) -> None:
             app.bind(
                 _to_textual_key(current.shortcut),
                 f"trigger({action_id!r})",
-                description=current.text,
+                description=_action_label(
+                    text=current.text,
+                    is_checkable=current.is_checkable,
+                    is_checked=current.is_checked,
+                ),
             )
+            if isinstance(current.renderer, TextualActionRenderer):
+                current.renderer.app = app
         views.extend(current.children_views)
 
 
@@ -684,6 +722,18 @@ class _ComposeUIApp(App[None]):
             self.run_worker(action_view.triggered.emit, thread=True)
         else:
             action_view.triggered.emit()
+
+    def refresh_action(self, action_view: ActionView, label: str) -> None:
+        """Show `label` as an action's description in the footer."""
+        if action_view.shortcut is None:
+            return
+        action = f"trigger({str(id(action_view))!r})"
+        # `bind` would add a second binding: replace the existing one in place instead
+        bindings = self._bindings.get_bindings_for_key(_to_textual_key(action_view.shortcut))
+        for index, binding in enumerate(bindings):
+            if binding.action == action:
+                bindings[index] = dataclasses.replace(binding, description=label)
+        self.refresh_bindings()
 
 
 class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):

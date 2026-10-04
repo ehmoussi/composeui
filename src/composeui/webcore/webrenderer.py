@@ -747,7 +747,6 @@ class WebActionRenderer(WebRenderer[ActionView]):
 
     def to_html(self, *, oob: bool = False) -> str:
         view = self._view
-        # like Qt, the check mark shows `is_checked`; triggering doesn't toggle it
         check = "✓ " if view.is_checkable and view.is_checked else ""
         shortcut = _web_shortcut(view.shortcut)
         kbd = f'<kbd class="kbd kbd-sm">{shortcut[0]}</kbd>' if shortcut else ""

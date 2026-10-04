@@ -12,6 +12,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    ActionView,
     InvalidStateError,
     LabelView,
     MainView,
@@ -233,6 +234,20 @@ def test_the_new_action_resets_the_main_view() -> None:
     view.file_menu.new.triggered.emit()
 
     assert view.note.text == "initial note"
+
+
+def test_triggering_a_checkable_action_toggles_it_before_its_callbacks_run() -> None:
+    wrap = ActionView(text="Wrap", is_checkable=True)
+    plain = ActionView(text="Refresh")
+    seen: list[bool] = []
+    wrap.triggered.connect(lambda: seen.append(wrap.is_checked))
+
+    wrap.triggered.emit()
+    wrap.triggered.emit()
+    plain.triggered.emit()
+
+    assert seen == [True, False]
+    assert plain.is_checked is False
 
 
 def test_load_state_restores_values_equal_to_attrs_defaults(tmp_path: Path) -> None:

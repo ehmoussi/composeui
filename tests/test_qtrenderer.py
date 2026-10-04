@@ -22,6 +22,7 @@ import json
 from typing import TYPE_CHECKING
 
 from qtpy.QtCore import QEvent, Qt
+from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -36,8 +37,8 @@ from qtpy.QtWidgets import (
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import MainRenderer, RendererContainer
-from composeui.core.view import LabelView, RendererType
-from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.core.view import ActionView, LabelView, RendererType
+from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 
 if TYPE_CHECKING:
@@ -212,6 +213,28 @@ def test_menu_renderer_builds_a_real_qmenu_with_actions_and_shortcuts(qtbot: QtB
     open_action = next(a for a in file_menu.actions() if a.text() == "Open")
     assert open_action.shortcut().toString() == "Ctrl+O"
     assert any(a.isSeparator() for a in file_menu.actions())
+
+
+def test_a_checkable_action_and_its_qaction_toggle_together(qtbot: QtBot) -> None:
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    action = ActionView(text="Wrap", is_checkable=True)
+    action.render(RendererType.QT)
+    assert isinstance(action.renderer, QtActionRenderer)
+    action.renderer.set_parent_rendered_object(window)
+    action.renderer.render()
+    qaction = action.renderer.qt_object
+    assert isinstance(qaction, QAction)
+
+    qaction.trigger()  # `QAction` checks itself before emitting `triggered`
+
+    assert action.is_checked is True
+    assert qaction.isChecked() is True
+
+    qaction.trigger()
+
+    assert action.is_checked is False
+    assert qaction.isChecked() is False
 
 
 def test_open_file_action_runs_the_native_dialog_and_loads_state(

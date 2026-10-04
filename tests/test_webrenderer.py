@@ -1091,17 +1091,15 @@ def test_the_open_upload_fires_its_action_then_loads(
     assert main_view.form.name.text == "Zoe"
 
 
-def test_a_checked_action_shows_its_check_mark() -> None:
-    action = ActionView(text="Wrap", is_checkable=True, is_checked=True)
+def test_triggering_a_checkable_action_toggles_its_check_mark() -> None:
+    action = ActionView(text="Wrap", is_checkable=True)
     action.render(RendererType.WEB)
     renderer = action.renderer
     assert isinstance(renderer, WebRenderer)
 
-    assert "<span>✓ Wrap</span>" in renderer.to_html()
-
-    action.is_checked = False
-
-    assert "<span>Wrap</span>" in renderer.to_html()
+    # the item comes back as an out-of-band fragment, with its check mark toggled
+    assert "<span>✓ Wrap</span>" in handle_event(renderer, "triggered", {})
+    assert "<span>Wrap</span>" in handle_event(renderer, "triggered", {})
 
 
 def test_new_clears_the_form_in_place(

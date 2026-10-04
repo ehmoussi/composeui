@@ -342,6 +342,16 @@ class ActionView(View):
 
     triggered: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        # first, so the callbacks connected after it see the new check state; on Qt,
+        # `QAction` has already toggled itself, and this brings the view in line
+        self.triggered.connect(self._toggle_checked)
+
+    def _toggle_checked(self) -> None:
+        if self.is_checkable:
+            self.is_checked = not self.is_checked
+
 
 @define_view
 class SeparatorAction(View):
