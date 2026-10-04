@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # pull requests cover every other branch; this avoids running twice per PR push
   push:
+    branches: [main]
   pull_request:
 
 jobs:
