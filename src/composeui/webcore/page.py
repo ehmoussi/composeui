@@ -68,8 +68,23 @@ function syncInvalidFields() {
     else field.removeAttribute("aria-invalid");
   });
 }
+/* opens each dialog the server shows: one swapped in arrives closed, and the browser
+   opens a modal `<dialog>` only from a script. Each element opens once: a button closes
+   its dialog before the server's answer swaps it closed too. */
+function openDialogs() {
+  document.querySelectorAll("dialog[data-dialog]:not([hidden]):not([data-opened])").forEach(
+    function (dialog) {
+      dialog.dataset.opened = "";
+      dialog.showModal();
+    },
+  );
+}
 document.addEventListener("DOMContentLoaded", function () {
-  new MutationObserver(syncInvalidFields).observe(document.body, {
+  openDialogs();
+  new MutationObserver(function () {
+    syncInvalidFields();
+    openDialogs();
+  }).observe(document.body, {
     childList: true,
     subtree: true,
   });

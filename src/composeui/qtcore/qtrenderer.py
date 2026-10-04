@@ -7,6 +7,7 @@ from qtpy.QtCore import QObject, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
+    QAbstractButton,
     QCheckBox,
     QFileDialog,
     QFormLayout,
@@ -15,6 +16,8 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QMessageBox,
+    QPushButton,
     QStackedWidget,
     QStatusBar,
     QStyle,
@@ -33,6 +36,8 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    DialogKind,
+    DialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -680,7 +685,10 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
     widget = view.renderer.qt_object
     if not isinstance(widget, QWidget):
         return
-    if isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
+    if isinstance(view, DialogView):
+        # a window of its own, over the column's window
+        widget.setParent(layout.parentWidget(), widget.windowFlags())
+    elif isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
         # a plain form insets its rows with its own layout's margins, and a page its views
         layout.addWidget(widget)
     else:
@@ -692,6 +700,91 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         inset.setContentsMargins(left, 0, right, 0)
         inset.addWidget(widget)
         layout.addLayout(inset)
+
+
+class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
+    """A modal message box, shown without blocking: its answer reaches the view later."""
+
+    def __init__(self, view: DialogView) -> None:
+        super().__init__(view)
+        self._accept_button: QPushButton | None = None
+        self._reject_button: QPushButton | None = None
+        #: the button that closed the box; None when it was closed from its window
+        self._clicked: QAbstractButton | None = None
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_dialog_visible,
+                "title": self._refresh_dialog_title,
+                "text": self._refresh_text,
+                "kind": self._refresh_kind,
+                "accept_text": self._refresh_accept_text,
+                "reject_text": self._refresh_reject_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            box = QMessageBox()
+            box.setModal(True)
+            self._accept_button = box.addButton("", QMessageBox.ButtonRole.AcceptRole)
+            self._reject_button = box.addButton("", QMessageBox.ButtonRole.RejectRole)
+            box.buttonClicked.connect(self._set_clicked)
+            box.finished.connect(self._answer)
+            self._rendered_object = box
+            self.refresh()
+
+    def _set_clicked(self, button: QAbstractButton) -> None:
+        self._clicked = button
+
+    def _answer(self, _result: int) -> None:
+        if self._clicked is None:
+            self._view.dismiss()
+        elif self._clicked is self._accept_button:
+            self._view.accept()
+        else:
+            self._view.reject()
+
+    def _refresh_dialog_visible(
+        self, _view: DialogView, rendered_object: QMessageBox, value: bool
+    ) -> None:
+        if value:
+            self._clicked = None
+        rendered_object.setVisible(value)
+
+    @staticmethod
+    def _refresh_dialog_title(_view: DialogView, rendered_object: QMessageBox, value: str) -> None:
+        rendered_object.setWindowTitle(value)
+
+    @staticmethod
+    def _refresh_text(_view: DialogView, rendered_object: QMessageBox, value: str) -> None:
+        rendered_object.setText(value)
+
+    def _refresh_kind(
+        self, _view: DialogView, rendered_object: QMessageBox, value: DialogKind
+    ) -> None:
+        if self._accept_button is None or self._reject_button is None:
+            return
+        is_confirm = value is DialogKind.CONFIRM
+        self._reject_button.setVisible(is_confirm)
+        # Escape clicks it: the hidden reject button would otherwise answer a message
+        rendered_object.setEscapeButton(self._reject_button if is_confirm else self._accept_button)
+
+    def _refresh_accept_text(
+        self, _view: DialogView, _rendered_object: QMessageBox, value: str
+    ) -> None:
+        if self._accept_button is not None:
+            self._accept_button.setText(value)
+
+    def _refresh_reject_text(
+        self, _view: DialogView, _rendered_object: QMessageBox, value: str
+    ) -> None:
+        if self._reject_button is not None:
+            self._reject_button.setText(value)
+
+    @staticmethod
+    def _update_state(view: DialogView, rendered_object: QMessageBox) -> None:
+        view.title = rendered_object.windowTitle()
+        view.text = rendered_object.text()
 
 
 class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
@@ -1037,6 +1130,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
+    "dialog": QtDialogRenderer,
     "float_input": QtFloatInputRenderer,
     "form": QtFormRenderer,
     "form_label": QtFormLabelRenderer,

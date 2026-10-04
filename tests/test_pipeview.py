@@ -73,3 +73,25 @@ def test_display_error_message(app: QtApplication[PipeMainView]) -> None:
     app.main_view.pages.inputs.pipe_form.main_pipe.radius.editing_finished.emit()
     assert app.main_view.pages.inputs.pipe_form.log_view.is_visible is False
     assert app.main_view.pages.inputs.pipe_form.log_view.log_message == ""
+
+
+def test_resetting_the_dimensions_waits_for_the_confirmation(
+    app: QtApplication[PipeMainView],
+) -> None:
+    main_view = app.main_view
+    main_view.status_bar.timeout = 0
+    radius = main_view.pages.inputs.pipe_form.main_pipe.radius
+    radius.value = 2000
+    radius.editing_finished.emit()
+    assert main_view.pages.inputs.pipe_form.log_view.is_visible
+
+    main_view.pipe_menu.reset_dimensions.triggered.emit()
+    assert main_view.confirm_reset.is_visible
+    main_view.confirm_reset.reject()
+    assert radius.value == 2000
+
+    main_view.pipe_menu.reset_dimensions.triggered.emit()
+    main_view.confirm_reset.accept()
+    assert radius.value == 50.0
+    assert main_view.pages.results.summary.rows[0][1] == "50"
+    assert not main_view.pages.inputs.pipe_form.log_view.is_visible

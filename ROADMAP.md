@@ -9,14 +9,13 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, label, log, checkbox, radio group, combobox, read-only table, forms, pages.
+input, label, log, checkbox, radio group, combobox, read-only table, forms, pages, message
+and confirm dialogs.
 
 1. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
    routes.
-2. **Simple dialogs** (`DialogView`): message and confirm, beyond the open/save file
-   dialogs. On the web, a `<dialog>` the server opens through an OOB swap.
-3. **Progress bar** (`ProgressBarView`).
-4. **Tree view** (`TreeView`), and editable table cells if an app needs them.
+2. **Progress bar** (`ProgressBarView`).
+3. **Tree view** (`TreeView`), and editable table cells if an app needs them.
 
 The web versions follow the same rules as the existing ones: the element that sent the
 request is never swapped back (the focus rule), changes elsewhere arrive as OOB updates,
@@ -60,6 +59,10 @@ The README's "Web backend" section covers what users see.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a
   bad file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.
+- **Dialogs** render at the end of the page, outside the pages' slots (a hidden slot
+  would hide them). The browser opens a modal `<dialog>` only from a script: `page.py`
+  opens each one swapped in shown, once. A button closes its dialog in the browser
+  first, so focus returns where it was, then posts its answer; the server swaps it closed.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown); action `data`
   isn't displayed; Ctrl shortcuts become Alt+Shift; an unknown page address is a 404, not
   a redirect (browsers ask for addresses of their own, like `/favicon.ico`).

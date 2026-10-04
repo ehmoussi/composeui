@@ -21,16 +21,18 @@ from textual.widgets import Checkbox, DataTable, Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
-from composeui.core.view import ActionView, MainView, RendererType, define_view
+from composeui.core.view import ActionView, DialogKind, MainView, RendererType, define_view
 from composeui.textualcore.textualrenderer import (
     ROW_INVALID_CLASS,
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
+from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
+from tests.dialogs import DialogsMainView
 from tests.pages import PagesMainView
 
 
@@ -343,7 +345,7 @@ async def test_menu_actions_become_key_bindings_shown_in_the_footer() -> None:
         await pilot.pause()
         assert any(isinstance(w, Footer) for w in app.screen.walk_children())
         shortcuts = {action.shortcut for action in app.registered_actions.values()}
-        assert shortcuts == {"Ctrl+n", "Ctrl+o", "Ctrl+s", "Ctrl+Shift+s", "Ctrl+q"}
+        assert shortcuts == {"Ctrl+n", "Ctrl+o", "Ctrl+s", "Ctrl+Shift+s", "Ctrl+q", "Ctrl+r"}
 
         # a plain action (no file dialog involved) dispatches directly - no
         # modal, no worker thread, nothing left on the screen stack.
@@ -501,3 +503,70 @@ async def test_the_toolbar_shows_one_page_at_a_time() -> None:
         await pilot.pause()
         assert name.widget.region.height > 0
         assert buttons["Inputs"].variant == "primary"
+
+
+@pytest.mark.asyncio
+async def test_a_confirmation_is_a_modal_screen_answered_with_its_buttons() -> None:
+    view = DialogsMainView()
+    view.confirm_clear.open()  # before the app runs: shown once it does
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        assert str(screen.text_label.render()) == "The name will be lost."
+        assert str(screen.accept_button.label) == "Clear"
+        assert screen.reject_button.display
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeDialog)
+        assert not view.confirm_clear.is_visible
+        assert view.name.text == "Ada"
+
+        await pilot.press("ctrl+l")  # the Clear action
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        view.confirm_clear.text = "Really?"  # while open
+        await pilot.pause()
+        assert str(screen.text_label.render()) == "Really?"
+        await pilot.click("#accept")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeDialog)
+        assert view.name.text == ""
+
+
+@pytest.mark.asyncio
+async def test_the_app_closes_a_dialog_unanswered_and_escape_accepts_a_message() -> None:
+    view = DialogsMainView()
+    dialog = view.confirm_clear
+    answers: list[str] = []
+    dialog.accepted.connect(lambda: answers.append("accepted"))
+    dialog.rejected.connect(lambda: answers.append("rejected"))
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        dialog.open()
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeDialog)
+        dialog.is_visible = False
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeDialog)
+        assert answers == []
+        # a message: Escape accepts it
+        dialog.kind = DialogKind.MESSAGE
+        dialog.open()
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        assert not screen.reject_button.display
+        await pilot.press("escape")
+        await pilot.pause()
+        assert answers == ["accepted"]

@@ -28,6 +28,8 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    DialogKind,
+    DialogView,
     ExitAppAction,
     FormLabelRowView,
     FormRowView,
@@ -1038,6 +1040,80 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
         )
 
 
+class WebDialogRenderer(WebRenderer[DialogView]):
+    """A modal `<dialog>`, opened by the page's script once swapped in shown.
+
+    The main renderer puts every dialog at the end of the page, outside any page's
+    slot, which hides its content. A button closes the dialog in the browser, so focus
+    goes back where it was, then posts its answer; Escape posts a dismissal. The
+    server then swaps the dialog closed: it isn't the button's own fragment, and is
+    closed already.
+    """
+
+    _role = "dialog"
+
+    def __init__(self, view: DialogView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("title", "text", "kind", "accept_text", "reject_text"), self._mark_dirty)
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        view = self._view
+        title_id = f"{self.widget_id}-title"
+        text_id = f"{self.widget_id}-text"
+        disabled = "" if view.is_enabled else " disabled"
+        reject = (
+            self._button_html("reject", view.reject_text, "btn", disabled)
+            if view.kind is DialogKind.CONFIRM
+            else ""
+        )
+        accept = self._button_html("accept", view.accept_text, "btn btn-primary", disabled)
+        # a disabled dialog can't be closed: its answer would be ignored
+        cancel = (
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
+            """ hx-vals='{"event": "dismiss"}'"""
+            if view.is_enabled
+            else ' oncancel="event.preventDefault()"'
+        )
+        title = (
+            f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
+            if view.title
+            else ""
+        )
+        labelledby = f' aria-labelledby="{title_id}"' if view.title else ""
+        return (
+            f'<dialog {self._root_attributes(oob=oob)} class="modal" data-dialog'
+            f'{labelledby} aria-describedby="{text_id}"{cancel} hx-swap="none">'
+            f'<div class="modal-box">{title}'
+            f'<p id="{text_id}" class="py-4 whitespace-pre-line">{html.escape(view.text)}</p>'
+            f'<div class="modal-action">{reject}{accept}</div></div></dialog>'
+        )
+
+    def _button_html(self, event: str, text: str, classes: str, disabled: str) -> str:
+        # the dialog's own `close`, not `cancel`: no dismissal posted on top of the answer
+        autofocus = " autofocus" if event == "accept" else ""
+        return (
+            f'<button type="button" class="{classes}" hx-post="/widget/{self.widget_id}"'
+            f""" hx-vals='{{"event": "{event}"}}'"""
+            f""" onclick="this.closest('dialog').close()"{autofocus}{disabled}>"""
+            f"{html.escape(text)}</button>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        answers = {
+            "accept": self._view.accept,
+            "reject": self._view.reject,
+            "dismiss": self._view.dismiss,
+        }
+        answer = answers.get(event)
+        if answer is None:
+            super().dispatch(event, form)
+            return
+        if self._view.is_enabled:
+            answer()
+
+
 class WebPageRenderer(WebRenderer[PageView]):
     """A page's views in a column, like the main view's own."""
 
@@ -1047,7 +1123,8 @@ class WebPageRenderer(WebRenderer[PageView]):
         content = "".join(
             view.renderer.to_html()
             for view in self._view.content_views
-            if isinstance(view.renderer, WebRenderer)
+            # at the end of the page instead (see `WebDialogRenderer`)
+            if isinstance(view.renderer, WebRenderer) and not isinstance(view, DialogView)
         )
         return (
             f'<section {self._root_attributes(oob=oob)} class="flex flex-col gap-6">'
@@ -1191,6 +1268,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         for child_view in self._view.children_views:
             if not isinstance(child_view.renderer, WebRenderer):
                 continue
+            if isinstance(child_view, DialogView):
+                continue  # see `_dialogs_html`
             if isinstance(child_view, StatusBar):
                 status_bar = child_view.renderer.to_html()
             elif isinstance(child_view, Menu):
@@ -1218,8 +1297,19 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             '<div class="card-body gap-6 p-6">'
             f"{''.join(content)}"
             "</div></div></main>"
-            f"{status_bar}",
+            f"{status_bar}{self._dialogs_html()}",
         )
+
+    def _dialogs_html(self) -> str:
+        """Render every dialog of the tree, outside the pages hiding their content."""
+        dialogs: list[str] = []
+        views: list[View] = list(self._view.children_views)
+        while len(views) > 0:
+            view = views.pop(0)
+            views.extend(view.children_views)
+            if isinstance(view, DialogView) and isinstance(view.renderer, WebDialogRenderer):
+                dialogs.append(view.renderer.to_html())
+        return "".join(dialogs)
 
     def _brand_html(self) -> str:
         """Show the app's title after a badge of its initial, standing in for an app icon."""
@@ -1257,6 +1347,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
+    "dialog": WebDialogRenderer,
     "float_input": WebFloatInputRenderer,
     "form": WebFormRenderer,
     "form_label": WebFormLabelRenderer,

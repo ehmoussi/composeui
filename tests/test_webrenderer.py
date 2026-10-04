@@ -33,6 +33,7 @@ from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
     ActionView,
+    DialogView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -41,6 +42,7 @@ from composeui.core.view import (
     LogView,
     MainView,
     Menu,
+    PageView,
     Router,
     SaveAsAction,
     SeparatorAction,
@@ -66,6 +68,7 @@ from composeui.webcore.webrenderer import (
 from examples import pipeform
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from tests.dialogs import DialogsMainView
 from tests.pages import InputsPage, PagesMainView
 
 if TYPE_CHECKING:
@@ -1648,3 +1651,143 @@ class _StateMainView(MainView):
 def test_a_route_cannot_take_an_address_of_the_backend() -> None:
     with pytest.raises(ValueError, match="'state'"):
         _StateMainView().render(RendererType.WEB)
+
+
+@pytest.fixture
+def dialog_views() -> list[DialogsMainView]:
+    """Each session's main view, kept by `dialog_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def dialog_client(dialog_views: list[DialogsMainView]) -> Iterator[TestClient]:
+    class DialogsApp(WebApplication[DialogsMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=DialogsMainView)
+
+        def setup_session(self, main_view: DialogsMainView) -> None:
+            dialog_views.append(main_view)
+
+    with TestClient(DialogsApp().create_starlette_app()) as client:
+        client.get("/")  # starts the session
+        yield client
+
+
+@pytest.fixture
+def dialogs_main_view(
+    dialog_views: list[DialogsMainView], dialog_client: TestClient
+) -> DialogsMainView:
+    dialog_client.get("/")  # the client's own session: still the one view built so far
+    (main_view,) = dialog_views
+    return main_view
+
+
+def test_an_action_opens_a_dialog_whose_answers_close_it(
+    dialogs_main_view: DialogsMainView, dialog_client: TestClient
+) -> None:
+    dialog_id = _widget_id(dialogs_main_view.confirm_clear.renderer)
+    name_id = _widget_id(dialogs_main_view.name.renderer)
+    clear_id = _widget_id(dialogs_main_view.edit_menu.clear.renderer)
+
+    def post(widget_id: str, event: str) -> str:
+        return dialog_client.post(f"/widget/{widget_id}", data={"event": event}).text
+
+    closed = _element(dialog_client.get("/").text, dialog_id)
+    assert closed.tag == "dialog"
+    assert "hidden" in closed.attributes
+
+    body = post(clear_id, "triggered")
+    dialog = _swapped(body, dialog_id)
+    assert "hidden" not in dialog.attributes
+    assert dialog.attributes["hx-trigger"] == "cancel"  # Escape
+    title_id = dialog.attributes["aria-labelledby"]
+    text_id = dialog.attributes["aria-describedby"]
+    assert title_id is not None
+    assert text_id is not None
+    assert _element(body, title_id).text == "Clear the name"
+    assert _element(body, text_id).text == "The name will be lost."
+    buttons = [
+        attributes.get("hx-vals") for tag, attributes in dialog.descendants if tag == "button"
+    ]
+    assert buttons == ['{"event": "reject"}', '{"event": "accept"}']
+
+    body = post(dialog_id, "dismiss")  # Escape rejects a confirmation
+    assert "hidden" in _swapped(body, dialog_id).attributes
+    assert _find(body, name_id) is None
+
+    post(clear_id, "triggered")
+    body = post(dialog_id, "accept")
+    assert "hidden" in _swapped(body, dialog_id).attributes
+    assert _swapped(body, name_id).text == ""
+
+    assert post(dialog_id, "accept") == ""  # a second click on the closed dialog
+
+
+def test_a_disabled_dialog_cannot_be_answered(
+    dialogs_main_view: DialogsMainView, dialog_client: TestClient
+) -> None:
+    dialog = dialogs_main_view.confirm_clear
+    dialog_id = _widget_id(dialog.renderer)
+    dialog.is_enabled = False
+    dialog.text = "<b>busy</b>"
+    dialog.open()
+
+    page = dialog_client.get("/").text
+    element = _element(page, dialog_id)
+    assert "hx-trigger" not in element.attributes
+    assert element.attributes["oncancel"] == "event.preventDefault()"
+    buttons = [attributes for tag, attributes in element.descendants if tag == "button"]
+    assert all("disabled" in attributes for attributes in buttons)
+    assert "<b>busy</b>" in element.text
+    assert all(tag != "b" for tag, _ in element.descendants)
+
+    dialog_client.post(f"/widget/{dialog_id}", data={"event": "accept"})
+    assert dialog.is_visible
+    assert dialogs_main_view.name.text == "Ada"
+
+
+@define_view
+class _NotePage(PageView):
+    note: DialogView = Factory(DialogView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_route("note")
+
+
+@define_view
+class _NotePages(Router):
+    first: InputsPage = Factory(InputsPage)
+    note: _NotePage = Factory(_NotePage)
+
+
+@define_view
+class _NoteMainView(MainView):
+    pages: _NotePages = Factory(_NotePages)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Notes", extension=".notes")
+
+
+def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
+    """A page that isn't shown hides its content: its dialog would never show."""
+    views: list[_NoteMainView] = []
+
+    class NotesApp(WebApplication[_NoteMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=_NoteMainView)
+
+        def setup_session(self, main_view: _NoteMainView) -> None:
+            views.append(main_view)
+
+    with TestClient(NotesApp().create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        main_view.pages.note.note.open()
+        page = client.get("/inputs").text
+
+    dialog_id = _widget_id(main_view.pages.note.note.renderer)
+    assert "hidden" not in _element(page, dialog_id).attributes
+    router = _element(page, _widget_id(main_view.pages.renderer))
+    assert all(attributes.get("id") != dialog_id for _, attributes in router.descendants)

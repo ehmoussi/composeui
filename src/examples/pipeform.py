@@ -9,6 +9,9 @@ import sys
 from attrs import Factory
 
 from composeui.core.view import (
+    ActionView,
+    DialogKind,
+    DialogView,
     FormView,
     GroupFormView,
     LabelRowCheckBoxView,
@@ -17,6 +20,7 @@ from composeui.core.view import (
     LabelRowInputView,
     LabelRowRadioGroupView,
     MainView,
+    Menu,
     PageView,
     Router,
     TableView,
@@ -45,6 +49,10 @@ class PipeDimensionView(GroupFormView):
         self.width.label = "Width"
         self.half_length.label = "Half Length"
         self.half_length.value = 200.0
+
+    @property
+    def dimensions(self) -> tuple[DimensionInputView, ...]:
+        return (self.radius, self.width, self.half_length)
 
 
 class EdgeType(enum.Enum):
@@ -249,8 +257,31 @@ class PipePagesView(Router):
 
 
 @define_view
+class PipeMenu(Menu):
+    reset_dimensions: ActionView = Factory(ActionView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "Pipe"
+        self.reset_dimensions.text = "Reset Dimensions"
+        self.reset_dimensions.shortcut = "Ctrl+r"
+
+
+@define_view
+class ResetDimensionsDialog(DialogView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.kind = DialogKind.CONFIRM
+        self.title = "Reset the dimensions"
+        self.text = "Both pipes go back to their starting dimensions."
+        self.accept_text = "Reset"
+
+
+@define_view
 class PipeMainView(MainView):
+    pipe_menu: PipeMenu = Factory(PipeMenu)
     pages: PipePagesView = Factory(PipePagesView)
+    confirm_reset: ResetDimensionsDialog = Factory(ResetDimensionsDialog)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -258,9 +289,26 @@ class PipeMainView(MainView):
         pipe_form = self.pages.inputs.pipe_form
         pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
         for pipe in (pipe_form.main_pipe, pipe_form.incident_pipe):
-            for dimension in (pipe.radius, pipe.width, pipe.half_length):
+            for dimension in pipe.dimensions:
                 dimension.editing_finished.connect(self._update_summary)
+        # the dimensions are only reset once the user confirms
+        self.pipe_menu.reset_dimensions.triggered.connect(self.confirm_reset.open)
+        self.confirm_reset.accepted.connect(self._reset_dimensions)
         self._update_summary()
+
+    def _reset_dimensions(self) -> None:
+        pipe_form = self.pages.inputs.pipe_form
+        initial = PipeFormView()
+        for pipe, initial_pipe in (
+            (pipe_form.main_pipe, initial.main_pipe),
+            (pipe_form.incident_pipe, initial.incident_pipe),
+        ):
+            for dimension, initial_dimension in zip(pipe.dimensions, initial_pipe.dimensions):
+                dimension.value = initial_dimension.value
+        # set in code, the values finish no editing: check and summarize them here
+        pipe_form.validate()
+        self._update_summary()
+        self.status_bar.show_message("Dimensions reset")
 
     def _update_summary(self) -> None:
         def text(value: float | None) -> str:

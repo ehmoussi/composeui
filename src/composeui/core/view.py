@@ -72,7 +72,8 @@ def _is_omitted_type(tp: Any) -> bool:
     if origin is Union:
         return any(_is_omitted_type(arg) for arg in get_args(tp))
     cls = origin if origin is not None else tp
-    return isinstance(cls, type) and issubclass(cls, _OMITTED_TYPES)
+    # a dialog is what the app asks the user, not study data
+    return isinstance(cls, type) and issubclass(cls, (*_OMITTED_TYPES, DialogView))
 
 
 def _is_omitted_field(f: "attrs.Attribute[Any]") -> bool:
@@ -353,6 +354,66 @@ class ActionView(View):
     def _toggle_checked(self) -> None:
         if self.is_checkable:
             self.is_checked = not self.is_checked
+
+
+class DialogKind(enum.Enum):
+    #: tells the user something: one button, accepting
+    MESSAGE = enum.auto()
+    #: asks the user to confirm: an accepting and a rejecting button
+    CONFIRM = enum.auto()
+
+
+@define_view
+class DialogView(View):
+    """A modal message or confirmation, shown from `open` until the user answers.
+
+    Nothing waits for the answer, since a web request can't: it comes through
+    `accepted` or `rejected`, once the dialog is closed. A dialog is what the app asks,
+    not study data: never saved, loaded or reset.
+    """
+
+    _renderer_key = "dialog"
+
+    title: str = attrs.field(default="")
+    text: str = attrs.field(default="")
+    kind: DialogKind = attrs.field(default=DialogKind.MESSAGE)
+    accept_text: str = attrs.field(default="OK")
+    #: the rejecting button's text; a message has no such button
+    reject_text: str = attrs.field(default="Cancel")
+
+    accepted: SignalNoArgs = attrs.Factory(SignalNoArgs)
+    rejected: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        # shown only once opened
+        self.is_visible = False
+
+    def open(self) -> None:
+        """Show the dialog; its answer comes through `accepted` or `rejected`."""
+        self.is_visible = True
+
+    def accept(self) -> None:
+        """Close the dialog with its accepting answer; ignored unless it's open."""
+        if self.is_visible:
+            self.is_visible = False
+            self.accepted.emit()
+
+    def reject(self) -> None:
+        """Close the dialog with its rejecting answer; ignored unless it's open."""
+        if self.is_visible:
+            self.is_visible = False
+            self.rejected.emit()
+
+    def dismiss(self) -> None:
+        """Close the dialog without a button (e.g. Escape): a confirmation is rejected.
+
+        A message has only one answer, so dismissing it accepts it.
+        """
+        if self.kind is DialogKind.CONFIRM:
+            self.reject()
+        else:
+            self.accept()
 
 
 @define_view

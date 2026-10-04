@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from qtpy.QtCore import QPoint, Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
     QCheckBox,
     QFileDialog,
@@ -23,7 +24,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
+    QMessageBox,
     QRadioButton,
     QStatusBar,
     QTableView,
@@ -32,9 +33,10 @@ from qtpy.QtWidgets import (
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import MainRenderer, RendererContainer
-from composeui.core.view import ActionView, LabelView, RendererType
+from composeui.core.view import ActionView, DialogKind, LabelView, RendererType
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
+from tests.dialogs import DialogsMainView
 from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
@@ -308,10 +310,9 @@ def test_menu_renderer_builds_a_real_qmenu_with_actions_and_shortcuts(qtbot: QtB
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
 
-    menus = window.findChildren(QMenu)
-    assert len(menus) == 1
+    menus = [action.menu() for action in window.menuBar().actions()]
+    assert [menu.title() for menu in menus] == ["File", "Pipe"]
     file_menu = menus[0]
-    assert file_menu.title() == "File"
     action_texts = [a.text() for a in file_menu.actions()]
     assert action_texts == ["New", "Open", "Save", "Save As", "", "Exit"]
     open_action = next(a for a in file_menu.actions() if a.text() == "Open")
@@ -441,3 +442,64 @@ def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     assert name.qt_object.isVisible()
     assert actions["Inputs"].isChecked()
     assert not actions["Results"].isChecked()
+
+
+def _dialog_window(qtbot: QtBot) -> tuple[DialogsMainView, QMainWindow, QMessageBox]:
+    view = DialogsMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    box = window.findChild(QMessageBox)
+    assert isinstance(box, QMessageBox)
+    return view, window, box
+
+
+def _shown_buttons(box: QMessageBox) -> dict[str, QAbstractButton]:
+    return {button.text(): button for button in box.buttons() if button.isVisibleTo(box)}
+
+
+def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
+    qtbot: QtBot,
+) -> None:
+    view, window, box = _dialog_window(qtbot)
+    assert not box.isVisible()
+
+    view.edit_menu.clear.triggered.emit()
+    assert box.isVisible()
+    assert box.isModal()
+    assert box.window() is not window
+    assert box.parentWidget().window() is window
+    assert box.windowTitle() == "Clear the name"
+    assert box.text() == "The name will be lost."
+    buttons = _shown_buttons(box)
+    assert list(buttons) == ["Clear", "Cancel"]
+
+    qtbot.keyClick(box, Qt.Key.Key_Escape)
+    assert not box.isVisible()
+    assert not view.confirm_clear.is_visible
+    assert view.name.text == "Ada"
+
+    view.confirm_clear.open()
+    qtbot.mouseClick(buttons["Clear"], Qt.MouseButton.LeftButton)
+    assert not box.isVisible()
+    assert view.name.text == ""
+
+
+def test_a_message_has_one_button_and_escape_or_closing_accepts_it(qtbot: QtBot) -> None:
+    view, _window, box = _dialog_window(qtbot)
+    dialog = view.confirm_clear
+    dialog.kind = DialogKind.MESSAGE
+
+    dialog.open()
+    assert list(_shown_buttons(box)) == ["Clear"]
+    qtbot.keyClick(box, Qt.Key.Key_Escape)
+    assert view.name.text == ""
+
+    view.name.text = "Ada"
+    dialog.open()
+    box.close()  # from its window's title bar
+    assert not dialog.is_visible
+    assert view.name.text == ""

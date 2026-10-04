@@ -25,6 +25,8 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    DialogKind,
+    DialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -43,6 +45,7 @@ from composeui.core.view import (
 )
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
@@ -278,6 +281,108 @@ class TextualSeparatorRenderer(_TextualNoopRenderer[SeparatorAction]):
 
 class TextualMenuRenderer(_TextualNoopRenderer[Menu]):
     """No visual widget: a `Menu`'s children register themselves directly with the app."""
+
+
+class TextualDialogRenderer(Renderer[DialogView, DialogView]):
+    """No widget in the screen: a modal screen pushed while the dialog is open.
+
+    A screen popped from the app can't be pushed again, so each opening pushes a new
+    one, built from the view.
+    """
+
+    def __init__(self, view: DialogView) -> None:
+        super().__init__(view)
+        #: set by `TextualMainRenderer` once it has built the app
+        self.app: _ComposeUIApp | None = None
+        #: the screen showing the dialog, while open
+        self.screen: ComposeDialog | None = None
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_visible,
+                "is_enabled": self._refresh_enabled,
+                "title": self._refresh_title,
+                "text": self._refresh_text,
+                "kind": self._refresh_kind,
+                "accept_text": self._refresh_accept_text,
+                "reject_text": self._refresh_reject_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = self._view
+
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        _call_on_app_thread(self.app, callback)
+
+    def refresh(self) -> None:
+        # see `TextualWidgetRenderer.refresh`
+        self.call_on_main_thread(super().refresh)
+
+    def refresh_attribute(self, attr_name: str, value: Any) -> None:
+        self.call_on_main_thread(functools.partial(super().refresh_attribute, attr_name, value))
+
+    def _refresh_visible(self, view: DialogView, _rendered_object: DialogView, value: bool) -> None:
+        app = self.app
+        # opened before the app runs: its mount refreshes the tree again
+        if app is None or not app.is_running:
+            return
+        if value and self.screen is None:
+            screen = ComposeDialog(view)
+            self.screen = screen
+            app.push_screen(screen, functools.partial(self._answer, screen))
+        elif not value and self.screen is not None:
+            screen, self.screen = self.screen, None
+            if screen.is_current:
+                screen.dismiss()  # no longer `self.screen`: `_answer` ignores it
+
+    def _answer(self, screen: ComposeDialog, answer: bool | None) -> None:
+        if screen is not self.screen:
+            return  # closed by the app, not the user
+        self.screen = None
+        if answer is None:
+            self._view.dismiss()
+        elif answer:
+            self._view.accept()
+        else:
+            self._view.reject()
+
+    def _refresh_enabled(
+        self, _view: DialogView, _rendered_object: DialogView, value: bool
+    ) -> None:
+        if self.screen is not None:
+            self.screen.set_enabled(is_enabled=value)
+
+    def _refresh_title(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
+        if self.screen is not None:
+            self.screen.title_label.update(value)
+            self.screen.title_label.display = value != ""
+
+    def _refresh_text(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
+        if self.screen is not None:
+            self.screen.text_label.update(value)
+
+    def _refresh_kind(
+        self, _view: DialogView, _rendered_object: DialogView, value: DialogKind
+    ) -> None:
+        if self.screen is not None:
+            self.screen.reject_button.display = value is DialogKind.CONFIRM
+
+    def _refresh_accept_text(
+        self, _view: DialogView, _rendered_object: DialogView, value: str
+    ) -> None:
+        if self.screen is not None:
+            self.screen.accept_button.label = value
+
+    def _refresh_reject_text(
+        self, _view: DialogView, _rendered_object: DialogView, value: str
+    ) -> None:
+        if self.screen is not None:
+            self.screen.reject_button.label = value
+
+    @staticmethod
+    def _update_state(view: DialogView, rendered_object: DialogView) -> None:
+        pass  # the user only answers, through `accepted`/`rejected`
 
 
 class InputViewLike(ViewLike, Protocol):
@@ -1021,6 +1126,12 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                     scrollable.append(widget)
             root = Vertical(VerticalScroll(*scrollable), *docked)
             self._rendered_object = _ComposeUIApp(self._view, root)
+            views: deque[View] = deque(self._view.children_views)
+            while views:
+                view = views.popleft()
+                if isinstance(view.renderer, TextualDialogRenderer):
+                    view.renderer.app = self._rendered_object
+                views.extend(view.children_views)
             self.refresh()
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
@@ -1109,6 +1220,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
+    "dialog": TextualDialogRenderer,
     "float_input": TextualFloatInputRenderer,
     "form": TextualFormRenderer,
     "form_label": TextualFormLabelRenderer,

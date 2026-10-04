@@ -153,8 +153,8 @@ How it differs from a desktop window:
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`) for the available building blocks, and `PageView`/`Router` for
-an app split into [pages](#pages).
+`LogMixin`, `LabelMixin`) for the available building blocks, `PageView`/`Router` for
+an app split into [pages](#pages), and `DialogView` for [dialogs](#dialogs).
 
 ## Pages
 
@@ -195,6 +195,45 @@ Which page is shown is navigation, not study data: saving, opening and New leave
 Qt docks the toolbar as a `QToolBar`, Textual shows a row of buttons at the top, and the
 web puts it in the page header, with a web address per page. See
 [`src/examples/pipeform.py`](src/examples/pipeform.py) for an app with two pages.
+
+## Dialogs
+
+A `DialogView` is a modal message, or a confirmation with an accepting and a rejecting
+button (`kind=DialogKind.CONFIRM`). It starts closed; `open()` shows it. Nothing waits
+for the answer, since a web request can't: connect to `accepted` and `rejected` instead,
+fired once the dialog is closed.
+
+```python
+from attrs import Factory
+
+from composeui.core.view import DialogKind, DialogView, MainView, define_view
+
+
+@define_view
+class ClearDialog(DialogView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.kind = DialogKind.CONFIRM
+        self.title = "Clear the form"
+        self.text = "Every field will be emptied."
+        self.accept_text = "Clear"  # "OK" otherwise; the other button is `reject_text`
+
+
+@define_view
+class AppMainView(MainView):
+    confirm_clear: ClearDialog = Factory(ClearDialog)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.confirm_clear.accepted.connect(self.reset_state)
+        # ... and something calls `self.confirm_clear.open()`, e.g. an action
+```
+
+Escape, or closing the dialog's window, rejects a confirmation and accepts a message,
+which has only one answer. A dialog isn't study data: saving, opening and New leave it
+alone. Qt shows a `QMessageBox`, Textual a modal screen, and the web a modal `<dialog>`,
+wherever the view is in the tree. In [`src/examples/pipeform.py`](src/examples/pipeform.py),
+the Pipe menu's Reset Dimensions asks for a confirmation first.
 
 ## Saving and loading state
 

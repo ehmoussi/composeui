@@ -26,6 +26,7 @@ from playwright.sync_api import Error, expect, sync_playwright
 from composeui.webcore.webapplication import WebApplication
 from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
+from tests.dialogs import DialogsMainView
 from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
@@ -87,6 +88,13 @@ def pages_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def dialogs_base_url() -> Iterator[str]:
+    """Serve an app asking to confirm an edit, for the whole module."""
+    with _serve(WebApplication(build_main_view=DialogsMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -119,6 +127,15 @@ def pipe_page(browser: Browser, pipe_base_url: str) -> Iterator[Page]:
 def pages_page(browser: Browser, pages_base_url: str) -> Iterator[Page]:
     """Open the app with two pages like `page`, in a session of its own."""
     context = browser.new_context(base_url=pages_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
+    """Open the app asking to confirm an edit like `page`, in a session of its own."""
+    context = browser.new_context(base_url=dialogs_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -304,3 +321,30 @@ def test_back_and_forward_go_through_the_pages_shown(pages_page: Page, pages_bas
     page.go_forward()
     expect(page).to_have_url(f"{pages_base_url}/results")
     expect(total).to_be_visible()
+
+
+def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) -> None:
+    page = dialogs_page
+    page.goto("/")
+    name = page.get_by_text("Ada")
+    dialog = page.get_by_role("dialog", name="Clear the name")
+    expect(dialog).to_be_hidden()
+
+    with _posted(page):
+        page.keyboard.press("Alt+Shift+KeyL")  # the Clear action
+    expect(dialog).to_be_visible()
+    expect(dialog).to_have_js_property("open", value=True)
+    clear = dialog.get_by_role("button", name="Clear")
+    expect(clear).to_be_focused()
+
+    with _posted(page):
+        page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(name).to_be_visible()
+
+    with _posted(page):
+        page.keyboard.press("Alt+Shift+KeyL")
+    with _posted(page):
+        clear.click()
+    expect(dialog).to_be_hidden()
+    expect(name).to_be_hidden()
