@@ -73,12 +73,12 @@ There is no CI: every check depends on someone running `make check test` locally
    `build_model` factory per session matches how main views work, while one shared
    `Model` would need its own locking. Implement the chosen one with
    `_add_reference_to_signals(main_view, model)`.~~ *(Per session: `WebModelApplication(build_main_view=..., build_model=...)`. A shared model would also leave other browsers stale, since a browser only gets fragments from its own requests.)*
-3. **Opt-in browser test suite.** Caret preservation, Alt+Shift shortcuts, the
+3. ~~**Opt-in browser test suite.** Caret preservation, Alt+Shift shortcuts, the
    `aria-invalid` sync, the offline page and the status bar's auto-clear were all checked
    by hand in headless Chromium, repeatedly. Add Playwright tests marked and skipped
    when Playwright or a browser isn't installed (`pytest.importorskip`), with a
    `make browser-test` target, and run them in CI (step 1.1) with `playwright install
-   chromium`.
+   chromium`.~~ *(`tests/test_browser.py`, marker `browser`, Playwright in a `browser` dependency group; `make test` excludes them; CI runs them in a separate `browser` job on Python 3.13.)*
 4. **Development reload.** `--reload` was removed because uvicorn's reloader needs an
    import string. Support it via a module-level app factory (e.g.
    `WebApplication.run()` accepting `"package.module:AppClass"`), or document
