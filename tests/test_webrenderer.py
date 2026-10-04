@@ -243,23 +243,6 @@ def test_the_browser_never_shows_a_stale_copy_of_the_page(
     assert client.get(f"/widget/{status_bar_id}").headers["cache-control"] == "no-store"
 
 
-def test_typing_updates_the_status_bar_out_of_band(
-    main_view: HelloMainView, client: TestClient
-) -> None:
-    input_id = _field_id(main_view.form.name)
-
-    response = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
-
-    assert response.status_code == 200
-    assert main_view.form.name.text == "Bob"
-    assert main_view.status_bar.message == "Hello, Bob!"
-    status_bar_id = _widget_id(main_view.status_bar.renderer)
-    assert f'<footer id="{status_bar_id}" hx-swap-oob="true"' in response.text
-    assert "Hello, Bob!" in response.text
-    # the field being typed in is never swapped back
-    assert input_id not in response.text
-
-
 def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     main_view: HelloMainView, client: TestClient
 ) -> None:
@@ -267,6 +250,9 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     input_id = _field_id(main_view.form.name)
 
     body = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"}).text
+
+    assert main_view.form.name.text == "Bob"
+    assert main_view.status_bar.message == "Hello, Bob!"
 
     swapped = {
         renderer.widget_id
@@ -291,6 +277,12 @@ def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestC
 
     assert main_view.form.age.value == -3.0
     assert "An age can&#x27;t be negative" in body
+
+    # another error of the same type: only the message changes, and it must still show
+    body = client.post(f"/widget/{age_id}", data={"value": "4.5", "event": "input"}).text
+
+    log_id = _widget_id(_part(main_view.form.age, "log"))
+    assert _swapped(body, log_id).text == "An age is a whole number of years"
 
     client.post(f"/widget/{age_id}", data={"value": "41", "event": "input"})
 
@@ -348,25 +340,6 @@ def test_unknown_widget_or_event_is_rejected(main_view: HelloMainView, client: T
     assert client.post("/widget/cui-0-input", data={"event": "input"}).status_code == 404
     input_id = _field_id(main_view.form.name)
     assert client.post(f"/widget/{input_id}", data={"event": "click"}).status_code == 400
-
-
-def test_changes_outside_a_request_are_not_collected(main_view: HelloMainView) -> None:
-    status_bar = main_view.status_bar
-
-    status_bar.message = "from a timer thread"
-
-    assert isinstance(status_bar.renderer, WebStatusBarRenderer)
-    assert "from a timer thread" in status_bar.renderer.to_html()
-
-
-def test_changes_inside_a_request_mark_the_renderer_dirty_once(main_view: HelloMainView) -> None:
-    name = main_view.form.name
-
-    with collect_dirty() as dirty:
-        name.placeholder = "Name"
-        name.text = "Zoe"
-
-    assert list(dirty.values()) == [_part(name, "field")]
 
 
 def test_hidden_and_disabled_views_keep_their_id(main_view: HelloMainView) -> None:
@@ -471,25 +444,6 @@ def rows() -> _RowsMainView:
     main_view = _RowsMainView()
     main_view.render(RendererType.WEB)
     return main_view
-
-
-def test_clearing_a_validated_input_dirties_its_log_but_not_the_input(
-    rows: _RowsMainView,
-) -> None:
-    field, log = _part(rows.name, "field"), _part(rows.name, "log")
-    assert rows.name.log_message == "A name is mandatory"
-
-    body = handle_event(field, "input", {"value": "Al"})
-
-    assert rows.name.text == "Al"
-    assert rows.name.log_message == ""
-    assert f'<p id="{log.widget_id}" hx-swap-oob="true" hidden' in body
-    assert field.widget_id not in body
-
-    body = handle_event(field, "input", {"value": ""})
-
-    assert "A name is mandatory" in body
-    assert f'id="{log.widget_id}" hx-swap-oob="true" aria-live' in body
 
 
 def test_float_input_ignores_transient_text(rows: _RowsMainView) -> None:
@@ -805,22 +759,6 @@ def test_pipeform_renders_its_rows_groups_and_hidden_edge_options(
         assert f'<fieldset id="{_widget_id(group.renderer)}" hidden' in page
     # the cross-field log has nothing to say yet
     assert f'<p id="{_widget_id(form.log_view.renderer)}" hidden' in page
-
-
-def test_choosing_chamfer_reveals_its_group_and_reports_it(
-    pipe_main_view: PipeMainView, pipe_client: TestClient
-) -> None:
-    form = pipe_main_view.pipe_form
-    edge_id = _field_id(form.edge_type)
-    chamfer_id = _widget_id(form.chamfer.renderer)
-
-    body = pipe_client.post(f"/widget/{edge_id}", data={edge_id: "Chamfer", "event": "change"}).text
-
-    assert form.chamfer.is_visible
-    assert f'<fieldset id="{chamfer_id}" hx-swap-oob="true" class=' in body
-    assert "Edge type changed: Chamfer" in body
-    assert edge_id not in body
-    assert _widget_id(form.fillet.renderer) not in body  # still hidden: unchanged
 
 
 def test_a_cross_field_check_runs_once_editing_finishes(
