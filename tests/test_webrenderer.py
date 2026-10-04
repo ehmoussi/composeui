@@ -1147,49 +1147,28 @@ def test_a_checked_action_shows_its_check_mark() -> None:
     assert "<span>Wrap</span>" in renderer.to_html()
 
 
-def test_new_clears_the_form_in_the_same_session(
+def test_new_clears_the_form_in_place(
     app: _HelloApp, main_view: HelloMainView, client: TestClient
 ) -> None:
+    form = main_view.form
     triggered = _count(main_view.file_menu.new.triggered)
     _type_name(client, main_view, "Bob")
+    client.post(f"/widget/{_field_id(form.age)}", data={"value": "41", "event": "input"})
 
     response = client.post(
         f"/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"}
     )
 
-    assert len(triggered) == 1  # user code connected to New still runs first
-    assert response.headers["hx-refresh"] == "true"
-    page = client.get("/").text
-    old_view, blank_view = app.session_views
-    assert blank_view.form.name.text == ""
-    assert 'value="Bob"' not in page
-    # same session, same cookie: the blank form is the one the browser now drives
-    _type_name(client, blank_view, "Ann")
-    assert blank_view.form.name.text == "Ann"
-    assert old_view.form.name.text == "Bob"
-
-
-def test_new_is_blank_even_when_the_app_opened_a_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    study = HelloMainView()
-    study.form.name.text = "Bob"
-    state_file = tmp_path / "study.hello"
-    study.save_state(state_file)
-    served: list[Starlette] = []
-    monkeypatch.setattr("sys.argv", ["webhello", "-f", str(state_file)])
-    monkeypatch.setattr(
-        "composeui.webcore.webapplication.uvicorn.run",
-        lambda app, **_: served.append(app),
-    )
-    app = _HelloApp()
-    app.run()
-
-    with TestClient(served[0]) as client:
-        client.get("/")
-        opened = app.session_views[0]
-        client.post(f"/widget/{_action_id(opened.file_menu.new)}", data={"event": "triggered"})
-        client.get("/")
-
-    assert opened.form.name.text == "Bob"  # a new session opens the file...
-    assert app.session_views[1].form.name.text == ""  # ...but New is blank
+    assert len(triggered) == 1
+    assert form.name.text == ""
+    assert form.age.value is None
+    # reset in place: every field New changed comes back out of band, no reload
+    assert "hx-refresh" not in response.headers
+    for widget_id in (
+        _field_id(form.name),
+        _field_id(form.age),
+        _widget_id(main_view.summary.renderer),
+    ):
+        assert f'id="{widget_id}" hx-swap-oob="true"' in response.text
+    assert "Nobody hasn&#x27;t said how old they are." in response.text
+    assert len(app.session_views) == 1

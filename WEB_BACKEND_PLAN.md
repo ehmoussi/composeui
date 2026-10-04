@@ -737,15 +737,17 @@ with stdlib `html.escape`.
      Save anyway. Core's shortcuts are unchanged; Qt and Textual still use them.
      Checked in Chromium from inside a text field: Alt+Shift+S downloads, N posts New,
      Q exits to a fresh form, O opens the file picker.
-   - **Revised after M8 (New):** step 4 left New generic, and so did nothing: core's
-     `NewAction._new_study` is an empty method, on every backend. On the web, New now
-     fires its `triggered` (user code still runs first), then
-     `SessionStore.start_over` gives the session a freshly built, blank main view
-     under the same id (so the cookie keeps working), and the page reloads. Blank means
-     it skips the app's `-f FILE`, which a brand-new session does open.
-     `WebActionRenderer.starts_new_document` marks the action; `WebSession`
-     records `new_requested`. Checked in Chromium: File → New and Alt+Shift+N both
-     clear every field and the summary. Qt and Textual's New is still a no-op.
+   - **Revised after M8 (New):** step 4 left New generic, and so it did nothing:
+     core's `NewAction._new_study` was an empty method, on every backend. Fixed in
+     core: New calls `MainView.reset_state()`, which builds a fresh instance of the
+     main view's class and copies its state into the live tree in place (like
+     `load_state`: renderers and connected signals stay bound, and only fields that
+     actually change reach the UI). So it also restores whatever
+     `__attrs_post_init__` set up, and clears `state_filepath`. On the web, the reset
+     fields come back as ordinary out-of-band fragments: no reload, same session. A
+     first web-only version (swapping in a new session view) was replaced by this.
+     Checked: web (File → New and Alt+Shift+N), Qt (the real `QAction`), Textual
+     (Ctrl+N in the pilot) all clear the form.
 
 10. **M9 — Tests.** By now each milestone has added its own tests to
     `tests/test_webrenderer.py` (AGENTS.md: every behavior change needs a test). M9 is

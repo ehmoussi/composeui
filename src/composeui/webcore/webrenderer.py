@@ -34,7 +34,6 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
-    NewAction,
     OpenFileAction,
     SaveAction,
     SaveAsAction,
@@ -742,15 +741,6 @@ class WebActionRenderer(WebRenderer[ActionView]):
             )
         menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
         return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
-
-    @property
-    def starts_new_document(self) -> bool:
-        """Whether triggering this action asks for a blank main view (New).
-
-        Core's `NewAction` only fires `triggered`; the web session then swaps in a
-        fresh main view (see `WebSession.new_requested`).
-        """
-        return isinstance(self._view, NewAction)
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "triggered" or not self._view.is_enabled:

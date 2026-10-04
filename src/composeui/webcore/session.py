@@ -62,8 +62,6 @@ class WebSession(RenderTarget):
     def __init__(self, main_view: MainView) -> None:
         super().__init__()
         self.main_view = main_view
-        #: set when the New action fired: the route then gives the session a blank view
-        self.new_requested = False
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
 
@@ -93,10 +91,7 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if renderer is None:
                 return None
-            body = handle_event(renderer, event, form)
-            if isinstance(renderer, WebActionRenderer) and renderer.starts_new_document:
-                self.new_requested = True
-            return body
+            return handle_event(renderer, event, form)
 
     def save_state(self) -> tuple[str, str]:
         """Return a download name and the JSON of the session's state (`save_state`'s)."""
@@ -156,8 +151,7 @@ class SessionStore:
     then clears a message on a tree nothing displays any more, which is harmless.
     """
 
-    def __init__(self, build_main_view: Callable[..., MainView], *, ttl: float) -> None:
-        """Keep sessions built by `build_main_view(blank=...)`; see `create`/`start_over`."""
+    def __init__(self, build_main_view: Callable[[], MainView], *, ttl: float) -> None:
         self._build_main_view = build_main_view
         self._ttl = ttl
         self._sessions: dict[str, tuple[WebSession, float]] = {}
@@ -181,16 +175,6 @@ class SessionStore:
         with self._lock:
             self._sessions[session_id] = (session, time.monotonic())
         return session_id, session
-
-    def start_over(self, session_id: Any) -> None:
-        """Give a session a blank main view (New), keeping its id, so its cookie still works.
-
-        Blank: unlike a new session, it doesn't open the app's `-f FILE`.
-        """
-        session = WebSession(self._build_main_view(blank=True))
-        with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id] = (session, time.monotonic())
 
     def drop(self, session_id: Any) -> None:
         with self._lock:

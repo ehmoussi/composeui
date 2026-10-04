@@ -7,10 +7,12 @@ from typing import Any, Optional, Union
 import pytest
 from attrs import Factory
 
+from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    LabelView,
     MainView,
     RadioGroupView,
     _is_omitted_type,
@@ -177,3 +179,56 @@ def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
 
     assert fresh.radio.value is None
     assert any("_StrRadioGroupView.value" in record.message for record in caplog.records)
+
+
+@define_view
+class _StudyMainView(MainView):
+    radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
+    note: LabelView = Factory(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Study", extension=".study")
+        # set up after construction, not attrs defaults: a reset must restore these too
+        self.radio.value = "a"
+        self.note.text = "initial note"
+
+
+def test_reset_state_brings_back_a_newly_built_main_view_in_place() -> None:
+    view = _StudyMainView()
+    radio, note = view.radio, view.note
+    seen: list[Optional[str]] = []
+
+    def on_changed(value: Optional[str]) -> None:
+        seen.append(value)
+
+    radio.value_changed.connect(on_changed)
+    radio.values = {"b": "b", "c": "c"}  # drops "a", which clears the value
+    radio.value = "c"
+    note.text = "edited"
+    view.minimum_width = 1
+    view.state_filepath = Path("old.study")
+
+    view.reset_state()
+
+    # the same view objects, so renderers bound to them keep working
+    assert view.radio is radio
+    assert view.note is note
+    assert radio.values == {"a": "a", "b": "b"}
+    assert radio.value == "a"
+    assert note.text == "initial note"
+    assert view.minimum_width == 720
+    assert view.state_filepath is None
+    assert view.title == "Study"  # frozen field untouched
+    radio.value_changed.emit("b")  # connections survive the reset
+    assert seen == ["b"]
+
+
+def test_the_new_action_resets_the_main_view() -> None:
+    view = _StudyMainView()
+    _add_reference_to_signals(view, None)  # what an application does: injects `main_view`
+    view.note.text = "edited"
+
+    view.file_menu.new.triggered.emit()
+
+    assert view.note.text == "initial note"
