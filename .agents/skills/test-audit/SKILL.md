@@ -145,8 +145,8 @@ not automatically deletable; the authoring gate still rejects new ones.
 Before judging a candidate, read the complete test and production owner, its
 entry point, callers, callees, sibling backend implementations, overlapping
 tests (including the examples in `src/examples/` the tests drive), and relevant
-`git log -p` history. Read `AGENTS.md`, `REVIEW.md` and, for web work,
-`WEB_BACKEND_PLAN.md` first. When the test claims toolkit-backed behavior (Qt
+`git log -p` history. Read `AGENTS.md` and, for web work, the design notes at
+the end of `ROADMAP.md` first. When the test claims toolkit-backed behavior (Qt
 signals, Textual message ordering, htmx swap semantics, cattrs hooks), inspect
 the dependency source or types under `.venv/` directly.
 
