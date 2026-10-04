@@ -1,27 +1,37 @@
-from composeui.core.view import MainView
+from attrs import Factory
+
+from composeui.core.view import InputView, MainView, define_view
 from composeui.webcore.webapplication import WebApplication
 
 
-class TestMainView(MainView):
+@define_view
+class GreetingInputView(InputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Test", extension=".web")
+        self.placeholder = "Type your name..."
+        self.text_edited.connect(self._on_name_changed)
+
+    # `main_view` is injected automatically because it's a requested parameter.
+    def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
+        main_view.status_bar.show_message(f"Hello, {text}!" if text else "")
 
 
-def _build_main_view() -> TestMainView:
-    main_view = TestMainView()
-    main_view.status_bar.message = "test 2"
-    return main_view
+@define_view
+class HelloMainView(MainView):
+    greeting: GreetingInputView = Factory(GreetingInputView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Hello ComposeUI", extension=".hello")
 
 
-class TestApp(WebApplication[TestMainView]):
+class HelloApp(WebApplication[HelloMainView]):
     def __init__(self) -> None:
-        super().__init__(build_main_view=_build_main_view)
+        super().__init__(build_main_view=HelloMainView)
 
 
 def main() -> None:
-    app = TestApp()
-    app.run()
+    HelloApp().run()
 
 
 if __name__ == "__main__":
