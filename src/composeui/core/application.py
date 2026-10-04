@@ -129,6 +129,7 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
 class Application(Generic[MainViewT]):
     def __init__(self, *, main_view: MainViewT) -> None:
         self._main_view = main_view
+        self._args: argparse.Namespace | None = None
         self._parser = argparse.ArgumentParser()
         self._parser.add_argument("--debug", help="Run the app in debug mode", action="store_true")
         self._parser.add_argument(
@@ -175,17 +176,17 @@ class Application(Generic[MainViewT]):
         self._main_view.render(renderer_type)
 
     def run(self) -> None:
-        args = self._parse_arguments()
-        if args.log or args.debug:
+        self._args = self._parse_arguments()
+        if self._args.log or self._args.debug:
             LOGGER.setLevel(level=logging.DEBUG)
         else:
             LOGGER.setLevel(level=logging.INFO)
-        if args.log_signals or args.debug:
+        if self._args.log_signals or self._args.debug:
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
-        if args.f is not None:
-            self.main_view.load_state(args.f)
+        if self._args.f is not None:
+            self.main_view.load_state(self._args.f)
 
     def _parse_arguments(self) -> argparse.Namespace:
         args = self._parser.parse_args()

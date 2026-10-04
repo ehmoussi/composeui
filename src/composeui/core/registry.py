@@ -19,6 +19,7 @@ class RendererType(enum.Enum):
 
     QT = "composeui.qtcore.qtrenderer"
     TEXTUAL = "composeui.textualcore.textualrenderer"
+    WEB = "composeui.webcore.webrenderer"
 
 
 def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Renderer[Any, Any] | None:
