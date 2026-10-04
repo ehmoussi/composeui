@@ -176,7 +176,11 @@ class Signal(Generic[Unpack[Ts]]):
             return Signal.get_function_file(callback.get_callback())  # type: ignore[arg-type]
         if isinstance(callback, functools.partial):
             return Signal.get_function_file(callback.func)
-        return f'File "{callback.__code__.co_filename}", line {callback.__code__.co_firstlineno}'
+        code = getattr(callback, "__code__", None)
+        if code is None:
+            # built-ins (e.g. `list.append`) and callable instances have no code object
+            return repr(callback)
+        return f'File "{code.co_filename}", line {code.co_firstlineno}'
 
 
 if TYPE_CHECKING:
