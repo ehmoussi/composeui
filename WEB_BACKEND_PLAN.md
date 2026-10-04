@@ -548,10 +548,13 @@ with stdlib `html.escape`.
      reads "cant'be", a pre-existing typo in the example, left alone.)
 
 7. **M6 — Real session handling.** Move off a single global `MainView` (fine for manual
-   testing through M5) to the per-session cookie-backed registry, so two browser tabs
-   don't clobber each other's state.
+   testing through M5) to the per-session cookie-backed registry, so two browsers (or
+   users) don't clobber each other's state. *(Corrected: a cookie is shared by every tab
+   of one browser, so tabs share one session, like two windows on the same document.
+   Per-tab sessions would need the id in each page, and then every refresh would start
+   an empty form.)*
 
-   1. `session.py`: `@attrs.define class WebSession: main_view: MainView;
+   1. ~~`session.py`: `@attrs.define class WebSession: main_view: MainView;
       renderers: dict[str, WebRenderer]; lock: threading.Lock`, plus a
       `SessionStore` (a plain `dict[str, WebSession]` behind a lock, with
       `get_or_create(session_id)` and `drop(session_id)`). Session ids come from
@@ -559,8 +562,8 @@ with stdlib `html.escape`.
       `SessionMiddleware` (`secret_key` from a `COMPOSEUI_SECRET` env var, falling
       back to a random per-process key with a logged warning: sessions then don't
       survive a restart, which is fine for dev). Keep the default `same_site="lax"`:
-      cross-site POSTs don't carry the cookie, which is the CSRF story for v1.
-   2. **Per-session construction (design decision).** Each session needs its own
+      cross-site POSTs don't carry the cookie, which is the CSRF story for v1.~~
+   2. ~~**Per-session construction (design decision).** Each session needs its own
       `MainView`, built by `build_main_view()`. `WebApplication` already takes a factory
       for this reason. Per session, the store must: build it, call core's
       `_add_reference_to_signals(main_view, model)` (so `main_view`/`model` injection
@@ -569,25 +572,53 @@ with stdlib `html.escape`.
       instance only, so web apps must wire behavior inside the views (as
       `pipeform.py`/the README already do) or in an overridable
       `WebApplication.setup_session(main_view)` hook. Add that hook. A shared `Model`
-      (`ModelApplication`) is shared across sessions; say so in the docstring.
-   3. Render-time registration: replace M2's global `WeakValueDictionary` with a
+      (`ModelApplication`) is shared across sessions; say so in the docstring.~~
+   3. ~~Render-time registration: replace M2's global `WeakValueDictionary` with a
       `ContextVar[dict[str, WebRenderer] | None]` that the store sets while it calls
       `main_view.render(RendererType.WEB)`, so each `WebRenderer.render()` registers
       into *its* session. This keeps the lookup per session and stops a client from
       posting another session's (guessable, `id()`-based) widget ids. The renderer
       also keeps a reference to its session's lock for `call_on_main_thread` (M2
-      step 8).
-   4. Routes resolve `request.session` → `WebSession`, and run dispatch/render under
+      step 8).~~
+   4. ~~Routes resolve `request.session` → `WebSession`, and run dispatch/render under
       `session.lock`. A request without a valid session (expired cookie, server
       restart) on `POST /widget/...` responds with an `HX-Refresh: true` header, so the
-      page reloads into a fresh session instead of erroring.
-   5. `-f FILE`: apply it to each new session's `MainView` (`load_state` after build).
-      That is the meaning closest to "open the app with this study".
-   6. Eviction: idle TTL (e.g. 1 h since last request, checked on access) so the dict
-      doesn't grow forever. Cancel a dropped session's pending `StatusBar._timer`.
-   7. Tests: two `TestClient`s (separate cookie jars) edit the same widget path and each
+      page reloads into a fresh session instead of erroring.~~
+   5. ~~`-f FILE`: apply it to each new session's `MainView` (`load_state` after build).
+      That is the meaning closest to "open the app with this study".~~
+   6. ~~Eviction: idle TTL (e.g. 1 h since last request, checked on access) so the dict
+      doesn't grow forever. Cancel a dropped session's pending `StatusBar._timer`.~~
+   7. ~~Tests: two `TestClient`s (separate cookie jars) edit the same widget path and each
       sees only its own value; client A posting client B's widget id gets 404; no cookie
-      on POST gives `HX-Refresh`; `setup_session` runs once per session. `make check`.
+      on POST gives `HX-Refresh`; `setup_session` runs once per session. `make check`.~~
+
+   *Implementation notes (M6 as built), where it differs from the steps above:*
+   - **No `COMPOSEUI_SECRET`:** the cookie is signed with a random per-process key.
+     Sessions live in memory, so after a restart an old cookie has no session to point
+     at whatever the key, and the session ids are unguessable 32-byte tokens anyway.
+     A fixed key would add configuration without keeping anything alive.
+   - **`RenderTarget`** (in `webrenderer.py`: a session's renderers by id plus its
+     `RLock`) is what `rendering_into()` registers renderers into, and `WebSession`
+     (in `session.py`) subclasses it with the `MainView` and the locked `page_html`/
+     `handle_event`/`fragment` entry points. A renderer rendered outside any session
+     (renderer-level tests) registers nowhere and calls `call_on_main_thread` callbacks
+     directly.
+   - **Expiry** is checked on each store access (`>= session_ttl` idle seconds, a
+     `WebApplication.session_ttl` class setting, 1 h by default). A dropped session's
+     `StatusBar` timer isn't cancelled: that would mean reaching into the private
+     `_timer`, and a late clear on a tree nothing displays any more is harmless.
+   - **Per-session construction** runs `build_main_view()`,
+     `_add_reference_to_signals`, `is_visible = True`, then `setup_session(main_view)`,
+     and only then `load_state(-f FILE)`, matching Qt/Textual apps that load `-f`
+     after their wiring. `WebApplication` extends `Application` only; a web
+     `ModelApplication` (one `Model` shared by every session) is not built yet.
+   - Tests reach each session's view through the real `setup_session` hook (no
+     test-only accessor), and cover: two browsers isolated, another session's widget
+     id → 404 (with a positive control), no live session → `HX-Refresh` on POST and
+     GET, one build per session across reloads, idle expiry, `-f` in every new
+     session (through `run()`, with only `uvicorn.run` replaced), and the timer waiting
+     for the session lock (M9 step 3, done early). Checked in Chromium with two
+     browser contexts, plus a server restart mid-session.
 
 8. **M7 — Save/Load state.** These fit neither the generic widget-dispatch endpoint nor
    the `MainRenderer.open_file()/save_file() -> Path | None` contract: there is no
@@ -662,9 +693,10 @@ with stdlib `html.escape`.
     2. A small HTML helper for assertions (`stdlib html.parser`, which finds an element
        by id and returns its attributes/text) so tests don't do brittle substring
        matching on markup. No new dependency.
-    3. A thread-safety test in the style of `tests/test_statusbar_thread_safety.py`:
+    3. ~~A thread-safety test in the style of `tests/test_statusbar_thread_safety.py`:
        `show_message` with a tiny timeout, the timer fires while a request holds the
-       session lock, and the clear lands after it with no exception.
+       session lock, and the clear lands after it with no exception.~~ *(Done early in M6:
+       `test_a_message_timer_waits_for_the_request_holding_the_session`.)*
     4. Coverage check: `webcore/` at least on par with `qtrenderer.py`'s 86%.
     5. Add `--extra web` to the README/AGENTS.md dev sync line if it isn't there yet;
        `make all` clean.
