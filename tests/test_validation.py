@@ -92,3 +92,38 @@ def test_form_validators_are_excluded_from_saved_state() -> None:
     data = CONVERTER.unstructure(form)
     assert "_validators" not in data
     assert "validators" not in data
+
+
+def test_a_failing_check_flags_the_rows_it_names_until_it_passes() -> None:
+    form = FormView()
+    radius, width, length = RowInputView(), RowInputView(), RowInputView()
+    fits, wide_enough = True, True
+    form.add_validator(lambda: None if fits else "too big", rows=(radius, length))
+    form.add_validator(lambda: None if wide_enough else "too thin", rows=(radius, width))
+
+    fits, wide_enough = False, False
+    form.validate()
+    assert [row.has_form_error for row in (radius, width, length)] == [True, True, True]
+    assert radius.is_invalid
+
+    # the radius stays flagged while the other check naming it still fails
+    fits = True
+    form.validate()
+    assert [row.has_form_error for row in (radius, width, length)] == [True, True, False]
+
+    wide_enough = True
+    form.validate()
+    assert [row.is_invalid for row in (radius, width, length)] == [False, False, False]
+
+
+def test_a_row_is_invalid_while_its_own_check_fails_too() -> None:
+    row = RowInputView()
+    row.set_validator(lambda: "required" if row.text == "" else None, row.text_edited)
+
+    row.text_edited.emit("")
+    assert row.is_invalid
+    assert not row.has_form_error  # its own message, not its form's
+
+    row.text = "hi"
+    row.text_edited.emit("hi")
+    assert not row.is_invalid

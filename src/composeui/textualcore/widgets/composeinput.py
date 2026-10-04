@@ -15,6 +15,17 @@ class ComposeInput(Input):
     lets `TextualInputRenderer` connect like it would to any other composeui signal.
     """
 
+    # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`): as Input's
+    # own `-invalid`
+    DEFAULT_CSS = """
+    ComposeInput.-row-invalid {
+        border: tall $error 60%;
+        &:focus {
+            border: tall $error;
+        }
+    }
+    """
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.value_changed: Signal[str] = Signal()

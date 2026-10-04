@@ -8,6 +8,7 @@ without them, these tests are skipped.
 
 from __future__ import annotations
 
+import contextlib
 import socket
 import threading
 import time
@@ -22,12 +23,15 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from playwright.sync_api import Error, expect, sync_playwright
 
+from composeui.webcore.webapplication import WebApplication
+from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from playwright.sync_api import Browser, Locator, Page, Route
+    from starlette.applications import Starlette
 
 pytestmark = pytest.mark.browser
 
@@ -40,15 +44,13 @@ class _BrowserHelloApp(HelloApp):
         main_view.status_bar.timeout = _MESSAGE_TIMEOUT
 
 
-@pytest.fixture(scope="module")
-def base_url() -> Iterator[str]:
-    """Serve the hello app on a free local port for the whole module."""
+@contextlib.contextmanager
+def _serve(app: Starlette) -> Iterator[str]:
+    """Serve `app` on a free local port while the block runs; yield its base url."""
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    config = uvicorn.Config(
-        _BrowserHelloApp().create_starlette_app(), host="127.0.0.1", port=port, log_level="error"
-    )
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -60,6 +62,20 @@ def base_url() -> Iterator[str]:
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     thread.join()
+
+
+@pytest.fixture(scope="module")
+def base_url() -> Iterator[str]:
+    """Serve the hello app for the whole module."""
+    with _serve(_BrowserHelloApp().create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def pipe_base_url() -> Iterator[str]:
+    """Serve the pipe form, whose checks span several fields, for the whole module."""
+    with _serve(WebApplication(build_main_view=PipeMainView).create_starlette_app()) as url:
+        yield url
 
 
 @pytest.fixture(scope="module")
@@ -77,6 +93,15 @@ def browser() -> Iterator[Browser]:
 def page(browser: Browser, base_url: str) -> Iterator[Page]:
     """Open a page in a fresh context: its own cookies, so its own session."""
     context = browser.new_context(base_url=base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def pipe_page(browser: Browser, pipe_base_url: str) -> Iterator[Page]:
+    """Open the pipe form like `page`, in a session of its own."""
+    context = browser.new_context(base_url=pipe_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -188,3 +213,32 @@ def test_the_theme_menu_overrides_the_browser_until_set_back_to_system(page: Pag
     # following the browser again: its switch to dark shows at once
     page.emulate_media(color_scheme="dark")
     assert background() == dark
+
+
+def test_a_failing_form_check_marks_the_fields_it_names(pipe_page: Page) -> None:
+    """The page marks a field from its row's log, as the field itself isn't swapped."""
+
+    def border(field: Locator) -> object:
+        return field.evaluate("field => getComputedStyle(field).borderColor")
+
+    pipe_page.goto("/")
+    main_radius, incident_radius = pipe_page.get_by_label("Radius").all()[:2]
+    main_width = pipe_page.get_by_label("Width").first
+    expect(main_radius).not_to_have_attribute("aria-invalid", "true")
+    valid_border = border(main_radius)
+
+    # below the incident radius, once left: the check naming both radii fails
+    main_radius.press("Control+a")
+    main_radius.press_sequentially("5")
+    main_radius.press("Tab")
+    for field in (main_radius, incident_radius):
+        expect(field).to_have_attribute("aria-invalid", "true")
+        assert border(field) != valid_border
+    expect(main_width).not_to_have_attribute("aria-invalid", "true")  # not involved
+
+    main_radius.press("Control+a")
+    main_radius.press_sequentially("60")
+    main_radius.press("Tab")
+    for field in (main_radius, incident_radius):
+        expect(field).not_to_have_attribute("aria-invalid", "true")
+    assert border(main_radius) == valid_border

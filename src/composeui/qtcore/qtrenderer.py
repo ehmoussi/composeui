@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from qtpy.QtCore import QObject, Qt
 from qtpy.QtCore import Signal as QtSignal
@@ -81,6 +81,10 @@ class _MainThreadInvoker(QObject):
 
 
 class QtWidgetRenderer(Renderer[TView, TWidget]):
+    #: a field renderer's style sheet while its form row is invalid (see
+    #: `FormRowView.is_invalid`); None for a widget that is never a row's field
+    _invalid_style: ClassVar[str | None] = None
+
     def __init__(self, view: TView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -89,6 +93,14 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
                 "is_enabled": self._refresh_enabled,
             }
         )
+        if self._invalid_style is not None and isinstance(view, FormRowView):
+            # only a row has these: the same renderer also draws a standalone field
+            self._refresh_dispatcher.update(
+                {
+                    name: self._invalid_refresher(name)
+                    for name in ("log_message", "log_type", "has_form_error")
+                }
+            )
         self._main_thread_invoker = _MainThreadInvoker()
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
@@ -129,6 +141,16 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
     def _refresh_enabled(_view: TView, renderer_object: TWidget, value: bool) -> None:
         renderer_object.setEnabled(value)
 
+    def _invalid_refresher(self, name: str) -> Callable[[TView, TWidget, Any], None]:
+        """Restyle the field once the row's attribute `name` changes to the given value."""
+
+        def refresh(view: TView, renderer_object: TWidget, value: Any) -> None:
+            is_invalid = isinstance(view, FormRowView) and view.is_invalid_once(name, value)
+            if isinstance(renderer_object, QWidget):  # always, for a field renderer
+                renderer_object.setStyleSheet((self._invalid_style if is_invalid else None) or "")
+
+        return refresh
+
 
 class _InputViewLike(ViewLike, Protocol):
     placeholder: str
@@ -142,6 +164,8 @@ class InputViewLike(_InputViewLike, Protocol):
 
 
 class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
+    _invalid_style = "QLineEdit { border: 1px solid red; }"
+
     def __init__(self, view: InputViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -186,6 +210,8 @@ class FloatInputViewLike(_InputViewLike, Protocol):
 
 
 class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
+    _invalid_style = "QLineEdit { border: 1px solid red; }"
+
     def __init__(self, view: FloatInputViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -330,6 +356,8 @@ class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
 
 
 class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup], Generic[TValue]):
+    _invalid_style = "QRadioButton { color: red; }"
+
     def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -373,6 +401,8 @@ class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup]
 class QtComboboxRenderer(
     QtWidgetRenderer[ValuesViewLike[TValue], QValueComboBox[TValue]], Generic[TValue]
 ):
+    _invalid_style = "QComboBox { border: 1px solid red; }"
+
     def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(

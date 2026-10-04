@@ -96,6 +96,33 @@ def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:
     assert view.pipe_form.name.text == "direct"
 
 
+def test_a_failing_pipe_check_outlines_the_fields_it_names(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    form = view.pipe_form
+    radius_widget = _field_widget(form.main_pipe.radius)
+    assert isinstance(radius_widget, QLineEdit)
+    named = [form.main_pipe.radius, form.main_pipe.width, form.incident_pipe.half_length]
+
+    def outlined() -> list[bool]:
+        return [
+            _field_widget(row).styleSheet() != "" for row in (*named, form.incident_pipe.radius)
+        ]
+
+    radius_widget.show()
+    radius_widget.setFocus()
+    radius_widget.selectAll()
+    qtbot.keyClicks(radius_widget, "300")
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
+    # radius + width > the incident half length: the incident radius isn't involved
+    assert outlined() == [True, True, True, False]
+
+    radius_widget.selectAll()
+    qtbot.keyClicks(radius_widget, "50")
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
+    assert outlined() == [False, False, False, False]
+
+
 def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)

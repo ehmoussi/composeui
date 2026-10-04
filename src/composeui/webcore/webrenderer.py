@@ -33,7 +33,6 @@ from composeui.core.view import (
     FormRowView,
     FormView,
     GroupFormView,
-    LogMixin,
     LogType,
     MainView,
     Menu,
@@ -200,8 +199,7 @@ class WebRenderer(Renderer[TView, str]):
         log_id = self._row_part_id("log")
         if log_id is not None:
             attributes.append(f'aria-describedby="{log_id}"')
-            view = self._view
-            if isinstance(view, LogMixin) and view.log_message and view.log_type is LogType.ERROR:
+            if isinstance(self._view, FormRowView) and self._view.is_invalid:
                 attributes.append('aria-invalid="true"')
         label_id = None if self.is_labelable else self._row_part_id("label")
         if label_id is not None:
@@ -552,13 +550,20 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
                 "log_type": self._mark_dirty,
             }
         )
+        if isinstance(view, FormRowView):
+            # carried by the log, not the field: swapping a field being typed in would
+            # reset its caret
+            self._refresh_dispatcher["has_form_error"] = self._mark_dirty
 
     def to_html(self, *, oob: bool = False) -> str:
         attributes = self._root_attributes(oob=oob)
         if self._view.is_visible and self._view.log_message == "":
             attributes += " hidden"  # same as Qt/Textual: an empty log takes no room
+        if isinstance(self._view, FormRowView) and self._view.has_form_error:
+            attributes += " data-form-error"  # a check of the form failed on this row
         # `pre-line`: `FormView.validate` joins its messages with newlines.
-        # `data-log`: the page's stylesheet marks the field just before an error log
+        # `data-log`, `data-form-error`: the page's stylesheet and script mark the field
+        # just before the log as invalid
         return (
             f'<p {attributes} aria-live="polite" data-log="{self._view.log_type.name.lower()}"'
             f' class="text-sm whitespace-pre-line {_LOG_CLASSES[self._view.log_type]}">'

@@ -1369,15 +1369,21 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         # a main radius below the incident one fails the cross-field check, which is
         # wired to `editing_finished`: typing alone doesn't run it...
         assert _find(post(radius_id, {"value": "5", "event": "input"}), form_log_id) is None
-        log = _swapped(post(radius_id, {"value": "5", "event": "change"}), form_log_id)
+        body = post(radius_id, {"value": "5", "event": "change"})
+        log = _swapped(body, form_log_id)
         assert "hidden" not in log.attributes
         assert "incident radius" in log.text
+        # it marks the two radii it is about through their rows' logs, which the page
+        # marks the fields from: the field being typed in is never swapped
+        _assert_radii_marked(body, form, marked=True)
+        # and a page served meanwhile shows the field invalid from the start
+        field_html = _part(form.main_pipe.radius, "field").to_html()
+        assert _element(field_html, radius_id).attributes["aria-invalid"] == "true"
         # ...until it is fixed
         post(radius_id, {"value": "60", "event": "input"})
-        assert (
-            "hidden"
-            in _swapped(post(radius_id, {"value": "60", "event": "change"}), form_log_id).attributes
-        )
+        body = post(radius_id, {"value": "60", "event": "change"})
+        assert "hidden" in _swapped(body, form_log_id).attributes
+        _assert_radii_marked(body, form, marked=False)
         assert form.log_view.log_message == ""
 
         # saved, then opened in another browser's session
@@ -1388,6 +1394,13 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
             bob.post("/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"] == "true"
         )
         _assert_shows_the_tee_study(bob.get("/").text, reopened)
+
+
+def _assert_radii_marked(body: str, form: Any, *, marked: bool) -> None:
+    """Check `body` swaps both radii's logs, flagged by a failing form check or not."""
+    for row in (form.main_pipe.radius, form.incident_pipe.radius):
+        log = _swapped(body, _widget_id(_part(row, "log")))
+        assert ("data-form-error" in log.attributes) is marked
 
 
 def _assert_shows_the_tee_study(page: str, form: Any) -> None:

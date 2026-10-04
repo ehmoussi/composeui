@@ -138,16 +138,19 @@ class PipeFormView(FormView):
         # Incident Pipe
         self.incident_pipe.title = "Incident Pipe"
         # two independent cross-field checks, combined into one shared `log_view`
+        # each names the rows it is about: their fields show as invalid while it fails
         self.add_validator(
             self._check_main_pipe_fits_incident,
             self.main_pipe.radius.editing_finished,
             self.main_pipe.width.editing_finished,
             self.incident_pipe.half_length.editing_finished,
+            rows=(self.main_pipe.radius, self.main_pipe.width, self.incident_pipe.half_length),
         )
         self.add_validator(
             self._check_incident_radius_not_greater_than_main,
             self.incident_pipe.radius.editing_finished,
             self.main_pipe.radius.editing_finished,
+            rows=(self.incident_pipe.radius, self.main_pipe.radius),
         )
         # Edge Type
         self.edge_type.value_changed.connect(self._display_edge_options)

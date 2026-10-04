@@ -23,6 +23,7 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import ActionView, MainView, RendererType, define_view
 from composeui.textualcore.textualrenderer import (
+    ROW_INVALID_CLASS,
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
@@ -120,6 +121,40 @@ async def test_editing_finished_fires_on_blur_not_just_enter() -> None:
 
         assert view.pipe_form.log_view.is_visible
         assert "incident radius" in view.pipe_form.log_view.log_message
+
+
+@pytest.mark.asyncio
+async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    form = view.pipe_form
+    rows = [
+        form.main_pipe.radius,
+        form.main_pipe.width,
+        form.incident_pipe.half_length,
+        form.incident_pipe.radius,
+    ]
+
+    def marked() -> list[bool]:
+        return [_field_widget(row.renderer).has_class(ROW_INVALID_CLASS) for row in rows]
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        radius = _field_widget(form.main_pipe.radius.renderer)
+        radius.focus()
+        clear = ["end"] + ["backspace"] * 10  # Textual's ctrl+a only goes to the start
+        await pilot.press(*clear, *"300", "tab")
+        await pilot.pause()
+        # radius + width > the incident half length: the incident radius isn't involved
+        assert marked() == [True, True, True, False]
+
+        radius.focus()
+        await pilot.press(*clear, *"50", "tab")
+        await pilot.pause()
+        assert marked() == [False, False, False, False]
 
 
 @pytest.mark.asyncio

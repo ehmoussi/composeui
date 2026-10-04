@@ -53,12 +53,15 @@ document.addEventListener("keydown", function (event) {
   item.click();
 });
 /* keeps each form field's aria-invalid in step with its log: while typing, only the log
-   is swapped, never the field. Watches the DOM, so it runs after every htmx swap. */
+   is swapped, never the field. The field is invalid while its log shows an error, or
+   a check of its form fails on its row (`data-form-error`). Watches the DOM, so it
+   runs after every htmx swap. */
 function syncInvalidFields() {
   document.querySelectorAll("[data-log]").forEach(function (log) {
     var field = document.querySelector('[aria-describedby="' + log.id + '"]');
     if (field === null) return;
-    if (log.dataset.log === "error" && !log.hidden) field.setAttribute("aria-invalid", "true");
+    var ownError = log.dataset.log === "error" && !log.hidden;
+    if (ownError || "formError" in log.dataset) field.setAttribute("aria-invalid", "true");
     else field.removeAttribute("aria-invalid");
   });
 }

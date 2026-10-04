@@ -4,7 +4,7 @@ import contextlib
 import dataclasses
 import functools
 from collections import deque
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
@@ -80,7 +80,16 @@ def _call_on_app_thread(app: App[Any] | None, callback: Callable[[], None]) -> N
         callback()
 
 
+#: the class a row's field widget has while the row is invalid (`FormRowView.is_invalid`),
+#: styled by the composeui widgets. Not Textual's own `-invalid`: `Input` resets that one
+#: from its validators on every keystroke
+ROW_INVALID_CLASS = "-row-invalid"
+
+
 class TextualWidgetRenderer(Renderer[TView, TWidget]):
+    #: whether the widget is a form row's field, showing the row as invalid
+    _marks_invalid: ClassVar[bool] = False
+
     def __init__(self, view: TView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -89,6 +98,14 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
                 "is_enabled": self._refresh_enabled,
             }
         )
+        if self._marks_invalid and isinstance(view, FormRowView):
+            # only a row has these: the same renderer also draws a standalone field
+            self._refresh_dispatcher.update(
+                {
+                    name: self._invalid_refresher(name)
+                    for name in ("log_message", "log_type", "has_form_error")
+                }
+            )
 
     @property
     def widget(self) -> TWidget | None:
@@ -124,6 +141,16 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
     @staticmethod
     def _refresh_enabled(_view: TView, rendered_object: TWidget, value: bool) -> None:
         rendered_object.disabled = not value
+
+    @staticmethod
+    def _invalid_refresher(name: str) -> Callable[[TView, TWidget, Any], None]:
+        """Mark the field once the row's attribute `name` changes to the given value."""
+
+        def refresh(view: TView, rendered_object: TWidget, value: Any) -> None:
+            is_invalid = isinstance(view, FormRowView) and view.is_invalid_once(name, value)
+            rendered_object.set_class(is_invalid, ROW_INVALID_CLASS)
+
+        return refresh
 
 
 TNoopView = TypeVar("TNoopView", bound=ViewLike)
@@ -213,6 +240,8 @@ class InputViewLike(ViewLike, Protocol):
 
 
 class TextualInputRenderer(TextualWidgetRenderer[InputViewLike, ComposeInput]):
+    _marks_invalid = True
+
     def __init__(self, view: InputViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -265,6 +294,8 @@ class FloatInputViewLike(ViewLike, Protocol):
 
 
 class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, ComposeInput]):
+    _marks_invalid = True
+
     def __init__(self, view: FloatInputViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -389,6 +420,8 @@ class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
 class TextualRadioGroupRenderer(
     TextualWidgetRenderer[ValuesViewLike[TValue], ComposeRadioSet[TValue]], Generic[TValue]
 ):
+    _marks_invalid = True
+
     def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
@@ -438,6 +471,8 @@ class TextualRadioGroupRenderer(
 class TextualComboboxRenderer(
     TextualWidgetRenderer[ValuesViewLike[TValue], ComposeCombobox[TValue]], Generic[TValue]
 ):
+    _marks_invalid = True
+
     def __init__(self, view: ValuesViewLike[TValue]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(

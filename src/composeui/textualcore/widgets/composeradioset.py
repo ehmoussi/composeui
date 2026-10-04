@@ -16,6 +16,16 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
     `TextualRadioGroupRenderer` connect like it would to any other composeui signal.
     """
 
+    # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`)
+    DEFAULT_CSS = """
+    ComposeRadioSet.-row-invalid {
+        border: tall $error 60%;
+        &:focus {
+            border: tall $error;
+        }
+    }
+    """
+
     def __init__(self, values: "dict[str, TValue]") -> None:
         self._values: dict[str, TValue] = dict(values)
         super().__init__(*self._values.keys())

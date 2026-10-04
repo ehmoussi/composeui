@@ -12,6 +12,17 @@ TValue = TypeVar("TValue")
 class ComposeCombobox(Select[TValue], Generic[TValue]):
     """A combobox built from a `{label: value}` mapping."""
 
+    # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`): the border
+    # is the current option's
+    DEFAULT_CSS = """
+    ComposeCombobox.-row-invalid > SelectCurrent {
+        border: tall $error 60%;
+    }
+    ComposeCombobox.-row-invalid:focus > SelectCurrent {
+        border: tall $error;
+    }
+    """
+
     def __init__(self, values: dict[str, TValue]) -> None:
         self._values: dict[str, TValue] = dict(values)
         super().__init__(values.items())

@@ -733,6 +733,29 @@ class FormRowView(LogMixin, View):
     #: registry key of the row's field renderer; concrete rows set it
     _field_renderer_key: ClassVar[Optional[str]] = None
 
+    #: set by `FormView.validate` while a cross-field check naming this row fails
+    has_form_error: bool = attrs.field(default=False)
+
+    @property
+    def is_invalid(self) -> bool:
+        """Whether the row's field shows as invalid: its own check or its form's fails."""
+        return self.is_invalid_once("has_form_error", self.has_form_error)
+
+    def is_invalid_once(self, name: str, value: Any) -> bool:
+        """Get `is_invalid` once the attribute `name` is set to `value`.
+
+        For renderers: they are notified of a change before it lands in the view (see
+        `notify_renderer`), so `is_invalid` itself still answers for the old value.
+        """
+        state = {
+            "has_form_error": self.has_form_error,
+            "log_type": self.log_type,
+            "log_message": self.log_message,
+            name: value,
+        }
+        own_error = state["log_type"] is LogType.ERROR and state["log_message"] != ""
+        return bool(state["has_form_error"]) or own_error
+
     def _create_renderer(self, renderer_type: RendererType) -> None:
         renderers = self._create_row_renderers(renderer_type)
         if renderers is not None:
@@ -810,7 +833,8 @@ class FormView(View):
     _renderer_key = "form"
 
     log_view: LogView = attrs.field(factory=LogView)
-    _validators: list[Validator] = attrs.field(
+    #: each cross-field check with the rows it is about
+    _validators: list[tuple[Validator, tuple[FormRowView, ...]]] = attrs.field(
         factory=list, init=False, repr=False, metadata={OMIT: True}
     )
 
@@ -828,7 +852,10 @@ class FormView(View):
         ]
 
     def add_validator(
-        self, validator: Validator, *signals: Signal[Unpack[tuple[Any, ...]]]
+        self,
+        validator: Validator,
+        *signals: Signal[Unpack[tuple[Any, ...]]],
+        rows: Sequence[FormRowView] = (),
     ) -> None:
         """Register a cross-field `validator`, re-run whenever any of `signals` fires.
 
@@ -838,8 +865,13 @@ class FormView(View):
         the last one winning (see `PipeFormView` in `examples/pipeform.py`, which has
         two independent checks spanning `main_pipe`/`incident_pipe`). Doesn't run
         immediately - call `validate()` afterward for an initial check.
+
+        `rows` are the rows the check is about: while it fails, each shows its field as
+        invalid (`FormRowView.has_form_error`), so the user sees which values to fix
+        even though the message is in the form's log. A row is flagged by the form that
+        last validated it, so name a row in one form's checks only.
         """
-        self._validators.append(validator)
+        self._validators.append((validator, tuple(rows)))
         for signal in signals:
             signal.connect(self.validate)
 
@@ -849,7 +881,16 @@ class FormView(View):
         Takes (and ignores) any positional args so it can be connected directly to
         signals of any arity, same as `LogMixin.run_validator`.
         """
-        messages = [message for validator in self._validators if (message := validator())]
+        messages: list[str] = []
+        failing: list[FormRowView] = []
+        for validator, rows in self._validators:
+            message = validator()
+            if message:
+                messages.append(message)
+                failing.extend(rows)
+        for _, rows in self._validators:
+            for row in rows:
+                row.has_form_error = any(row is failing_row for failing_row in failing)
         if len(messages) > 0:
             self.log_view.log_message = "- " + "\n- ".join(messages)
             self.log_view.log_type = LogType.ERROR

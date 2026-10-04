@@ -168,11 +168,20 @@ body {
   }
 }
 
-/* A field followed by a log showing an error is invalid too; text the browser itself
-   rejects (a float field's pattern) as well, once the user has interacted with it. */
+/* A field followed by a log showing an error is invalid too, as is one a failing check
+   of its form names (`data-form-error`); text the browser itself rejects (a float
+   field's pattern) as well, once the user has interacted with it. */
 .input:has(+ [data-log="error"]:not([hidden])),
+.input:has(+ [data-form-error]),
 .select:has(+ [data-log="error"]:not([hidden])),
+.select:has(+ [data-form-error]),
 .input:user-invalid {
+  --input-color: var(--color-error);
+  border-color: var(--color-error);
+}
+/* a radio group's buttons, the same way */
+[role="radiogroup"]:has(+ [data-log="error"]:not([hidden])) .radio,
+[role="radiogroup"]:has(+ [data-form-error]) .radio {
   --input-color: var(--color-error);
   border-color: var(--color-error);
 }
