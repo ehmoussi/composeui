@@ -50,6 +50,12 @@ web = [
     "uvicorn>=0.39.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+# `src/examples` is importable in a development install (the editable install puts `src`
+# on the path) but is not part of the distribution
+include = ["composeui*"]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
