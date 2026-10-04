@@ -1100,7 +1100,11 @@ class WebRouterRenderer(WebRenderer[Router]):
             for page in self._view.pages
             if isinstance(page.action.renderer, WebActionRenderer)
         )
-        return f'<nav aria-label="Pages" class="tabs tabs-border">{links}</nav>'
+        # a row of its own under the brand on a narrow screen, next to it on a wider one
+        return (
+            '<nav aria-label="Pages" class="tabs tabs-box tabs-sm order-last w-full'
+            f' flex-nowrap overflow-x-auto sm:order-none sm:w-auto">{links}</nav>'
+        )
 
 
 #: first segments of the backend's own addresses, which no page's address can take
@@ -1195,11 +1199,14 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 if child_view is self.router and isinstance(child_view.renderer, WebRouterRenderer):
                     toolbar = child_view.renderer.toolbar_html()
                 content.append(child_view.renderer.to_html())
+        # the pages' toolbar wraps to a row of its own on a narrow screen
+        wrap = " flex-wrap" if toolbar else ""
         # bottom padding keeps the last row clear of the fixed status bar
         return get_page(
             self._view.title,
             # sticky: the menus stay at hand however long the form is
-            '<header class="navbar sticky top-0 z-20 min-h-14 gap-3 border-b border-base-300'
+            f'<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
+            " border-base-300"
             ' bg-base-100 px-4">'
             f"{self._brand_html()}{toolbar}"
             '<nav class="ml-auto flex items-center gap-1">'
