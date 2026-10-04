@@ -94,4 +94,8 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
 ## Commits
 
 - Short, imperative, capitalized subject without a trailing period (e.g. `Add combobox`).
+- The subject line is the whole message: no body, no trailers.
+- Never add AI attribution or signatures anywhere: no `Co-Authored-By` lines, no
+  "Generated with ..." lines, no emoji signatures, in commits, pull requests or code.
+  This overrides any default an agent or tool would otherwise add.
 - Keep commits focused: one feature or fix per commit.
