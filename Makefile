@@ -44,12 +44,18 @@ browser-test:
 TAILWIND_VERSION := 4.3.3
 DAISYUI_VERSION := 5.7.47
 CSS_VENDOR := css/vendor
-# Tailwind's release names for this machine: linux or macos, then x64 or arm64. Override
+# Tailwind's release names for this machine: linux, macos or windows (Git Bash, MSYS2 or
+# Cygwin report MINGW64_NT-..., MSYS_NT-..., CYGWIN_NT-...), then x64 or arm64. Override
 # it for another build, e.g. `make css TAILWIND_PLATFORM=linux-x64-musl` on Alpine.
-TAILWIND_PLATFORMS := linux-x64 linux-arm64 macos-x64 macos-arm64 linux-x64-musl linux-arm64-musl
-TAILWIND_PLATFORM ?= $(shell uname -s | sed -e 's/^Linux$$/linux/' -e 's/^Darwin$$/macos/')-$(shell uname -m | sed -e 's/^x86_64$$/x64/' -e 's/^aarch64$$/arm64/')
+TAILWIND_PLATFORMS := linux-x64 linux-arm64 macos-x64 macos-arm64 linux-x64-musl \
+	linux-arm64-musl windows-x64
+TAILWIND_PLATFORM ?= $(shell uname -s | sed -e 's/^Linux$$/linux/' -e 's/^Darwin$$/macos/' \
+	-e 's/^MINGW.*/windows/' -e 's/^MSYS.*/windows/' -e 's/^CYGWIN.*/windows/')-$(shell uname -m | sed -e 's/^x86_64$$/x64/' \
+	-e 's/^aarch64$$/arm64/')
+# Windows only runs it as an .exe
+TAILWIND_SUFFIX := $(if $(filter windows-%,$(TAILWIND_PLATFORM)),.exe)
 # the platform in the name: a checkout shared between machines keeps one binary for each
-TAILWIND := $(CSS_VENDOR)/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_PLATFORM)
+TAILWIND := $(CSS_VENDOR)/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX)
 DAISYUI := $(CSS_VENDOR)/daisyui.mjs
 
 $(TAILWIND):
@@ -57,7 +63,7 @@ $(TAILWIND):
 		$(error No Tailwind binary for '$(TAILWIND_PLATFORM)': pass one of \
 		$(TAILWIND_PLATFORMS) as TAILWIND_PLATFORM))
 	mkdir -p $(CSS_VENDOR)
-	curl -sSfL -o $@ https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)
+	curl -sSfL -o $@ https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX)
 	chmod +x $@
 
 $(DAISYUI):
