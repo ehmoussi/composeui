@@ -69,10 +69,10 @@ There is no CI: every check depends on someone running `make check test` locally
    view by its attribute path from the main view, and replay it on every session's main
    view (in `_new_session_view`, before `setup_session`). Test with a callback connected
    through `app.connect` reacting in two browsers.~~ *(Also fixed in core: `app.connect` crashed on any backend when the callback asked for `main_view`, because `Signal` held every injected callback as a `WeakMethod`.)*
-2. **Web `ModelApplication`.** Decide per-session versus shared models: a
+2. ~~**Web `ModelApplication`.** Decide per-session versus shared models: a
    `build_model` factory per session matches how main views work, while one shared
    `Model` would need its own locking. Implement the chosen one with
-   `_add_reference_to_signals(main_view, model)`.
+   `_add_reference_to_signals(main_view, model)`.~~ *(Per session: `WebModelApplication(build_main_view=..., build_model=...)`. A shared model would also leave other browsers stale, since a browser only gets fragments from its own requests.)*
 3. **Opt-in browser test suite.** Caret preservation, Alt+Shift shortcuts, the
    `aria-invalid` sync, the offline page and the status bar's auto-clear were all checked
    by hand in headless Chromium, repeatedly. Add Playwright tests marked and skipped
