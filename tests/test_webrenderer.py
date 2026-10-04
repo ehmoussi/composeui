@@ -38,6 +38,7 @@ from composeui.core.view import (
     define_view,
 )
 from composeui.webcore.webrenderer import (
+    UnsupportedEventError,
     WebFloatInputRenderer,
     WebInputRenderer,
     WebLabelRenderer,
@@ -1031,26 +1032,56 @@ def test_the_file_menu_sits_in_the_header(main_view: HelloMainView, client: Test
 
     header = page[page.index("<header") : page.index("</header>")]
     assert f'<div id="{_widget_id(menu.renderer)}" class="dropdown">' in header
-    assert '<kbd class="kbd kbd-sm">Ctrl+Shift+S</kbd>' in header
     assert 'role="separator"' in header
     assert f'href="/state?trigger={_action_id(menu.save)}" download' in header
     assert 'type="file" name="file"' in header
     assert f'hx-post="/widget/{_action_id(menu.new)}"' in header
 
 
-def test_a_menu_action_fires_its_triggered(main_view: HelloMainView, client: TestClient) -> None:
-    new = main_view.file_menu.new
-    triggered = _count(new.triggered)
+@pytest.mark.parametrize(
+    ("action", "key"), [("new", "N"), ("open_file", "O"), ("save", "S"), ("exit_app", "Q")]
+)
+def test_menu_shortcuts_avoid_the_browsers_own(
+    main_view: HelloMainView, client: TestClient, action: str, key: str
+) -> None:
+    """Ctrl+N/O/S/Q belong to the browser (new window, open, save page, quit Firefox)."""
+    page = client.get("/").text
+    item_id = _action_id(getattr(main_view.file_menu, action))
+    item = page[page.index(f'<li id="{item_id}"') :]
+    item = item[: item.index("</li>")]
 
-    response = client.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+    assert f'<kbd class="kbd kbd-sm">Alt+Shift+{key}</kbd>' in item
+    # what the page's key handler clicks when Alt+Shift+<key> is pressed
+    assert f'data-shortcut="Key{key}"' in item
+    assert "Ctrl" not in page[page.index("<header") : page.index("</header>")]
 
-    assert response.status_code == 200
+
+def test_save_as_has_no_web_shortcut(main_view: HelloMainView, client: TestClient) -> None:
+    # in a browser it downloads just like Save, whose Alt+Shift+S it would collide with
+    page = client.get("/").text
+    item = page[page.index(f'<li id="{_action_id(main_view.file_menu.save_as)}"') :]
+    item = item[: item.index("</li>")]
+
+    assert "<kbd" not in item
+    assert "data-shortcut" not in item
+
+
+def test_an_action_fires_its_triggered_unless_disabled() -> None:
+    # a plain action: every File menu one also does more (New, Exit, Save, Open)
+    action = ActionView(text="Refresh")
+    action.render(RendererType.WEB)
+    renderer = action.renderer
+    assert isinstance(renderer, WebRenderer)
+    triggered = _count(action.triggered)
+
+    handle_event(renderer, "triggered", {})
+
     assert len(triggered) == 1
 
-    new.is_enabled = False
-    refused = client.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+    action.is_enabled = False
 
-    assert refused.status_code == 400
+    with pytest.raises(UnsupportedEventError):  # the route answers 400
+        handle_event(renderer, "triggered", {})
     assert len(triggered) == 1
 
 
@@ -1114,3 +1145,51 @@ def test_a_checked_action_shows_its_check_mark() -> None:
     action.is_checked = False
 
     assert "<span>Wrap</span>" in renderer.to_html()
+
+
+def test_new_clears_the_form_in_the_same_session(
+    app: _HelloApp, main_view: HelloMainView, client: TestClient
+) -> None:
+    triggered = _count(main_view.file_menu.new.triggered)
+    _type_name(client, main_view, "Bob")
+
+    response = client.post(
+        f"/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"}
+    )
+
+    assert len(triggered) == 1  # user code connected to New still runs first
+    assert response.headers["hx-refresh"] == "true"
+    page = client.get("/").text
+    old_view, blank_view = app.session_views
+    assert blank_view.form.name.text == ""
+    assert 'value="Bob"' not in page
+    # same session, same cookie: the blank form is the one the browser now drives
+    _type_name(client, blank_view, "Ann")
+    assert blank_view.form.name.text == "Ann"
+    assert old_view.form.name.text == "Bob"
+
+
+def test_new_is_blank_even_when_the_app_opened_a_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    study = HelloMainView()
+    study.form.name.text = "Bob"
+    state_file = tmp_path / "study.hello"
+    study.save_state(state_file)
+    served: list[Starlette] = []
+    monkeypatch.setattr("sys.argv", ["webhello", "-f", str(state_file)])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **_: served.append(app),
+    )
+    app = _HelloApp()
+    app.run()
+
+    with TestClient(served[0]) as client:
+        client.get("/")
+        opened = app.session_views[0]
+        client.post(f"/widget/{_action_id(opened.file_menu.new)}", data={"event": "triggered"})
+        client.get("/")
+
+    assert opened.form.name.text == "Bob"  # a new session opens the file...
+    assert app.session_views[1].form.name.text == ""  # ...but New is blank

@@ -726,6 +726,26 @@ with stdlib `html.escape`.
    - Checked in Chromium: the menu sits in the header with its shortcuts; Save
      downloads `hello-composeui.hello` and closes the dropdown; Exit lands on an empty
      form; Open with the saved file brings the name back.
+   - **Revised after M8 (shortcuts):** step 3's display-only `Ctrl+…` labels are
+     replaced by working shortcuts the browser leaves free. A view's `Ctrl+<letter or
+     digit>` shows and works as `Alt+Shift+<key>` (New N, Open O, Save S, Exit Q), the
+     combination web apps use for their own shortcuts. One page-level `keydown`
+     handler (in `page.py`) clicks the item marked `data-shortcut="Key<X>"`, matching
+     the physical key (`event.code`), so keyboard layouts and macOS's Option key don't
+     change it. Any other shortcut has no web equivalent and shows nothing: Save As's
+     `Ctrl+Shift+S` would collide with Save's, and in a browser it downloads just like
+     Save anyway. Core's shortcuts are unchanged; Qt and Textual still use them.
+     Checked in Chromium from inside a text field: Alt+Shift+S downloads, N posts New,
+     Q exits to a fresh form, O opens the file picker.
+   - **Revised after M8 (New):** step 4 left New generic, and so did nothing: core's
+     `NewAction._new_study` is an empty method, on every backend. On the web, New now
+     fires its `triggered` (user code still runs first), then
+     `SessionStore.start_over` gives the session a freshly built, blank main view
+     under the same id (so the cookie keeps working), and the page reloads. Blank means
+     it skips the app's `-f FILE`, which a brand-new session does open.
+     `WebActionRenderer.starts_new_document` marks the action; `WebSession`
+     records `new_requested`. Checked in Chromium: File → New and Alt+Shift+N both
+     clear every field and the summary. Qt and Textual's New is still a no-op.
 
 10. **M9 — Tests.** By now each milestone has added its own tests to
     `tests/test_webrenderer.py` (AGENTS.md: every behavior change needs a test). M9 is
