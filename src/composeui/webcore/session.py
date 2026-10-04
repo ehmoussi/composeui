@@ -16,11 +16,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-import cattrs
-
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError
-from composeui.core.view import CONVERTER, _apply_state
+from composeui.core.view import CONVERTER, InvalidStateError
 from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
@@ -39,16 +37,6 @@ if TYPE_CHECKING:
 
 #: largest state file accepted from an upload, in bytes
 MAX_STATE_SIZE = 5 * 1024 * 1024
-#: what applying a structurally wrong state file can raise (from cattrs or a field's
-#: own conversion, e.g. `float("abc")`)
-_BAD_STATE_ERRORS = (
-    ValueError,
-    TypeError,
-    KeyError,
-    AttributeError,
-    cattrs.BaseValidationError,
-    cattrs.StructureHandlerNotFoundError,
-)
 
 
 def safe_filename(name: str) -> str:
@@ -104,36 +92,29 @@ class WebSession(RenderTarget):
             return safe_filename(name), json.dumps(CONVERTER.unstructure(main_view))
 
     def load_state(self, filename: str, content: bytes) -> str | None:
-        """Load an uploaded state file; on failure, return the status bar saying why.
-
-        The file is applied to a scratch instance first: `_apply_state` sets fields one
-        by one, so a file failing halfway would otherwise leave the session half loaded.
-        """
+        """Load an uploaded state file; on failure, return the status bar saying why."""
         with self.lock, collect_dirty() as dirty:
-            error = self._check_state(filename, content)
+            error = self._load_state(filename, content)
             if error is not None:
-                self.main_view.status_bar.show_message(error)
+                self.main_view.status_bar.show_message(f"Can't open {filename!r}: {error}.")
                 return render_dirty(dirty)
-            _apply_state(self.main_view, json.loads(content))
             self.main_view.state_filepath = Path(Path(filename).name)
             return None
 
-    def _check_state(self, filename: str, content: bytes) -> str | None:
+    def _load_state(self, filename: str, content: bytes) -> str | None:
         extension = self.main_view.extension
         if Path(filename).suffix != extension:
-            return f"Can't open {filename!r}: expected a {extension} file."
+            return f"expected a {extension} file"
         if len(content) > MAX_STATE_SIZE:
-            return f"Can't open {filename!r}: the file is too large."
+            return "the file is too large"
         try:
             data = json.loads(content)
         except ValueError:
-            return f"Can't open {filename!r}: it isn't a valid {extension} file."
-        if not isinstance(data, dict):
-            return f"Can't open {filename!r}: it isn't a valid {extension} file."
+            return f"it isn't a valid {extension} file"
         try:
-            _apply_state(type(self.main_view)(), data)
-        except _BAD_STATE_ERRORS:
-            return f"Can't open {filename!r}: it doesn't match this application."
+            self.main_view.load_state_data(data)
+        except InvalidStateError as error:
+            return str(error)
         return None
 
     def fragment(self, widget_id: str) -> str | None:
