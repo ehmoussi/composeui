@@ -193,7 +193,8 @@ class WebRenderer(Renderer[TView, str]):
         The field is described by the log, read out with the field, and is
         `aria-invalid` while the log shows an error (the page script keeps that in step
         when only the log is swapped, see `page.py`). A field a `<label for>` can't name,
-        a radio group, is labelled by the row's label instead. Nothing outside a row.
+        a radio group or a checkbox, is labelled by the row's label instead. Nothing
+        outside a row.
         """
         attributes: list[str] = []
         log_id = self._row_part_id("log")
@@ -394,6 +395,58 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
         return f' inputmode="decimal" pattern="{_DECIMAL_PATTERN}"'
 
 
+class CheckBoxViewLike(ViewLike, Protocol):
+    text: str
+    is_checked: bool
+    toggled: Signal[bool]
+
+
+class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
+    """A checkbox with its text, posting each toggle.
+
+    The root is a `<div role="group">`, as for a radio group: the box's own `<label>`
+    names it with its text, and a row's label names the group. Like a radio group,
+    the box is never swapped back after a toggle; it is when the server changes it.
+    """
+
+    _role = "checkbox"
+    is_labelable = False
+
+    def __init__(self, view: CheckBoxViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._mark_dirty,
+                "is_checked": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        checked = " checked" if self._view.is_checked else ""
+        disabled = "" if self._view.is_enabled else " disabled"
+        # an unchecked box posts no value at all: `checked` is told apart by its presence
+        return (
+            f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="group"'
+            ' class="flex">'
+            '<label class="label cursor-pointer gap-2 text-base-content">'
+            '<input type="checkbox" class="checkbox checkbox-sm checkbox-primary"'
+            f' name="checked" value="on"{checked} hx-post="/widget/{self.widget_id}"'
+            ' hx-trigger="change" hx-vals=\'{"event": "change"}\' hx-swap="none"'
+            f' autocomplete="off"{disabled}>'
+            f"{html.escape(self._view.text)}</label></div>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "change":
+            super().dispatch(event, form)
+        is_checked = "checked" in form
+        if is_checked == self._view.is_checked:
+            return
+        with self.stop_refresh():
+            self._view.is_checked = is_checked
+        self._view.toggled.emit(is_checked)
+
+
 TValue = TypeVar("TValue")
 
 
@@ -510,7 +563,8 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
 
     def to_html(self, *, oob: bool = False) -> str:
         field = self._field_renderer()
-        # a radio group isn't labelable: its `role="radiogroup"` names itself instead
+        # a radio group or a checkbox is a `<div>`, which isn't labelable: its
+        # `aria-labelledby` names it instead
         target = f' for="{field.widget_id}"' if field.is_labelable else ""
         return (
             f"<label {self._root_attributes(oob=oob)}{target}"
@@ -1044,6 +1098,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 #: renderer keys of the web backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
+    "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "float_input": WebFloatInputRenderer,
     "form": WebFormRenderer,

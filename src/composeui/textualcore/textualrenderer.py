@@ -38,6 +38,7 @@ from composeui.core.view import (
     StatusBar,
     View,
 )
+from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
@@ -409,6 +410,51 @@ class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
     @staticmethod
     def _update_state(view: FormLabelRowView, rendered_object: Label) -> None:
         pass  # a Label's text isn't user-editable; nothing to read back
+
+
+class CheckBoxViewLike(ViewLike, Protocol):
+    text: str
+    is_checked: bool
+    toggled: Signal[bool]
+
+
+class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeCheckbox]):
+    _marks_invalid = True
+
+    def __init__(self, view: CheckBoxViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "is_checked": self._refresh_is_checked,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeCheckbox()
+            self._rendered_object.toggled.connect(self._update_checked)
+
+    @staticmethod
+    def _refresh_text(
+        _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: str
+    ) -> None:
+        rendered_object.label = value
+
+    @staticmethod
+    def _refresh_is_checked(
+        _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: bool
+    ) -> None:
+        rendered_object.set_checked(value)
+
+    @staticmethod
+    def _update_state(view: CheckBoxViewLike, rendered_object: ComposeCheckbox) -> None:
+        view.is_checked = rendered_object.value
+
+    def _update_checked(self, is_checked: bool) -> None:
+        with self.stop_refresh():
+            self._view.is_checked = is_checked
+        self._view.toggled.emit(is_checked)
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
@@ -895,6 +941,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 #: renderer keys of the Textual backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
+    "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
     "float_input": TextualFloatInputRenderer,
     "form": TextualFormRenderer,

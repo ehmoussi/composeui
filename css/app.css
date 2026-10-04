@@ -179,9 +179,11 @@ body {
   --input-color: var(--color-error);
   border-color: var(--color-error);
 }
-/* a radio group's buttons, the same way */
+/* a radio group's buttons and a checkbox's box, the same way */
 [role="radiogroup"]:has(+ [data-log="error"]:not([hidden])) .radio,
-[role="radiogroup"]:has(+ [data-form-error]) .radio {
+[role="radiogroup"]:has(+ [data-form-error]) .radio,
+[role="group"]:has(+ [data-log="error"]:not([hidden])) .checkbox,
+[role="group"]:has(+ [data-form-error]) .checkbox {
   --input-color: var(--color-error);
   border-color: var(--color-error);
 }

@@ -17,7 +17,7 @@ from typing import Any, Optional, Union
 from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Footer, Input
+from textual.widgets import Checkbox, Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -155,6 +155,40 @@ async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
         await pilot.press(*clear, *"50", "tab")
         await pilot.pause()
         assert marked() == [False, False, False, False]
+
+
+@pytest.mark.asyncio
+async def test_pressing_the_checkbox_checks_the_view_and_enables_its_row() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    insulated = view.pipe_form.insulated
+    toggled: list[bool] = []
+    insulated.toggled.connect(toggled.append)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        checkbox = _field_widget(insulated.renderer)
+        assert isinstance(checkbox, Checkbox)
+        assert str(checkbox.label) == "Insulated pipe"
+        thickness_widget = _field_widget(view.pipe_form.insulation_thickness.renderer)
+        assert thickness_widget.disabled
+
+        checkbox.focus()
+        await pilot.press("space")
+        await pilot.pause()
+
+        assert insulated.is_checked is True
+        assert not thickness_widget.disabled  # toggled -> the thickness row
+        assert toggled == [True]
+
+        # set in code: the box follows, but only the user's toggles are reported
+        insulated.is_checked = False
+        await pilot.pause()
+        assert checkbox.value is False
+        assert toggled == [True]
 
 
 @pytest.mark.asyncio

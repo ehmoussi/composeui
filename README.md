@@ -81,8 +81,8 @@ if __name__ == "__main__":
 
 Run it with `uv run python hello.py` (requires the `pyside6` extra installed).
 
-For a larger, real-world-shaped example with forms, radio groups, validation, and a file menu
-with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py) (`uv run python -m
+For a larger, real-world-shaped example with forms, radio groups, a checkbox, validation, and a
+file menu with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py) (`uv run python -m
 examples.pipeform --backend qt`, or `textual`, or `web`).
 
 ## Web backend
@@ -147,8 +147,8 @@ How it differs from a desktop window:
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
-(`InputMixin`, `FloatInputMixin`, `RadioGroupMixin`, `LogMixin`, `LabelMixin`) for the
-available building blocks.
+(`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `RadioGroupMixin`, `LogMixin`,
+`LabelMixin`) for the available building blocks.
 
 ## Saving and loading state
 

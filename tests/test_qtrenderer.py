@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QGroupBox,
     QLabel,
@@ -170,6 +171,30 @@ def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> N
     assert buttons[0].x() == 0
     # each next to the one before, not spread over the width
     assert buttons[-1].geometry().right() < edge_widget.width() // 2
+
+
+def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    insulated = view.pipe_form.insulated
+    checkbox = _field_widget(insulated)
+    assert isinstance(checkbox, QCheckBox)
+    assert checkbox.text() == "Insulated pipe"
+    thickness_widget = _field_widget(view.pipe_form.insulation_thickness)
+    assert not thickness_widget.isEnabled()
+    toggled: list[bool] = []
+    insulated.toggled.connect(toggled.append)
+
+    checkbox.click()
+
+    assert insulated.is_checked is True
+    assert thickness_widget.isEnabled()  # toggled -> the thickness row
+    assert toggled == [True]
+
+    # set in code: the box follows, but only the user's toggles are reported
+    insulated.is_checked = False
+    assert not checkbox.isChecked()
+    assert toggled == [True]
 
 
 def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:

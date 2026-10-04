@@ -729,6 +729,63 @@ def test_clearing_the_name_shows_its_row_message(
     assert f'id="{_widget_id(_part(name, "log"))}" hx-swap-oob="true"' in body
 
 
+def test_the_checkbox_is_named_by_its_text_and_its_group_by_the_row_label(
+    pipe_main_view: PipeMainView, pipe_client: TestClient
+) -> None:
+    insulated = pipe_main_view.pipe_form.insulated
+    label_id, field_id = _widget_id(_part(insulated, "label")), _field_id(insulated)
+
+    page = pipe_client.get("/").text
+
+    field = _element(page, field_id)
+    assert field.attributes["role"] == "group"
+    assert field.attributes["aria-labelledby"] == label_id
+    assert field.attributes["aria-describedby"] == _widget_id(_part(insulated, "log"))
+    # a `<div>` isn't labelable: `for=` would point at nothing
+    assert "for" not in _element(page, label_id).attributes
+    (box,) = [attributes for tag, attributes in field.descendants if tag == "input"]
+    assert box["type"] == "checkbox"
+    assert "checked" not in box
+    assert field.text == "Insulated pipe"  # inside the box's own `<label>`
+
+
+def test_toggling_the_checkbox_enables_its_row_without_swapping_the_box(
+    pipe_main_view: PipeMainView, pipe_client: TestClient
+) -> None:
+    form = pipe_main_view.pipe_form
+    field_id = _field_id(form.insulated)
+    thickness_id = _field_id(form.insulation_thickness)
+    toggled: list[bool] = []
+    form.insulated.toggled.connect(toggled.append)
+
+    def toggle(**checked: str) -> str:
+        return pipe_client.post(f"/widget/{field_id}", data={"event": "change", **checked}).text
+
+    body = toggle(checked="on")
+
+    assert form.insulated.is_checked is True
+    assert "disabled" not in _swapped(body, thickness_id).attributes
+    assert _find(body, field_id) is None
+
+    toggle(checked="on")  # posted twice (e.g. a retry): no second toggle
+    body = toggle()  # an unchecked box posts no value
+
+    assert form.insulated.is_checked is False
+    assert "disabled" in _swapped(body, thickness_id).attributes
+    assert toggled == [True, False]
+
+
+def test_checking_the_box_on_the_server_swaps_it_checked(pipe_main_view: PipeMainView) -> None:
+    insulated = pipe_main_view.pipe_form.insulated
+    field = _part(insulated, "field")
+
+    with collect_dirty() as dirty:
+        insulated.is_checked = True
+
+    assert field.widget_id in dirty
+    assert _selected(_swapped(render_dirty(dirty), field.widget_id)) == ["on"]
+
+
 def test_disabling_a_group_disables_its_whole_fieldset(pipe_main_view: PipeMainView) -> None:
     main_pipe = pipe_main_view.pipe_form.main_pipe
 

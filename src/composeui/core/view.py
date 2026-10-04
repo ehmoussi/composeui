@@ -653,6 +653,20 @@ class LabelView(LabelMixin, View):
     _renderer_key = "label"
 
 
+@define_view
+class CheckBoxMixin:
+    #: shown next to the box
+    text: str = attrs.field(default="")
+    is_checked: bool = attrs.field(default=False)
+    #: the user checked or unchecked the box; not emitted when `is_checked` is set in code
+    toggled: Signal[bool] = attrs.Factory(Signal[bool])
+
+
+@define_view
+class CheckBoxView(CheckBoxMixin, View):
+    _renderer_key = "checkbox"
+
+
 TValue = TypeVar("TValue")
 
 
@@ -806,6 +820,16 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
 @define_view
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
     _field_renderer_key = "float_input"
+
+
+@define_view
+class RowCheckBoxView(FormRowView, CheckBoxMixin):
+    _field_renderer_key = "checkbox"
+
+
+@define_view
+class LabelRowCheckBoxView(FormLabelRowView, CheckBoxMixin):
+    _field_renderer_key = "checkbox"
 
 
 @define_view

@@ -11,6 +11,7 @@ from attrs import Factory
 from composeui.core.view import (
     FormView,
     GroupFormView,
+    LabelRowCheckBoxView,
     LabelRowComboboxView,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -84,6 +85,14 @@ class MaterialView(LabelRowComboboxView[Material]):
 
 
 @define_view
+class InsulatedView(LabelRowCheckBoxView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = "Insulation"
+        self.text = "Insulated pipe"
+
+
+@define_view
 class ChamferDimensionView(GroupFormView):
     height: DimensionInputView = Factory(DimensionInputView)
     width: DimensionInputView = Factory(DimensionInputView)
@@ -121,6 +130,8 @@ class PipeNameRowView(LabelRowInputView):
 class PipeFormView(FormView):
     name: PipeNameRowView = Factory(PipeNameRowView)
     material: MaterialView = Factory(MaterialView)
+    insulated: InsulatedView = Factory(InsulatedView)
+    insulation_thickness: DimensionInputView = Factory(DimensionInputView)
 
     main_pipe: PipeDimensionView = Factory(PipeDimensionView)
     incident_pipe: PipeDimensionView = Factory(PipeDimensionView)
@@ -132,6 +143,11 @@ class PipeFormView(FormView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        # Insulation: its thickness only matters for an insulated pipe
+        self.insulation_thickness.label = "Insulation Thickness"
+        self.insulation_thickness.value = 10.0
+        self.insulated.toggled.connect(self._enable_insulation_thickness)
+        self._enable_insulation_thickness(self.insulated.is_checked)
         # Main Pipe
         self.main_pipe.title = "Main Pipe"
         self.main_pipe.radius.value = 50.0
@@ -185,6 +201,9 @@ class PipeFormView(FormView):
                 f"({incident_radius} > {main_radius})"
             )
         return None
+
+    def _enable_insulation_thickness(self, is_insulated: bool) -> None:
+        self.insulation_thickness.is_enabled = is_insulated
 
     def _display_edge_options(self, edge_type: EdgeType | None) -> None:
         if edge_type == EdgeType.Chamfer:

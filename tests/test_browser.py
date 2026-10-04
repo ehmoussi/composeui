@@ -242,3 +242,20 @@ def test_a_failing_form_check_marks_the_fields_it_names(pipe_page: Page) -> None
     for field in (main_radius, incident_radius):
         expect(field).not_to_have_attribute("aria-invalid", "true")
     assert border(main_radius) == valid_border
+
+
+def test_checking_and_unchecking_the_box_reaches_the_server(pipe_page: Page) -> None:
+    """An unchecked box posts no value: htmx leaves it out, as a form would."""
+    pipe_page.goto("/")
+    insulated = pipe_page.get_by_role("checkbox", name="Insulated pipe")
+    thickness = pipe_page.get_by_label("Insulation Thickness")
+    expect(thickness).to_be_disabled()
+
+    with _posted(pipe_page):
+        insulated.check()
+    expect(thickness).to_be_enabled()
+
+    with _posted(pipe_page):
+        insulated.uncheck()
+    expect(thickness).to_be_disabled()
+    expect(insulated).not_to_be_checked()

@@ -7,6 +7,7 @@ from qtpy.QtCore import QObject, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -344,6 +345,52 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QLabel]):
     @staticmethod
     def _update_state(view: FormLabelRowView, rendered_object: QLabel) -> None:
         view.label = rendered_object.text()
+
+
+class CheckBoxViewLike(ViewLike, Protocol):
+    text: str
+    is_checked: bool
+    toggled: Signal[bool]
+
+
+class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
+    _invalid_style = "QCheckBox { color: red; }"
+
+    def __init__(self, view: CheckBoxViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "is_checked": self._refresh_is_checked,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QCheckBox()
+            # first, so the view's callbacks see the new check state
+            self._rendered_object.toggled.connect(self._update_checked)
+            self._view.toggled.add_qt_signal(self._rendered_object.toggled)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_text(_view: CheckBoxViewLike, rendered_object: QCheckBox, value: str) -> None:
+        rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_is_checked(
+        _view: CheckBoxViewLike, rendered_object: QCheckBox, value: bool
+    ) -> None:
+        rendered_object.setChecked(value)
+
+    @staticmethod
+    def _update_state(view: CheckBoxViewLike, rendered_object: QCheckBox) -> None:
+        view.text = rendered_object.text()
+        view.is_checked = rendered_object.isChecked()
+
+    def _update_checked(self, is_checked: bool) -> None:
+        with self.stop_refresh():
+            self._view.is_checked = is_checked
 
 
 TValue = TypeVar("TValue")
@@ -852,6 +899,7 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
 #: renderer keys of the Qt backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
+    "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "float_input": QtFloatInputRenderer,
     "form": QtFormRenderer,
