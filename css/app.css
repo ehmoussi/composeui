@@ -100,6 +100,35 @@ body {
   grid-column: 1 / -1;
 }
 
+/* the header's Theme button shows the theme in use: the sun in the light theme, the
+   moon in the dark one, whether picked in its menu or followed from the browser */
+.theme-toggle .icon-moon,
+[data-theme="composeui-dark"] .theme-toggle .icon-sun {
+  display: none;
+}
+[data-theme="composeui-dark"] .theme-toggle .icon-moon {
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-toggle .icon-sun {
+    display: none;
+  }
+  :root:not([data-theme]) .theme-toggle .icon-moon {
+    display: block;
+  }
+}
+/* the menu's current choice, ticked */
+.theme-option {
+  justify-content: space-between;
+}
+.theme-option[aria-pressed="true"] {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.theme-option[aria-pressed="true"]::after {
+  content: "✓";
+}
+
 /* the status bar: frosted over the content scrolling under it; a message gets a dot in
    the theme's colour and fades in, each time it is swapped in. The dot is drawn here,
    not in the markup: an empty bar stays an empty element */

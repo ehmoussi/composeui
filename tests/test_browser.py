@@ -27,7 +27,7 @@ from examples.webhello import HelloApp, HelloMainView
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from playwright.sync_api import Browser, Page, Route
+    from playwright.sync_api import Browser, Locator, Page, Route
 
 pytestmark = pytest.mark.browser
 
@@ -158,3 +158,33 @@ def test_the_status_bar_clears_itself_once_its_message_times_out(page: Page) -> 
     expect(status_bar).to_have_text("Hello, Alice!")
     # nothing else is sent: the bar asks for its own state once the message has expired
     expect(status_bar).to_have_text("", timeout=(_MESSAGE_TIMEOUT + 5) * 1000)
+
+
+def test_the_theme_menu_overrides_the_browser_until_set_back_to_system(page: Page) -> None:
+    def background() -> object:
+        return page.evaluate("getComputedStyle(document.body).backgroundColor")
+
+    def option(theme: str) -> Locator:
+        """Open the Theme menu and return its `theme` item."""
+        page.get_by_role("button", name="Theme").click()
+        return page.get_by_role("button", name=theme)
+
+    page.emulate_media(color_scheme="light")
+    page.goto("/")
+    light = background()
+    expect(option("System")).to_have_attribute("aria-pressed", "true")
+
+    page.get_by_role("button", name="Dark").click()  # from the menu still open
+    dark = background()
+    assert dark != light
+    # the choice outlives a reload, and wins over the browser's light preference
+    page.reload()
+    assert background() == dark
+    expect(option("Dark")).to_have_attribute("aria-pressed", "true")
+
+    page.get_by_role("button", name="System").click()
+    page.reload()
+    assert background() == light
+    # following the browser again: its switch to dark shows at once
+    page.emulate_media(color_scheme="dark")
+    assert background() == dark

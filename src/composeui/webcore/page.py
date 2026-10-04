@@ -12,6 +12,36 @@ _PAGE = Template("""<!DOCTYPE html>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="/static/app.css" rel="stylesheet" type="text/css" />
 <script>
+/* the theme picked in the header's Theme menu: Light or Dark win over the browser's
+   light/dark preference and are remembered by this browser; System forgets the choice
+   and follows the browser again. Applied here, before the body renders, so a reload
+   never flashes the other theme first. */
+var THEMES = ["composeui", "composeui-dark"];
+function storedTheme() {
+  var theme = null;
+  try {
+    theme = localStorage.getItem("composeui-theme");
+  } catch (error) {}  // storage blocked: follow the browser's preference
+  return THEMES.indexOf(theme) >= 0 ? theme : "system";
+}
+function applyTheme(choice) {
+  if (choice === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = choice;
+  document.querySelectorAll("[data-theme-option]").forEach(function (option) {
+    option.setAttribute("aria-pressed", String(option.dataset.themeOption === choice));
+  });
+}
+function setTheme(choice) {
+  try {
+    if (choice === "system") localStorage.removeItem("composeui-theme");
+    else localStorage.setItem("composeui-theme", choice);
+  } catch (error) {}
+  applyTheme(choice);
+}
+applyTheme(storedTheme());
+document.addEventListener("DOMContentLoaded", function () {
+  applyTheme(storedTheme());  // again, now that the menu exists: marks the current choice
+});
 /* menu shortcuts: Alt+Shift+<key> clicks the item marked with that key. Matched on the
    physical key (`code`), so it works whatever character the keyboard layout, or the
    Option key on macOS, would type. (No dollar sign in here: this page is a string.Template.) */

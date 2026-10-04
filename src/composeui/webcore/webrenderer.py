@@ -802,6 +802,35 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
         )
 
 
+def _theme_option(choice: str, text: str) -> str:
+    # `setTheme` in `page.py`; the blur closes the dropdown
+    return (
+        f'<li><button type="button" class="theme-option" data-theme-option="{choice}"'
+        f""" onclick="setTheme('{choice}'); document.activeElement.blur()">{text}</button></li>"""
+    )
+
+
+#: the header's Theme menu: Light, Dark, or System (the browser's preference). Its button
+#: shows the theme in use, the sun or the moon, however it was chosen
+_THEME_MENU: Final = (
+    '<div class="dropdown dropdown-end ml-auto">'
+    '<div tabindex="0" role="button" class="theme-toggle btn btn-ghost btn-sm btn-square"'
+    ' aria-label="Theme" title="Theme">'
+    '<svg class="icon-sun size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41'
+    'M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+    "</svg>"
+    '<svg class="icon-moon size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></div>'
+    '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-40 rounded-box border'
+    ' border-base-300 bg-base-100 p-2 shadow-lg">'
+    f"{_theme_option('composeui', 'Light')}{_theme_option('composeui-dark', 'Dark')}"
+    f"{_theme_option('system', 'System')}</ul></div>"
+)
+
+
 class WebMainRenderer(MainRenderer[MainView, str]):
     """Renders the whole page; never swapped itself, so its attributes are no-ops."""
 
@@ -855,6 +884,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             f"{self._brand_html()}"
             '<nav class="flex items-center gap-1 border-l border-base-300 pl-3">'
             f"{''.join(menus)}</nav>"
+            f"{_THEME_MENU}"
             "</header>"
             '<main class="mx-auto max-w-3xl px-4 pt-8 pb-20">'
             '<div class="card border border-base-300 bg-base-100 shadow-md">'
