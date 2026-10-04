@@ -121,6 +121,10 @@ How it differs from a desktop window:
   `WebApplication.setup_session`, which runs for each new session's main view.
   `app.connect(view=app.main_view...)` is replayed on every new session: the callback gets
   that session's own `view` and `main_view`, never the template no browser displays.
+- **Models are per session too:** `WebModelApplication(build_main_view=..., build_model=...)`
+  builds one model per session, and callbacks asking for `model` get their session's. A
+  model shared between browsers would leave the others showing stale views, since each
+  browser only sees what its own requests return.
 - **Save and Open** download the state as a file and upload one; the File menu sits in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
   Ctrl ones for themselves.

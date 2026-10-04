@@ -4,7 +4,7 @@ import functools
 import secrets
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, ClassVar, NamedTuple, TypeVar, cast
+from typing import TYPE_CHECKING, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
 
 import attrs
 import uvicorn
@@ -31,13 +31,15 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeVarTuple, Unpack
 
-    from composeui.core.application import _ConnectDecorator
+    from composeui.core.application import _ConnectDecorator, _ConnectModelDecorator
+    from composeui.core.model import Model
     from composeui.core.view import MainView
 
     Ts = TypeVarTuple("Ts")
 
 
 MainViewT = TypeVar("MainViewT", bound="MainView")
+ModelT = TypeVar("ModelT", bound="Model")
 ViewT = TypeVar("ViewT", bound="View")
 
 #: attribute names leading from a main view to one of its views or signals
@@ -126,6 +128,12 @@ class WebApplication(Application[MainViewT]):
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]:
+        return cast("_ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]", self._record(view, signals))
+
+    def _record(
+        self, view: View, signals: Sequence[Signal[Unpack[Ts]]]
+    ) -> Callable[[Callable[..., None]], Callable[..., None]]:
+        """Return a decorator recording a connection, replayed on every new session."""
         paths = _attribute_paths(self.main_view)
         for target in (view, *signals):
             if id(target) not in paths:
@@ -138,7 +146,7 @@ class WebApplication(Application[MainViewT]):
             self._connections.append(_Connection(view_path, signal_paths, callback))
             return callback
 
-        return cast("_ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]", wrapper)
+        return wrapper
 
     def setup_session(self, main_view: MainViewT) -> None:
         """Wire a new session's main view; override to connect app-level behavior."""
@@ -155,7 +163,8 @@ class WebApplication(Application[MainViewT]):
 
     def _new_session_view(self) -> MainViewT:
         main_view = self._build_main_view()
-        _add_reference_to_signals(main_view, None)
+        model = self._new_session_model()
+        _add_reference_to_signals(main_view, model)
         main_view.is_visible = True
         for connection in self._connections:
             self._replay(connection, main_view)
@@ -165,8 +174,16 @@ class WebApplication(Application[MainViewT]):
             main_view.load_state(self._args.f)
         return main_view
 
+    def _new_session_model(self) -> Model | None:
+        """Build a new session's model: none, unless the app has one."""
+        return None
+
     def _replay(self, connection: _Connection, main_view: MainViewT) -> None:
-        """Connect `connection`'s callback to this session's own view and signals."""
+        """Connect `connection`'s callback to this session's own view and signals.
+
+        `model` needs no binding: the session's signals inject their own (see
+        `_add_reference_to_signals`).
+        """
         available = {"view": _resolve(main_view, connection.view), "main_view": main_view}
         requested = self._requested_kwargs(connection.callback, tuple(available))
         bound = functools.partial(
@@ -174,3 +191,31 @@ class WebApplication(Application[MainViewT]):
         )
         for path in connection.signals:
             cast("Signal[Unpack[tuple[object, ...]]]", _resolve(main_view, path)).connect(bound)
+
+
+class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT]):
+    """A `WebApplication` whose every session also gets its own model from `build_model`.
+
+    Per session rather than shared, like the main views: a browser only ever sees the
+    fragments its own requests return, so a model shared between sessions would leave
+    every other browser showing stale views (and would need its own locking). Callbacks
+    asking for `model`, whether a view's own or connected through `connect`, get their
+    session's.
+    """
+
+    def __init__(
+        self, *, build_main_view: Callable[[], MainViewT], build_model: Callable[[], ModelT]
+    ) -> None:
+        self._build_model = build_model
+        super().__init__(build_main_view=build_main_view)
+
+    def connect(
+        self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
+    ) -> _ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]:
+        return cast(
+            "_ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]",
+            self._record(view, signals),
+        )
+
+    def _new_session_model(self) -> ModelT:
+        return self._build_model()

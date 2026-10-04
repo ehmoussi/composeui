@@ -24,6 +24,7 @@ pytest.importorskip("httpx")
 from attrs import Factory
 from starlette.testclient import TestClient
 
+from composeui.core.model import Model
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
@@ -38,7 +39,7 @@ from composeui.core.view import (
     StatusBar,
     define_view,
 )
-from composeui.webcore.webapplication import WebApplication
+from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     UnsupportedEventError,
     WebFloatInputRenderer,
@@ -780,6 +781,51 @@ def test_app_connect_reacts_in_each_browser_on_its_own_views(app: _HelloApp) -> 
         assert type_name(bob, bob_view, "Bob") == "Echo: Bob"
         assert alice_view.summary.text == "Echo: Alice"
     assert app.main_view.summary.text != "Echo: Alice"  # the template is never wired
+
+
+class _Guestbook(Model):
+    def __init__(self) -> None:
+        self.names: list[str] = []
+
+
+def test_each_browser_gets_its_own_model() -> None:
+    models: list[_Guestbook] = []
+
+    def build_model() -> _Guestbook:
+        models.append(_Guestbook())
+        return models[-1]
+
+    class GuestbookApp(WebModelApplication[HelloMainView, _Guestbook]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            views.append(main_view)
+
+    views: list[HelloMainView] = []
+    app = GuestbookApp(build_main_view=HelloMainView, build_model=build_model)
+    name = app.main_view.form.name
+
+    @app.connect(view=name, signals=[name.editing_finished])
+    def sign(*, view: NameRowView, main_view: HelloMainView, model: _Guestbook) -> None:
+        model.names.append(view.text)
+        main_view.summary.text = ", ".join(model.names)
+
+    def sign_as(client: TestClient, view: HelloMainView, text: str) -> str:
+        """Enter `text` as the name; return the summary as the browser now shows it."""
+        field_id = _field_id(view.form.name)
+        response = client.post(f"/widget/{field_id}", data={"value": text, "event": "change"})
+        assert response.status_code == 200
+        return _element(client.get("/").text, _widget_id(view.summary.renderer)).text
+
+    web = app.create_starlette_app()
+    with TestClient(web) as alice, TestClient(web) as bob:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = views
+
+        assert sign_as(alice, alice_view, "Alice") == "Alice"
+        assert sign_as(bob, bob_view, "Bob") == "Bob"
+        assert sign_as(alice, alice_view, "Ada") == "Alice, Ada"
+    # one per session, and none for the template
+    assert [model.names for model in models] == [["Alice", "Ada"], ["Bob"]]
 
 
 def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None:
