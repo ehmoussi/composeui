@@ -17,6 +17,8 @@ from composeui.core.view import (
     LabelRowInputView,
     LabelRowRadioGroupView,
     MainView,
+    PageView,
+    Router,
     TableView,
     define_view,
 )
@@ -219,17 +221,43 @@ class PipeFormView(FormView):
 
 
 @define_view
-class PipeMainView(MainView):
+class InputsPageView(PageView):
     pipe_form: PipeFormView = Factory(PipeFormView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_route("inputs")
+        self.title = "Inputs"
+
+
+@define_view
+class ResultsPageView(PageView):
     #: both pipes' dimensions side by side, read-only
     summary: TableView = Factory(TableView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Pipe Form", extension=".pipe")
-        self.pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
+        self._init_route("results")
+        self.title = "Results"
         self.summary.headers = ["Pipe", "Radius", "Width", "Half Length"]
-        for pipe in (self.pipe_form.main_pipe, self.pipe_form.incident_pipe):
+
+
+@define_view
+class PipePagesView(Router):
+    inputs: InputsPageView = Factory(InputsPageView)
+    results: ResultsPageView = Factory(ResultsPageView)
+
+
+@define_view
+class PipeMainView(MainView):
+    pages: PipePagesView = Factory(PipePagesView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Pipe Form", extension=".pipe")
+        pipe_form = self.pages.inputs.pipe_form
+        pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
+        for pipe in (pipe_form.main_pipe, pipe_form.incident_pipe):
             for dimension in (pipe.radius, pipe.width, pipe.half_length):
                 dimension.editing_finished.connect(self._update_summary)
         self._update_summary()
@@ -238,14 +266,15 @@ class PipeMainView(MainView):
         def text(value: float | None) -> str:
             return "" if value is None else f"{value:g}"
 
-        self.summary.rows = [
+        pipe_form = self.pages.inputs.pipe_form
+        self.pages.results.summary.rows = [
             [
                 pipe.title,
                 text(pipe.radius.value),
                 text(pipe.width.value),
                 text(pipe.half_length.value),
             ]
-            for pipe in (self.pipe_form.main_pipe, self.pipe_form.incident_pipe)
+            for pipe in (pipe_form.main_pipe, pipe_form.incident_pipe)
         ]
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:

@@ -91,10 +91,10 @@ async def test_textual_radio_group_with_nonnull_initial_value_mounts_without_cra
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.pause()
-        widget = _field_widget(view.pipe_form.edge_type.renderer)
+        widget = _field_widget(view.pages.inputs.pipe_form.edge_type.renderer)
         assert isinstance(widget, ComposeRadioSet)
         assert widget.value() == EdgeType.Normal
-        assert view.pipe_form.edge_type.value == EdgeType.Normal
+        assert view.pages.inputs.pipe_form.edge_type.value == EdgeType.Normal
 
 
 @pytest.mark.asyncio
@@ -114,15 +114,15 @@ async def test_editing_finished_fires_on_blur_not_just_enter() -> None:
 
     async with app.run_test() as pilot:
         await pilot.pause()
-        widget = _field_widget(view.pipe_form.main_pipe.radius.renderer)
+        widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius.renderer)
         widget.focus()
         await pilot.press("5")
         await pilot.pause()
         await pilot.press("tab")
         await pilot.pause()
 
-        assert view.pipe_form.log_view.is_visible
-        assert "incident radius" in view.pipe_form.log_view.log_message
+        assert view.pages.inputs.pipe_form.log_view.is_visible
+        assert "incident radius" in view.pages.inputs.pipe_form.log_view.log_message
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
     assert isinstance(view.renderer, TextualMainRenderer)
     app = view.renderer.app
     assert app is not None
-    form = view.pipe_form
+    form = view.pages.inputs.pipe_form
     rows = [
         form.main_pipe.radius,
         form.main_pipe.width,
@@ -166,7 +166,7 @@ async def test_pressing_the_checkbox_checks_the_view_and_enables_its_row() -> No
     assert isinstance(view.renderer, TextualMainRenderer)
     app = view.renderer.app
     assert app is not None
-    insulated = view.pipe_form.insulated
+    insulated = view.pages.inputs.pipe_form.insulated
     toggled: list[bool] = []
     insulated.toggled.connect(toggled.append)
 
@@ -175,7 +175,7 @@ async def test_pressing_the_checkbox_checks_the_view_and_enables_its_row() -> No
         checkbox = _field_widget(insulated.renderer)
         assert isinstance(checkbox, Checkbox)
         assert str(checkbox.label) == "Insulated pipe"
-        thickness_widget = _field_widget(view.pipe_form.insulation_thickness.renderer)
+        thickness_widget = _field_widget(view.pages.inputs.pipe_form.insulation_thickness.renderer)
         assert thickness_widget.disabled
 
         checkbox.focus()
@@ -203,21 +203,22 @@ async def test_the_summary_table_shows_each_edit_as_plain_text() -> None:
 
     async with app.run_test(size=(100, 60)) as pilot:
         await pilot.pause()
-        assert isinstance(view.summary.renderer, TextualWidgetRenderer)
-        table = view.summary.renderer.widget
+        assert isinstance(view.pages.results.summary.renderer, TextualWidgetRenderer)
+        table = view.pages.results.summary.renderer.widget
         assert isinstance(table, DataTable)
 
         def lines() -> list[str]:
             return [table.render_line(y).text.strip() for y in range(table.size.height)]
 
-        radius = _field_widget(view.pipe_form.main_pipe.radius.renderer)
+        radius = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius.renderer)
         radius.focus()
         await pilot.press("end", *["backspace"] * 10, *"35", "tab")
+        view.pages.navigate("results")
         await pilot.pause()
         assert lines()[1].split() == ["Main", "Pipe", "35", "20", "200"]
 
         # shown as typed, not read as Rich markup (which would drop "[red]")
-        view.summary.rows = [["[red]", "1", "2", "3"]]
+        view.pages.results.summary.rows = [["[red]", "1", "2", "3"]]
         await pilot.pause()
         assert lines()[1].split() == ["[red]", "1", "2", "3"]
 
@@ -243,16 +244,16 @@ async def test_long_log_message_wraps_instead_of_being_clipped() -> None:
         # Set up values that trip the validation directly on the view, then blur a
         # field for real (through the widget) to run `_display_error_message` via
         # its actual `editing_finished` wiring, not by calling it directly.
-        view.pipe_form.main_pipe.radius.value = 100.0
-        view.pipe_form.main_pipe.width.value = 150.0
-        radius_widget = _field_widget(view.pipe_form.main_pipe.radius.renderer)
+        view.pages.inputs.pipe_form.main_pipe.radius.value = 100.0
+        view.pages.inputs.pipe_form.main_pipe.width.value = 150.0
+        radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius.renderer)
         radius_widget.focus()
         await pilot.press("tab")
         await pilot.pause()
 
-        message = view.pipe_form.log_view.log_message
+        message = view.pages.inputs.pipe_form.log_view.log_message
         assert len(message) > 80  # long enough that width:auto would overflow
-        log_renderer = view.pipe_form.log_view.renderer
+        log_renderer = view.pages.inputs.pipe_form.log_view.renderer
         assert isinstance(log_renderer, TextualWidgetRenderer)
         widget = log_renderer.widget
         assert widget is not None
@@ -279,10 +280,10 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
 
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        view.pipe_form.edge_type.value = EdgeType.Chamfer
+        view.pages.inputs.pipe_form.edge_type.value = EdgeType.Chamfer
         await pilot.pause()
 
-        chamfer_renderer = view.pipe_form.chamfer.renderer
+        chamfer_renderer = view.pages.inputs.pipe_form.chamfer.renderer
         assert isinstance(chamfer_renderer, TextualWidgetRenderer)
         chamfer_widget = chamfer_renderer.widget
         assert chamfer_widget is not None
@@ -315,7 +316,7 @@ async def test_group_form_shows_a_border_and_title_separating_it_from_other_grou
 
     async with app.run_test() as pilot:
         await pilot.pause()
-        main_pipe_renderer = view.pipe_form.main_pipe.renderer
+        main_pipe_renderer = view.pages.inputs.pipe_form.main_pipe.renderer
         assert isinstance(main_pipe_renderer, TextualWidgetRenderer)
         main_pipe_widget = main_pipe_renderer.widget
         assert main_pipe_widget is not None
@@ -401,7 +402,7 @@ async def test_open_file_action_runs_the_picker_on_a_worker_thread_and_loads_sta
     Textual reactives directly.
     """
     donor = PipeMainView()
-    donor.pipe_form.name.text = "loaded_name"
+    donor.pages.inputs.pipe_form.name.text = "loaded_name"
     filepath = tmp_path / "state.pipe"
     donor.save_state(filepath)
 
@@ -430,8 +431,8 @@ async def test_open_file_action_runs_the_picker_on_a_worker_thread_and_loads_sta
 
         assert len(app.screen_stack) == 1  # modal closed
         assert view.file_view.filepath == filepath
-        assert view.pipe_form.name.text == "loaded_name"
-        name_widget = _field_widget(view.pipe_form.name.renderer)
+        assert view.pages.inputs.pipe_form.name.text == "loaded_name"
+        name_widget = _field_widget(view.pages.inputs.pipe_form.name.renderer)
         assert isinstance(name_widget, Input)
         assert name_widget.value == "loaded_name"  # the real widget reflects it too
 
