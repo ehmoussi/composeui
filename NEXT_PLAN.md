@@ -7,9 +7,9 @@ out a step's line when it's done.
 
 ## 0 — Land the web backend
 
-1. Open a pull request for `web-backend` into `main` (20 commits, M0–M10 plus three core
+1. ~~Open a pull request for `web-backend` into `main` (20 commits, M0–M10 plus three core
    fixes: New resets the view, saved files hold every field, `file_view` is excluded
-   from state). The PR description can mostly be `WEB_BACKEND_PLAN.md`'s summary.
+   from state). The PR description can mostly be `WEB_BACKEND_PLAN.md`'s summary.~~ *(Opened: [#1](https://github.com/ehmoussi/composeui3/pull/1).)*
 
 ## 1 — Trust: catch regressions automatically
 
