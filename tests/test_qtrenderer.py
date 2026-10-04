@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
     QRadioButton,
     QStatusBar,
     QTableView,
+    QToolBar,
 )
 
 from composeui.core.application import _add_reference_to_signals
@@ -34,6 +35,7 @@ from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import ActionView, LabelView, RendererType
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
+from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -400,3 +402,40 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     assert view.file_view.filepath == saved_path
     data = json.loads(saved_path.read_text())
     assert data["pipe_form"]["name"]["text"] == "saved_name"
+
+
+def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
+    view = PagesMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    toolbar = window.findChild(QToolBar)
+    assert isinstance(toolbar, QToolBar)
+    actions = {action.text(): action for action in toolbar.actions()}
+    assert list(actions) == ["Inputs", "Results"]
+    name = view.router.inputs.name.renderer
+    total = view.router.results.total.renderer
+    assert isinstance(name, QtWidgetRenderer)
+    assert isinstance(total, QtWidgetRenderer)
+    assert name.qt_object is not None
+    assert total.qt_object is not None
+    assert name.qt_object.isVisible()
+    assert not total.qt_object.isVisible()
+
+    results_button = toolbar.widgetForAction(actions["Results"])
+    qtbot.mouseClick(results_button, Qt.MouseButton.LeftButton)
+    assert view.router.current_route == "results"
+    assert total.qt_object.isVisible()
+    assert not name.qt_object.isVisible()
+    # clicking the shown page's entry again leaves it checked, the other unchecked
+    qtbot.mouseClick(results_button, Qt.MouseButton.LeftButton)
+    assert actions["Results"].isChecked()
+    assert not actions["Inputs"].isChecked()
+
+    view.router.navigate("inputs")  # from app code
+    assert name.qt_object.isVisible()
+    assert actions["Inputs"].isChecked()
+    assert not actions["Results"].isChecked()

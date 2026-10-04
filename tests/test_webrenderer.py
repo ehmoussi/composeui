@@ -41,6 +41,7 @@ from composeui.core.view import (
     LogView,
     MainView,
     Menu,
+    Router,
     SaveAsAction,
     SeparatorAction,
     StatusBar,
@@ -65,6 +66,7 @@ from composeui.webcore.webrenderer import (
 from examples import pipeform
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from tests.pages import InputsPage, PagesMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -1544,3 +1546,101 @@ def test_form_fields_are_linked_to_their_label_and_message(
     # `<label for>` can't name a radio group's `<div>`: the group points at its label
     style = _element(page, _field_id(form.style))
     assert style.attributes["aria-labelledby"] == _widget_id(_part(form.style, "label"))
+
+
+@pytest.fixture
+def pages_views() -> list[PagesMainView]:
+    """Each session's main view, kept by `pages_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def pages_client(pages_views: list[PagesMainView]) -> Iterator[TestClient]:
+    class PagesApp(WebApplication[PagesMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=PagesMainView)
+
+        def setup_session(self, main_view: PagesMainView) -> None:
+            pages_views.append(main_view)
+
+    with TestClient(PagesApp().create_starlette_app()) as client:
+        yield client
+
+
+def _shown_routes(page: str) -> list[str]:
+    return re.findall(r'<div data-route="([^"]*)">', page)
+
+
+def test_each_page_has_its_own_address(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    home = pages_client.get("/", follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == "/inputs"
+
+    page = pages_client.get("/results").text
+    (main_view,) = pages_views
+    assert main_view.router.current_route == "results"
+    assert _shown_routes(page) == ["results"]
+    results_link = _element(page, _widget_id(main_view.router.results.action.renderer))
+    inputs_link = _element(page, _widget_id(main_view.router.inputs.action.renderer))
+    assert (results_link.text, results_link.attributes["href"]) == ("Results", "/results")
+    assert "aria-current" in results_link.attributes
+    assert "aria-current" not in inputs_link.attributes
+
+    # no page there, e.g. the browser's own `/favicon.ico`: not found, and no navigation
+    for address in ("/settings", "/favicon.ico"):
+        assert pages_client.get(address).status_code == 404
+    assert main_view.router.current_route == "results"
+
+
+def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    pages_client.get("/")
+    (main_view,) = pages_views
+    results = _widget_id(main_view.router.results.action.renderer)
+
+    response = pages_client.post(f"/widget/{results}", data={"event": "triggered"})
+    assert main_view.router.current_route == "results"
+    assert response.headers["HX-Push-Url"] == "/results"
+    router = _swapped(response.text, _widget_id(main_view.router.renderer))
+    shown = [
+        attributes["data-route"]
+        for tag, attributes in router.descendants
+        if tag == "div" and "data-route" in attributes and "hidden" not in attributes
+    ]
+    assert shown == ["results"]
+    assert "aria-current" in _swapped(response.text, results).attributes
+    inputs = _swapped(response.text, _widget_id(main_view.router.inputs.action.renderer))
+    assert "aria-current" not in inputs.attributes
+
+    # the shown page's link again: no navigation, so nothing new in the history
+    again = pages_client.post(f"/widget/{results}", data={"event": "triggered"})
+    assert "HX-Push-Url" not in again.headers
+
+
+@define_view
+class _StatePage(InputsPage):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_route("state")
+
+
+@define_view
+class _StateRouter(Router):
+    state: _StatePage = Factory(_StatePage)
+
+
+@define_view
+class _StateMainView(MainView):
+    router: _StateRouter = Factory(_StateRouter)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="State", extension=".state")
+
+
+def test_a_route_cannot_take_an_address_of_the_backend() -> None:
+    with pytest.raises(ValueError, match="'state'"):
+        _StateMainView().render(RendererType.WEB)

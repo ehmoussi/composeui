@@ -38,6 +38,8 @@ from composeui.core.view import (
     Menu,
     NewAction,
     OpenFileAction,
+    PageView,
+    Router,
     SaveAction,
     SaveAsAction,
     SeparatorAction,
@@ -814,6 +816,7 @@ class Placement(enum.Enum):
 
     ITEM = "item"  # an item of a dropdown
     BUTTON = "button"  # a button of its own
+    PAGE = "page"  # a link to a page, in the header's toolbar of pages
     OMITTED = "omitted"  # not shown: Save As next to Save (both download), Exit
 
 
@@ -922,6 +925,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
         self.accept: str | None = None
         #: set by its menu: kept for when the action is swapped on its own
         self.placement = Placement.ITEM
+        #: the address of the page a page's action shows, set by `WebRouterRenderer`
+        self.href: str | None = None
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 ("text", "icon", "data", "shortcut", "is_checkable", "is_checked"),
@@ -934,6 +939,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
             return f"<span {self._root_attributes(oob=oob)} hidden></span>"
         if self.placement is Placement.BUTTON:
             return self._button_html(oob=oob)
+        if self.placement is Placement.PAGE:
+            return self._page_link_html(oob=oob)
         view = self._view
         check = "✓ " if view.is_checkable and view.is_checked else ""
         shortcut = _web_shortcut(view.shortcut)
@@ -966,6 +973,32 @@ class WebActionRenderer(WebRenderer[ActionView]):
             return f'<button {attributes} type="button" disabled>{label}</button>'
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         return self._active_html(attributes, label, key)
+
+    def _page_link_html(self, *, oob: bool) -> str:
+        """Render a toolbar link to a page: still a link to its address, for a new tab.
+
+        A click posts `triggered` instead of following the link: the router navigates,
+        and the response puts the page's address in the browser's history.
+        """
+        view = self._view
+        is_current = view.is_checkable and view.is_checked
+        shortcut = _web_shortcut(view.shortcut)
+        text = html.escape(view.text)
+        tooltip = f' title="{text} ({shortcut[0]})"' if shortcut else ""
+        classes = "tab tab-active" if is_current else "tab"
+        current = ' aria-current="page"' if is_current else ""
+        if not view.is_enabled:
+            return (
+                f'<a {self._root_attributes(oob=oob)} class="tab tab-disabled"'
+                f' aria-disabled="true"{tooltip}>{text}</a>'
+            )
+        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+        href = html.escape(self.href or "")
+        return (
+            f'<a {self._root_attributes(oob=oob)} class="{classes}" href="{href}"{current}'
+            f'{tooltip} hx-post="/widget/{self.widget_id}"'
+            f""" hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{text}</a>"""
+        )
 
     def _active_html(self, attributes: str, label: str, key: str) -> str:
         """Render the element a click (or the page's key handler, through `key`) activates."""
@@ -1003,6 +1036,75 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
             f'<li {self._root_attributes(oob=oob)} role="separator">'
             '<hr class="my-1 border-base-300 p-0"></li>'
         )
+
+
+class WebPageRenderer(WebRenderer[PageView]):
+    """A page's views in a column, like the main view's own."""
+
+    _role = "page"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        content = "".join(
+            view.renderer.to_html()
+            for view in self._view.content_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        return (
+            f'<section {self._root_attributes(oob=oob)} class="flex flex-col gap-6">'
+            f"{content}</section>"
+        )
+
+
+def page_path(route: str) -> str:
+    """Get the address of the page on `route` (routes are made to fit in one)."""
+    return f"/{route}"
+
+
+class WebRouterRenderer(WebRenderer[Router]):
+    """The pages, only the current one shown, and the toolbar of their links.
+
+    Each page sits in a slot of its own, hidden unless current, which leaves the page's
+    own `is_visible` to the page. The toolbar has no fragment of its own: the main
+    renderer puts it in the header, and each link swaps on its own.
+    """
+
+    _role = "router"
+
+    def __init__(self, view: Router) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"current_route": self._mark_dirty})
+
+    def render(self) -> None:
+        super().render()
+        # the children are rendered first: make each page's action a link to it
+        for page in self._view.pages:
+            if isinstance(page.action.renderer, WebActionRenderer):
+                page.action.renderer.placement = Placement.PAGE
+                page.action.renderer.href = page_path(page.route)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        slots: list[str] = []
+        for page in self._view.pages:
+            if not isinstance(page.renderer, WebRenderer):
+                continue
+            hidden = "" if page.route == self._view.current_route else " hidden"
+            slots.append(
+                f'<div data-route="{html.escape(page.route)}"{hidden}>'
+                f"{page.renderer.to_html()}</div>"
+            )
+        return f"<div {self._root_attributes(oob=oob)}>{''.join(slots)}</div>"
+
+    def toolbar_html(self) -> str:
+        links = "".join(
+            page.action.renderer.to_html()
+            for page in self._view.pages
+            if isinstance(page.action.renderer, WebActionRenderer)
+        )
+        return f'<nav aria-label="Pages" class="tabs tabs-border">{links}</nav>'
+
+
+#: first segments of the backend's own addresses, which no page's address can take
+RESERVED_ROUTES: Final = frozenset({"state", "static", "widget"})
 
 
 def _theme_option(choice: str, text: str) -> str:
@@ -1054,9 +1156,21 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             )
         )
 
+    @property
+    def router(self) -> Router | None:
+        """The main view's router, whose pages have addresses; None without one."""
+        return next((view for view in self._view.children_views if isinstance(view, Router)), None)
+
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-main"
+        router = self.router
+        reserved = sorted(
+            page.route for page in (router.pages if router else []) if page.route in RESERVED_ROUTES
+        )
+        if len(reserved) > 0:
+            msg = f"The web backend uses the address of the routes {reserved}: rename them."
+            raise ValueError(msg)
         # the children are rendered first: hand the Open actions the file type they load
         views: list[View] = list(self._view.children_views)
         while len(views) > 0:
@@ -1069,6 +1183,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         menus: list[str] = []
         content: list[str] = []
         status_bar = ""
+        toolbar = ""
         for child_view in self._view.children_views:
             if not isinstance(child_view.renderer, WebRenderer):
                 continue
@@ -1077,6 +1192,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             elif isinstance(child_view, Menu):
                 menus.append(child_view.renderer.to_html())
             else:
+                if child_view is self.router and isinstance(child_view.renderer, WebRouterRenderer):
+                    toolbar = child_view.renderer.toolbar_html()
                 content.append(child_view.renderer.to_html())
         # bottom padding keeps the last row clear of the fixed status bar
         return get_page(
@@ -1084,7 +1201,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             # sticky: the menus stay at hand however long the form is
             '<header class="navbar sticky top-0 z-20 min-h-14 gap-3 border-b border-base-300'
             ' bg-base-100 px-4">'
-            f"{self._brand_html()}"
+            f"{self._brand_html()}{toolbar}"
             '<nav class="ml-auto flex items-center gap-1">'
             f"{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
@@ -1142,7 +1259,9 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "log": WebLogRenderer,
     "main": WebMainRenderer,
     "menu": WebMenuRenderer,
+    "page": WebPageRenderer,
     "radio_group": WebRadioGroupRenderer,
+    "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,

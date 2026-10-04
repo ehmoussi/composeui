@@ -15,8 +15,10 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QStackedWidget,
     QStatusBar,
     QStyle,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -38,6 +40,8 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    PageView,
+    Router,
     SeparatorAction,
     StatusBar,
     View,
@@ -669,6 +673,95 @@ class QtGroupFormRenderer(QtFormRenderer):
             rendered_object.setTitle(value)
 
 
+def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
+    """Add `view`'s widget to a column of content: a window's, or a page's."""
+    if not isinstance(view.renderer, QtWidgetRenderer):
+        return
+    widget = view.renderer.qt_object
+    if not isinstance(widget, QWidget):
+        return
+    if isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
+        # a plain form insets its rows with its own layout's margins, and a page its views
+        layout.addWidget(widget)
+    else:
+        # inset like a plain form's rows
+        inset = QVBoxLayout()
+        style = widget.style()
+        left = style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin)
+        right = style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin)
+        inset.setContentsMargins(left, 0, right, 0)
+        inset.addWidget(widget)
+        layout.addLayout(inset)
+
+
+class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
+    """A page's views in a column, laid out like the window's own."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QVBoxLayout(self._rendered_object)
+            # the window's layout already insets the page
+            layout.setContentsMargins(0, 0, 0, 0)
+            for view in self._view.content_views:
+                _add_content_widget(layout, view)
+            layout.addStretch()
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: PageView, rendered_object: QWidget) -> None:
+        pass  # a page has no user-editable state of its own
+
+
+class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
+    """The pages, stacked, and a toolbar of their actions that the window docks.
+
+    Each page sits in a slot of its own: the stack shows and hides its slots, which
+    leaves the page's own `is_visible` to the page.
+    """
+
+    def __init__(self, view: Router) -> None:
+        super().__init__(view)
+        #: the toolbar of the pages' actions, docked by the main window
+        self.toolbar: QToolBar | None = None
+        self._slots: dict[str, QWidget] = {}
+        self._refresh_dispatcher.update({"current_route": self._refresh_current_route})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QStackedWidget()
+            self.toolbar = QToolBar()
+            self.toolbar.setMovable(False)
+            self.toolbar.toggleViewAction().setVisible(False)  # no way to close it
+            for page in self._view.pages:
+                if not isinstance(page.action.renderer, QtActionRenderer):
+                    continue
+                page.action.renderer.set_parent_rendered_object(self.toolbar)
+                page.action.renderer.render()
+                action = page.action.renderer.qt_object
+                if action is not None:
+                    self.toolbar.addAction(action)
+                slot = QWidget()
+                slot_layout = QVBoxLayout(slot)
+                slot_layout.setContentsMargins(0, 0, 0, 0)
+                if isinstance(page.renderer, QtPageRenderer) and page.renderer.qt_object:
+                    slot_layout.addWidget(page.renderer.qt_object)
+                self._slots[page.route] = slot
+                self._rendered_object.addWidget(slot)
+            self.refresh()
+
+    def _refresh_current_route(
+        self, _view: Router, rendered_object: QStackedWidget, value: str
+    ) -> None:
+        slot = self._slots.get(value)
+        if slot is not None:
+            rendered_object.setCurrentWidget(slot)
+
+    @staticmethod
+    def _update_state(view: Router, rendered_object: QStackedWidget) -> None:
+        pass  # navigation goes through the pages' actions, never the stack itself
+
+
 class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
@@ -753,21 +846,14 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
                 status_bar_obj = child_view.renderer.qt_object
                 if isinstance(status_bar_obj, QStatusBar):
                     rendered_object.setStatusBar(status_bar_obj)
-            elif isinstance(child_view.renderer, QtWidgetRenderer):
-                child_rendered_object = child_view.renderer.qt_object
-                if not isinstance(child_rendered_object, QWidget):
-                    continue
-                if isinstance(child_view, FormView) and not isinstance(child_view, GroupFormView):
-                    central_layout.addWidget(child_rendered_object)
-                else:
-                    # inset like a plain form's rows, which its own layout's margins inset
-                    inset = QVBoxLayout()
-                    style = central_widget.style()
-                    left = style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin)
-                    right = style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin)
-                    inset.setContentsMargins(left, 0, right, 0)
-                    inset.addWidget(child_rendered_object)
-                    central_layout.addLayout(inset)
+            elif isinstance(child_view.renderer, QtRouterRenderer):
+                toolbar = child_view.renderer.toolbar
+                stack = child_view.renderer.qt_object
+                if toolbar is not None and stack is not None:
+                    rendered_object.addToolBar(toolbar)
+                    central_layout.addWidget(stack)
+            else:
+                _add_content_widget(central_layout, child_view)
         central_layout.addStretch()
         central_layout.update()
         rendered_object.setCentralWidget(central_widget)
@@ -960,7 +1046,9 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "log": QtLogRenderer,
     "main": QtMainRenderer,
     "menu": QtMenuRenderer,
+    "page": QtPageRenderer,
     "radio_group": QtRadioGroupRenderer,
+    "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,

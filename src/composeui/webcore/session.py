@@ -25,6 +25,7 @@ from composeui.webcore.webrenderer import (
     WebMainRenderer,
     collect_dirty,
     handle_event,
+    page_path,
     render_dirty,
     rendering_into,
 )
@@ -32,7 +33,7 @@ from composeui.webcore.webrenderer import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from composeui.core.view import MainView
+    from composeui.core.view import MainView, Router
 
 
 #: largest state file accepted from an upload, in bytes
@@ -67,19 +68,51 @@ class WebSession(RenderTarget):
                 # its fragments are dropped: the caller answers with a download or a reload
                 handle_event(renderer, "triggered", {})
 
+    @property
+    def _router(self) -> Router | None:
+        renderer = self.main_view.renderer
+        return renderer.router if isinstance(renderer, WebMainRenderer) else None
+
+    def home_path(self) -> str | None:
+        """Get the address of the first page; None for an app without pages."""
+        router = self._router
+        if router is None or len(router.pages) == 0:
+            return None
+        return page_path(router.pages[0].route)
+
+    def open_route(self, route: str) -> bool:
+        """Show the page on `route`, as its address asks; False if no page has it."""
+        with self.lock, collect_dirty():  # the whole page is sent: drop the fragments
+            router = self._router
+            if router is None or router.page(route) is None:
+                return False
+            router.navigate(route)
+            return True
+
     def page_html(self) -> str:
         with self.lock:
             if not isinstance(self.main_view.renderer, WebMainRenderer):
                 raise NoRenderedObjectError
             return self.main_view.renderer.page_html()
 
-    def handle_event(self, widget_id: str, event: str, form: Mapping[str, str]) -> str | None:
-        """Apply a browser event to one of this session's widgets; None if it isn't one."""
+    def handle_event(
+        self, widget_id: str, event: str, form: Mapping[str, str]
+    ) -> tuple[str, str | None] | None:
+        """Apply a browser event to one of this session's widgets; None if it isn't one.
+
+        Returns the fragments the event changed, and the address of the page it
+        navigated to, if it did (e.g. a toolbar link, or an app's own `navigate`).
+        """
         with self.lock:
             renderer = self.renderers.get(widget_id)
             if renderer is None:
                 return None
-            return handle_event(renderer, event, form)
+            router = self._router
+            route = None if router is None else router.current_route
+            body = handle_event(renderer, event, form)
+            if router is None or router.current_route == route:
+                return body, None
+            return body, page_path(router.current_route)
 
     def save_state(self) -> tuple[str, str]:
         """Return a download name and the JSON of the session's state (`save_state`'s)."""

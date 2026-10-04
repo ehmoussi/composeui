@@ -8,6 +8,9 @@ _PAGE = Template("""<!DOCTYPE html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>$title</title>
+<!-- no copies of past pages: going back or forward reloads the page from the server,
+     whose state they would contradict, at the address of a page of the app -->
+<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}' />
 <script src="/static/htmx.min.js"></script>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="/static/app.css" rel="stylesheet" type="text/css" />

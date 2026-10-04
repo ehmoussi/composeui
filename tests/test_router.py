@@ -5,47 +5,8 @@ from pathlib import Path
 import pytest
 from attrs import Factory
 
-from composeui.core.view import (
-    CONVERTER,
-    InputView,
-    MainView,
-    PageView,
-    Router,
-    define_view,
-)
-
-
-@define_view
-class _InputsPage(PageView):
-    name: InputView = Factory(InputView)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("inputs")
-        self.title = "Inputs"
-
-
-@define_view
-class _ResultsPage(PageView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("results")
-        self.title = "Results"
-
-
-@define_view
-class _Router(Router):
-    inputs: _InputsPage = Factory(_InputsPage)
-    results: _ResultsPage = Factory(_ResultsPage)
-
-
-@define_view
-class _PagesMainView(MainView):
-    router: _Router = Factory(_Router)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Pages", extension=".pages")
+from composeui.core.view import CONVERTER, PageView, Router, define_view
+from tests.pages import InputsPage, PagesMainView, PagesRouter
 
 
 def _checked_routes(router: Router) -> list[str]:
@@ -53,7 +14,7 @@ def _checked_routes(router: Router) -> list[str]:
 
 
 def test_triggering_a_page_action_shows_its_page() -> None:
-    router = _Router()
+    router = PagesRouter()
     shown: list[str] = []
     router.route_changed.connect(shown.append)
     assert router.current_route == "inputs"
@@ -70,7 +31,7 @@ def test_triggering_a_page_action_shows_its_page() -> None:
 
 
 def test_navigating_to_an_unknown_route_is_rejected() -> None:
-    router = _Router()
+    router = PagesRouter()
     with pytest.raises(ValueError, match="'settings'"):
         router.navigate("settings")
     assert router.current_route == "inputs"
@@ -100,8 +61,8 @@ class _SlashedRouter(Router):
 
 @define_view
 class _TwiceRouter(Router):
-    first: _InputsPage = Factory(_InputsPage)
-    second: _InputsPage = Factory(_InputsPage)
+    first: InputsPage = Factory(InputsPage)
+    second: InputsPage = Factory(InputsPage)
 
 
 @pytest.mark.parametrize(
@@ -120,7 +81,7 @@ def test_a_router_rejects_a_missing_invalid_or_repeated_route(
 
 
 def test_the_shown_page_is_never_saved_loaded_or_reset(tmp_path: Path) -> None:
-    main_view = _PagesMainView()
+    main_view = PagesMainView()
     main_view.router.inputs.name.text = "pipe"
     main_view.router.navigate("results")
     filepath = tmp_path / "study.pages"
@@ -132,7 +93,7 @@ def test_the_shown_page_is_never_saved_loaded_or_reset(tmp_path: Path) -> None:
     assert main_view.router.current_route == "results"
     assert _checked_routes(main_view.router) == ["results"]
 
-    other = _PagesMainView()
+    other = PagesMainView()
     other.load_state(filepath)
     assert other.router.inputs.name.text == "pipe"
     assert other.router.current_route == "inputs"

@@ -28,8 +28,10 @@ from composeui.textualcore.textualrenderer import (
     TextualWidgetRenderer,
 )
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
+from tests.pages import PagesMainView
 
 
 def _field_widget(
@@ -462,3 +464,39 @@ async def test_open_file_action_can_be_cancelled_without_hanging() -> None:
 
         assert len(app.screen_stack) == 1
         assert view.file_view.filepath is None
+
+
+@pytest.mark.asyncio
+async def test_the_toolbar_shows_one_page_at_a_time() -> None:
+    view = PagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    name = view.router.inputs.name.renderer
+    total = view.router.results.total.renderer
+    assert isinstance(name, TextualWidgetRenderer)
+    assert isinstance(total, TextualWidgetRenderer)
+    assert name.widget is not None
+    assert total.widget is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        buttons = {str(button.label): button for button in app.query(ComposeToolbarButton)}
+        assert list(buttons) == ["Inputs", "Results"]
+        assert buttons["Inputs"].variant == "primary"
+        assert name.widget.region.height > 0
+        assert total.widget.region.height == 0
+
+        await pilot.click(buttons["Results"])
+        await pilot.pause()
+        assert view.router.current_route == "results"
+        assert total.widget.region.height > 0
+        assert name.widget.region.height == 0
+        assert buttons["Results"].variant == "primary"
+        assert buttons["Inputs"].variant == "default"
+
+        view.router.navigate("inputs")  # from app code
+        await pilot.pause()
+        assert name.widget.region.height > 0
+        assert buttons["Inputs"].variant == "primary"
