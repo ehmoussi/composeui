@@ -648,8 +648,8 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
         return (
             f"<footer {self._root_attributes(oob=oob)}{self._auto_clear_attributes()}"
             ' role="status" aria-live="polite"'
-            ' class="fixed inset-x-0 bottom-0 min-h-8 border-t border-base-300 bg-base-100'
-            ' px-4 py-1 text-sm">'
+            ' class="status-bar fixed inset-x-0 bottom-0 z-20 flex min-h-9 items-center gap-2'
+            ' border-t border-base-300 px-4 text-sm">'
             f"{html.escape(self._view.message)}"
             "</footer>"
         )
