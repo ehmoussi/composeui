@@ -210,6 +210,7 @@ def test_page_shows_the_form_and_docks_an_empty_status_bar(
     classes = set((status_bar.attributes["class"] or "").split())
     assert status_bar.tag == "footer"
     assert status_bar.text == ""
+    assert status_bar.descendants == []
     # a status line docked at the bottom, not a coloured callout showing even when empty
     assert {"fixed", "inset-x-0", "bottom-0"} <= classes
     assert "alert" not in classes
@@ -610,9 +611,8 @@ def test_replacing_the_values_rerenders_the_options(main_view: HelloMainView) ->
     assert list(dirty) == [renderer.widget_id]
     assert style.value is None
     group = _element(renderer.to_html(), renderer.widget_id)
-    assert [
-        attributes["value"] for _, attributes in group.descendants if "value" in attributes
-    ] == ["Casual"]
+    radios = [attributes for tag, attributes in group.descendants if tag == "input"]
+    assert [radio.get("value") for radio in radios] == ["Casual"]
     assert _selected(group) == []
 
 
@@ -1233,3 +1233,56 @@ def _assert_shows_the_tee_study(page: str, form: Any) -> None:
     assert "hidden" in _element(page, _widget_id(form.log_view.renderer)).attributes
     assert form.name.text == "Tee"
     assert form.main_pipe.radius.value == 60.0
+
+
+def test_the_page_loads_nothing_from_another_host(client: TestClient) -> None:
+    """Styles and scripts are served by the app itself, so it also works offline."""
+    page = client.get("/").text
+
+    assert re.findall(r'(?:src|href)="(?:https?:)?//[^"]*"', page) == []
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
+    main_view: HelloMainView, client: TestClient, pipe_client: TestClient
+) -> None:
+    """Catches a class added in Python without rebuilding `static/app.css` (`make css`)."""
+    markup = [client.get("/").text, pipe_client.get("/").text]
+    for log_type in LogType:  # each log colour
+        log = LogView(log_message="x", log_type=log_type)
+        log.render(RendererType.WEB)
+        assert isinstance(log.renderer, WebRenderer)
+        markup.append(log.renderer.to_html())
+    main_view.file_menu.new.is_enabled = False  # a disabled menu item
+    markup.append(client.get("/").text)
+    classes = {
+        name
+        for page in markup
+        for value in re.findall(r'class="([^"]*)"', page)
+        for name in value.split()
+    }
+    stylesheet = client.get("/static/app.css").text
+
+    missing = sorted(
+        name for name in classes if not re.search(rf"\.{re.escape(name)}(?![\w-])", stylesheet)
+    )
+    assert len(classes) > 40
+    assert missing == []
+
+
+def test_form_fields_are_linked_to_their_label_and_message(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    """Screen readers read a row's message with its field, and know when it's invalid."""
+    form = main_view.form
+    page = client.get("/").text
+
+    name = _element(page, _field_id(form.name))
+    assert name.attributes["aria-describedby"] == _widget_id(_part(form.name, "log"))
+    assert name.attributes["aria-invalid"] == "true"  # starts on "A name is mandatory"
+    age = _element(page, _field_id(form.age))
+    assert age.attributes["aria-describedby"] == _widget_id(_part(form.age, "log"))
+    assert "aria-invalid" not in age.attributes
+    # `<label for>` can't name a radio group's `<div>`: the group points at its label
+    style = _element(page, _field_id(form.style))
+    assert style.attributes["aria-labelledby"] == _widget_id(_part(form.style, "label"))

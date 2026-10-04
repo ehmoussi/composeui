@@ -32,6 +32,27 @@ check: lint mypy
 test:
 	QT_QPA_PLATFORM=offscreen uv run pytest tests --cov=src --cov-report=term-missing:skip-covered
 
+# Tailwind's standalone CLI and daisyUI's plugin files: no Node/npm needed. Downloaded
+# once into css/vendor/ (not committed); the built static/app.css is committed.
+TAILWIND_VERSION := 4.3.3
+DAISYUI_VERSION := 5.7.47
+CSS_VENDOR := css/vendor
+TAILWIND := $(CSS_VENDOR)/tailwindcss-$(TAILWIND_VERSION)
+DAISYUI := $(CSS_VENDOR)/daisyui.mjs
+
+$(TAILWIND):
+	mkdir -p $(CSS_VENDOR)
+	curl -sSfL -o $@ https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-linux-x64
+	chmod +x $@
+
+$(DAISYUI):
+	mkdir -p $(CSS_VENDOR)
+	curl -sSfL -o $@ https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui.mjs
+
+.PHONY: css
+css: $(TAILWIND) $(DAISYUI)
+	$(TAILWIND) -i css/app.css -o src/composeui/webcore/static/app.css --minify
+
 .PHONY: clean
 clean:
 	rm -rf `find . -name __pycache__`

@@ -13,3 +13,5 @@ wheels/
 *.coverage
 
 *.pipe
+# downloaded by `make css`, not committed
+css/vendor/

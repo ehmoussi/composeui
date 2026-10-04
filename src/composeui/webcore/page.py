@@ -9,18 +9,8 @@ _PAGE = Template("""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>$title</title>
 <script src="/static/htmx.min.js"></script>
-<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<style>
-/* a field followed by a log showing an error is invalid too; text the browser itself
-   rejects (a float field's pattern) as well, once the user has interacted with it */
-.input:has(+ [data-log="error"]:not([hidden])),
-.select:has(+ [data-log="error"]:not([hidden])),
-.input:user-invalid {
-  --input-color: var(--color-error);
-  border-color: var(--color-error);
-}
-</style>
+<!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
+<link href="/static/app.css" rel="stylesheet" type="text/css" />
 <script>
 /* menu shortcuts: Alt+Shift+<key> clicks the item marked with that key. Matched on the
    physical key (`code`), so it works whatever character the keyboard layout, or the
@@ -31,6 +21,22 @@ document.addEventListener("keydown", function (event) {
   if (item === null) return;
   event.preventDefault();
   item.click();
+});
+/* keeps each form field's aria-invalid in step with its log: while typing, only the log
+   is swapped, never the field. Watches the DOM, so it runs after every htmx swap. */
+function syncInvalidFields() {
+  document.querySelectorAll("[data-log]").forEach(function (log) {
+    var field = document.querySelector('[aria-describedby="' + log.id + '"]');
+    if (field === null) return;
+    if (log.dataset.log === "error" && !log.hidden) field.setAttribute("aria-invalid", "true");
+    else field.removeAttribute("aria-invalid");
+  });
+}
+document.addEventListener("DOMContentLoaded", function () {
+  new MutationObserver(syncInvalidFields).observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 });
 </script>
 </head>
