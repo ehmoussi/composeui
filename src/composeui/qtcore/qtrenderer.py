@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (
     QMainWindow,
     QMenu,
     QStatusBar,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -578,9 +579,6 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
             else:
                 self._rendered_object = QWidget()
             layout = QFormLayout()
-            if not isinstance(self._view, GroupFormView):
-                # no frame of its own: its rows line up with the window's other widgets
-                layout.setContentsMargins(0, 0, 0, 0)
             self._rendered_object.setLayout(layout)
             for field_row in self._view.field_rows:
                 if isinstance(field_row, FormRowView) and isinstance(
@@ -757,8 +755,19 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
                     rendered_object.setStatusBar(status_bar_obj)
             elif isinstance(child_view.renderer, QtWidgetRenderer):
                 child_rendered_object = child_view.renderer.qt_object
-                if isinstance(child_rendered_object, QWidget):
+                if not isinstance(child_rendered_object, QWidget):
+                    continue
+                if isinstance(child_view, FormView) and not isinstance(child_view, GroupFormView):
                     central_layout.addWidget(child_rendered_object)
+                else:
+                    # inset like a plain form's rows, which its own layout's margins inset
+                    inset = QVBoxLayout()
+                    style = central_widget.style()
+                    left = style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin)
+                    right = style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin)
+                    inset.setContentsMargins(left, 0, right, 0)
+                    inset.addWidget(child_rendered_object)
+                    central_layout.addLayout(inset)
         central_layout.addStretch()
         central_layout.update()
         rendered_object.setCentralWidget(central_widget)
