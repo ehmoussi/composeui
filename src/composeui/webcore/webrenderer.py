@@ -26,7 +26,15 @@ from composeui.core.renderer import (
     RendererContainer,
     ViewLike,
 )
-from composeui.core.view import FormLabelRowView, LogType, MainView, StatusBar
+from composeui.core.view import (
+    FormLabelRowView,
+    FormRowView,
+    FormView,
+    GroupFormView,
+    LogType,
+    MainView,
+    StatusBar,
+)
 from composeui.webcore.page import get_page
 
 if TYPE_CHECKING:
@@ -500,6 +508,70 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
         )
 
 
+class WebFormRenderer(WebRenderer[FormView]):
+    """A form: each row's label, field and log stacked together, then the form's log.
+
+    A `<fieldset>`, so disabling the form disables every control in it, as disabling a
+    Qt container disables its children. Rows have no fragment of their own: each of a
+    row's renderers hides itself when the row does, and swaps on its own.
+    """
+
+    _role = "form"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-4", legend="")
+
+    def _fieldset(self, *, oob: bool, classes: str, legend: str) -> str:
+        disabled = "" if self._view.is_enabled else " disabled"
+        rows = "".join(self._row_html(row) for row in self._view.field_rows)
+        return (
+            f'<fieldset {self._root_attributes(oob=oob)} class="{classes}"{disabled}>'
+            f"{legend}{rows}{self._fragment(self._view.log_view.renderer)}</fieldset>"
+        )
+
+    def _row_html(self, row: FormRowView | FormView) -> str:
+        if isinstance(row, FormView):
+            return self._fragment(row.renderer)
+        if not isinstance(row.renderer, RendererContainer):
+            return ""  # this backend doesn't support the row's field
+        parts = ["label", "field", "log"] if isinstance(row, FormLabelRowView) else ["field", "log"]
+        # field right before log: the page's stylesheet marks a field followed by an error
+        return (
+            '<div class="flex flex-col gap-1">'
+            f"{''.join(self._row_part(row.renderer, part) for part in parts)}</div>"
+        )
+
+    def _row_part(self, row_renderer: RendererContainer[Any], part: str) -> str:
+        try:
+            renderer = row_renderer.get_renderer(part)
+        except KeyError as e:
+            msg = f"The {part} renderer is missing in a row of the form {self._view}"
+            raise ValueError(msg) from e
+        return self._fragment(renderer)
+
+    @staticmethod
+    def _fragment(renderer: Any) -> str:
+        return renderer.to_html() if isinstance(renderer, WebRenderer) else ""
+
+
+class WebGroupFormRenderer(WebFormRenderer):
+    """A titled group of rows, e.g. `pipeform.py`'s "Main Pipe"."""
+
+    _role = "group_form"
+
+    def __init__(self, view: GroupFormView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._mark_dirty})
+
+    def to_html(self, *, oob: bool = False) -> str:
+        title = self._view.title if isinstance(self._view, GroupFormView) else ""
+        return self._fieldset(
+            oob=oob,
+            classes="fieldset min-w-0 gap-4 rounded-box border border-base-300 bg-base-200 p-4",
+            legend=f'<legend class="fieldset-legend">{html.escape(title)}</legend>',
+        )
+
+
 class WebStatusBarRenderer(WebRenderer[StatusBar]):
     _role = "status_bar"
 
@@ -611,7 +683,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "combobox": WebComboboxRenderer,
     "float_input": WebFloatInputRenderer,
+    "form": WebFormRenderer,
     "form_label": WebFormLabelRenderer,
+    "group_form": WebGroupFormRenderer,
     "input": WebInputRenderer,
     "label": WebLabelRenderer,
     "log": WebLogRenderer,

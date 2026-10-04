@@ -16,6 +16,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtapplication import QtApplication
 from composeui.textualcore.textualapplication import TextualApplication
+from composeui.webcore.webapplication import WebApplication
 
 
 @define_view
@@ -219,9 +220,15 @@ class TextualPipeApp(TextualApplication[PipeMainView]):
         super().__init__(main_view=main_view)
 
 
+class WebPipeApp(WebApplication[PipeMainView]):
+    def __init__(self) -> None:
+        super().__init__(build_main_view=PipeMainView)
+
+
 def main() -> None:
-    app = QtPipeApp()
+    # app = QtPipeApp()
     # app = TextualPipeApp()
+    app = WebPipeApp()
     app.run()
 
 
