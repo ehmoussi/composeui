@@ -11,6 +11,16 @@ _PAGE = Template("""<!DOCTYPE html>
 <script src="/static/htmx.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style>
+/* a field followed by a log showing an error is invalid too; text the browser itself
+   rejects (a float field's pattern) as well, once the user has interacted with it */
+.input:has(+ [data-log="error"]:not([hidden])),
+.select:has(+ [data-log="error"]:not([hidden])),
+.input:user-invalid {
+  --input-color: var(--color-error);
+  border-color: var(--color-error);
+}
+</style>
 </head>
 
 <body class="bg-base-200 min-h-screen">

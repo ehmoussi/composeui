@@ -9,6 +9,7 @@ renderers are driven directly through `handle_event`, the function the route cal
 
 from __future__ import annotations
 
+import enum
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -24,6 +25,7 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
     LabelRowFloatInputView,
     LabelRowInputView,
+    LabelRowRadioGroupView,
     LabelView,
     LogType,
     LogView,
@@ -36,13 +38,14 @@ from composeui.webcore.webrenderer import (
     WebInputRenderer,
     WebLabelRenderer,
     WebLogRenderer,
+    WebRadioGroupRenderer,
     WebRenderer,
     WebStatusBarRenderer,
     collect_dirty,
     handle_event,
     render_dirty,
 )
-from examples.webhello import HelloApp
+from examples.webhello import Colour, GreetingStyle, HelloApp
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -147,6 +150,29 @@ def test_age_is_validated_and_summarised(app: HelloApp, client: TestClient) -> N
 
     assert main_view.age_log.log_message == ""
     assert main_view.summary.text == "Nobody is 41 years old."
+
+
+def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
+    app: HelloApp, client: TestClient
+) -> None:
+    main_view = app.main_view
+    age_id = _widget_id(main_view.age.renderer)
+    finished: list[None] = []
+
+    def on_finished() -> None:
+        finished.append(None)
+
+    main_view.age.editing_finished.connect(on_finished)
+    client.post(f"/widget/{age_id}", data={"value": "4", "event": "input"})
+    client.post(f"/widget/{age_id}", data={"value": "4a", "event": "input"})
+
+    body = client.post(f"/widget/{age_id}", data={"value": "4a", "event": "change"}).text
+
+    # the field, otherwise never swapped back, now shows the age its messages describe
+    assert main_view.age.value == 4.0
+    assert f'<input id="{age_id}" hx-swap-oob="true"' in body
+    assert 'value="4.0"' in body
+    assert finished == []
 
 
 def test_change_event_applies_the_text_and_finishes_editing_once(
@@ -270,12 +296,27 @@ class _NameRowView(LabelRowInputView):
         return "A name is mandatory" if self.text == "" else None
 
 
+class _Shape(enum.Enum):
+    ROUND = "Round"
+    SQUARE = "Square"
+
+
+@define_view
+class _ShapeRowView(LabelRowRadioGroupView[_Shape]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = "Shape"
+        self.values = {shape.value: shape for shape in _Shape}
+        self.value = _Shape.ROUND
+
+
 @define_view
 class _RowsMainView(MainView):
     name: _NameRowView = Factory(_NameRowView)
     length: LabelRowFloatInputView = Factory(LabelRowFloatInputView)
     note: LabelView = Factory(LabelView)
     form_log: LogView = Factory(LogView)
+    shape: _ShapeRowView = Factory(_ShapeRowView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -408,6 +449,8 @@ def test_log_is_hidden_when_empty_and_coloured_by_type(rows: _RowsMainView) -> N
     fragment = renderer.to_html()
     assert "hidden" not in fragment
     assert "text-warning" in fragment
+    # the hook the page's stylesheet uses to mark the field before an error log
+    assert 'data-log="warning"' in fragment
     assert "whitespace-pre-line" in fragment
     assert "- first\n- second" in fragment
 
@@ -421,3 +464,159 @@ def test_label_renders_escaped_text(rows: _RowsMainView) -> None:
 
     assert list(dirty) == [renderer.widget_id]
     assert renderer.to_html() == f'<span id="{renderer.widget_id}">&lt;b&gt;bold&lt;/b&gt;</span>'
+
+
+def test_page_renders_the_choices(app: HelloApp, client: TestClient) -> None:
+    page = client.get("/").text
+    style_id = _widget_id(app.main_view.style.renderer)
+    colour_id = _widget_id(app.main_view.colour.renderer)
+
+    assert f'<div id="{style_id}" role="radiogroup"' in page
+    assert page.count('type="radio" class="radio radio-sm" value="') == 2
+    assert f'value="Casual" checked name="{style_id}"' in page
+    assert f'value="Formal" name="{style_id}"' in page
+    # nothing chosen yet: the combobox starts on its empty choice
+    assert f'<select id="{colour_id}"' in page
+    assert '<option value="" selected></option><option value="Red">Red</option>' in page
+
+
+def test_choosing_a_style_regreets_without_swapping_the_radio_group(
+    app: HelloApp, client: TestClient
+) -> None:
+    main_view = app.main_view
+    input_id = _widget_id(main_view.greeting.renderer)
+    style_id = _widget_id(main_view.style.renderer)
+    client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
+
+    body = client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"}).text
+
+    assert main_view.style.value is GreetingStyle.FORMAL
+    assert main_view.status_bar.message == "Good day, Bob."
+    assert "Good day, Bob." in body
+    assert style_id not in body
+
+
+def test_choosing_a_colour_updates_the_summary(app: HelloApp, client: TestClient) -> None:
+    main_view = app.main_view
+    colour_id = _widget_id(main_view.colour.renderer)
+
+    body = client.post(f"/widget/{colour_id}", data={colour_id: "Blue", "event": "change"}).text
+
+    assert main_view.colour.value is Colour.BLUE
+    assert "and likes blue." in body
+    assert colour_id not in body
+
+    # the empty choice clears the colour again
+    client.post(f"/widget/{colour_id}", data={colour_id: "", "event": "change"})
+
+    assert main_view.colour.value is None
+    assert main_view.summary.text == "Nobody hasn't said how old they are."
+
+
+def test_an_unknown_label_clears_the_value_instead_of_failing(
+    app: HelloApp, client: TestClient
+) -> None:
+    main_view = app.main_view
+    colour_id = _widget_id(main_view.colour.renderer)
+    main_view.colour.value = Colour.RED
+
+    response = client.post(f"/widget/{colour_id}", data={colour_id: "Purple", "event": "change"})
+
+    assert response.status_code == 200
+    assert main_view.colour.value is None
+
+
+def test_choosing_the_current_value_again_does_not_re_emit(
+    app: HelloApp, client: TestClient
+) -> None:
+    style = app.main_view.style
+    style_id = _widget_id(style.renderer)
+    emitted: list[GreetingStyle | None] = []
+
+    def on_changed(value: GreetingStyle | None) -> None:
+        emitted.append(value)
+
+    style.value_changed.connect(on_changed)
+
+    for _ in range(2):
+        client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"})
+
+    assert emitted == [GreetingStyle.FORMAL]
+
+
+def test_replacing_the_values_rerenders_the_options(app: HelloApp) -> None:
+    app.create_starlette_app()
+    style = app.main_view.style
+    renderer = style.renderer
+    assert isinstance(renderer, WebRadioGroupRenderer)
+    style.value = GreetingStyle.FORMAL
+
+    with collect_dirty() as dirty:
+        # drops the current value, which `_reconcile_values` clears
+        style.values = {"Casual": GreetingStyle.CASUAL}
+
+    assert list(dirty) == [renderer.widget_id]
+    assert style.value is None
+    fragment = renderer.to_html()
+    assert "Formal" not in fragment
+    assert "checked" not in fragment
+
+
+def test_a_disabled_radio_group_disables_every_radio(app: HelloApp) -> None:
+    app.create_starlette_app()
+    style = app.main_view.style
+    assert isinstance(style.renderer, WebRadioGroupRenderer)
+
+    style.is_enabled = False
+
+    assert style.renderer.to_html().count(" disabled>") == 2
+
+
+def test_a_radio_row_label_does_not_point_at_the_group(rows: _RowsMainView) -> None:
+    label, field = _part(rows.shape, "label"), _part(rows.shape, "field")
+
+    assert "for=" not in label.to_html()
+    assert f'name="{field.widget_id}"' in field.to_html()
+
+    handle_event(field, "change", {field.widget_id: "Square"})
+
+    assert rows.shape.value is _Shape.SQUARE
+
+
+def test_a_timed_message_makes_the_status_bar_fetch_itself_after_the_timeout(
+    app: HelloApp,
+) -> None:
+    app.create_starlette_app()
+    status_bar = app.main_view.status_bar
+    renderer = status_bar.renderer
+    assert isinstance(renderer, WebStatusBarRenderer)
+    status_bar.timeout = 3.0
+
+    assert "hx-get" not in renderer.to_html()  # nothing to clear yet
+
+    status_bar.message = "Saved"
+
+    fragment = renderer.to_html()
+    assert f'hx-get="/widget/{renderer.widget_id}"' in fragment
+    assert 'hx-trigger="load delay:3250ms"' in fragment
+    assert 'hx-swap="outerHTML"' in fragment
+
+    status_bar.timeout = 0  # a message that never times out needs no fetch
+    assert "hx-get" not in renderer.to_html()
+
+
+def test_fetching_a_widget_returns_its_current_fragment(app: HelloApp, client: TestClient) -> None:
+    status_bar = app.main_view.status_bar
+    status_bar_id = _widget_id(status_bar.renderer)
+    status_bar.timeout = 3.0
+    status_bar.message = "Hello, Bob!"
+    # what `show_message`'s timer does on the server, outside any request
+    status_bar.clear_message()
+
+    response = client.get(f"/widget/{status_bar_id}")
+
+    assert response.status_code == 200
+    assert response.text.startswith(f'<footer id="{status_bar_id}" role="status"')
+    assert "Hello, Bob!" not in response.text
+    assert "hx-get" not in response.text
+    assert client.get("/widget/cui-0-status_bar").status_code == 404
