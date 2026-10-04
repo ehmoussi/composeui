@@ -787,9 +787,15 @@ with stdlib `html.escape`.
       99%, `webrenderer.py` 96%, `page.py`/`webapplication.py` 100% (bar: 86%). The
       README's dev sync line now installs every extra (`--all-extras`), like AGENTS.md;
       `make all` is clean.
-    - **Not done yet:** rewriting the earlier tests onto the helper and pruning the ones
-      the scenario now duplicates. That is a campaign over all web tests, which the
-      test-audit skill only starts from a per-test inventory approved first.
+    - **Test campaign (approved inventory), three commits, tests only:** five tests
+      deleted because stronger tests own their contracts (each owner proven by breaking
+      production and watching it fail; the age test gained a message-only change no
+      test owned before), four merged into their owners (the hello page structure,
+      escaping of an input value and a label's text, the pipe form's first page and its
+      "typing alone doesn't run the cross-field check" step), and thirteen rewritten
+      onto the HTML helper instead of raw-markup substrings (the nested-fragment test
+      now uses a real pipe form group, and its test-only container renderer is gone).
+      63 web tests became 58; coverage unchanged.
 
 11. **M10 — Polish.**
     1. Swap the CDN Tailwind/daisyUI tags for a compiled `static/app.css`. Tailwind
