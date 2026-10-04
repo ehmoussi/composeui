@@ -232,3 +232,24 @@ def test_the_new_action_resets_the_main_view() -> None:
     view.file_menu.new.triggered.emit()
 
     assert view.note.text == "initial note"
+
+
+def test_load_state_restores_values_equal_to_attrs_defaults(tmp_path: Path) -> None:
+    """A saved field equal to its attrs default must still be restored on load.
+
+    `_StudyMainView` starts `note.text` at "initial note" (in `__attrs_post_init__`),
+    not at `LabelView`'s attrs default `""`: a study where the note was emptied must
+    load back empty, not with the fresh view's starting text.
+    """
+    view = _StudyMainView()
+    view.note.text = ""  # back to the attrs default, away from the starting state
+    filepath = tmp_path / "study.study"
+    view.save_state(filepath)  # `radio.is_visible` is saved at its attrs default, True
+
+    loaded = _StudyMainView()
+    # like pipeform's Fillet group, hidden at first until its option is picked
+    loaded.radio.is_visible = False
+    loaded.load_state(filepath)
+
+    assert loaded.note.text == ""
+    assert loaded.radio.is_visible is True
