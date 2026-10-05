@@ -33,9 +33,10 @@ def has_data(model: Model | None) -> bool:
 
 def new_study(main_view: MainView, model: Model | None) -> None:
     """Start a new study: the model's data and the views back to their start."""
+    main_view.reset_state()
     if model is not None:
         model.new()
-    main_view.reset_state()
+        model.loaded()
 
 
 def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
@@ -69,6 +70,8 @@ def open_study(
     """
     if model is None or model.data_name is None:
         main_view.load_state(path)
+        if model is not None:
+            model.loaded()
         return
     invalid = f"it isn't a valid {main_view.extension} file"
     try:
@@ -93,3 +96,4 @@ def open_study(
     # checked above, so it can't fail now that the model has changed
     main_view.load_state_data(data)
     main_view.state_filepath = path
+    model.loaded()

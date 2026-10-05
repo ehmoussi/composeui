@@ -19,6 +19,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
+from typing_extensions import override
 
 from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.signal import Signal
@@ -263,6 +264,8 @@ class WebApplication(Application[MainViewT]):
         for connection in self._connections:
             self._replay(connection, main_view)
         self.setup_session(main_view)
+        if model is not None:
+            self._setup_model(main_view, model)
         # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
         if self._args is not None and self._args.f is not None:
             open_study(main_view, model, self._args.f)
@@ -271,6 +274,9 @@ class WebApplication(Application[MainViewT]):
     def _new_session_model(self) -> Model | None:
         """Build a new session's model: none, unless the app has one."""
         return None
+
+    def _setup_model(self, main_view: MainViewT, model: Model) -> None:
+        """Wire a new session's model, which only an app with a model has."""
 
     def _replay(self, connection: _Connection, main_view: MainViewT) -> None:
         """Connect `connection`'s callback to this session's own view and signals.
@@ -311,5 +317,15 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
             self._record(view, signals),
         )
 
+    def setup_model(self, main_view: MainViewT, model: ModelT) -> None:
+        """Wire a new session's model to its main view; override to connect model signals.
+
+        Runs after `setup_session`, e.g. to refresh views when a `SqliteTable` changes.
+        """
+
     def _new_session_model(self) -> ModelT:
         return self._build_model()
+
+    @override
+    def _setup_model(self, main_view: MainViewT, model: Model) -> None:
+        self.setup_model(main_view, cast("ModelT", model))

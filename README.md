@@ -291,7 +291,10 @@ Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`
   views' `cattrs` converter; `as_parameters(row)` gives an instance's fields as a query's
   named parameters.
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
-  rows through it, and after New and Open, so the views showing them can follow.
+  rows through it, and after New and Open once the views are loaded too, so the views
+  showing the rows can follow: connect it once the app is built (`app.model.runs.changed`),
+  or, on the web, in `WebModelApplication.setup_model`, which gets each session's main
+  view and model.
 - **Studies.** New starts an empty database, and Save and Open (and `-f`) save and open
   the views' state and the database together, as a zip archive under the app's
   `extension`. The model works on a scratch copy in a temporary file, so the user's file

@@ -157,8 +157,6 @@ class SqliteModel(Model):
 
     def new(self) -> None:
         self._replace_database(self._new_database())
-        for table in self._tables:
-            table.changed.emit()
 
     def save_data(self, path: Path) -> None:
         target = sqlite3.connect(str(path))
@@ -186,6 +184,10 @@ class SqliteModel(Model):
             database.close()
             raise
         self._replace_database(database)
+
+    def loaded(self) -> None:
+        # every table may have changed; emitted only now, so the views refreshing read the
+        # study's views (e.g. a filter), not the ones it replaces
         for table in self._tables:
             table.changed.emit()
 
