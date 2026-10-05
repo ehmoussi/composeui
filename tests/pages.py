@@ -2,17 +2,27 @@
 
 from attrs import Factory
 
-from composeui.core.view import InputView, LabelView, MainView, PageView, Router, define_view
+from composeui.core.view import (
+    ButtonView,
+    InputView,
+    LabelView,
+    MainView,
+    PageView,
+    Router,
+    define_view,
+)
 
 
 @define_view
 class InputsPage(PageView):
     name: InputView = Factory(InputView)
+    submit: ButtonView = Factory(ButtonView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_route("inputs")
         self.title = "Inputs"
+        self.submit.text = "Submit"
 
 
 @define_view
@@ -39,3 +49,7 @@ class PagesMainView(MainView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_app_info(title="Pages", extension=".pages")
+        self.router.inputs.submit.clicked.connect(self._submit)
+
+    def _submit(self) -> None:
+        self.router.results.total.text = f"Submitted: {self.router.inputs.name.text}"

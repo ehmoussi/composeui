@@ -154,7 +154,8 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`) for the available building blocks, `PageView`/`Router` for
-an app split into [pages](#pages), and `DialogView` for [dialogs](#dialogs).
+an app split into [pages](#pages), `DialogView` for [dialogs](#dialogs), and
+`ButtonView` for a button the user clicks (`clicked`), e.g. under a form to submit it.
 
 ## Pages
 

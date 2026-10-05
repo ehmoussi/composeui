@@ -43,6 +43,7 @@ from composeui.core.view import (
     StatusBar,
     View,
 )
+from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
@@ -608,6 +609,30 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
         with self.stop_refresh():
             self._view.is_checked = is_checked
         self._view.toggled.emit(is_checked)
+
+
+class ButtonViewLike(ViewLike, Protocol):
+    text: str
+    clicked: SignalNoArgs
+
+
+class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]):
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._refresh_text})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeButton()
+            self._rendered_object.clicked.connect(self._view.clicked.emit)
+
+    @staticmethod
+    def _refresh_text(_view: ButtonViewLike, rendered_object: ComposeButton, value: str) -> None:
+        rendered_object.label = value
+
+    @staticmethod
+    def _update_state(view: ButtonViewLike, rendered_object: ComposeButton) -> None:
+        pass  # a button's text isn't user-editable; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1218,6 +1243,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 #: renderer keys of the Textual backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
+    "button": TextualButtonRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
     "dialog": TextualDialogRenderer,

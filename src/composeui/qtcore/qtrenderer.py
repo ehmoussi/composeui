@@ -404,6 +404,35 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
             self._view.is_checked = is_checked
 
 
+class ButtonViewLike(ViewLike, Protocol):
+    text: str
+    clicked: SignalNoArgs
+
+
+class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._refresh_text})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QPushButton()
+            # Qt's own `clicked` also passes the check state, which a button doesn't have
+            self._rendered_object.clicked.connect(self._emit_clicked)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_text(_view: ButtonViewLike, rendered_object: QPushButton, value: str) -> None:
+        rendered_object.setText(value)
+
+    @staticmethod
+    def _update_state(view: ButtonViewLike, rendered_object: QPushButton) -> None:
+        view.text = rendered_object.text()
+
+    def _emit_clicked(self) -> None:
+        self._view.clicked.emit()
+
+
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     rows: list[list[str]]
@@ -698,7 +727,11 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         left = style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin)
         right = style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin)
         inset.setContentsMargins(left, 0, right, 0)
-        inset.addWidget(widget)
+        if isinstance(widget, QPushButton):
+            # as wide as its text, like a form's own buttons, not the whole column
+            inset.addWidget(widget, alignment=Qt.AlignmentFlag.AlignLeft)
+        else:
+            inset.addWidget(widget)
         layout.addLayout(inset)
 
 
@@ -1128,6 +1161,7 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
 #: renderer keys of the Qt backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
+    "button": QtButtonRenderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "dialog": QtDialogRenderer,

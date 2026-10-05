@@ -25,6 +25,7 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QRadioButton,
     QStatusBar,
     QTableView,
@@ -442,6 +443,30 @@ def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     assert name.qt_object.isVisible()
     assert actions["Inputs"].isChecked()
     assert not actions["Results"].isChecked()
+
+
+def test_clicking_the_button_runs_what_its_view_connects(qtbot: QtBot) -> None:
+    view = PagesMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    inputs = view.router.inputs
+    assert isinstance(inputs.submit.renderer, QtWidgetRenderer)
+    button = inputs.submit.renderer.qt_object
+    assert isinstance(button, QPushButton)
+    assert button.text() == "Submit"
+    # as wide as its text, not the page's whole width
+    assert button.width() < window.width() / 2
+    inputs.name.text = "Ada"
+
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+
+    assert view.router.results.total.text == "Submitted: Ada"
+    inputs.submit.text = "Send"
+    assert button.text() == "Send"
 
 
 def _dialog_window(qtbot: QtBot) -> tuple[DialogsMainView, QMainWindow, QMessageBox]:

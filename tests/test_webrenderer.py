@@ -1699,6 +1699,32 @@ def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
     assert "HX-Push-Url" not in again.headers
 
 
+def test_clicking_the_button_swaps_in_what_its_view_changed(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    page = pages_client.get("/inputs").text
+    (main_view,) = pages_views
+    inputs = main_view.router.inputs
+    button_id = _widget_id(inputs.submit.renderer)
+    button = _element(page, button_id)
+    assert (button.tag, button.attributes["type"], button.text) == ("button", "button", "Submit")
+    inputs.name.text = "<Ada>"
+
+    response = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+
+    assert response.status_code == 200
+    total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
+    assert total.text == "Submitted: <Ada>"  # escaped in the markup, the text once parsed
+    assert _find(response.text, button_id) is None  # the clicked button isn't swapped back
+
+    inputs.submit.is_enabled = False
+    refused = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+    assert refused.status_code == 400
+    main_view.router.results.total.text = ""
+    pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+    assert main_view.router.results.total.text == ""
+
+
 @define_view
 class _StatePage(InputsPage):
     def __attrs_post_init__(self) -> None:
