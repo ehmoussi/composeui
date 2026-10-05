@@ -8,17 +8,18 @@ get their own. State lives in this process only: a restart starts every session 
 
 from __future__ import annotations
 
-import json
 import re
 import secrets
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
+from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError
-from composeui.core.view import CONVERTER, InvalidStateError
+from composeui.core.study import has_data, open_study, save_study
 from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
@@ -33,11 +34,14 @@ from composeui.webcore.webrenderer import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from composeui.core.model import Model
     from composeui.core.view import MainView, Router
 
 
 #: largest state file accepted from an upload, in bytes
 MAX_STATE_SIZE = 5 * 1024 * 1024
+#: largest a study's archive may unpack to, in bytes (its database compresses well)
+MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
 
 
 def safe_filename(name: str) -> str:
@@ -48,11 +52,19 @@ def safe_filename(name: str) -> str:
 class WebSession(RenderTarget):
     """A session's view tree, rendered once and then driven by its browser's requests."""
 
-    def __init__(self, main_view: MainView) -> None:
+    def __init__(self, main_view: MainView, model: Model | None = None) -> None:
         super().__init__()
         self.main_view = main_view
+        # held here: the signals giving it to callbacks only keep a weak reference
+        self.model = model
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
+
+    def close(self) -> None:
+        """Release the session's model (e.g. its database file); the session is dropped."""
+        with self.lock:
+            if self.model is not None:
+                self.model.close()
 
     @property
     def closed(self) -> bool:
@@ -114,15 +126,21 @@ class WebSession(RenderTarget):
                 return body, None
             return body, page_path(router.current_route)
 
-    def save_state(self) -> tuple[str, str]:
-        """Return a download name and the JSON of the session's state (`save_state`'s)."""
-        with self.lock:
+    def save_state(self) -> tuple[str, bytes, str]:
+        """Return a download name, the saved study (`save_study`'s) and its media type."""
+        with self.lock, tempfile.TemporaryDirectory(prefix="composeui-") as directory:
             main_view = self.main_view
             if main_view.state_filepath is not None:
                 name = main_view.state_filepath.name
             else:
                 name = f"{main_view.title.lower()}{main_view.extension}"
-            return safe_filename(name), json.dumps(CONVERTER.unstructure(main_view))
+            state_filepath = main_view.state_filepath
+            path = Path(directory, "study")
+            save_study(main_view, self.model, path)
+            # the browser's file is wherever it saves the download, not this scratch one
+            main_view.state_filepath = state_filepath
+            media_type = "application/zip" if has_data(self.model) else "application/json"
+            return safe_filename(name), path.read_bytes(), media_type
 
     def load_state(self, filename: str, content: bytes) -> str | None:
         """Load an uploaded state file; on failure, return the status bar saying why."""
@@ -140,14 +158,13 @@ class WebSession(RenderTarget):
             return f"expected a {extension} file"
         if len(content) > MAX_STATE_SIZE:
             return "the file is too large"
-        try:
-            data = json.loads(content)
-        except ValueError:
-            return f"it isn't a valid {extension} file"
-        try:
-            self.main_view.load_state_data(data)
-        except InvalidStateError as error:
-            return str(error)
+        with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+            path = Path(directory, "study")
+            path.write_bytes(content)
+            try:
+                open_study(self.main_view, self.model, path, max_size=MAX_UNPACKED_SIZE)
+            except InvalidStateError as error:
+                return str(error)
         return None
 
     def fragment(self, widget_id: str) -> str | None:
@@ -165,8 +182,10 @@ class SessionStore:
     then clears a message on a tree nothing displays any more, which is harmless.
     """
 
-    def __init__(self, build_main_view: Callable[[], MainView], *, ttl: float) -> None:
-        self._build_main_view = build_main_view
+    def __init__(
+        self, build_session: Callable[[], tuple[MainView, Model | None]], *, ttl: float
+    ) -> None:
+        self._build_session = build_session
         self._ttl = ttl
         self._sessions: dict[str, tuple[WebSession, float]] = {}
         self._lock = threading.Lock()
@@ -184,7 +203,7 @@ class SessionStore:
 
     def create(self) -> tuple[str, WebSession]:
         # built outside the store's lock: building runs app code, which may be slow
-        session = WebSession(self._build_main_view())
+        session = WebSession(*self._build_session())
         session_id = secrets.token_urlsafe(32)
         with self._lock:
             self._sessions[session_id] = (session, time.monotonic())
@@ -192,7 +211,9 @@ class SessionStore:
 
     def drop(self, session_id: Any) -> None:
         with self._lock:
-            self._sessions.pop(session_id, None)
+            entry = self._sessions.pop(session_id, None)
+        if entry is not None:
+            entry[0].close()
 
     def _drop_expired(self) -> None:
         now = time.monotonic()
@@ -202,4 +223,5 @@ class SessionStore:
             if now - last_seen >= self._ttl
         ]
         for session_id in expired:
-            del self._sessions[session_id]
+            session, _ = self._sessions.pop(session_id)
+            session.close()
