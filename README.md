@@ -281,7 +281,12 @@ Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`
 (`model.runs.add(...)`):
 
 - **Transactions.** `with self.connection() as db:` commits once the block ends and rolls
-  back if it raises; a block inside another joins it. Foreign keys are on.
+  back if it raises; a block inside another joins it.
+- **Settings.** `pragmas` is set on every study's connection, since SQLite keeps these
+  per connection rather than in the file: foreign keys and recursive triggers on, and
+  `synchronous` off, since the model's database is a scratch copy and the study file is
+  written apart. Override it to change them (`pragmas = {**SqliteModel.pragmas,
+  "cache_size": -64000}`).
 - **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
   views' `cattrs` converter; `as_parameters(row)` gives an instance's fields as a query's
   named parameters.

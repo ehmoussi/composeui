@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sqlite3
 import tempfile
 import threading
 import weakref
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar, Union, cast
 
 from composeui.core.model import InvalidStateError, Model
@@ -85,6 +87,20 @@ class SqliteModel(Model):
     schema_version: ClassVar[int] = 1
     #: by version: the function bringing a database at that version to the next one
     migrations: ClassVar[Mapping[int, Callable[[sqlite3.Connection], None]]] = {}
+    #: set on the connection of every study's database: SQLite keeps these per connection,
+    #: not in the file, and New and Open each start a connection of their own. No WAL
+    #: journal: it lets other connections read during a write, and the model has one
+    pragmas: ClassVar[Mapping[str, int | str]] = MappingProxyType(
+        {
+            "foreign_keys": "ON",
+            # the database is a scratch copy nothing reopens after a crash: waiting for the
+            # disk on every commit protects nothing, the study file is written apart
+            "synchronous": "OFF",
+            # a row replaced (`INSERT OR REPLACE`) fires its delete triggers, and a trigger
+            # may fire itself, so triggers keeping other tables up to date see every change
+            "recursive_triggers": "ON",
+        }
+    )
 
     def __init__(self) -> None:
         self._tables: list[SqliteTable] = []
@@ -153,7 +169,7 @@ class SqliteModel(Model):
             target.close()
 
     def open_data(self, path: Path) -> None:
-        database = _Database()
+        database = _Database(self.pragmas)
         try:
             source = sqlite3.connect(str(path))
             try:
@@ -177,7 +193,7 @@ class SqliteModel(Model):
         self._database.close()
 
     def _new_database(self) -> _Database:
-        database = _Database()
+        database = _Database(self.pragmas)
         db = database.connection
         for table in self._tables:
             db.executescript(table.create)
@@ -219,19 +235,31 @@ class SqliteModel(Model):
 class _Database:
     """A connection to a scratch database in a temporary file, deleted with it."""
 
-    def __init__(self) -> None:
+    def __init__(self, pragmas: Mapping[str, int | str]) -> None:
+        statements = [_pragma_statement(name, value) for name, value in pragmas.items()]
         fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
         os.close(fd)
         self.path = Path(name)
         # threads take turns through the model's lock
         self.connection = sqlite3.connect(name, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
-        self.connection.execute("PRAGMA foreign_keys = ON")
+        for statement in statements:
+            self.connection.execute(statement)
         # also when the model is dropped unclosed (e.g. an expired web session's)
         self._finalizer = weakref.finalize(self, _discard, self.connection, self.path)
 
     def close(self) -> None:
         self._finalizer()
+
+
+def _pragma_statement(name: str, value: int | str) -> str:
+    """Get the statement setting a pragma, which can't take its value as a parameter."""
+    if re.fullmatch(r"[A-Za-z_]+", name) is None or (
+        isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value) is None
+    ):
+        msg = f"Not a pragma setting: {name} = {value!r}"
+        raise ValueError(msg)
+    return f"PRAGMA {name} = {value}"
 
 
 def _discard(connection: sqlite3.Connection, path: Path) -> None:
