@@ -307,6 +307,11 @@ Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`
   refused.
 - On the web, each session's database is deleted with the session.
 
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) puts it together, on
+every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalogue of
+pipes the database checks as they're added, listed through a filtered query with their
+mass from a SQL view joining them to their material.
+
 ## Development
 
 ```bash
