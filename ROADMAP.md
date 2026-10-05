@@ -46,81 +46,17 @@ classes appear (a test fails otherwise).
 
 ## 2 — A SQLite model
 
-`Model` is an empty class today: `ModelApplication` hands it to callbacks, and nothing
-else touches it. An app's data often outgrows a form: runs and their results, a catalogue
-of parts, anything with many rows, relations between them, and queries over them. Views
-are the wrong place for it (they hold what is shown, and their state is one JSON
-document). Give the app a SQLite database of its own in the model (stdlib `sqlite3`, no
-new dependency), where it keeps that data with its own schema and its own SQL, saved and
-opened with the study.
+`SqliteModel` is in (README, "A SQLite model"): the app's tables and SQL, transactions,
+typed rows, a `changed` signal per table, and studies saved as a zip of the views' state
+and the database, checked before opening and brought up to date by migrations; on the
+web, per session. Left:
 
-1. **`SqliteModel`, the database the app works with.** The app writes its schema and its
-   queries; ComposeUI provides the connection, the transactions and the study's file,
-   not an ORM:
-   - **Tables as classes.** Each table (or group of related tables) is a class with its
-     `CREATE` SQL and the methods the app needs (`add_run`, `runs_between`,
-     `delete_part`...), registered on the model by name; the model creates them in a new
-     study. Callbacks reach them through `model`, as they do today.
-   - **Transactions.** `with self.connection() as db:` commits on exit and rolls back on
-     an exception, so a callback's writes land together or not at all. Foreign keys and
-     WAL are on; the app is free to add indexes, views and triggers.
-   - **Typed rows.** A row maps to an `attrs` class through the views' `cattrs` converter
-     (`structure(dict(row), Cls)`) and back for inserts, so a table method returns
-     `list[Run]` rather than tuples, without pydantic.
-   - **One connection per model**, shared by threads under a lock
-     (`check_same_thread=False`): a desktop study or a web session has a single user, so
-     a connection pool buys nothing. A worker thread (a long computation writing its
-     results) uses the same `connection()`.
-
-   ```python
-   @attrs.define
-   class Run:
-       id: int
-       radius: float
-       stress: float
-
-   class Runs(SqliteTable):
-       create = "CREATE TABLE run(id INTEGER PRIMARY KEY, radius REAL, stress REAL)"
-
-       def add(self, radius: float, stress: float) -> None:
-           with self.connection() as db:
-               db.execute("INSERT INTO run(radius, stress) VALUES (?, ?)", (radius, stress))
-
-       def above(self, stress: float) -> list[Run]:
-           with self.connection() as db:
-               rows = db.execute("SELECT * FROM run WHERE stress > ?", (stress,))
-               return [structure(dict(row), Run) for row in rows]
-   ```
-2. **Views and the model.** The model doesn't know the views. Callbacks move data between
-   them: a form's Apply writes rows, a table view or a chart is filled from a query. A
-   table class may emit a `Signal` after a commit that changed it, so every view showing
-   its rows can refresh without the writer knowing them.
-3. **The study's file.** Save writes the views' state and the database together, as an
-   archive (stdlib `zipfile`) of the `save_state` JSON and the database file, under the
-   app's `extension`; Open reads both back. A model without a database keeps today's
-   JSON file. Underneath:
-   - The model works on a scratch database in a temporary file, never on the user's own:
-     New starts an empty one with the tables created; Open and Save copy between it and
-     the archive with `Connection.backup` (a plain file copy loses what is still in the
-     WAL file). Save writes beside the target and renames over it, so a failed save
-     leaves the old study intact, and unsaved edits never touch it.
-   - **Opening is checked first**, like `load_state_data`: the archive's members, the
-     app name and the schema version (`PRAGMA user_version`) are checked and the view
-     state applied to a scratch main view; only then does the study replace the current
-     one. An older schema version runs the app's migrations (one function per step) on
-     the scratch copy; a newer one is refused with a status bar message.
-   - `Model` gains `new()`, `open(path)`, `save(path)` and `close()` for this, no-ops on
-     the base class so existing models keep working; `ModelApplication` wires File's
-     New, Open and Save to them and calls `close()` on exit.
-4. **Web.** Each session has its own model, so its own scratch database, deleted when
-   the session is dropped. Save streams the archive as the download; Open writes the
-   upload to a temporary file and checks it as above before swapping it in, so a bad
-   upload never half-loads.
-5. **An example and tests:** `pipeform` keeping each pipe it computes as a row, listed
-   on its Results page by the read-only table and filtered by a query; tests for the
-   transactions (a raising callback leaves no rows), typed rows, New, Save then Open round
-   trips, a failed save, an older and a newer schema, a bad file, and the web download and
-   upload.
+1. **An example:** `pipeform` keeping each pipe the user records as a row, listed on its
+   Results page by the read-only table and filtered by a query, with a `changed`
+   connection refreshing the list.
+2. **A worker thread writing results** (once there is a progress bar): the model's lock
+   already lets one share the connection; an example should show the views updated
+   through `call_on_main_thread`, not from the worker.
 
 ## 3 — Adoption
 

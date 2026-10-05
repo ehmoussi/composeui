@@ -148,7 +148,7 @@ How it differs from a desktop window:
 | `Signal` (`composeui.core.signal`) | A typed event emitter. `signal.connect(callback)` supports callbacks that optionally take `view`, `main_view`, and/or `model` keyword arguments, injected automatically. |
 | `Renderer` / `RendererContainer` (`composeui.core.renderer`) | Binds a `View` to a concrete toolkit widget and keeps them in sync in both directions (`refresh_attribute` / `update_state`). |
 | `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView` (and optionally a `Model`), parses CLI args (`--debug`, `--log`, `--log-signals`, `-f FILE`), and drives rendering. |
-| `Model` (`composeui.core.model`) | Empty base class for application/business-logic state, meant to be subclassed. |
+| `Model` (`composeui.core.model`) | Base class for the app's data, meant to be subclassed; `SqliteModel` keeps it in a [SQLite database](#a-sqlite-model). |
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
@@ -240,6 +240,63 @@ the Pipe menu's Reset Dimensions asks for a confirmation first.
 `MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
 to JSON via `cattrs`, automatically skipping `Signal`/`Renderer` fields and, on load, updating
 the live view tree in place so renderer bindings and signal connections survive the reload.
+
+## A SQLite model
+
+Views hold what is shown. Data with many rows, relations between them, and queries over
+them (runs and their results, a catalogue of parts) belongs in a `SqliteModel`: a SQLite
+database of the app's own, with its own schema and SQL, saved and opened with the study.
+
+```python
+import attrs
+
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+
+
+@attrs.define
+class Run:
+    id: int
+    radius: float
+
+
+class Runs(SqliteTable):
+    create = "CREATE TABLE run(id INTEGER PRIMARY KEY, radius REAL NOT NULL);"
+
+    def add(self, radius: float) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO run(radius) VALUES (?)", (radius,))
+
+    def above(self, radius: float) -> list[Run]:
+        return self.fetch(Run, "SELECT * FROM run WHERE radius > ?", (radius,))
+
+
+class PipeModel(SqliteModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.runs = self.add_table(Runs)
+```
+
+Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`,
+`WebModelApplication`), and callbacks asking for `model` reach the tables
+(`model.runs.add(...)`):
+
+- **Transactions.** `with self.connection() as db:` commits once the block ends and rolls
+  back if it raises; a block inside another joins it. Foreign keys are on.
+- **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
+  views' `cattrs` converter; `as_parameters(row)` gives an instance's fields as a query's
+  named parameters.
+- **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
+  rows through it, and after New and Open, so the views showing them can follow.
+- **Studies.** New starts an empty database, and Save and Open (and `-f`) save and open
+  the views' state and the database together, as a zip archive under the app's
+  `extension`. The model works on a scratch copy in a temporary file, so the user's file
+  only changes when saved, and a failed save leaves it whole. Opening checks everything
+  first: a file that doesn't fit leaves the study as it was and says why in the status bar.
+- **Versions.** Raise `schema_version` with every change to the tables and add the step
+  from the previous version to `migrations` (`{1: add_stress_column}`): a study saved by an
+  older version is brought up to date when opened, and one saved by a newer version is
+  refused.
+- On the web, each session's database is deleted with the session.
 
 ## Development
 

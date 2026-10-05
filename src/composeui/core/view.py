@@ -29,12 +29,16 @@ import cattrs
 from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import Unpack, dataclass_transform
 
+from composeui.core import study
+from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from attrs import AttrsInstance
+
+    from composeui.core.model import Model
 
 
 LOGGER = logging.getLogger("COMPOSEUI_VIEW")
@@ -60,10 +64,6 @@ _BAD_STATE_ERRORS = (
     cattrs.BaseValidationError,
     cattrs.StructureHandlerNotFoundError,
 )
-
-
-class InvalidStateError(ValueError):
-    """Saved state that can't be loaded into a main view; the view is left unchanged."""
 
 
 def _is_omitted_type(tp: Any) -> bool:
@@ -444,8 +444,8 @@ class NewAction(ActionView):
         self.data = None
         self.triggered.connect(self._new_study)
 
-    def _new_study(self, *, main_view: "MainView") -> None:
-        main_view.reset_state()
+    def _new_study(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
+        study.new_study(main_view, model)
 
 
 @define_view
@@ -520,23 +520,23 @@ class FileMenu(Menu):
         self.save.triggered.connect(self._save_state)
         self.open_file.triggered.connect(self._load_state)
 
-    def _load_state(self, *, main_view: "MainView") -> None:
+    def _load_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
         filepath = main_view.ask_open_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
         if filepath is None:
             return
         try:
-            main_view.load_state(filepath)
+            study.open_study(main_view, model, filepath)
         except InvalidStateError as error:
             main_view.status_bar.show_message(f"Can't open {filepath.name!r}: {error}.")
 
-    def _save_state(self, *, main_view: "MainView") -> None:
+    def _save_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
         filepath = main_view.ask_save_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
         if filepath is not None:
-            main_view.save_state(filepath)
+            study.save_study(main_view, model, filepath)
 
 
 @define_view
@@ -576,9 +576,17 @@ class MainView(View):
     def load_state_data(self, data: Any) -> None:
         """Load state, as `save_state` writes it once parsed from json.
 
-        The data is first applied to a newly built main view: applying sets fields one by
-        one, so data failing halfway would otherwise leave this view half loaded. Raises
-        `InvalidStateError`, leaving this view unchanged, when the data doesn't fit it.
+        Raises `InvalidStateError`, leaving this view unchanged, when the data doesn't fit
+        it (see `check_state_data`).
+        """
+        self.check_state_data(data)
+        _apply_state(self, data)
+
+    def check_state_data(self, data: Any) -> None:
+        """Raise `InvalidStateError` if `load_state_data` can't load `data`.
+
+        The data is applied to a newly built main view: applying sets fields one by one,
+        so data failing halfway would otherwise leave this view half loaded.
         """
         if not isinstance(data, dict):
             msg = f"it isn't a valid {self.extension} file"
@@ -588,7 +596,10 @@ class MainView(View):
         except _BAD_STATE_ERRORS as error:
             msg = "it doesn't match this application"
             raise InvalidStateError(msg) from error
-        _apply_state(self, data)
+
+    def state_data(self) -> Any:
+        """Get the state `save_state` writes, before it's turned into json."""
+        return CONVERTER.unstructure(self)
 
     def reset_state(self) -> None:
         """Set every view back to the state of a newly built main view (a new study).
@@ -601,7 +612,7 @@ class MainView(View):
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file."""
         with filepath.open("w") as f:
-            json.dump(CONVERTER.unstructure(self), f)
+            json.dump(self.state_data(), f)
         self.state_filepath = filepath
 
     def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:

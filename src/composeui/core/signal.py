@@ -144,6 +144,7 @@ class Signal(Generic[Unpack[Ts]]):
             return InjectedCallback(
                 callback=callback,
                 requested_bounds=requested_bounds,
+                optional_bounds=self._optional_bounds(callback),
                 main_view=self._main_view,
                 model=self._model,
             )
@@ -157,6 +158,19 @@ class Signal(Generic[Unpack[Ts]]):
         except (TypeError, ValueError):
             return frozenset()
         return frozenset(name for name in names if name in params)
+
+    @staticmethod
+    def _optional_bounds(callback: CallbackT[Unpack[Ts]]) -> frozenset[str]:
+        """Get the bounds `callback` has a default for, left out when there is none to give."""
+        try:
+            params = inspect.signature(callback).parameters
+        except (TypeError, ValueError):
+            return frozenset()
+        return frozenset(
+            name
+            for name in ("main_view", "model")
+            if name in params and params[name].default is not inspect.Parameter.empty
+        )
 
     @staticmethod
     def get_function_name(callback: CallbackT[Any]) -> str:
@@ -215,6 +229,7 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         *,
         callback: CallbackT[Unpack[Ts]],
         requested_bounds: frozenset[str],
+        optional_bounds: frozenset[str] = frozenset(),
         main_view: ReferenceType[MainView] | None,
         model: ReferenceType[Model] | None,
     ) -> None:
@@ -226,6 +241,7 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         else:
             self._callback = lambda: callback
         self._requested_bounds = requested_bounds
+        self._optional_bounds = optional_bounds
         self._main_view = main_view
         self._model = model
 
@@ -256,8 +272,9 @@ class InjectedCallback(Generic[Unpack[Ts]]):
             kwargs["main_view"] = main_view
         if "model" in self._requested_bounds:
             model = None if self._model is None else self._model()
-            if model is None:
+            if model is not None:
+                kwargs["model"] = model
+            elif "model" not in self._optional_bounds:
                 msg = "The model is missing."
                 raise ValueError(msg)
-            kwargs["model"] = model
         return callback(*args, **kwargs)  # type: ignore[arg-type]

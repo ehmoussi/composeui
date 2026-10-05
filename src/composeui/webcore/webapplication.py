@@ -22,6 +22,7 @@ from starlette.staticfiles import StaticFiles
 
 from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.signal import Signal
+from composeui.core.study import open_study
 from composeui.core.view import View
 from composeui.webcore.routes import (
     homepage,
@@ -230,7 +231,7 @@ class WebApplication(Application[MainViewT]):
 
     def create_starlette_app(self) -> Starlette:
         """Create the Starlette app, building a fresh main view for each new session."""
-        return create_starlette_app(SessionStore(self._new_session_view, ttl=self.session_ttl))
+        return create_starlette_app(SessionStore(self._new_session, ttl=self.session_ttl))
 
     def run(self) -> None:
         """Build and serve the app."""
@@ -253,7 +254,8 @@ class WebApplication(Application[MainViewT]):
             port=self._args.port,
         )
 
-    def _new_session_view(self) -> MainViewT:
+    def _new_session(self) -> tuple[MainViewT, Model | None]:
+        """Build a new session's main view, wired, and its model."""
         main_view = self._build_main_view()
         model = self._new_session_model()
         _add_reference_to_signals(main_view, model)
@@ -263,8 +265,8 @@ class WebApplication(Application[MainViewT]):
         self.setup_session(main_view)
         # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
         if self._args is not None and self._args.f is not None:
-            main_view.load_state(self._args.f)
-        return main_view
+            open_study(main_view, model, self._args.f)
+        return main_view, model
 
     def _new_session_model(self) -> Model | None:
         """Build a new session's model: none, unless the app has one."""

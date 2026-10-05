@@ -14,6 +14,7 @@ from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, overrid
 
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
+from composeui.core.study import open_study
 from composeui.core.view import View
 
 if TYPE_CHECKING:
@@ -186,7 +187,11 @@ class Application(Generic[MainViewT]):
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
         if self._args.f is not None:
-            self.main_view.load_state(self._args.f)
+            open_study(self.main_view, self._study_model(), self._args.f)
+
+    def _study_model(self) -> Model | None:
+        """Get the model opened, saved and started over with the views: none here."""
+        return None
 
     def _parse_arguments(self) -> argparse.Namespace:
         args = self._parser.parse_args()
@@ -215,9 +220,9 @@ class Application(Generic[MainViewT]):
 
 class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
     def __init__(self, *, main_view: MainViewT, model: ModelT) -> None:
-        super().__init__(main_view=main_view)
-        self._main_view = main_view
+        # first: the base class gives it to the signals
         self._model = model
+        super().__init__(main_view=main_view)
 
     @override
     def _add_reference_to_signals(self) -> None:
@@ -225,6 +230,10 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
 
     @property
     def model(self) -> ModelT:
+        return self._model
+
+    @override
+    def _study_model(self) -> ModelT:
         return self._model
 
     def connect(

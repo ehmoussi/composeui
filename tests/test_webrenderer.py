@@ -31,6 +31,7 @@ from uvicorn.importer import import_from_string
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.view import (
     ActionView,
     DialogView,
@@ -916,6 +917,69 @@ def test_each_browser_gets_its_own_model() -> None:
         assert sign_as(alice, alice_view, "Ada") == "Alice, Ada"
     # one per session, and none for the template
     assert [model.names for model in models] == [["Alice", "Ada"], ["Bob"]]
+
+
+class _Signatures(SqliteTable):
+    create = "CREATE TABLE signature(id INTEGER PRIMARY KEY, name TEXT NOT NULL);"
+
+    def sign(self, name: str) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO signature(name) VALUES (?)", (name,))
+
+    def names(self) -> list[str]:
+        with self.connection() as db:
+            return [row["name"] for row in db.execute("SELECT name FROM signature ORDER BY id")]
+
+
+class _SignedGuestbook(SqliteModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.signatures = self.add_table(_Signatures)
+
+
+def test_a_saved_study_brings_its_database_to_another_browser() -> None:
+    class GuestbookApp(WebModelApplication[HelloMainView, _SignedGuestbook]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    views: list[HelloMainView] = []
+    # nothing but its session keeps a model
+    app = GuestbookApp(build_main_view=HelloMainView, build_model=_SignedGuestbook)
+    name = app.main_view.form.name
+
+    @app.connect(view=name, signals=[name.editing_finished])
+    def sign(*, view: NameRowView, main_view: HelloMainView, model: _SignedGuestbook) -> None:
+        model.signatures.sign(view.text)
+        main_view.summary.text = ", ".join(model.signatures.names())
+
+    def sign_as(client: TestClient, view: HelloMainView, text: str) -> None:
+        field_id = _field_id(view.form.name)
+        response = client.post(f"/widget/{field_id}", data={"value": text, "event": "change"})
+        assert response.status_code == 200
+
+    web = app.create_starlette_app()
+    with TestClient(web) as alice, TestClient(web) as bob:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = views
+        sign_as(alice, alice_view, "Alice")
+        sign_as(alice, alice_view, "Ada")
+        saved = alice.get("/state")
+        assert saved.headers["content-type"] == "application/zip"
+
+        response = bob.post("/state", files={"file": ("study.hello", saved.content)})
+
+        assert response.headers["hx-refresh"] == "true"
+        assert bob_view.form.name.text == "Ada"
+        sign_as(bob, bob_view, "Bob")
+        assert bob_view.summary.text == "Alice, Ada, Bob"
+        # the views' state alone isn't a study of this app: it would lose the signatures
+        views_only = json.dumps(HelloMainView().state_data()).encode()
+        response = bob.post("/state", files={"file": ("study.hello", views_only)})
+        assert "isn&#x27;t a valid .hello file" in response.text
+        sign_as(bob, bob_view, "Eve")
+        assert bob_view.summary.text == "Alice, Ada, Bob, Eve"
 
 
 def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None:

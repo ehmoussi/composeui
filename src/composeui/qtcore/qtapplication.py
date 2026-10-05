@@ -29,7 +29,12 @@ class QtApplication(Application[MainViewT]):
 
 class QtModelApplication(ModelApplication[MainViewT, ModelT]):
     def run(self) -> None:
+        super().run()
         app = QApplication(sys.argv)
         self.render(RendererType.QT)
         signal.signal(signal.SIGINT, signal.SIG_DFL)  # kill the program when Ctr+c
-        sys.exit(app.exec())
+        try:
+            code = app.exec()
+        finally:
+            self.model.close()
+        sys.exit(code)

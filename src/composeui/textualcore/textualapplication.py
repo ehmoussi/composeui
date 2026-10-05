@@ -27,8 +27,12 @@ class TextualApplication(Application[MainViewT]):
 
 class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
     def run(self) -> None:
+        super().run()
         self.render(RendererType.TEXTUAL)
-        if isinstance(self.main_view.renderer, TextualMainRenderer) and (
-            self.main_view.renderer.app is not None
-        ):
-            self.main_view.renderer.app.run()
+        try:
+            if isinstance(self.main_view.renderer, TextualMainRenderer) and (
+                self.main_view.renderer.app is not None
+            ):
+                self.main_view.renderer.app.run()
+        finally:
+            self.model.close()

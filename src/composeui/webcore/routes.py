@@ -112,9 +112,9 @@ def state_download(request: Request) -> Response:
     trigger = request.query_params.get("trigger")
     if trigger is not None:
         session.trigger_action(trigger)  # e.g. Save's own `triggered`, before the download
-    filename, body = session.save_state()
+    filename, body, media_type = session.save_state()
     headers = {**_NO_STORE, "Content-Disposition": f'attachment; filename="{filename}"'}
-    return Response(body, media_type="application/json", headers=headers)
+    return Response(body, media_type=media_type, headers=headers)
 
 
 async def state_upload(request: Request) -> Response:
