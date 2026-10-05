@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import zipfile
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable
@@ -15,7 +16,6 @@ from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
-    import sqlite3
     from collections.abc import Iterator
     from pathlib import Path
 
@@ -143,6 +143,53 @@ def test_a_block_that_raises_writes_nothing(app: App) -> None:
     app.model.runs.add(50.0)
     assert app.model.runs.radii() == [50.0]
     assert changes == [None]
+
+
+class Parts(SqliteTable):
+    create = """
+        CREATE TABLE part(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE use(part_id INTEGER NOT NULL REFERENCES part(id));
+        CREATE TABLE removed(name TEXT NOT NULL);
+        CREATE TRIGGER part_removed AFTER DELETE ON part
+        BEGIN INSERT INTO removed(name) VALUES (old.name); END;
+    """
+
+
+class PartsModel(SqliteModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts = self.add_table(Parts)
+
+
+def _started(model: PartsModel, tmp_path: Path) -> None:
+    """Leave `model` on the database it's built with."""
+
+
+def _new(model: PartsModel, _tmp_path: Path) -> None:
+    model.new()
+
+
+def _opened(model: PartsModel, tmp_path: Path) -> None:
+    path = tmp_path / "data.sqlite"
+    model.save_data(path)
+    model.open_data(path)
+
+
+@pytest.mark.parametrize("start", [_started, _new, _opened])
+def test_every_database_keeps_the_models_settings(
+    start: Callable[[PartsModel, Path], None], tmp_path: Path
+) -> None:
+    model = PartsModel()
+    start(model, tmp_path)
+
+    with pytest.raises(sqlite3.IntegrityError), model.parts.connection() as db:
+        db.execute("INSERT INTO use(part_id) VALUES (1)")  # foreign keys are enforced
+    with model.parts.connection() as db:
+        db.execute("INSERT INTO part(id, name) VALUES (1, 'bolt')")
+        db.execute("INSERT OR REPLACE INTO part(id, name) VALUES (1, 'screw')")
+        # the replaced row went through the delete trigger (recursive triggers are on)
+        assert [row["name"] for row in db.execute("SELECT name FROM removed")] == ["bolt"]
+    model.close()
 
 
 def test_a_study_of_an_older_version_is_brought_up_to_date(app: App, tmp_path: Path) -> None:
