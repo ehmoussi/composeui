@@ -17,7 +17,7 @@ from typing import Any, Optional, Union
 from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Checkbox, DataTable, Footer, Input
+from textual.widgets import Button, Checkbox, DataTable, Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -503,6 +503,32 @@ async def test_the_toolbar_shows_one_page_at_a_time() -> None:
         await pilot.pause()
         assert name.widget.region.height > 0
         assert buttons["Inputs"].variant == "primary"
+
+
+@pytest.mark.asyncio
+async def test_pressing_the_button_runs_what_its_view_connects() -> None:
+    view = PagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    inputs = view.router.inputs
+    assert isinstance(inputs.submit.renderer, TextualWidgetRenderer)
+    button = inputs.submit.renderer.widget
+    assert isinstance(button, Button)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert str(button.label) == "Submit"
+        inputs.name.text = "Ada"
+
+        await pilot.click(button)
+        await pilot.pause()
+
+        assert view.router.results.total.text == "Submitted: Ada"
+        inputs.submit.text = "Send"
+        await pilot.pause()
+        assert str(button.label) == "Send"
 
 
 @pytest.mark.asyncio

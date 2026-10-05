@@ -742,6 +742,17 @@ class CheckBoxView(CheckBoxMixin, View):
 
 
 @define_view
+class ButtonView(View):
+    """A button the user clicks to act on what the page shows, e.g. to submit a form."""
+
+    _renderer_key = "button"
+
+    text: str = attrs.field(default="")
+    #: the user clicked the button
+    clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+
+@define_view
 class TableMixin:
     """A read-only table of text: the app formats each cell itself.
 

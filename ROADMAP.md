@@ -9,7 +9,7 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, label, log, checkbox, radio group, combobox, read-only table, forms, pages, message
+input, label, log, button, checkbox, radio group, combobox, read-only table, forms, pages, message
 and confirm dialogs.
 
 1. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't

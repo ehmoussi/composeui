@@ -451,6 +451,37 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
         self._view.toggled.emit(is_checked)
 
 
+class ButtonViewLike(ViewLike, Protocol):
+    text: str
+    clicked: SignalNoArgs
+
+
+class WebButtonRenderer(WebRenderer[ButtonViewLike]):
+    """A button posting each click; like every control, never swapped back after one."""
+
+    _role = "button"
+
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._mark_dirty})
+
+    def to_html(self, *, oob: bool = False) -> str:
+        disabled = "" if self._view.is_enabled else " disabled"
+        # `self-start`: as wide as its text, not the page's whole column
+        return (
+            f'<button {self._root_attributes(oob=oob)} type="button"'
+            ' class="btn btn-primary self-start"'
+            f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "click"}}\''
+            f' hx-swap="none"{disabled}>{html.escape(self._view.text)}</button>'
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        # a disabled button can't be clicked: a post saying otherwise is refused
+        if event != "click" or not self._view.is_enabled:
+            super().dispatch(event, form)
+        self._view.clicked.emit()
+
+
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     rows: list[list[str]]
@@ -1361,6 +1392,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 #: renderer keys of the web backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
+    "button": WebButtonRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "dialog": WebDialogRenderer,
