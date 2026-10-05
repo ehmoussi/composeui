@@ -49,12 +49,9 @@ classes appear (a test fails otherwise).
 `SqliteModel` is in (README, "A SQLite model"): the app's tables and SQL, transactions,
 typed rows, a `changed` signal per table, and studies saved as a zip of the views' state
 and the database, checked before opening and brought up to date by migrations; on the
-web, per session. Left:
+web, per session; `examples/pipecatalogue.py` shows it. Left:
 
-1. **An example:** `pipeform` keeping each pipe the user records as a row, listed on its
-   Results page by the read-only table and filtered by a query, with a `changed`
-   connection refreshing the list.
-2. **A worker thread writing results** (once there is a progress bar): the model's lock
+1. **A worker thread writing results** (once there is a progress bar): the model's lock
    already lets one share the connection; an example should show the views updated
    through `call_on_main_thread`, not from the worker.
 

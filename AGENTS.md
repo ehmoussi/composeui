@@ -47,7 +47,7 @@ src/composeui/
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
-src/examples/    # example apps (pipeform.py, textual_demo.py, ...), also used by tests; not in the wheel
+src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
 ```
 
