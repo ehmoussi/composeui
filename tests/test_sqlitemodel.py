@@ -100,12 +100,16 @@ def test_a_saved_study_opens_with_its_views_and_its_rows(app: App, tmp_path: Pat
     path = tmp_path / "study.hello"
     _save(app, path)
     other = App(main_view=HelloMainView(), model=RunsModel())
+    # what a view refreshing from the rows would see of the views
+    names_seen: list[str] = []
+    other.model.runs.changed.connect(lambda: names_seen.append(other.main_view.form.name.text))
 
     _open(other, path)
 
     assert other.model.runs.radii() == [80.0, 50.0]
     assert other.main_view.form.name.text == "Bob"
     assert other.main_view.state_filepath == path
+    assert names_seen == ["Bob"]  # told once the study's views are in place too
     # the user's file is the study, not the scratch database the model works on
     app.model.runs.add(20.0)
     _open(other, path)

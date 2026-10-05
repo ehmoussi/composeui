@@ -52,14 +52,16 @@ class _BoundCallback(Protocol[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
     ) -> None: ...
 
 
+# `model` is typed `Any`: a signal can't know its app's model class, and a callback asks
+# for that class, not `Model`
 CallbackT = TypeAliasType(
     "CallbackT",
     (
         Union[
             Callable[[Unpack[Ts]], None],
             _MainViewCallback["MainView", Unpack[Ts]],
-            _ModelCallback["Model", Unpack[Ts]],
-            _BoundCallback["MainView", "Model", Unpack[Ts]],
+            _ModelCallback[Any, Unpack[Ts]],
+            _BoundCallback["MainView", Any, Unpack[Ts]],
         ]
     ),
     type_params=(Ts,),
@@ -99,9 +101,9 @@ class Signal(Generic[Unpack[Ts]]):
     @overload
     def connect(self, callback: _MainViewCallback[MainView, Unpack[Ts]]) -> None: ...
     @overload
-    def connect(self, callback: _ModelCallback[Model, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: _ModelCallback[Any, Unpack[Ts]]) -> None: ...
     @overload
-    def connect(self, callback: _BoundCallback[MainView, Model, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: _BoundCallback[MainView, Any, Unpack[Ts]]) -> None: ...
     def connect(self, callback: CallbackT[Unpack[Ts]]) -> None:
         injected_callback = self._inject_callback(callback)
         self._callbacks.append(injected_callback)

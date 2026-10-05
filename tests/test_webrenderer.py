@@ -943,15 +943,21 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
 
+        def setup_model(self, main_view: HelloMainView, model: _SignedGuestbook) -> None:
+            # whatever changes the signatures, an upload included, the summary follows
+            def show_signatures() -> None:
+                main_view.summary.text = ", ".join(model.signatures.names())
+
+            model.signatures.changed.connect(show_signatures)
+
     views: list[HelloMainView] = []
     # nothing but its session keeps a model
     app = GuestbookApp(build_main_view=HelloMainView, build_model=_SignedGuestbook)
     name = app.main_view.form.name
 
     @app.connect(view=name, signals=[name.editing_finished])
-    def sign(*, view: NameRowView, main_view: HelloMainView, model: _SignedGuestbook) -> None:
+    def sign(*, view: NameRowView, model: _SignedGuestbook) -> None:
         model.signatures.sign(view.text)
-        main_view.summary.text = ", ".join(model.signatures.names())
 
     def sign_as(client: TestClient, view: HelloMainView, text: str) -> None:
         field_id = _field_id(view.form.name)
@@ -972,6 +978,7 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
 
         assert response.headers["hx-refresh"] == "true"
         assert bob_view.form.name.text == "Ada"
+        assert bob_view.summary.text == "Alice, Ada"
         sign_as(bob, bob_view, "Bob")
         assert bob_view.summary.text == "Alice, Ada, Bob"
         # the views' state alone isn't a study of this app: it would lose the signatures

@@ -36,5 +36,8 @@ class Model:
         Raises `InvalidStateError`, leaving the data unchanged, for a file that doesn't fit.
         """
 
+    def loaded(self) -> None:
+        """React once New or Open has put both the views and the data in place."""
+
     def close(self) -> None:
         """Release what the data holds (files, connections); the app is done with it."""
