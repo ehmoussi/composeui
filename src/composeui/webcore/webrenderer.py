@@ -36,6 +36,7 @@ from composeui.core.view import (
     FormRowView,
     FormView,
     GroupFormView,
+    HorizontalView,
     LogType,
     MainView,
     Menu,
@@ -1186,6 +1187,25 @@ class WebPageRenderer(WebRenderer[PageView]):
         )
 
 
+class WebHorizontalRenderer(WebRenderer[HorizontalView]):
+    """Views side by side, each as wide as its share of the row.
+
+    Each view sits in a cell carrying its share, an inline style rather than a class
+    per share; the cell hides with its view, which swaps on its own.
+    """
+
+    _role = "horizontal"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        cells = "".join(
+            '<div class="min-w-0 has-[>[hidden]]:hidden"'
+            f' style="flex: {stretch} 1 0%">{view.renderer.to_html()}</div>'
+            for view, stretch in self._view.stretched_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        return f'<div {self._root_attributes(oob=oob)} class="flex gap-6">{cells}</div>'
+
+
 def page_path(route: str) -> str:
     """Get the address of the page on `route` (routes are made to fit in one)."""
     return f"/{route}"
@@ -1411,6 +1431,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "form": WebFormRenderer,
     "form_label": WebFormLabelRenderer,
     "group_form": WebGroupFormRenderer,
+    "horizontal": WebHorizontalRenderer,
     "input": WebInputRenderer,
     "label": WebLabelRenderer,
     "log": WebLogRenderer,

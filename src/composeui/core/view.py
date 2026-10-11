@@ -54,6 +54,9 @@ _OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
 #: `_OMITTED_TYPES` - e.g. `Validator` fields, whose type (bare/`Optional`/`list`-
 #: wrapped `Callable`) isn't a single class `_is_omitted_type` can match generically.
 OMIT = "omit"
+#: Field metadata key for a view field of a `HorizontalView`: its share of the row's
+#: width, against its siblings' (1 when unset)
+STRETCH = "stretch"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
 #: conversion, e.g. `float("abc")`)
 _BAD_STATE_ERRORS = (
@@ -1044,6 +1047,26 @@ class GroupFormView(FormView):
     _renderer_key = "group_form"
 
     title: str = attrs.field(default="")
+
+
+@define_view
+class HorizontalView(View):
+    """Its view fields laid out side by side, in a row.
+
+    Each field takes a share of the row's width, set by its `STRETCH` metadata:
+    ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``.
+    """
+
+    _renderer_key = "horizontal"
+
+    @property
+    def stretched_views(self) -> list[tuple[View, int]]:
+        """Get the views in the row, in order, each with its share of the row's width."""
+        return [
+            (view, f.metadata.get(STRETCH, 1))
+            for f in attrs.fields(cast("type[AttrsInstance]", type(self)))
+            if isinstance(view := getattr(self, f.name), View)
+        ]
 
 
 #: what a page's route can be: it also names the page in a web address (`/<route>`)
