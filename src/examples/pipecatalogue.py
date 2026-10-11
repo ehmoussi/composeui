@@ -19,6 +19,7 @@ from attrs import Factory
 
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters
 from composeui.core.view import (
+    ButtonVariant,
     ButtonView,
     DialogKind,
     DialogView,
@@ -268,6 +269,7 @@ class CataloguePageView(PageView):
         self._init_route("catalogue")
         self.title = "Catalogue"
         self.remove_shown.text = "Remove the Shown Pipes"
+        self.remove_shown.variant = ButtonVariant.DANGER
         self.pipes.headers = [
             "Name",
             "Material",

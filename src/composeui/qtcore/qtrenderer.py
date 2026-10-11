@@ -36,6 +36,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    ButtonVariant,
     DialogKind,
     DialogView,
     FormLabelRowView,
@@ -406,13 +407,16 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
 
 class ButtonViewLike(ViewLike, Protocol):
     text: str
+    variant: ButtonVariant
     clicked: SignalNoArgs
 
 
 class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
     def __init__(self, view: ButtonViewLike) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"text": self._refresh_text})
+        self._refresh_dispatcher.update(
+            {"text": self._refresh_text, "variant": self._refresh_variant}
+        )
 
     def render(self) -> None:
         if self._rendered_object is None:
@@ -424,6 +428,16 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
     @staticmethod
     def _refresh_text(_view: ButtonViewLike, rendered_object: QPushButton, value: str) -> None:
         rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_variant(
+        _view: ButtonViewLike, rendered_object: QPushButton, value: ButtonVariant
+    ) -> None:
+        # Qt has no variants: the style draws a default button emphasized, and a
+        # destroying one is red like an invalid field
+        rendered_object.setDefault(value is ButtonVariant.PRIMARY)
+        is_danger = value is ButtonVariant.DANGER
+        rendered_object.setStyleSheet("QPushButton { color: red; }" if is_danger else "")
 
     @staticmethod
     def _update_state(view: ButtonViewLike, rendered_object: QPushButton) -> None:

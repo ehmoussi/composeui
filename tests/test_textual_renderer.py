@@ -21,7 +21,14 @@ from textual.widgets import Button, Checkbox, DataTable, Footer, Input
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
-from composeui.core.view import ActionView, DialogKind, MainView, RendererType, define_view
+from composeui.core.view import (
+    ActionView,
+    ButtonVariant,
+    DialogKind,
+    MainView,
+    RendererType,
+    define_view,
+)
 from composeui.textualcore.textualrenderer import (
     ROW_INVALID_CLASS,
     TextualMainRenderer,
@@ -529,6 +536,10 @@ async def test_pressing_the_button_runs_what_its_view_connects() -> None:
         inputs.submit.text = "Send"
         await pilot.pause()
         assert str(button.label) == "Send"
+        assert button.variant == "primary"
+        inputs.submit.variant = ButtonVariant.DANGER
+        await pilot.pause()
+        assert button.variant == "error"
 
 
 @pytest.mark.asyncio
