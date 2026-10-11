@@ -75,6 +75,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -1961,3 +1962,42 @@ def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> Non
         assert select("2").status_code == 400
         assert table.selected_row == 1
         assert emitted == [1]
+
+
+def test_disabling_a_container_disables_the_views_in_it() -> None:
+    views: list[VerticalMainView] = []
+
+    class ColumnApp(WebApplication[VerticalMainView]):
+        def setup_session(self, main_view: VerticalMainView) -> None:
+            views.append(main_view)
+
+    app = ColumnApp(build_main_view=VerticalMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        row, column = view.tables, view.tables.column
+        column.table.rows = [["North"], ["South"]]
+
+        def disable_the_row(_row: int | None) -> None:
+            row.is_enabled = False
+
+        column.table.selection_changed.connect(disable_the_row)
+        table_id, button_id = _widget_id(column.table.renderer), _widget_id(column.button.renderer)
+        body = client.post(f"/widget/{table_id}", data={"event": "select", "row": "0"}).text
+
+        # the row swaps whole, the views of the column inside it disabled
+        swapped = _swapped(body, _widget_id(row.renderer))
+        (button,) = [
+            attributes for _, attributes in swapped.descendants if attributes.get("id") == button_id
+        ]
+        assert "disabled" in button
+        assert not any(
+            "hx-post" in attributes for tag, attributes in swapped.descendants if tag == "tr"
+        )
+        # a stale page's posts are refused, as a disabled button's or table's own
+        clicked: list[bool] = []
+        column.button.clicked.connect(lambda: clicked.append(True))
+        assert client.post(f"/widget/{button_id}", data={"event": "click"}).status_code == 400
+        selected = client.post(f"/widget/{table_id}", data={"event": "select", "row": "1"})
+        assert selected.status_code == 400
+        assert (column.table.selected_row, clicked) == (0, [])

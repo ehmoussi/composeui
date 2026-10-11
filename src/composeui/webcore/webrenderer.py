@@ -55,7 +55,7 @@ from composeui.core.view import (
 from composeui.webcore.page import get_page
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Mapping
+    from collections.abc import Generator, Iterable, Mapping
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
@@ -150,6 +150,8 @@ class WebRenderer(Renderer[TView, str]):
     def __init__(self, view: TView) -> None:
         super().__init__(view)
         self._lock: threading.RLock | None = None
+        #: the container drawing this view, if it passes its enabled state on (`is_enabled`)
+        self.parent: WebRenderer[Any] | None = None
         self._refresh_dispatcher.update(
             {
                 "is_visible": self._mark_dirty,
@@ -170,6 +172,24 @@ class WebRenderer(Renderer[TView, str]):
             if target is not None:
                 target.renderers[self._rendered_object] = self
                 self._lock = target.lock
+
+    @property
+    def is_enabled(self) -> bool:
+        """Whether the view and every container around it are enabled.
+
+        As disabling a Qt or Textual container disables its children; the container
+        swaps whole, so its views come back disabled with it.
+        """
+        return self._view.is_enabled and (self.parent is None or self.parent.is_enabled)
+
+    def _adopt(self, views: Iterable[View]) -> None:
+        """Make this renderer the parent of `views`' renderers (see `is_enabled`)."""
+        for view in views:
+            renderer: Any = view.renderer
+            children = renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
+            for child in children:
+                if isinstance(child, WebRenderer):
+                    child.parent = self
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         if self._lock is None:
@@ -254,7 +274,7 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
         # `hx-swap="none"`: the field being typed in is never swapped back (it would
         # reset the caret); everything else arrives out of band. `queue all` keeps a
         # `change` from being dropped behind an in-flight debounced edit.
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         return (
             f"<input {self._root_attributes(oob=oob)}{self._row_attributes()}"
             ' class="input w-full" type="text"'
@@ -431,7 +451,7 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
 
     def to_html(self, *, oob: bool = False) -> str:
         checked = " checked" if self._view.is_checked else ""
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         # an unchecked box posts no value at all: `checked` is told apart by its presence
         return (
             f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="group"'
@@ -479,7 +499,7 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         self._refresh_dispatcher.update({"text": self._mark_dirty, "variant": self._mark_dirty})
 
     def to_html(self, *, oob: bool = False) -> str:
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         variant = _BUTTON_CLASSES[self._view.variant]
         # `self-start`: as wide as its text, not the page's whole column
         return (
@@ -491,7 +511,7 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled button can't be clicked: a post saying otherwise is refused
-        if event != "click" or not self._view.is_enabled:
+        if event != "click" or not self.is_enabled:
             super().dispatch(event, form)
         self._view.clicked.emit()
 
@@ -536,7 +556,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     def _row_html(self, index: int, row: list[str]) -> str:
         cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
         selected = ' aria-current="true"' if index == self._view.selected_row else ""
-        if not self._view.is_enabled:
+        if not self.is_enabled:
             return f"<tr{selected}>{cells}</tr>"
         return (
             f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
@@ -548,7 +568,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled table can't be clicked: a post saying otherwise is refused
-        if event != "select" or not self._view.is_enabled:
+        if event != "select" or not self.is_enabled:
             super().dispatch(event, form)
         row = form.get("row", "")
         if not row.isdigit() or int(row) >= len(self._view.rows):
@@ -616,7 +636,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
 
     def to_html(self, *, oob: bool = False) -> str:
         selected = self._view.serialize_value()
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         options = "".join(
             '<label class="label cursor-pointer gap-2 text-base-content">'
             f'<input type="radio" class="radio radio-sm radio-primary" value="{html.escape(label)}"'
@@ -636,7 +656,7 @@ class WebComboboxRenderer(_WebValuesRenderer[TValue]):
 
     def to_html(self, *, oob: bool = False) -> str:
         selected = self._view.serialize_value()
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         # an empty choice only while nothing is selected, as Qt's combobox shows nothing
         empty = '<option value="" selected></option>' if selected is None else ""
         options = "".join(
@@ -749,11 +769,15 @@ class WebFormRenderer(WebRenderer[FormView]):
 
     _role = "form"
 
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
     def to_html(self, *, oob: bool = False) -> str:
         return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-5", legend="")
 
     def _fieldset(self, *, oob: bool, classes: str, legend: str) -> str:
-        disabled = "" if self._view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         rows = "".join(self._row_html(row) for row in self._view.field_rows)
         return (
             f'<fieldset {self._root_attributes(oob=oob)} class="{classes}"{disabled}>'
@@ -1208,6 +1232,11 @@ class WebPageRenderer(WebRenderer[PageView]):
 
     _role = "page"
 
+    def render(self) -> None:
+        super().render()
+        # not its dialogs: drawn outside the page's fragment, they wouldn't swap with it
+        self._adopt(view for view in self._view.content_views if not isinstance(view, DialogView))
+
     def to_html(self, *, oob: bool = False) -> str:
         content = "".join(
             view.renderer.to_html()
@@ -1231,6 +1260,10 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
 
     _role = "horizontal"
 
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
     def to_html(self, *, oob: bool = False) -> str:
         cells = "".join(
             '<div class="min-w-0 has-[>[hidden]]:hidden"'
@@ -1248,6 +1281,10 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
     """Views one above the other, at the top of the column, like a page's."""
 
     _role = "vertical"
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
 
     def to_html(self, *, oob: bool = False) -> str:
         content = "".join(
