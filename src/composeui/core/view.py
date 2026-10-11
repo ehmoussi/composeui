@@ -1073,6 +1073,17 @@ class HorizontalView(View):
 _ROUTE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
+class PageWidth(enum.Enum):
+    """How wide a page may grow, where the window doesn't set it (the web backend)."""
+
+    #: a column of fields, easy to read
+    NARROW = enum.auto()
+    #: room for side by side views, e.g. tables
+    WIDE = enum.auto()
+    #: the whole window
+    FULL = enum.auto()
+
+
 @define_view
 class PageView(View):
     """A page of the app, shown while its `Router` is on the page's `route`.
@@ -1083,6 +1094,8 @@ class PageView(View):
     """
 
     _renderer_key = "page"
+    #: how wide the page may grow; a subclass sets it: ``width = PageWidth.WIDE``
+    width: ClassVar[PageWidth] = PageWidth.NARROW
 
     #: names the page in its router; set once, from `__attrs_post_init__`, with
     #: `_init_route`
