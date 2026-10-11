@@ -16,6 +16,7 @@ from typing import Any, Optional, Union
 
 from attrs import Factory
 from textual.containers import VerticalScroll
+from textual.coordinate import Coordinate
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, DataTable, Footer, Input
 
@@ -27,6 +28,7 @@ from composeui.core.view import (
     DialogKind,
     MainView,
     RendererType,
+    SelectionMode,
     View,
     define_view,
 )
@@ -694,7 +696,7 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
     assert isinstance(view.tables.narrow.renderer, TextualWidgetRenderer)
     table = view.tables.narrow.renderer.widget
     assert isinstance(table, DataTable)
-    emitted: list[int | None] = []
+    emitted: list[list[int]] = []
     view.tables.narrow.selection_changed.connect(emitted.append)
 
     async with app.run_test(size=(120, 40)) as pilot:
@@ -705,16 +707,16 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
         await pilot.click(table, offset=(2, 2))
         await pilot.pause()
         assert table.show_cursor
-        assert view.tables.narrow.selected_row == 1
-        assert emitted == [1]
+        assert view.tables.narrow.selected_rows == [1]
+        assert emitted == [[1]]
 
         await pilot.press("down")
         await pilot.pause()
-        assert view.tables.narrow.selected_row == 2
-        assert emitted == [1, 2]
+        assert view.tables.narrow.selected_rows == [2]
+        assert emitted == [[1], [2]]
 
         # set from code: shown, but not the user's doing
-        view.tables.narrow.selected_row = 0
+        view.tables.narrow.selected_rows = [0]
         await pilot.pause()
         assert table.cursor_row == 0
         # new rows still holding it, moved: the cursor follows it
@@ -724,4 +726,48 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
         view.tables.narrow.rows = [["West"]]
         await pilot.pause()
         assert not table.show_cursor
-        assert emitted == [1, 2]
+        assert emitted == [[1], [2]]
+
+
+@pytest.mark.asyncio
+async def test_a_click_or_enter_adds_or_removes_its_row_in_a_table_selecting_several() -> None:
+    view = HorizontalMainView()
+    table_view = view.tables.narrow
+    table_view.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(table_view.renderer, TextualWidgetRenderer)
+    table = table_view.renderer.widget
+    assert isinstance(table, DataTable)
+    emitted: list[list[int]] = []
+    table_view.selection_changed.connect(emitted.append)
+
+    def checked() -> list[str]:
+        return [str(table.get_cell_at(Coordinate(row, 0))) for row in range(table.row_count)]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        # the header, then the rows: South is the second
+        await pilot.click(table, offset=(2, 2))
+        await pilot.pause()
+        # the cursor only moves: Enter adds its row
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        assert table_view.selected_rows == [1, 2]
+        assert checked() == ["", "✓", "✓"]
+        await pilot.click(table, offset=(2, 2))
+        await pilot.pause()
+        assert table_view.selected_rows == [2]
+        assert emitted == [[1], [1, 2], [2]]
+
+        # set from code: shown, but not the user's doing
+        table_view.selected_rows = [0, 1]
+        await pilot.pause()
+        assert checked() == ["✓", "✓", ""]
+        # new rows still holding one of them, moved: its check follows it
+        table_view.rows = [["West"], ["North"]]
+        await pilot.pause()
+        assert checked() == ["", "✓"]
+        assert emitted == [[1], [1, 2], [2]]

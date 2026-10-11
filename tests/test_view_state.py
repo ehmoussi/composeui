@@ -17,6 +17,7 @@ from composeui.core.view import (
     LabelView,
     MainView,
     RadioGroupView,
+    SelectionMode,
     _is_omitted_type,
     define_view,
 )
@@ -300,32 +301,52 @@ def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> N
 
 def test_a_table_selects_only_one_of_its_rows_and_keeps_it_through_new_rows() -> None:
     table = HorizontalMainView().tables.narrow
-    table.selected_row = 2
+    table.selected_rows = [2]
 
-    with pytest.raises(ValueError, match="selected_row"):
-        table.selected_row = 3
-    assert table.selected_row == 2
+    for rows in ([3], [0, 0], [0, 1]):  # past the end, twice, or several rows
+        with pytest.raises(ValueError, match="selected_rows"):
+            table.selected_rows = rows
+    assert table.selected_rows == [2]
 
     # East moved to the end, past the replaced rows' last index
     table.rows = [["West"], ["South"], ["Centre"], ["East"]]
-    assert table.selected_row == 3
+    assert table.selected_rows == [3]
     # twice: either could be the one selected
     table.rows = [["East"], ["East"]]
-    assert table.selected_row is None
-    table.selected_row = 0
+    assert table.selected_rows == []
+    table.selected_rows = [0]
     table.rows = [["North"]]
-    assert table.selected_row is None
+    assert table.selected_rows == []
+
+
+def test_a_table_selecting_several_rows_keeps_each_through_new_rows() -> None:
+    table = HorizontalMainView().tables.narrow
+    table.selection_mode = SelectionMode.MULTIPLE
+    table.selected_rows = [0, 2]
+
+    # North dropped, East moved to the start
+    table.rows = [["East"], ["South"], ["West"]]
+    assert table.selected_rows == [0]
+    table.selected_rows = [0, 1, 2]
+    table.rows = [["West"], ["South"], ["East"]]
+    assert table.selected_rows == [0, 1, 2]
+
+    # back to a single row: the first selected one stays
+    table.selection_mode = SelectionMode.SINGLE
+    assert table.selected_rows == [0]
 
 
 def test_load_state_restores_a_table_selection_with_its_rows(tmp_path: Path) -> None:
     view = HorizontalMainView()
-    view.tables.wide.rows = [["A"], ["B"]]
-    view.tables.wide.selected_row = 1
+    view.tables.wide.selection_mode = SelectionMode.MULTIPLE
+    view.tables.wide.rows = [["A"], ["B"], ["C"]]
+    view.tables.wide.selected_rows = [0, 2]
     path = tmp_path / "state.side"
     view.save_state(path)
 
     loaded = HorizontalMainView()
     loaded.load_state(path)
 
-    assert loaded.tables.wide.rows == [["A"], ["B"]]
-    assert loaded.tables.wide.selected_row == 1
+    assert loaded.tables.wide.selection_mode is SelectionMode.MULTIPLE
+    assert loaded.tables.wide.rows == [["A"], ["B"], ["C"]]
+    assert loaded.tables.wide.selected_rows == [0, 2]
