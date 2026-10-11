@@ -567,3 +567,29 @@ def test_editing_a_cell_posts_its_text_without_selecting_its_row(places_page: Pa
     expect(lake).not_to_have_attribute("aria-current", "true")
     expect(note).to_have_value("Windy")
     expect(note).to_be_focused()
+
+
+def test_a_row_clicked_before_the_last_click_is_answered_shows_selected(
+    horizontal_page: Page,
+) -> None:
+    page = horizontal_page
+    page.goto("/")
+    north, south = (page.get_by_role("row", name=name) for name in ("North", "South"))
+    # a slow network: both clicks are posted before either is answered
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        held.append(route)
+
+    page.route("**/widget/*", hold)
+    for row in (north, south):
+        with page.expect_request("**/widget/*"):
+            row.click()
+    # the first answer swaps the table, replacing the row the second click came from
+    for route in held:
+        with _posted(page):
+            route.continue_()
+    page.unroute("**/widget/*")
+
+    expect(south).to_have_attribute("aria-current", "true")
+    expect(north).not_to_have_attribute("aria-current", "true")
