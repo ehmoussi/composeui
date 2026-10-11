@@ -20,20 +20,26 @@ from qtpy.QtWidgets import (
     QTableView,
 )
 
+from composeui.core.view import replace_cell
+
 _Index = Union[QModelIndex, QPersistentModelIndex]
 
 
 class QTextTableModel(QAbstractTableModel):
-    """A read-only table of text over the view's own lists, without a copy per cell.
+    """A table of text over the view's own lists, without a copy per cell.
 
     Qt asks only for the cells it draws, so a long table costs no more than a short one.
-    Its items aren't editable: `QAbstractTableModel.flags` leaves `ItemIsEditable` out.
+    The cells of `editable_columns` are editable: an edit changing a cell replaces its
+    row (the view's lists aren't changed in place), then `cell_edited` emits it.
     """
+
+    cell_edited = Signal(int, int, str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._headers: list[str] = []
         self._rows: list[list[str]] = []
+        self.editable_columns: list[int] = []
 
     def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
         self.beginResetModel()
@@ -48,11 +54,31 @@ class QTextTableModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self._headers)
 
     def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
-        if role != Qt.ItemDataRole.DisplayRole or not index.isValid():
+        is_shown = role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole)
+        if not is_shown or not index.isValid():
             return None
         row = self._rows[index.row()]
         # a row short of a cell shows it empty
         return row[index.column()] if index.column() < len(row) else None
+
+    def flags(self, index: _Index) -> Qt.ItemFlag:
+        flags = super().flags(index)
+        if index.isValid() and index.column() in self.editable_columns:
+            flags |= Qt.ItemFlag.ItemIsEditable
+        return flags
+
+    def setData(  # noqa: N802
+        self, index: _Index, value: Any, role: int = Qt.ItemDataRole.EditRole
+    ) -> bool:
+        if role != Qt.ItemDataRole.EditRole or not index.isValid():
+            return False
+        row, column, text = index.row(), index.column(), str(value)
+        if text == (self.data(index) or ""):
+            return False
+        self._rows = replace_cell(self._rows, row, column, text)
+        self.dataChanged.emit(index, index)
+        self.cell_edited.emit(row, column, text)
+        return True
 
     def headerData(  # noqa: N802
         self,
@@ -66,15 +92,17 @@ class QTextTableModel(QAbstractTableModel):
 
 
 class QTextTableView(QTableView):
-    """A read-only table of text, with no row numbers, where the user selects rows.
+    """A table of text, with no row numbers, where the user selects rows.
 
     One row at most by default; with `set_multiple_selection`, each click adds or removes
     a row, as Qt's `MultiSelection`. `selected_rows_changed` emits the selected rows'
     indexes, in order, only when the user changes them: setting them or the table from
-    code stays silent.
+    code stays silent. The user edits a cell of `set_editable_columns` with a double click
+    or F2, and `cell_edited` emits its row, column and new text.
     """
 
     selected_rows_changed = Signal(list)
+    cell_edited = Signal(int, int, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -96,6 +124,7 @@ class QTextTableView(QTableView):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.selectionModel().selectionChanged.connect(self._emit_selected_rows_changed)
+        self._model.cell_edited.connect(self.cell_edited)
 
     def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
         self._is_setting = True
@@ -103,6 +132,9 @@ class QTextTableView(QTableView):
             self._model.set_table(headers, rows)
         finally:
             self._is_setting = False
+
+    def set_editable_columns(self, columns: list[int]) -> None:
+        self._model.editable_columns = columns
 
     def set_multiple_selection(self, *, is_multiple: bool) -> None:
         self.setSelectionMode(

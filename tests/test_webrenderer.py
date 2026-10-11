@@ -77,6 +77,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.tables import EditableTableMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -2065,6 +2066,77 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     assert table.selected_rows == [0]
     assert _rows_with(body, table_id, "aria-selected") == [f"{table_id}-row-0"]
     assert emitted == [[2], [0, 2], [0]]
+
+
+def test_an_editable_cell_is_a_field_posting_its_text_without_swapping_the_table() -> None:
+    views: list[EditableTableMainView] = []
+
+    class PlacesApp(WebApplication[EditableTableMainView]):
+        def setup_session(self, main_view: EditableTableMainView) -> None:
+            views.append(main_view)
+
+    app = PlacesApp(build_main_view=EditableTableMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        table = view.places
+        table_id = _widget_id(table.renderer)
+        edited: list[tuple[int, int, str, list[str]]] = []
+
+        def record(row: int, column: int, text: str) -> None:
+            # the row as it was: the edit is applied once the callbacks have run
+            edited.append((row, column, text, table.rows[row]))
+
+        table.cell_edited.connect(record)
+
+        def edit(row: str, column: str, text: str) -> Any:
+            return client.post(
+                f"/widget/{table_id}",
+                data={"event": "edit", "row": row, "column": column, "text": text},
+            )
+
+        # only the notes are fields, named by their header; the harbour's is empty
+        fields = [
+            attributes for tag, attributes in _element(page, table_id).descendants if tag == "input"
+        ]
+        assert [(field["aria-label"], field["value"]) for field in fields] == [
+            ("Note", "Calm"),
+            ("Note", ""),
+        ]
+
+        table.selected_rows = [1]
+        body = edit("1", "1", "Busy").text
+        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert edited == [(1, 1, "Busy", ["Harbour"])]
+        assert table.selected_rows == [1]
+        # the field already shows what the user typed
+        assert _find(body, table_id) is None
+
+        # the app refuses an edit, putting the same rows back: the table comes back
+        # (nothing selected: putting a selection back would swap the table on its own)
+        table.selected_rows = []
+
+        def refuse(_row: int, _column: int, _text: str) -> None:
+            table.rows = [list(cells) for cells in table.rows]
+
+        table.cell_edited.connect(refuse)
+        fields = [
+            attributes
+            for tag, attributes in _swapped(edit("0", "1", "Windy").text, table_id).descendants
+            if tag == "input"
+        ]
+        assert [field["value"] for field in fields] == ["Calm", "Busy"]
+
+        # the place isn't editable, and the row a stale page shows is gone: the table
+        # comes back as it now is
+        for row, column in (("0", "0"), ("7", "1")):
+            _swapped(edit(row, column, "Pond").text, table_id)
+        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+
+        table.is_enabled = False
+        assert edit("0", "1", "Windy").status_code == 400
+        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert len(edited) == 2  # the refused edit's
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

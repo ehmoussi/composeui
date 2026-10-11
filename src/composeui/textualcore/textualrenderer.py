@@ -46,6 +46,7 @@ from composeui.core.view import (
     StatusBar,
     VerticalView,
     View,
+    replace_cell,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
@@ -664,6 +665,8 @@ class TableViewLike(ViewLike, Protocol):
     rows: list[list[str]]
     selected_rows: list[int]
     selection_changed: Signal[list[int]]
+    editable_columns: list[int]
+    cell_edited: Signal[int, int, str]
 
 
 class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
@@ -675,6 +678,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
                 "selection_mode": self._refresh_selection_mode,
                 "rows": self._refresh_rows,
                 "selected_rows": self._refresh_selected_rows,
+                "editable_columns": self._refresh_editable_columns,
             }
         )
 
@@ -682,6 +686,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
         if self._rendered_object is None:
             self._rendered_object = ComposeTable()
             self._rendered_object.selected_rows_changed.connect(self._update_selected_rows)
+            self._rendered_object.cell_edited.connect(self._update_cell)
 
     @staticmethod
     def _refresh_headers(
@@ -708,6 +713,12 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
         rendered_object.set_selected_rows(value)
 
     @staticmethod
+    def _refresh_editable_columns(
+        _view: TableViewLike, rendered_object: ComposeTable, value: list[int]
+    ) -> None:
+        rendered_object.editable_columns = value
+
+    @staticmethod
     def _update_state(view: TableViewLike, rendered_object: ComposeTable) -> None:
         view.selected_rows = rendered_object.selected_rows()
 
@@ -715,6 +726,16 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
         with self.stop_refresh():
             self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
+
+    def _update_cell(self, row: int, column: int, text: str) -> None:
+        rows = self._view.rows
+        self._view.cell_edited.emit(row, column, text)
+        if self._view.rows is rows:
+            with self.stop_refresh():
+                self._view.rows = replace_cell(rows, row, column, text)
+        elif self._view.rows == rows:
+            # the app put the same rows back, which reached nothing: show them again
+            self.refresh()
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

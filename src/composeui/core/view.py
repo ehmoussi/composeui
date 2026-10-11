@@ -781,15 +781,28 @@ class SelectionMode(enum.Enum):
     MULTIPLE = enum.auto()
 
 
+def replace_cell(rows: list[list[str]], row: int, column: int, text: str) -> list[list[str]]:
+    """Return `rows` with `text` in a cell, as new lists: a row short of it is filled with ""."""
+    cells = [*rows[row], *[""] * (column + 1 - len(rows[row]))]
+    cells[column] = text
+    return [*rows[:row], cells, *rows[row + 1 :]]
+
+
 @define_view
 class TableMixin:
-    """A read-only table of text: the app formats each cell itself.
+    """A table of text: the app formats each cell itself.
 
     Each row has one cell per header. Assign new lists to update the table: changing a
     list in place doesn't reach the renderer. The user selects rows as `selection_mode`
     allows: `selected_rows` holds their indexes, and `selection_changed` emits them when
     the user changes them. New `rows` keep each selected row selected when they hold it
     exactly once, wherever it moved, and drop it otherwise.
+
+    The user edits the cells of the columns in `editable_columns` (none by default):
+    `cell_edited` emits the row, the column and the new text while `rows` still holds the
+    old one, then the edit replaces its row in `rows`, keeping the selection. To refuse or
+    reformat it, or to show what the edit changed elsewhere, assign `rows` from the
+    callback instead: the table shows them, and the edit isn't applied on top.
     """
 
     def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
@@ -816,6 +829,10 @@ class TableMixin:
         self, attribute: "attrs.Attribute[Any]", rows: list[list[str]]
     ) -> list[list[str]]:
         """Move `selected_rows` to their rows in `rows` (or drop them), and notify the renderer."""
+        renderer = cast("View", self).renderer
+        if isinstance(renderer, (Renderer, RendererContainer)) and renderer.is_updating_state():
+            # the user edited a cell: every row stays where it was, and so does the selection
+            return rows
         selected = [self.rows[row] for row in self.selected_rows]
         # cleared first: refreshing the rows clears a widget's selection, even at the same index
         self.selected_rows = []
@@ -837,6 +854,8 @@ class TableMixin:
     # after `rows`: loading saved state checks it against the rows already loaded
     selected_rows: list[int] = attrs.field(factory=list[int], validator=[_check_selected_rows])
     selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
+    editable_columns: list[int] = attrs.Factory(list[int])
+    cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
 
 
 @define_view
