@@ -779,7 +779,8 @@ class TableMixin:
     Each row has one cell per header. Assign new lists to update the table: changing a
     list in place doesn't reach the renderer. The user can select one row:
     `selected_row` is its index, and `selection_changed` emits it (or `None`) when the
-    user selects another row.
+    user selects another row. New `rows` keep the selection on its row when they hold
+    it exactly once, wherever it moved, and clear it otherwise.
     """
 
     def _check_selected_row(self, _attribute: "attrs.Attribute[Any]", row: Optional[int]) -> None:
@@ -793,9 +794,18 @@ class TableMixin:
     def _reconcile_rows(
         self, attribute: "attrs.Attribute[Any]", rows: list[list[str]]
     ) -> list[list[str]]:
-        """Clear `selected_row`, which would point at another row, then notify the renderer."""
+        """Move `selected_row` to its row in `rows` (or clear it), and notify the renderer."""
+        selected = None if self.selected_row is None else self.rows[self.selected_row]
+        # cleared first: refreshing the rows clears a widget's selection, even at the same index
         self.selected_row = None
-        return notify_renderer(cast("View", self), attribute, rows)
+        rows = notify_renderer(cast("View", self), attribute, rows)
+        if selected is not None and rows.count(selected) == 1:
+            row = rows.index(selected)
+            fields = attrs.fields_dict(cast("type[AttrsInstance]", type(self)))
+            notify_renderer(cast("View", self), fields["selected_row"], row)
+            # unvalidated: the validator would check `row` against the rows being replaced
+            object.__setattr__(self, "selected_row", row)
+        return rows
 
     headers: list[str] = attrs.Factory(list[str])
     rows: list[list[str]] = attrs.field(factory=list[list[str]], on_setattr=_reconcile_rows)

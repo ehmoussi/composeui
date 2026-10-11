@@ -298,7 +298,7 @@ def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> N
     assert view.status_bar.message == "Can't open 'bad.study': it isn't a valid .study file."
 
 
-def test_a_table_selects_only_one_of_its_rows_and_forgets_it_with_new_rows() -> None:
+def test_a_table_selects_only_one_of_its_rows_and_keeps_it_through_new_rows() -> None:
     table = HorizontalMainView().tables.narrow
     table.selected_row = 2
 
@@ -306,8 +306,14 @@ def test_a_table_selects_only_one_of_its_rows_and_forgets_it_with_new_rows() -> 
         table.selected_row = 3
     assert table.selected_row == 2
 
-    # the index would point at another row
-    table.rows = [["West"], ["South"], ["East"]]
+    # East moved to the end, past the replaced rows' last index
+    table.rows = [["West"], ["South"], ["Centre"], ["East"]]
+    assert table.selected_row == 3
+    # twice: either could be the one selected
+    table.rows = [["East"], ["East"]]
+    assert table.selected_row is None
+    table.selected_row = 0
+    table.rows = [["North"]]
     assert table.selected_row is None
 
 
