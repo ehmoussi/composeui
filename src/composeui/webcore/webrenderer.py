@@ -1340,6 +1340,8 @@ class WebRouterRenderer(WebRenderer[Router]):
 
     def render(self) -> None:
         super().render()
+        # not the toolbar: apart from the pages, like Qt's, it still switches them
+        self._adopt(self._view.pages)
         # the children are rendered first: make each page's action a link to it
         for page in self._view.pages:
             if isinstance(page.action.renderer, WebActionRenderer):
