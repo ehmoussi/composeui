@@ -28,6 +28,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    ButtonVariant,
     DialogKind,
     DialogView,
     ExitAppAction,
@@ -453,7 +454,16 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
 
 class ButtonViewLike(ViewLike, Protocol):
     text: str
+    variant: ButtonVariant
     clicked: SignalNoArgs
+
+
+#: each button variant as daisyUI's
+_BUTTON_CLASSES: Final[dict[ButtonVariant, str]] = {
+    ButtonVariant.PRIMARY: "btn-primary",
+    ButtonVariant.SECONDARY: "btn-soft",
+    ButtonVariant.DANGER: "btn-error",
+}
 
 
 class WebButtonRenderer(WebRenderer[ButtonViewLike]):
@@ -463,14 +473,15 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
 
     def __init__(self, view: ButtonViewLike) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"text": self._mark_dirty})
+        self._refresh_dispatcher.update({"text": self._mark_dirty, "variant": self._mark_dirty})
 
     def to_html(self, *, oob: bool = False) -> str:
         disabled = "" if self._view.is_enabled else " disabled"
+        variant = _BUTTON_CLASSES[self._view.variant]
         # `self-start`: as wide as its text, not the page's whole column
         return (
             f'<button {self._root_attributes(oob=oob)} type="button"'
-            ' class="btn btn-primary self-start"'
+            f' class="btn {variant} self-start"'
             f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "click"}}\''
             f' hx-swap="none"{disabled}>{html.escape(self._view.text)}</button>'
         )

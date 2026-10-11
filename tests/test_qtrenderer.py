@@ -34,7 +34,7 @@ from qtpy.QtWidgets import (
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import MainRenderer, RendererContainer
-from composeui.core.view import ActionView, DialogKind, LabelView, RendererType
+from composeui.core.view import ActionView, ButtonVariant, DialogKind, LabelView, RendererType
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
@@ -467,6 +467,13 @@ def test_clicking_the_button_runs_what_its_view_connects(qtbot: QtBot) -> None:
     assert view.router.results.total.text == "Submitted: Ada"
     inputs.submit.text = "Send"
     assert button.text() == "Send"
+    # the main action stands out; a destroying one is red
+    assert button.isDefault()
+    inputs.submit.variant = ButtonVariant.DANGER
+    assert not button.isDefault()
+    assert "red" in button.styleSheet()
+    inputs.submit.variant = ButtonVariant.SECONDARY
+    assert (button.isDefault(), button.styleSheet()) == (False, "")
 
 
 def _dialog_window(qtbot: QtBot) -> tuple[DialogsMainView, QMainWindow, QMessageBox]:

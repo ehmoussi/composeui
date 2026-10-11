@@ -34,6 +34,7 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.view import (
     ActionView,
+    ButtonVariant,
     DialogView,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -1708,6 +1709,7 @@ def test_clicking_the_button_swaps_in_what_its_view_changed(
     button_id = _widget_id(inputs.submit.renderer)
     button = _element(page, button_id)
     assert (button.tag, button.attributes["type"], button.text) == ("button", "button", "Submit")
+    assert "btn-primary" in button.attributes["class"].split()
     inputs.name.text = "<Ada>"
 
     response = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
@@ -1716,6 +1718,11 @@ def test_clicking_the_button_swaps_in_what_its_view_changed(
     total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
     assert total.text == "Submitted: <Ada>"  # escaped in the markup, the text once parsed
     assert _find(response.text, button_id) is None  # the clicked button isn't swapped back
+
+    with collect_dirty() as dirty:
+        inputs.submit.variant = ButtonVariant.DANGER
+        swapped = _swapped(render_dirty(dirty), button_id)
+    assert "btn-error" in swapped.attributes["class"].split()
 
     inputs.submit.is_enabled = False
     refused = pages_client.post(f"/widget/{button_id}", data={"event": "click"})

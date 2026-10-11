@@ -741,6 +741,17 @@ class CheckBoxView(CheckBoxMixin, View):
     _renderer_key = "checkbox"
 
 
+class ButtonVariant(enum.Enum):
+    """How much a button stands out, for the user to tell actions apart."""
+
+    #: the page's main action, e.g. submitting its form
+    PRIMARY = enum.auto()
+    #: an action beside the main one
+    SECONDARY = enum.auto()
+    #: an action destroying something, e.g. removing rows
+    DANGER = enum.auto()
+
+
 @define_view
 class ButtonView(View):
     """A button the user clicks to act on what the page shows, e.g. to submit a form."""
@@ -748,6 +759,7 @@ class ButtonView(View):
     _renderer_key = "button"
 
     text: str = attrs.field(default="")
+    variant: ButtonVariant = attrs.field(default=ButtonVariant.PRIMARY)
     #: the user clicked the button
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 

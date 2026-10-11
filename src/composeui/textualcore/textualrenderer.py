@@ -25,6 +25,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    ButtonVariant,
     DialogKind,
     DialogView,
     FormLabelRowView,
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from textual.widget import Widget
+    from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
 
@@ -613,13 +615,24 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
 
 class ButtonViewLike(ViewLike, Protocol):
     text: str
+    variant: ButtonVariant
     clicked: SignalNoArgs
+
+
+#: each button variant as Textual's
+_BUTTON_VARIANTS: dict[ButtonVariant, ButtonVariantName] = {
+    ButtonVariant.PRIMARY: "primary",
+    ButtonVariant.SECONDARY: "default",
+    ButtonVariant.DANGER: "error",
+}
 
 
 class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]):
     def __init__(self, view: ButtonViewLike) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"text": self._refresh_text})
+        self._refresh_dispatcher.update(
+            {"text": self._refresh_text, "variant": self._refresh_variant}
+        )
 
     def render(self) -> None:
         if self._rendered_object is None:
@@ -629,6 +642,12 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
     @staticmethod
     def _refresh_text(_view: ButtonViewLike, rendered_object: ComposeButton, value: str) -> None:
         rendered_object.label = value
+
+    @staticmethod
+    def _refresh_variant(
+        _view: ButtonViewLike, rendered_object: ComposeButton, value: ButtonVariant
+    ) -> None:
+        rendered_object.variant = _BUTTON_VARIANTS[value]
 
     @staticmethod
     def _update_state(view: ButtonViewLike, rendered_object: ComposeButton) -> None:
