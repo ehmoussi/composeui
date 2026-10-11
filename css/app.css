@@ -187,3 +187,8 @@ body {
   --input-color: var(--color-error);
   border-color: var(--color-error);
 }
+
+/* a table's selected row, in the theme's colour: over the zebra stripes and the hover */
+.table tbody tr[aria-current="true"] {
+  background-color: color-mix(in oklch, var(--color-primary) 18%, transparent);
+}

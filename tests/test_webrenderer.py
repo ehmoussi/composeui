@@ -73,6 +73,7 @@ from examples import pipeform
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.dialogs import DialogsMainView
+from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
 
 if TYPE_CHECKING:
@@ -1918,3 +1919,45 @@ def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
     assert "hidden" not in _element(page, dialog_id).attributes
     router = _element(page, _widget_id(main_view.pages.renderer))
     assert all(attributes.get("id") != dialog_id for _, attributes in router.descendants)
+
+
+def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> None:
+    views: list[HorizontalMainView] = []
+
+    class TablesApp(WebApplication[HorizontalMainView]):
+        def setup_session(self, main_view: HorizontalMainView) -> None:
+            views.append(main_view)
+
+    app = TablesApp(build_main_view=HorizontalMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        table = view.tables.narrow
+        table_id = _widget_id(table.renderer)
+        emitted: list[int | None] = []
+        table.selection_changed.connect(emitted.append)
+
+        def select(row: str) -> Any:
+            return client.post(f"/widget/{table_id}", data={"event": "select", "row": row})
+
+        def current_rows(body: str) -> list[str | None]:
+            rows = [attributes for tag, attributes in _swapped(body, table_id).descendants]
+            return [row["id"] for row in rows if row.get("aria-current") == "true"]
+
+        body = select("1").text
+        assert table.selected_row == 1
+        assert emitted == [1]
+        assert current_rows(body) == [f"{table_id}-row-1"]
+
+        select("1")  # the selected row again
+        assert emitted == [1]
+
+        # a row a stale page still shows: the table comes back as it now is
+        body = select("7").text
+        assert table.selected_row == 1
+        assert current_rows(body) == [f"{table_id}-row-1"]
+
+        table.is_enabled = False
+        assert select("2").status_code == 400
+        assert table.selected_row == 1
+        assert emitted == [1]

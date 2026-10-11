@@ -629,3 +629,29 @@ def test_a_message_has_one_button_and_escape_or_closing_accepts_it(qtbot: QtBot)
     box.close()  # from its window's title bar
     assert not dialog.is_visible
     assert view.name.text == ""
+
+
+def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBot) -> None:
+    view = HorizontalMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _widget(view.tables.narrow)
+    assert isinstance(table, QTableView)
+    emitted: list[int | None] = []
+    view.tables.narrow.selection_changed.connect(emitted.append)
+
+    south = table.visualRect(table.model().index(1, 0)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=south)
+
+    assert view.tables.narrow.selected_row == 1
+    assert emitted == [1]
+
+    # set from code: shown, but not the user's doing
+    view.tables.narrow.selected_row = 2
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [2]
+    view.tables.narrow.rows = [["West"]]
+    assert table.selectionModel().selectedRows() == []
+    assert emitted == [1]

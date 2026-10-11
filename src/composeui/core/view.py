@@ -777,11 +777,31 @@ class TableMixin:
     """A read-only table of text: the app formats each cell itself.
 
     Each row has one cell per header. Assign new lists to update the table: changing a
-    list in place doesn't reach the renderer.
+    list in place doesn't reach the renderer. The user can select one row:
+    `selected_row` is its index, and `selection_changed` emits it (or `None`) when the
+    user selects another row.
     """
 
+    def _check_selected_row(self, _attribute: "attrs.Attribute[Any]", row: Optional[int]) -> None:
+        if row is not None and not 0 <= row < len(self.rows):
+            msg = (
+                f"Cannot set {type(self).__name__}.selected_row to {row}: the table has "
+                f"{len(self.rows)} rows."
+            )
+            raise ValueError(msg)
+
+    def _reconcile_rows(
+        self, attribute: "attrs.Attribute[Any]", rows: list[list[str]]
+    ) -> list[list[str]]:
+        """Clear `selected_row`, which would point at another row, then notify the renderer."""
+        self.selected_row = None
+        return notify_renderer(cast("View", self), attribute, rows)
+
     headers: list[str] = attrs.Factory(list[str])
-    rows: list[list[str]] = attrs.Factory(list[list[str]])
+    rows: list[list[str]] = attrs.field(factory=list[list[str]], on_setattr=_reconcile_rows)
+    # after `rows`: loading saved state checks it against the rows already loaded
+    selected_row: Optional[int] = attrs.field(default=None, validator=[_check_selected_row])
+    selection_changed: Signal[Optional[int]] = attrs.Factory(Signal[Optional[int]])
 
 
 @define_view

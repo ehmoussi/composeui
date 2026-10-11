@@ -454,6 +454,8 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     rows: list[list[str]]
+    selected_row: int | None
+    selection_changed: Signal[int | None]
 
 
 class QtTableRenderer(QtWidgetRenderer[TableViewLike, QTextTableView]):
@@ -463,19 +465,23 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QTextTableView]):
             {
                 "headers": self._refresh_headers,
                 "rows": self._refresh_rows,
+                "selected_row": self._refresh_selected_row,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTextTableView()
+            self._rendered_object.selected_row_changed.connect(self._update_selected_row)
             self.refresh()
 
     @staticmethod
     def _refresh_headers(
         view: TableViewLike, rendered_object: QTextTableView, value: list[str]
     ) -> None:
+        # resetting the table drops its selection: reapply it
         rendered_object.set_table(value, view.rows)
+        rendered_object.set_selected_row(view.selected_row)
 
     @staticmethod
     def _refresh_rows(
@@ -484,8 +490,19 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QTextTableView]):
         rendered_object.set_table(view.headers, value)
 
     @staticmethod
+    def _refresh_selected_row(
+        _view: TableViewLike, rendered_object: QTextTableView, value: int | None
+    ) -> None:
+        rendered_object.set_selected_row(value)
+
+    @staticmethod
     def _update_state(view: TableViewLike, rendered_object: QTextTableView) -> None:
-        pass  # read-only: the user can't change anything to read back
+        view.selected_row = rendered_object.selected_row()
+
+    def _update_selected_row(self, row: int | None) -> None:
+        with self.stop_refresh():
+            self._view.selected_row = row
+        self._view.selection_changed.emit(row)
 
 
 TValue = TypeVar("TValue")

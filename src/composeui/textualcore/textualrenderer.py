@@ -6,12 +6,11 @@ import functools
 from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
-from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
-from textual.widgets import ContentSwitcher, DataTable, Footer, Label, Static
+from textual.widgets import ContentSwitcher, Footer, Label, Static
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
@@ -53,6 +52,7 @@ from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composetable import ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 
 if TYPE_CHECKING:
@@ -660,44 +660,52 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     rows: list[list[str]]
+    selected_row: int | None
+    selection_changed: Signal[int | None]
 
 
-class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, "DataTable[Text]"]):
+class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
     def __init__(self, view: TableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "headers": self._refresh_headers,
                 "rows": self._refresh_rows,
+                "selected_row": self._refresh_selected_row,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = DataTable(cursor_type="none", zebra_stripes=True)
+            self._rendered_object = ComposeTable()
+            self._rendered_object.selected_row_changed.connect(self._update_selected_row)
 
     @staticmethod
     def _refresh_headers(
-        view: TableViewLike, rendered_object: DataTable[Text], value: list[str]
+        view: TableViewLike, rendered_object: ComposeTable, value: list[str]
     ) -> None:
-        TextualTableRenderer._fill(rendered_object, value, view.rows)
+        rendered_object.fill(value, view.rows)
 
     @staticmethod
     def _refresh_rows(
-        view: TableViewLike, rendered_object: DataTable[Text], value: list[list[str]]
+        view: TableViewLike, rendered_object: ComposeTable, value: list[list[str]]
     ) -> None:
-        TextualTableRenderer._fill(rendered_object, view.headers, value)
+        rendered_object.fill(view.headers, value)
 
     @staticmethod
-    def _fill(table: DataTable[Text], headers: list[str], rows: list[list[str]]) -> None:
-        """Rebuild the whole table, as plain text: a string cell would be read as markup."""
-        table.clear(columns=True)
-        table.add_columns(*(Text(header) for header in headers))
-        table.add_rows([Text(cell) for cell in row] for row in rows)
+    def _refresh_selected_row(
+        _view: TableViewLike, rendered_object: ComposeTable, value: int | None
+    ) -> None:
+        rendered_object.set_selected_row(value)
 
     @staticmethod
-    def _update_state(view: TableViewLike, rendered_object: DataTable[Text]) -> None:
-        pass  # read-only: the user can't change anything to read back
+    def _update_state(view: TableViewLike, rendered_object: ComposeTable) -> None:
+        view.selected_row = rendered_object.selected_row()
+
+    def _update_selected_row(self, row: int | None) -> None:
+        with self.stop_refresh():
+            self._view.selected_row = row
+        self._view.selection_changed.emit(row)
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

@@ -505,3 +505,25 @@ def test_a_vertical_view_stacks_its_views_at_its_top(vertical_page: Page) -> Non
     )
     # next to a taller table, the column's spare height is left below its views
     assert button["y"] + button["height"] < tall["y"] + tall["height"]
+
+
+def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
+    horizontal_page: Page,
+) -> None:
+    page = horizontal_page
+    page.goto("/")
+    north, south = (page.get_by_role("row", name=name) for name in ("North", "South"))
+
+    with _posted(page):
+        north.click()
+    expect(north).to_have_attribute("aria-current", "true")
+    # htmx binds the swapped rows' triggers once the swap has settled
+    expect(page.locator(".htmx-added")).to_have_count(0)
+
+    south.focus()
+    with _posted(page):
+        page.keyboard.press("Enter")
+    expect(south).to_have_attribute("aria-current", "true")
+    expect(north).not_to_have_attribute("aria-current", "true")
+    # the table was swapped back, the row that had the focus keeps it
+    expect(south).to_be_focused()

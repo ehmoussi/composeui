@@ -20,6 +20,7 @@ from composeui.core.view import (
     _is_omitted_type,
     define_view,
 )
+from tests.horizontal import HorizontalMainView
 
 
 # Generic mixins must be bound to a concrete type through a subclass (like
@@ -295,3 +296,30 @@ def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> N
     view.file_menu.open_file.triggered.emit()
 
     assert view.status_bar.message == "Can't open 'bad.study': it isn't a valid .study file."
+
+
+def test_a_table_selects_only_one_of_its_rows_and_forgets_it_with_new_rows() -> None:
+    table = HorizontalMainView().tables.narrow
+    table.selected_row = 2
+
+    with pytest.raises(ValueError, match="selected_row"):
+        table.selected_row = 3
+    assert table.selected_row == 2
+
+    # the index would point at another row
+    table.rows = [["West"], ["South"], ["East"]]
+    assert table.selected_row is None
+
+
+def test_load_state_restores_a_table_selection_with_its_rows(tmp_path: Path) -> None:
+    view = HorizontalMainView()
+    view.tables.wide.rows = [["A"], ["B"]]
+    view.tables.wide.selected_row = 1
+    path = tmp_path / "state.side"
+    view.save_state(path)
+
+    loaded = HorizontalMainView()
+    loaded.load_state(path)
+
+    assert loaded.tables.wide.rows == [["A"], ["B"]]
+    assert loaded.tables.wide.selected_row == 1
