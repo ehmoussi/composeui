@@ -30,6 +30,7 @@ Ts = TypeVarTuple("Ts")
 
 _MainViewT_contra = TypeVar("_MainViewT_contra", contravariant=True)
 _ModelT_contra = TypeVar("_ModelT_contra", contravariant=True)
+_MainViewT = TypeVar("_MainViewT", bound="MainView")
 
 
 class _MainViewCallback(Protocol[_MainViewT_contra, Unpack[Ts]]):
@@ -52,16 +53,16 @@ class _BoundCallback(Protocol[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
     ) -> None: ...
 
 
-# `model` is typed `Any`: a signal can't know its app's model class, and a callback asks
-# for that class, not `Model`
+# `main_view` and `model` are typed `Any`: a signal can't know its app's classes, and a
+# callback asks for those, not `MainView` and `Model` (`connect` still checks a main view)
 CallbackT = TypeAliasType(
     "CallbackT",
     (
         Union[
             Callable[[Unpack[Ts]], None],
-            _MainViewCallback["MainView", Unpack[Ts]],
+            _MainViewCallback[Any, Unpack[Ts]],
             _ModelCallback[Any, Unpack[Ts]],
-            _BoundCallback["MainView", Any, Unpack[Ts]],
+            _BoundCallback[Any, Any, Unpack[Ts]],
         ]
     ),
     type_params=(Ts,),
@@ -99,11 +100,11 @@ class Signal(Generic[Unpack[Ts]]):
     @overload
     def connect(self, callback: Callable[[Unpack[Ts]], None]) -> None: ...
     @overload
-    def connect(self, callback: _MainViewCallback[MainView, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: _MainViewCallback[_MainViewT, Unpack[Ts]]) -> None: ...
     @overload
     def connect(self, callback: _ModelCallback[Any, Unpack[Ts]]) -> None: ...
     @overload
-    def connect(self, callback: _BoundCallback[MainView, Any, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]]) -> None: ...
     def connect(self, callback: CallbackT[Unpack[Ts]]) -> None:
         injected_callback = self._inject_callback(callback)
         self._callbacks.append(injected_callback)
