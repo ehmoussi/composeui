@@ -2069,7 +2069,39 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     assert emitted == [[2], [0, 2], [0]]
 
 
-def test_an_editable_cell_is_a_field_posting_its_text_without_swapping_the_table() -> None:
+class _Places(NamedTuple):
+    """The editable table's view and its fragment's id, a client, and the edits emitted."""
+
+    client: TestClient
+    table: TableView
+    table_id: str
+    edited: list[tuple[int, int, str, list[str]]]
+
+    def post(self, event: str, row: str, column: str, text: str = "") -> Any:
+        data = {"event": event, "row": row, "column": column, "text": text}
+        return self.client.post(f"/widget/{self.table_id}", data=data)
+
+    def edit(self, row: str, column: str, text: str) -> str:
+        """Edit a cell as the user does, and return the table the edit swaps back."""
+        self.post("start_edit", row, column)
+        return str(self.post("edit", row, column, text).text)
+
+    def fields(self, markup: str) -> list[dict[str, str | None]]:
+        descendants = _swapped(markup, self.table_id).descendants
+        return [attributes for tag, attributes in descendants if tag == "input"]
+
+    def texts(self, markup: str) -> list[str]:
+        return [_element(markup, f"{self.table_id}-row-{row}").text for row in range(2)]
+
+
+def _editable_cells(markup: str, table_id: str) -> int:
+    descendants = _element(markup, table_id).descendants
+    return sum("data-edit" in attributes for _, attributes in descendants)
+
+
+@pytest.fixture
+def places() -> Iterator[_Places]:
+    """Serve an app with an editable table, recording each edit with its row as it was."""
     views: list[EditableTableMainView] = []
 
     class PlacesApp(WebApplication[EditableTableMainView]):
@@ -2078,10 +2110,9 @@ def test_an_editable_cell_is_a_field_posting_its_text_without_swapping_the_table
 
     app = PlacesApp(build_main_view=EditableTableMainView)
     with TestClient(app.create_starlette_app()) as client:
-        page = client.get("/").text
+        client.get("/")
         (view,) = views
         table = view.places
-        table_id = _widget_id(table.renderer)
         edited: list[tuple[int, int, str, list[str]]] = []
 
         def record(row: int, column: int, text: str) -> None:
@@ -2089,63 +2120,61 @@ def test_an_editable_cell_is_a_field_posting_its_text_without_swapping_the_table
             edited.append((row, column, text, table.rows[row]))
 
         table.cell_edited.connect(record)
+        yield _Places(client, table, _widget_id(table.renderer), edited)
 
-        def edit(row: str, column: str, text: str) -> Any:
-            return client.post(
-                f"/widget/{table_id}",
-                data={"event": "edit", "row": row, "column": column, "text": text},
-            )
 
-        # only the notes are fields, named by their header; the harbour's is empty
-        fields = [
-            attributes for tag, attributes in _element(page, table_id).descendants if tag == "input"
-        ]
-        assert [(field["aria-label"], field["value"]) for field in fields] == [
-            ("Note", "Calm"),
-            ("Note", ""),
-        ]
+def test_editing_a_cell_swaps_in_its_field_until_its_text_is_posted(places: _Places) -> None:
+    table, table_id = places.table, places.table_id
+    page = places.client.get("/").text
+    # only the notes are editable, the harbour's too though its row is short of it
+    assert _editable_cells(page, table_id) == 2
 
-        table.selected_rows = [1]
-        body = edit("1", "1", "Busy").text
-        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
-        assert edited == [(1, 1, "Busy", ["Harbour"])]
-        assert table.selected_rows == [1]
-        # the field already shows what the user typed
-        assert _find(body, table_id) is None
+    table.selected_rows = [1]
+    (field,) = places.fields(places.post("start_edit", "1", "1").text)
+    assert (field["aria-label"], field["value"]) == ("Note", "")
+    assert "autofocus" in field
+    body = places.post("edit", "1", "1", "Busy").text
+    assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+    assert places.edited == [(1, 1, "Busy", ["Harbour"])]
+    # the row moved nowhere: it stays selected
+    assert table.selected_rows == [1]
+    # the cell is text again
+    assert places.fields(body) == []
+    assert places.texts(body) == ["LakeCalm", "HarbourBusy"]
+    # a cell no field is editing takes no text: e.g. leaving the field after Enter
+    places.post("edit", "1", "1", "Busy")
+    places.post("edit", "0", "1", "Pond")
+    assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+    assert len(places.edited) == 1
 
-        def answer(row: int, column: int, text: str) -> None:
-            if text == "Windy":  # applied, the rows sorted by note: the lake moves last
-                rows = replace_cell(table.rows, row, column, text)
-                table.rows = sorted(rows, key=lambda cells: cells[1])
-            else:  # refused, the same rows put back
-                table.rows = [list(cells) for cells in table.rows]
+    # the place isn't editable, and the row a stale page shows is gone: the table
+    # comes back as it now is, no field in it
+    for row, column in (("0", "0"), ("7", "1")):
+        assert places.fields(places.post("start_edit", row, column).text) == []
 
-        table.cell_edited.connect(answer)
-        table.selected_rows = [0]
-        body = edit("0", "1", "Windy").text
-        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
-        assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
+    # disabled, the notes are text only, and a stale page's posts are refused
+    table.is_enabled = False
+    assert _editable_cells(places.client.get("/").text, table_id) == 0
+    assert places.post("start_edit", "0", "1").status_code == 400
 
-        # refused: the table comes back with the old text (nothing selected: putting a
-        # selection back would swap the table on its own)
-        table.selected_rows = []
-        fields = [
-            attributes
-            for tag, attributes in _swapped(edit("1", "1", "Foggy").text, table_id).descendants
-            if tag == "input"
-        ]
-        assert [field["value"] for field in fields] == ["Busy", "Windy"]
 
-        # the place isn't editable, and the row a stale page shows is gone: the table
-        # comes back as it now is
-        for row, column in (("0", "0"), ("7", "1")):
-            _swapped(edit(row, column, "Pond").text, table_id)
-        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
+def test_rows_answering_an_edit_are_shown_its_row_still_selected(places: _Places) -> None:
+    table, table_id = places.table, places.table_id
 
-        table.is_enabled = False
-        assert edit("0", "1", "Windy").status_code == 400
-        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
-        assert len(edited) == 3
+    def answer(row: int, column: int, text: str) -> None:
+        if text == "Windy":  # applied, the rows sorted by note: the lake moves last
+            rows = replace_cell(table.rows, row, column, text)
+            table.rows = sorted(rows, key=lambda cells: cells[1:])
+        else:  # refused, the same rows put back
+            table.rows = [list(cells) for cells in table.rows]
+
+    table.cell_edited.connect(answer)
+    table.selected_rows = [0]
+    body = places.edit("0", "1", "Windy")
+    assert table.rows == [["Harbour"], ["Lake", "Windy"]]
+    assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
+    assert places.texts(places.edit("1", "1", "Foggy")) == ["Harbour", "LakeWindy"]
+    assert len(places.edited) == 2
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

@@ -554,24 +554,32 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     Selecting several, the table is a grid whose rows are each selected or not
     (`aria-selected`), and a click adds or removes its row.
 
-    A cell of `editable_columns` is a borderless field, named by its header, posting its
-    text when the user leaves it or presses Enter; like any field, it isn't swapped back
-    after a post. A click or Enter in it doesn't select its row.
+    Double clicking a cell of `editable_columns`, or pressing F2 on its row (see
+    `page.py`), edits it: the table comes back with a field in the cell, named by its
+    header, its text selected. Enter or leaving the field posts the text, Escape puts the
+    old text back first; either way the cell is text again. The page keeps the text the
+    user is typing through a swap of the table, e.g. answering the double click's clicks.
     """
 
     _role = "table"
 
     def __init__(self, view: TableViewLike) -> None:
         super().__init__(view)
+        #: the cell the user is editing, by row and column
+        self._editing: tuple[int, int] | None = None
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
                 "selection_mode": self._mark_dirty,
-                "rows": self._mark_dirty,
+                "rows": self._refresh_rows,
                 "selected_rows": self._mark_dirty,
                 "editable_columns": self._mark_dirty,
             }
         )
+
+    def _refresh_rows(self, view: TableViewLike, rendered_object: str, value: Any) -> None:
+        self._editing = None  # its row may have moved, or be gone
+        self._mark_dirty(view, rendered_object, value)
 
     def to_html(self, *, oob: bool = False) -> str:
         headers = "".join(f"<th>{html.escape(header)}</th>" for header in self._view.headers)
@@ -585,7 +593,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def _row_html(self, index: int, row: list[str]) -> str:
-        # a row short of an editable cell still gets its field, empty
+        # a row short of an editable cell still gets the cell, empty
         width = max(len(row), *(column + 1 for column in self._editable_columns()), 0)
         cells = "".join(
             self._cell_html(index, column, row[column] if column < len(row) else "")
@@ -609,28 +617,33 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def _cell_html(self, row: int, column: int, text: str) -> str:
-        if column not in self._editable_columns():
+        if column not in self._editable_columns() or not self.is_enabled:
             return f"<td>{html.escape(text)}</td>"
-        if not self.is_enabled:
-            post = " disabled"
-        else:
-            post = (
-                f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
-                f""" hx-vals='{{"event": "edit", "row": "{row}", "column": "{column}"}}'"""
-                ' hx-swap="none"'
+
+        def post(event: str) -> str:
+            return (
+                f' hx-post="/widget/{self.widget_id}" hx-swap="none"'
+                f""" hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
+            )
+
+        if self._editing != (row, column):
+            return (
+                f'<td data-edit hx-trigger="dblclick"{post("start_edit")}>{html.escape(text)}</td>'
             )
         header = html.escape(self._view.headers[column])
         # its own id, so htmx gives it the focus back when the table is swapped
         return (
             f'<td class="p-0"><input id="{self.widget_id}-cell-{row}-{column}" type="text"'
-            ' class="input input-ghost input-sm w-full min-w-0" name="text"'
-            f' value="{html.escape(text)}" aria-label="{header}" autocomplete="off"'
-            f"{post}></td>"
+            ' class="input input-ghost input-sm w-full min-w-0" name="text" data-cell'
+            f' value="{html.escape(text)}" data-original="{html.escape(text)}"'
+            f' aria-label="{header}" autocomplete="off" autofocus'
+            ' hx-trigger="keydown[key==&apos;Enter&apos;], blur"'
+            f"{post('edit')}></td>"
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event == "edit" and self.is_enabled:
-            self._edit(form)
+        if event in ("start_edit", "edit") and self.is_enabled:
+            self._edit(event, form)
             return
         # a disabled table can't be clicked: a post saying otherwise is refused
         if event != "select" or not self.is_enabled:
@@ -649,7 +662,10 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
 
-    def _edit(self, form: Mapping[str, str]) -> None:
+    def _edit(self, event: str, form: Mapping[str, str]) -> None:
+        """Start editing a cell, or end it with the text posted."""
+        # either way the table comes back: with the field, or with the cell's text
+        self._mark_dirty(self._view, self.widget_id, self._view.rows)
         row, column = form.get("row", ""), form.get("column", "")
         if (
             not row.isdigit()
@@ -657,20 +673,23 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             or not column.isdigit()
             or int(column) not in self._editable_columns()
         ):
-            # a cell a stale page still shows: swap the table back as it now is
-            self._mark_dirty(self._view, self.widget_id, self._view.rows)
+            return  # a cell a stale page still shows
+        cell = (int(row), int(column))
+        if event == "start_edit":
+            self._editing = cell
             return
-        cells, text = self._view.rows[int(row)], form.get("text", "")
-        if text == (cells[int(column)] if int(column) < len(cells) else ""):
+        if self._editing != cell:
+            return  # a field already gone, e.g. leaving it after Enter
+        self._editing = None
+        cells, text = self._view.rows[cell[0]], form.get("text", "")
+        if text == (cells[cell[1]] if cell[1] < len(cells) else ""):
             return
         rows = self._view.rows
-        self._view.emit_cell_edited(int(row), int(column), text)
+        self._view.emit_cell_edited(*cell, text)
+        # unless the app answered with its own rows, which it has marked to show
         if self._view.rows is rows:
             with self.stop_refresh():
-                self._view.rows = replace_cell(rows, int(row), int(column), text)
-        elif self._view.rows == rows:
-            # the app put the same rows back, which reached nothing: show them again
-            self.refresh()
+                self._view.rows = replace_cell(rows, *cell, text)
 
     def _editable_columns(self) -> list[int]:
         """`editable_columns` the table has a header for."""

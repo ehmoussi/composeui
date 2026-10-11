@@ -111,6 +111,44 @@ document.addEventListener("htmx:beforeRequest", function (event) {
     }
   });
 });
+/* editing a table cell: the server swaps the table back with a field in the cell (see
+   `WebTableRenderer`), posting its text on Enter or when the user leaves it. F2 on a row
+   edits its first editable cell, as a double click on the cell does; the field comes
+   with its text selected, and Escape puts the text back before leaving it. */
+document.addEventListener("keydown", function (event) {
+  var target = event.target;
+  if (event.key === "F2" && target.tagName === "TR") {
+    var cell = target.querySelector("[data-edit]");
+    if (cell !== null) {
+      event.preventDefault();
+      htmx.trigger(cell, "dblclick");
+    }
+  } else if (event.key === "Escape" && "cell" in target.dataset) {
+    target.value = target.dataset.original;
+    delete target.dataset.typed;
+    target.blur();
+  }
+});
+document.addEventListener("htmx:load", function (event) {
+  var field = event.detail.elt.querySelector("[data-cell]");
+  if (field !== null && field === document.activeElement && !("typed" in field.dataset)) {
+    field.select();
+  }
+});
+/* the field keeps the text the user is typing through a swap of its table (e.g. the
+   answer to the double click's own clicks, selecting the row, arriving after a key):
+   the server only gets the text at the end, so its copy of the table has the old. */
+document.addEventListener("input", function (event) {
+  if ("cell" in event.target.dataset) event.target.dataset.typed = "";
+});
+document.addEventListener("htmx:oobBeforeSwap", function (event) {
+  var field = document.activeElement;
+  if (field === null || !("typed" in field.dataset)) return;
+  var swapped = event.detail.fragment.getElementById(field.id);
+  if (swapped === null) return;
+  swapped.setAttribute("value", field.value);
+  swapped.dataset.typed = "";
+});
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   new MutationObserver(function () {

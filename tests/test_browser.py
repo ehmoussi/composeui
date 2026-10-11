@@ -547,26 +547,57 @@ def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     expect(south).to_be_focused()
 
 
-def test_editing_a_cell_posts_its_text_without_selecting_its_row(places_page: Page) -> None:
+def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(
+    places_page: Page,
+) -> None:
     page = places_page
     page.goto("/")
-    posted: list[str] = []
-    page.on("request", lambda request: posted.append(request.post_data or ""))
     lake = page.get_by_role("row").filter(has_text="Lake")
     note = lake.get_by_label("Note")
+    # a slow network: the double click's own clicks, selecting the row, are answered
+    # only once the user has started typing
+    held: list[Route] = []
 
-    note.click()
-    note.select_text()
+    def hold_selections(route: Route) -> None:
+        if "event=select" in (route.request.post_data or ""):
+            held.append(route)
+        else:
+            route.continue_()
+
+    page.route("**/widget/*", hold_selections)
+    with _posted(page):
+        lake.get_by_text("Calm").dblclick()
+    # the field comes focused, its text selected: typing replaces it
+    expect(note).to_be_focused()
     note.press_sequentially("Windy")
     with _posted(page):
-        note.press("Enter")
+        for route in held:
+            route.continue_()
+    page.unroute("**/widget/*")
 
-    # the click and Enter were the field's: only the edit was posted
-    assert len(posted) == 1
-    assert "event=edit" in posted[0]
-    expect(lake).not_to_have_attribute("aria-current", "true")
+    # the table came back with the row selected, the field as the user left it
+    expect(lake).to_have_attribute("aria-current", "true")
     expect(note).to_have_value("Windy")
     expect(note).to_be_focused()
+    # htmx binds the swapped field's trigger once the swap has settled
+    expect(page.locator(".htmx-added")).to_have_count(0)
+    with _posted(page):
+        note.press("Enter")
+    expect(note).to_have_count(0)
+    expect(lake).to_contain_text("Windy")
+
+    # F2 on the row edits its note too; Escape leaves it as it was
+    expect(page.locator(".htmx-added")).to_have_count(0)
+    lake.focus()
+    with _posted(page):
+        page.keyboard.press("F2")
+    expect(note).to_be_focused()
+    expect(page.locator(".htmx-added")).to_have_count(0)
+    note.press_sequentially("Foggy")
+    with _posted(page):
+        note.press("Escape")
+    expect(note).to_have_count(0)
+    expect(lake).to_contain_text("Windy")
 
 
 def test_a_row_clicked_before_the_last_click_is_answered_shows_selected(
