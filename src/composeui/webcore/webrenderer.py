@@ -47,6 +47,7 @@ from composeui.core.view import (
     Router,
     SaveAction,
     SaveAsAction,
+    SelectionMode,
     SeparatorAction,
     StatusBar,
     VerticalView,
@@ -533,17 +534,20 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
 
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
+    selection_mode: SelectionMode
     rows: list[list[str]]
-    selected_row: int | None
-    selection_changed: Signal[int | None]
+    selected_rows: list[int]
+    selection_changed: Signal[list[int]]
 
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
     """A read-only table, scrolling sideways on its own when wider than the page.
 
     Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
-    show it selected (`aria-current`), each row keeping its own id so htmx gives the
-    focus back to the row that had it.
+    show it selected, each row keeping its own id so htmx gives the focus back to the
+    row that had it. Selecting one row, it is the current one (`aria-current`).
+    Selecting several, the table is a grid whose rows are each selected or not
+    (`aria-selected`), and a click adds or removes its row.
     """
 
     _role = "table"
@@ -553,24 +557,30 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
+                "selection_mode": self._mark_dirty,
                 "rows": self._mark_dirty,
-                "selected_row": self._mark_dirty,
+                "selected_rows": self._mark_dirty,
             }
         )
 
     def to_html(self, *, oob: bool = False) -> str:
         headers = "".join(f"<th>{html.escape(header)}</th>" for header in self._view.headers)
         rows = "".join(self._row_html(index, row) for index, row in enumerate(self._view.rows))
+        grid = ' role="grid" aria-multiselectable="true"' if self._is_multiple() else ""
         return (
             f"<div {self._root_attributes(oob=oob)}"
             ' class="overflow-x-auto rounded-box border border-base-300">'
-            '<table class="table table-zebra table-sm">'
+            f'<table class="table table-zebra table-sm"{grid}>'
             f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
         )
 
     def _row_html(self, index: int, row: list[str]) -> str:
         cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
-        selected = ' aria-current="true"' if index == self._view.selected_row else ""
+        is_selected = index in self._view.selected_rows
+        if self._is_multiple():
+            selected = f' aria-selected="{"true" if is_selected else "false"}"'
+        else:
+            selected = ' aria-current="true"' if is_selected else ""
         if not self.is_enabled:
             return f"<tr{selected}>{cells}</tr>"
         return (
@@ -590,10 +600,17 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             # a row a stale page still shows: swap the table back as it now is
             self._mark_dirty(self._view, self.widget_id, self._view.rows)
             return
-        if int(row) == self._view.selected_row:
+        if self._is_multiple():
+            rows = sorted(set(self._view.selected_rows) ^ {int(row)})
+        elif self._view.selected_rows == [int(row)]:
             return
-        self._view.selected_row = int(row)
-        self._view.selection_changed.emit(int(row))
+        else:
+            rows = [int(row)]
+        self._view.selected_rows = rows
+        self._view.selection_changed.emit(rows)
+
+    def _is_multiple(self) -> bool:
+        return self._view.selection_mode is SelectionMode.MULTIPLE
 
 
 TValue = TypeVar("TValue")

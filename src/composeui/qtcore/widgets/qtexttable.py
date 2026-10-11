@@ -66,13 +66,15 @@ class QTextTableModel(QAbstractTableModel):
 
 
 class QTextTableView(QTableView):
-    """A read-only table of text, with no row numbers, where the user selects one row.
+    """A read-only table of text, with no row numbers, where the user selects rows.
 
-    `selected_row_changed` emits the selected row's index, or `None`, only when the
-    user changes the selection: setting it or the table from code stays silent.
+    One row at most by default; with `set_multiple_selection`, each click adds or removes
+    a row, as Qt's `MultiSelection`. `selected_rows_changed` emits the selected rows'
+    indexes, in order, only when the user changes them: setting them or the table from
+    code stays silent.
     """
 
-    selected_row_changed = Signal(object)
+    selected_rows_changed = Signal(list)
 
     def __init__(self) -> None:
         super().__init__()
@@ -93,7 +95,7 @@ class QTextTableView(QTableView):
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.selectionModel().selectionChanged.connect(self._emit_selected_row_changed)
+        self.selectionModel().selectionChanged.connect(self._emit_selected_rows_changed)
 
     def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
         self._is_setting = True
@@ -102,26 +104,33 @@ class QTextTableView(QTableView):
         finally:
             self._is_setting = False
 
-    def selected_row(self) -> int | None:
-        rows = self.selectionModel().selectedRows()
-        return rows[0].row() if rows else None
+    def set_multiple_selection(self, *, is_multiple: bool) -> None:
+        self.setSelectionMode(
+            QAbstractItemView.SelectionMode.MultiSelection
+            if is_multiple
+            else QAbstractItemView.SelectionMode.SingleSelection
+        )
 
-    def set_selected_row(self, row: int | None) -> None:
+    def selected_rows(self) -> list[int]:
+        return sorted(index.row() for index in self.selectionModel().selectedRows())
+
+    def set_selected_rows(self, rows: list[int]) -> None:
         self._is_setting = True
         try:
-            if row is None:
-                self.clearSelection()
-            else:
-                self.selectionModel().select(
-                    self._model.index(row, 0),
-                    QItemSelectionModel.SelectionFlag.ClearAndSelect
-                    | QItemSelectionModel.SelectionFlag.Rows,
-                )
+            selection = QItemSelection()
+            for row in rows:
+                index = self._model.index(row, 0)
+                selection.select(index, index)
+            self.selectionModel().select(
+                selection,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
         finally:
             self._is_setting = False
 
-    def _emit_selected_row_changed(
+    def _emit_selected_rows_changed(
         self, _selected: QItemSelection, _deselected: QItemSelection
     ) -> None:
         if not self._is_setting:
-            self.selected_row_changed.emit(self.selected_row())
+            self.selected_rows_changed.emit(self.selected_rows())

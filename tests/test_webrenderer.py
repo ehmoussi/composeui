@@ -49,6 +49,7 @@ from composeui.core.view import (
     PageView,
     Router,
     SaveAsAction,
+    SelectionMode,
     SeparatorAction,
     StatusBar,
     TableView,
@@ -1984,7 +1985,9 @@ def test_disabling_a_router_disables_its_pages_but_not_their_links(
         assert "hx-post" in link.attributes
 
 
-def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> None:
+@pytest.fixture
+def tables() -> Iterator[tuple[TestClient, HorizontalMainView]]:
+    """Serve an app with tables side by side; yield a client and its main view."""
     views: list[HorizontalMainView] = []
 
     class TablesApp(WebApplication[HorizontalMainView]):
@@ -1995,35 +1998,73 @@ def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> Non
     with TestClient(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
-        table = view.tables.narrow
-        table_id = _widget_id(table.renderer)
-        emitted: list[int | None] = []
-        table.selection_changed.connect(emitted.append)
+        yield client, view
 
-        def select(row: str) -> Any:
-            return client.post(f"/widget/{table_id}", data={"event": "select", "row": row})
 
-        def current_rows(body: str) -> list[str | None]:
-            rows = [attributes for tag, attributes in _swapped(body, table_id).descendants]
-            return [row["id"] for row in rows if row.get("aria-current") == "true"]
+def _rows_with(markup: str, table_id: str, attribute: str) -> list[str | None]:
+    """Ids of the swapped table's rows whose `attribute` is true."""
+    rows = [attributes for _, attributes in _swapped(markup, table_id).descendants]
+    return [row["id"] for row in rows if row.get(attribute) == "true"]
 
-        body = select("1").text
-        assert table.selected_row == 1
-        assert emitted == [1]
-        assert current_rows(body) == [f"{table_id}-row-1"]
 
-        select("1")  # the selected row again
-        assert emitted == [1]
+def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it(
+    tables: tuple[TestClient, HorizontalMainView],
+) -> None:
+    client, view = tables
+    table = view.tables.narrow
+    table_id = _widget_id(table.renderer)
+    emitted: list[list[int]] = []
+    table.selection_changed.connect(emitted.append)
 
-        # a row a stale page still shows: the table comes back as it now is
-        body = select("7").text
-        assert table.selected_row == 1
-        assert current_rows(body) == [f"{table_id}-row-1"]
+    def select(row: str) -> Any:
+        return client.post(f"/widget/{table_id}", data={"event": "select", "row": row})
 
-        table.is_enabled = False
-        assert select("2").status_code == 400
-        assert table.selected_row == 1
-        assert emitted == [1]
+    body = select("1").text
+    assert table.selected_rows == [1]
+    assert emitted == [[1]]
+    assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
+
+    select("1")  # the selected row again
+    assert emitted == [[1]]
+
+    # a row a stale page still shows: the table comes back as it now is
+    body = select("7").text
+    assert table.selected_rows == [1]
+    assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
+
+    table.is_enabled = False
+    assert select("2").status_code == 400
+    assert table.selected_rows == [1]
+    assert emitted == [[1]]
+
+
+def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
+    tables: tuple[TestClient, HorizontalMainView],
+) -> None:
+    client, view = tables
+    table = view.tables.narrow
+    table.selection_mode = SelectionMode.MULTIPLE
+    table_id = _widget_id(table.renderer)
+    emitted: list[list[int]] = []
+    table.selection_changed.connect(emitted.append)
+
+    def select(row: str) -> str:
+        return client.post(f"/widget/{table_id}", data={"event": "select", "row": row}).text
+
+    page = client.get("/").text
+    grid = next(tag for tag in _element(page, table_id).descendants if tag[0] == "table")
+    assert grid[1]["role"] == "grid"
+    assert grid[1]["aria-multiselectable"] == "true"
+
+    select("2")
+    body = select("0")
+    assert table.selected_rows == [0, 2]
+    assert _rows_with(body, table_id, "aria-selected") == [f"{table_id}-row-{i}" for i in (0, 2)]
+    assert _rows_with(body, table_id, "aria-current") == []
+    body = select("2")
+    assert table.selected_rows == [0]
+    assert _rows_with(body, table_id, "aria-selected") == [f"{table_id}-row-0"]
+    assert emitted == [[2], [0, 2], [0]]
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:
@@ -2040,7 +2081,7 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
         row, column = view.tables, view.tables.column
         column.table.rows = [["North"], ["South"]]
 
-        def disable_the_row(_row: int | None) -> None:
+        def disable_the_row(_rows: list[int]) -> None:
             row.is_enabled = False
 
         column.table.selection_changed.connect(disable_the_row)
@@ -2062,4 +2103,4 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
         assert client.post(f"/widget/{button_id}", data={"event": "click"}).status_code == 400
         selected = client.post(f"/widget/{table_id}", data={"event": "select", "row": "1"})
         assert selected.status_code == 400
-        assert (column.table.selected_row, clicked) == (0, [])
+        assert (column.table.selected_rows, clicked) == ([0], [])

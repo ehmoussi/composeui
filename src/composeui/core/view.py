@@ -772,46 +772,71 @@ class ButtonView(View):
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
 
+class SelectionMode(enum.Enum):
+    """How many of a table's rows the user can select."""
+
+    #: one row at most: selecting another row replaces it
+    SINGLE = enum.auto()
+    #: any number of rows: selecting a row adds it, and selecting it again removes it
+    MULTIPLE = enum.auto()
+
+
 @define_view
 class TableMixin:
     """A read-only table of text: the app formats each cell itself.
 
     Each row has one cell per header. Assign new lists to update the table: changing a
-    list in place doesn't reach the renderer. The user can select one row:
-    `selected_row` is its index, and `selection_changed` emits it (or `None`) when the
-    user selects another row. New `rows` keep the selection on its row when they hold
-    it exactly once, wherever it moved, and clear it otherwise.
+    list in place doesn't reach the renderer. The user selects rows as `selection_mode`
+    allows: `selected_rows` holds their indexes, and `selection_changed` emits them when
+    the user changes them. New `rows` keep each selected row selected when they hold it
+    exactly once, wherever it moved, and drop it otherwise.
     """
 
-    def _check_selected_row(self, _attribute: "attrs.Attribute[Any]", row: Optional[int]) -> None:
-        if row is not None and not 0 <= row < len(self.rows):
-            msg = (
-                f"Cannot set {type(self).__name__}.selected_row to {row}: the table has "
-                f"{len(self.rows)} rows."
-            )
+    def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
+        name = type(self).__name__
+        if any(not 0 <= row < len(self.rows) for row in rows):
+            msg = f"Cannot set {name}.selected_rows to {rows}: the table has {len(self.rows)} rows."
             raise ValueError(msg)
+        if len(set(rows)) != len(rows):
+            msg = f"Cannot set {name}.selected_rows to {rows}: a row is selected twice."
+            raise ValueError(msg)
+        if self.selection_mode is SelectionMode.SINGLE and len(rows) > 1:
+            msg = f"Cannot set {name}.selected_rows to {rows}: the table selects a single row."
+            raise ValueError(msg)
+
+    def _reconcile_mode(
+        self, attribute: "attrs.Attribute[Any]", mode: SelectionMode
+    ) -> SelectionMode:
+        """Keep only the first selected row when the table comes to select a single one."""
+        if mode is SelectionMode.SINGLE and len(self.selected_rows) > 1:
+            self.selected_rows = self.selected_rows[:1]
+        return cast("SelectionMode", notify_renderer(cast("View", self), attribute, mode))
 
     def _reconcile_rows(
         self, attribute: "attrs.Attribute[Any]", rows: list[list[str]]
     ) -> list[list[str]]:
-        """Move `selected_row` to its row in `rows` (or clear it), and notify the renderer."""
-        selected = None if self.selected_row is None else self.rows[self.selected_row]
+        """Move `selected_rows` to their rows in `rows` (or drop them), and notify the renderer."""
+        selected = [self.rows[row] for row in self.selected_rows]
         # cleared first: refreshing the rows clears a widget's selection, even at the same index
-        self.selected_row = None
+        self.selected_rows = []
         rows = notify_renderer(cast("View", self), attribute, rows)
-        if selected is not None and rows.count(selected) == 1:
-            row = rows.index(selected)
+        kept = sorted(rows.index(row) for row in selected if rows.count(row) == 1)
+        if len(kept) > 0:
             fields = attrs.fields_dict(cast("type[AttrsInstance]", type(self)))
-            notify_renderer(cast("View", self), fields["selected_row"], row)
-            # unvalidated: the validator would check `row` against the rows being replaced
-            object.__setattr__(self, "selected_row", row)
+            notify_renderer(cast("View", self), fields["selected_rows"], kept)
+            # unvalidated: the validator would check `kept` against the rows being replaced
+            object.__setattr__(self, "selected_rows", kept)
         return rows
 
     headers: list[str] = attrs.Factory(list[str])
+    # before `selected_rows`, which it limits
+    selection_mode: SelectionMode = attrs.field(
+        default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
+    )
     rows: list[list[str]] = attrs.field(factory=list[list[str]], on_setattr=_reconcile_rows)
     # after `rows`: loading saved state checks it against the rows already loaded
-    selected_row: Optional[int] = attrs.field(default=None, validator=[_check_selected_row])
-    selection_changed: Signal[Optional[int]] = attrs.Factory(Signal[Optional[int]])
+    selected_rows: list[int] = attrs.field(factory=list[int], validator=[_check_selected_rows])
+    selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
 
 
 @define_view

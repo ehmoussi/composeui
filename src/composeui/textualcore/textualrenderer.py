@@ -41,6 +41,7 @@ from composeui.core.view import (
     Router,
     SaveAction,
     SaveAsAction,
+    SelectionMode,
     SeparatorAction,
     StatusBar,
     VerticalView,
@@ -659,9 +660,10 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
 
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
+    selection_mode: SelectionMode
     rows: list[list[str]]
-    selected_row: int | None
-    selection_changed: Signal[int | None]
+    selected_rows: list[int]
+    selection_changed: Signal[list[int]]
 
 
 class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
@@ -670,15 +672,16 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
         self._refresh_dispatcher.update(
             {
                 "headers": self._refresh_headers,
+                "selection_mode": self._refresh_selection_mode,
                 "rows": self._refresh_rows,
-                "selected_row": self._refresh_selected_row,
+                "selected_rows": self._refresh_selected_rows,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeTable()
-            self._rendered_object.selected_row_changed.connect(self._update_selected_row)
+            self._rendered_object.selected_rows_changed.connect(self._update_selected_rows)
 
     @staticmethod
     def _refresh_headers(
@@ -687,25 +690,31 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
         rendered_object.fill(value, view.rows)
 
     @staticmethod
+    def _refresh_selection_mode(
+        _view: TableViewLike, rendered_object: ComposeTable, value: SelectionMode
+    ) -> None:
+        rendered_object.set_multiple_selection(is_multiple=value is SelectionMode.MULTIPLE)
+
+    @staticmethod
     def _refresh_rows(
         view: TableViewLike, rendered_object: ComposeTable, value: list[list[str]]
     ) -> None:
         rendered_object.fill(view.headers, value)
 
     @staticmethod
-    def _refresh_selected_row(
-        _view: TableViewLike, rendered_object: ComposeTable, value: int | None
+    def _refresh_selected_rows(
+        _view: TableViewLike, rendered_object: ComposeTable, value: list[int]
     ) -> None:
-        rendered_object.set_selected_row(value)
+        rendered_object.set_selected_rows(value)
 
     @staticmethod
     def _update_state(view: TableViewLike, rendered_object: ComposeTable) -> None:
-        view.selected_row = rendered_object.selected_row()
+        view.selected_rows = rendered_object.selected_rows()
 
-    def _update_selected_row(self, row: int | None) -> None:
+    def _update_selected_rows(self, rows: list[int]) -> None:
         with self.stop_refresh():
-            self._view.selected_row = row
-        self._view.selection_changed.emit(row)
+            self._view.selected_rows = rows
+        self._view.selection_changed.emit(rows)
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

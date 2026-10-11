@@ -36,7 +36,14 @@ from qtpy.QtWidgets import (
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import MainRenderer, RendererContainer
-from composeui.core.view import ActionView, ButtonVariant, DialogKind, LabelView, RendererType
+from composeui.core.view import (
+    ActionView,
+    ButtonVariant,
+    DialogKind,
+    LabelView,
+    RendererType,
+    SelectionMode,
+)
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
@@ -640,17 +647,17 @@ def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBo
     qtbot.waitExposed(window)
     table = _widget(view.tables.narrow)
     assert isinstance(table, QTableView)
-    emitted: list[int | None] = []
+    emitted: list[list[int]] = []
     view.tables.narrow.selection_changed.connect(emitted.append)
 
     south = table.visualRect(table.model().index(1, 0)).center()
     qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=south)
 
-    assert view.tables.narrow.selected_row == 1
-    assert emitted == [1]
+    assert view.tables.narrow.selected_rows == [1]
+    assert emitted == [[1]]
 
     # set from code: shown, but not the user's doing
-    view.tables.narrow.selected_row = 2
+    view.tables.narrow.selected_rows = [2]
     assert [index.row() for index in table.selectionModel().selectedRows()] == [2]
     # new rows still holding it, at the same index then moved: it stays shown
     view.tables.narrow.rows = [["West"], ["South"], ["East"]]
@@ -659,4 +666,39 @@ def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBo
     assert [index.row() for index in table.selectionModel().selectedRows()] == [0]
     view.tables.narrow.rows = [["West"]]
     assert table.selectionModel().selectedRows() == []
-    assert emitted == [1]
+    assert emitted == [[1]]
+
+
+def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
+    qtbot: QtBot,
+) -> None:
+    view = HorizontalMainView()
+    view.tables.narrow.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _widget(view.tables.narrow)
+    assert isinstance(table, QTableView)
+    emitted: list[list[int]] = []
+    view.tables.narrow.selection_changed.connect(emitted.append)
+
+    def click(row: int) -> None:
+        center = table.visualRect(table.model().index(row, 0)).center()
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+
+    click(2)
+    click(0)
+    click(2)
+    assert view.tables.narrow.selected_rows == [0]
+    assert emitted == [[2], [0, 2], [0]]
+
+    # set from code: shown, but not the user's doing
+    view.tables.narrow.selected_rows = [1, 2]
+    assert sorted(index.row() for index in table.selectionModel().selectedRows()) == [1, 2]
+    # back to a single row: a click replaces it
+    view.tables.narrow.selection_mode = SelectionMode.SINGLE
+    click(0)
+    assert view.tables.narrow.selected_rows == [0]
+    assert emitted == [[2], [0, 2], [0], [0]]
