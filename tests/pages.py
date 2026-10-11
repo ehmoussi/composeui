@@ -8,6 +8,7 @@ from composeui.core.view import (
     LabelView,
     MainView,
     PageView,
+    PageWidth,
     Router,
     define_view,
 )
@@ -27,6 +28,8 @@ class InputsPage(PageView):
 
 @define_view
 class ResultsPage(PageView):
+    width = PageWidth.WIDE
+
     total: LabelView = Factory(LabelView)
 
     def __attrs_post_init__(self) -> None:
@@ -53,3 +56,14 @@ class PagesMainView(MainView):
 
     def _submit(self) -> None:
         self.router.results.total.text = f"Submitted: {self.router.inputs.name.text}"
+
+
+@define_view
+class WidePageMainView(MainView):
+    """A wide page right in the window, with no router."""
+
+    results: ResultsPage = Factory(ResultsPage)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Wide page", extension=".wide")

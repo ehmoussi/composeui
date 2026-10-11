@@ -28,7 +28,7 @@ from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
-from tests.pages import PagesMainView
+from tests.pages import PagesMainView, WidePageMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -104,6 +104,13 @@ def horizontal_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def wide_page_base_url() -> Iterator[str]:
+    """Serve an app with a wide page and no router, for the whole module."""
+    with _serve(WebApplication(build_main_view=WidePageMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -154,6 +161,15 @@ def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
 def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page]:
     """Open the app with tables side by side like `page`, in a session of its own."""
     context = browser.new_context(base_url=horizontal_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def wide_page(browser: Browser, wide_page_base_url: str) -> Iterator[Page]:
+    """Open the app with a wide page like `page`, in a session of its own."""
+    context = browser.new_context(base_url=wide_page_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -339,6 +355,40 @@ def test_back_and_forward_go_through_the_pages_shown(pages_page: Page, pages_bas
     page.go_forward()
     expect(page).to_have_url(f"{pages_base_url}/results")
     expect(total).to_be_visible()
+
+
+def test_the_main_column_is_as_wide_as_the_shown_page_lets_it(pages_page: Page) -> None:
+    page = pages_page
+    page.set_viewport_size({"width": 1600, "height": 900})
+    page.goto("/")
+    main = page.get_by_role("main")
+    narrow = main.bounding_box()
+    assert narrow is not None
+
+    with _posted(page):
+        page.get_by_role("link", name="Results").click()
+    expect(page.get_by_text("Total: 0")).to_be_visible()
+    wide = main.bounding_box()
+    assert wide is not None
+    assert wide["width"] > narrow["width"]
+
+    with _posted(page):
+        page.get_by_role("link", name="Inputs").click()
+    expect(page.get_by_role("textbox")).to_be_visible()
+    assert main.bounding_box() == narrow
+
+
+def test_a_wide_page_with_no_router_widens_the_main_column(
+    wide_page: Page, pages_page: Page
+) -> None:
+    for page in (wide_page, pages_page):
+        page.set_viewport_size({"width": 1600, "height": 900})
+        page.goto("/")
+    wide = wide_page.get_by_role("main").bounding_box()
+    narrow = pages_page.get_by_role("main").bounding_box()  # on its narrow first page
+    assert wide is not None
+    assert narrow is not None
+    assert wide["width"] > narrow["width"]
 
 
 def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) -> None:

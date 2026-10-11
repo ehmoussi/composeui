@@ -1621,9 +1621,9 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
     stylesheet = client.get("/static/app.css").text
 
     def selector(name: str) -> str:
-        # a variant's colon and an opacity's slash are escaped in its selector, e.g.
-        # `.sm\:w-auto`, `.text-base-content\/50`
-        return "." + re.escape(name.replace(":", "\\:").replace("/", "\\/"))
+        # all but letters, digits, `_` and `-` is escaped in its selector, e.g.
+        # `.sm\:w-auto`, `.text-base-content\/50`, `.has-\[\>\[hidden\]\]\:hidden`
+        return "." + re.escape(re.sub(r"([^\w-])", r"\\\1", name))
 
     missing = sorted(
         name for name in classes if not re.search(rf"{selector(name)}(?![\w-])", stylesheet)

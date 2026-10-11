@@ -1182,7 +1182,8 @@ class WebPageRenderer(WebRenderer[PageView]):
             if isinstance(view.renderer, WebRenderer) and not isinstance(view, DialogView)
         )
         return (
-            f'<section {self._root_attributes(oob=oob)} class="flex flex-col gap-6">'
+            f"<section {self._root_attributes(oob=oob)}"
+            f' data-width="{self._view.width.name.lower()}" class="flex flex-col gap-6">'
             f"{content}</section>"
         )
 
@@ -1204,6 +1205,16 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
             if isinstance(view.renderer, WebRenderer)
         )
         return f'<div {self._root_attributes(oob=oob)} class="flex gap-6">{cells}</div>'
+
+
+#: the main column's width, following the shown page's `PageView.width`: switching pages
+#: only swaps the router, so CSS picks the width from the page neither hidden nor in a
+#: hidden slot
+_MAIN_WIDTHS = (
+    "max-w-3xl"
+    " has-[[data-width=wide]:not([hidden],[hidden]_*)]:max-w-6xl"
+    " has-[[data-width=full]:not([hidden],[hidden]_*)]:max-w-none"
+)
 
 
 def page_path(route: str) -> str:
@@ -1366,7 +1377,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             f"{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
             "</header>"
-            '<main class="mx-auto max-w-3xl px-4 pt-8 pb-20">'
+            f'<main class="mx-auto {_MAIN_WIDTHS} px-4 pt-8 pb-20">'
             '<div class="card border border-base-300 bg-base-100 shadow-md">'
             '<div class="card-body gap-6 p-6">'
             f"{''.join(content)}"
