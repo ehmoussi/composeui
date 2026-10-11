@@ -10,6 +10,7 @@ directly through `handle_event`, the function the route calls.
 from __future__ import annotations
 
 import enum
+import hashlib
 import json
 import re
 import sys
@@ -35,6 +36,7 @@ from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
+    ButtonView,
     DialogView,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -1578,6 +1580,21 @@ def test_the_page_loads_nothing_from_another_host(client: TestClient) -> None:
     assert client.get("/static/app.css").status_code == 200
 
 
+def test_the_page_names_each_static_file_by_its_content(client: TestClient) -> None:
+    """A new stylesheet or script has a new address: a browser can't keep an older copy."""
+    page = client.get("/").text
+
+    addresses = re.findall(r'(?:src|href)="(/static/[^"]*)"', page)
+
+    assert sorted(address.split("?")[0] for address in addresses) == [
+        "/static/app.css",
+        "/static/htmx.min.js",
+    ]
+    for address in addresses:
+        body = client.get(address).content
+        assert address.endswith(f"?v={hashlib.sha256(body).hexdigest()[:16]}")
+
+
 def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
     main_view: HelloMainView, client: TestClient, pipe_client: TestClient
 ) -> None:
@@ -1588,6 +1605,11 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
         log.render(RendererType.WEB)
         assert isinstance(log.renderer, WebRenderer)
         markup.append(log.renderer.to_html())
+    for variant in ButtonVariant:  # each button colour
+        button = ButtonView(text="x", variant=variant)
+        button.render(RendererType.WEB)
+        assert isinstance(button.renderer, WebRenderer)
+        markup.append(button.renderer.to_html())
     main_view.file_menu.new.is_enabled = False  # a disabled menu item
     markup.append(client.get("/").text)
     classes = {
