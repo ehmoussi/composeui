@@ -1922,6 +1922,39 @@ def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
     assert all(attributes.get("id") != dialog_id for _, attributes in router.descendants)
 
 
+def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it() -> None:
+    views: list[_NoteMainView] = []
+
+    class NotesApp(WebApplication[_NoteMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=_NoteMainView)
+
+        def setup_session(self, main_view: _NoteMainView) -> None:
+            views.append(main_view)
+
+    with TestClient(NotesApp().create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        page, dialog = main_view.pages.note, main_view.pages.note.note
+        dialog.open()
+
+        def disable_the_page() -> None:
+            page.is_enabled = False
+
+        main_view.pages.first.submit.clicked.connect(disable_the_page)
+        submit_id = _widget_id(main_view.pages.first.submit.renderer)
+        body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
+
+        dialog_id = _widget_id(dialog.renderer)
+        swapped = _swapped(body, dialog_id)
+        assert "hx-trigger" not in swapped.attributes  # Escape doesn't dismiss it
+        buttons = [attributes for tag, attributes in swapped.descendants if tag == "button"]
+        assert all("disabled" in attributes for attributes in buttons)
+        # a stale page's answer is ignored, as a disabled dialog's own
+        client.post(f"/widget/{dialog_id}", data={"event": "accept"})
+        assert dialog.is_visible
+
+
 def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> None:
     views: list[HorizontalMainView] = []
 

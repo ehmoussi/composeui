@@ -152,10 +152,12 @@ class WebRenderer(Renderer[TView, str]):
         self._lock: threading.RLock | None = None
         #: the container drawing this view, if it passes its enabled state on (`is_enabled`)
         self.parent: WebRenderer[Any] | None = None
+        #: the renderers this one is the `parent` of
+        self.children: list[WebRenderer[Any]] = []
         self._refresh_dispatcher.update(
             {
                 "is_visible": self._mark_dirty,
-                "is_enabled": self._mark_dirty,
+                "is_enabled": self._refresh_enabled,
             }
         )
 
@@ -178,7 +180,8 @@ class WebRenderer(Renderer[TView, str]):
         """Whether the view and every container around it are enabled.
 
         As disabling a Qt or Textual container disables its children; the container
-        swaps whole, so its views come back disabled with it.
+        swaps whole, so its views come back disabled with it, and so do the dialogs
+        drawn apart from it (see `_refresh_enabled`).
         """
         return self._view.is_enabled and (self.parent is None or self.parent.is_enabled)
 
@@ -188,8 +191,9 @@ class WebRenderer(Renderer[TView, str]):
             renderer: Any = view.renderer
             children = renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
             for child in children:
-                if isinstance(child, WebRenderer):
+                if isinstance(child, WebRenderer) and child not in self.children:
                     child.parent = self
+                    self.children.append(child)
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         if self._lock is None:
@@ -246,6 +250,17 @@ class WebRenderer(Renderer[TView, str]):
         if not isinstance(renderer, WebRenderer) or renderer is self:
             return None
         return renderer.widget_id
+
+    def _refresh_enabled(self, view: TView, rendered_object: str, value: Any) -> None:
+        self._mark_dirty(view, rendered_object, value)
+        # the dialogs below, drawn at the end of the page rather than in this fragment
+        dirty = _DIRTY.get()
+        descendants = list(self.children)
+        while dirty is not None and len(descendants) > 0:
+            descendant = descendants.pop()
+            descendants.extend(descendant.children)
+            if isinstance(descendant, WebDialogRenderer):
+                dirty[descendant.widget_id] = descendant
 
     def _mark_dirty(self, _view: TView, _rendered_object: str, _value: Any) -> None:
         dirty = _DIRTY.get()
@@ -1175,7 +1190,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         view = self._view
         title_id = f"{self.widget_id}-title"
         text_id = f"{self.widget_id}-text"
-        disabled = "" if view.is_enabled else " disabled"
+        disabled = "" if self.is_enabled else " disabled"
         reject = (
             self._button_html("reject", view.reject_text, "btn", disabled)
             if view.kind is DialogKind.CONFIRM
@@ -1186,7 +1201,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         cancel = (
             f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
             """ hx-vals='{"event": "dismiss"}'"""
-            if view.is_enabled
+            if self.is_enabled
             else ' oncancel="event.preventDefault()"'
         )
         title = (
@@ -1223,7 +1238,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         if answer is None:
             super().dispatch(event, form)
             return
-        if self._view.is_enabled:
+        if self.is_enabled:
             answer()
 
 
@@ -1234,8 +1249,7 @@ class WebPageRenderer(WebRenderer[PageView]):
 
     def render(self) -> None:
         super().render()
-        # not its dialogs: drawn outside the page's fragment, they wouldn't swap with it
-        self._adopt(view for view in self._view.content_views if not isinstance(view, DialogView))
+        self._adopt(self._view.content_views)
 
     def to_html(self, *, oob: bool = False) -> str:
         content = "".join(
