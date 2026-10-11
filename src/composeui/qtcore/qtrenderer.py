@@ -874,7 +874,9 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
                 if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
                     view.renderer.qt_object, QWidget
                 ):
-                    layout.addWidget(view.renderer.qt_object, stretch)
+                    # at the top: Qt centres a view shorter than the row (e.g. a table
+                    # as tall as its rows, beside a taller one) as the window grows
+                    layout.addWidget(view.renderer.qt_object, stretch, Qt.AlignmentFlag.AlignTop)
             if self._view.align is Align.START:
                 layout.addStretch(0)
             self.refresh()

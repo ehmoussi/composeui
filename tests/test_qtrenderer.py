@@ -458,8 +458,27 @@ def test_a_vertical_view_stacks_its_views_at_its_top(qtbot: QtBot) -> None:
 
     assert table.top() == 0
     assert button.top() == table.bottom() + 1 + layout.spacing()
-    # next to a taller table, the column's spare height is left below its views
-    assert button.bottom() < _widget(column).height() - 1
+    # next to a taller table, the row's spare height is left below the column's views
+    assert _widget(column).geometry().top() == _widget(view.tables.tall).geometry().top()
+    assert button.bottom() < _widget(view.tables.tall).geometry().bottom()
+
+
+def test_a_view_shorter_than_its_row_stays_at_the_row_s_top(qtbot: QtBot) -> None:
+    view = VerticalMainView()
+    # the table beside the column now the shorter of the two
+    view.tables.tall.rows = [["Short"]]
+    view.tables.column.table.rows = [[str(i)] for i in range(10)]
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+
+    for height in (600, 900):
+        window.resize(800, height)
+        qtbot.waitUntil(lambda height=height: window.height() == height)
+        assert _widget(view.tables.tall).geometry().top() == 0
 
 
 def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) -> None:
