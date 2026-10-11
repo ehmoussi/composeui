@@ -94,6 +94,23 @@ function openDialogs() {
     },
   );
 }
+/* the answer to a request whose element a swap has since replaced (e.g. a row clicked
+   before the answer to a click on another row) still swaps its fragments: htmx looks
+   for them from the element, which is no longer in the page. Whether it is, is read
+   before htmx handles the answer, which may swap it out itself. */
+document.addEventListener("htmx:beforeRequest", function (event) {
+  var element = event.detail.elt;
+  var request = event.detail.xhr;
+  var isReplaced = false;
+  request.addEventListener("readystatechange", function () {
+    if (request.readyState === XMLHttpRequest.DONE) isReplaced = !element.isConnected;
+  });
+  request.addEventListener("load", function () {
+    if (isReplaced && request.status === 200) {
+      htmx.swap(document.body, request.responseText, { swapStyle: "none" });
+    }
+  });
+});
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   new MutationObserver(function () {
