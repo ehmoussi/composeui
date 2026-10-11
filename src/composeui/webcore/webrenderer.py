@@ -499,10 +499,17 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     rows: list[list[str]]
+    selected_row: int | None
+    selection_changed: Signal[int | None]
 
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
-    """A read-only table, scrolling sideways on its own when wider than the page."""
+    """A read-only table, scrolling sideways on its own when wider than the page.
+
+    Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
+    show it selected (`aria-current`), each row keeping its own id so htmx gives the
+    focus back to the row that had it.
+    """
 
     _role = "table"
 
@@ -512,21 +519,46 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             {
                 "headers": self._mark_dirty,
                 "rows": self._mark_dirty,
+                "selected_row": self._mark_dirty,
             }
         )
 
     def to_html(self, *, oob: bool = False) -> str:
         headers = "".join(f"<th>{html.escape(header)}</th>" for header in self._view.headers)
-        rows = "".join(
-            f"<tr>{''.join(f'<td>{html.escape(cell)}</td>' for cell in row)}</tr>"
-            for row in self._view.rows
-        )
+        rows = "".join(self._row_html(index, row) for index, row in enumerate(self._view.rows))
         return (
             f"<div {self._root_attributes(oob=oob)}"
             ' class="overflow-x-auto rounded-box border border-base-300">'
             '<table class="table table-zebra table-sm">'
             f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
         )
+
+    def _row_html(self, index: int, row: list[str]) -> str:
+        cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
+        selected = ' aria-current="true"' if index == self._view.selected_row else ""
+        if not self._view.is_enabled:
+            return f"<tr{selected}>{cells}</tr>"
+        return (
+            f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
+            f'{selected} hx-post="/widget/{self.widget_id}"'
+            ' hx-trigger="click, keydown[key==&apos;Enter&apos;]"'
+            f""" hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
+            f"{cells}</tr>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        # a disabled table can't be clicked: a post saying otherwise is refused
+        if event != "select" or not self._view.is_enabled:
+            super().dispatch(event, form)
+        row = form.get("row", "")
+        if not row.isdigit() or int(row) >= len(self._view.rows):
+            # a row a stale page still shows: swap the table back as it now is
+            self._mark_dirty(self._view, self.widget_id, self._view.rows)
+            return
+        if int(row) == self._view.selected_row:
+            return
+        self._view.selected_row = int(row)
+        self._view.selection_changed.emit(int(row))
 
 
 TValue = TypeVar("TValue")

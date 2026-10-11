@@ -1,4 +1,4 @@
-"""Rows of views side by side, shared by the backend tests of `HorizontalView`."""
+"""Rows of views side by side, shared by the backend tests of `HorizontalView` and of tables."""
 
 import attrs
 from attrs import Factory
@@ -23,6 +23,7 @@ class TablesRow(HorizontalView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.narrow.headers = ["Narrow"]
+        self.narrow.rows = [["North"], ["South"], ["East"]]
         self.wide.headers = ["Wide"]
         self.hidden.headers = ["Hidden"]
         # takes no share of the row
