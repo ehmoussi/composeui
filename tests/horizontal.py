@@ -40,10 +40,10 @@ class HorizontalMainView(MainView):
 
 @define_view
 class StartButtons(HorizontalView):
-    """Buttons as wide as their text, packed at the row's start (the default)."""
+    """Buttons, as wide as their text by default, packed at the row's start (the default)."""
 
-    first: ButtonView = attrs.field(factory=ButtonView, metadata={STRETCH: 0})
-    second: ButtonView = attrs.field(factory=ButtonView, metadata={STRETCH: 0})
+    first: ButtonView = Factory(ButtonView)
+    second: ButtonView = Factory(ButtonView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()

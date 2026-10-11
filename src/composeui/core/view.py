@@ -55,7 +55,8 @@ _OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
 #: wrapped `Callable`) isn't a single class `_is_omitted_type` can match generically.
 OMIT = "omit"
 #: Field metadata key for a view field of a `HorizontalView`: its share of the row's
-#: width, against its siblings' (1 when unset); 0 keeps it as wide as its content
+#: width, against its siblings' (its view's `default_stretch` when unset); 0 keeps it
+#: as wide as its content
 STRETCH = "stretch"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
 #: conversion, e.g. `float("abc")`)
@@ -237,6 +238,8 @@ class View:
     #: key of this view's renderer in the backend's ``RENDERERS`` mapping
     #: (see `composeui.core.registry`); concrete views set it
     _renderer_key: ClassVar[Optional[str]] = None
+    #: its share of a `HorizontalView`'s width when its field sets no `STRETCH`
+    default_stretch: ClassVar[int] = 1
 
     # properties
     is_visible: bool = attrs.field(default=True)
@@ -760,6 +763,8 @@ class ButtonView(View):
     """A button the user clicks to act on what the page shows, e.g. to submit a form."""
 
     _renderer_key = "button"
+    # as wide as its text in a row: a button spanning a whole row is rarely wanted
+    default_stretch = 0
 
     text: str = attrs.field(default="")
     variant: ButtonVariant = attrs.field(default=ButtonVariant.PRIMARY)
@@ -1061,9 +1066,10 @@ class HorizontalView(View):
     """Its view fields laid out side by side, in a row.
 
     Each field takes a share of the row's width, set by its `STRETCH` metadata:
-    ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``.
-    Views with a share of 0 keep their content's width, e.g. buttons; when they all do,
-    `align` packs them at the row's start or end: a subclass sets ``align = Align.END``.
+    ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``, or its
+    `default_stretch` when unset (1). A view with a share of 0 keeps its content's width,
+    as a button does by default; when they all do, `align` packs them at the row's start
+    or end: a subclass sets ``align = Align.END``.
     """
 
     _renderer_key = "horizontal"
@@ -1075,7 +1081,7 @@ class HorizontalView(View):
     def stretched_views(self) -> list[tuple[View, int]]:
         """Get the views in the row, in order, each with its share of the row's width."""
         return [
-            (view, f.metadata.get(STRETCH, 1))
+            (view, f.metadata.get(STRETCH, view.default_stretch))
             for f in attrs.fields(cast("type[AttrsInstance]", type(self)))
             if isinstance(view := getattr(self, f.name), View)
         ]
