@@ -40,7 +40,7 @@ from composeui.core.view import ActionView, ButtonVariant, DialogKind, LabelView
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
-from tests.horizontal import HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.vertical import VerticalMainView
 
@@ -460,6 +460,27 @@ def test_a_vertical_view_stacks_its_views_at_its_top(qtbot: QtBot) -> None:
     assert button.top() == table.bottom() + 1 + layout.spacing()
     # next to a taller table, the column's spare height is left below its views
     assert button.bottom() < _widget(column).height() - 1
+
+
+def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) -> None:
+    view = ButtonsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+
+    for row, packed_at_end in ((view.start, False), (view.end, True)):
+        first, second = (_widget(button).geometry() for button in (row.first, row.second))
+        width = _widget(row).width()
+        # as wide as their text, side by side
+        assert first.width() == _widget(row.first).sizeHint().width()
+        assert 0 < second.left() - first.right() < 20
+        if packed_at_end:
+            assert second.right() == width - 1
+        else:
+            assert first.left() == 0
 
 
 def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:

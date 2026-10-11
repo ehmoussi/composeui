@@ -37,6 +37,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    Align,
     ButtonVariant,
     DialogKind,
     DialogView,
@@ -865,11 +866,17 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
             layout = QHBoxLayout(self._rendered_object)
             # the column holding the row already insets it
             layout.setContentsMargins(0, 0, 0, 0)
+            # a spacer with no share: it takes the free width only when no view has a
+            # share, ahead of views (e.g. buttons) that would otherwise grow into it
+            if self._view.align is Align.END:
+                layout.addStretch(0)
             for view, stretch in self._view.stretched_views:
                 if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
                     view.renderer.qt_object, QWidget
                 ):
                     layout.addWidget(view.renderer.qt_object, stretch)
+            if self._view.align is Align.START:
+                layout.addStretch(0)
             self.refresh()
 
     @staticmethod

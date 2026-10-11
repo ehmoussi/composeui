@@ -25,6 +25,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    Align,
     ButtonVariant,
     DialogKind,
     DialogView,
@@ -992,10 +993,13 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal
                     isinstance(view.renderer, TextualWidgetRenderer)
                     and view.renderer.widget is not None
                 ):
-                    view.renderer.widget.styles.width = f"{stretch}fr"
+                    # no share: as wide as its content
+                    view.renderer.widget.styles.width = f"{stretch}fr" if stretch > 0 else "auto"
                     widgets.append(view.renderer.widget)
             self._rendered_object = Horizontal(*widgets)
             self._rendered_object.styles.height = "auto"
+            if self._view.align is Align.END:
+                self._rendered_object.styles.align_horizontal = "right"
 
     @staticmethod
     def _update_state(view: HorizontalView, rendered_object: Horizontal) -> None:

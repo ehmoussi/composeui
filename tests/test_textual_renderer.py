@@ -27,6 +27,7 @@ from composeui.core.view import (
     DialogKind,
     MainView,
     RendererType,
+    View,
     define_view,
 )
 from composeui.textualcore.textualrenderer import (
@@ -40,7 +41,7 @@ from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
-from tests.horizontal import HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.vertical import VerticalMainView
 
@@ -521,6 +522,33 @@ async def test_a_vertical_view_stacks_its_views_at_its_top() -> None:
         assert button.y == table.bottom
         # next to a taller table, the column's spare height is left below its views
         assert button.bottom < tall.bottom
+
+
+@pytest.mark.asyncio
+async def test_buttons_with_no_share_pack_at_their_row_s_start_or_end() -> None:
+    view = ButtonsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def widget(of: View) -> Widget:
+        assert isinstance(of.renderer, TextualWidgetRenderer)
+        assert of.renderer.widget is not None
+        return of.renderer.widget
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        for row, packed_at_end in ((view.start, False), (view.end, True)):
+            first, second = widget(row.first).region, widget(row.second).region
+            row_region = widget(row).region
+            # as wide as their text, side by side
+            assert first.width < row_region.width // 4
+            assert second.x - first.right < 4
+            if packed_at_end:
+                assert second.right == row_region.right
+            else:
+                assert first.x == row_region.x
 
 
 @pytest.mark.asyncio

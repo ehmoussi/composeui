@@ -55,7 +55,7 @@ _OMITTED_TYPES = (Signal, Renderer, RendererContainer, threading.Timer)
 #: wrapped `Callable`) isn't a single class `_is_omitted_type` can match generically.
 OMIT = "omit"
 #: Field metadata key for a view field of a `HorizontalView`: its share of the row's
-#: width, against its siblings' (1 when unset)
+#: width, against its siblings' (1 when unset); 0 keeps it as wide as its content
 STRETCH = "stretch"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
 #: conversion, e.g. `float("abc")`)
@@ -1049,15 +1049,27 @@ class GroupFormView(FormView):
     title: str = attrs.field(default="")
 
 
+class Align(enum.Enum):
+    """Where a row packs its views when they leave some of its width free."""
+
+    START = enum.auto()
+    END = enum.auto()
+
+
 @define_view
 class HorizontalView(View):
     """Its view fields laid out side by side, in a row.
 
     Each field takes a share of the row's width, set by its `STRETCH` metadata:
     ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``.
+    Views with a share of 0 keep their content's width, e.g. buttons; when they all do,
+    `align` packs them at the row's start or end: a subclass sets ``align = Align.END``.
     """
 
     _renderer_key = "horizontal"
+
+    #: where the views go when none of them takes a share of the row's free width
+    align: ClassVar[Align] = Align.START
 
     @property
     def stretched_views(self) -> list[tuple[View, int]]:

@@ -28,6 +28,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     ActionView,
+    Align,
     ButtonVariant,
     DialogKind,
     DialogView,
@@ -1201,11 +1202,14 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
     def to_html(self, *, oob: bool = False) -> str:
         cells = "".join(
             '<div class="min-w-0 has-[>[hidden]]:hidden"'
-            f' style="flex: {stretch} 1 0%">{view.renderer.to_html()}</div>'
+            # no share: as wide as its content
+            f' style="flex: {f"{stretch} 1 0%" if stretch > 0 else "none"}">'
+            f"{view.renderer.to_html()}</div>"
             for view, stretch in self._view.stretched_views
             if isinstance(view.renderer, WebRenderer)
         )
-        return f'<div {self._root_attributes(oob=oob)} class="flex gap-6">{cells}</div>'
+        align = " justify-end" if self._view.align is Align.END else ""
+        return f'<div {self._root_attributes(oob=oob)} class="flex gap-6{align}">{cells}</div>'
 
 
 class WebVerticalRenderer(WebRenderer[VerticalView]):

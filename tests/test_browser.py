@@ -27,7 +27,7 @@ from composeui.webcore.webapplication import WebApplication
 from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
-from tests.horizontal import HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.vertical import VerticalMainView
 
@@ -105,6 +105,13 @@ def horizontal_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def buttons_base_url() -> Iterator[str]:
+    """Serve an app with rows of buttons packed at either end, for the whole module."""
+    with _serve(WebApplication(build_main_view=ButtonsMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def wide_page_base_url() -> Iterator[str]:
     """Serve an app with a wide page and no router, for the whole module."""
     with _serve(WebApplication(build_main_view=WidePageMainView).create_starlette_app()) as url:
@@ -170,6 +177,15 @@ def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
 def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page]:
     """Open the app with tables side by side like `page`, in a session of its own."""
     context = browser.new_context(base_url=horizontal_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def buttons_page(browser: Browser, buttons_base_url: str) -> Iterator[Page]:
+    """Open the app with rows of buttons like `page`, in a session of its own."""
+    context = browser.new_context(base_url=buttons_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -450,6 +466,25 @@ def test_a_horizontal_view_shares_the_row_by_stretch(horizontal_page: Page) -> N
     assert wide["width"] == pytest.approx(3 * narrow["width"], rel=0.02)
     # the hidden table takes no share: the two shown span the row, inset alike both sides
     assert wide["x"] + wide["width"] == pytest.approx(1000 - narrow["x"], abs=1)
+
+
+def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(buttons_page: Page) -> None:
+    page = buttons_page
+    page.set_viewport_size({"width": 1000, "height": 600})
+    page.goto("/")
+    boxes = {}
+    for name in ("Add", "Remove", "Cancel", "Save"):
+        box = page.get_by_role("button", name=name).bounding_box()
+        assert box is not None
+        boxes[name] = box
+    add, remove, cancel, save = boxes.values()
+
+    # as wide as their text, side by side
+    assert add["width"] < 200
+    assert 0 < remove["x"] - (add["x"] + add["width"]) < 40
+    # each row spans the column: one starts where the other ends
+    assert cancel["x"] > remove["x"] + remove["width"]
+    assert save["x"] + save["width"] == pytest.approx(1000 - add["x"], abs=1)
 
 
 def test_a_vertical_view_stacks_its_views_at_its_top(vertical_page: Page) -> None:

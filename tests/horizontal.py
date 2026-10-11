@@ -1,9 +1,17 @@
-"""Tables side by side, shared by the backend tests of `HorizontalView`."""
+"""Rows of views side by side, shared by the backend tests of `HorizontalView`."""
 
 import attrs
 from attrs import Factory
 
-from composeui.core.view import STRETCH, HorizontalView, MainView, TableView, define_view
+from composeui.core.view import (
+    STRETCH,
+    Align,
+    ButtonView,
+    HorizontalView,
+    MainView,
+    TableView,
+    define_view,
+)
 
 
 @define_view
@@ -28,3 +36,36 @@ class HorizontalMainView(MainView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_app_info(title="Side by side", extension=".side")
+
+
+@define_view
+class StartButtons(HorizontalView):
+    """Buttons as wide as their text, packed at the row's start (the default)."""
+
+    first: ButtonView = attrs.field(factory=ButtonView, metadata={STRETCH: 0})
+    second: ButtonView = attrs.field(factory=ButtonView, metadata={STRETCH: 0})
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.first.text = "Add"
+        self.second.text = "Remove"
+
+
+@define_view
+class EndButtons(StartButtons):
+    align = Align.END
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.first.text = "Cancel"
+        self.second.text = "Save"
+
+
+@define_view
+class ButtonsMainView(MainView):
+    start: StartButtons = Factory(StartButtons)
+    end: EndButtons = Factory(EndButtons)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Buttons", extension=".buttons")
