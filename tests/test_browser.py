@@ -27,6 +27,7 @@ from composeui.webcore.webapplication import WebApplication
 from examples.pipeform import PipeMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
+from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
@@ -95,6 +96,14 @@ def dialogs_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def horizontal_base_url() -> Iterator[str]:
+    """Serve an app with tables side by side, for the whole module."""
+    app = WebApplication(build_main_view=HorizontalMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -136,6 +145,15 @@ def pages_page(browser: Browser, pages_base_url: str) -> Iterator[Page]:
 def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
     """Open the app asking to confirm an edit like `page`, in a session of its own."""
     context = browser.new_context(base_url=dialogs_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page]:
+    """Open the app with tables side by side like `page`, in a session of its own."""
+    context = browser.new_context(base_url=horizontal_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -348,3 +366,19 @@ def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) 
         clear.click()
     expect(dialog).to_be_hidden()
     expect(name).to_be_hidden()
+
+
+def test_a_horizontal_view_shares_the_row_by_stretch(horizontal_page: Page) -> None:
+    page = horizontal_page
+    page.set_viewport_size({"width": 1000, "height": 600})
+    page.goto("/")
+    narrow = page.get_by_role("table").filter(has_text="Narrow").bounding_box()
+    wide = page.get_by_role("table").filter(has_text="Wide").bounding_box()
+    assert narrow is not None
+    assert wide is not None
+
+    assert narrow["y"] == wide["y"]
+    assert narrow["x"] + narrow["width"] < wide["x"]
+    assert wide["width"] == pytest.approx(3 * narrow["width"], rel=0.02)
+    # the hidden table takes no share: the two shown span the row, inset alike both sides
+    assert wide["x"] + wide["width"] == pytest.approx(1000 - narrow["x"], abs=1)

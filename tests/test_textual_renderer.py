@@ -40,6 +40,7 @@ from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
+from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView
 
 
@@ -474,6 +475,29 @@ async def test_open_file_action_can_be_cancelled_without_hanging() -> None:
 
         assert len(app.screen_stack) == 1
         assert view.file_view.filepath is None
+
+
+@pytest.mark.asyncio
+async def test_a_horizontal_view_shares_the_row_by_stretch() -> None:
+    view = HorizontalMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    widgets = []
+    for table in (view.tables.narrow, view.tables.wide, view.tables):
+        assert isinstance(table.renderer, TextualWidgetRenderer)
+        assert table.renderer.widget is not None
+        widgets.append(table.renderer.widget)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        narrow, wide, row = (widget.region for widget in widgets)
+        assert narrow.y == wide.y
+        assert narrow.right <= wide.x
+        assert wide.width == pytest.approx(3 * narrow.width, rel=0.02)
+        # the hidden table takes no share: the two shown span the row
+        assert (narrow.x, wide.right) == (row.x, row.right)
 
 
 @pytest.mark.asyncio

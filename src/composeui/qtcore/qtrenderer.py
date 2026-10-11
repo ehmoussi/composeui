@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -43,6 +44,7 @@ from composeui.core.view import (
     FormRowView,
     FormView,
     GroupFormView,
+    HorizontalView,
     LogType,
     MainView,
     Menu,
@@ -853,6 +855,27 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
         pass  # a page has no user-editable state of its own
 
 
+class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
+    """Views side by side, each as wide as its share of the row."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QHBoxLayout(self._rendered_object)
+            # the column holding the row already insets it
+            layout.setContentsMargins(0, 0, 0, 0)
+            for view, stretch in self._view.stretched_views:
+                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
+                    view.renderer.qt_object, QWidget
+                ):
+                    layout.addWidget(view.renderer.qt_object, stretch)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: HorizontalView, rendered_object: QWidget) -> None:
+        pass  # a row has no user-editable state of its own
+
+
 class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
     """The pages, stacked, and a toolbar of their actions that the window docks.
 
@@ -1183,6 +1206,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "form": QtFormRenderer,
     "form_label": QtFormLabelRenderer,
     "group_form": QtGroupFormRenderer,
+    "horizontal": QtHorizontalRenderer,
     "input": QtInputRenderer,
     "label": QtLabelRenderer,
     "log": QtLogRenderer,

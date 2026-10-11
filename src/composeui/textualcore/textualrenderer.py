@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
 from textual.widgets import ContentSwitcher, DataTable, Footer, Label, Static
@@ -32,6 +32,7 @@ from composeui.core.view import (
     FormRowView,
     FormView,
     GroupFormView,
+    HorizontalView,
     LogType,
     MainView,
     Menu,
@@ -979,6 +980,27 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
         pass  # a page has no user-editable state of its own
 
 
+class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal]):
+    """Views side by side, each as wide as its share of the row."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets: list[Widget] = []
+            for view, stretch in self._view.stretched_views:
+                if (
+                    isinstance(view.renderer, TextualWidgetRenderer)
+                    and view.renderer.widget is not None
+                ):
+                    view.renderer.widget.styles.width = f"{stretch}fr"
+                    widgets.append(view.renderer.widget)
+            self._rendered_object = Horizontal(*widgets)
+            self._rendered_object.styles.height = "auto"
+
+    @staticmethod
+    def _update_state(view: HorizontalView, rendered_object: Horizontal) -> None:
+        pass  # a row has no user-editable state of its own
+
+
 class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
     """The pages, one shown at a time, and a toolbar of their actions docked at the top.
 
@@ -1270,6 +1292,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "form": TextualFormRenderer,
     "form_label": TextualFormLabelRenderer,
     "group_form": TextualGroupFormRenderer,
+    "horizontal": TextualHorizontalRenderer,
     "input": TextualInputRenderer,
     "label": TextualLabelRenderer,
     "log": TextualLogRenderer,

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 from qtpy.QtCore import QPoint, Qt
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import (
@@ -30,6 +31,7 @@ from qtpy.QtWidgets import (
     QStatusBar,
     QTableView,
     QToolBar,
+    QWidget,
 )
 
 from composeui.core.application import _add_reference_to_signals
@@ -38,14 +40,15 @@ from composeui.core.view import ActionView, ButtonVariant, DialogKind, LabelView
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
+from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import pytest
     from pytestqt.qtbot import QtBot
-    from qtpy.QtWidgets import QWidget
+
+    from composeui.core.view import View
 
 
 def _field_widget(view: object) -> QWidget:
@@ -406,6 +409,35 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     assert view.file_view.filepath == saved_path
     data = json.loads(saved_path.read_text())
     assert data["pages"]["inputs"]["pipe_form"]["name"]["text"] == "saved_name"
+
+
+def _widget(view: View) -> QWidget:
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    widget = view.renderer.qt_object
+    assert isinstance(widget, QWidget)
+    return widget
+
+
+def test_a_horizontal_view_shares_the_row_by_stretch(qtbot: QtBot) -> None:
+    view = HorizontalMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    narrow, wide, row = (
+        _widget(table).geometry() for table in (view.tables.narrow, view.tables.wide, view.tables)
+    )
+
+    assert narrow.top() == wide.top()
+    assert narrow.right() < wide.left()
+    assert wide.width() == pytest.approx(3 * narrow.width(), rel=0.02)
+    # the hidden table takes no share: the two shown span the row
+    assert narrow.left() == 0
+    assert wide.right() == row.width() - 1
 
 
 def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
