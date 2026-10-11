@@ -542,6 +542,8 @@ class TableViewLike(ViewLike, Protocol):
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
 
+    def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
     """A table, scrolling sideways on its own when wider than the page.
@@ -662,7 +664,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         if text == (cells[int(column)] if int(column) < len(cells) else ""):
             return
         rows = self._view.rows
-        self._view.cell_edited.emit(int(row), int(column), text)
+        self._view.emit_cell_edited(int(row), int(column), text)
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, int(row), int(column), text)
