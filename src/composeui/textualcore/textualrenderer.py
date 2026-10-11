@@ -43,6 +43,7 @@ from composeui.core.view import (
     SaveAsAction,
     SeparatorAction,
     StatusBar,
+    VerticalView,
     View,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
@@ -1001,6 +1002,25 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal
         pass  # a row has no user-editable state of its own
 
 
+class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
+    """Views one above the other, at the top of the column."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets = [
+                view.renderer.widget
+                for view in self._view.children_views
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            self._rendered_object = Vertical(*widgets)
+            self._rendered_object.styles.height = "auto"
+
+    @staticmethod
+    def _update_state(view: VerticalView, rendered_object: Vertical) -> None:
+        pass  # a column has no user-editable state of its own
+
+
 class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
     """The pages, one shown at a time, and a toolbar of their actions docked at the top.
 
@@ -1304,4 +1324,5 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "separator": TextualSeparatorRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
+    "vertical": TextualVerticalRenderer,
 }

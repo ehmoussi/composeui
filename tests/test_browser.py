@@ -29,6 +29,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView, WidePageMainView
+from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -111,6 +112,14 @@ def wide_page_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def vertical_base_url() -> Iterator[str]:
+    """Serve an app with a table above its button, for the whole module."""
+    app = WebApplication(build_main_view=VerticalMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -170,6 +179,15 @@ def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page
 def wide_page(browser: Browser, wide_page_base_url: str) -> Iterator[Page]:
     """Open the app with a wide page like `page`, in a session of its own."""
     context = browser.new_context(base_url=wide_page_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def vertical_page(browser: Browser, vertical_base_url: str) -> Iterator[Page]:
+    """Open the app with a table above its button like `page`, in a session of its own."""
+    context = browser.new_context(base_url=vertical_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -432,3 +450,23 @@ def test_a_horizontal_view_shares_the_row_by_stretch(horizontal_page: Page) -> N
     assert wide["width"] == pytest.approx(3 * narrow["width"], rel=0.02)
     # the hidden table takes no share: the two shown span the row, inset alike both sides
     assert wide["x"] + wide["width"] == pytest.approx(1000 - narrow["x"], abs=1)
+
+
+def test_a_vertical_view_stacks_its_views_at_its_top(vertical_page: Page) -> None:
+    page = vertical_page
+    page.set_viewport_size({"width": 1000, "height": 600})
+    page.goto("/")
+    table = page.get_by_role("table").filter(has_text="Short").bounding_box()
+    button = page.get_by_role("button", name="Add").bounding_box()
+    tall = page.get_by_role("table").filter(has_text="Tall").bounding_box()
+    assert table is not None
+    assert button is not None
+    assert tall is not None
+
+    assert table["y"] == tall["y"]
+    # the views are apart by the row's gap between its cells, nothing more
+    assert button["y"] - (table["y"] + table["height"]) == pytest.approx(
+        tall["x"] - (table["x"] + table["width"]), abs=1
+    )
+    # next to a taller table, the column's spare height is left below its views
+    assert button["y"] + button["height"] < tall["y"] + tall["height"]

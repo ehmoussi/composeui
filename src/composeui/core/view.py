@@ -1069,6 +1069,17 @@ class HorizontalView(View):
         ]
 
 
+@define_view
+class VerticalView(View):
+    """Its view fields laid out one above the other, in a column, as tall as their content.
+
+    A page is already a column: this one is for a column inside a `HorizontalView`, e.g.
+    a table above its buttons, next to another table.
+    """
+
+    _renderer_key = "vertical"
+
+
 #: what a page's route can be: it also names the page in a web address (`/<route>`)
 _ROUTE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 

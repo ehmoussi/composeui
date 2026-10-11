@@ -48,6 +48,7 @@ from composeui.core.view import (
     SaveAsAction,
     SeparatorAction,
     StatusBar,
+    VerticalView,
     View,
 )
 from composeui.webcore.page import get_page
@@ -1207,6 +1208,20 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
         return f'<div {self._root_attributes(oob=oob)} class="flex gap-6">{cells}</div>'
 
 
+class WebVerticalRenderer(WebRenderer[VerticalView]):
+    """Views one above the other, at the top of the column, like a page's."""
+
+    _role = "vertical"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        content = "".join(
+            view.renderer.to_html()
+            for view in self._view.children_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
+
+
 #: the main column's width, following the shown page's `PageView.width`: switching pages
 #: only swaps the router, so CSS picks the width from the page neither hidden nor in a
 #: hidden slot
@@ -1454,4 +1469,5 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "separator": WebSeparatorRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
+    "vertical": WebVerticalRenderer,
 }

@@ -42,6 +42,7 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView
+from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -438,6 +439,27 @@ def test_a_horizontal_view_shares_the_row_by_stretch(qtbot: QtBot) -> None:
     # the hidden table takes no share: the two shown span the row
     assert narrow.left() == 0
     assert wide.right() == row.width() - 1
+
+
+def test_a_vertical_view_stacks_its_views_at_its_top(qtbot: QtBot) -> None:
+    view = VerticalMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    column = view.tables.column
+    table, button = (_widget(child).geometry() for child in (column.table, column.button))
+    layout = _widget(column).layout()
+    assert layout is not None
+
+    assert table.top() == 0
+    assert button.top() == table.bottom() + 1 + layout.spacing()
+    # next to a taller table, the column's spare height is left below its views
+    assert button.bottom() < _widget(column).height() - 1
 
 
 def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:

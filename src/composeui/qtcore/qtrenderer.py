@@ -52,6 +52,7 @@ from composeui.core.view import (
     Router,
     SeparatorAction,
     StatusBar,
+    VerticalView,
     View,
 )
 from composeui.qtcore.widgets.qiconpath import QIconPath
@@ -876,6 +877,29 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
         pass  # a row has no user-editable state of its own
 
 
+class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
+    """Views one above the other, at the top of the column."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QVBoxLayout(self._rendered_object)
+            # the row holding the column already insets it
+            layout.setContentsMargins(0, 0, 0, 0)
+            for view in self._view.children_views:
+                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
+                    view.renderer.qt_object, QWidget
+                ):
+                    layout.addWidget(view.renderer.qt_object)
+            # height to spare, next to a taller view, goes below the views, not between them
+            layout.addStretch()
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: VerticalView, rendered_object: QWidget) -> None:
+        pass  # a column has no user-editable state of its own
+
+
 class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
     """The pages, stacked, and a toolbar of their actions that the window docks.
 
@@ -1218,4 +1242,5 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "separator": QtSeparatorRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
+    "vertical": QtVerticalRenderer,
 }

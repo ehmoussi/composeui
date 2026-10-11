@@ -42,6 +42,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import PagesMainView
+from tests.vertical import VerticalMainView
 
 
 def _field_widget(
@@ -498,6 +499,28 @@ async def test_a_horizontal_view_shares_the_row_by_stretch() -> None:
         assert wide.width == pytest.approx(3 * narrow.width, rel=0.02)
         # the hidden table takes no share: the two shown span the row
         assert (narrow.x, wide.right) == (row.x, row.right)
+
+
+@pytest.mark.asyncio
+async def test_a_vertical_view_stacks_its_views_at_its_top() -> None:
+    view = VerticalMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    widgets = []
+    for child in (view.tables.column.table, view.tables.column.button, view.tables.tall):
+        assert isinstance(child.renderer, TextualWidgetRenderer)
+        assert child.renderer.widget is not None
+        widgets.append(child.renderer.widget)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        table, button, tall = (widget.region for widget in widgets)
+        assert table.y == tall.y
+        assert button.y == table.bottom
+        # next to a taller table, the column's spare height is left below its views
+        assert button.bottom < tall.bottom
 
 
 @pytest.mark.asyncio
