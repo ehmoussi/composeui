@@ -26,6 +26,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     DialogKind,
+    EditRefusedError,
     MainView,
     RendererType,
     SelectionMode,
@@ -841,3 +842,28 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         assert cells() == [["Harbour", "Busy"], ["Lake", "Windy"]]
         assert view.places.selected_rows == [1]
         assert table.cursor_row == 1
+
+
+@pytest.mark.asyncio
+async def test_a_refused_edit_leaves_its_cell_and_the_selection_as_they_were() -> None:
+    view = EditableTableMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.places.renderer, TextualWidgetRenderer)
+    table = view.places.renderer.widget
+    assert isinstance(table, DataTable)
+
+    def refuse(_row: int, _column: int, _text: str) -> None:
+        raise EditRefusedError
+
+    view.places.cell_edited.connect(refuse)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(table, offset=(2, 1))  # the lake's row
+        await pilot.press("f2", *"Windy", "enter")
+        await pilot.pause()
+        assert view.places.rows == [["Lake", "Calm"], ["Harbour"]]
+        assert [str(cell) for cell in table.get_row_at(0)] == ["Lake", "Calm"]
+        assert view.places.selected_rows == [0]

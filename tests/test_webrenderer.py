@@ -38,6 +38,7 @@ from composeui.core.view import (
     ButtonVariant,
     ButtonView,
     DialogView,
+    EditRefusedError,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -2165,8 +2166,8 @@ def test_rows_answering_an_edit_are_shown_its_row_still_selected(places: _Places
         if text == "Windy":  # applied, the rows sorted by note: the lake moves last
             rows = replace_cell(table.rows, row, column, text)
             table.rows = sorted(rows, key=lambda cells: cells[1:])
-        else:  # refused, the same rows put back
-            table.rows = [list(cells) for cells in table.rows]
+        else:
+            raise EditRefusedError
 
     table.cell_edited.connect(answer)
     table.selected_rows = [0]
