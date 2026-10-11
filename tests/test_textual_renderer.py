@@ -717,6 +717,10 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
         view.tables.narrow.selected_row = 0
         await pilot.pause()
         assert table.cursor_row == 0
+        # new rows still holding it, moved: the cursor follows it
+        view.tables.narrow.rows = [["West"], ["North"]]
+        await pilot.pause()
+        assert (table.show_cursor, table.cursor_row) == (True, 1)
         view.tables.narrow.rows = [["West"]]
         await pilot.pause()
         assert not table.show_cursor

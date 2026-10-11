@@ -652,6 +652,11 @@ def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBo
     # set from code: shown, but not the user's doing
     view.tables.narrow.selected_row = 2
     assert [index.row() for index in table.selectionModel().selectedRows()] == [2]
+    # new rows still holding it, at the same index then moved: it stays shown
+    view.tables.narrow.rows = [["West"], ["South"], ["East"]]
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [2]
+    view.tables.narrow.rows = [["East"], ["West"]]
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [0]
     view.tables.narrow.rows = [["West"]]
     assert table.selectionModel().selectedRows() == []
     assert emitted == [1]
