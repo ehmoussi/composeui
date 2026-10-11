@@ -1,5 +1,20 @@
+import hashlib
 import html
+from pathlib import Path
 from string import Template
+
+_STATIC = Path(__file__).parent / "static"
+
+
+def _static_url(name: str) -> str:
+    """Get the address of a static file, naming its content.
+
+    A new version of the file has a new address, so a browser never keeps using a copy it
+    cached of an older one (e.g. a stylesheet without the classes a new page uses).
+    """
+    digest = hashlib.sha256((_STATIC / name).read_bytes()).hexdigest()[:16]
+    return f"/static/{name}?v={digest}"
+
 
 # no `data-theme`: daisyUI then follows the browser's light/dark preference
 _PAGE = Template("""<!DOCTYPE html>
@@ -11,9 +26,9 @@ _PAGE = Template("""<!DOCTYPE html>
 <!-- no copies of past pages: going back or forward reloads the page from the server,
      whose state they would contradict, at the address of a page of the app -->
 <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}' />
-<script src="/static/htmx.min.js"></script>
+<script src="$htmx_url"></script>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
-<link href="/static/app.css" rel="stylesheet" type="text/css" />
+<link href="$css_url" rel="stylesheet" type="text/css" />
 <script>
 /* the theme picked in the header's Theme menu: Light or Dark win over the browser's
    light/dark preference and are remembered by this browser; System forgets the choice
@@ -102,5 +117,9 @@ $content
 """)
 
 
+#: read once: the files only change with a new version of the package
+_STATIC_URLS = {"htmx_url": _static_url("htmx.min.js"), "css_url": _static_url("app.css")}
+
+
 def get_page(title: str, content: str) -> str:
-    return _PAGE.substitute({"title": html.escape(title), "content": content})
+    return _PAGE.substitute({"title": html.escape(title), "content": content, **_STATIC_URLS})
