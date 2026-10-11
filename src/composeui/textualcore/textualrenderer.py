@@ -668,6 +668,8 @@ class TableViewLike(ViewLike, Protocol):
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
 
+    def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+
 
 class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
     def __init__(self, view: TableViewLike) -> None:
@@ -729,7 +731,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
 
     def _update_cell(self, row: int, column: int, text: str) -> None:
         rows = self._view.rows
-        self._view.cell_edited.emit(row, column, text)
+        self._view.emit_cell_edited(row, column, text)
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)

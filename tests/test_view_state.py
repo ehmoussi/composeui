@@ -20,8 +20,10 @@ from composeui.core.view import (
     SelectionMode,
     _is_omitted_type,
     define_view,
+    replace_cell,
 )
 from tests.horizontal import HorizontalMainView
+from tests.tables import EditableTableMainView
 
 
 # Generic mixins must be bound to a concrete type through a subclass (like
@@ -333,6 +335,34 @@ def test_a_table_selecting_several_rows_keeps_each_through_new_rows() -> None:
 
     # back to a single row: the first selected one stays
     table.selection_mode = SelectionMode.SINGLE
+    assert table.selected_rows == [0]
+
+
+def test_rows_answering_an_edit_keep_its_row_selected_as_edited_or_as_it_was() -> None:
+    table = EditableTableMainView().places
+    table.rows = [["Harbour", "Busy"], ["Lake", "Calm"], ["Marsh", "Still"]]
+    table.selection_mode = SelectionMode.MULTIPLE
+    table.selected_rows = [0, 1]
+
+    def answer(row: int, column: int, text: str) -> None:
+        if text == "Windy":  # applied, the rows sorted by note: the lake moves last
+            table.rows = sorted(replace_cell(table.rows, row, column, text), key=lambda r: r[1])
+        elif text == "Foggy":  # refused, the same rows put back
+            table.rows = [list(cells) for cells in table.rows]
+        else:  # reformatted: the app's own row, neither the edited nor the old one
+            table.rows = replace_cell(table.rows, row, column, text.upper())
+
+    table.cell_edited.connect(answer)
+    table.emit_cell_edited(1, 1, "Windy")
+    assert table.rows == [["Harbour", "Busy"], ["Marsh", "Still"], ["Lake", "Windy"]]
+    assert table.selected_rows == [0, 2]  # the harbour's untouched, the lake's moved
+    table.emit_cell_edited(2, 1, "Foggy")
+    assert table.selected_rows == [0, 2]
+    table.emit_cell_edited(2, 1, "rainy")
+    assert table.selected_rows == [0]
+    # rows assigned after the edit hold the lake as they always did
+    table.selected_rows = [2]
+    table.rows = [["Lake", "RAINY"]]
     assert table.selected_rows == [0]
 
 

@@ -745,23 +745,27 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     assert [index.row() for index in table.selectionModel().selectedRows()] == [1]
 
     def answer(row: int, column: int, text: str) -> None:
-        if text == "Windy":  # with its own text
-            view.places.rows = replace_cell(view.places.rows, row, column, text.upper())
-        elif text == "Foggy":  # refusing it, with the same rows
+        if text == "Windy":  # applied, the rows sorted by note: the lake moves last
+            rows = replace_cell(view.places.rows, row, column, text)
+            view.places.rows = sorted(rows, key=lambda cells: cells[1])
+        elif text == "Foggy":  # refused, the same rows put back
             view.places.rows = [list(cells) for cells in view.places.rows]
 
     view.places.cell_edited.connect(answer)
-    # the app answers an edit with its own text: the table shows it
+    # the table shows the app's rows, its selection following the edited row
     edit(0, 1, "Windy")
-    assert view.places.rows == [["Lake", "WINDY"], ["Harbour", "Busy"]]
-    assert model.index(0, 1).data() == "WINDY"
-    # or refuses it: the table shows the old text again
-    edit(0, 1, "Foggy")
-    assert view.places.rows == [["Lake", "WINDY"], ["Harbour", "Busy"]]
-    assert model.index(0, 1).data() == "WINDY"
+    assert view.places.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
+    assert model.index(1, 1).data() == "Windy"
+    assert view.places.selected_rows == [1]
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [1]
+    # refused: the table shows the old text again, the row still selected
+    edit(1, 1, "Foggy")
+    assert view.places.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
+    assert model.index(1, 1).data() == "Windy"
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [1]
 
     # the places themselves aren't editable
     center = table.visualRect(model.index(0, 0)).center()
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
-    assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (0, 1, "Foggy")]
+    assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]

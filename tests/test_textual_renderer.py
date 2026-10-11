@@ -31,6 +31,7 @@ from composeui.core.view import (
     SelectionMode,
     View,
     define_view,
+    replace_cell,
 )
 from composeui.textualcore.textualrenderer import (
     ROW_INVALID_CLASS,
@@ -827,3 +828,16 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         assert not isinstance(app.screen, ComposeRowEditor)
         assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
         assert edited == [(1, 1, "Busy", ["Harbour"])]
+
+        # the app answers with its rows sorted by note: the cursor follows the lake
+        def answer(row: int, column: int, text: str) -> None:
+            rows = replace_cell(view.places.rows, row, column, text)
+            view.places.rows = sorted(rows, key=lambda cells: cells[1])
+
+        view.places.cell_edited.connect(answer)
+        await pilot.double_click(table, offset=(note, 1))
+        await pilot.press("end", *["backspace"] * len("Calm"), *"Windy", "enter")
+        await pilot.pause()
+        assert cells() == [["Harbour", "Busy"], ["Lake", "Windy"]]
+        assert view.places.selected_rows == [1]
+        assert table.cursor_row == 1

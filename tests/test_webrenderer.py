@@ -55,6 +55,7 @@ from composeui.core.view import (
     TableView,
     View,
     define_view,
+    replace_cell,
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
@@ -2112,31 +2113,39 @@ def test_an_editable_cell_is_a_field_posting_its_text_without_swapping_the_table
         # the field already shows what the user typed
         assert _find(body, table_id) is None
 
-        # the app refuses an edit, putting the same rows back: the table comes back
-        # (nothing selected: putting a selection back would swap the table on its own)
+        def answer(row: int, column: int, text: str) -> None:
+            if text == "Windy":  # applied, the rows sorted by note: the lake moves last
+                rows = replace_cell(table.rows, row, column, text)
+                table.rows = sorted(rows, key=lambda cells: cells[1])
+            else:  # refused, the same rows put back
+                table.rows = [list(cells) for cells in table.rows]
+
+        table.cell_edited.connect(answer)
+        table.selected_rows = [0]
+        body = edit("0", "1", "Windy").text
+        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
+        assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
+
+        # refused: the table comes back with the old text (nothing selected: putting a
+        # selection back would swap the table on its own)
         table.selected_rows = []
-
-        def refuse(_row: int, _column: int, _text: str) -> None:
-            table.rows = [list(cells) for cells in table.rows]
-
-        table.cell_edited.connect(refuse)
         fields = [
             attributes
-            for tag, attributes in _swapped(edit("0", "1", "Windy").text, table_id).descendants
+            for tag, attributes in _swapped(edit("1", "1", "Foggy").text, table_id).descendants
             if tag == "input"
         ]
-        assert [field["value"] for field in fields] == ["Calm", "Busy"]
+        assert [field["value"] for field in fields] == ["Busy", "Windy"]
 
         # the place isn't editable, and the row a stale page shows is gone: the table
         # comes back as it now is
         for row, column in (("0", "0"), ("7", "1")):
             _swapped(edit(row, column, "Pond").text, table_id)
-        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
 
         table.is_enabled = False
         assert edit("0", "1", "Windy").status_code == 400
-        assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
-        assert len(edited) == 2  # the refused edit's
+        assert table.rows == [["Harbour", "Busy"], ["Lake", "Windy"]]
+        assert len(edited) == 3
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

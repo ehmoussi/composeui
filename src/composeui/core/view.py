@@ -802,7 +802,9 @@ class TableMixin:
     `cell_edited` emits the row, the column and the new text while `rows` still holds the
     old one, then the edit replaces its row in `rows`, keeping the selection. To refuse or
     reformat it, or to show what the edit changed elsewhere, assign `rows` from the
-    callback instead: the table shows them, and the edit isn't applied on top.
+    callback instead: the table shows them, and the edit isn't applied on top. The edited
+    row stays selected when they hold it as edited (e.g. renamed, then sorted), or else
+    as it was (the edit refused).
     """
 
     def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
@@ -833,11 +835,17 @@ class TableMixin:
         if isinstance(renderer, (Renderer, RendererContainer)) and renderer.is_updating_state():
             # the user edited a cell: every row stays where it was, and so does the selection
             return rows
-        selected = [self.rows[row] for row in self.selected_rows]
+        edited = self._edited_rows if self._edited_rows is not None else self.rows
+        # each selected row as edited, then as it was
+        selected = [(edited[row], self.rows[row]) for row in self.selected_rows]
         # cleared first: refreshing the rows clears a widget's selection, even at the same index
         self.selected_rows = []
         rows = notify_renderer(cast("View", self), attribute, rows)
-        kept = sorted(rows.index(row) for row in selected if rows.count(row) == 1)
+        found: set[int] = set()
+        for candidates in selected:
+            held = [rows.index(cells) for cells in candidates if rows.count(cells) == 1]
+            found.update(held[:1])
+        kept = sorted(found)
         if len(kept) > 0:
             fields = attrs.fields_dict(cast("type[AttrsInstance]", type(self)))
             notify_renderer(cast("View", self), fields["selected_rows"], kept)
@@ -856,6 +864,22 @@ class TableMixin:
     selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
     editable_columns: list[int] = attrs.Factory(list[int])
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
+    #: `rows` as the edit being emitted leaves them, while its callbacks run
+    _edited_rows: Optional[list[list[str]]] = attrs.field(
+        default=None, init=False, repr=False, metadata={OMIT: True}
+    )
+
+    def emit_cell_edited(self, row: int, column: int, text: str) -> None:
+        """Emit `cell_edited` for the user's edit, `rows` still holding the old text.
+
+        Rows its callbacks assign keep the edited row selected as `TableMixin` says.
+        Renderers call it; applying the edit afterwards is theirs.
+        """
+        self._edited_rows = replace_cell(self.rows, row, column, text)
+        try:
+            self.cell_edited.emit(row, column, text)
+        finally:
+            self._edited_rows = None
 
 
 @define_view
