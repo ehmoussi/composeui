@@ -154,6 +154,10 @@ class RendererContainer(Generic[TView]):
     def get_renderer(self, name: str) -> Renderer[TView, Any]:
         return self._renderers[name]
 
+    @property
+    def renderers(self) -> list[Renderer[TView, Any]]:
+        return list(self._renderers.values())
+
     def render(self) -> None:
         """Render the view in the appropriate framework."""
         for renderer in self._renderers.values():
