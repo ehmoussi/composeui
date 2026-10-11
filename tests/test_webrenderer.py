@@ -52,6 +52,7 @@ from composeui.core.view import (
     SeparatorAction,
     StatusBar,
     TableView,
+    View,
     define_view,
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -1899,8 +1900,9 @@ class _NoteMainView(MainView):
         self._init_app_info(title="Notes", extension=".notes")
 
 
-def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
-    """A page that isn't shown hides its content: its dialog would never show."""
+@pytest.fixture
+def notes() -> Iterator[tuple[TestClient, _NoteMainView]]:
+    """Serve an app with a dialog on its second page; yield a client and its main view."""
     views: list[_NoteMainView] = []
 
     class NotesApp(WebApplication[_NoteMainView]):
@@ -1913,8 +1915,26 @@ def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
     with TestClient(NotesApp().create_starlette_app()) as client:
         client.get("/")
         (main_view,) = views
-        main_view.pages.note.note.open()
-        page = client.get("/inputs").text
+        yield client, main_view
+
+
+def _disable_on_submit(main_view: _NoteMainView, container: View) -> str:
+    """Return the id of the first page's button, whose click disables `container`."""
+
+    def disable() -> None:
+        container.is_enabled = False
+
+    main_view.pages.first.submit.clicked.connect(disable)
+    return _widget_id(main_view.pages.first.submit.renderer)
+
+
+def test_a_page_dialog_shows_outside_the_pages_hidden_slots(
+    notes: tuple[TestClient, _NoteMainView],
+) -> None:
+    """A page that isn't shown hides its content: its dialog would never show."""
+    client, main_view = notes
+    main_view.pages.note.note.open()
+    page = client.get("/inputs").text
 
     dialog_id = _widget_id(main_view.pages.note.note.renderer)
     assert "hidden" not in _element(page, dialog_id).attributes
@@ -1922,37 +1942,46 @@ def test_a_page_dialog_shows_outside_the_pages_hidden_slots() -> None:
     assert all(attributes.get("id") != dialog_id for _, attributes in router.descendants)
 
 
-def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it() -> None:
-    views: list[_NoteMainView] = []
+@pytest.mark.parametrize("disabled", ["page", "router"])
+def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it(
+    notes: tuple[TestClient, _NoteMainView], disabled: str
+) -> None:
+    client, main_view = notes
+    dialog = main_view.pages.note.note
+    dialog.open()
+    container = main_view.pages.note if disabled == "page" else main_view.pages
+    submit_id = _disable_on_submit(main_view, container)
+    body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
 
-    class NotesApp(WebApplication[_NoteMainView]):
-        def __init__(self) -> None:
-            super().__init__(build_main_view=_NoteMainView)
+    dialog_id = _widget_id(dialog.renderer)
+    swapped = _swapped(body, dialog_id)
+    assert "hx-trigger" not in swapped.attributes  # Escape doesn't dismiss it
+    buttons = [attributes for tag, attributes in swapped.descendants if tag == "button"]
+    assert all("disabled" in attributes for attributes in buttons)
+    # a stale page's answer is ignored, as a disabled dialog's own
+    client.post(f"/widget/{dialog_id}", data={"event": "accept"})
+    assert dialog.is_visible
 
-        def setup_session(self, main_view: _NoteMainView) -> None:
-            views.append(main_view)
 
-    with TestClient(NotesApp().create_starlette_app()) as client:
-        client.get("/")
-        (main_view,) = views
-        page, dialog = main_view.pages.note, main_view.pages.note.note
-        dialog.open()
+def test_disabling_a_router_disables_its_pages_but_not_their_links(
+    notes: tuple[TestClient, _NoteMainView],
+) -> None:
+    client, main_view = notes
+    submit_id = _disable_on_submit(main_view, main_view.pages)
+    body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
 
-        def disable_the_page() -> None:
-            page.is_enabled = False
-
-        main_view.pages.first.submit.clicked.connect(disable_the_page)
-        submit_id = _widget_id(main_view.pages.first.submit.renderer)
-        body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
-
-        dialog_id = _widget_id(dialog.renderer)
-        swapped = _swapped(body, dialog_id)
-        assert "hx-trigger" not in swapped.attributes  # Escape doesn't dismiss it
-        buttons = [attributes for tag, attributes in swapped.descendants if tag == "button"]
-        assert all("disabled" in attributes for attributes in buttons)
-        # a stale page's answer is ignored, as a disabled dialog's own
-        client.post(f"/widget/{dialog_id}", data={"event": "accept"})
-        assert dialog.is_visible
+    router = _swapped(body, _widget_id(main_view.pages.renderer))
+    (submit,) = [
+        attributes for _, attributes in router.descendants if attributes.get("id") == submit_id
+    ]
+    assert "disabled" in submit
+    assert client.post(f"/widget/{submit_id}", data={"event": "click"}).status_code == 400
+    # as Qt's toolbar, apart from the stack of pages: the pages can still be switched
+    page = client.get("/").text
+    for routed in (main_view.pages.first, main_view.pages.note):
+        link = _element(page, _widget_id(routed.action.renderer))
+        assert "aria-disabled" not in link.attributes
+        assert "hx-post" in link.attributes
 
 
 def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it() -> None:
