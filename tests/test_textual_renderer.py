@@ -39,12 +39,14 @@ from composeui.textualcore.textualrenderer import (
 )
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composetable import ComposeRowEditor
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
+from tests.tables import EditableTableMainView
 from tests.vertical import VerticalMainView
 
 
@@ -771,3 +773,57 @@ async def test_a_click_or_enter_adds_or_removes_its_row_in_a_table_selecting_sev
         await pilot.pause()
         assert checked() == ["", "✓"]
         assert emitted == [[1], [1, 2], [2]]
+
+
+@pytest.mark.asyncio
+async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_selection() -> None:
+    view = EditableTableMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.places.renderer, TextualWidgetRenderer)
+    table = view.places.renderer.widget
+    assert isinstance(table, DataTable)
+    edited: list[tuple[int, int, str, list[str]]] = []
+
+    def record(row: int, column: int, text: str) -> None:
+        # the row as it was: the edit is applied once the callbacks have run
+        edited.append((row, column, text, view.places.rows[row]))
+
+    view.places.cell_edited.connect(record)
+
+    def cells() -> list[list[str]]:
+        return [[str(cell) for cell in table.get_row_at(row)] for row in range(table.row_count)]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        # the header, then the rows: the harbour's, short of its note, is the second
+        await pilot.click(table, offset=(2, 2))
+        await pilot.press("f2")
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeRowEditor)
+        assert app.focused is app.screen.inputs[1]  # the only editable cell, the note
+        await pilot.press(*"Busy", "enter")
+        await pilot.pause()
+        assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert cells() == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert edited == [(1, 1, "Busy", ["Harbour"])]
+        # its row moved nowhere: it stays selected
+        assert view.places.selected_rows == [1]
+
+        # the lake's note: past the place's cell, whose own double click edits nothing
+        await pilot.double_click(table, offset=(2, 1))
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeRowEditor)
+        place = next(iter(table.columns.values()))
+        note = place.get_render_width(table) + 1
+        await pilot.double_click(table, offset=(note, 1))
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeRowEditor)
+        # Escape leaves the row as it was
+        await pilot.press("ctrl+a", *"Windy", "escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeRowEditor)
+        assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+        assert edited == [(1, 1, "Busy", ["Harbour"])]

@@ -52,6 +52,7 @@ from composeui.core.view import (
     StatusBar,
     VerticalView,
     View,
+    replace_cell,
 )
 from composeui.webcore.page import get_page
 
@@ -538,16 +539,22 @@ class TableViewLike(ViewLike, Protocol):
     rows: list[list[str]]
     selected_rows: list[int]
     selection_changed: Signal[list[int]]
+    editable_columns: list[int]
+    cell_edited: Signal[int, int, str]
 
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
-    """A read-only table, scrolling sideways on its own when wider than the page.
+    """A table, scrolling sideways on its own when wider than the page.
 
     Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
     show it selected, each row keeping its own id so htmx gives the focus back to the
     row that had it. Selecting one row, it is the current one (`aria-current`).
     Selecting several, the table is a grid whose rows are each selected or not
     (`aria-selected`), and a click adds or removes its row.
+
+    A cell of `editable_columns` is a borderless field, named by its header, posting its
+    text when the user leaves it or presses Enter; like any field, it isn't swapped back
+    after a post. A click or Enter in it doesn't select its row.
     """
 
     _role = "table"
@@ -560,6 +567,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
                 "selection_mode": self._mark_dirty,
                 "rows": self._mark_dirty,
                 "selected_rows": self._mark_dirty,
+                "editable_columns": self._mark_dirty,
             }
         )
 
@@ -575,7 +583,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def _row_html(self, index: int, row: list[str]) -> str:
-        cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
+        # a row short of an editable cell still gets its field, empty
+        width = max(len(row), *(column + 1 for column in self._editable_columns()), 0)
+        cells = "".join(
+            self._cell_html(index, column, row[column] if column < len(row) else "")
+            for column in range(width)
+        )
         is_selected = index in self._view.selected_rows
         if self._is_multiple():
             selected = f' aria-selected="{"true" if is_selected else "false"}"'
@@ -586,12 +599,37 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         return (
             f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
             f'{selected} hx-post="/widget/{self.widget_id}"'
-            ' hx-trigger="click, keydown[key==&apos;Enter&apos;]"'
+            # not from a cell's field, which takes its own clicks and Enter
+            ' hx-trigger="click[target.tagName!=&apos;INPUT&apos;],'
+            ' keydown[key==&apos;Enter&apos;&amp;&amp;target.tagName!=&apos;INPUT&apos;]"'
             f""" hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
             f"{cells}</tr>"
         )
 
+    def _cell_html(self, row: int, column: int, text: str) -> str:
+        if column not in self._editable_columns():
+            return f"<td>{html.escape(text)}</td>"
+        if not self.is_enabled:
+            post = " disabled"
+        else:
+            post = (
+                f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
+                f""" hx-vals='{{"event": "edit", "row": "{row}", "column": "{column}"}}'"""
+                ' hx-swap="none"'
+            )
+        header = html.escape(self._view.headers[column])
+        # its own id, so htmx gives it the focus back when the table is swapped
+        return (
+            f'<td class="p-0"><input id="{self.widget_id}-cell-{row}-{column}" type="text"'
+            ' class="input input-ghost input-sm w-full min-w-0" name="text"'
+            f' value="{html.escape(text)}" aria-label="{header}" autocomplete="off"'
+            f"{post}></td>"
+        )
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event == "edit" and self.is_enabled:
+            self._edit(form)
+            return
         # a disabled table can't be clicked: a post saying otherwise is refused
         if event != "select" or not self.is_enabled:
             super().dispatch(event, form)
@@ -608,6 +646,37 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             rows = [int(row)]
         self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
+
+    def _edit(self, form: Mapping[str, str]) -> None:
+        row, column = form.get("row", ""), form.get("column", "")
+        if (
+            not row.isdigit()
+            or int(row) >= len(self._view.rows)
+            or not column.isdigit()
+            or int(column) not in self._editable_columns()
+        ):
+            # a cell a stale page still shows: swap the table back as it now is
+            self._mark_dirty(self._view, self.widget_id, self._view.rows)
+            return
+        cells, text = self._view.rows[int(row)], form.get("text", "")
+        if text == (cells[int(column)] if int(column) < len(cells) else ""):
+            return
+        rows = self._view.rows
+        self._view.cell_edited.emit(int(row), int(column), text)
+        if self._view.rows is rows:
+            with self.stop_refresh():
+                self._view.rows = replace_cell(rows, int(row), int(column), text)
+        elif self._view.rows == rows:
+            # the app put the same rows back, which reached nothing: show them again
+            self.refresh()
+
+    def _editable_columns(self) -> list[int]:
+        """`editable_columns` the table has a header for."""
+        return [
+            column
+            for column in self._view.editable_columns
+            if 0 <= column < len(self._view.headers)
+        ]
 
     def _is_multiple(self) -> bool:
         return self._view.selection_mode is SelectionMode.MULTIPLE

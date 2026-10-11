@@ -43,12 +43,14 @@ from composeui.core.view import (
     LabelView,
     RendererType,
     SelectionMode,
+    replace_cell,
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
+from tests.tables import EditableTableMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -702,3 +704,64 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     click(0)
     assert view.tables.narrow.selected_rows == [0]
     assert emitted == [[2], [0, 2], [0], [0]]
+
+
+def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: QtBot) -> None:
+    view = EditableTableMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _widget(view.places)
+    assert isinstance(table, QTableView)
+    model = table.model()
+    edited: list[tuple[int, int, str, list[str]]] = []
+
+    def record(row: int, column: int, text: str) -> None:
+        # the row as it was: the edit is applied once the callbacks have run
+        edited.append((row, column, text, view.places.rows[row]))
+
+    view.places.cell_edited.connect(record)
+
+    def edit(row: int, column: int, text: str) -> None:
+        center = table.visualRect(model.index(row, column)).center()
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+        qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+        editor = table.focusWidget()
+        assert isinstance(editor, QLineEdit)
+        editor.selectAll()
+        qtbot.keyClicks(editor, text)
+        qtbot.keyClick(editor, Qt.Key.Key_Return)
+        # Qt commits the text and closes the editor in a queued call
+        qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+
+    # the harbour's row is short of its note: the edit fills it
+    edit(1, 1, "Busy")
+    assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
+    assert edited == [(1, 1, "Busy", ["Harbour"])]
+    # its row moved nowhere: it stays selected
+    assert view.places.selected_rows == [1]
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [1]
+
+    def answer(row: int, column: int, text: str) -> None:
+        if text == "Windy":  # with its own text
+            view.places.rows = replace_cell(view.places.rows, row, column, text.upper())
+        elif text == "Foggy":  # refusing it, with the same rows
+            view.places.rows = [list(cells) for cells in view.places.rows]
+
+    view.places.cell_edited.connect(answer)
+    # the app answers an edit with its own text: the table shows it
+    edit(0, 1, "Windy")
+    assert view.places.rows == [["Lake", "WINDY"], ["Harbour", "Busy"]]
+    assert model.index(0, 1).data() == "WINDY"
+    # or refuses it: the table shows the old text again
+    edit(0, 1, "Foggy")
+    assert view.places.rows == [["Lake", "WINDY"], ["Harbour", "Busy"]]
+    assert model.index(0, 1).data() == "WINDY"
+
+    # the places themselves aren't editable
+    center = table.visualRect(model.index(0, 0)).center()
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    assert table.state() is not QAbstractItemView.State.EditingState
+    assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (0, 1, "Foggy")]

@@ -29,6 +29,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView, WidePageMainView
+from tests.tables import EditableTableMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -127,6 +128,14 @@ def vertical_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def places_base_url() -> Iterator[str]:
+    """Serve an app with a table whose notes are editable, for the whole module."""
+    app = WebApplication(build_main_view=EditableTableMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -177,6 +186,15 @@ def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
 def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page]:
     """Open the app with tables side by side like `page`, in a session of its own."""
     context = browser.new_context(base_url=horizontal_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def places_page(browser: Browser, places_base_url: str) -> Iterator[Page]:
+    """Open the app with an editable table like `page`, in a session of its own."""
+    context = browser.new_context(base_url=places_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -527,3 +545,25 @@ def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     expect(north).not_to_have_attribute("aria-current", "true")
     # the table was swapped back, the row that had the focus keeps it
     expect(south).to_be_focused()
+
+
+def test_editing_a_cell_posts_its_text_without_selecting_its_row(places_page: Page) -> None:
+    page = places_page
+    page.goto("/")
+    posted: list[str] = []
+    page.on("request", lambda request: posted.append(request.post_data or ""))
+    lake = page.get_by_role("row").filter(has_text="Lake")
+    note = lake.get_by_label("Note")
+
+    note.click()
+    note.select_text()
+    note.press_sequentially("Windy")
+    with _posted(page):
+        note.press("Enter")
+
+    # the click and Enter were the field's: only the edit was posted
+    assert len(posted) == 1
+    assert "event=edit" in posted[0]
+    expect(lake).not_to_have_attribute("aria-current", "true")
+    expect(note).to_have_value("Windy")
+    expect(note).to_be_focused()
