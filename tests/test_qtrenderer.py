@@ -40,6 +40,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     DialogKind,
+    EditRefusedError,
     LabelView,
     RendererType,
     SelectionMode,
@@ -748,8 +749,8 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
         if text == "Windy":  # applied, the rows sorted by note: the lake moves last
             rows = replace_cell(view.places.rows, row, column, text)
             view.places.rows = sorted(rows, key=lambda cells: cells[1])
-        elif text == "Foggy":  # refused, the same rows put back
-            view.places.rows = [list(cells) for cells in view.places.rows]
+        elif text == "Foggy":
+            raise EditRefusedError
 
     view.places.cell_edited.connect(answer)
     # the table shows the app's rows, its selection following the edited row

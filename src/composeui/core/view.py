@@ -781,6 +781,10 @@ class SelectionMode(enum.Enum):
     MULTIPLE = enum.auto()
 
 
+class EditRefusedError(Exception):
+    """Raised by a `cell_edited` callback to refuse the edit: the cell keeps its old text."""
+
+
 def replace_cell(rows: list[list[str]], row: int, column: int, text: str) -> list[list[str]]:
     """Return `rows` with `text` in a cell, as new lists: a row short of it is filled with ""."""
     cells = [*rows[row], *[""] * (column + 1 - len(rows[row]))]
@@ -804,7 +808,8 @@ class TableMixin:
     reformat it, or to show what the edit changed elsewhere, assign `rows` from the
     callback instead: the table shows them, and the edit isn't applied on top. The edited
     row stays selected when they hold it as edited (e.g. renamed, then sorted), or else
-    as it was (the edit refused).
+    as it was (the edit refused). Raising `EditRefusedError` refuses it too, the rows staying
+    as they are, e.g. when the model refused the new text and changed nothing.
     """
 
     def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
@@ -878,6 +883,9 @@ class TableMixin:
         self._edited_rows = replace_cell(self.rows, row, column, text)
         try:
             self.cell_edited.emit(row, column, text)
+        except EditRefusedError:
+            # the rows answering the edit, as when a callback puts them back itself
+            self.rows = [list(cells) for cells in self.rows]
         finally:
             self._edited_rows = None
 
