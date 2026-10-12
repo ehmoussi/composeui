@@ -49,13 +49,10 @@ class PipeDimensionView(GroupFormView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.half_length.value = 200.0
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.radius.label = self.tr("Radius")
         self.width.label = self.tr("Width")
         self.half_length.label = self.tr("Half Length")
+        self.half_length.value = 200.0
 
     @property
     def dimensions(self) -> tuple[DimensionInputView, ...]:
@@ -72,12 +69,9 @@ class EdgeType(enum.Enum):
 class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.value = EdgeType.Normal
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.label = self.tr("Edge Type")
         self.values = {self.tr(edge_type.value): edge_type for edge_type in EdgeType}
+        self.value = EdgeType.Normal
 
 
 class Material(enum.Enum):
@@ -91,18 +85,15 @@ class Material(enum.Enum):
 class MaterialView(LabelRowComboboxView[Material]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.value = Material.Steel
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.label = self.tr("Material")
         self.values = {self.tr(material.value): material for material in Material}
+        self.value = Material.Steel
 
 
 @define_view
 class InsulatedView(LabelRowCheckBoxView):
-    def retranslate(self) -> None:
-        super().retranslate()
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.label = self.tr("Insulation")
         self.text = self.tr("Insulated pipe")
 
@@ -112,8 +103,8 @@ class ChamferDimensionView(GroupFormView):
     height: DimensionInputView = Factory(DimensionInputView)
     width: DimensionInputView = Factory(DimensionInputView)
 
-    def retranslate(self) -> None:
-        super().retranslate()
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.title = self.tr("Chamfer")
         self.height.label = self.tr("Height")
         self.width.label = self.tr("Width")
@@ -123,8 +114,8 @@ class ChamferDimensionView(GroupFormView):
 class FilletDimensionView(GroupFormView):
     radius: DimensionInputView = Factory(DimensionInputView)
 
-    def retranslate(self) -> None:
-        super().retranslate()
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.title = self.tr("Fillet")
         self.radius.label = self.tr("Radius")
 
@@ -133,12 +124,9 @@ class FilletDimensionView(GroupFormView):
 class PipeNameRowView(LabelRowInputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        self.label = self.tr("Name")
         self.set_validator(self._check_name, self.text_edited)
         self.run_validator()
-
-    def retranslate(self) -> None:
-        super().retranslate()
-        self.label = self.tr("Name")
 
     def _check_name(self) -> str | None:
         return self.tr("A name is mandatory") if self.text == "" else None
@@ -161,6 +149,9 @@ class PipeFormView(FormView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        self.insulation_thickness.label = self.tr("Insulation Thickness")
+        self.main_pipe.title = self.tr("Main Pipe")
+        self.incident_pipe.title = self.tr("Incident Pipe")
         # Insulation: its thickness only matters for an insulated pipe
         self.insulation_thickness.value = 10.0
         self.insulated.toggled.connect(self._enable_insulation_thickness)
@@ -187,12 +178,6 @@ class PipeFormView(FormView):
         self._display_edge_options(self.edge_type.value)
         # Fillet
         self.fillet.radius.value = 20.0
-
-    def retranslate(self) -> None:
-        super().retranslate()
-        self.insulation_thickness.label = self.tr("Insulation Thickness")
-        self.main_pipe.title = self.tr("Main Pipe")
-        self.incident_pipe.title = self.tr("Incident Pipe")
 
     def _check_main_pipe_fits_incident(self) -> str | None:
         main_radius = self.main_pipe.radius.value
@@ -246,9 +231,6 @@ class InputsPageView(PageView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_route("inputs")
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.title = self.tr("Inputs")
 
 
@@ -260,9 +242,6 @@ class ResultsPageView(PageView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_route("results")
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.title = self.tr("Results")
         self.summary.headers = [
             self.tr(header) for header in ("Pipe", "Radius", "Width", "Half Length")
@@ -281,12 +260,9 @@ class PipeMenu(Menu):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.reset_dimensions.shortcut = "Ctrl+r"
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.title = self.tr("Pipe")
         self.reset_dimensions.text = self.tr("Reset Dimensions")
+        self.reset_dimensions.shortcut = "Ctrl+r"
 
 
 @define_view
@@ -296,6 +272,7 @@ class LanguageMenu(Menu):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        self.title = self.tr("Language")
         # each language named in itself, whatever the app's: never translated
         for action, language, name, shortcut in (
             (self.english, "en", "English", "Ctrl+Shift+e"),
@@ -305,10 +282,6 @@ class LanguageMenu(Menu):
             action.text = name
             action.shortcut = shortcut
             action.is_checkable = True
-
-    def retranslate(self) -> None:
-        super().retranslate()
-        self.title = self.tr("Language")
 
     @property
     def actions(self) -> tuple[ActionView, ...]:
@@ -326,9 +299,6 @@ class ResetDimensionsDialog(DialogView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
-
-    def retranslate(self) -> None:
-        super().retranslate()
         self.title = self.tr("Reset the dimensions")
         self.text = self.tr("Both pipes go back to their starting dimensions.")
         self.accept_text = self.tr("Reset")
@@ -361,8 +331,6 @@ class PipeMainView(MainView):
 
     def retranslate(self) -> None:
         super().retranslate()
-        # it shows the pipes' titles
-        self._update_summary()
         self.language_menu.check(self.language)
 
     def _reset_dimensions(self) -> None:
