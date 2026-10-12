@@ -18,7 +18,7 @@ def _static_url(name: str) -> str:
 
 # no `data-theme`: daisyUI then follows the browser's light/dark preference
 _PAGE = Template("""<!DOCTYPE html>
-<html lang="en">
+<html lang="$language">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -149,11 +149,18 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
 });
+/* the page's language, for screen readers and the browser's spell checker: the server
+   swaps in its marker when the app changes language (see `language_marker`) */
+function syncLanguage() {
+  var marker = document.getElementById("cui-language");
+  if (marker !== null) document.documentElement.lang = marker.dataset.language;
+}
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   new MutationObserver(function () {
     syncInvalidFields();
     openDialogs();
+    syncLanguage();
   }).observe(document.body, {
     childList: true,
     subtree: true,
@@ -166,6 +173,7 @@ document.addEventListener("DOMContentLoaded", function () {
 <div id="app">
 $content
 </div>
+$language_marker
 </body>
 
 </html>
@@ -176,5 +184,19 @@ $content
 _STATIC_URLS = {"htmx_url": _static_url("htmx.min.js"), "css_url": _static_url("app.css")}
 
 
-def get_page(title: str, content: str) -> str:
-    return _PAGE.substitute({"title": html.escape(title), "content": content, **_STATIC_URLS})
+def language_marker(language: str, *, oob: bool = False) -> str:
+    """Get the element telling the page's script the language, to set `<html lang>`."""
+    swap = ' hx-swap-oob="true"' if oob else ""
+    return f'<div id="cui-language" data-language="{html.escape(language)}"{swap} hidden></div>'
+
+
+def get_page(title: str, content: str, language: str) -> str:
+    return _PAGE.substitute(
+        {
+            "title": html.escape(title),
+            "content": content,
+            "language": html.escape(language),
+            "language_marker": language_marker(language),
+            **_STATIC_URLS,
+        }
+    )

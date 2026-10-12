@@ -2393,6 +2393,7 @@ def test_every_session_shows_the_language_asked_on_the_command_line(
     with TestClient(served[0]) as client:
         page = client.get("/").text
     view = app.session_views[0]
+    assert '<html lang="fr">' in page
     size = _element(page, _field_id(view.shape.size))
     assert [attributes["value"] for tag, attributes in size.descendants if tag == "option"] == [
         "SMALL",
@@ -2425,4 +2426,20 @@ def test_the_language_menu_swaps_in_the_translated_widgets(
     assert "hx-refresh" not in response.headers
     assert "Conduite principale" in _swapped(response.text, main_pipe_id).text
     assert pipe_main_view.language == "fr"
+    # the page's script sets `<html lang>` from it
+    assert _swapped(response.text, "cui-language").attributes["data-language"] == "fr"
     assert menu.french.is_checked is True
+
+
+def test_the_page_is_in_the_app_s_source_language_until_set(
+    pipe_main_view: PipeMainView, pipe_client: TestClient
+) -> None:
+    page = pipe_client.get("/").text
+
+    assert '<html lang="en">' in page
+    assert _element(page, "cui-language").attributes["data-language"] == "en"
+    # an event leaving the language alone doesn't send it again
+    response = pipe_client.post(
+        f"/widget/{_action_id(pipe_main_view.language_menu.english)}", data={"event": "triggered"}
+    )
+    assert _find(response.text, "cui-language") is None

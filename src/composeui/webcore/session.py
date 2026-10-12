@@ -20,6 +20,7 @@ from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError
 from composeui.core.study import has_data, open_study, save_study
+from composeui.webcore.page import language_marker
 from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
@@ -121,7 +122,10 @@ class WebSession(RenderTarget):
                 return None
             router = self._router
             route = None if router is None else router.current_route
+            language = self.main_view.language
             body = handle_event(renderer, event, form)
+            if self.main_view.language != language:
+                body += language_marker(self.main_view.language, oob=True)
             if router is None or router.current_route == route:
                 return body, None
             return body, page_path(router.current_route)

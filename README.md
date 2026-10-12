@@ -307,7 +307,9 @@ class PipeMainView(MainView):
 
 `main_view.set_language("fr")` (or `--language fr` on the command line) calls `retranslate`
 on every view, children before their parent, and the views being reactive, every backend
-shows the new text at once; on the web, each session has its own language. A regional
+shows the new text at once; on the web, each session has its own language, and the page's
+`<html lang>` follows it. Until then, `language` is the app's `source_language` (`"en"`
+unless a main view says otherwise). A regional
 language (`fr-CA`) falls back on its base language's catalog (`fr.json`), and text no catalog
 translates shows as written. `retranslate` also runs once as the view is built, so text set
 there shows without a language too.

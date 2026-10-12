@@ -45,6 +45,8 @@ def test_set_language_translates_every_view() -> None:
     view = TranslatedMainView()
     shape = view.shape
 
+    assert view.language == "en"  # the source language, until set
+
     view.set_language("fr")
 
     assert view.language == "fr"
