@@ -58,6 +58,9 @@ OMIT = "omit"
 #: width, against its siblings' (its view's `default_stretch` when unset); 0 keeps it
 #: as wide as its content
 STRETCH = "stretch"
+#: Field metadata key for text the user reads rather than enters (labels, titles...): it
+#: belongs to the app's code and language, not to a study, so it's never saved or loaded
+UI_TEXT = "ui_text"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
 #: conversion, e.g. `float("abc")`)
 _BAD_STATE_ERRORS = (
@@ -85,13 +88,18 @@ def _is_omitted_field(f: "attrs.Attribute[Any]") -> bool:
     return _is_omitted_type(f.type) or bool(f.metadata.get(OMIT, False))
 
 
+def _is_state_field(f: "attrs.Attribute[Any]") -> bool:
+    """Check whether `f` is study data, which state files save and load."""
+    return not _is_omitted_field(f) and not f.metadata.get(UI_TEXT, False)
+
+
 @CONVERTER.register_unstructure_hook_factory(attrs.has)
 def _omit_renderer_and_signals(
     cls: "type[AttrsInstance]",
 ) -> Callable[[Any], dict[str, Any]]:
     attrs.resolve_types(cls)
     overrides: dict[str, AttributeOverride] = {
-        str(f.name): override(omit=True) for f in attrs.fields(cls) if _is_omitted_field(f)
+        str(f.name): override(omit=True) for f in attrs.fields(cls) if not _is_state_field(f)
     }
     unstructure = make_dict_unstructure_fn(
         cls,
@@ -143,7 +151,7 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
         for f in attrs.fields(current_cls):
             if (
                 f.name not in new_data
-                or _is_omitted_field(f)
+                or not _is_state_field(f)
                 or f.on_setattr is attrs.setters.frozen
                 or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
             ):
@@ -342,7 +350,7 @@ class FileView(View):
 class ActionView(View):
     _renderer_key = "action"
 
-    text: str = attrs.field(default="")
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
     #: an image file's path; set by the app, not study data: never saved, loaded or
     #: reset (the web backend serves the file, so a study must not name one)
     icon: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
@@ -382,12 +390,12 @@ class DialogView(View):
 
     _renderer_key = "dialog"
 
-    title: str = attrs.field(default="")
-    text: str = attrs.field(default="")
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
     kind: DialogKind = attrs.field(default=DialogKind.MESSAGE)
-    accept_text: str = attrs.field(default="OK")
+    accept_text: str = attrs.field(default="OK", metadata={UI_TEXT: True})
     #: the rejecting button's text; a message has no such button
-    reject_text: str = attrs.field(default="Cancel")
+    reject_text: str = attrs.field(default="Cancel", metadata={UI_TEXT: True})
 
     accepted: SignalNoArgs = attrs.Factory(SignalNoArgs)
     rejected: SignalNoArgs = attrs.Factory(SignalNoArgs)
@@ -433,7 +441,7 @@ class SeparatorAction(View):
 class Menu(View):
     _renderer_key = "menu"
 
-    title: str = attrs.field(default="")
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -451,7 +459,7 @@ class ToolBar(View):
 
     _renderer_key = "toolbar"
 
-    title: str = attrs.field(default="")
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
 @define_view
@@ -656,7 +664,7 @@ class MainView(View):
 @define_view
 class _InputView:
     # properties
-    placeholder: str = attrs.field(default="")
+    placeholder: str = attrs.field(default="", metadata={UI_TEXT: True})
     # signals
     editing_finished: SignalNoArgs = attrs.field(factory=SignalNoArgs)
     text_changed: Signal[str] = attrs.field(factory=Signal[str])
@@ -740,7 +748,7 @@ class LogView(LogMixin, View):
 
 @define_view
 class LabelMixin:
-    text: str = attrs.field(default="")
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
 @define_view
@@ -751,7 +759,7 @@ class LabelView(LabelMixin, View):
 @define_view
 class CheckBoxMixin:
     #: shown next to the box
-    text: str = attrs.field(default="")
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
     is_checked: bool = attrs.field(default=False)
     #: the user checked or unchecked the box; not emitted when `is_checked` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
@@ -781,7 +789,7 @@ class ButtonView(View):
     # as wide as its text in a row: a button spanning a whole row is rarely wanted
     default_stretch = 0
 
-    text: str = attrs.field(default="")
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
     variant: ButtonVariant = attrs.field(default=ButtonVariant.PRIMARY)
     #: the user clicked the button
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
@@ -873,7 +881,7 @@ class TableMixin:
             object.__setattr__(self, "selected_rows", kept)
         return rows
 
-    headers: list[str] = attrs.Factory(list[str])
+    headers: list[str] = attrs.field(factory=list[str], metadata={UI_TEXT: True})
     # before `selected_rows`, which it limits
     selection_mode: SelectionMode = attrs.field(
         default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
@@ -1033,7 +1041,7 @@ class FormRowView(LogMixin, View):
 
 @define_view
 class FormLabelRowView(FormRowView):
-    label: str = attrs.field(default="")
+    label: str = attrs.field(default="", metadata={UI_TEXT: True})
 
     def _create_row_renderers(
         self, renderer_type: RendererType
@@ -1172,7 +1180,7 @@ class FormView(View):
 class GroupFormView(FormView):
     _renderer_key = "group_form"
 
-    title: str = attrs.field(default="")
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
 class Align(enum.Enum):
