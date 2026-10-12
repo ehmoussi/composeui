@@ -958,29 +958,55 @@ class ValuesGroupMixin(Generic[TValue]):
     )
     value_changed: Signal[Optional[TValue]] = attrs.Factory(Signal[Optional[TValue]])
 
+    @staticmethod
+    def _value_key(index: int, value: TValue) -> str:
+        """Get the key `value`, at `index` in `values`, is saved and sent by.
+
+        Not its label, which changes with the app's language: an enum member's name, a
+        string itself, else its position.
+        """
+        if isinstance(value, enum.Enum):
+            return value.name
+        if isinstance(value, str):
+            return value
+        return str(index)
+
+    @property
+    def options(self) -> list[tuple[str, str]]:
+        """Get each of `values` as its key (see `serialize_value`) and its label, in order."""
+        return [
+            (self._value_key(index, value), label)
+            for index, (label, value) in enumerate(self.values.items())
+        ]
+
     def serialize_value(self) -> Optional[str]:
-        """Serialize `value` as its label, the key it has in `values`."""
+        """Serialize `value` as its key: its label could be in another language on load."""
         if self.value is None:
             return None
-        for label, candidate in self.values.items():
+        for index, candidate in enumerate(self.values.values()):
             if candidate == self.value:
-                return label
+                return self._value_key(index, candidate)
         return None
 
-    def deserialize_value(self, label: Optional[str]) -> Optional[TValue]:
-        """Look up a label previously produced by `serialize_value` back into a TValue."""
-        if label is None:
+    def deserialize_value(self, key: Optional[str]) -> Optional[TValue]:
+        """Look up a key previously produced by `serialize_value` back into a TValue.
+
+        A label is accepted too, as older state files saved it.
+        """
+        if key is None:
             return None
-        if label not in self.values:
-            LOGGER.warning(
-                "Cannot restore %s.value from saved state: label %r is not among "
-                "the current options %r.",
-                type(self).__name__,
-                label,
-                list(self.values),
-            )
-            return None
-        return self.values[label]
+        for index, candidate in enumerate(self.values.values()):
+            if self._value_key(index, candidate) == key:
+                return candidate
+        if key in self.values:
+            return self.values[key]
+        LOGGER.warning(
+            "Cannot restore %s.value from saved state: %r is not among the current options %r.",
+            type(self).__name__,
+            key,
+            list(self.values),
+        )
+        return None
 
 
 @define_view

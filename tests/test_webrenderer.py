@@ -551,13 +551,14 @@ def test_page_renders_the_choices(main_view: HelloMainView, client: TestClient) 
     style = _element(page, style_id)
     radios = [attributes for tag, attributes in style.descendants if tag == "input"]
     assert style.attributes["role"] == "radiogroup"
-    assert [radio["value"] for radio in radios] == ["Casual", "Formal"]
+    # keyed by the enum members' names, which no language changes
+    assert [radio["value"] for radio in radios] == ["CASUAL", "FORMAL"]
     # one radio set per group: named after the group's own id
     assert {radio["name"] for radio in radios} == {style_id}
-    assert _selected(style) == ["Casual"]
+    assert _selected(style) == ["CASUAL"]
     colour = _element(page, _field_id(main_view.form.colour))
     options = [attributes["value"] for tag, attributes in colour.descendants if tag == "option"]
-    assert options == ["", "Red", "Green", "Blue"]
+    assert options == ["", "RED", "GREEN", "BLUE"]
     assert _selected(colour) == [""]  # nothing chosen yet: the empty choice
 
 
@@ -567,7 +568,7 @@ def test_choosing_a_style_regreets_without_swapping_the_radio_group(
     style_id = _field_id(main_view.form.style)
     _type_name(client, main_view, "Bob")
 
-    body = client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"}).text
+    body = client.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"}).text
 
     assert main_view.form.style.value is GreetingStyle.FORMAL
     assert _swapped(body, _widget_id(main_view.status_bar.renderer)).text == "Good day, Bob."
@@ -580,7 +581,7 @@ def test_choosing_a_colour_updates_the_summary(
     colour_id = _field_id(main_view.form.colour)
     summary_id = _widget_id(main_view.summary.renderer)
 
-    body = client.post(f"/widget/{colour_id}", data={colour_id: "Blue", "event": "change"}).text
+    body = client.post(f"/widget/{colour_id}", data={colour_id: "BLUE", "event": "change"}).text
 
     assert main_view.form.colour.value is Colour.BLUE
     assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are and likes blue."
@@ -593,7 +594,7 @@ def test_choosing_a_colour_updates_the_summary(
     assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are."
 
 
-def test_an_unknown_label_clears_the_value_instead_of_failing(
+def test_an_unknown_choice_clears_the_value_instead_of_failing(
     main_view: HelloMainView, client: TestClient
 ) -> None:
     colour_id = _field_id(main_view.form.colour)
@@ -615,7 +616,7 @@ def test_choosing_the_current_value_again_does_not_re_emit(
     style.value_changed.connect(emitted.append)
 
     for _ in range(2):
-        client.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"})
+        client.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
 
     assert emitted == [GreetingStyle.FORMAL]
 
@@ -634,7 +635,7 @@ def test_replacing_the_values_rerenders_the_options(main_view: HelloMainView) ->
     assert style.value is None
     group = _element(renderer.to_html(), renderer.widget_id)
     radios = [attributes for tag, attributes in group.descendants if tag == "input"]
-    assert [radio.get("value") for radio in radios] == ["Casual"]
+    assert [radio.get("value") for radio in radios] == ["CASUAL"]
     assert _selected(group) == []
 
 
@@ -657,7 +658,7 @@ def test_a_radio_row_label_does_not_point_at_the_group(rows: _RowsMainView) -> N
     # a `<div>` isn't labelable: `for=` would point at nothing
     assert "for" not in _element(label.to_html(), label.widget_id).attributes
 
-    handle_event(field, "change", {field.widget_id: "Square"})
+    handle_event(field, "change", {field.widget_id: "SQUARE"})
 
     assert rows.shape.value is _Shape.SQUARE
 
@@ -1187,7 +1188,7 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
         alice_view, bob_view = app.session_views
         _type_name(alice, alice_view, "Alice")
         style_id = _field_id(alice_view.form.style)
-        alice.post(f"/widget/{style_id}", data={style_id: "Formal", "event": "change"})
+        alice.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
         saved = alice.get("/state").content
 
         response = bob.post("/state", files={"file": ("study.hello", saved)})
