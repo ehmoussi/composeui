@@ -35,6 +35,7 @@ from composeui.webcore.routes import (
     widget_fragment,
 )
 from composeui.webcore.session import SessionStore
+from composeui.webcore.webrenderer import check_routes
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -233,7 +234,12 @@ class WebApplication(Application[MainViewT]):
         """Wire a new session's main view; override to connect app-level behavior."""
 
     def create_starlette_app(self) -> Starlette:
-        """Create the Starlette app, building a fresh main view for each new session."""
+        """Create the Starlette app, building a fresh main view for each new session.
+
+        A page whose route takes one of the backend's addresses stops it here, before
+        serving, rather than failing every request.
+        """
+        check_routes(self.main_view)
         return create_starlette_app(SessionStore(self._new_session, ttl=self.session_ttl))
 
     def run(self) -> None:

@@ -61,6 +61,7 @@ from composeui.core.view import (
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
+    RESERVED_ROUTES,
     UnsupportedEventError,
     WebFloatInputRenderer,
     WebInputRenderer,
@@ -1703,6 +1704,35 @@ def test_each_page_has_its_own_address(
     for address in ("/settings", "/favicon.ico"):
         assert pages_client.get(address).status_code == 404
     assert main_view.router.current_route == "results"
+
+
+@pytest.mark.parametrize("route", sorted(RESERVED_ROUTES))
+def test_a_page_on_an_address_the_backend_uses_stops_the_app_before_serving(
+    route: str,
+) -> None:
+    @define_view
+    class Page(PageView):
+        def __attrs_post_init__(self) -> None:
+            super().__attrs_post_init__()
+            self._init_route(route)
+
+    @define_view
+    class Pages(Router):
+        page: Page = Factory(Page)
+
+    @define_view
+    class ReservedMainView(MainView):
+        pages: Pages = Factory(Pages)
+
+        def __attrs_post_init__(self) -> None:
+            super().__attrs_post_init__()
+            self._init_app_info(title="Reserved", extension=".reserved")
+
+    message = re.escape(f"the routes [{route!r}]: rename them")
+    with pytest.raises(ValueError, match=message):
+        WebApplication(build_main_view=ReservedMainView).create_starlette_app()
+    with pytest.raises(ValueError, match=message):  # rendered without the app
+        ReservedMainView().render(RendererType.WEB)
 
 
 def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
