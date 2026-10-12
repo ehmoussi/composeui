@@ -713,17 +713,20 @@ class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):
     values: dict[str, TValue]
     value_changed: Signal[TValue | None]
 
+    @property
+    def options(self) -> list[tuple[str, str]]: ...
+
     def serialize_value(self) -> str | None: ...
 
-    def deserialize_value(self, label: str | None) -> TValue | None: ...
+    def deserialize_value(self, key: str | None) -> TValue | None: ...
 
 
 class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
-    """A choice among `values`, identified on the wire by its label (its `values` key).
+    """A choice among `values`, identified on the wire by its key (see `options`).
 
-    Labels, not `str(value)`: the same convention as `serialize_value`/
-    `deserialize_value`, which also turn a stale or bogus label into `None` with a
-    warning instead of the `ValueError` `_check_value` would raise.
+    The same key as `serialize_value`/`deserialize_value`, which also turn a stale or
+    bogus key into `None` with a warning instead of the `ValueError` `_check_value`
+    would raise.
     """
 
     def __init__(self, view: ValuesViewLike[TValue]) -> None:
@@ -739,8 +742,8 @@ class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
         if event != "change":
             super().dispatch(event, form)
         # the field is named after the widget id, so two groups never share a radio set
-        label = form.get(self.widget_id, "")
-        value = None if label == "" else self._view.deserialize_value(label)
+        key = form.get(self.widget_id, "")
+        value = None if key == "" else self._view.deserialize_value(key)
         if value == self._view.value:
             return
         with self.stop_refresh():
@@ -763,11 +766,11 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
         disabled = "" if self.is_enabled else " disabled"
         options = "".join(
             '<label class="label cursor-pointer gap-2 text-base-content">'
-            f'<input type="radio" class="radio radio-sm radio-primary" value="{html.escape(label)}"'
-            f"{' checked' if label == selected else ''}{self._htmx_attributes()}"
+            f'<input type="radio" class="radio radio-sm radio-primary" value="{html.escape(key)}"'
+            f"{' checked' if key == selected else ''}{self._htmx_attributes()}"
             f' autocomplete="off"{disabled}>'
             f"{html.escape(label)}</label>"
-            for label in self._view.values
+            for key, label in self._view.options
         )
         return (
             f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="radiogroup"'
@@ -784,9 +787,9 @@ class WebComboboxRenderer(_WebValuesRenderer[TValue]):
         # an empty choice only while nothing is selected, as Qt's combobox shows nothing
         empty = '<option value="" selected></option>' if selected is None else ""
         options = "".join(
-            f'<option value="{html.escape(label)}"'
-            f"{' selected' if label == selected else ''}>{html.escape(label)}</option>"
-            for label in self._view.values
+            f'<option value="{html.escape(key)}"'
+            f"{' selected' if key == selected else ''}>{html.escape(label)}</option>"
+            for key, label in self._view.options
         )
         return (
             f"<select {self._root_attributes(oob=oob)}{self._row_attributes()}"

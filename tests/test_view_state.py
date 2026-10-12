@@ -1,5 +1,6 @@
 """Tests for the cattrs (un)structure hooks and MainView state persistence."""
 
+import enum
 import json
 import logging
 from pathlib import Path
@@ -14,6 +15,7 @@ from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
     ActionView,
+    ComboboxView,
     InputView,
     InvalidStateError,
     LabelView,
@@ -141,14 +143,54 @@ def test_radio_group_keeps_value_when_still_a_member_of_new_values() -> None:
     assert view.radio.value == "a"
 
 
-def test_unstructure_serializes_radio_group_value_as_its_label() -> None:
+def test_unstructure_serializes_a_string_choice_as_itself() -> None:
     view = _RadioMainView()
     view.radio.value = "b"
     data = CONVERTER.unstructure(view)
-    assert data["radio"]["value"] == "b"  # the label, not necessarily the raw TValue
+    assert data["radio"]["value"] == "b"
 
     view.radio.value = None
     assert CONVERTER.unstructure(view)["radio"]["value"] is None
+
+
+class _Edge(enum.Enum):
+    ROUND = 1
+    SHARP = 2
+
+
+@define_view
+class _EdgeComboboxView(ComboboxView[_Edge]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.values = {"Round": _Edge.ROUND, "Sharp": _Edge.SHARP}
+
+
+@define_view
+class _SizeComboboxView(ComboboxView[float]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.values = {"Small": 0.5, "Large": 2.0}
+
+
+def test_a_choice_is_saved_by_a_key_its_label_in_another_language_still_loads() -> None:
+    edge, size = _EdgeComboboxView(), _SizeComboboxView()
+    edge.value, size.value = _Edge.SHARP, 2.0
+    # an enum by its member's name, anything else by its position
+    assert (edge.serialize_value(), size.serialize_value()) == ("SHARP", "1")
+    assert edge.options == [("ROUND", "Round"), ("SHARP", "Sharp")]
+
+    edge.values = {"Arrondi": _Edge.ROUND, "Vif": _Edge.SHARP}
+    size.values = {"Petit": 0.5, "Grand": 2.0}
+
+    assert edge.deserialize_value("SHARP") is _Edge.SHARP
+    assert size.deserialize_value("1") == 2.0
+
+
+def test_a_choice_saved_by_its_label_still_loads() -> None:
+    """Older state files saved a choice by its label."""
+    edge = _EdgeComboboxView()
+
+    assert edge.deserialize_value("Sharp") is _Edge.SHARP
 
 
 def test_save_and_load_state_round_trip_preserves_renderer_bindings(tmp_path: Path) -> None:
