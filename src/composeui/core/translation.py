@@ -1,7 +1,8 @@
 """Translate the text views show, from JSON catalogs.
 
 A catalog is a `<language>.json` file mapping the text as written in the code to its
-translation: ``{"Radius": "Rayon"}``. Text missing from every catalog is shown as written.
+translation: ``{"Radius": "Rayon"}``. Text missing from every catalog is shown as written,
+like text translated as "": a translation still to fill.
 """
 
 from __future__ import annotations
@@ -59,7 +60,12 @@ def translator(language: str, directories: Sequence[Path]) -> Translate:
     """
     catalog: dict[str, str] = {}
     for directory in reversed(directories):
-        catalog.update(load_catalog(directory, language))
+        # "" is still to fill: a catalog after it can translate the text
+        catalog.update(
+            (text, translation)
+            for text, translation in load_catalog(directory, language).items()
+            if translation != ""
+        )
 
     def translate(text: str) -> str:
         return catalog.get(text, text)
