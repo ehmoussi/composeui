@@ -440,6 +440,19 @@ class Menu(View):
 
 
 @define_view
+class ToolBar(View):
+    """A row of actions at the top of the window, for the ones the user runs most.
+
+    Its `ActionView` and `SeparatorAction` fields are its entries, in order; a field of
+    the main view, docked by the window. `title` names it, e.g. for a screen reader.
+    """
+
+    _renderer_key = "toolbar"
+
+    title: str = attrs.field(default="")
+
+
+@define_view
 class NewAction(ActionView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()

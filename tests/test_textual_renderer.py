@@ -42,13 +42,14 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor
-from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
+from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView
+from tests.toolbar import ToolBarMainView
 from tests.vertical import VerticalMainView
 
 
@@ -591,6 +592,39 @@ async def test_the_toolbar_shows_one_page_at_a_time() -> None:
         await pilot.pause()
         assert name.widget.region.height > 0
         assert buttons["Inputs"].variant == "primary"
+
+
+@pytest.mark.asyncio
+async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
+    view = ToolBarMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        toolbar, pages = app.query(ComposeToolbar)
+        # docked at the top together, not over each other
+        assert toolbar.region.y == 0
+        assert pages.region.y == toolbar.region.bottom
+        buttons = {str(button.label): button for button in toolbar.query(ComposeToolbarButton)}
+        assert list(buttons) == ["Open", "Run", "Wrap"]
+
+        await pilot.click(buttons["Run"])
+        await pilot.pause()
+        assert view.router.results.total.text == "Ran"
+        await pilot.click(buttons["Wrap"])
+        await pilot.pause()
+        assert view.toolbar.wrap.is_checked
+        assert buttons["Wrap"].variant == "primary"
+
+        # the picker blocks its caller: run from the app's own thread, it would never show
+        await pilot.click(buttons["Open"])
+        await pilot.pause()
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
 
 
 @pytest.mark.asyncio

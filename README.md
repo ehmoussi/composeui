@@ -154,10 +154,10 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`) for the available building blocks, `PageView`/`Router` for
-an app split into [pages](#pages), `DialogView` for [dialogs](#dialogs), and
-`ButtonView` for a button the user clicks (`clicked`), e.g. under a form to submit it; its
-`variant` (`ButtonVariant`: primary, secondary, danger) tells the main action from the others
-and from one destroying something.
+an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
+for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
+under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, danger)
+tells the main action from the others and from one destroying something.
 
 ## Pages
 
@@ -198,6 +198,39 @@ Which page is shown is navigation, not study data: saving, opening and New leave
 Qt docks the toolbar as a `QToolBar`, Textual shows a row of buttons at the top, and the
 web puts it in the page header, with a web address per page. See
 [`src/examples/pipeform.py`](src/examples/pipeform.py) for an app with two pages.
+
+## Toolbars
+
+A `ToolBar` is a row of the actions the user runs most, docked at the top of the window.
+Its `ActionView` and `SeparatorAction` fields are its entries, in order; make it a field of
+the main view:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import ActionView, MainView, ToolBar, define_view
+
+
+@define_view
+class RunToolBar(ToolBar):
+    run: ActionView = Factory(ActionView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "Run"  # names it, e.g. for a screen reader
+        self.run.text = "Run"
+        self.run.shortcut = "Ctrl+r"
+
+
+@define_view
+class AppMainView(MainView):
+    toolbar: RunToolBar = Factory(RunToolBar)
+```
+
+Clicking an entry triggers its action, a checkable one shows as pressed while checked,
+and disabling the toolbar disables its entries. Qt docks it as a `QToolBar`, Textual shows
+a row of buttons at the top, above a router's, and the web puts its buttons in the page
+header, before the menus.
 
 ## Dialogs
 

@@ -44,6 +44,7 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     StatusBar,
+    ToolBar,
     VerticalView,
     View,
     replace_cell,
@@ -55,7 +56,12 @@ from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeTable
-from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
+from composeui.textualcore.widgets.composetoolbar import (
+    ComposeToolbar,
+    ComposeToolbarButton,
+    ComposeToolbars,
+    ComposeToolbarSeparator,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -212,15 +218,16 @@ class _TextualNoopRenderer(Renderer[TNoopView, TNoopView]):
 class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
     """No widget of its own: key bindings + `Footer` entries, or toolbar buttons.
 
-    `_ComposeUIApp` turns actions with a shortcut into key bindings, and a router's
-    toolbar shows its pages' actions as buttons.
+    `_ComposeUIApp` turns actions with a shortcut into key bindings, and a toolbar, or a
+    router's for its pages' actions, shows them as buttons.
     """
 
     def __init__(self, view: ActionView) -> None:
         super().__init__(view)
         #: set once `_register_actions` has bound the action to a key
         self.app: _ComposeUIApp | None = None
-        #: set by `TextualRouterRenderer` for a page's action: its toolbar button
+        #: set by the toolbar showing the action (`TextualToolBarRenderer`, or
+        #: `TextualRouterRenderer` for a page's action): its button
         self.button: ComposeToolbarButton | None = None
         self._refresh_dispatcher.update(
             {
@@ -1111,6 +1118,42 @@ class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
         pass  # navigation goes through the pages' actions, never the switcher itself
 
 
+class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
+    """A row of buttons, one per action, docked at the top by the main renderer."""
+
+    def __init__(self, view: ToolBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._noop})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets: list[Widget] = []
+            for child_view in self._view.children_views:
+                if isinstance(child_view, SeparatorAction):
+                    widgets.append(ComposeToolbarSeparator())
+                elif isinstance(child_view, ActionView) and isinstance(
+                    child_view.renderer, TextualActionRenderer
+                ):
+                    button = ComposeToolbarButton()
+                    button.triggered.connect(functools.partial(self._trigger, child_view))
+                    child_view.renderer.button = button
+                    widgets.append(button)
+            self._rendered_object = ComposeToolbar(*widgets)
+
+    def _trigger(self, action_view: ActionView) -> None:
+        app = self._get_app()
+        if isinstance(app, _ComposeUIApp):
+            app.trigger(action_view)
+
+    @staticmethod
+    def _noop(_view: ToolBar, _rendered_object: ComposeToolbar, _value: Any) -> None:
+        pass  # a row of buttons has no title to show
+
+    @staticmethod
+    def _update_state(view: ToolBar, rendered_object: ComposeToolbar) -> None:
+        pass  # nothing user-editable to read back
+
+
 def _slot_id(route: str) -> str:
     """Id of a page's slot in its router's switcher (routes are valid ids)."""
     return f"page-{route}"
@@ -1187,8 +1230,11 @@ class _ComposeUIApp(App[None]):
 
     def action_trigger(self, action_id: str) -> None:
         action_view = self.registered_actions.get(action_id)
-        if action_view is None:
-            return
+        if action_view is not None:
+            self.trigger(action_view)
+
+    def trigger(self, action_view: ActionView) -> None:
+        """Trigger an action from its key binding or its toolbar button."""
         if isinstance(action_view, _FILE_DIALOG_ACTIONS):
             # `ask_open_filepath`/`ask_save_filepath` block waiting for a modal file
             # picker; blocking the app's own thread that way would freeze the very
@@ -1233,29 +1279,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            # `StatusBar` is docked to the real bottom of the terminal (see
-            # `TextualStatusBarRenderer`); everything else goes in a `VerticalScroll`
-            # so content taller than the screen stays reachable instead of clipped.
-            scrollable: list[Widget] = []
-            docked: list[Widget] = []
-            for child_view in self._view.children_views:
-                if not (
-                    isinstance(child_view.renderer, TextualWidgetRenderer)
-                    and child_view.renderer.widget is not None
-                ):
-                    continue
-                widget = child_view.renderer.widget
-                if isinstance(child_view, StatusBar):
-                    docked.append(widget)
-                elif isinstance(child_view.renderer, TextualRouterRenderer):
-                    # docked at the top (see `ComposeToolbar`), clear of the scrolling
-                    if child_view.renderer.toolbar is not None:
-                        docked.append(child_view.renderer.toolbar)
-                    scrollable.append(widget)
-                else:
-                    scrollable.append(widget)
-            root = Vertical(VerticalScroll(*scrollable), *docked)
-            self._rendered_object = _ComposeUIApp(self._view, root)
+            self._rendered_object = _ComposeUIApp(self._view, self._root_widget())
             views: deque[View] = deque(self._view.children_views)
             while views:
                 view = views.popleft()
@@ -1263,6 +1287,38 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                     view.renderer.app = self._rendered_object
                 views.extend(view.children_views)
             self.refresh()
+
+    def _root_widget(self) -> Widget:
+        """Lay out the screen: the toolbars and the status bar docked, the rest scrolling.
+
+        `StatusBar` is docked to the real bottom of the terminal (see
+        `TextualStatusBarRenderer`) and the toolbars to the top; everything else goes in
+        a `VerticalScroll` so content taller than the screen stays reachable instead of
+        clipped.
+        """
+        scrollable: list[Widget] = []
+        toolbars: list[Widget] = []
+        docked: list[Widget] = []
+        for child_view in self._view.children_views:
+            if not (
+                isinstance(child_view.renderer, TextualWidgetRenderer)
+                and child_view.renderer.widget is not None
+            ):
+                continue
+            widget = child_view.renderer.widget
+            if isinstance(child_view, StatusBar):
+                docked.append(widget)
+            elif isinstance(child_view, ToolBar):
+                toolbars.append(widget)
+            elif isinstance(child_view.renderer, TextualRouterRenderer):
+                if child_view.renderer.toolbar is not None:
+                    toolbars.append(child_view.renderer.toolbar)
+                scrollable.append(widget)
+            else:
+                scrollable.append(widget)
+        if len(toolbars) > 0:
+            docked.append(ComposeToolbars(*toolbars))
+        return Vertical(VerticalScroll(*scrollable), *docked)
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self._rendered_object, callback)
@@ -1368,5 +1424,6 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "separator": TextualSeparatorRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
+    "toolbar": TextualToolBarRenderer,
     "vertical": TextualVerticalRenderer,
 }

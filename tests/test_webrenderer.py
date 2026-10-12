@@ -80,6 +80,7 @@ from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView
+from tests.toolbar import ToolBarMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -1727,6 +1728,58 @@ def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
     # the shown page's link again: no navigation, so nothing new in the history
     again = pages_client.post(f"/widget/{results}", data={"event": "triggered"})
     assert "HX-Push-Url" not in again.headers
+
+
+def test_a_toolbar_shows_its_actions_as_header_buttons() -> None:
+    views: list[ToolBarMainView] = []
+
+    class ToolBarApp(WebApplication[ToolBarMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=ToolBarMainView)
+
+        def setup_session(self, main_view: ToolBarMainView) -> None:
+            views.append(main_view)
+
+    with TestClient(ToolBarApp().create_starlette_app()) as client:
+        page = client.get("/").text
+        (main_view,) = views
+        toolbar_view = main_view.toolbar
+        toolbar_id = _widget_id(toolbar_view.renderer)
+        toolbar = _element(page, toolbar_id)
+        assert (toolbar.attributes["role"], toolbar.attributes["aria-label"]) == ("toolbar", "Edit")
+        assert [
+            attributes.get("role") or tag
+            for tag, attributes in toolbar.descendants
+            if tag in {"label", "button", "div"}
+        ] == ["label", "separator", "button", "button"]
+        # Open uploads a study, as the File menu's does
+        open_file = _element(page, _action_id(toolbar_view.open_file))
+        file_input = next(a for tag, a in open_file.descendants if tag == "input")
+        assert file_input["accept"] == ".toolbar"
+        run = _element(page, _action_id(toolbar_view.run))
+        assert (run.text, run.attributes["title"]) == ("Run", "Run (Alt+Shift+R)")
+
+        response = client.post(
+            f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+        )
+        total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
+        assert total.text == "Ran"
+        wrap_id = _action_id(toolbar_view.wrap)
+        response = client.post(f"/widget/{wrap_id}", data={"event": "triggered"})
+        wrap = _swapped(response.text, wrap_id)
+        assert wrap.attributes["aria-pressed"] == "true"
+        assert "btn-active" in (wrap.attributes["class"] or "").split()
+
+        with collect_dirty() as dirty:
+            toolbar_view.is_enabled = False
+            swapped = _swapped(render_dirty(dirty), toolbar_id)
+        assert all(
+            "disabled" in attributes for tag, attributes in swapped.descendants if tag == "button"
+        )
+        refused = client.post(
+            f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+        )
+        assert refused.status_code == 400
 
 
 def test_clicking_the_button_swaps_in_what_its_view_changed(

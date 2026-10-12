@@ -69,8 +69,6 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
   directory, or Redis) and reload it when a cookie for an unknown session arrives; needs a
   fixed signing key from the environment. Only worth it for a deployed app, which also
   raises multi-process serving (sessions live in one process's memory today).
-- **A generic `ToolBar` view.** Toolbar entries are per page today (`PageView.action`);
-  a toolbar of arbitrary actions can come when an app wants one.
 
 ## Design notes for the web backend
 
@@ -98,8 +96,10 @@ The README's "Web backend" section covers what users see.
   first, so focus returns where it was, then posts its answer; the server swaps it closed.
 - **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are
   buttons of their own (Save As and Exit left out), and any other menu is a dropdown
-  under its title, marked with a chevron so it reads apart from the buttons. A dropdown
-  is as wide as its longest item, the shortcut a faded hint beside it. On a phone the
+  under its title, marked with a chevron so it reads apart from the buttons. A
+  `ToolBar`'s buttons go before the menus, as plain text: an action's `icon` is a Qt file
+  path. A dropdown is as wide as its longest item, the shortcut a faded hint beside it.
+  On a phone the
   buttons keep only their icon and the app's title is cut short, so the header holds on
   one line, the pages' toolbar on a row of its own.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown); action `data`
