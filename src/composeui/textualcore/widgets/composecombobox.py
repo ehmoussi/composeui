@@ -30,13 +30,16 @@ class ComposeCombobox(Select[TValue], Generic[TValue]):
 
     def set_values(self, values: dict[str, TValue]) -> None:
         """Rebuild the select for a new set of options."""
-        self.set_options(values.items())
+        # set in code, not chosen by the user: `value_changed` isn't emitted
+        with self.prevent(Select.Changed):
+            self.set_options(values.items())
 
     def set_value(self, value: TValue | None) -> None:
-        if value is None:
-            self.value = Select.NULL
-        else:
-            self.value = value
+        with self.prevent(Select.Changed):
+            if value is None:
+                self.value = Select.NULL
+            else:
+                self.value = value
 
     def current_value(self) -> TValue | None:
         return self.selection
