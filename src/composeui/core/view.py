@@ -34,7 +34,14 @@ from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.translation import CATALOGS_DIR, Translate, no_translation, translator
+from composeui.core.translation import (
+    CATALOGS_DIR,
+    Translate,
+    TranslatedText,
+    no_translation,
+    translate_again,
+    translator,
+)
 
 if TYPE_CHECKING:
     from attrs import AttrsInstance
@@ -214,19 +221,22 @@ def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
     return value
 
 
-def _retranslate(view: "View", translate: Translate, previous: Optional[Translate] = None) -> None:
+def _retranslate(view: "View", translate: Translate) -> None:
     """Show the text of `view` and its children translated with `translate`.
 
-    `previous` translated the text they show now; by default, each view's own.
+    The text `tr` translated, wherever a field keeps it; text set without `tr` is left as
+    it is.
     """
     for child in view.children_views:
-        _retranslate(child, translate, previous)
-    shown = view._tr if previous is None else previous  # noqa: SLF001
-    for name, text in view._default_texts.items():  # noqa: SLF001
-        # otherwise the app changed it, and translates it itself
-        if getattr(view, name) == shown(text):
-            setattr(view, name, translate(text))
+        _retranslate(child, translate)
     view._tr = translate  # noqa: SLF001
+    for f in attrs.fields(cast("type[AttrsInstance]", type(view))):
+        if f.on_setattr is attrs.setters.frozen:
+            continue  # set once, e.g. the main view's title
+        value = getattr(view, f.name)
+        translated = translate_again(value, translate)
+        if translated is not value:
+            setattr(view, f.name, translated)
     view.retranslate()
     # a message on show is in the previous language
     if isinstance(view, LogMixin) and view.log_message != "":
@@ -270,8 +280,7 @@ class View:
     _renderer_key: ClassVar[Optional[str]] = None
     #: its share of a `HorizontalView`'s width when its field sets no `STRETCH`
     default_stretch: ClassVar[int] = 1
-    #: text ComposeUI's views start with, by field, as written in the code: a language
-    #: translates it unless the app changed it
+    #: text ComposeUI's views start with, by field, as written in the code, set with `tr`
     _default_texts: ClassVar[dict[str, str]] = {}
 
     # properties
@@ -292,19 +301,23 @@ class View:
             if isinstance(signal, Signal):
                 signal.set_name(f"{type(self).__name__}.{f.name}")
         for name, text in self._default_texts.items():
-            setattr(self, name, text)
+            setattr(self, name, self.tr(text))
         self.retranslate()
 
-    def tr(self, text: str) -> str:
-        """Translate `text`, as written in the code, into the main view's language."""
-        return self._tr(text)
+    def tr(self, text: str) -> TranslatedText:
+        """Translate `text`, as written in the code, into the main view's language.
+
+        A view keeping the translation, in a field or in a list or dict of one, shows it in
+        the next language `MainView.set_language` sets; formatted too.
+        """
+        return TranslatedText(self._tr(text), text)
 
     def retranslate(self) -> None:
-        """Set the text the view shows, translated with `tr`; a subclass overrides it.
+        """Update text that `tr` alone doesn't follow, e.g. built from other text.
 
         Called once while the view is built, before the rest of `__attrs_post_init__`,
-        then by `MainView.set_language` on every view, children before their parent: a
-        view setting its children's text has the last word, as when they are built.
+        then by `MainView.set_language` on every view, children before their parent, once
+        their text is translated.
         """
 
     @property
@@ -715,7 +728,7 @@ class MainView(View):
         """
         _reset_state(self, type(self)())
         # the new view's text is as written in the code
-        _retranslate(self, self._tr, no_translation)
+        _retranslate(self, self._tr)
 
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file."""
