@@ -1180,6 +1180,12 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
             self._view.triggered.add_qt_signal(self._rendered_object.triggered)
             self.refresh()
 
+    def refresh_attribute(self, attr_name: str, value: Any) -> None:
+        # no `QAction` without a parent to show it, e.g. the entry of a page outside a
+        # router: nothing to update, and `render` shows the view as it is then
+        if self._rendered_object is not None:
+            super().refresh_attribute(attr_name, value)
+
     @staticmethod
     def _update_state(view: ActionView, rendered_object: QAction) -> None:
         view.text = rendered_object.text()

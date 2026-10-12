@@ -51,7 +51,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
-from tests.pages import PagesMainView
+from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -829,6 +829,24 @@ def test_a_language_set_once_rendered_relabels_the_widgets(qtbot: QtBot) -> None
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     assert [action.text() for action in window.menuBar().actions()] == ["Fichier"]
+
+
+def test_an_action_without_a_qaction_ignores_changes_until_rendered(qtbot: QtBot) -> None:
+    # a page outside a router: its entry, showing its title, has no toolbar to be in
+    page = InputsPage()
+    page.render(RendererType.QT)
+    assert isinstance(page.action.renderer, QtActionRenderer)
+    assert page.action.renderer.qt_object is None
+
+    page.title = "Entrées"
+
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    page.action.renderer.set_parent_rendered_object(window)
+    page.action.renderer.render()
+    qaction = page.action.renderer.qt_object
+    assert isinstance(qaction, QAction)
+    assert qaction.text() == "Entrées"
 
 
 def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
