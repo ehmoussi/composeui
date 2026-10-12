@@ -1,11 +1,12 @@
 """Test of the example pipeform."""
 
 import time
+from pathlib import Path
 
 import pytest
 
 from composeui.qtcore.qtapplication import QtApplication
-from examples.pipeform import EdgeType, PipeMainView
+from examples.pipeform import EdgeType, Material, PipeMainView
 
 
 @pytest.fixture
@@ -95,3 +96,45 @@ def test_resetting_the_dimensions_waits_for_the_confirmation(
     assert radius.value == 50.0
     assert main_view.pages.results.summary.rows[0][1] == "50"
     assert not main_view.pages.inputs.pipe_form.log_view.is_visible
+
+
+def test_the_pipe_form_in_french(app: QtApplication[PipeMainView]) -> None:
+    view = app.main_view
+    view.status_bar.timeout = 0
+    pipe_form = view.pages.inputs.pipe_form
+    pipe_form.incident_pipe.radius.value = 80.0
+    pipe_form.validate()
+
+    view.set_language("fr")
+
+    assert pipe_form.main_pipe.title == "Conduite principale"
+    assert pipe_form.name.log_message == "Un nom est obligatoire"
+    assert pipe_form.log_view.log_message == (
+        "- Le rayon incident ne peut pas dépasser le rayon principal : (80.0 > 50.0)"
+    )
+    assert list(pipe_form.edge_type.values) == ["Normale", "Chanfrein", "Congé"]
+    assert view.pages.results.summary.headers == ["Conduite", "Rayon", "Largeur", "Demi-longueur"]
+    assert [row[0] for row in view.pages.results.summary.rows] == [
+        "Conduite principale",
+        "Conduite incidente",
+    ]
+    pipe_form.edge_type.value = EdgeType.Fillet
+    pipe_form.edge_type.value_changed.emit(EdgeType.Fillet)
+    assert view.status_bar.message == "Type d'arête changé : Congé"
+
+
+def test_a_study_saved_in_french_opens_in_english(tmp_path: Path) -> None:
+    french = PipeMainView()
+    french.set_language("fr")
+    french.pages.inputs.pipe_form.edge_type.value = EdgeType.Chamfer
+    french.pages.inputs.pipe_form.material.value = Material.Copper
+    filepath = tmp_path / "study.pipe"
+    french.save_state(filepath)
+
+    english = PipeMainView()
+    english.load_state(filepath)
+
+    pipe_form = english.pages.inputs.pipe_form
+    assert pipe_form.edge_type.value is EdgeType.Chamfer
+    assert pipe_form.material.value is Material.Copper
+    assert pipe_form.main_pipe.title == "Main Pipe"
