@@ -83,6 +83,7 @@ from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
+from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -2365,3 +2366,49 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
         selected = client.post(f"/widget/{table_id}", data={"event": "select", "row": "1"})
         assert selected.status_code == 400
         assert (column.table.selected_rows, clicked) == ([0], [])
+
+
+class _ShapesApp(WebApplication[TranslatedMainView]):
+    def __init__(self) -> None:
+        super().__init__(build_main_view=TranslatedMainView)
+        self.session_views: list[TranslatedMainView] = []
+
+    def setup_session(self, main_view: TranslatedMainView) -> None:
+        self.session_views.append(main_view)
+
+
+def test_every_session_shows_the_language_asked_on_the_command_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    served: list[Starlette] = []
+    monkeypatch.setattr("sys.argv", ["shapes", "--language", "fr"])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **_: served.append(app),
+    )
+    app = _ShapesApp()
+
+    app.run()
+
+    with TestClient(served[0]) as client:
+        page = client.get("/").text
+    view = app.session_views[0]
+    size = _element(page, _field_id(view.shape.size))
+    assert [attributes["value"] for tag, attributes in size.descendants if tag == "option"] == [
+        "SMALL",
+        "LARGE",
+    ]
+    assert size.text == "PetiteGrande"
+    assert _selected(size) == ["LARGE"]
+    assert _element(page, _widget_id(_part(view.shape.size, "label"))).text == (
+        "Taille de la forme"
+    )
+
+    # back to the text as written, e.g. from a language menu
+    with collect_dirty() as dirty:
+        view.set_language("en")
+
+    combobox = _part(view.shape.size, "field")
+    assert combobox.widget_id in dirty
+    assert "Large</option>" in combobox.to_html()
+    assert view.shape.size.value is Size.LARGE

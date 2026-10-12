@@ -20,6 +20,7 @@ from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QLabel,
@@ -53,6 +54,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
+from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -802,3 +804,28 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
     assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
+
+
+def test_a_language_set_once_rendered_relabels_the_widgets(qtbot: QtBot) -> None:
+    view = TranslatedMainView()
+    view.render(RendererType.QT)
+    size = view.shape.size
+    seen: list[object] = []
+    size.value_changed.connect(seen.append)
+
+    view.set_language("fr")
+
+    group = view.shape.renderer
+    assert isinstance(group, QtWidgetRenderer)
+    assert isinstance(group.qt_object, QGroupBox)
+    assert group.qt_object.title() == "Forme"
+    combobox = _field_widget(size)
+    assert isinstance(combobox, QComboBox)
+    assert [combobox.itemText(i) for i in range(combobox.count())] == ["Petite", "Grande"]
+    assert combobox.currentText() == "Grande"
+    assert size.value is Size.LARGE
+    assert seen == []
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    assert [action.text() for action in window.menuBar().actions()] == ["Fichier"]
