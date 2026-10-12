@@ -52,6 +52,7 @@ from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView
+from tests.toolbar import ToolBarMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -547,6 +548,37 @@ def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     assert name.qt_object.isVisible()
     assert actions["Inputs"].isChecked()
     assert not actions["Results"].isChecked()
+
+
+def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
+    view = ToolBarMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    toolbar, pages = window.findChildren(QToolBar)
+    assert window.toolBarArea(toolbar) == Qt.ToolBarArea.TopToolBarArea
+    assert toolbar.windowTitle() == "Edit"
+    assert [(action.text(), action.isSeparator()) for action in toolbar.actions()] == [
+        ("Open", False),
+        ("", True),
+        ("Run", False),
+        ("Wrap", False),
+    ]
+    assert [action.text() for action in pages.actions()] == ["Inputs", "Results"]
+    _, _, run, wrap = toolbar.actions()
+
+    qtbot.mouseClick(toolbar.widgetForAction(run), Qt.MouseButton.LeftButton)
+    assert view.router.results.total.text == "Ran"
+    qtbot.mouseClick(toolbar.widgetForAction(wrap), Qt.MouseButton.LeftButton)
+    assert view.toolbar.wrap.is_checked
+    view.toolbar.wrap.is_checked = False
+    assert not wrap.isChecked()
+    view.toolbar.is_enabled = False
+    assert not toolbar.widgetForAction(run).isEnabled()
 
 
 def test_clicking_the_button_runs_what_its_view_connects(qtbot: QtBot) -> None:

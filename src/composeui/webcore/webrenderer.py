@@ -50,6 +50,7 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     StatusBar,
+    ToolBar,
     VerticalView,
     View,
     replace_cell,
@@ -1043,6 +1044,7 @@ class Placement(enum.Enum):
     ITEM = "item"  # an item of a dropdown
     BUTTON = "button"  # a button of its own
     PAGE = "page"  # a link to a page, in the header's toolbar of pages
+    TOOL = "tool"  # a button of a `ToolBar`
     OMITTED = "omitted"  # not shown: Save As next to Save (both download), Exit
 
 
@@ -1141,7 +1143,7 @@ class WebMenuRenderer(WebRenderer[Menu]):
 
 
 class WebActionRenderer(WebRenderer[ActionView]):
-    """A menu action posting `triggered`; Save/Open are a download link and an upload.
+    """A menu or toolbar action posting `triggered`; Save/Open are a download and an upload.
 
     Those two can't go through the generic widget event: a download has to be a plain
     link, and a file has to be uploaded. Both name the action (`trigger`), so its
@@ -1155,7 +1157,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
         #: the file types Open's picker offers, e.g. ".hello"; an action doesn't know its
         #: main view, so `WebMainRenderer.render` sets it
         self.accept: str | None = None
-        #: set by its menu: kept for when the action is swapped on its own
+        #: set by its menu or toolbar: kept for when the action is swapped on its own
         self.placement = Placement.ITEM
         #: the address of the page a page's action shows, set by `WebRouterRenderer`
         self.href: str | None = None
@@ -1173,6 +1175,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
             return self._button_html(oob=oob)
         if self.placement is Placement.PAGE:
             return self._page_link_html(oob=oob)
+        if self.placement is Placement.TOOL:
+            return self._tool_html(oob=oob)
         view = self._view
         check = "✓ " if view.is_checkable and view.is_checked else ""
         shortcut = _web_shortcut(view.shortcut)
@@ -1210,6 +1214,24 @@ class WebActionRenderer(WebRenderer[ActionView]):
             return f'<button {attributes} type="button" disabled>{label}</button>'
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         return self._active_html(attributes, label, key)
+
+    def _tool_html(self, *, oob: bool) -> str:
+        """Render a toolbar button: its text, pressed while checked, its shortcut in the tooltip."""
+        view = self._view
+        shortcut = _web_shortcut(view.shortcut)
+        text = html.escape(view.text)
+        tooltip = f' title="{text} ({shortcut[0]})"' if shortcut else ""
+        is_checked = view.is_checkable and view.is_checked
+        active = " btn-active" if is_checked else ""
+        pressed = f' aria-pressed="{str(is_checked).lower()}"' if view.is_checkable else ""
+        attributes = (
+            f'{self._root_attributes(oob=oob)} class="btn btn-ghost btn-sm{active}"'
+            f"{tooltip}{pressed}"
+        )
+        if not self.is_enabled:
+            return f'<button {attributes} type="button" disabled>{text}</button>'
+        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+        return self._active_html(attributes, text, key)
 
     def _page_link_html(self, *, oob: bool) -> str:
         """Render a toolbar link to a page: still a link to its address, for a new tab.
@@ -1260,7 +1282,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event != "triggered" or not self._view.is_enabled:
+        # `is_enabled`: an action of a disabled toolbar is disabled with it
+        if event != "triggered" or not self.is_enabled:
             super().dispatch(event, form)
         self._view.triggered.emit()
 
@@ -1268,10 +1291,56 @@ class WebActionRenderer(WebRenderer[ActionView]):
 class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
     _role = "separator"
 
+    def __init__(self, view: SeparatorAction) -> None:
+        super().__init__(view)
+        #: set by its toolbar: a bar between buttons rather than a menu's line
+        self.is_in_toolbar = False
+
     def to_html(self, *, oob: bool = False) -> str:
+        if self.is_in_toolbar:
+            return (
+                f'<div {self._root_attributes(oob=oob)} role="separator"'
+                ' aria-orientation="vertical" class="mx-1 h-5 w-px bg-base-300"></div>'
+            )
         return (
             f'<li {self._root_attributes(oob=oob)} role="separator">'
             '<hr class="my-1 border-base-300 p-0"></li>'
+        )
+
+
+class WebToolBarRenderer(WebRenderer[ToolBar]):
+    """A row of buttons in the header, one per action, posting `triggered`."""
+
+    _role = "toolbar"
+
+    def __init__(self, view: ToolBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._mark_dirty})
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+        # the children are rendered first: make them a toolbar's
+        for child in self._view.children_views:
+            if isinstance(child.renderer, WebActionRenderer):
+                child.renderer.placement = Placement.TOOL
+            elif isinstance(child.renderer, WebSeparatorRenderer):
+                child.renderer.is_in_toolbar = True
+
+    def to_html(self, *, oob: bool = False) -> str:
+        items = _between_items(
+            [
+                (isinstance(child, SeparatorAction), child.renderer.to_html())
+                for child in self._view.children_views
+                if isinstance(child.renderer, WebRenderer)
+            ]
+        )
+        title = html.escape(self._view.title)
+        label = f' aria-label="{title}"' if title else ""
+        return (
+            f'<div {self._root_attributes(oob=oob)} role="toolbar"{label}'
+            ' class="flex items-center gap-1">'
+            f"{''.join(item for _, item in items)}</div>"
         )
 
 
@@ -1558,6 +1627,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 
     def page_html(self) -> str:
         menus: list[str] = []
+        toolbars: list[str] = []
         content: list[str] = []
         status_bar = ""
         toolbar = ""
@@ -1570,6 +1640,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 status_bar = child_view.renderer.to_html()
             elif isinstance(child_view, Menu):
                 menus.append(child_view.renderer.to_html())
+            elif isinstance(child_view, ToolBar):
+                toolbars.append(child_view.renderer.to_html())
             else:
                 if child_view is self.router and isinstance(child_view.renderer, WebRouterRenderer):
                     toolbar = child_view.renderer.toolbar_html()
@@ -1585,7 +1657,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             ' bg-base-100 px-4">'
             f"{self._brand_html()}{toolbar}"
             '<nav class="ml-auto flex items-center gap-1">'
-            f"{''.join(menus)}</nav>"
+            f"{''.join(toolbars)}{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
             "</header>"
             f'<main class="mx-auto {_MAIN_WIDTHS} px-4 pt-8 pb-20">'
@@ -1665,5 +1737,6 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "separator": WebSeparatorRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
+    "toolbar": WebToolBarRenderer,
     "vertical": WebVerticalRenderer,
 }

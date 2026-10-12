@@ -1,5 +1,5 @@
-from textual.containers import Horizontal
-from textual.widgets import Button
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Button, Static
 
 from composeui.core.signal import SignalNoArgs
 
@@ -16,17 +16,45 @@ class ComposeToolbarButton(Button):
         self.triggered.emit()
 
 
+class ComposeToolbarSeparator(Static):
+    """A thin bar between two groups of toolbar buttons."""
+
+    DEFAULT_CSS = """
+    ComposeToolbarSeparator {
+        width: auto;
+        margin-right: 1;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__("│")
+
+
 class ComposeToolbar(Horizontal):
-    """A row of toolbar buttons, docked at the top of the screen."""
+    """A row of toolbar buttons, in the `ComposeToolbars` docked at the top of the screen."""
 
     DEFAULT_CSS = """
     ComposeToolbar {
-        dock: top;
         height: auto;
         padding: 0 1;
         background: $panel;
     }
     ComposeToolbar > ComposeToolbarButton {
         margin-right: 1;
+    }
+    """
+
+
+class ComposeToolbars(Vertical):
+    """The toolbars, one above the other, docked at the top of the screen.
+
+    Widgets docked to the same edge overlap: the toolbars share one dock instead.
+    """
+
+    DEFAULT_CSS = """
+    ComposeToolbars {
+        dock: top;
+        height: auto;
     }
     """

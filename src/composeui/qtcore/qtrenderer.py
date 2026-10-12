@@ -54,6 +54,7 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     StatusBar,
+    ToolBar,
     VerticalView,
     View,
     replace_cell,
@@ -1091,6 +1092,10 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
                 status_bar_obj = child_view.renderer.qt_object
                 if isinstance(status_bar_obj, QStatusBar):
                     rendered_object.setStatusBar(status_bar_obj)
+            elif isinstance(child_view.renderer, QtToolBarRenderer):
+                toolbar_obj = child_view.renderer.qt_object
+                if toolbar_obj is not None:
+                    rendered_object.addToolBar(toolbar_obj)
             elif isinstance(child_view.renderer, QtRouterRenderer):
                 toolbar = child_view.renderer.toolbar
                 stack = child_view.renderer.qt_object
@@ -1277,6 +1282,36 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
         rendered_object.setTitle(title)
 
 
+class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
+    """A toolbar of its actions, docked at the top by the main window."""
+
+    def __init__(self, view: ToolBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._refresh_title})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QToolBar()
+            self._rendered_object.setMovable(False)
+            self._rendered_object.toggleViewAction().setVisible(False)  # no way to close it
+            for child_view in self._view.children_views:
+                if isinstance(child_view.renderer, (QtActionRenderer, QtSeparatorRenderer)):
+                    child_view.renderer.set_parent_rendered_object(self._rendered_object)
+                    child_view.renderer.render()
+                    action = child_view.renderer.qt_object
+                    if action is not None:
+                        self._rendered_object.addAction(action)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: ToolBar, rendered_object: QToolBar) -> None:
+        view.title = rendered_object.windowTitle()
+
+    @staticmethod
+    def _refresh_title(_view: ToolBar, rendered_object: QToolBar, title: str) -> None:
+        rendered_object.setWindowTitle(title)
+
+
 #: renderer keys of the Qt backend, looked up by `composeui.core.registry.create_renderer`
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
@@ -1300,5 +1335,6 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "separator": QtSeparatorRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
+    "toolbar": QtToolBarRenderer,
     "vertical": QtVerticalRenderer,
 }
