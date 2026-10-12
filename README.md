@@ -327,6 +327,18 @@ there shows without a language too.
 with `uv run python -m examples.pipeform --backend qt --language fr`, or switch from its
 Language menu, which calls `set_language` and checks the language shown.
 
+Check the app's catalogs against its code, e.g. in CI:
+
+```bash
+uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView
+```
+
+It fails on text a catalog misses (it would show as written) and on a translation whose
+`{placeholders}` differ from the text's (formatting it would fail), and lists the entries
+no code uses any more. The text is the literals passed to `tr` in the views' source, plus
+the text the views translate as they are built, which finds the text `tr` gets from a
+variable, e.g. an enum's values.
+
 ## Saving and loading state
 
 `MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
