@@ -63,10 +63,12 @@ from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     RESERVED_ROUTES,
     UnsupportedEventError,
+    WebActionRenderer,
     WebFloatInputRenderer,
     WebInputRenderer,
     WebLabelRenderer,
     WebLogRenderer,
+    WebMainRenderer,
     WebRadioGroupRenderer,
     WebRenderer,
     WebStatusBarRenderer,
@@ -1447,6 +1449,7 @@ def test_triggering_a_checkable_action_toggles_its_check_mark() -> None:
     action.render(RendererType.WEB)
     renderer = action.renderer
     assert isinstance(renderer, WebRenderer)
+    renderer.to_html()  # on the page, as in its menu
 
     # the item comes back as an out-of-band fragment, with its check mark toggled
     assert ">✓ Wrap</span>" in handle_event(renderer, "triggered", {})
@@ -2443,3 +2446,32 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
         f"/widget/{_action_id(pipe_main_view.language_menu.english)}", data={"event": "triggered"}
     )
     assert _find(response.text, "cui-language") is None
+
+
+@define_view
+class _LonePageMainView(MainView):
+    #: outside a router: no toolbar shows its entry
+    page: InputsPage = Factory(InputsPage)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Lone page", extension=".lone")
+
+
+def test_a_page_outside_a_router_swaps_nothing_for_its_entry() -> None:
+    main_view = _LonePageMainView()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+    page = main_view.renderer.page_html()
+    action = main_view.page.action.renderer
+    assert isinstance(action, WebActionRenderer)
+    assert action.widget_id not in page
+    new = main_view.file_menu.new.renderer
+    assert isinstance(new, WebActionRenderer)
+    assert new.widget_id in page
+
+    with collect_dirty() as dirty:
+        main_view.page.title = "Entrées"
+        main_view.file_menu.new.text = "Nouveau"
+
+    assert list(dirty) == [new.widget_id]

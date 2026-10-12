@@ -1183,6 +1183,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
         self.placement = Placement.ITEM
         #: the address of the page a page's action shows, set by `WebRouterRenderer`
         self.href: str | None = None
+        #: whether the page has it: a menu, a toolbar or a router put it there
+        self._is_shown = False
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 ("text", "icon", "data", "shortcut", "is_checkable", "is_checked"),
@@ -1190,7 +1192,13 @@ class WebActionRenderer(WebRenderer[ActionView]):
             )
         )
 
+    def _mark_dirty(self, view: ActionView, rendered_object: str, value: Any) -> None:
+        # e.g. the entry of a page outside a router: no element on the page to swap
+        if self._is_shown:
+            super()._mark_dirty(view, rendered_object, value)
+
     def to_html(self, *, oob: bool = False) -> str:
+        self._is_shown = True
         if self.placement is Placement.OMITTED:
             return f"<span {self._root_attributes(oob=oob)} hidden></span>"
         if self.placement is Placement.BUTTON:
