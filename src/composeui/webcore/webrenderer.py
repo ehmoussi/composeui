@@ -1710,6 +1710,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             f"{''.join(content)}"
             "</div></div></main>"
             f"{status_bar}{self._dialogs_html()}",
+            self._view.language,
         )
 
     def _dialogs_html(self) -> str:

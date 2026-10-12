@@ -315,8 +315,8 @@ class LanguageMenu(Menu):
         return (self.english, self.french)
 
     def check(self, language: str) -> None:
-        """Check the action of `language` ("fr-CA" checks French); English without one."""
-        base = language.replace("_", "-").split("-")[0] or "en"
+        """Check the action of `language`: "fr-CA" checks French."""
+        base = language.replace("_", "-").split("-")[0]
         for action in self.actions:
             action.is_checked = action.data == base
 

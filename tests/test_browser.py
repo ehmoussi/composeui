@@ -624,3 +624,16 @@ def test_a_row_clicked_before_the_last_click_is_answered_shows_selected(
 
     expect(south).to_have_attribute("aria-current", "true")
     expect(north).not_to_have_attribute("aria-current", "true")
+
+
+def test_the_language_menu_sets_the_page_s_language(pipe_page: Page) -> None:
+    pipe_page.goto("/")
+    html = pipe_page.locator("html")
+    expect(html).to_have_attribute("lang", "en")
+
+    pipe_page.get_by_text("Language", exact=True).click()
+    with _posted(pipe_page):
+        pipe_page.get_by_text("Français", exact=True).click()
+
+    expect(html).to_have_attribute("lang", "fr")
+    expect(pipe_page.get_by_label("Matériau")).to_be_visible()

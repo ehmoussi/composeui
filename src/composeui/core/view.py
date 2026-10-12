@@ -642,13 +642,15 @@ class MainView(View):
     #: `composeui.core.translation`); a subclass sets it, e.g. to
     #: ``Path(__file__).parent / "locales"``
     translations_dir: ClassVar[Optional[Path]] = None
+    #: the language the app's text is written in, shown until `set_language`
+    source_language: ClassVar[str] = "en"
     #: set by `set_language`; empty while the text shows as written in the code
     _language: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
 
     @property
     def language(self) -> str:
-        """Get the language set with `set_language`, or "" if none was."""
-        return self._language
+        """Get the language the text shows in: set with `set_language`, or the source's."""
+        return self._language or self.source_language
 
     def set_language(self, language: str) -> None:
         """Show the text of every view in `language`, e.g. "fr" or "fr-CA".
