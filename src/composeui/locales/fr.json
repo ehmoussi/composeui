@@ -1,0 +1,11 @@
+{
+  "File": "Fichier",
+  "New": "Nouveau",
+  "Open": "Ouvrir",
+  "Save": "Enregistrer",
+  "Save As": "Enregistrer sous",
+  "Exit": "Quitter",
+  "OK": "OK",
+  "Cancel": "Annuler",
+  "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}."
+}

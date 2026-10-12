@@ -34,6 +34,7 @@ from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.translation import CATALOGS_DIR, Translate, no_translation, translator
 
 if TYPE_CHECKING:
     from attrs import AttrsInstance
@@ -213,6 +214,27 @@ def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
     return value
 
 
+def _retranslate(view: "View", translate: Translate, previous: Optional[Translate] = None) -> None:
+    """Show the text of `view` and its children translated with `translate`.
+
+    `previous` translated the text they show now; by default, each view's own.
+    """
+    for child in view.children_views:
+        _retranslate(child, translate, previous)
+    shown = view._tr if previous is None else previous  # noqa: SLF001
+    for name, text in view._default_texts.items():  # noqa: SLF001
+        # otherwise the app changed it, and translates it itself
+        if getattr(view, name) == shown(text):
+            setattr(view, name, translate(text))
+    view._tr = translate  # noqa: SLF001
+    view.retranslate()
+    # a message on show is in the previous language
+    if isinstance(view, LogMixin) and view.log_message != "":
+        view.run_validator()
+    if isinstance(view, FormView) and view.log_view.log_message != "":
+        view.validate()
+
+
 T = TypeVar("T", bound=type)
 
 
@@ -248,6 +270,9 @@ class View:
     _renderer_key: ClassVar[Optional[str]] = None
     #: its share of a `HorizontalView`'s width when its field sets no `STRETCH`
     default_stretch: ClassVar[int] = 1
+    #: text ComposeUI's views start with, by field, as written in the code: a language
+    #: translates it unless the app changed it
+    _default_texts: ClassVar[dict[str, str]] = {}
 
     # properties
     is_visible: bool = attrs.field(default=True)
@@ -256,12 +281,31 @@ class View:
     renderer: Optional[Union[Renderer[Any, Any], RendererContainer[Any]]] = attrs.field(
         default=None
     )
+    #: translates the view's text into its main view's language (see `MainView.set_language`)
+    _tr: Translate = attrs.field(
+        default=no_translation, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
             signal = getattr(self, f.name, None)
             if isinstance(signal, Signal):
                 signal.set_name(f"{type(self).__name__}.{f.name}")
+        for name, text in self._default_texts.items():
+            setattr(self, name, text)
+        self.retranslate()
+
+    def tr(self, text: str) -> str:
+        """Translate `text`, as written in the code, into the main view's language."""
+        return self._tr(text)
+
+    def retranslate(self) -> None:
+        """Set the text the view shows, translated with `tr`; a subclass overrides it.
+
+        Called once while the view is built, before the rest of `__attrs_post_init__`,
+        then by `MainView.set_language` on every view, children before their parent: a
+        view setting its children's text has the last word, as when they are built.
+        """
 
     @property
     def children_views(self) -> list["View"]:
@@ -389,6 +433,7 @@ class DialogView(View):
     """
 
     _renderer_key = "dialog"
+    _default_texts: ClassVar[dict[str, str]] = {"accept_text": "OK", "reject_text": "Cancel"}
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -464,10 +509,11 @@ class ToolBar(View):
 
 @define_view
 class NewAction(ActionView):
+    _default_texts: ClassVar[dict[str, str]] = {"text": "New"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+n"
-        self.text = "New"
         self.is_checkable = False
         self.icon = None
         self.data = None
@@ -479,9 +525,10 @@ class NewAction(ActionView):
 
 @define_view
 class OpenFileAction(ActionView):
+    _default_texts: ClassVar[dict[str, str]] = {"text": "Open"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.text = "Open"
         self.shortcut = "Ctrl+o"
         self.is_checkable = False
         self.icon = None
@@ -493,9 +540,10 @@ class OpenFileAction(ActionView):
 
 @define_view
 class SaveAction(ActionView):
+    _default_texts: ClassVar[dict[str, str]] = {"text": "Save"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.text = "Save"
         self.shortcut = "Ctrl+s"
         self.is_checkable = False
         self.icon = None
@@ -507,9 +555,10 @@ class SaveAction(ActionView):
 
 @define_view
 class SaveAsAction(ActionView):
+    _default_texts: ClassVar[dict[str, str]] = {"text": "Save As"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.text = "Save As"
         self.shortcut = "Ctrl+Shift+s"
         self.is_checkable = False
         self.icon = None
@@ -521,9 +570,10 @@ class SaveAsAction(ActionView):
 
 @define_view
 class ExitAppAction(ActionView):
+    _default_texts: ClassVar[dict[str, str]] = {"text": "Exit"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.text = "Exit"
         self.shortcut = "Ctrl+q"
         self.is_checkable = False
         self.icon = None
@@ -543,9 +593,10 @@ class FileMenu(Menu):
     separator_exit: SeparatorAction = attrs.Factory(SeparatorAction)
     exit_app: ExitAppAction = attrs.Factory(ExitAppAction)
 
+    _default_texts: ClassVar[dict[str, str]] = {"title": "File"}
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.title = "File"
         self.save.triggered.connect(self._save_state)
         self.open_file.triggered.connect(self._load_state)
 
@@ -558,7 +609,8 @@ class FileMenu(Menu):
         try:
             study.open_study(main_view, model, filepath)
         except InvalidStateError as error:
-            main_view.status_bar.show_message(f"Can't open {filepath.name!r}: {error}.")
+            message = main_view.tr("Can't open {name}: {error}.")
+            main_view.status_bar.show_message(message.format(name=repr(filepath.name), error=error))
 
     def _save_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
         filepath = main_view.ask_save_filepath(
@@ -585,6 +637,28 @@ class MainView(View):
     file_view: FileView = attrs.field(factory=FileView, metadata={OMIT: True})
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
+
+    #: the directory of the app's catalogs, `<language>.json` files (see
+    #: `composeui.core.translation`); a subclass sets it, e.g. to
+    #: ``Path(__file__).parent / "locales"``
+    translations_dir: ClassVar[Optional[Path]] = None
+    #: set by `set_language`; empty while the text shows as written in the code
+    _language: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
+
+    @property
+    def language(self) -> str:
+        """Get the language set with `set_language`, or "" if none was."""
+        return self._language
+
+    def set_language(self, language: str) -> None:
+        """Show the text of every view in `language`, e.g. "fr" or "fr-CA".
+
+        From the app's catalogs (`translations_dir`), then ComposeUI's; text neither
+        translates shows as written in the code.
+        """
+        directories = [d for d in (self.translations_dir, CATALOGS_DIR) if d is not None]
+        _retranslate(self, translator(language, directories))
+        self._language = language
 
     def _init_app_info(self, *, title: str, extension: str) -> None:
         """Set `title`/`extension` once, meant to be called from `__attrs_post_init__`."""
@@ -637,6 +711,8 @@ class MainView(View):
         connected signals keep working.
         """
         _reset_state(self, type(self)())
+        # the new view's text is as written in the code
+        _retranslate(self, self._tr, no_translation)
 
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file."""

@@ -18,7 +18,7 @@ from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, DataTable, Footer, Input
+from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Label
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -51,6 +51,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
+from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 
 
@@ -928,3 +929,36 @@ async def test_a_combobox_emits_its_value_when_the_user_picks_it_not_when_code_s
         await pilot.pause()
         assert seen == [Material.Steel]
         assert material.value is Material.Steel
+
+
+@pytest.mark.asyncio
+async def test_a_language_set_once_rendered_relabels_the_widgets() -> None:
+    view = TranslatedMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    size = view.shape.size
+    seen: list[object] = []
+    size.value_changed.connect(seen.append)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        view.set_language("fr")
+        await pilot.pause()
+
+        group = view.shape.renderer
+        assert isinstance(group, TextualWidgetRenderer)
+        assert group.widget is not None
+        assert group.widget.border_title == "Forme"
+        assert isinstance(size.renderer, RendererContainer)
+        label = size.renderer.get_renderer("label")
+        assert isinstance(label, TextualWidgetRenderer)
+        assert isinstance(label.widget, Label)
+        assert str(label.widget.render()) == "Taille de la forme"
+        combobox = _field_widget(size.renderer)
+        assert isinstance(combobox, ComposeCombobox)
+        assert [str(prompt) for prompt, _ in combobox._options[1:]] == ["Petite", "Grande"]  # noqa: SLF001
+        assert combobox.selection is Size.LARGE
+        assert size.value is Size.LARGE
+        assert seen == []

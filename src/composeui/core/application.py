@@ -140,6 +140,9 @@ class Application(Generic[MainViewT]):
         self._parser.add_argument(
             "--log-signals", help="Log all the emitted signals.", action="store_true"
         )
+        self._parser.add_argument(
+            "--language", metavar="LANGUAGE", help="Show the app in LANGUAGE, e.g. fr."
+        )
         self._add_reference_to_signals()
 
     def _add_reference_to_signals(self) -> None:
@@ -186,6 +189,8 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
+        if self._args.language is not None:
+            self.main_view.set_language(self._args.language)
         if self._args.f is not None:
             open_study(self.main_view, self._study_model(), self._args.f)
 

@@ -274,6 +274,8 @@ class WebApplication(Application[MainViewT]):
         self.setup_session(main_view)
         if model is not None:
             self._setup_model(main_view, model)
+        if self._args is not None and self._args.language is not None:
+            main_view.set_language(self._args.language)
         # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
         if self._args is not None and self._args.f is not None:
             open_study(main_view, model, self._args.f)

@@ -297,6 +297,11 @@ class TextualSeparatorRenderer(_TextualNoopRenderer[SeparatorAction]):
 class TextualMenuRenderer(_TextualNoopRenderer[Menu]):
     """No visual widget: a `Menu`'s children register themselves directly with the app."""
 
+    def __init__(self, view: Menu) -> None:
+        super().__init__(view)
+        # nowhere to show it: its actions are key bindings
+        self._refresh_dispatcher.update({"title": self._noop})
+
 
 class TextualDialogRenderer(Renderer[DialogView, DialogView]):
     """No widget in the screen: a modal screen pushed while the dialog is open.
