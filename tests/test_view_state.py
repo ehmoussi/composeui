@@ -24,6 +24,7 @@ from composeui.core.view import (
 )
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
+from tests.toolbar import ToolBarMainView
 
 
 # Generic mixins must be bound to a concrete type through a subclass (like
@@ -82,6 +83,20 @@ def test_load_state_ignores_values_even_though_saved(tmp_path: Path) -> None:
     fresh.load_state(filepath)  # must not crash on the unresolved-TValue `values` dict
     assert fresh.radio.values == {"a": "a", "b": "b"}  # untouched, from __attrs_post_init__
     assert fresh.radio.value == "a"
+
+
+def test_a_study_neither_saves_nor_sets_an_icon(tmp_path: Path) -> None:
+    # the web backend serves an icon's file: a study naming one could read any file
+    view = ToolBarMainView()
+    view.toolbar.run.icon = "icons/run.svg"
+    filepath = tmp_path / "state.json"
+    view.save_state(filepath)
+    assert '"icon"' not in filepath.read_text()
+
+    data = view.state_data()
+    data["toolbar"]["run"]["icon"] = "/etc/passwd"  # a study saved before, or forged
+    view.load_state_data(data)
+    assert view.toolbar.run.icon == "icons/run.svg"
 
 
 def test_radio_group_rejects_a_value_not_in_values() -> None:

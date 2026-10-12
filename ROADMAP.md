@@ -97,11 +97,15 @@ The README's "Web backend" section covers what users see.
 - **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are
   buttons of their own (Save As and Exit left out), and any other menu is a dropdown
   under its title, marked with a chevron so it reads apart from the buttons. A
-  `ToolBar`'s buttons go before the menus, as plain text: an action's `icon` is a Qt file
-  path. A dropdown is as wide as its longest item, the shortcut a faded hint beside it.
-  On a phone the
-  buttons keep only their icon and the app's title is cut short, so the header holds on
-  one line, the pages' toolbar on a row of its own.
+  `ToolBar`'s buttons go before the menus. A dropdown is as wide as its longest item, the
+  shortcut a faded hint beside it. On a phone the buttons with an icon keep only their
+  icon and the app's title is cut short, so the header holds on one line, the pages'
+  toolbar on a row of its own.
+- **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the
+  file at `/icon/<digest><suffix>`, an address naming its content, cached for good. Only
+  image files a view has named are served, and `icon` is never loaded from a study, so
+  no request can name a file. An SVG is drawn as a CSS mask in the text's color, so it
+  follows the theme like the built-in New/Open/Save icons; another image shows as is.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown); action `data`
   isn't displayed; Ctrl shortcuts become Alt+Shift; an unknown page address is a 404, not
   a redirect (browsers ask for addresses of their own, like `/favicon.ico`).

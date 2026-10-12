@@ -12,6 +12,7 @@ from __future__ import annotations
 import enum
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -1730,56 +1731,121 @@ def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
     assert "HX-Push-Url" not in again.headers
 
 
-def test_a_toolbar_shows_its_actions_as_header_buttons() -> None:
-    views: list[ToolBarMainView] = []
+@pytest.fixture
+def toolbar_views() -> list[ToolBarMainView]:
+    """Each session's main view, kept by `toolbar_client`'s app."""
+    return []
 
+
+@pytest.fixture
+def toolbar_client(toolbar_views: list[ToolBarMainView]) -> Iterator[TestClient]:
     class ToolBarApp(WebApplication[ToolBarMainView]):
         def __init__(self) -> None:
             super().__init__(build_main_view=ToolBarMainView)
 
         def setup_session(self, main_view: ToolBarMainView) -> None:
-            views.append(main_view)
+            toolbar_views.append(main_view)
 
     with TestClient(ToolBarApp().create_starlette_app()) as client:
-        page = client.get("/").text
-        (main_view,) = views
-        toolbar_view = main_view.toolbar
-        toolbar_id = _widget_id(toolbar_view.renderer)
-        toolbar = _element(page, toolbar_id)
-        assert (toolbar.attributes["role"], toolbar.attributes["aria-label"]) == ("toolbar", "Edit")
-        assert [
-            attributes.get("role") or tag
-            for tag, attributes in toolbar.descendants
-            if tag in {"label", "button", "div"}
-        ] == ["label", "separator", "button", "button"]
-        # Open uploads a study, as the File menu's does
-        open_file = _element(page, _action_id(toolbar_view.open_file))
-        file_input = next(a for tag, a in open_file.descendants if tag == "input")
-        assert file_input["accept"] == ".toolbar"
-        run = _element(page, _action_id(toolbar_view.run))
-        assert (run.text, run.attributes["title"]) == ("Run", "Run (Alt+Shift+R)")
+        yield client
 
-        response = client.post(
-            f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
-        )
-        total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
-        assert total.text == "Ran"
-        wrap_id = _action_id(toolbar_view.wrap)
-        response = client.post(f"/widget/{wrap_id}", data={"event": "triggered"})
-        wrap = _swapped(response.text, wrap_id)
-        assert wrap.attributes["aria-pressed"] == "true"
-        assert "btn-active" in (wrap.attributes["class"] or "").split()
 
-        with collect_dirty() as dirty:
-            toolbar_view.is_enabled = False
-            swapped = _swapped(render_dirty(dirty), toolbar_id)
-        assert all(
-            "disabled" in attributes for tag, attributes in swapped.descendants if tag == "button"
-        )
-        refused = client.post(
-            f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
-        )
-        assert refused.status_code == 400
+def test_a_toolbar_shows_its_actions_as_header_buttons(
+    toolbar_views: list[ToolBarMainView], toolbar_client: TestClient
+) -> None:
+    page = toolbar_client.get("/").text
+    (main_view,) = toolbar_views
+    toolbar_view = main_view.toolbar
+    toolbar_id = _widget_id(toolbar_view.renderer)
+    toolbar = _element(page, toolbar_id)
+    assert (toolbar.attributes["role"], toolbar.attributes["aria-label"]) == ("toolbar", "Edit")
+    assert [
+        attributes.get("role") or tag
+        for tag, attributes in toolbar.descendants
+        if tag in {"label", "button", "div"}
+    ] == ["label", "separator", "button", "button"]
+    # Open uploads a study, as the File menu's does
+    open_file = _element(page, _action_id(toolbar_view.open_file))
+    file_input = next(a for tag, a in open_file.descendants if tag == "input")
+    assert file_input["accept"] == ".toolbar"
+    run = _element(page, _action_id(toolbar_view.run))
+    assert (run.text, run.attributes["title"]) == ("Run", "Run (Alt+Shift+R)")
+
+    response = toolbar_client.post(
+        f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+    )
+    total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
+    assert total.text == "Ran"
+    wrap_id = _action_id(toolbar_view.wrap)
+    response = toolbar_client.post(f"/widget/{wrap_id}", data={"event": "triggered"})
+    wrap = _swapped(response.text, wrap_id)
+    assert wrap.attributes["aria-pressed"] == "true"
+    assert "btn-active" in (wrap.attributes["class"] or "").split()
+
+    with collect_dirty() as dirty:
+        toolbar_view.is_enabled = False
+        swapped = _swapped(render_dirty(dirty), toolbar_id)
+    assert all(
+        "disabled" in attributes for tag, attributes in swapped.descendants if tag == "button"
+    )
+    refused = toolbar_client.post(
+        f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+    )
+    assert refused.status_code == 400
+
+
+def _icon_url(element: _Element) -> str:
+    """Get the address of an action's icon file, drawn as an SVG mask or an image."""
+    for tag, attributes in element.descendants:
+        if tag == "img":
+            return attributes["src"] or ""
+        match = re.search(r"url\('([^']*)'\)", attributes.get("style") or "")
+        if match is not None:
+            return match.group(1)
+    msg = f"no icon in {element}"
+    raise AssertionError(msg)
+
+
+def test_an_icon_is_served_from_its_content_and_only_when_a_view_names_it(
+    toolbar_views: list[ToolBarMainView], toolbar_client: TestClient, tmp_path: Path
+) -> None:
+    toolbar_client.get("/")
+    (main_view,) = toolbar_views
+    run_svg = tmp_path / "run.svg"
+    run_svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>')
+    wrap_png = tmp_path / "wrap.png"
+    wrap_png.write_bytes(b"\x89PNG\r\n\x1a\n")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("not an image")
+    main_view.toolbar.run.icon = str(run_svg)
+    main_view.toolbar.wrap.icon = str(wrap_png)
+    main_view.router.results.icon = str(secret)
+
+    page = toolbar_client.get("/").text
+    run_url = _icon_url(_element(page, _action_id(main_view.toolbar.run)))
+    wrap_url = _icon_url(_element(page, _action_id(main_view.toolbar.wrap)))
+    for url, path, media_type in (
+        (run_url, run_svg, "image/svg+xml"),
+        (wrap_url, wrap_png, "image/png"),
+    ):
+        response = toolbar_client.get(url)
+        assert response.status_code == 200
+        assert response.content == path.read_bytes()
+        assert response.headers["content-type"] == media_type
+        assert "immutable" in response.headers["cache-control"]
+    # the tooltip names a button the phone shows as its icon only
+    assert _element(page, _action_id(main_view.toolbar.wrap)).attributes["title"] == "Wrap"
+    results_tab = _element(page, _action_id(main_view.router.results.action))
+    assert not any(tag in {"img", "span"} for tag, _ in results_tab.descendants)
+
+    # another content: another address, and the old one is gone
+    run_svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect width="4"/></svg>')
+    os.utime(run_svg, ns=(0, run_svg.stat().st_mtime_ns + 1))
+    with collect_dirty() as dirty:
+        main_view.toolbar.run.text = "Go"
+        swapped = _swapped(render_dirty(dirty), _action_id(main_view.toolbar.run))
+    assert _icon_url(swapped) != run_url
+    assert toolbar_client.get(run_url).status_code == 404
 
 
 def test_clicking_the_button_swaps_in_what_its_view_changed(

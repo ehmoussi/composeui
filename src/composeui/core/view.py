@@ -343,7 +343,9 @@ class ActionView(View):
     _renderer_key = "action"
 
     text: str = attrs.field(default="")
-    icon: Optional[str] = attrs.field(default=None)
+    #: an image file's path; set by the app, not study data: never saved, loaded or
+    #: reset (the web backend serves the file, so a study must not name one)
+    icon: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
     data: Any = attrs.field(default=None)
     shortcut: Optional[str] = attrs.field(default=None)
     is_checkable: bool = attrs.field(default=False)
