@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+from typing_extensions import Self
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -71,3 +73,70 @@ def translator(language: str, directories: Sequence[Path]) -> Translate:
         return catalog.get(text, text)
 
     return translate
+
+
+# a `__dict__` for what it remembers: a str subclass can't have non-empty `__slots__`
+class TranslatedText(str):  # noqa: SLOT000
+    """Text `View.tr` translated, remembering it as written to translate it again.
+
+    `MainView.set_language` translates it again wherever a view keeps it: in a field, a
+    list (a table's headers) or a dict's keys (a choice's labels). Formatting it keeps the
+    arguments, to format the next translation with them; other str methods return a plain
+    str, which stays in its language.
+    """
+
+    source: str
+    #: the `format` arguments, or `None` if it isn't formatted
+    arguments: tuple[tuple[Any, ...], dict[str, Any]] | None
+
+    def __new__(
+        cls,
+        text: str,
+        source: str,
+        arguments: tuple[tuple[Any, ...], dict[str, Any]] | None = None,
+    ) -> Self:
+        self = super().__new__(cls, text)
+        self.source = source
+        self.arguments = arguments
+        return self
+
+    def __getnewargs__(self) -> tuple[str, str, tuple[tuple[Any, ...], dict[str, Any]] | None]:  # type: ignore[override]
+        # copying it (`copy.deepcopy`) keeps what it remembers
+        return (str(self), self.source, self.arguments)
+
+    def format(self, *args: Any, **kwargs: Any) -> TranslatedText:
+        """Format it, remembering the arguments: translated text among them follows too."""
+        return TranslatedText(str.format(self, *args, **kwargs), self.source, (args, kwargs))
+
+    def translated(self, translate: Translate) -> TranslatedText:
+        """Translate it again, with `translate`."""
+        text = translate(self.source)
+        if self.arguments is None:
+            return TranslatedText(text, self.source)
+        args, kwargs = self.arguments
+        args = tuple(translate_again(arg, translate) for arg in args)
+        kwargs = {key: translate_again(value, translate) for key, value in kwargs.items()}
+        return TranslatedText(text.format(*args, **kwargs), self.source, (args, kwargs))
+
+
+def translate_again(value: Any, translate: Translate) -> Any:
+    """Translate the `TranslatedText` in `value` again, itself or in a list, tuple or dict.
+
+    Return `value` itself when it holds none, so a caller can tell nothing changed.
+    """
+    if isinstance(value, TranslatedText):
+        return value.translated(translate)
+    if isinstance(value, (list, tuple)):
+        items = [translate_again(item, translate) for item in value]
+        if all(new is old for new, old in zip(items, value)):
+            return value
+        return type(value)(items) if type(value) in (list, tuple) else value
+    if isinstance(value, dict):
+        entries = [
+            (translate_again(key, translate), translate_again(item, translate))
+            for key, item in value.items()
+        ]
+        if all(k is k0 and v is v0 for (k, v), (k0, v0) in zip(entries, value.items())):
+            return value
+        return dict(entries)
+    return value

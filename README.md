@@ -286,16 +286,16 @@ Write the app's text in one language in the code and translate it from JSON cata
 {"Radius": "Rayon", "Main Pipe": "Conduite principale"}
 ```
 
-Set the text a view shows in its `retranslate`, through `tr`, and point the main view at
-the catalogs' directory:
+Set the text a view shows through `tr`, wherever you set it, and point the main view at the
+catalogs' directory:
 
 ```python
 @define_view
 class PipeDimensionView(GroupFormView):
     radius: DimensionInputView = Factory(DimensionInputView)
 
-    def retranslate(self) -> None:
-        super().retranslate()
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
         self.title = self.tr("Main Pipe")
         self.radius.label = self.tr("Radius")
 
@@ -305,23 +305,26 @@ class PipeMainView(MainView):
     translations_dir = Path(__file__).parent / "locales"
 ```
 
-`main_view.set_language("fr")` (or `--language fr` on the command line) calls `retranslate`
-on every view, children before their parent, and the views being reactive, every backend
-shows the new text at once; on the web, each session has its own language, and the page's
-`<html lang>` follows it. Until then, `language` is the app's `source_language` (`"en"`
-unless a main view says otherwise). A regional
-language (`fr-CA`) falls back on its base language's catalog (`fr.json`), and text no catalog
-translates shows as written. `retranslate` also runs once as the view is built, so text set
-there shows without a language too.
+`tr` returns the translation as a `str` that remembers the text as written. When
+`main_view.set_language("fr")` (or `--language fr` on the command line) changes the
+language, every view field keeping such text is translated again: a label or a title, a
+status or validator message, a table's headers and rows, a choice's labels (the keys of
+`values`). The views being reactive, every backend shows the new text at once; on the web,
+each session has its own language, and the page's `<html lang>` follows it. Until then,
+`language` is the app's `source_language` (`"en"` unless a main view says otherwise). A
+regional language (`fr-CA`) falls back on its base language's catalog (`fr.json`), and
+text no catalog translates shows as written.
 
-- Text set elsewhere, e.g. a status message or a validator's, translates with `tr` where it
-  is set. A validator's message on show follows a language change.
-- A choice's labels can be translated in `retranslate`: its value stays selected, and a
-  study saves it by a key no language changes (an enum member's name, a string value itself,
-  else its position).
+- Formatted text follows too: `self.tr("Picked {color}").format(color=self.tr("Red"))`
+  is formatted again in the new language, its translated arguments translated as well.
+- Text set without `tr`, or made from a translation (`self.tr("Name") + ":"`, an f-string),
+  stays as it is. For text a view builds from other text, override `retranslate`: it runs
+  once as the view is built, then on each language change, once the text is translated.
+- A choice's value stays selected when its labels change, and a study saves it by a key no
+  language changes (an enum member's name, a string value itself, else its position).
+- The main view's `title` is set once, as the app starts: it isn't translated again.
 - ComposeUI translates its own text (the File menu, a dialog's OK and Cancel) from its own
-  catalogs; the app's catalog wins over them. Text the app set outside `retranslate` is left
-  as it is.
+  catalogs; the app's catalog wins over them.
 
 [`src/examples/pipeform.py`](src/examples/pipeform.py) is translated into French: start it
 with `uv run python -m examples.pipeform --backend qt --language fr`, or switch from its
