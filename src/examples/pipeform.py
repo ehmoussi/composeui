@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import enum
 import sys
+from pathlib import Path
 
 from attrs import Factory
 
@@ -45,10 +46,13 @@ class PipeDimensionView(GroupFormView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.radius.label = "Radius"
-        self.width.label = "Width"
-        self.half_length.label = "Half Length"
         self.half_length.value = 200.0
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.radius.label = self.tr("Radius")
+        self.width.label = self.tr("Width")
+        self.half_length.label = self.tr("Half Length")
 
     @property
     def dimensions(self) -> tuple[DimensionInputView, ...]:
@@ -65,13 +69,12 @@ class EdgeType(enum.Enum):
 class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.label = "Edge Type"
-        self.values = {
-            EdgeType.Normal.value: EdgeType.Normal,
-            EdgeType.Chamfer.value: EdgeType.Chamfer,
-            EdgeType.Fillet.value: EdgeType.Fillet,
-        }
         self.value = EdgeType.Normal
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.label = self.tr("Edge Type")
+        self.values = {self.tr(edge_type.value): edge_type for edge_type in EdgeType}
 
 
 class Material(enum.Enum):
@@ -85,22 +88,20 @@ class Material(enum.Enum):
 class MaterialView(LabelRowComboboxView[Material]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.label = "Material"
-        self.values = {
-            Material.Steel.value: Material.Steel,
-            Material.Copper.value: Material.Copper,
-            Material.Aluminum.value: Material.Aluminum,
-            Material.Pvc.value: Material.Pvc,
-        }
         self.value = Material.Steel
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.label = self.tr("Material")
+        self.values = {self.tr(material.value): material for material in Material}
 
 
 @define_view
 class InsulatedView(LabelRowCheckBoxView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.label = "Insulation"
-        self.text = "Insulated pipe"
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.label = self.tr("Insulation")
+        self.text = self.tr("Insulated pipe")
 
 
 @define_view
@@ -108,33 +109,36 @@ class ChamferDimensionView(GroupFormView):
     height: DimensionInputView = Factory(DimensionInputView)
     width: DimensionInputView = Factory(DimensionInputView)
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.title = "Chamfer"
-        self.height.label = "Height"
-        self.width.label = "Width"
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Chamfer")
+        self.height.label = self.tr("Height")
+        self.width.label = self.tr("Width")
 
 
 @define_view
 class FilletDimensionView(GroupFormView):
     radius: DimensionInputView = Factory(DimensionInputView)
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.title = "Fillet"
-        self.radius.label = "Radius"
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Fillet")
+        self.radius.label = self.tr("Radius")
 
 
 @define_view
 class PipeNameRowView(LabelRowInputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.label = "Name"
         self.set_validator(self._check_name, self.text_edited)
         self.run_validator()
 
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.label = self.tr("Name")
+
     def _check_name(self) -> str | None:
-        return "A name is mandatory" if self.text == "" else None
+        return self.tr("A name is mandatory") if self.text == "" else None
 
 
 @define_view
@@ -155,15 +159,11 @@ class PipeFormView(FormView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # Insulation: its thickness only matters for an insulated pipe
-        self.insulation_thickness.label = "Insulation Thickness"
         self.insulation_thickness.value = 10.0
         self.insulated.toggled.connect(self._enable_insulation_thickness)
         self._enable_insulation_thickness(self.insulated.is_checked)
         # Main Pipe
-        self.main_pipe.title = "Main Pipe"
         self.main_pipe.radius.value = 50.0
-        # Incident Pipe
-        self.incident_pipe.title = "Incident Pipe"
         # two independent cross-field checks, combined into one shared `log_view`
         # each names the rows it is about: their fields show as invalid while it fails
         self.add_validator(
@@ -185,6 +185,12 @@ class PipeFormView(FormView):
         # Fillet
         self.fillet.radius.value = 20.0
 
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.insulation_thickness.label = self.tr("Insulation Thickness")
+        self.main_pipe.title = self.tr("Main Pipe")
+        self.incident_pipe.title = self.tr("Incident Pipe")
+
     def _check_main_pipe_fits_incident(self) -> str | None:
         main_radius = self.main_pipe.radius.value
         main_width = self.main_pipe.width.value
@@ -195,11 +201,12 @@ class PipeFormView(FormView):
             or incident_half_length is None
             or (main_radius + main_width) > incident_half_length
         ):
-            return (
-                "The sum of the radius and width of the main pipe "
-                "can't be greater than the half length of the incident pipe: "
-                f"({main_radius} + {main_width} > "
-                f"{incident_half_length})"
+            message = self.tr(
+                "The sum of the radius and width of the main pipe can't be greater than "
+                "the half length of the incident pipe: ({radius} + {width} > {half_length})"
+            )
+            return message.format(
+                radius=main_radius, width=main_width, half_length=incident_half_length
             )
         return None
 
@@ -207,10 +214,11 @@ class PipeFormView(FormView):
         incident_radius = self.incident_pipe.radius.value
         main_radius = self.main_pipe.radius.value
         if incident_radius is None or main_radius is None or incident_radius > main_radius:
-            return (
+            message = self.tr(
                 "The incident radius can't be greater than the main radius: "
-                f"({incident_radius} > {main_radius})"
+                "({incident_radius} > {main_radius})"
             )
+            return message.format(incident_radius=incident_radius, main_radius=main_radius)
         return None
 
     def _enable_insulation_thickness(self, is_insulated: bool) -> None:
@@ -235,7 +243,10 @@ class InputsPageView(PageView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_route("inputs")
-        self.title = "Inputs"
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Inputs")
 
 
 @define_view
@@ -246,8 +257,13 @@ class ResultsPageView(PageView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._init_route("results")
-        self.title = "Results"
-        self.summary.headers = ["Pipe", "Radius", "Width", "Half Length"]
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Results")
+        self.summary.headers = [
+            self.tr(header) for header in ("Pipe", "Radius", "Width", "Half Length")
+        ]
 
 
 @define_view
@@ -262,9 +278,12 @@ class PipeMenu(Menu):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.title = "Pipe"
-        self.reset_dimensions.text = "Reset Dimensions"
         self.reset_dimensions.shortcut = "Ctrl+r"
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Pipe")
+        self.reset_dimensions.text = self.tr("Reset Dimensions")
 
 
 @define_view
@@ -272,13 +291,18 @@ class ResetDimensionsDialog(DialogView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
-        self.title = "Reset the dimensions"
-        self.text = "Both pipes go back to their starting dimensions."
-        self.accept_text = "Reset"
+
+    def retranslate(self) -> None:
+        super().retranslate()
+        self.title = self.tr("Reset the dimensions")
+        self.text = self.tr("Both pipes go back to their starting dimensions.")
+        self.accept_text = self.tr("Reset")
 
 
 @define_view
 class PipeMainView(MainView):
+    translations_dir = Path(__file__).parent / "locales"
+
     pipe_menu: PipeMenu = Factory(PipeMenu)
     pages: PipePagesView = Factory(PipePagesView)
     confirm_reset: ResetDimensionsDialog = Factory(ResetDimensionsDialog)
@@ -296,6 +320,11 @@ class PipeMainView(MainView):
         self.confirm_reset.accepted.connect(self._reset_dimensions)
         self._update_summary()
 
+    def retranslate(self) -> None:
+        super().retranslate()
+        # it shows the pipes' titles
+        self._update_summary()
+
     def _reset_dimensions(self) -> None:
         pipe_form = self.pages.inputs.pipe_form
         initial = PipeFormView()
@@ -308,7 +337,7 @@ class PipeMainView(MainView):
         # set in code, the values finish no editing: check and summarize them here
         pipe_form.validate()
         self._update_summary()
-        self.status_bar.show_message("Dimensions reset")
+        self.status_bar.show_message(self.tr("Dimensions reset"))
 
     def _update_summary(self) -> None:
         def text(value: float | None) -> str:
@@ -327,7 +356,8 @@ class PipeMainView(MainView):
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
         if value is not None:
-            self.status_bar.show_message(f"Edge type changed: {value.value}")
+            message = self.tr("Edge type changed: {edge_type}")
+            self.status_bar.show_message(message.format(edge_type=self.tr(value.value)))
 
 
 def main() -> None:

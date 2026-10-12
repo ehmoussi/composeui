@@ -321,6 +321,9 @@ there shows without a language too.
   catalogs; the app's catalog wins over them. Text the app set outside `retranslate` is left
   as it is.
 
+[`src/examples/pipeform.py`](src/examples/pipeform.py) is translated into French:
+`uv run python -m examples.pipeform --backend qt --language fr`.
+
 ## Saving and loading state
 
 `MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
