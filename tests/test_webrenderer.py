@@ -2429,8 +2429,10 @@ def test_the_language_menu_swaps_in_the_translated_widgets(
     assert "hx-refresh" not in response.headers
     assert "Conduite principale" in _swapped(response.text, main_pipe_id).text
     assert pipe_main_view.language == "fr"
-    # the page's script sets `<html lang>` from it
-    assert _swapped(response.text, "cui-language").attributes["data-language"] == "fr"
+    # the page's script sets `<html lang>` and `<title>` from it
+    marker = _swapped(response.text, "cui-page").attributes
+    assert (marker["data-language"], marker["data-title"]) == ("fr", "Formulaire de conduite")
+    assert "Formulaire de conduite" in _swapped(response.text, "cui-brand").text
     assert menu.french.is_checked is True
 
 
@@ -2440,12 +2442,15 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
     page = pipe_client.get("/").text
 
     assert '<html lang="en">' in page
-    assert _element(page, "cui-language").attributes["data-language"] == "en"
+    assert "<title>Pipe Form</title>" in page
+    marker = _element(page, "cui-page").attributes
+    assert (marker["data-language"], marker["data-title"]) == ("en", "Pipe Form")
     # an event leaving the language alone doesn't send it again
     response = pipe_client.post(
         f"/widget/{_action_id(pipe_main_view.language_menu.english)}", data={"event": "triggered"}
     )
-    assert _find(response.text, "cui-language") is None
+    assert _find(response.text, "cui-page") is None
+    assert _find(response.text, "cui-brand") is None
 
 
 @define_view

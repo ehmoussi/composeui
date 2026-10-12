@@ -149,18 +149,20 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
 });
-/* the page's language, for screen readers and the browser's spell checker: the server
-   swaps in its marker when the app changes language (see `language_marker`) */
-function syncLanguage() {
-  var marker = document.getElementById("cui-language");
-  if (marker !== null) document.documentElement.lang = marker.dataset.language;
+/* the page's language, for screen readers and the browser's spell checker, and its
+   title: the server swaps in its marker when the app changes them (see `page_marker`) */
+function syncPage() {
+  var marker = document.getElementById("cui-page");
+  if (marker === null) return;
+  document.documentElement.lang = marker.dataset.language;
+  if (document.title !== marker.dataset.title) document.title = marker.dataset.title;
 }
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   new MutationObserver(function () {
     syncInvalidFields();
     openDialogs();
-    syncLanguage();
+    syncPage();
   }).observe(document.body, {
     childList: true,
     subtree: true,
@@ -173,7 +175,7 @@ document.addEventListener("DOMContentLoaded", function () {
 <div id="app">
 $content
 </div>
-$language_marker
+$page_marker
 </body>
 
 </html>
@@ -184,10 +186,13 @@ $language_marker
 _STATIC_URLS = {"htmx_url": _static_url("htmx.min.js"), "css_url": _static_url("app.css")}
 
 
-def language_marker(language: str, *, oob: bool = False) -> str:
-    """Get the element telling the page's script the language, to set `<html lang>`."""
+def page_marker(language: str, title: str, *, oob: bool = False) -> str:
+    """Get the element telling the page's script its `<html lang>` and `<title>`."""
     swap = ' hx-swap-oob="true"' if oob else ""
-    return f'<div id="cui-language" data-language="{html.escape(language)}"{swap} hidden></div>'
+    return (
+        f'<div id="cui-page" data-language="{html.escape(language)}"'
+        f' data-title="{html.escape(title)}"{swap} hidden></div>'
+    )
 
 
 def get_page(title: str, content: str, language: str) -> str:
@@ -196,7 +201,7 @@ def get_page(title: str, content: str, language: str) -> str:
             "title": html.escape(title),
             "content": content,
             "language": html.escape(language),
-            "language_marker": language_marker(language),
+            "page_marker": page_marker(language, title),
             **_STATIC_URLS,
         }
     )

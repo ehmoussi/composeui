@@ -861,6 +861,7 @@ def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
 
     french.trigger()
 
+    assert window.windowTitle() == "Formulaire de conduite"
     assert [action.text() for action in window.menuBar().actions()] == [
         "Fichier",
         "Conduite",

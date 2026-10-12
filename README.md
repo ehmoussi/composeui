@@ -322,7 +322,9 @@ text no catalog translates shows as written.
   once as the view is built, then on each language change, once the text is translated.
 - A choice's value stays selected when its labels change, and a study saves it by a key no
   language changes (an enum member's name, a string value itself, else its position).
-- The main view's `title` is set once, as the app starts: it isn't translated again.
+- The main view's `title`, set once as the app starts (`_init_app_info`), follows a
+  language too when set with `tr`: the window's title, the app's in Textual, the page's
+  header and `<title>` on the web.
 - ComposeUI translates its own text (the File menu, a dialog's OK and Cancel) from its own
   catalogs; the app's catalog wins over them.
 

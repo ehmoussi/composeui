@@ -1655,6 +1655,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                     "minimum_width",
                     "minimum_height",
                     "state_filepath",
+                    # in the page's header and `<title>`: the session swaps them
+                    "title",
                 ),
                 self._noop,
             )
@@ -1707,7 +1709,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             f'<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
             " border-base-300"
             ' bg-base-100 px-4">'
-            f"{self._brand_html()}{toolbar}"
+            f"{self.brand_html()}{toolbar}"
             '<nav class="ml-auto flex items-center gap-1">'
             f"{''.join(toolbars)}{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
@@ -1732,15 +1734,16 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 dialogs.append(view.renderer.to_html())
         return "".join(dialogs)
 
-    def _brand_html(self) -> str:
+    def brand_html(self, *, oob: bool = False) -> str:
         """Show the app's title after a badge of its initial, standing in for an app icon."""
         title = self._view.title
         initial = html.escape(title.strip()[:1].upper())
+        swap = ' hx-swap-oob="true"' if oob else ""
         return (
             # on a narrow screen, the title gives way to the header's buttons rather than
             # pushing them to a row of their own
-            '<div class="flex min-w-0 flex-1 basis-0 items-center gap-2 sm:flex-none'
-            ' sm:basis-auto">'
+            f'<div id="cui-brand"{swap} class="flex min-w-0 flex-1 basis-0 items-center gap-2'
+            ' sm:flex-none sm:basis-auto">'
             '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
             ' rounded-field bg-primary text-sm font-bold text-primary-content">'
             f"{initial}</span>"
