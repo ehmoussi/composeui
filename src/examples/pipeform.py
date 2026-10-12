@@ -327,10 +327,11 @@ class PipeMainView(MainView):
         self.confirm_reset.accepted.connect(self._reset_dimensions)
         for action in self.language_menu.actions:
             action.triggered.connect(functools.partial(self.set_language, action.data))
+        self.language_menu.check(self.language)
         self._update_summary()
 
-    def retranslate(self) -> None:
-        super().retranslate()
+    def set_language(self, language: str) -> None:
+        super().set_language(language)
         self.language_menu.check(self.language)
 
     def _reset_dimensions(self) -> None:
