@@ -1589,6 +1589,17 @@ class WebRouterRenderer(WebRenderer[Router]):
 RESERVED_ROUTES: Final = frozenset({"icon", "state", "static", "widget"})
 
 
+def check_routes(main_view: MainView) -> None:
+    """Raise `ValueError` if a page of the main view's router has an address the backend uses."""
+    router = next((view for view in main_view.children_views if isinstance(view, Router)), None)
+    reserved = sorted(
+        page.route for page in (router.pages if router else []) if page.route in RESERVED_ROUTES
+    )
+    if len(reserved) > 0:
+        msg = f"The web backend uses the address of the routes {reserved}: rename them."
+        raise ValueError(msg)
+
+
 def _theme_option(choice: str, text: str) -> str:
     # `setTheme` in `page.py`; the blur closes the dropdown
     return (
@@ -1646,13 +1657,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-main"
-        router = self.router
-        reserved = sorted(
-            page.route for page in (router.pages if router else []) if page.route in RESERVED_ROUTES
-        )
-        if len(reserved) > 0:
-            msg = f"The web backend uses the address of the routes {reserved}: rename them."
-            raise ValueError(msg)
+        check_routes(self._view)
         # the children are rendered first: hand the Open actions the file type they load
         views: list[View] = list(self._view.children_views)
         while len(views) > 0:
