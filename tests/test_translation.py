@@ -34,6 +34,18 @@ def test_the_first_catalog_wins_and_untranslated_text_shows_as_written(tmp_path:
     ]
 
 
+def test_text_translated_as_empty_is_still_to_translate(tmp_path: Path) -> None:
+    app, library = tmp_path / "app", tmp_path / "library"
+    app.mkdir()
+    library.mkdir()
+    (app / "fr.json").write_text('{"Save": "", "Name": ""}', encoding="utf-8")
+    (library / "fr.json").write_text('{"Save": "Enregistrer"}', encoding="utf-8")
+
+    translate = translator("fr", [app, library])
+
+    assert [translate(text) for text in ("Save", "Name")] == ["Enregistrer", "Name"]
+
+
 def test_a_catalog_not_mapping_text_to_text_is_refused(tmp_path: Path) -> None:
     (tmp_path / "fr.json").write_text('{"Size": 3}', encoding="utf-8")
 

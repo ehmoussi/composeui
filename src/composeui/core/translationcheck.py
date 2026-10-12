@@ -5,6 +5,9 @@ Run it on the app's main view; it fails on text a catalog misses or on a transla
 
     python -m composeui.core.translationcheck examples.pipeform:PipeMainView
 
+With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated as "" for a
+translator to fill; until then, the text shows as written.
+
 The text is found two ways: the string literals passed to ``tr`` (or set in a view's
 ``_default_texts``) in the source of every view of the main view, and the text the views
 translate as they show it, which finds text ``tr`` gets from a variable, e.g. an enum's.
@@ -16,6 +19,7 @@ import argparse
 import ast
 import importlib
 import inspect
+import json
 import string
 import sys
 from pathlib import Path
@@ -37,7 +41,7 @@ class CatalogReport:
     """What a catalog lacks, or has too much of, for the text of the code."""
 
     path: Path
-    #: text no catalog translates: it shows as written in the code
+    #: text no catalog translates, or as "": it shows as written in the code
     missing: list[str] = attrs.Factory(list)
     #: text and translation whose ``{placeholders}`` differ: formatting it fails or loses one
     mismatched: list[tuple[str, str]] = attrs.Factory(list)
@@ -137,25 +141,51 @@ def check_catalog(
     `others` are the catalogs it falls back on, e.g. ComposeUI's: their text isn't missing.
     """
     report = CatalogReport(path)
-    known = set(catalog).union(*others)
-    report.missing = sorted(texts - known)
+    report.missing = sorted(texts - _translated(catalog, *others))
     report.unused = sorted(set(catalog) - texts)
     report.mismatched = [
         (text, translation)
         for text, translation in catalog.items()
-        if placeholders(text) != placeholders(translation)
+        if translation != "" and placeholders(text) != placeholders(translation)
     ]
     return report
 
 
-def check_main_view(main_view_class: type[MainView]) -> list[CatalogReport]:
-    """Check each catalog in `main_view_class.translations_dir` against the app's text."""
+def _translated(*catalogs: dict[str, str]) -> set[str]:
+    return {text for catalog in catalogs for text, translation in catalog.items() if translation}
+
+
+def _app_texts(main_view_class: type[MainView]) -> tuple[Path, set[str]]:
+    """Get the directory of the app's catalogs and the text its code translates."""
     directory = main_view_class.translations_dir
     if directory is None:
         msg = f"{main_view_class.__name__} sets no translations_dir"
         raise ValueError(msg)
     main_view = main_view_class()
-    texts = find_texts(source_paths(main_view)) | shown_texts(main_view)
+    return directory, find_texts(source_paths(main_view)) | shown_texts(main_view)
+
+
+def write_catalog(main_view_class: type[MainView], language: str) -> tuple[Path, list[str]]:
+    """Add the text `language`'s catalog misses to it, translated as "" for a translator.
+
+    Its entries are kept, unused ones too. A regional language's new catalog ("fr-CA")
+    starts from its base language's: it replaces it. Text ComposeUI's catalog translates
+    isn't added: the app's catalog only has it to translate it otherwise.
+    Return the catalog's path and the text added.
+    """
+    directory, texts = _app_texts(main_view_class)
+    catalog = load_catalog(directory, language)
+    added = sorted(texts - set(catalog) - _translated(load_catalog(CATALOGS_DIR, language)))
+    catalog.update(dict.fromkeys(added, ""))
+    path = directory / f"{language}.json"
+    directory.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path, added
+
+
+def check_main_view(main_view_class: type[MainView]) -> list[CatalogReport]:
+    """Check each catalog in `main_view_class.translations_dir` against the app's text."""
+    directory, texts = _app_texts(main_view_class)
     reports = []
     for path in sorted(directory.glob("*.json")):
         language = path.stem
@@ -191,7 +221,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "main_view", type=_main_view_class, help="the app's main view, as module:Class"
     )
+    parser.add_argument(
+        "--write",
+        action="append",
+        default=[],
+        metavar="LANGUAGE",
+        help='first add the text to translate to LANGUAGE\'s catalog, translated as ""',
+    )
     args = parser.parse_args(argv)
+    for language in args.write:
+        path, added = write_catalog(args.main_view, language)
+        print(f"{path}: {len(added)} entries added to translate")  # noqa: T201
     reports = check_main_view(args.main_view)
     for report in reports:
         print(report)  # noqa: T201

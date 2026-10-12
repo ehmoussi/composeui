@@ -339,6 +339,17 @@ no code uses any more. The text is the literals passed to `tr` in the views' sou
 the text the views translate as they are built, which finds the text `tr` gets from a
 variable, e.g. an enum's values.
 
+To start or complete a catalog, `--write fr` first adds the text `fr.json` misses to it,
+translated as `""` for a translator to fill (it creates the file if needed):
+
+```bash
+uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView --write fr
+```
+
+Its entries are kept. A translation left empty counts as missing, and the text shows as
+written. Text ComposeUI's own catalog translates in that language (the File menu, OK...)
+isn't added, and a new regional catalog (`fr-CA`) starts from its base language's.
+
 ## Saving and loading state
 
 `MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
