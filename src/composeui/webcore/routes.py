@@ -4,8 +4,15 @@ from typing import TYPE_CHECKING
 
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
-from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from starlette.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 
+from composeui.webcore.icons import icon_path
 from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.webrenderer import UnsupportedEventError
 
@@ -21,6 +28,13 @@ _NO_STORE = {"Cache-Control": "no-store"}
 #: Answer to a widget request whose session is gone (expired, or the server restarted):
 #: htmx reloads the page, which starts a fresh session, instead of the request failing.
 _RELOAD = {**_NO_STORE, "HX-Refresh": "true"}
+#: An icon's address names its content (see `icons.py`), so it never changes; an SVG
+#: opened on its own runs no script and loads nothing.
+_ICON_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "X-Content-Type-Options": "nosniff",
+}
 #: key of the session id in Starlette's signed session cookie
 SESSION_KEY = "composeui_session"
 
@@ -140,3 +154,11 @@ async def state_upload(request: Request) -> Response:
     if status_bar is None:
         return Response(headers=_RELOAD)
     return HTMLResponse(status_bar, headers=_NO_STORE)
+
+
+def icon(request: Request) -> Response:
+    """Serve an icon file a view named; any other name is not found."""
+    path = icon_path(request.path_params["name"])
+    if path is None or not path.is_file():
+        return PlainTextResponse("Not Found", status_code=404)
+    return FileResponse(path, headers=_ICON_HEADERS)

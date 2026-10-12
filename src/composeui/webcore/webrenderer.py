@@ -55,6 +55,7 @@ from composeui.core.view import (
     View,
     replace_cell,
 )
+from composeui.webcore.icons import icon_url
 from composeui.webcore.page import get_page
 
 if TYPE_CHECKING:
@@ -1038,6 +1039,24 @@ def _icon(name: str) -> str:
     )
 
 
+def _file_icon(icon: str | None) -> str:
+    """Show an action's icon file, or nothing without one (see `icons.py`).
+
+    An SVG is drawn in the text's color, as the built-in icons are, so it follows the
+    theme: only its shape counts. Any other image shows as it is.
+    """
+    url = None if icon is None else icon_url(icon)
+    if url is None:
+        return ""
+    if url.endswith(".svg"):
+        mask = f"url('{url}') center / contain no-repeat"
+        return (
+            '<span aria-hidden="true" class="size-4 shrink-0 bg-current"'
+            f' style="mask: {mask}; -webkit-mask: {mask}"></span>'
+        )
+    return f'<img src="{url}" alt="" aria-hidden="true" class="size-4 shrink-0 object-contain">'
+
+
 class Placement(enum.Enum):
     """Where a menu's action shows in the header (see `WebMenuRenderer`)."""
 
@@ -1186,7 +1205,10 @@ class WebActionRenderer(WebRenderer[ActionView]):
             if shortcut
             else ""
         )
-        label = f'<span class="whitespace-nowrap">{check}{html.escape(view.text)}</span>{kbd}'
+        label = (
+            '<span class="flex items-center gap-2 whitespace-nowrap">'
+            f"{_file_icon(view.icon)}{check}{html.escape(view.text)}</span>{kbd}"
+        )
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         if not view.is_enabled:
             item = f'<button type="button" class="justify-between" disabled>{label}</button>'
@@ -1202,10 +1224,12 @@ class WebActionRenderer(WebRenderer[ActionView]):
         text = html.escape(view.text)
         tooltip = f"{text} ({shortcut[0]})" if shortcut else text
         style = "btn-primary" if isinstance(view, SaveAction) else "btn-ghost"
-        if isinstance(view, NewAction):
-            icon = _icon("new")
-        else:
-            icon = _icon("open" if isinstance(view, OpenFileAction) else "save")
+        icon = _file_icon(view.icon)
+        if icon == "":
+            if isinstance(view, NewAction):
+                icon = _icon("new")
+            else:
+                icon = _icon("open" if isinstance(view, OpenFileAction) else "save")
         attributes = (
             f'{self._root_attributes(oob=oob)} class="btn btn-sm {style}" title="{tooltip}"'
         )
@@ -1216,11 +1240,20 @@ class WebActionRenderer(WebRenderer[ActionView]):
         return self._active_html(attributes, label, key)
 
     def _tool_html(self, *, oob: bool) -> str:
-        """Render a toolbar button: its text, pressed while checked, its shortcut in the tooltip."""
+        """Render a toolbar button, pressed while checked, its shortcut in the tooltip.
+
+        With an icon, it keeps only the icon on a phone, as the header's buttons do: the
+        tooltip then names it.
+        """
         view = self._view
         shortcut = _web_shortcut(view.shortcut)
         text = html.escape(view.text)
-        tooltip = f' title="{text} ({shortcut[0]})"' if shortcut else ""
+        icon = _file_icon(view.icon)
+        label = f'{icon}<span class="toolbar-label">{text}</span>' if icon else text
+        if shortcut:
+            tooltip = f' title="{text} ({shortcut[0]})"'
+        else:
+            tooltip = f' title="{text}"' if icon else ""
         is_checked = view.is_checkable and view.is_checked
         active = " btn-active" if is_checked else ""
         pressed = f' aria-pressed="{str(is_checked).lower()}"' if view.is_checkable else ""
@@ -1229,9 +1262,9 @@ class WebActionRenderer(WebRenderer[ActionView]):
             f"{tooltip}{pressed}"
         )
         if not self.is_enabled:
-            return f'<button {attributes} type="button" disabled>{text}</button>'
+            return f'<button {attributes} type="button" disabled>{label}</button>'
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
-        return self._active_html(attributes, text, key)
+        return self._active_html(attributes, label, key)
 
     def _page_link_html(self, *, oob: bool) -> str:
         """Render a toolbar link to a page: still a link to its address, for a new tab.
@@ -1244,19 +1277,22 @@ class WebActionRenderer(WebRenderer[ActionView]):
         shortcut = _web_shortcut(view.shortcut)
         text = html.escape(view.text)
         tooltip = f' title="{text} ({shortcut[0]})"' if shortcut else ""
-        classes = "tab tab-active" if is_current else "tab"
+        icon = _file_icon(view.icon)
+        label = f"{icon}{text}"
+        gap = " gap-2" if icon else ""
+        classes = f"tab tab-active{gap}" if is_current else f"tab{gap}"
         current = ' aria-current="page"' if is_current else ""
         if not view.is_enabled:
             return (
-                f'<a {self._root_attributes(oob=oob)} class="tab tab-disabled"'
-                f' aria-disabled="true"{tooltip}>{text}</a>'
+                f'<a {self._root_attributes(oob=oob)} class="tab tab-disabled{gap}"'
+                f' aria-disabled="true"{tooltip}>{label}</a>'
             )
         key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
         href = html.escape(self.href or "")
         return (
             f'<a {self._root_attributes(oob=oob)} class="{classes}" href="{href}"{current}'
             f'{tooltip} hx-post="/widget/{self.widget_id}"'
-            f""" hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{text}</a>"""
+            f""" hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{label}</a>"""
         )
 
     def _active_html(self, attributes: str, label: str, key: str) -> str:
@@ -1550,7 +1586,7 @@ class WebRouterRenderer(WebRenderer[Router]):
 
 
 #: first segments of the backend's own addresses, which no page's address can take
-RESERVED_ROUTES: Final = frozenset({"state", "static", "widget"})
+RESERVED_ROUTES: Final = frozenset({"icon", "state", "static", "widget"})
 
 
 def _theme_option(choice: str, text: str) -> str:

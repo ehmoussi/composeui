@@ -135,8 +135,12 @@ How it differs from a desktop window:
 - **Pages have their own address.** With a router (see [Pages](#pages)), each page is at
   `/<route>`, and `/` sends the browser to the first page. The pages' toolbar sits in the
   header; changing pages puts the new address in the browser's history, so back, forward,
-  bookmarks and reloads land on that page. A route can't be `state`, `static` or `widget`,
-  which the backend uses.
+  bookmarks and reloads land on that page. A route can't be `icon`, `state`, `static` or
+  `widget`, which the backend uses.
+- **Icons** are the image files actions name (`action.icon = "icons/run.svg"`, the path
+  Qt reads), served by the backend. An SVG is drawn in the text's color, so it follows
+  the light and dark themes: only its shape counts, as with a Lucide or Material icon.
+  PNG, JPEG, GIF, WebP and ICO files show as they are.
 - Single process only, and no push from the server: the page changes in response to the
   user's own actions (a status bar message still clears itself after its timeout).
 
@@ -230,7 +234,9 @@ class AppMainView(MainView):
 Clicking an entry triggers its action, a checkable one shows as pressed while checked,
 and disabling the toolbar disables its entries. Qt docks it as a `QToolBar`, Textual shows
 a row of buttons at the top, above a router's, and the web puts its buttons in the page
-header, before the menus.
+header, before the menus. An action's `icon`, an image file's path, shows on Qt and the
+web (see [Web backend](#web-backend)); a terminal shows the text. An icon is set by the
+app's code, not study data: never saved, loaded or reset.
 
 ## Dialogs
 
