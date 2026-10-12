@@ -626,7 +626,7 @@ def test_a_row_clicked_before_the_last_click_is_answered_shows_selected(
     expect(north).not_to_have_attribute("aria-current", "true")
 
 
-def test_the_language_menu_sets_the_page_s_language(pipe_page: Page) -> None:
+def test_the_language_menu_sets_the_page_s_language_and_title(pipe_page: Page) -> None:
     pipe_page.goto("/")
     html = pipe_page.locator("html")
     expect(html).to_have_attribute("lang", "en")
@@ -636,4 +636,6 @@ def test_the_language_menu_sets_the_page_s_language(pipe_page: Page) -> None:
         pipe_page.get_by_text("Français", exact=True).click()
 
     expect(html).to_have_attribute("lang", "fr")
+    expect(pipe_page).to_have_title("Formulaire de conduite")
+    expect(pipe_page.get_by_role("heading", name="Formulaire de conduite")).to_be_visible()
     expect(pipe_page.get_by_label("Matériau")).to_be_visible()

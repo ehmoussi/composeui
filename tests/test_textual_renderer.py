@@ -987,6 +987,7 @@ async def test_the_language_menu_shortcut_relabels_the_widgets() -> None:
         await pilot.pause()
 
         assert view.language == "fr"
+        assert app.title == "Formulaire de conduite"
         main_pipe = view.pages.inputs.pipe_form.main_pipe.renderer
         assert isinstance(main_pipe, TextualWidgetRenderer)
         assert main_pipe.widget is not None

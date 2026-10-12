@@ -213,8 +213,8 @@ def test_text_set_with_tr_where_the_view_is_built_follows_the_language(
     assert palette.color.value is Color.BLUE
     assert palette.colors.headers == ["Couleurs"]
     assert palette.colors.rows == [["Rouge"], ["Bleu"], ["#00ff00"]]
-    # set once: never translated
-    assert main_view.title == "Untitled"
+    # set once by the app, but a language translates it
+    assert main_view.title == "Sans titre"
 
     main_view.set_language("en")
 

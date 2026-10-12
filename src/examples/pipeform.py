@@ -316,7 +316,7 @@ class PipeMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Pipe Form", extension=".pipe")
+        self._init_app_info(title=self.tr("Pipe Form"), extension=".pipe")
         pipe_form = self.pages.inputs.pipe_form
         pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
         for pipe in (pipe_form.main_pipe, pipe_form.incident_pipe):

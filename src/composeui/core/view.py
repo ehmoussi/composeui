@@ -231,11 +231,15 @@ def _retranslate(view: "View", translate: Translate) -> None:
         _retranslate(child, translate)
     view._tr = translate  # noqa: SLF001
     for f in attrs.fields(cast("type[AttrsInstance]", type(view))):
-        if f.on_setattr is attrs.setters.frozen:
-            continue  # set once, e.g. the main view's title
         value = getattr(view, f.name)
         translated = translate_again(value, translate)
-        if translated is not value:
+        if translated is value:
+            continue
+        if f.on_setattr is attrs.setters.frozen:
+            # set once by the app, e.g. the main view's title: only a language changes it
+            notify_renderer(view, f, translated)
+            object.__setattr__(view, f.name, translated)
+        else:
             setattr(view, f.name, translated)
     view.retranslate()
     # a message on show is in the previous language
