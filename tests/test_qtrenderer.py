@@ -329,7 +329,7 @@ def test_menu_renderer_builds_a_real_qmenu_with_actions_and_shortcuts(qtbot: QtB
     assert isinstance(window, QMainWindow)
 
     menus = [action.menu() for action in window.menuBar().actions()]
-    assert [menu.title() for menu in menus] == ["File", "Pipe"]
+    assert [menu.title() for menu in menus] == ["File", "Pipe", "Language"]
     file_menu = menus[0]
     action_texts = [a.text() for a in file_menu.actions()]
     assert action_texts == ["New", "Open", "Save", "Save As", "", "Exit"]
@@ -829,3 +829,27 @@ def test_a_language_set_once_rendered_relabels_the_widgets(qtbot: QtBot) -> None
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     assert [action.text() for action in window.menuBar().actions()] == ["Fichier"]
+
+
+def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    language_menu = window.menuBar().actions()[2].menu()
+    english, french = language_menu.actions()
+    assert (english.isChecked(), french.isChecked()) == (True, False)
+
+    french.trigger()
+
+    assert [action.text() for action in window.menuBar().actions()] == [
+        "Fichier",
+        "Conduite",
+        "Langue",
+    ]
+    assert (english.isChecked(), french.isChecked()) == (False, True)
+    main_pipe = view.pages.inputs.pipe_form.main_pipe.renderer
+    assert isinstance(main_pipe, QtWidgetRenderer)
+    assert isinstance(main_pipe.qt_object, QGroupBox)
+    assert main_pipe.qt_object.title() == "Conduite principale"

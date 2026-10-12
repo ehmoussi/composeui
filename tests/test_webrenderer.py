@@ -2412,3 +2412,17 @@ def test_every_session_shows_the_language_asked_on_the_command_line(
     assert combobox.widget_id in dirty
     assert "Large</option>" in combobox.to_html()
     assert view.shape.size.value is Size.LARGE
+
+
+def test_the_language_menu_swaps_in_the_translated_widgets(
+    pipe_main_view: PipeMainView, pipe_client: TestClient
+) -> None:
+    menu = pipe_main_view.language_menu
+    main_pipe_id = _widget_id(pipe_main_view.pages.inputs.pipe_form.main_pipe.renderer)
+
+    response = pipe_client.post(f"/widget/{_action_id(menu.french)}", data={"event": "triggered"})
+
+    assert "hx-refresh" not in response.headers
+    assert "Conduite principale" in _swapped(response.text, main_pipe_id).text
+    assert pipe_main_view.language == "fr"
+    assert menu.french.is_checked is True

@@ -321,8 +321,9 @@ there shows without a language too.
   catalogs; the app's catalog wins over them. Text the app set outside `retranslate` is left
   as it is.
 
-[`src/examples/pipeform.py`](src/examples/pipeform.py) is translated into French:
-`uv run python -m examples.pipeform --backend qt --language fr`.
+[`src/examples/pipeform.py`](src/examples/pipeform.py) is translated into French: start it
+with `uv run python -m examples.pipeform --backend qt --language fr`, or switch from its
+Language menu, which calls `set_language` and checks the language shown.
 
 ## Saving and loading state
 

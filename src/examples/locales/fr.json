@@ -29,5 +29,6 @@
   "Both pipes go back to their starting dimensions.": "Les deux conduites reprennent leurs dimensions de départ.",
   "Reset": "Réinitialiser",
   "Dimensions reset": "Dimensions réinitialisées",
-  "Edge type changed: {edge_type}": "Type d'arête changé : {edge_type}"
+  "Edge type changed: {edge_type}": "Type d'arête changé : {edge_type}",
+  "Language": "Langue"
 }
