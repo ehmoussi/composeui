@@ -306,7 +306,7 @@ class ResetDimensionsDialog(DialogView):
 
 @define_view
 class PipeMainView(MainView):
-    translations_dir = Path(__file__).parent / "locales"
+    translations_dir = Path(__file__).parent / "locales" / "pipeform"
 
     pipe_menu: PipeMenu = Factory(PipeMenu)
     # the app's language, not study data: never saved, loaded or reset
