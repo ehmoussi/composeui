@@ -39,11 +39,12 @@ from composeui.textualcore.textualrenderer import (
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
+from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
-from examples.pipeform import EdgeType, PipeMainView
+from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -901,3 +902,29 @@ async def test_a_refused_edit_leaves_its_cell_and_the_selection_as_they_were() -
         assert view.places.rows == [["Lake", "Calm"], ["Harbour"]]
         assert [str(cell) for cell in table.get_row_at(0)] == ["Lake", "Calm"]
         assert view.places.selected_rows == [0]
+
+
+@pytest.mark.asyncio
+async def test_a_combobox_emits_its_value_when_the_user_picks_it_not_when_code_sets_it() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    material = view.pages.inputs.pipe_form.material
+    seen: list[object] = []
+    material.value_changed.connect(seen.append)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        material.values = dict(reversed(material.values.items()))
+        material.value = Material.Copper
+        await pilot.pause()
+        assert seen == []
+
+        combobox = _field_widget(material.renderer)
+        assert isinstance(combobox, ComposeCombobox)
+        combobox.value = Material.Steel  # what picking an option does
+        await pilot.pause()
+        assert seen == [Material.Steel]
+        assert material.value is Material.Steel
