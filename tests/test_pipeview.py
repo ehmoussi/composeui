@@ -138,3 +138,49 @@ def test_a_study_saved_in_french_opens_in_english(tmp_path: Path) -> None:
     assert pipe_form.edge_type.value is EdgeType.Chamfer
     assert pipe_form.material.value is Material.Copper
     assert pipe_form.main_pipe.title == "Main Pipe"
+
+
+def test_the_language_menu_switches_the_language_and_checks_it(
+    app: QtApplication[PipeMainView],
+) -> None:
+    view = app.main_view
+    menu = view.language_menu
+    assert (menu.english.is_checked, menu.french.is_checked) == (True, False)
+
+    menu.french.triggered.emit()
+
+    assert view.language == "fr"
+    assert menu.title == "Langue"
+    assert view.pages.inputs.pipe_form.main_pipe.title == "Conduite principale"
+    # a language is named in itself, whatever the app's
+    assert (menu.english.text, menu.french.text) == ("English", "Français")
+    assert (menu.english.is_checked, menu.french.is_checked) == (False, True)
+
+    menu.french.triggered.emit()  # the checked language again: still checked
+    assert (menu.english.is_checked, menu.french.is_checked) == (False, True)
+
+    menu.english.triggered.emit()
+    assert view.pages.inputs.pipe_form.main_pipe.title == "Main Pipe"
+    assert (menu.english.is_checked, menu.french.is_checked) == (True, False)
+
+
+def test_a_regional_language_checks_its_base_language() -> None:
+    view = PipeMainView()
+
+    view.set_language("fr-CA")
+
+    assert view.language_menu.french.is_checked is True
+    assert view.language_menu.english.is_checked is False
+
+
+def test_the_language_is_not_study_data(tmp_path: Path) -> None:
+    french = PipeMainView()
+    french.language_menu.french.triggered.emit()
+    filepath = tmp_path / "study.pipe"
+    french.save_state(filepath)
+
+    english = PipeMainView()
+    english.load_state(filepath)
+
+    assert english.language_menu.english.is_checked is True
+    assert english.language_menu.french.is_checked is False

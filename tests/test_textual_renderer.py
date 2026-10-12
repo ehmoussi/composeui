@@ -364,7 +364,16 @@ async def test_menu_actions_become_key_bindings_shown_in_the_footer() -> None:
         await pilot.pause()
         assert any(isinstance(w, Footer) for w in app.screen.walk_children())
         shortcuts = {action.shortcut for action in app.registered_actions.values()}
-        assert shortcuts == {"Ctrl+n", "Ctrl+o", "Ctrl+s", "Ctrl+Shift+s", "Ctrl+q", "Ctrl+r"}
+        assert shortcuts == {
+            "Ctrl+n",
+            "Ctrl+o",
+            "Ctrl+s",
+            "Ctrl+Shift+s",
+            "Ctrl+q",
+            "Ctrl+r",
+            "Ctrl+Shift+e",
+            "Ctrl+Shift+f",
+        }
 
         # a plain action (no file dialog involved) dispatches directly - no
         # modal, no worker thread, nothing left on the screen stack.
@@ -962,3 +971,23 @@ async def test_a_language_set_once_rendered_relabels_the_widgets() -> None:
         assert combobox.selection is Size.LARGE
         assert size.value is Size.LARGE
         assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_the_language_menu_shortcut_relabels_the_widgets() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+shift+f")
+        await pilot.pause()
+
+        assert view.language == "fr"
+        main_pipe = view.pages.inputs.pipe_form.main_pipe.renderer
+        assert isinstance(main_pipe, TextualWidgetRenderer)
+        assert main_pipe.widget is not None
+        assert main_pipe.widget.border_title == "Conduite principale"

@@ -657,8 +657,9 @@ class MainView(View):
         translates shows as written in the code.
         """
         directories = [d for d in (self.translations_dir, CATALOGS_DIR) if d is not None]
-        _retranslate(self, translator(language, directories))
+        # first: `retranslate` can show it, e.g. checking it in a language menu
         self._language = language
+        _retranslate(self, translator(language, directories))
 
     def _init_app_info(self, *, title: str, extension: str) -> None:
         """Set `title`/`extension` once, meant to be called from `__attrs_post_init__`."""
