@@ -1,5 +1,6 @@
 """Tests for the cattrs (un)structure hooks and MainView state persistence."""
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -13,6 +14,7 @@ from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
     ActionView,
+    InputView,
     InvalidStateError,
     LabelView,
     MainView,
@@ -205,7 +207,8 @@ def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
 @define_view
 class _StudyMainView(MainView):
     radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
-    note: LabelView = Factory(LabelView)
+    note: InputView = Factory(InputView)
+    heading: LabelView = Factory(LabelView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -273,7 +276,7 @@ def test_load_state_restores_values_equal_to_attrs_defaults(tmp_path: Path) -> N
     """A saved field equal to its attrs default must still be restored on load.
 
     `_StudyMainView` starts `note.text` at "initial note" (in `__attrs_post_init__`),
-    not at `LabelView`'s attrs default `""`: a study where the note was emptied must
+    not at `InputView`'s attrs default `""`: a study where the note was emptied must
     load back empty, not with the fresh view's starting text.
     """
     view = _StudyMainView()
@@ -288,6 +291,27 @@ def test_load_state_restores_values_equal_to_attrs_defaults(tmp_path: Path) -> N
 
     assert loaded.note.text == ""
     assert loaded.radio.is_visible is True
+
+
+def test_ui_text_is_neither_saved_nor_loaded(tmp_path: Path) -> None:
+    """Labels and titles come from the app's code and language, not from a study."""
+    view = _StudyMainView()
+    view.heading.text = "Notes"
+    filepath = tmp_path / "study.study"
+    view.save_state(filepath)
+
+    data = json.loads(filepath.read_text())
+    assert "text" not in data["heading"]
+    assert "title" not in data["file_menu"]
+    assert "text" not in data["file_menu"]["new"]
+    # a file saved before UI text was left out, e.g. in another language
+    data["heading"]["text"] = "Remarques"
+    data["note"]["text"] = "a note"
+    filepath.write_text(json.dumps(data))
+    view.load_state(filepath)
+
+    assert view.heading.text == "Notes"
+    assert view.note.text == "a note"
 
 
 def test_load_state_failing_halfway_leaves_the_view_unchanged(tmp_path: Path) -> None:

@@ -282,6 +282,10 @@ the Pipe menu's Reset Dimensions asks for a confirmation first.
 `MainView.save_state(path)` and `MainView.load_state(path)` (de)serialize the full view tree
 to JSON via `cattrs`, automatically skipping `Signal`/`Renderer` fields and, on load, updating
 the live view tree in place so renderer bindings and signal connections survive the reload.
+Text the user reads rather than enters (labels, titles, headers, button and menu text) is
+tagged `UI_TEXT` and skipped too: it comes from the app's code, in its language, not from a
+study. Tag a text field of your own views the same way:
+`attrs.field(default="", metadata={UI_TEXT: True})`.
 
 ## A SQLite model
 
