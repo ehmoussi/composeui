@@ -18,13 +18,12 @@ from composeui.core.registry import RendererType
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
-from composeui.core.view import View
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from composeui.core.model import Model
-    from composeui.core.view import MainView
+    from composeui.core.view import MainView, View
 
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -122,11 +121,11 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
     while len(views) > 0:
         current_view = views.popleft()
         current_view._main_view = main_view_reference  # noqa: SLF001
+        # its children, not only its view fields: e.g. a language menu's actions
+        views.extend(current_view.children_views)
         for field_row_attr in attrs.fields(cast("type[attrs.AttrsInstance]", type(current_view))):
             child = getattr(current_view, field_row_attr.name)
-            if isinstance(child, View):
-                views.append(child)
-            elif isinstance(child, Signal):
+            if isinstance(child, Signal):
                 child.set_main_view(main_view)
                 if model is not None:
                     child.set_model(model)

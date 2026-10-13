@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import enum
-import functools
 from pathlib import Path
 
-import attrs
 from attrs import Factory
 
 from composeui.core.application import run
 from composeui.core.view import (
-    OMIT,
     ActionView,
     DialogKind,
     DialogView,
@@ -22,6 +19,7 @@ from composeui.core.view import (
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
+    LanguageMenu,
     MainView,
     Menu,
     PageView,
@@ -261,35 +259,6 @@ class PipeMenu(Menu):
 
 
 @define_view
-class LanguageMenu(Menu):
-    english: ActionView = Factory(ActionView)
-    french: ActionView = Factory(ActionView)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.title = self.tr("Language")
-        # each language named in itself, whatever the app's: never translated
-        for action, language, name, shortcut in (
-            (self.english, "en", "English", "Ctrl+Shift+e"),
-            (self.french, "fr", "Français", "Ctrl+Shift+f"),
-        ):
-            action.data = language
-            action.text = name
-            action.shortcut = shortcut
-            action.is_checkable = True
-
-    @property
-    def actions(self) -> tuple[ActionView, ...]:
-        return (self.english, self.french)
-
-    def check(self, language: str) -> None:
-        """Check the action of `language`: "fr-CA" checks French."""
-        base = language.replace("_", "-").split("-")[0]
-        for action in self.actions:
-            action.is_checked = action.data == base
-
-
-@define_view
 class ResetDimensionsDialog(DialogView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -306,8 +275,8 @@ class PipeMainView(MainView):
     translations_dir = Path(__file__).parent / "locales" / "pipeform"
 
     pipe_menu: PipeMenu = Factory(PipeMenu)
-    # the app's language, not study data: never saved, loaded or reset
-    language_menu: LanguageMenu = attrs.field(factory=LanguageMenu, metadata={OMIT: True})
+    # its languages from the catalogs: `translations_dir`'s, and the source's
+    language_menu: LanguageMenu = Factory(LanguageMenu)
     pages: PipePagesView = Factory(PipePagesView)
     confirm_reset: ResetDimensionsDialog = Factory(ResetDimensionsDialog)
 
@@ -321,14 +290,7 @@ class PipeMainView(MainView):
         # the dimensions are only reset once the user confirms
         self.pipe_menu.reset_dimensions.triggered.connect(self.confirm_reset.open)
         self.confirm_reset.accepted.connect(self._reset_dimensions)
-        for action in self.language_menu.actions:
-            action.triggered.connect(functools.partial(self.set_language, action.data))
-        self.language_menu.check(self.language)
         self._update_summary()
-
-    def set_language(self, language: str) -> None:
-        super().set_language(language)
-        self.language_menu.check(self.language)
 
     def _reset_dimensions(self) -> None:
         pipe_form = self.pages.inputs.pipe_form

@@ -15,6 +15,7 @@ from composeui.core.view import (
     ButtonView,
     GroupFormView,
     LabelRowComboboxView,
+    LanguageMenu,
     MainView,
     PageView,
     Router,
@@ -306,3 +307,36 @@ def test_text_declared_in_the_class_bodies_follows_the_language(tmp_path: Path) 
     assert (page.shapes.headers, page.draw.text) == (["Forme", "#"], "Dessiner")
     main_view.set_language("en")
     assert (main_view.title, page.title, page.draw.text) == ("Shapes", "Gallery", "Draw")
+
+
+def test_the_language_menu_offers_the_catalogs_languages(tmp_path: Path) -> None:
+    for language in ("fr", "fr-CA", "eo"):
+        (tmp_path / f"{language}.json").write_text("{}", encoding="utf-8")
+
+    @define_view
+    class LanguagesMainView(MainView):
+        translations_dir = tmp_path
+
+        language_menu: LanguageMenu = Factory(LanguageMenu)
+
+    main_view = LanguagesMainView()
+    _add_reference_to_signals(main_view, None)
+    menu = main_view.language_menu
+
+    # the source's first; a language with no name of its own is named by its code
+    assert [action.text for action in menu.actions] == [
+        "English",
+        "eo",
+        "Français",
+        "Français (CA)",
+    ]
+    # "e" and "f" each start two languages: no shortcut picks one
+    assert [action.shortcut for action in menu.actions] == [None] * 4
+    assert "language_menu" not in main_view.state_data()  # how the app shows, not a study
+    main_view.set_language("fr-CA")  # its own catalog: checked rather than French
+    assert [action.is_checked for action in menu.actions] == [False, False, False, True]
+    # a new study keeps the language, and the menu still switches it
+    main_view.file_menu.new.triggered.emit()
+    menu.action("fr").triggered.emit()
+    assert main_view.language == "fr"
+    assert [action.is_checked for action in menu.actions] == [False, False, True, False]

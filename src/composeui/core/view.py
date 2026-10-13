@@ -11,7 +11,7 @@ import re
 import sys
 import threading
 from collections import deque
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -39,9 +39,11 @@ from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
     CATALOGS_DIR,
+    LANGUAGE_NAMES,
     T,
     Translate,
     TranslatedText,
+    language_name,
     no_translation,
     translate_again,
     translator,
@@ -93,8 +95,8 @@ def _is_omitted_type(tp: Any) -> bool:
     if origin is Union:
         return any(_is_omitted_type(arg) for arg in get_args(tp))
     cls = origin if origin is not None else tp
-    # a dialog is what the app asks the user, not study data
-    return isinstance(cls, type) and issubclass(cls, (*_OMITTED_TYPES, DialogView))
+    # a dialog is what the app asks the user, and the language how it shows: not study data
+    return isinstance(cls, type) and issubclass(cls, (*_OMITTED_TYPES, DialogView, LanguageMenu))
 
 
 def _is_omitted_field(f: "attrs.Attribute[Any]") -> bool:
@@ -683,6 +685,59 @@ class FileMenu(Menu):
 
 
 @define_view
+class LanguageMenu(Menu):
+    """A menu of the app's languages, the one shown checked; triggering one shows it.
+
+    Make it a field of the main view, which gives it the languages it has catalogs for
+    (`MainView.languages`), each named in itself whatever the language shown, and keeps
+    the shown one checked. The language isn't study data: never saved, loaded or reset.
+    """
+
+    title: str = attrs.field(default=T("Language"), metadata={UI_TEXT: True})
+    #: each language's action, its code as `data`; set with `set_languages`
+    actions: list[ActionView] = attrs.field(factory=list[ActionView], metadata={OMIT: True})
+    #: the languages' names, by code; a subclass extends it for a language it lacks:
+    #: ``names = {**LanguageMenu.names, "eo": "Esperanto"}``
+    names: ClassVar[Mapping[str, str]] = LANGUAGE_NAMES
+
+    @property
+    def children_views(self) -> list[View]:
+        return [*super().children_views, *self.actions]
+
+    def set_languages(self, languages: Sequence[str]) -> None:
+        """Offer `languages`, by code, before the menu is rendered.
+
+        A language whose first letter no other one shares gets a Ctrl+Shift shortcut.
+        """
+        initials = [language[:1].lower() for language in languages]
+        self.actions = [
+            ActionView(
+                text=language_name(language, self.names),
+                data=language,
+                is_checkable=True,
+                shortcut=f"Ctrl+Shift+{initial}" if initials.count(initial) == 1 else None,
+            )
+            for language, initial in zip(languages, initials)
+        ]
+
+    def action(self, language: str) -> ActionView:
+        """Get the action of `language`, e.g. "fr"."""
+        for action in self.actions:
+            if action.data == language:
+                return action
+        msg = f"{type(self).__name__} doesn't offer {language!r}."
+        raise KeyError(msg)
+
+    def check(self, language: str) -> None:
+        """Check `language`'s action, else its base language's: "fr-CA" checks French."""
+        offered = [action.data for action in self.actions]
+        base = language.replace("_", "-").split("-")[0]
+        checked = language if language in offered else base
+        for action in self.actions:
+            action.is_checked = action.data == checked
+
+
+@define_view
 class MainView(View):
     _renderer_key = "main"
 
@@ -717,10 +772,28 @@ class MainView(View):
     #: set by `set_language`; empty while the text shows as written in the code
     _language: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
 
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        for menu in self._language_menus():
+            menu.set_languages(self.languages)
+            for action in menu.actions:
+                action.triggered.connect(functools.partial(self.set_language, action.data))
+            menu.check(self.language)
+
     @property
     def language(self) -> str:
         """Get the language the text shows in: set with `set_language`, or the source's."""
         return self._language or self.source_language
+
+    @property
+    def languages(self) -> list[str]:
+        """Get the languages the app shows: `source_language`, then the catalogs'."""
+        found = (
+            []
+            if self.translations_dir is None
+            else sorted(path.stem for path in self.translations_dir.glob("*.json"))
+        )
+        return list(dict.fromkeys([self.source_language, *found]))
 
     def set_language(self, language: str) -> None:
         """Show the text of every view in `language`, e.g. "fr" or "fr-CA".
@@ -729,9 +802,14 @@ class MainView(View):
         translates shows as written in the code.
         """
         directories = [d for d in (self.translations_dir, CATALOGS_DIR) if d is not None]
-        # first: `retranslate` can show it, e.g. checking it in a language menu
+        # first: `retranslate` can show it
         self._language = language
         _retranslate(self, translator(language, directories))
+        for menu in self._language_menus():
+            menu.check(language)
+
+    def _language_menus(self) -> list[LanguageMenu]:
+        return [view for view in self.children_views if isinstance(view, LanguageMenu)]
 
     def load_state(self, filepath: Path) -> None:
         """Load the state saved in a json file; see `load_state_data`."""

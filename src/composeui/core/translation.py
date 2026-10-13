@@ -9,18 +9,77 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable
 
 from typing_extensions import Self
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 #: translates a text as written in the code into a language
 Translate = Callable[[str], str]
 
 #: ComposeUI's own catalogs, for the text of the views it defines (menus, dialogs...)
 CATALOGS_DIR = Path(__file__).parent.parent / "locales"
+
+
+#: languages by code, each named in itself, as a menu offering them shows them
+LANGUAGE_NAMES: Mapping[str, str] = MappingProxyType(
+    {
+        "ar": "العربية",
+        "bg": "Български",
+        "ca": "Català",
+        "cs": "Čeština",
+        "da": "Dansk",
+        "de": "Deutsch",
+        "el": "Ελληνικά",
+        "en": "English",
+        "es": "Español",
+        "et": "Eesti",
+        "fa": "فارسی",
+        "fi": "Suomi",
+        "fr": "Français",
+        "he": "עברית",
+        "hi": "हिन्दी",
+        "hr": "Hrvatski",
+        "hu": "Magyar",
+        "id": "Bahasa Indonesia",
+        "it": "Italiano",
+        "ja": "日本語",
+        "ko": "한국어",
+        "lt": "Lietuvių",
+        "lv": "Latviešu",
+        "nb": "Norsk bokmål",
+        "nl": "Nederlands",
+        "pl": "Polski",
+        "pt": "Português",
+        "ro": "Română",
+        "ru": "Русский",
+        "sk": "Slovenčina",
+        "sl": "Slovenščina",
+        "sr": "Српски",
+        "sv": "Svenska",
+        "th": "ไทย",
+        "tr": "Türkçe",
+        "uk": "Українська",
+        "vi": "Tiếng Việt",
+        "zh": "中文",
+    }
+)
+
+
+def language_name(language: str, names: Mapping[str, str] = LANGUAGE_NAMES) -> str:
+    """Name `language` in itself, from `names`: "fr-CA" is "Français (CA)".
+
+    A language `names` doesn't know is named by its code.
+    """
+    if language in names:
+        return names[language]
+    base, _, region = language.replace("_", "-").partition("-")
+    if base not in names:
+        return language
+    return f"{names[base]} ({region})" if region else names[base]
 
 
 def no_translation(text: str) -> str:
