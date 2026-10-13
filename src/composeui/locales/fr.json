@@ -7,5 +7,6 @@
   "Exit": "Quitter",
   "OK": "OK",
   "Cancel": "Annuler",
-  "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}."
+  "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}.",
+  "Language": "Langue"
 }

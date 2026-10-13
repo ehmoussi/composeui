@@ -2437,7 +2437,9 @@ def test_the_language_menu_swaps_in_the_translated_widgets(
     menu = pipe_main_view.language_menu
     main_pipe_id = _widget_id(pipe_main_view.pages.inputs.pipe_form.main_pipe.renderer)
 
-    response = pipe_client.post(f"/widget/{_action_id(menu.french)}", data={"event": "triggered"})
+    response = pipe_client.post(
+        f"/widget/{_action_id(menu.action('fr'))}", data={"event": "triggered"}
+    )
 
     assert "hx-refresh" not in response.headers
     assert "Conduite principale" in _swapped(response.text, main_pipe_id).text
@@ -2446,7 +2448,7 @@ def test_the_language_menu_swaps_in_the_translated_widgets(
     marker = _swapped(response.text, "cui-page").attributes
     assert (marker["data-language"], marker["data-title"]) == ("fr", "Formulaire de conduite")
     assert "Formulaire de conduite" in _swapped(response.text, "cui-brand").text
-    assert menu.french.is_checked is True
+    assert menu.action("fr").is_checked is True
 
 
 def test_the_page_is_in_the_app_s_source_language_until_set(
@@ -2460,7 +2462,8 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
     assert (marker["data-language"], marker["data-title"]) == ("en", "Pipe Form")
     # an event leaving the language alone doesn't send it again
     response = pipe_client.post(
-        f"/widget/{_action_id(pipe_main_view.language_menu.english)}", data={"event": "triggered"}
+        f"/widget/{_action_id(pipe_main_view.language_menu.action('en'))}",
+        data={"event": "triggered"},
     )
     assert _find(response.text, "cui-page") is None
     assert _find(response.text, "cui-brand") is None

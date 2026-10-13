@@ -315,10 +315,15 @@ text no catalog translates shows as written.
   the web. So does a page's `page_title`.
 - ComposeUI translates its own text (the File menu, a dialog's OK and Cancel) from its own
   catalogs; the app's catalog wins over them.
+- A `LanguageMenu` field of the main view lets the user switch:
+  `language_menu: LanguageMenu = Factory(LanguageMenu)`. It offers `source_language` and a
+  language per catalog in `translations_dir`, each named in itself ("Français"), keeps the
+  one shown checked, and isn't study data. A language it can't name shows its code: name
+  it in a subclass, `names = {**LanguageMenu.names, "eo": "Esperanto"}`.
 
 [`src/examples/pipeform.py`](src/examples/pipeform.py) is translated into French: start it
 with `uv run python -m examples.pipeform --backend qt --language fr`, or switch from its
-Language menu, which calls `set_language` and checks the language shown.
+Language menu.
 
 Check the app's catalogs against its code, e.g. in CI:
 

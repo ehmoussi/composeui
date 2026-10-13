@@ -145,23 +145,23 @@ def test_the_language_menu_switches_the_language_and_checks_it(
 ) -> None:
     view = app.main_view
     menu = view.language_menu
-    assert (menu.english.is_checked, menu.french.is_checked) == (True, False)
+    assert (menu.action("en").is_checked, menu.action("fr").is_checked) == (True, False)
 
-    menu.french.triggered.emit()
+    menu.action("fr").triggered.emit()
 
     assert view.language == "fr"
     assert menu.title == "Langue"
     assert view.pages.inputs.pipe_form.main_pipe.title == "Conduite principale"
     # a language is named in itself, whatever the app's
-    assert (menu.english.text, menu.french.text) == ("English", "Français")
-    assert (menu.english.is_checked, menu.french.is_checked) == (False, True)
+    assert (menu.action("en").text, menu.action("fr").text) == ("English", "Français")
+    assert (menu.action("en").is_checked, menu.action("fr").is_checked) == (False, True)
 
-    menu.french.triggered.emit()  # the checked language again: still checked
-    assert (menu.english.is_checked, menu.french.is_checked) == (False, True)
+    menu.action("fr").triggered.emit()  # the checked language again: still checked
+    assert (menu.action("en").is_checked, menu.action("fr").is_checked) == (False, True)
 
-    menu.english.triggered.emit()
+    menu.action("en").triggered.emit()
     assert view.pages.inputs.pipe_form.main_pipe.title == "Main Pipe"
-    assert (menu.english.is_checked, menu.french.is_checked) == (True, False)
+    assert (menu.action("en").is_checked, menu.action("fr").is_checked) == (True, False)
 
 
 def test_a_regional_language_checks_its_base_language() -> None:
@@ -169,18 +169,18 @@ def test_a_regional_language_checks_its_base_language() -> None:
 
     view.set_language("fr-CA")
 
-    assert view.language_menu.french.is_checked is True
-    assert view.language_menu.english.is_checked is False
+    assert view.language_menu.action("fr").is_checked is True
+    assert view.language_menu.action("en").is_checked is False
 
 
 def test_the_language_is_not_study_data(tmp_path: Path) -> None:
     french = PipeMainView()
-    french.language_menu.french.triggered.emit()
+    french.language_menu.action("fr").triggered.emit()
     filepath = tmp_path / "study.pipe"
     french.save_state(filepath)
 
     english = PipeMainView()
     english.load_state(filepath)
 
-    assert english.language_menu.english.is_checked is True
-    assert english.language_menu.french.is_checked is False
+    assert english.language_menu.action("en").is_checked is True
+    assert english.language_menu.action("fr").is_checked is False
