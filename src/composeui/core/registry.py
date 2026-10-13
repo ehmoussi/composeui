@@ -1,25 +1,37 @@
 """Map abstract renderer keys to each backend's concrete renderer classes.
 
-Adding a backend means adding one `RendererType` member here and one ``RENDERERS`` mapping
-in the backend module.
+Adding a backend means adding one `RendererType` member here, one ``RENDERERS`` mapping in
+the backend's renderers module, and ``APPLICATION``/``MODEL_APPLICATION`` in its
+application module.
 """
 
 from __future__ import annotations
 
 import enum
 import importlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from composeui.core.renderer import Renderer
 
 
-class RendererType(enum.Enum):
-    """A renderer backend, identified by the module exposing its ``RENDERERS`` mapping."""
+class Backend(NamedTuple):
+    """A backend's modules, by dotted path: none is imported until the backend is used."""
 
-    QT = "composeui.qtcore.qtrenderer"
-    TEXTUAL = "composeui.textualcore.textualrenderer"
-    WEB = "composeui.webcore.webrenderer"
+    #: exposes the ``RENDERERS`` mapping
+    renderers: str
+    #: exposes ``APPLICATION`` and ``MODEL_APPLICATION``, the backend's application classes
+    applications: str
+
+
+class RendererType(enum.Enum):
+    """A renderer backend, identified by its modules."""
+
+    QT = Backend("composeui.qtcore.qtrenderer", "composeui.qtcore.qtapplication")
+    TEXTUAL = Backend(
+        "composeui.textualcore.textualrenderer", "composeui.textualcore.textualapplication"
+    )
+    WEB = Backend("composeui.webcore.webrenderer", "composeui.webcore.webapplication")
 
 
 def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Renderer[Any, Any] | None:
@@ -29,7 +41,7 @@ def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Rendere
     support that widget: the view is then simply not rendered, matching how
     partial backends behaved before the registry existed.
     """
-    module = importlib.import_module(renderer_type.value)
+    module = importlib.import_module(renderer_type.value.renderers)
     factory = module.RENDERERS.get(key)
     if factory is None:
         return None

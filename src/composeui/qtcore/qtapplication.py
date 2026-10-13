@@ -38,3 +38,8 @@ class QtModelApplication(ModelApplication[MainViewT, ModelT]):
         finally:
             self.model.close()
         sys.exit(code)
+
+
+#: the backend's applications, for `composeui.core.application.run`
+APPLICATION = QtApplication
+MODEL_APPLICATION = QtModelApplication

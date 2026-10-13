@@ -57,45 +57,37 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
 
 ## 3 — Less boilerplate for apps
 
-Found writing `examples/indoorenvironments.py` (~480 lines, most of it wiring rather than
+Found writing `examples/indoorenvironments.py` (~440 lines, most of it wiring rather than
 app logic); `pipeform.py` and `pipecatalogue.py` repeat the same patterns. In order of
 lines saved.
 
-1. **Run any backend with one call.** Every example's `main()` parses `--backend`,
-   rewrites `sys.argv`, imports the backend lazily and builds the app, and the backends
-   disagree: Qt and Textual take instances and need `connect_model` called by hand, the
-   web takes builders and needs a subclass only to override `setup_model`. Add
-   `run(MainView, model=Model, setup_model=connect_model, default_backend="web")`,
-   resolving the backend through `core.registry` (core still imports none). A smaller
-   first step: a `setup_model=` argument to `WebModelApplication`, and the same
-   builder-style constructor on every backend.
-2. **A built-in `LanguageMenu`.** `pipeform.py` and `indoorenvironments.py` carry the same
+1. **A built-in `LanguageMenu`.** `pipeform.py` and `indoorenvironments.py` carry the same
    ~45 lines: the menu, its `check()`, the `triggered` wiring and a `set_language`
    override. Ship one in `core.view`, its languages from `translations_dir/*.json` plus
    `source_language`, each named in itself, omitted from the state by default, and wired
    and kept checked by `MainView` when it's a field:
    `language_menu: LanguageMenu = Factory(LanguageMenu)`.
-3. **A table of typed records.** `rows: list[list[str]]` makes the app format every cell
+2. **A table of typed records.** `rows: list[list[str]]` makes the app format every cell
    with `str()`, parse edits back (`map(float, ...)` and its own "must be a number"
    message), switch on column indexes (`column == 0`) and read
    `rows[selected_rows[0]][0]` for the selected item. Add
    `RecordTableView[RecordT]` (an `attrs` class) built from `Column(field, header, editable=...)`,
    with `records`, `selected_record` and `record_edited` emitting the old and new record,
    parsed by `CONVERTER`; a cell that doesn't parse refuses the edit (`View.refusing`).
-4. **Model-to-view wiring.**
+3. **Model-to-view wiring.**
    - `changed.connect(callback, now=True)` (or `model.watch(table, callback)`), calling it
      once right away, instead of `connect` followed by a manual first call.
    - Inject `model`/`main_view` into model signals as into view signals, so
      `table.changed.connect(view.show_table)` needs no lambda.
    - A callback may take fewer positional arguments than its signal emits:
      `_show_rooms(self, _rows, model)` only exists to drop `_rows`.
-5. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
+4. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
    ...), replacing the example's two near-identical `_create_unique_*_name`;
    `fetch_column(sql, parameters) -> list[Any]` for a list of names; tables declared on
    the model (`indoor_environments = table(IndoorEnvironments)`) instead of an `__init__`
    calling `add_table`.
 
-Together, (1)–(3) would take the example from ~480 to about 300 lines.
+Together, (1)–(2) would take the example from ~440 to about 300 lines.
 
 ## 4 — Adoption
 

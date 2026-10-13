@@ -8,14 +8,13 @@ dimensions, a wall thinner than the radius) and File saves and opens the views a
 database together.
 """
 
-import argparse
 import enum
-import sys
 from typing import ClassVar, Optional
 
 import attrs
 from attrs import Factory
 
+from composeui.core.application import run
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters
 from composeui.core.view import (
     ButtonVariant,
@@ -350,40 +349,7 @@ def connect_model(main_view: PipeCatalogueMainView, model: PipeCatalogueModel) -
 
 
 def main() -> None:
-    # every app parses `sys.argv` itself when it runs, so take `--backend` out
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--backend", choices=["qt", "textual", "web"], default="web")
-    args, rest = parser.parse_known_args()
-    sys.argv = [sys.argv[0], *rest]
-    # imported only once chosen: running one backend doesn't need the others' extras
-    if args.backend == "qt":
-        from composeui.qtcore.qtapplication import QtModelApplication  # noqa: PLC0415
-
-        app = QtModelApplication(main_view=PipeCatalogueMainView(), model=PipeCatalogueModel())
-        connect_model(app.main_view, app.model)
-        app.run()
-    elif args.backend == "textual":
-        from composeui.textualcore.textualapplication import (  # noqa: PLC0415
-            TextualModelApplication,
-        )
-
-        textual_app = TextualModelApplication(
-            main_view=PipeCatalogueMainView(), model=PipeCatalogueModel()
-        )
-        connect_model(textual_app.main_view, textual_app.model)
-        textual_app.run()
-    else:
-        from composeui.webcore.webapplication import WebModelApplication  # noqa: PLC0415
-
-        class PipeCatalogueWebApp(WebModelApplication[PipeCatalogueMainView, PipeCatalogueModel]):
-            def setup_model(
-                self, main_view: PipeCatalogueMainView, model: PipeCatalogueModel
-            ) -> None:
-                connect_model(main_view, model)
-
-        PipeCatalogueWebApp(
-            build_main_view=PipeCatalogueMainView, build_model=PipeCatalogueModel
-        ).run()
+    run(PipeCatalogueMainView, build_model=PipeCatalogueModel, setup_model=connect_model)
 
 
 if __name__ == "__main__":

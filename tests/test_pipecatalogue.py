@@ -23,9 +23,12 @@ App = ModelApplication[PipeCatalogueMainView, PipeCatalogueModel]
 
 @pytest.fixture
 def app() -> Iterator[App]:
-    app = App(main_view=PipeCatalogueMainView(), model=PipeCatalogueModel())
+    app = App(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=connect_model,
+    )
     app.main_view.status_bar.timeout = 0
-    connect_model(app.main_view, app.model)
     yield app
     app.model.close()
 
@@ -106,8 +109,11 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
     path = tmp_path / "plant.pipes"
     app.main_view.file_view.filepath = path
     app.main_view.file_menu.save.triggered.emit()
-    other = App(main_view=PipeCatalogueMainView(), model=PipeCatalogueModel())
-    connect_model(other.main_view, other.model)
+    other = App(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=connect_model,
+    )
 
     other.main_view.file_view.filepath = path
     other.main_view.file_menu.open_file.triggered.emit()

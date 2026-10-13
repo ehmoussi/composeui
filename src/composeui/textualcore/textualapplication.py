@@ -36,3 +36,8 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
                 self.main_view.renderer.app.run()
         finally:
             self.model.close()
+
+
+#: the backend's applications, for `composeui.core.application.run`
+APPLICATION = TextualApplication
+MODEL_APPLICATION = TextualModelApplication

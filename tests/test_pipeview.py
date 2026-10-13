@@ -12,7 +12,7 @@ from examples.pipeform import EdgeType, Material, PipeMainView
 @pytest.fixture
 def app() -> QtApplication[PipeMainView]:
     """Create app."""
-    return QtApplication(main_view=PipeMainView())
+    return QtApplication(build_main_view=PipeMainView)
 
 
 def test_check_name(app: QtApplication[PipeMainView]) -> None:

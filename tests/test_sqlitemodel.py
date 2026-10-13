@@ -80,7 +80,7 @@ App = ModelApplication[HelloMainView, RunsModel]
 
 @pytest.fixture
 def app() -> Iterator[App]:
-    app = App(main_view=HelloMainView(), model=RunsModel())
+    app = App(build_main_view=HelloMainView, build_model=RunsModel)
     yield app
     app.model.close()
 
@@ -102,7 +102,7 @@ def test_a_saved_study_opens_with_its_views_and_its_rows(app: App, tmp_path: Pat
     app.model.runs.add(50.0)
     path = tmp_path / "study.hello"
     _save(app, path)
-    other = App(main_view=HelloMainView(), model=RunsModel())
+    other = App(build_main_view=HelloMainView, build_model=RunsModel)
     # what a view refreshing from the rows would see of the views
     names_seen: list[str] = []
     other.model.runs.changed.connect(lambda: names_seen.append(other.main_view.form.name.text))
@@ -203,7 +203,7 @@ def test_a_study_of_an_older_version_is_brought_up_to_date(app: App, tmp_path: P
     app.model.runs.add(80.0)
     path = tmp_path / "study.hello"
     _save(app, path)
-    newer = ModelApplication(main_view=HelloMainView(), model=MeasuredRunsModel())
+    newer = ModelApplication(build_main_view=HelloMainView, build_model=MeasuredRunsModel)
 
     _open(newer, path)
 
@@ -213,7 +213,7 @@ def test_a_study_of_an_older_version_is_brought_up_to_date(app: App, tmp_path: P
 
 
 def _newer_study(path: Path) -> None:
-    newer = ModelApplication(main_view=HelloMainView(), model=MeasuredRunsModel())
+    newer = ModelApplication(build_main_view=HelloMainView, build_model=MeasuredRunsModel)
     _save(newer, path)
     newer.model.close()
 
@@ -337,7 +337,7 @@ TagsApp = ModelApplication[TagsMainView, TagsModel]
 
 @pytest.fixture
 def tags_app() -> Iterator[TagsApp]:
-    app = TagsApp(main_view=TagsMainView(), model=TagsModel())
+    app = TagsApp(build_main_view=TagsMainView, build_model=TagsModel)
     app.model.tags.add("red")
     app.model.tags.add("blue")
     app.main_view.table.rows = [["blue"], ["red"]]
