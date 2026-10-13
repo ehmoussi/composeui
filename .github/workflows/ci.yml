@@ -33,6 +33,7 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run ruff check
       - run: make mypy
+      - run: make translations
       - run: make test
 
   browser:

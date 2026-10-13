@@ -23,7 +23,8 @@ make lint    # ruff format + ruff check --fix
 make mypy    # mypy on packages composeui + examples, Qt binding resolved to PySide6
 make test    # QT_QPA_PLATFORM=offscreen pytest tests with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
-make check   # lint + mypy
+make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
+make check   # lint + mypy + translations
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
 ```
