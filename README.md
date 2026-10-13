@@ -414,7 +414,7 @@ the tables (`model.runs.add(...)`):
   SQLite's message), else SQLite's. A view shows it in the status bar with
   `with self.refusing(self.tr("Can't add the pipe: {error}")):`, the message translated
   too (a catalog's check finds a table's `refusals` in a view's module); in a
-  `cell_edited` callback, the edit is refused as well.
+  `cell_edited` or `record_edited` callback, the edit is refused as well.
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
   rows through it, and after New and Open once the views are loaded too, so the views
   showing the rows can follow: connect it in `setup_model(main_view, model)`, which the
@@ -434,6 +434,27 @@ the tables (`model.runs.add(...)`):
 every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalogue of
 pipes the database checks as they're added, listed through a filtered query with their
 mass from a SQL view joining them to their material.
+
+## A table of records
+
+A `TableView` shows text the app formats itself. A `RecordTableView` shows `attrs`
+records, such as the ones `fetch` returns, a column per field:
+
+```python
+from composeui.core.view import Column, RecordTableView, T, child
+
+runs: RecordTableView[Run] = child(
+    RecordTableView[Run],
+    columns=[Column("id", T("Run")), Column("radius", T("Radius"), editable=True)],
+)
+```
+
+Assign `records` to update it (`table.records = model.runs.above(0.1)`) and read
+`selected_record` (or `selected_records`). An edited cell is parsed into its field's type
+through the views' `cattrs` converter, and `record_edited` emits the old and the new record;
+a cell that doesn't parse refuses the edit and says why in the status bar. The records are
+saved and loaded with the study by their type, so build the table as
+`RecordTableView[Run]` (or subclass it).
 
 ## Development
 

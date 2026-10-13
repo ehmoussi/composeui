@@ -113,9 +113,11 @@ def _is_state_field(f: "attrs.Attribute[Any]") -> bool:
 def _omit_renderer_and_signals(
     cls: "type[AttrsInstance]",
 ) -> Callable[[Any], dict[str, Any]]:
-    attrs.resolve_types(cls)
+    # a generic view's class, e.g. a field's `RecordTableView[Room]`
+    view_cls = get_origin(cls) or cls
+    attrs.resolve_types(view_cls)
     overrides: dict[str, AttributeOverride] = {
-        str(f.name): override(omit=True) for f in attrs.fields(cls) if not _is_state_field(f)
+        str(f.name): override(omit=True) for f in attrs.fields(view_cls) if not _is_state_field(f)
     }
     unstructure = make_dict_unstructure_fn(
         cls,
@@ -130,7 +132,18 @@ def _omit_renderer_and_signals(
         _cattrs_include_init_false=False,
         **overrides,
     )
-    if not issubclass(cls, ValuesGroupMixin):
+    if issubclass(view_cls, RecordTableView):
+
+        def unstructure_record_table(obj: "RecordTableView[Any]") -> dict[str, Any]:
+            data = unstructure(cast("AttrsInstance", obj))
+            # the records by their own type, which the field's `RecordT` doesn't name;
+            # the rows only show them, and the columns, the app's, set what's editable
+            data["records"] = CONVERTER.unstructure(obj.records)
+            del data["rows"], data["editable_columns"]
+            return data
+
+        return unstructure_record_table
+    if not issubclass(view_cls, ValuesGroupMixin):
         return unstructure
 
     def unstructure_radio_group(obj: "ValuesGroupMixin[Any]") -> dict[str, Any]:
@@ -156,6 +169,8 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
     in saved state (for inspection/debugging) but never restored from it on load: it's
     app-defined config, not persisted user data, and has the same unresolved-`TValue`
     structuring problem `value` has, without an equivalent label-based workaround.
+    ``RecordTableView.records`` is restored first, by `RecordTableView.record_type`: its
+    rows, before the selection checked against them.
     """
     states = deque([(view, data)])
     while len(states) > 0:
@@ -164,12 +179,18 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
         attrs.resolve_types(current_cls)
         if isinstance(current_view, ValuesGroupMixin) and "value" in new_data:
             current_view.value = current_view.deserialize_value(new_data["value"])
+        if isinstance(current_view, RecordTableView) and "records" in new_data:
+            current_view.records = current_view.structure_records(new_data["records"])
         for f in attrs.fields(current_cls):
             if (
                 f.name not in new_data
                 or not _is_state_field(f)
                 or f.on_setattr is attrs.setters.frozen
                 or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
+                or (
+                    f.name in ("rows", "records", "editable_columns")
+                    and isinstance(current_view, RecordTableView)
+                )
             ):
                 continue
             new_value = new_data[f.name]
@@ -189,18 +210,21 @@ def _reset_state(view: "View", initial: "View") -> None:
     attributes, so renderers and connected signals stay bound and only what actually
     changed is pushed to the UI. Fields `_apply_state` never restores are skipped the
     same way (omitted, frozen); `ValuesGroupMixin.values` is reset before `value`, which
-    must be one of them.
+    must be one of them, and `RecordTableView.records` before the selection.
     """
     states: deque[tuple[View, View]] = deque([(view, initial)])
     while len(states) > 0:
         current_view, initial_view = states.popleft()
         current_cls = cast("type[AttrsInstance]", type(current_view))
         attrs.resolve_types(current_cls)
+        if isinstance(current_view, RecordTableView) and isinstance(initial_view, RecordTableView):
+            current_view.records = initial_view.records
         for f in attrs.fields(current_cls):
             if (
                 _is_omitted_field(f)
                 or f.on_setattr is attrs.setters.frozen
                 or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
+                or (f.name in ("rows", "records") and isinstance(current_view, RecordTableView))
             ):
                 continue
             current_field = getattr(current_view, f.name)
@@ -1133,7 +1157,7 @@ class TableMixin:
         self._edited_rows = replace_cell(self.rows, row, column, text)
         token = _editing_cell.set(True)
         try:
-            self.cell_edited.emit(row, column, text)
+            self._emit_edit(row, column, text)
         except EditRefusedError:
             # the rows answering the edit, as when a callback puts them back itself
             self.rows = [list(cells) for cells in self.rows]
@@ -1141,10 +1165,153 @@ class TableMixin:
             _editing_cell.reset(token)
             self._edited_rows = None
 
+    def _emit_edit(self, row: int, column: int, text: str) -> None:
+        """Emit the edit's signals, `_edited_rows` holding the rows as it leaves them."""
+        self.cell_edited.emit(row, column, text)
+
 
 @define_view
 class TableView(TableMixin, View):
     _renderer_key = "table"
+
+
+RecordT = TypeVar("RecordT", bound="AttrsInstance")
+
+
+@attrs.frozen
+class Column:
+    """A column of a `RecordTableView`: a field of its records, under `header`."""
+
+    #: the name of the records' field the column shows
+    field: str
+    header: str
+    #: whether the user edits the column's cells
+    editable: bool = False
+
+
+def _cell_text(value: Any) -> str:
+    """Show a record's field in its cell: as saved, None as an empty cell."""
+    return "" if value is None else str(CONVERTER.unstructure(value))
+
+
+def _parse_bool(text: Any, _type: type) -> bool:
+    if isinstance(text, str) and text.lower() in ("true", "false"):
+        return text.lower() == "true"
+    msg = f"{text!r} isn't a boolean"
+    raise ValueError(msg)
+
+
+#: parses a cell's text into a record's field; strict about booleans, which
+#: `bool("False")` would make true
+_CELL_CONVERTER = CONVERTER.copy()
+_CELL_CONVERTER.register_structure_hook(bool, _parse_bool)
+
+
+@define_view
+class RecordTableView(TableView, Generic[RecordT]):
+    """A table of records, `attrs` instances, each a row with a cell per column.
+
+    Build it with its records' type, so a study can save and load them:
+    ``child(RecordTableView[Room], columns=[Column("name", T("Room"), editable=True)])``.
+    `columns` set the headers and the editable columns, and the table formats each field
+    in its cell (`str`, None as an empty cell): assign new `records`, not `rows`.
+
+    The user's edit is parsed into the field's type with `CONVERTER`: a cell that doesn't
+    parse refuses the edit, saying why in the status bar. Else `record_edited` emits the
+    old and the new record while `records` still holds the old one, then the new one
+    replaces it, unless the callbacks assigned `records` themselves; refusing the edit
+    works as with `cell_edited` (`View.refusing`).
+    """
+
+    def _reconcile_columns(
+        self, _attribute: "attrs.Attribute[Any]", columns: list[Column]
+    ) -> list[Column]:
+        self.headers = [translate_again(column.header, self._tr) for column in columns]
+        self.editable_columns = [index for index, column in enumerate(columns) if column.editable]
+        self.rows = [self._cells(record, columns) for record in self.records]
+        return columns
+
+    def _reconcile_records(
+        self, _attribute: "attrs.Attribute[Any]", records: list[RecordT]
+    ) -> list[RecordT]:
+        self.rows = [self._cells(record, self.columns) for record in records]
+        return records
+
+    # the table's setup, by the app: not study data
+    columns: list[Column] = attrs.field(
+        factory=list[Column], on_setattr=_reconcile_columns, metadata={OMIT: True}
+    )
+    records: list[RecordT] = attrs.field(factory=list, on_setattr=_reconcile_records)
+    #: the user edited a record: the old one, then the new one
+    record_edited: Signal[RecordT, RecordT] = attrs.Factory(Signal[RecordT, RecordT])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.columns = self.columns
+        self.records = self.records
+
+    @property
+    def record_type(self) -> type:
+        """Get the records' type, from ``RecordTableView[Room]`` or a subclass's base."""
+        bases = [getattr(self, "__orig_class__", None)]
+        bases += [base for cls in type(self).__mro__ for base in getattr(cls, "__orig_bases__", ())]
+        for base in bases:
+            origin = get_origin(base)
+            if isinstance(origin, type) and issubclass(origin, RecordTableView):
+                (record_type,) = get_args(base)
+                if isinstance(record_type, type):
+                    return record_type
+        msg = (
+            f"{type(self).__name__} doesn't know its records' type: build it as "
+            "RecordTableView[Room](...)."
+        )
+        raise TypeError(msg)
+
+    @property
+    def selected_record(self) -> Optional[RecordT]:
+        """Get the first selected record, or None if no row is selected."""
+        return self.records[self.selected_rows[0]] if len(self.selected_rows) > 0 else None
+
+    @property
+    def selected_records(self) -> list[RecordT]:
+        """Get the selected records, as `selected_rows` lists them."""
+        return [self.records[row] for row in self.selected_rows]
+
+    def structure_records(self, data: Any) -> list[RecordT]:
+        """Build records of `record_type` from their saved data."""
+        return cast("list[RecordT]", CONVERTER.structure(data, cast("Any", list)[self.record_type]))
+
+    @staticmethod
+    def _cells(record: Any, columns: Sequence[Column]) -> list[str]:
+        return [_cell_text(getattr(record, column.field)) for column in columns]
+
+    def _emit_edit(self, row: int, column: int, text: str) -> None:
+        old = self.records[row]
+        name = self.columns[column].field
+        field_type: Any = attrs.fields_dict(attrs.resolve_types(type(old)))[name].type
+        try:
+            if text == "" and type(None) in get_args(field_type):
+                value = None
+            else:
+                value = _CELL_CONVERTER.structure(text, field_type)
+        except _BAD_STATE_ERRORS as error:
+            main_view = None if self._main_view is None else self._main_view()
+            if main_view is not None:
+                message = self.tr('{header}: "{text}" isn\'t a valid value')
+                main_view.status_bar.show_message(
+                    message.format(header=self.headers[column], text=text)
+                )
+            raise EditRefusedError from error
+        # `old` as `Any`: mypy's attrs plugin doesn't take a bound type variable
+        new: RecordT = attrs.evolve(cast("Any", old), **{name: value})
+        if self._edited_rows is not None:
+            # as the table will show it, to keep it selected once the records come back
+            self._edited_rows[row] = self._cells(new, self.columns)
+        records, rows = self.records, self.rows
+        super()._emit_edit(row, column, text)
+        self.record_edited.emit(old, new)
+        if self.records is records and self.rows is rows:
+            self.records = [*records[:row], new, *records[row + 1 :]]
 
 
 TValue = TypeVar("TValue")

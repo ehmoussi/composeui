@@ -84,7 +84,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
-from tests.tables import EditableTableMainView
+from tests.tables import EditableTableMainView, Room, RoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -2343,6 +2343,26 @@ def test_a_refusal_in_an_edit_refuses_it_and_says_why(places: _Places) -> None:
     assert table.rows == rows
     assert "Foggy" not in "".join(places.texts(body))
     assert html.escape("Can't note it: too foggy") in body
+
+
+def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
+    views: list[RoomsMainView] = []
+
+    class RoomsApp(WebApplication[RoomsMainView]):
+        def setup_session(self, main_view: RoomsMainView) -> None:
+            views.append(main_view)
+
+    with TestClient(RoomsApp(build_main_view=RoomsMainView).create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        rooms = _Places(client, view.rooms, _widget_id(view.rooms.renderer), [])
+
+        # the new record's cell, not the text as typed
+        assert rooms.texts(rooms.edit("1", "1", "21")) == ["Hall18False", "Kitchen21.02True"]
+        assert view.rooms.records[1] == Room("Kitchen", 21.0, 2, is_heated=True)
+        body = rooms.edit("1", "1", "warm")
+        assert rooms.texts(body) == ["Hall18False", "Kitchen21.02True"]
+        assert html.escape('Temperature: "warm" isn\'t a valid value') in body
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

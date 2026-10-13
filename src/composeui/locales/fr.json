@@ -8,5 +8,6 @@
   "OK": "OK",
   "Cancel": "Annuler",
   "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}.",
-  "Language": "Langue"
+  "Language": "Langue",
+  "{header}: \"{text}\" isn't a valid value": "{header} : « {text} » n'est pas une valeur valide"
 }
