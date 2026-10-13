@@ -13,7 +13,7 @@ from attrs import Factory
 
 from composeui.core.application import ModelApplication
 from composeui.core.model import RefusedError
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table, unique_name
 from composeui.core.view import ButtonView, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
@@ -297,15 +297,18 @@ class Tags(SqliteTable):
         with self.connection() as db:
             db.execute("UPDATE tag SET name = ? WHERE name = ?", (new_name, old_name))
 
-    def names(self) -> list[str]:
+    def add_unique(self, base: str) -> str:
         with self.connection() as db:
-            return [row["name"] for row in db.execute("SELECT name FROM tag ORDER BY name")]
+            name = unique_name(db, "tag", "name", base)
+            db.execute("INSERT INTO tag(name) VALUES (?)", (name,))
+        return name
+
+    def names(self) -> list[str]:
+        return self.fetch_column("SELECT name FROM tag ORDER BY name")
 
 
 class TagsModel(SqliteModel):
-    def __init__(self) -> None:
-        super().__init__()
-        self.tags = self.add_table(Tags)
+    tags = table(Tags)
 
 
 @define_view
@@ -401,3 +404,37 @@ def test_a_table_s_changed_signal_gives_a_view_s_method_the_model() -> None:
     app.model.tags.add("blue")
     assert app.main_view.table.rows == [["blue"], ["red"]]
     app.model.close()
+
+
+def test_a_unique_name_numbers_the_base_past_the_names_taken_whatever_their_case() -> None:
+    model = TagsModel()
+    model.tags.add("Tag")
+    model.tags.add("tag 2")
+
+    assert [model.tags.add_unique("Tag") for _ in range(2)] == ["Tag 3", "Tag 4"]
+    assert model.tags.add_unique("Label") == "Label"
+    model.close()
+
+
+class Notes(SqliteTable):
+    create = "CREATE TABLE note(text TEXT NOT NULL);"
+
+
+class NotedTagsModel(TagsModel):
+    """Its tables declared by its class and its base's."""
+
+    notes = table(Notes)
+
+
+def test_each_model_builds_the_tables_its_classes_declare() -> None:
+    model, other = NotedTagsModel(), NotedTagsModel()
+    model.tags.add("red")
+
+    assert (type(model.tags), type(model.notes)) == (Tags, Notes)
+    assert other.tags.names() == []
+    # a new study creates them again
+    model.new()
+    assert model.tags.names() == []
+    assert model.notes.fetch_column("SELECT count(*) FROM note") == [0]
+    model.close()
+    other.close()

@@ -15,7 +15,7 @@ import attrs
 from attrs import Factory
 
 from composeui.core.application import run
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
 from composeui.core.view import (
     ButtonVariant,
     ButtonView,
@@ -161,9 +161,7 @@ class Pipes(SqliteTable):
 
 
 class PipeCatalogueModel(SqliteModel):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pipes = self.add_table(Pipes)
+    pipes = table(Pipes)
 
 
 @define_view

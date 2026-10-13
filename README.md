@@ -367,7 +367,7 @@ database of the app's own, with its own schema and SQL, saved and opened with th
 ```python
 import attrs
 
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
 
 
 @attrs.define
@@ -388,9 +388,7 @@ class Runs(SqliteTable):
 
 
 class PipeModel(SqliteModel):
-    def __init__(self) -> None:
-        super().__init__()
-        self.runs = self.add_table(Runs)
+    runs = table(Runs)
 ```
 
 Give it to the app, `run(PipeMainView, build_model=PipeModel, setup_model=connect_model)`
@@ -406,8 +404,11 @@ the tables (`model.runs.add(...)`):
   written apart. Override it to change them (`pragmas = {**SqliteModel.pragmas,
   "cache_size": -64000}`).
 - **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
-  views' `cattrs` converter; `as_parameters(row)` gives an instance's fields as a query's
-  named parameters.
+  views' `cattrs` converter, and `fetch_column` gives a query's first column (a list of
+  names); `as_parameters(row)` gives an instance's fields as a query's named parameters.
+- **New names.** `unique_name(db, "run", "name", "Run")` gives "Run", or else "Run 2",
+  "Run 3"... the first name the column doesn't hold, whatever its case: a row the user
+  adds, then renames.
 - **Refusals.** A constraint failing refuses the transaction: `connection()` raises a
   `RefusedError` (`composeui.core.model`) with the table's message for it, from
   `refusals` (`{"thin_wall": "its wall must be thinner than its radius"}`, by a part of
