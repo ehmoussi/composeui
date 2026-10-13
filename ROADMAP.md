@@ -55,22 +55,7 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
    already lets one share the connection; an example should show the views updated
    through `call_on_main_thread`, not from the worker.
 
-## 3 — Less boilerplate for apps
-
-Found writing `examples/indoorenvironments.py` (~400 lines, most of it wiring rather than
-app logic); `pipeform.py` and `pipecatalogue.py` repeat the same patterns. In order of
-lines saved.
-
-1. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
-   ...), replacing the example's two near-identical `_create_unique_*_name`;
-   `fetch_column(sql, parameters) -> list[Any]` for a list of names; tables declared on
-   the model (`indoor_environments = table(IndoorEnvironments)`) instead of an `__init__`
-   calling `add_table`.
-
-With the record tables and the model-to-view wiring in, the example is down to ~370 lines;
-this would take it to about 300.
-
-## 4 — Adoption
+## 3 — Adoption
 
 1. **API reference docs** (mkdocs + mkdocstrings; the code is fully typed), with a widget
    catalog and a short architecture page (views, signals, renderers, the registry).
@@ -78,7 +63,7 @@ this would take it to about 300.
    plain `uvicorn` deployment note for the web.
 3. **`CHANGELOG.md`, semantic versions and a PyPI release.**
 
-## 5 — Later, when needed
+## 4 — Later, when needed
 
 - **Web: keep sessions across restarts.** Persist each session's `save_state` JSON (a
   directory, or Redis) and reload it when a cookie for an unknown session arrives; needs a

@@ -17,7 +17,7 @@ import threading
 import weakref
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, Union, cast
 
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
@@ -39,6 +39,26 @@ def as_parameters(row: object) -> dict[str, Any]:
     """Get an `attrs` instance's fields by name, as named parameters of a query."""
     parameters: dict[str, Any] = CONVERTER.unstructure(row)
     return parameters
+
+
+def _identifier(name: str) -> str:
+    """Quote a table's or a column's name for SQL, which can't take it as a parameter."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def unique_name(db: sqlite3.Connection, table: str, column: str, base: str) -> str:
+    """Get `base`, or else "`base` 2", "`base` 3"..., the first no row of `table` has.
+
+    Names differing only by case are the same name (a `COLLATE NOCASE` column's), e.g. to
+    add a "Room" whatever rooms there are already.
+    """
+    sql = f"SELECT {_identifier(column)} FROM {_identifier(table)}"  # noqa: S608 (quoted)
+    taken = {str(name).casefold() for (name,) in db.execute(sql) if name is not None}
+    name, number = base, 1
+    while name.casefold() in taken:
+        number += 1
+        name = f"{base} {number}"
+    return name
 
 
 class SqliteTable:
@@ -88,14 +108,37 @@ class SqliteTable:
             row = db.execute(sql, parameters).fetchone()
         return None if row is None else CONVERTER.structure(dict(row), cls)
 
+    def fetch_column(self, sql: str, parameters: Parameters = ()) -> list[Any]:
+        """Run the query `sql` and get its rows' first column, e.g. a list of names."""
+        with self.connection() as db:
+            return [row[0] for row in db.execute(sql, parameters)]
+
+
+class _DeclaredTable(Generic[SqliteTableT]):
+    """A table a `SqliteModel` class declares, which each model builds (see `table`)."""
+
+    def __init__(self, table_type: type[SqliteTableT]) -> None:
+        self.table_type = table_type
+
+
+def table(table_type: type[SqliteTableT]) -> SqliteTableT:
+    """Declare a table of a `SqliteModel`, in the model's class.
+
+    E.g. ``runs = table(Runs)``: each model builds its own, as an attribute of the same
+    name, before creating its database; in the order the classes declare them, a base
+    class's first.
+    """
+    # the model's attribute is the table: typed as one, as `attrs.Factory` is
+    return cast("SqliteTableT", _DeclaredTable(table_type))
+
 
 class SqliteModel(Model):
     """A model whose data is a SQLite database, saved and opened with the study.
 
-    Add the tables in `__init__` with `add_table`, and keep them as attributes for the
-    callbacks to reach (`model.runs.add(...)`). A study's database is created from the
-    tables' `create` scripts at `schema_version`; a study saved at an older version is
-    brought up to date by `migrations` when opened.
+    Declare the tables in the class, ``runs = table(Runs)``, for the callbacks to reach
+    (`model.runs.add(...)`), or add them in `__init__` with `add_table`. A study's
+    database is created from the tables' `create` scripts at `schema_version`; a study
+    saved at an older version is brought up to date by `migrations` when opened.
     """
 
     data_name: ClassVar[str | None] = "data.sqlite"
@@ -121,6 +164,18 @@ class SqliteModel(Model):
 
     def __init__(self) -> None:
         self._tables: list[SqliteTable] = []
+        declared: dict[str, _DeclaredTable[Any]] = {}
+        for cls in reversed(type(self).__mro__):
+            declared.update(
+                (name, value)
+                for name, value in vars(cls).items()
+                if isinstance(value, _DeclaredTable)
+            )
+        for name, declared_table in declared.items():
+            # before the database, which `_new_database` creates with them
+            built = declared_table.table_type(self)
+            self._tables.append(built)
+            setattr(self, name, built)
         # one connection for the model, which threads (a worker, web requests) take in turn
         self._lock = threading.RLock()
         self._depth = 0
