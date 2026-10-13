@@ -89,12 +89,14 @@ class HelloFormView(FormView):
 
 @define_view
 class HelloMainView(MainView):
+    app_title = "Hello ComposeUI"
+    extension = ".hello"
+
     form: HelloFormView = Factory(HelloFormView)
     summary: LabelView = Factory(LabelView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Hello ComposeUI", extension=".hello")
         form = self.form
         # one keystroke updates the status bar, the row's own log and the summary at once
         form.name.text_edited.connect(self._greet)

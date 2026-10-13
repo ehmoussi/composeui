@@ -38,8 +38,7 @@ class ColumnAndTableRow(HorizontalView):
 
 @define_view
 class VerticalMainView(MainView):
-    tables: ColumnAndTableRow = Factory(ColumnAndTableRow)
+    app_title = "One above the other"
+    extension = ".above"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="One above the other", extension=".above")
+    tables: ColumnAndTableRow = Factory(ColumnAndTableRow)

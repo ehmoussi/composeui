@@ -77,12 +77,10 @@ class DiscardDialog(DialogView):
 
 @define_view
 class TranslatedMainView(MainView):
+    app_title = "Shapes"
+    extension = ".shapes"
     translations_dir = Path(__file__).parent / "locales"
 
     shape: ShapeFormView = Factory(ShapeFormView)
     confirm_remove: RemoveDialog = Factory(RemoveDialog)
     confirm_discard: DiscardDialog = Factory(DiscardDialog)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Shapes", extension=".shapes")

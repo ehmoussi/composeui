@@ -83,6 +83,10 @@ class TranslatedText(str):  # noqa: SLOT000
     list (a table's headers) or a dict's keys (a choice's labels). Formatting it keeps the
     arguments, to format the next translation with them; other str methods return a plain
     str, which stays in its language.
+
+    Built from `text` alone (as `T`), it's the text as written, translated once a view
+    keeps it and the main view sets a language: text declared where no view can `tr` it,
+    e.g. a field's default or a class variable.
     """
 
     source: str
@@ -92,11 +96,11 @@ class TranslatedText(str):  # noqa: SLOT000
     def __new__(
         cls,
         text: str,
-        source: str,
+        source: str | None = None,
         arguments: tuple[tuple[Any, ...], dict[str, Any]] | None = None,
     ) -> Self:
         self = super().__new__(cls, text)
-        self.source = source
+        self.source = text if source is None else source
         self.arguments = arguments
         return self
 
@@ -117,6 +121,11 @@ class TranslatedText(str):  # noqa: SLOT000
         args = tuple(translate_again(arg, translate) for arg in args)
         kwargs = {key: translate_again(value, translate) for key, value in kwargs.items()}
         return TranslatedText(text.format(*args, **kwargs), self.source, (args, kwargs))
+
+
+#: text to translate, as written in the code, wherever it's declared:
+#: ``add: ButtonView = child(ButtonView, text=T("Add"))``
+T = TranslatedText
 
 
 def translate_again(value: Any, translate: Translate) -> Any:

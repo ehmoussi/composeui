@@ -10,12 +10,16 @@ import pytest
 from attrs import Factory
 
 from composeui.core.application import _add_reference_to_signals
-from composeui.core.translation import TranslatedText, load_catalog, no_translation, translator
+from composeui.core.translation import T, TranslatedText, load_catalog, no_translation, translator
 from composeui.core.view import (
+    ButtonView,
     GroupFormView,
     LabelRowComboboxView,
     MainView,
+    PageView,
+    Router,
     TableView,
+    child,
     define_view,
 )
 from tests.translated import Size, TranslatedMainView
@@ -181,12 +185,14 @@ def _palette_main_view(directory: Path) -> Any:
 
     @define_view
     class PaletteMainView(MainView):
+        app_title = T("Untitled")
+        extension = ".palette"
         translations_dir = directory
+
         palette: PaletteView = Factory(PaletteView)
 
         def __attrs_post_init__(self) -> None:
             super().__attrs_post_init__()
-            self._init_app_info(title=self.tr("Untitled"), extension=".palette")
             self.palette.color.value_changed.connect(self.show_color)
 
         def show_color(self, color: Optional[Color]) -> None:
@@ -261,3 +267,42 @@ def test_new_keeps_the_language_of_text_set_where_the_view_is_built(tmp_path: Pa
 
     assert main_view.palette.title == "Palette de couleurs"
     assert main_view.palette.color.values == {"Rouge": Color.RED, "Bleu": Color.BLUE}
+
+
+def test_text_declared_in_the_class_bodies_follows_the_language(tmp_path: Path) -> None:
+    catalog = {"Shapes": "Formes", "Shape": "Forme", "Draw": "Dessiner", "Gallery": "Galerie"}
+    (tmp_path / "fr.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+    @define_view
+    class GalleryPage(PageView):
+        route = "gallery"
+        page_title = T("Gallery")
+
+        shapes: TableView = child(TableView, headers=[T("Shape"), "#"])
+        draw: ButtonView = child(ButtonView, text=T("Draw"))
+
+    @define_view
+    class GalleryRouter(Router):
+        gallery: GalleryPage = Factory(GalleryPage)
+
+    @define_view
+    class GalleryMainView(MainView):
+        app_title = T("Shapes")
+        extension = ".shapes"
+        translations_dir = tmp_path
+
+        router: GalleryRouter = Factory(GalleryRouter)
+
+    main_view = GalleryMainView()
+    _add_reference_to_signals(main_view, None)
+    page = main_view.router.gallery
+
+    main_view.set_language("fr")
+
+    assert (main_view.title, page.title) == ("Formes", "Galerie")
+    assert (page.shapes.headers, page.draw.text) == (["Forme", "#"], "Dessiner")
+    # a new study's views start in the language too
+    main_view.file_menu.new.triggered.emit()
+    assert (page.shapes.headers, page.draw.text) == (["Forme", "#"], "Dessiner")
+    main_view.set_language("en")
+    assert (main_view.title, page.title, page.draw.text) == ("Shapes", "Gallery", "Draw")

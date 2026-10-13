@@ -49,9 +49,7 @@ class _UnroutedRouter(Router):
 
 @define_view
 class _SlashedPage(PageView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("a/b")
+    route = "a/b"
 
 
 @define_view

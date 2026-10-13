@@ -27,7 +27,9 @@ from composeui.core.view import (
     Menu,
     PageView,
     Router,
+    T,
     TableView,
+    child,
     define_view,
 )
 
@@ -226,26 +228,20 @@ class PipeFormView(FormView):
 
 @define_view
 class InputsPageView(PageView):
-    pipe_form: PipeFormView = Factory(PipeFormView)
+    route = "inputs"
+    page_title = T("Inputs")
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("inputs")
-        self.title = self.tr("Inputs")
+    pipe_form: PipeFormView = Factory(PipeFormView)
 
 
 @define_view
 class ResultsPageView(PageView):
+    route = "results"
+    page_title = T("Results")
     #: both pipes' dimensions side by side, read-only
-    summary: TableView = Factory(TableView)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("results")
-        self.title = self.tr("Results")
-        self.summary.headers = [
-            self.tr(header) for header in ("Pipe", "Radius", "Width", "Half Length")
-        ]
+    summary: TableView = child(
+        TableView, headers=[T("Pipe"), T("Radius"), T("Width"), T("Half Length")]
+    )
 
 
 @define_view
@@ -306,6 +302,8 @@ class ResetDimensionsDialog(DialogView):
 
 @define_view
 class PipeMainView(MainView):
+    app_title = T("Pipe Form")
+    extension = ".pipe"
     translations_dir = Path(__file__).parent / "locales" / "pipeform"
 
     pipe_menu: PipeMenu = Factory(PipeMenu)
@@ -316,7 +314,6 @@ class PipeMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title=self.tr("Pipe Form"), extension=".pipe")
         pipe_form = self.pages.inputs.pipe_form
         pipe_form.edge_type.value_changed.connect(self._display_message_status_bar)
         for pipe in (pipe_form.main_pipe, pipe_form.incident_pipe):

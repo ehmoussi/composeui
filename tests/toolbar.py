@@ -31,12 +31,14 @@ class EditToolBar(ToolBar):
 
 @define_view
 class ToolBarMainView(MainView):
+    app_title = "Toolbar"
+    extension = ".toolbar"
+
     toolbar: EditToolBar = Factory(EditToolBar)
     router: PagesRouter = Factory(PagesRouter)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Toolbar", extension=".toolbar")
         # the File menu's Open, from the toolbar
         self.toolbar.open_file.triggered.connect(self.file_menu.open_file.triggered.emit)
         self.toolbar.run.triggered.connect(self._run)

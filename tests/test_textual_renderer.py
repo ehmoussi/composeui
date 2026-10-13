@@ -384,13 +384,12 @@ async def test_menu_actions_become_key_bindings_shown_in_the_footer() -> None:
 
 @define_view
 class _WrapMainView(MainView):
+    app_title = "Wrap"
+    extension = ".wrap"
+
     wrap: ActionView = Factory(
         lambda: ActionView(text="Wrap", shortcut="Ctrl+e", is_checkable=True)
     )
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Wrap", extension=".wrap")
 
 
 @pytest.mark.asyncio

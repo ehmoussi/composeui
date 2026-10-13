@@ -44,11 +44,10 @@ class _StrRadioGroupView(RadioGroupView[str]):
 
 @define_view
 class _RadioMainView(MainView):
-    radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
+    app_title = "Radio"
+    extension = ".radio"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Radio", extension=".radio")
+    radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
 
 
 def test_is_omitted_type_detects_signal_renderer_and_container() -> None:
@@ -248,13 +247,15 @@ def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
 
 @define_view
 class _StudyMainView(MainView):
+    app_title = "Study"
+    extension = ".study"
+
     radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
     note: InputView = Factory(InputView)
     heading: LabelView = Factory(LabelView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Study", extension=".study")
         # set up after construction, not attrs defaults: a reset must restore these too
         self.radio.value = "a"
         self.note.text = "initial note"

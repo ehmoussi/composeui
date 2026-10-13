@@ -310,12 +310,14 @@ class TagsModel(SqliteModel):
 
 @define_view
 class TagsMainView(MainView):
+    app_title = "Tags"
+    extension = ".tags"
+
     add: ButtonView = Factory(ButtonView)
     table: TableView = Factory(TableView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Tags", extension=".tags")
         self.status_bar.timeout = 0
         self.table.editable_columns = [0]
         self.add.clicked.connect(self._add)

@@ -36,13 +36,15 @@ class ClearDialog(DialogView):
 
 @define_view
 class DialogsMainView(MainView):
+    app_title = "Dialogs"
+    extension = ".dialogs"
+
     edit_menu: EditMenu = Factory(EditMenu)
     name: LabelView = Factory(LabelView)
     confirm_clear: ClearDialog = Factory(ClearDialog)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Dialogs", extension=".dialogs")
         self.name.text = "Ada"
         self.edit_menu.clear.triggered.connect(self.confirm_clear.open)
         self.confirm_clear.accepted.connect(self._clear)

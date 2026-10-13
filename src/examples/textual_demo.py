@@ -57,11 +57,13 @@ class DemoFormView(GroupFormView):
 
 @define_view
 class TextualDemoMainView(MainView):
+    app_title = "Textual Demo"
+    extension = ".demo"
+
     form: DemoFormView = Factory(DemoFormView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Textual Demo", extension=".demo")
         self.form.shape.value_changed.connect(self._display_shape_status)
 
     def _display_shape_status(self, value: str | None) -> None:

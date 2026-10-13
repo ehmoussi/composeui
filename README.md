@@ -63,11 +63,10 @@ class GreetingInputView(InputView):
 
 @define_view
 class HelloMainView(MainView):
-    greeting: GreetingInputView = Factory(GreetingInputView)
+    app_title = "Hello ComposeUI"
+    extension = ".hello"  # of its study files
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Hello ComposeUI", extension=".hello")
+    greeting: GreetingInputView = Factory(GreetingInputView)
 
 
 class HelloApp(QtApplication[HelloMainView]):
@@ -166,23 +165,21 @@ tells the main action from the others and from one destroying something.
 ## Pages
 
 A `Router` shows one page at a time and adds a toolbar with an entry per page. Each page
-is a `PageView` with a route, a unique name made of letters, digits, `_` and `-`. Its view
-fields are its content, laid out in a column:
+is a `PageView` with a `route`, a unique name made of letters, digits, `_` and `-`, and a
+`page_title`, its toolbar entry. Its view fields are its content, laid out in a column:
 
 ```python
 from attrs import Factory
 
-from composeui.core.view import MainView, PageView, Router, TableView, define_view
+from composeui.core.view import MainView, PageView, Router, TableView, child, define_view
 
 
 @define_view
 class ResultsPage(PageView):
-    summary: TableView = Factory(TableView)
+    route = "results"
+    page_title = "Results"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("results")
-        self.title = "Results"  # its toolbar entry
+    summary: TableView = child(TableView, headers=["Pipe", "Radius"])
 
 
 @define_view
@@ -286,26 +283,29 @@ Write the app's text in one language in the code and translate it from JSON cata
 {"Radius": "Rayon", "Main Pipe": "Conduite principale"}
 ```
 
-Set the text a view shows through `tr`, wherever you set it, and point the main view at the
-catalogs' directory:
+Declare the text a view shows with `T` where the view's class declares it, or set it
+through a view's `tr` once the view is built, and point the main view at the catalogs'
+directory:
 
 ```python
 @define_view
 class PipeDimensionView(GroupFormView):
-    radius: DimensionInputView = Factory(DimensionInputView)
+    # `child` builds a view field's view with these fields, one per view
+    radius: DimensionInputView = child(DimensionInputView, label=T("Radius"))
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Main Pipe")
-        self.radius.label = self.tr("Radius")
 
 
 @define_view
 class PipeMainView(MainView):
+    app_title = T("Pipe Form")
     translations_dir = Path(__file__).parent / "locales"
 ```
 
-`tr` returns the translation as a `str` that remembers the text as written. When
+`tr` returns the translation as a `str` that remembers the text as written; `T` is the
+same, translated once a view keeps it and the main view sets a language. When
 `main_view.set_language("fr")` (or `--language fr` on the command line) changes the
 language, every view field keeping such text is translated again: a label or a title, a
 status or validator message, a table's headers and rows, a choice's labels (the keys of
@@ -322,9 +322,9 @@ text no catalog translates shows as written.
   once as the view is built, then on each language change, once the text is translated.
 - A choice's value stays selected when its labels change, and a study saves it by a key no
   language changes (an enum member's name, a string value itself, else its position).
-- The main view's `title`, set once as the app starts (`_init_app_info`), follows a
-  language too when set with `tr`: the window's title, the app's in Textual, the page's
-  header and `<title>` on the web.
+- The main view's `title`, its class's `app_title`, follows a language too when declared
+  with `T`: the window's title, the app's in Textual, the page's header and `<title>` on
+  the web. So does a page's `page_title`.
 - ComposeUI translates its own text (the File menu, a dialog's OK and Cancel) from its own
   catalogs; the app's catalog wins over them.
 
@@ -340,9 +340,9 @@ uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView
 
 It fails on text a catalog misses (it would show as written) and on a translation whose
 `{placeholders}` differ from the text's (formatting it would fail), and lists the entries
-no code uses any more. The text is the literals passed to `tr` in the views' source, plus
-the text the views translate as they are built, which finds the text `tr` gets from a
-variable, e.g. an enum's values.
+no code uses any more. The text is the literals passed to `tr` or `T` in the views'
+source, plus the text the views translate as they are built, which finds the text `tr`
+gets from a variable, e.g. an enum's values.
 
 To start or complete a catalog, `--write fr` first adds the text `fr.json` misses to it,
 translated as `""` for a translator to fill (it creates the file if needed):
