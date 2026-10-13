@@ -11,7 +11,6 @@ from examples.pipecatalogue import (
     Material,
     PipeCatalogueMainView,
     PipeCatalogueModel,
-    connect_model,
 )
 
 if TYPE_CHECKING:
@@ -26,7 +25,7 @@ def app() -> Iterator[App]:
     app = App(
         build_main_view=PipeCatalogueMainView,
         build_model=PipeCatalogueModel,
-        setup_model=connect_model,
+        setup_model=PipeCatalogueMainView.connect_model,
     )
     app.main_view.status_bar.timeout = 0
     yield app
@@ -112,7 +111,7 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
     other = App(
         build_main_view=PipeCatalogueMainView,
         build_model=PipeCatalogueModel,
-        setup_model=connect_model,
+        setup_model=PipeCatalogueMainView.connect_model,
     )
 
     other.main_view.file_view.filepath = path

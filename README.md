@@ -391,8 +391,8 @@ class PipeModel(SqliteModel):
     runs = table(Runs)
 ```
 
-Give it to the app, `run(PipeMainView, build_model=PipeModel, setup_model=connect_model)`
-(or a `ModelApplication`: `QtModelApplication`, `TextualModelApplication`,
+Give it to the app, `run(PipeMainView, build_model=PipeModel,
+setup_model=PipeMainView.connect_model)` (or a `ModelApplication`: `QtModelApplication`, `TextualModelApplication`,
 `WebModelApplication`, taking the same arguments), and callbacks asking for `model` reach
 the tables (`model.runs.add(...)`):
 
@@ -419,9 +419,14 @@ the tables (`model.runs.add(...)`):
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
   rows through it, and after New and Open once the views are loaded too, so the views
   showing the rows can follow: connect it in `setup_model(main_view, model)`, which the
-  app calls once both are built, and on the web for each session. A view's method asking
-  for `model` is given it, and `now=True` shows the rows right away:
-  `model.runs.changed.connect(main_view.show_runs, now=True)`.
+  app calls once both are built, and on the web for each session. A method of the main
+  view keeps it beside the views it refreshes; a view's method asking for `model` is
+  given it, and `now=True` shows the rows right away:
+
+  ```python
+  def connect_model(self, model: PipeModel) -> None:  # PipeMainView's
+      model.runs.changed.connect(self.show_runs, now=True)
+  ```
 - **Studies.** New starts an empty database, and Save and Open (and `-f`) save and open
   the views' state and the database together, as a zip archive under the app's
   `extension`. The model works on a scratch copy in a temporary file, so the user's file
