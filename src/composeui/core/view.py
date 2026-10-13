@@ -1041,6 +1041,32 @@ class ButtonView(View):
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
 
+@define_view
+class ProgressBarView(View):
+    """How far a long task has gone, e.g. a computation working through its cases."""
+
+    _renderer_key = "progress_bar"
+
+    def _check_maximum(self, _attribute: "attrs.Attribute[Any]", maximum: Optional[int]) -> None:
+        if maximum is not None and maximum <= 0:
+            msg = f"Cannot set {type(self).__name__}.maximum to {maximum}: it must be positive."
+            raise ValueError(msg)
+
+    #: steps done, from 0 to `maximum`; shown clamped to that range (see `clamp`)
+    value: int = attrs.field(default=0)
+    #: steps the task takes; None while unknown, the bar then only showing that it runs
+    maximum: Optional[int] = attrs.field(default=100, validator=[_check_maximum])
+
+    @staticmethod
+    def clamp(value: int, maximum: Optional[int]) -> int:
+        """`value` within a bar's range of `maximum` steps, as it shows: a count may overshoot.
+
+        Takes both, as a renderer refreshes one before the view holds the new value.
+        """
+        value = max(0, value)
+        return value if maximum is None else min(value, maximum)
+
+
 class SelectionMode(enum.Enum):
     """How many of a table's rows the user can select."""
 

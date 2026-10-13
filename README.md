@@ -149,6 +149,8 @@ an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `Dialog
 for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
 under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, danger)
 tells the main action from the others and from one destroying something.
+`ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
+a bar that only shows the task runs while `maximum` is `None`.
 
 ## Pages
 

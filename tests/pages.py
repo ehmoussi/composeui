@@ -9,6 +9,7 @@ from composeui.core.view import (
     MainView,
     PageView,
     PageWidth,
+    ProgressBarView,
     Router,
     define_view,
 )
@@ -34,6 +35,7 @@ class ResultsPage(PageView):
     width = PageWidth.WIDE
 
     total: LabelView = Factory(LabelView)
+    progress: ProgressBarView = Factory(ProgressBarView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()

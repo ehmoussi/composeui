@@ -18,7 +18,7 @@ from attrs import Factory
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Label
+from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Label, ProgressBar
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -635,6 +635,33 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         await pilot.pause()
         await pilot.pause()
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+
+@pytest.mark.asyncio
+async def test_the_progress_bar_follows_its_view() -> None:
+    view = PagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    progress = view.router.results.progress
+    assert isinstance(progress.renderer, TextualWidgetRenderer)
+    bar = progress.renderer.widget
+    assert isinstance(bar, ProgressBar)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert (bar.progress, bar.total) == (0, 100)
+        progress.value = 40
+        progress.maximum = 200
+        await pilot.pause()
+        assert (bar.progress, bar.total) == (40, 200)
+        progress.value = 250
+        await pilot.pause()
+        assert bar.progress == 200  # full, not past its end
+        progress.maximum = None
+        await pilot.pause()
+        assert bar.percentage is None  # Textual's bar for a task of unknown length
 
 
 @pytest.mark.asyncio

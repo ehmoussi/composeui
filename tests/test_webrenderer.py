@@ -1885,6 +1885,32 @@ def test_an_icon_is_served_from_its_content_and_only_when_a_view_names_it(
     assert toolbar_client.get(run_url).status_code == 404
 
 
+def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    page = pages_client.get("/results").text
+    (main_view,) = pages_views
+    progress = main_view.router.results.progress
+    bar_id = _widget_id(progress.renderer)
+    bar = _element(page, bar_id)
+    assert (bar.tag, bar.attributes["value"], bar.attributes["max"]) == ("progress", "0", "100")
+    submit = main_view.router.inputs.submit
+
+    def advance() -> None:
+        progress.value = 250
+
+    submit.clicked.connect(advance)
+    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    bar = _swapped(response.text, bar_id)
+    assert (bar.attributes["value"], bar.attributes["max"]) == ("100", "100")  # clamped
+
+    progress.maximum = None
+    bar = _element(pages_client.get(f"/widget/{bar_id}").text, bar_id)
+    # no value: the browser's own bar for a task of unknown length
+    assert "value" not in bar.attributes
+    assert "max" not in bar.attributes
+
+
 def test_clicking_the_button_swaps_in_what_its_view_changed(
     pages_views: list[PagesMainView], pages_client: TestClient
 ) -> None:

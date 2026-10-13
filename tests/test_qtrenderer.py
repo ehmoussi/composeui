@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QRadioButton,
     QStatusBar,
@@ -581,6 +582,29 @@ def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
     assert not wrap.isChecked()
     view.toolbar.is_enabled = False
     assert not toolbar.widgetForAction(run).isEnabled()
+
+
+def test_the_progress_bar_follows_its_view(qtbot: QtBot) -> None:
+    view = PagesMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    progress = view.router.results.progress
+    assert isinstance(progress.renderer, QtWidgetRenderer)
+    bar = progress.renderer.qt_object
+    assert isinstance(bar, QProgressBar)
+    assert (bar.value(), bar.maximum()) == (0, 100)
+
+    progress.value = 40
+    assert bar.value() == 40
+    progress.maximum = 200
+    assert (bar.value(), bar.maximum()) == (40, 200)
+    progress.value = 250  # Qt ignores a value out of range: the bar would stay at 40
+    assert bar.value() == 200
+    progress.maximum = None
+    assert (bar.minimum(), bar.maximum()) == (0, 0)  # Qt's busy bar
 
 
 def test_clicking_the_button_runs_what_its_view_connects(qtbot: QtBot) -> None:

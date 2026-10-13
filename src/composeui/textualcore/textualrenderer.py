@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
-from textual.widgets import ContentSwitcher, Footer, Label, Static
+from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
@@ -38,6 +38,7 @@ from composeui.core.view import (
     Menu,
     OpenFileAction,
     PageView,
+    ProgressBarView,
     Router,
     SaveAction,
     SaveAsAction,
@@ -669,6 +670,39 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
     @staticmethod
     def _update_state(view: ButtonViewLike, rendered_object: ComposeButton) -> None:
         pass  # a button's text isn't user-editable; nothing to read back
+
+
+class ProgressBarViewLike(ViewLike, Protocol):
+    value: int
+    maximum: int | None
+
+
+class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, ProgressBar]):
+    def __init__(self, view: ProgressBarViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"value": self._refresh_value, "maximum": self._refresh_maximum}
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            # no time left: neither Qt nor the web estimates one
+            self._rendered_object = ProgressBar(show_eta=False)
+
+    @staticmethod
+    def _refresh_value(view: ProgressBarViewLike, rendered_object: ProgressBar, value: int) -> None:
+        rendered_object.update(progress=ProgressBarView.clamp(value, view.maximum))
+
+    @staticmethod
+    def _refresh_maximum(
+        view: ProgressBarViewLike, rendered_object: ProgressBar, value: int | None
+    ) -> None:
+        # no total is Textual's own bar for a task of unknown length
+        rendered_object.update(total=value, progress=ProgressBarView.clamp(view.value, value))
+
+    @staticmethod
+    def _update_state(view: ProgressBarViewLike, rendered_object: ProgressBar) -> None:
+        pass  # the user can't move a progress bar; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1424,6 +1458,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "main": TextualMainRenderer,
     "menu": TextualMenuRenderer,
     "page": TextualPageRenderer,
+    "progress_bar": TextualProgressBarRenderer,
     "radio_group": TextualRadioGroupRenderer,
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
