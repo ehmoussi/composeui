@@ -336,14 +336,17 @@ class PipeCatalogueMainView(MainView):
         count = model.pipes.remove(self.pages.catalogue.shown.shown())
         self.status_bar.show_message(f"Removed {count} pipe{'' if count == 1 else 's'}")
 
-
-def connect_model(main_view: PipeCatalogueMainView, model: PipeCatalogueModel) -> None:
-    """Keep the catalogue listing the database's pipes, whatever changes them."""
-    model.pipes.changed.connect(main_view.show_pipes, now=True)
+    def connect_model(self, model: PipeCatalogueModel) -> None:
+        """Keep the catalogue listing the database's pipes, whatever changes them."""
+        model.pipes.changed.connect(self.show_pipes, now=True)
 
 
 def main() -> None:
-    run(PipeCatalogueMainView, build_model=PipeCatalogueModel, setup_model=connect_model)
+    run(
+        PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=PipeCatalogueMainView.connect_model,
+    )
 
 
 if __name__ == "__main__":
