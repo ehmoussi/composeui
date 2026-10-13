@@ -32,11 +32,10 @@ class TablesRow(HorizontalView):
 
 @define_view
 class HorizontalMainView(MainView):
-    tables: TablesRow = Factory(TablesRow)
+    app_title = "Side by side"
+    extension = ".side"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Side by side", extension=".side")
+    tables: TablesRow = Factory(TablesRow)
 
 
 @define_view
@@ -64,9 +63,8 @@ class EndButtons(StartButtons):
 
 @define_view
 class ButtonsMainView(MainView):
+    app_title = "Buttons"
+    extension = ".buttons"
+
     start: StartButtons = Factory(StartButtons)
     end: EndButtons = Factory(EndButtons)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Buttons", extension=".buttons")

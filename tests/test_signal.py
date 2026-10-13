@@ -9,9 +9,8 @@ from composeui.core.view import MainView, StatusBar, View, define_view
 
 @define_view
 class _MainView(MainView):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Signals", extension=".signals")
+    app_title = "Signals"
+    extension = ".signals"
 
 
 class _Recorder:

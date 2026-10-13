@@ -16,26 +16,27 @@ from composeui.core.view import (
 
 @define_view
 class InputsPage(PageView):
+    route = "inputs"
+    page_title = "Inputs"
+
     name: InputView = Factory(InputView)
     submit: ButtonView = Factory(ButtonView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_route("inputs")
-        self.title = "Inputs"
         self.submit.text = "Submit"
 
 
 @define_view
 class ResultsPage(PageView):
+    route = "results"
+    page_title = "Results"
     width = PageWidth.WIDE
 
     total: LabelView = Factory(LabelView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_route("results")
-        self.title = "Results"
         self.total.text = "Total: 0"
 
 
@@ -47,11 +48,13 @@ class PagesRouter(Router):
 
 @define_view
 class PagesMainView(MainView):
+    app_title = "Pages"
+    extension = ".pages"
+
     router: PagesRouter = Factory(PagesRouter)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Pages", extension=".pages")
         self.router.inputs.submit.clicked.connect(self._submit)
 
     def _submit(self) -> None:
@@ -62,8 +65,7 @@ class PagesMainView(MainView):
 class WidePageMainView(MainView):
     """A wide page right in the window, with no router."""
 
-    results: ResultsPage = Factory(ResultsPage)
+    app_title = "Wide page"
+    extension = ".wide"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Wide page", extension=".wide")
+    results: ResultsPage = Factory(ResultsPage)

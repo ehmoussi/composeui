@@ -434,6 +434,9 @@ class _ShapeRowView(LabelRowRadioGroupView[_Shape]):
 
 @define_view
 class _RowsMainView(MainView):
+    app_title = "Rows"
+    extension = ".rows"
+
     name: _NameRowView = Factory(_NameRowView)
     length: LabelRowFloatInputView = Factory(LabelRowFloatInputView)
     note: LabelView = Factory(LabelView)
@@ -443,7 +446,6 @@ class _RowsMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Rows", extension=".rows")
         self.length.label = "Length"
         self.length.value = 20.0
 
@@ -1712,15 +1714,13 @@ def test_each_page_has_its_own_address(
     assert main_view.router.current_route == "results"
 
 
-@pytest.mark.parametrize("route", sorted(RESERVED_ROUTES))
+@pytest.mark.parametrize("reserved", sorted(RESERVED_ROUTES))
 def test_a_page_on_an_address_the_backend_uses_stops_the_app_before_serving(
-    route: str,
+    reserved: str,
 ) -> None:
     @define_view
     class Page(PageView):
-        def __attrs_post_init__(self) -> None:
-            super().__attrs_post_init__()
-            self._init_route(route)
+        route = reserved
 
     @define_view
     class Pages(Router):
@@ -1728,13 +1728,12 @@ def test_a_page_on_an_address_the_backend_uses_stops_the_app_before_serving(
 
     @define_view
     class ReservedMainView(MainView):
+        app_title = "Reserved"
+        extension = ".reserved"
+
         pages: Pages = Factory(Pages)
 
-        def __attrs_post_init__(self) -> None:
-            super().__attrs_post_init__()
-            self._init_app_info(title="Reserved", extension=".reserved")
-
-    message = re.escape(f"the routes [{route!r}]: rename them")
+    message = re.escape(f"the routes [{reserved!r}]: rename them")
     with pytest.raises(ValueError, match=message):
         WebApplication(build_main_view=ReservedMainView).create_starlette_app()
     with pytest.raises(ValueError, match=message):  # rendered without the app
@@ -1918,9 +1917,7 @@ def test_clicking_the_button_swaps_in_what_its_view_changed(
 
 @define_view
 class _StatePage(InputsPage):
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("state")
+    route = "state"
 
 
 @define_view
@@ -1930,11 +1927,10 @@ class _StateRouter(Router):
 
 @define_view
 class _StateMainView(MainView):
-    router: _StateRouter = Factory(_StateRouter)
+    app_title = "State"
+    extension = ".state"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="State", extension=".state")
+    router: _StateRouter = Factory(_StateRouter)
 
 
 def test_a_route_cannot_take_an_address_of_the_backend() -> None:
@@ -2037,11 +2033,9 @@ def test_a_disabled_dialog_cannot_be_answered(
 
 @define_view
 class _NotePage(PageView):
-    note: DialogView = Factory(DialogView)
+    route = "note"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("note")
+    note: DialogView = Factory(DialogView)
 
 
 @define_view
@@ -2052,11 +2046,10 @@ class _NotePages(Router):
 
 @define_view
 class _NoteMainView(MainView):
-    pages: _NotePages = Factory(_NotePages)
+    app_title = "Notes"
+    extension = ".notes"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Notes", extension=".notes")
+    pages: _NotePages = Factory(_NotePages)
 
 
 @pytest.fixture
@@ -2473,12 +2466,10 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
 
 @define_view
 class _LonePageMainView(MainView):
+    app_title = "Lone page"
+    extension = ".lone"
     #: outside a router: no toolbar shows its entry
     page: InputsPage = Factory(InputsPage)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_app_info(title="Lone page", extension=".lone")
 
 
 def test_a_page_outside_a_router_swaps_nothing_for_its_entry() -> None:

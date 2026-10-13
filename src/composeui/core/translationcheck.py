@@ -8,10 +8,10 @@ Run it on the app's main view; it fails on text a catalog misses or on a transla
 With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated as "" for a
 translator to fill; until then, the text shows as written.
 
-The text is found two ways: the string literals passed to ``tr`` (or set in a view's
-``_default_texts`` or a ``SqliteTable``'s ``refusals``) in the source of every view of the
-main view, and the text the views translate as they show it, which finds text ``tr`` gets
-from a variable, e.g. an enum's. A table's refusals are found only in a module of a view.
+The text is found two ways: the string literals passed to ``tr`` or ``T`` (or set in a
+``SqliteTable``'s ``refusals``) in the source of every view of the main view, and the text
+the views translate as they show it, which finds text ``tr`` gets from a variable, e.g. an
+enum's. A table's refusals are found only in a module of a view.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class CatalogReport:
 
 
 def find_texts(paths: Iterable[Path]) -> set[str]:
-    """Find the text the code in `paths` translates: ``tr`` literals, `_TEXT_DICTS`."""
+    """Find the text the code in `paths` translates: `_TEXT_CALLS` literals, `_TEXT_DICTS`."""
     texts: set[str] = set()
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -78,16 +78,18 @@ def find_texts(paths: Iterable[Path]) -> set[str]:
     return texts
 
 
-#: class variables whose dict values are text to translate: a view's starting text, and a
-#: `SqliteTable`'s refusals (`View.refusing` translates them)
-_TEXT_DICTS = ("_default_texts", "refusals")
+#: what translates the text it's called with: a view's `tr`, and `T` declaring it
+_TEXT_CALLS = ("tr", "T")
+#: class variables whose dict values are text to translate: a `SqliteTable`'s refusals
+#: (`View.refusing` translates them)
+_TEXT_DICTS = ("refusals",)
 
 
 def _literal_texts(node: ast.AST) -> Iterator[str]:
     if isinstance(node, ast.Call) and node.args:
         func = node.func
         name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-        if name == "tr":
+        if name in _TEXT_CALLS:
             yield from _strings([node.args[0]])
     elif isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict):
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]

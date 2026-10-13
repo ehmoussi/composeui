@@ -31,6 +31,7 @@ from composeui.core.view import (
     PageView,
     Router,
     TableView,
+    child,
     define_view,
 )
 
@@ -236,12 +237,9 @@ class MaterialFilterRowView(LabelRowComboboxView[str]):
 @define_view
 class ShownFormView(FormView):
     material: MaterialFilterRowView = Factory(MaterialFilterRowView)
-    min_radius: DimensionRowView = Factory(DimensionRowView)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.min_radius.label = "Outer radius at least (mm)"
-        self.min_radius.placeholder = "Any"
+    min_radius: DimensionRowView = child(
+        DimensionRowView, label="Outer radius at least (mm)", placeholder="Any"
+    )
 
     def shown(self) -> Shown:
         material = self.material.value
@@ -253,37 +251,27 @@ class ShownFormView(FormView):
 
 @define_view
 class CataloguePageView(PageView):
-    shown: ShownFormView = Factory(ShownFormView)
-    pipes: TableView = Factory(TableView)
-    total: LabelView = Factory(LabelView)
-    remove_shown: ButtonView = Factory(ButtonView)
+    route = "catalogue"
+    page_title = "Catalogue"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("catalogue")
-        self.title = "Catalogue"
-        self.remove_shown.text = "Remove the Shown Pipes"
-        self.remove_shown.variant = ButtonVariant.DANGER
-        self.pipes.headers = [
-            "Name",
-            "Material",
-            "Outer radius (mm)",
-            "Wall (mm)",
-            "Length (m)",
-            "Mass (kg)",
-        ]
+    shown: ShownFormView = Factory(ShownFormView)
+    pipes: TableView = child(
+        TableView,
+        headers=["Name", "Material", "Outer radius (mm)", "Wall (mm)", "Length (m)", "Mass (kg)"],
+    )
+    total: LabelView = Factory(LabelView)
+    remove_shown: ButtonView = child(
+        ButtonView, text="Remove the Shown Pipes", variant=ButtonVariant.DANGER
+    )
 
 
 @define_view
 class AddPageView(PageView):
-    pipe: PipeFormView = Factory(PipeFormView)
-    add_pipe: ButtonView = Factory(ButtonView)
+    route = "add"
+    page_title = "Add"
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self._init_route("add")
-        self.title = "Add"
-        self.add_pipe.text = "Add the Pipe"
+    pipe: PipeFormView = Factory(PipeFormView)
+    add_pipe: ButtonView = child(ButtonView, text="Add the Pipe")
 
 
 @define_view
@@ -305,12 +293,14 @@ class RemoveShownDialog(DialogView):
 
 @define_view
 class PipeCatalogueMainView(MainView):
+    app_title = "Pipe Catalogue"
+    extension = ".pipes"
+
     pages: CataloguePagesView = Factory(CataloguePagesView)
     confirm_remove: RemoveShownDialog = Factory(RemoveShownDialog)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self._init_app_info(title="Pipe Catalogue", extension=".pipes")
         # the callbacks get the model through their `model` parameter
         self.pages.add.add_pipe.clicked.connect(self._add_pipe)
         # removing can't be undone: only once the user confirms

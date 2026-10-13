@@ -2,6 +2,7 @@
 
 import contextlib
 import contextvars
+import copy
 import enum
 import functools
 import json
@@ -29,7 +30,7 @@ from typing import (
 import attrs
 import cattrs
 from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
-from typing_extensions import Unpack, dataclass_transform
+from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
 from composeui.core.model import InvalidStateError, RefusedError
@@ -38,6 +39,7 @@ from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
     CATALOGS_DIR,
+    T,
     Translate,
     TranslatedText,
     no_translation,
@@ -253,16 +255,18 @@ def _retranslate(view: "View", translate: Translate) -> None:
         view.validate()
 
 
-T = TypeVar("T", bound=type)
+_ClassT = TypeVar("_ClassT", bound=type)
 
 
 @overload
-def define_view(cls: T) -> T: ...
+def define_view(cls: _ClassT) -> _ClassT: ...
 @overload
-def define_view(cls: None = None, **kwargs: Any) -> Callable[[T], T]: ...
+def define_view(cls: None = None, **kwargs: Any) -> Callable[[_ClassT], _ClassT]: ...
 @dataclass_transform(kw_only_default=True, field_specifiers=(attrs.field,))
-def define_view(cls: Union[T, None] = None, **kwargs: Any) -> Union[T, Callable[[T], T]]:
-    def wrap(cls: T) -> T:
+def define_view(
+    cls: Union[_ClassT, None] = None, **kwargs: Any
+) -> Union[_ClassT, Callable[[_ClassT], _ClassT]]:
+    def wrap(cls: _ClassT) -> _ClassT:
         if "on_setattr" in kwargs:
             if isinstance(kwargs["on_setattr"], Sequence):
                 kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
@@ -281,6 +285,23 @@ def define_view(cls: Union[T, None] = None, **kwargs: Any) -> Union[T, Callable[
     return wrap(cls)
 
 
+_P = ParamSpec("_P")
+_ViewT = TypeVar("_ViewT", bound="View")
+
+
+def child(cls: Callable[_P, _ViewT], /, *args: _P.args, **kwargs: _P.kwargs) -> _ViewT:
+    """Get a view field's default: a `cls` view built with these arguments, one per view.
+
+    E.g. ``add: ButtonView = child(ButtonView, text=T("Add"))``. The arguments are copied
+    for each view built, so a list among them is never shared.
+    """
+
+    def build() -> _ViewT:
+        return cls(*copy.deepcopy(args), **copy.deepcopy(kwargs))
+
+    return cast("_ViewT", attrs.Factory(build))
+
+
 @define_view
 class View:
     #: key of this view's renderer in the backend's ``RENDERERS`` mapping
@@ -288,8 +309,6 @@ class View:
     _renderer_key: ClassVar[Optional[str]] = None
     #: its share of a `HorizontalView`'s width when its field sets no `STRETCH`
     default_stretch: ClassVar[int] = 1
-    #: text ComposeUI's views start with, by field, as written in the code, set with `tr`
-    _default_texts: ClassVar[dict[str, str]] = {}
 
     # properties
     is_visible: bool = attrs.field(default=True)
@@ -312,8 +331,6 @@ class View:
             signal = getattr(self, f.name, None)
             if isinstance(signal, Signal):
                 signal.set_name(f"{type(self).__name__}.{f.name}")
-        for name, text in self._default_texts.items():
-            setattr(self, name, self.tr(text))
         self.retranslate()
 
     def tr(self, text: str) -> TranslatedText:
@@ -479,14 +496,13 @@ class DialogView(View):
     """
 
     _renderer_key = "dialog"
-    _default_texts: ClassVar[dict[str, str]] = {"accept_text": "OK", "reject_text": "Cancel"}
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
     kind: DialogKind = attrs.field(default=DialogKind.MESSAGE)
-    accept_text: str = attrs.field(default="OK", metadata={UI_TEXT: True})
+    accept_text: str = attrs.field(default=T("OK"), metadata={UI_TEXT: True})
     #: the rejecting button's text; a message has no such button
-    reject_text: str = attrs.field(default="Cancel", metadata={UI_TEXT: True})
+    reject_text: str = attrs.field(default=T("Cancel"), metadata={UI_TEXT: True})
 
     accepted: SignalNoArgs = attrs.Factory(SignalNoArgs)
     rejected: SignalNoArgs = attrs.Factory(SignalNoArgs)
@@ -555,7 +571,7 @@ class ToolBar(View):
 
 @define_view
 class NewAction(ActionView):
-    _default_texts: ClassVar[dict[str, str]] = {"text": "New"}
+    text: str = attrs.field(default=T("New"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -571,7 +587,7 @@ class NewAction(ActionView):
 
 @define_view
 class OpenFileAction(ActionView):
-    _default_texts: ClassVar[dict[str, str]] = {"text": "Open"}
+    text: str = attrs.field(default=T("Open"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -586,7 +602,7 @@ class OpenFileAction(ActionView):
 
 @define_view
 class SaveAction(ActionView):
-    _default_texts: ClassVar[dict[str, str]] = {"text": "Save"}
+    text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -601,7 +617,7 @@ class SaveAction(ActionView):
 
 @define_view
 class SaveAsAction(ActionView):
-    _default_texts: ClassVar[dict[str, str]] = {"text": "Save As"}
+    text: str = attrs.field(default=T("Save As"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -616,7 +632,7 @@ class SaveAsAction(ActionView):
 
 @define_view
 class ExitAppAction(ActionView):
-    _default_texts: ClassVar[dict[str, str]] = {"text": "Exit"}
+    text: str = attrs.field(default=T("Exit"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -639,7 +655,7 @@ class FileMenu(Menu):
     separator_exit: SeparatorAction = attrs.Factory(SeparatorAction)
     exit_app: ExitAppAction = attrs.Factory(ExitAppAction)
 
-    _default_texts: ClassVar[dict[str, str]] = {"title": "File"}
+    title: str = attrs.field(default=T("File"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -670,8 +686,16 @@ class FileMenu(Menu):
 class MainView(View):
     _renderer_key = "main"
 
-    title: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
-    extension: str = attrs.field(init=False, on_setattr=attrs.setters.frozen)
+    #: the app's name, in the window's title; a subclass sets it: ``app_title = T("Pipes")``
+    app_title: ClassVar[str] = ""
+    #: the extension of the app's study files; a subclass sets it: ``extension = ".pipe"``
+    extension: ClassVar[str] = ""
+    #: `app_title`, in the main view's language
+    title: str = attrs.field(
+        default=attrs.Factory(lambda self: self.app_title, takes_self=True),
+        init=False,
+        on_setattr=attrs.setters.frozen,
+    )
     state_filepath: Optional[Path] = None
 
     minimum_width: int = attrs.field(default=720)
@@ -708,11 +732,6 @@ class MainView(View):
         # first: `retranslate` can show it, e.g. checking it in a language menu
         self._language = language
         _retranslate(self, translator(language, directories))
-
-    def _init_app_info(self, *, title: str, extension: str) -> None:
-        """Set `title`/`extension` once, meant to be called from `__attrs_post_init__`."""
-        object.__setattr__(self, "title", title)
-        object.__setattr__(self, "extension", extension)
 
     def load_state(self, filepath: Path) -> None:
         """Load the state saved in a json file; see `load_state_data`."""
@@ -1412,15 +1431,16 @@ class PageView(View):
     _renderer_key = "page"
     #: how wide the page may grow; a subclass sets it: ``width = PageWidth.WIDE``
     width: ClassVar[PageWidth] = PageWidth.NARROW
+    #: names the page in its router; a subclass sets it: ``route = "results"``
+    route: ClassVar[str] = ""
+    #: the `title` the page starts with: ``page_title = T("Results")``
+    page_title: ClassVar[str] = ""
 
-    #: names the page in its router; set once, from `__attrs_post_init__`, with
-    #: `_init_route`
-    route: str = attrs.field(default="", on_setattr=attrs.setters.frozen)
     action: ActionView = attrs.field(factory=ActionView, metadata={OMIT: True})
 
-    def _init_route(self, route: str) -> None:
-        """Set `route` once, meant to be called from `__attrs_post_init__`."""
-        object.__setattr__(self, "route", route)
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = self.page_title
 
     @property
     def title(self) -> str:
@@ -1470,7 +1490,8 @@ class Router(View):
             if _ROUTE_PATTERN.fullmatch(page.route) is None:
                 msg = (
                     f"{type(page).__name__}.route is {page.route!r}: a route is made of "
-                    "letters, digits, '_' and '-' only. Set it with `_init_route`."
+                    "letters, digits, '_' and '-' only. Set it in the page's class: "
+                    'route = "results".'
                 )
                 raise ValueError(msg)
             if page.route in routes:
