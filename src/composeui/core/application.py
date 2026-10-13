@@ -5,6 +5,7 @@ import functools
 import inspect
 import logging
 import sys
+import weakref
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
@@ -115,8 +116,10 @@ class _ConnectModelDecorator(Protocol[_ViewTD, _MainViewTD, _ModelTD, Unpack[_Ts
 
 def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
     views: deque[View] = deque([main_view])
+    main_view_reference = weakref.ref(main_view)
     while len(views) > 0:
         current_view = views.popleft()
+        current_view._main_view = main_view_reference  # noqa: SLF001
         for field_row_attr in attrs.fields(cast("type[attrs.AttrsInstance]", type(current_view))):
             child = getattr(current_view, field_row_attr.name)
             if isinstance(child, View):

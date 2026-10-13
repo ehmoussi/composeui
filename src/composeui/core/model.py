@@ -12,6 +12,14 @@ class InvalidStateError(ValueError):
     """A saved study that can't be opened; the views and the model are left unchanged."""
 
 
+class RefusedError(Exception):
+    """A change the model refused, changing nothing.
+
+    Its message tells the user why, as written in the code (`View.refusing` translates it),
+    or translated already by a view's `tr`.
+    """
+
+
 class Model:
     """The app's data beside its views, given to the callbacks asking for `model`.
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import enum
 import hashlib
+import html
 import json
 import os
 import re
@@ -30,7 +31,7 @@ from attrs import Factory
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
-from composeui.core.model import Model
+from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
@@ -2330,6 +2331,23 @@ def test_rows_answering_an_edit_are_shown_its_row_still_selected(places: _Places
     assert _rows_with(body, table_id, "aria-current") == [f"{table_id}-row-1"]
     assert places.texts(places.edit("1", "1", "Foggy")) == ["Harbour", "LakeWindy"]
     assert len(places.edited) == 2
+
+
+def test_a_refusal_in_an_edit_refuses_it_and_says_why(places: _Places) -> None:
+    table = places.table
+    rows = table.rows
+
+    def refuse(_row: int, _column: int, _text: str) -> None:
+        reason = "too foggy"
+        with table.refusing("Can't note it: {error}"):
+            raise RefusedError(reason)
+
+    table.cell_edited.connect(refuse)
+    body = places.edit("1", "1", "Foggy")
+
+    assert table.rows == rows
+    assert "Foggy" not in "".join(places.texts(body))
+    assert html.escape("Can't note it: too foggy") in body
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import zipfile
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import attrs
 import pytest
+from attrs import Factory
 
 from composeui.core.application import ModelApplication
+from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.view import ButtonView, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
+    import sqlite3
     from collections.abc import Iterator
     from pathlib import Path
 
@@ -186,7 +189,7 @@ def test_every_database_keeps_the_models_settings(
     model = PartsModel()
     start(model, tmp_path)
 
-    with pytest.raises(sqlite3.IntegrityError), model.parts.connection() as db:
+    with pytest.raises(RefusedError), model.parts.connection() as db:
         db.execute("INSERT INTO use(part_id) VALUES (1)")  # foreign keys are enforced
     with model.parts.connection() as db:
         db.execute("INSERT INTO part(id, name) VALUES (1, 'bolt')")
@@ -276,3 +279,107 @@ def test_a_failed_save_leaves_the_previous_study_whole(
 
     assert path.read_bytes() == saved
     assert [file.name for file in tmp_path.iterdir()] == ["study.hello"]
+
+
+class Tags(SqliteTable):
+    create = """
+        CREATE TABLE tag(
+            name TEXT NOT NULL UNIQUE CONSTRAINT named CHECK (name != '')
+        );
+    """
+    refusals: ClassVar[dict[str, str]] = {"named": "a tag needs a name"}
+
+    def add(self, name: str) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO tag(name) VALUES (?)", (name,))
+
+    def rename(self, old_name: str, new_name: str) -> None:
+        with self.connection() as db:
+            db.execute("UPDATE tag SET name = ? WHERE name = ?", (new_name, old_name))
+
+    def names(self) -> list[str]:
+        with self.connection() as db:
+            return [row["name"] for row in db.execute("SELECT name FROM tag ORDER BY name")]
+
+
+class TagsModel(SqliteModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags = self.add_table(Tags)
+
+
+@define_view
+class TagsMainView(MainView):
+    add: ButtonView = Factory(ButtonView)
+    table: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._init_app_info(title="Tags", extension=".tags")
+        self.status_bar.timeout = 0
+        self.table.editable_columns = [0]
+        self.add.clicked.connect(self._add)
+        self.table.cell_edited.connect(self._rename)
+
+    def _add(self, model: TagsModel) -> None:
+        with self.table.refusing(self.tr("Can't add the tag: {error}")):
+            model.tags.add("")
+
+    def _rename(self, row: int, column: int, text: str, model: TagsModel) -> None:
+        with self.table.refusing(self.tr("Can't rename the tag: {error}")):
+            model.tags.rename(self.table.rows[row][column], text)
+
+
+TagsApp = ModelApplication[TagsMainView, TagsModel]
+
+
+@pytest.fixture
+def tags_app() -> Iterator[TagsApp]:
+    app = TagsApp(main_view=TagsMainView(), model=TagsModel())
+    app.model.tags.add("red")
+    app.model.tags.add("blue")
+    app.main_view.table.rows = [["blue"], ["red"]]
+    yield app
+    app.model.close()
+
+
+def test_a_refusal_says_why_in_the_apps_language(
+    tags_app: TagsApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog = {
+        "Can't rename the tag: {error}": "Impossible de renommer l'étiquette : {error}",
+        "a tag needs a name": "une étiquette doit avoir un nom",
+    }
+    (tmp_path / "fr.json").write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(TagsMainView, "translations_dir", tmp_path)
+    main_view = tags_app.main_view
+    main_view.set_language("fr")
+
+    main_view.table.emit_cell_edited(1, 0, "")
+
+    assert main_view.status_bar.message == (
+        "Impossible de renommer l'étiquette : une étiquette doit avoir un nom"
+    )
+    assert tags_app.model.tags.names() == ["blue", "red"]
+    # the refusal's text follows the language too
+    main_view.set_language("en")
+    assert main_view.status_bar.message == "Can't rename the tag: a tag needs a name"
+
+
+def test_a_refusal_no_key_names_shows_sqlites_message(tags_app: TagsApp) -> None:
+    main_view = tags_app.main_view
+
+    main_view.table.emit_cell_edited(1, 0, "blue")
+
+    assert main_view.status_bar.message == (
+        "Can't rename the tag: UNIQUE constraint failed: tag.name"
+    )
+
+
+def test_a_refusal_outside_an_edit_only_says_why(tags_app: TagsApp) -> None:
+    main_view = tags_app.main_view
+
+    main_view.add.clicked.emit()
+
+    assert main_view.status_bar.message == "Can't add the tag: a tag needs a name"
+    assert tags_app.model.tags.names() == ["blue", "red"]

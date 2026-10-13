@@ -1,5 +1,7 @@
 # from __future__ import annotations
 
+import contextlib
+import contextvars
 import enum
 import functools
 import json
@@ -30,7 +32,7 @@ from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import Unpack, dataclass_transform
 
 from composeui.core import study
-from composeui.core.model import InvalidStateError
+from composeui.core.model import InvalidStateError, RefusedError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
@@ -44,6 +46,8 @@ from composeui.core.translation import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from attrs import AttrsInstance
 
     from composeui.core.model import Model
@@ -298,6 +302,10 @@ class View:
     _tr: Translate = attrs.field(
         default=no_translation, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
+    #: the main view holding this view, set by the application; weak, as a view's parent
+    _main_view: Optional[Callable[[], Optional["MainView"]]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -315,6 +323,27 @@ class View:
         the next language `MainView.set_language` sets; formatted too.
         """
         return TranslatedText(self._tr(text), text)
+
+    @contextlib.contextmanager
+    def refusing(self, message: str) -> "Iterator[None]":
+        """Show the model's refusal of the block's change in the main view's status bar.
+
+        `message` shows the `RefusedError`'s message, translated (unless `tr` gave it), as
+        ``{error}``, e.g. ``self.tr("Can't add a room: {error}")``. In a `cell_edited`
+        callback, the edit is refused too: the cell keeps its old text.
+        """
+        try:
+            yield
+        except RefusedError as error:
+            main_view = None if self._main_view is None else self._main_view()
+            if main_view is None:  # not shown by an application: nowhere to show it
+                raise
+            reason = error.args[0] if error.args else ""
+            if not isinstance(reason, TranslatedText):
+                reason = self.tr(str(reason))
+            main_view.status_bar.show_message(message.format(error=reason))
+            if _editing_cell.get():
+                raise EditRefusedError from error
 
     def retranslate(self) -> None:
         """Update text that `tr` alone doesn't follow, e.g. built from other text.
@@ -904,6 +933,10 @@ class EditRefusedError(Exception):
     """Raised by a `cell_edited` callback to refuse the edit: the cell keeps its old text."""
 
 
+#: whether a `cell_edited` callback is running, for `View.refusing` to refuse its edit
+_editing_cell: contextvars.ContextVar[bool] = contextvars.ContextVar("_editing_cell", default=False)
+
+
 def replace_cell(rows: list[list[str]], row: int, column: int, text: str) -> list[list[str]]:
     """Return `rows` with `text` in a cell, as new lists: a row short of it is filled with ""."""
     cells = [*rows[row], *[""] * (column + 1 - len(rows[row]))]
@@ -928,7 +961,8 @@ class TableMixin:
     callback instead: the table shows them, and the edit isn't applied on top. The edited
     row stays selected when they hold it as edited (e.g. renamed, then sorted), or else
     as it was (the edit refused). Raising `EditRefusedError` refuses it too, the rows staying
-    as they are, e.g. when the model refused the new text and changed nothing.
+    as they are, e.g. when the model refused the new text and changed nothing; so does a
+    `RefusedError` caught by `View.refusing` in the callback.
     """
 
     def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
@@ -1000,12 +1034,14 @@ class TableMixin:
         Renderers call it; applying the edit afterwards is theirs.
         """
         self._edited_rows = replace_cell(self.rows, row, column, text)
+        token = _editing_cell.set(True)
         try:
             self.cell_edited.emit(row, column, text)
         except EditRefusedError:
             # the rows answering the edit, as when a callback puts them back itself
             self.rows = [list(cells) for cells in self.rows]
         finally:
+            _editing_cell.reset(token)
             self._edited_rows = None
 
 
