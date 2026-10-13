@@ -37,7 +37,7 @@ def test_emit_calls_callbacks_without_a_code_object() -> None:
 
 def test_app_connect_injects_the_view_and_main_view() -> None:
     """`Application.connect` hands a plain function its `view` and the app's `main_view`."""
-    app = Application(main_view=_MainView())
+    app = Application(build_main_view=_MainView)
     status_bar = app.main_view.status_bar
     calls: list[tuple[View, MainView]] = []
 

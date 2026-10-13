@@ -45,8 +45,8 @@ A minimal window with a text input that greets you in the status bar as you type
 ```python
 from attrs import Factory
 
+from composeui.core.application import run
 from composeui.core.view import InputView, MainView, define_view
-from composeui.qtcore.qtapplication import QtApplication
 
 
 @define_view
@@ -69,16 +69,15 @@ class HelloMainView(MainView):
     greeting: GreetingInputView = Factory(GreetingInputView)
 
 
-class HelloApp(QtApplication[HelloMainView]):
-    def __init__(self) -> None:
-        super().__init__(main_view=HelloMainView())
-
-
 if __name__ == "__main__":
-    HelloApp().run()
+    run(HelloMainView)
 ```
 
-Run it with `uv run python hello.py` (requires the `pyside6` extra installed).
+Run it with `uv run python hello.py --backend qt` (requires the `pyside6` extra installed),
+`--backend textual` (the `tui` extra) or `--backend web`, the default (the `web` extra).
+`run` imports only the backend chosen, and leaves the rest of the command line to its app
+(`--help` lists it). To always start one backend, build its application yourself:
+`QtApplication(build_main_view=HelloMainView).run()`.
 
 For a larger, real-world-shaped example with forms, radio groups, a checkbox, a read-only
 table, validation, and a file menu with save/load, see [`src/examples/pipeform.py`](src/examples/pipeform.py) (`uv run python -m
@@ -86,22 +85,10 @@ examples.pipeform --backend qt`, or `textual`, or `web`).
 
 ## Web backend
 
-The same views can be served as a web page instead of a window. Only the application
-changes: a `WebApplication` takes a function building the main view, because every
-browser gets its own copy of it.
-
-```python
-from composeui.webcore.webapplication import WebApplication
-
-
-class WebHelloApp(WebApplication[HelloMainView]):
-    def __init__(self) -> None:
-        super().__init__(build_main_view=HelloMainView)
-
-
-if __name__ == "__main__":
-    WebHelloApp().run()  # serves http://127.0.0.1:8000 (--host/--port to change)
-```
+The same views can be served as a web page instead of a window: `run(HelloMainView)`
+serves http://127.0.0.1:8000 (`--host`/`--port` to change), as does
+`WebApplication(build_main_view=HelloMainView).run()`. Every application takes a function
+building the main view, because on the web every browser gets its own copy of it.
 
 Run it with `uv run python hello.py` (requires the `web` extra). Pages are rendered on the
 server and updated with [htmx](https://htmx.org/): editing a field posts it, and the
@@ -120,10 +107,11 @@ How it differs from a desktop window:
   `WebApplication.setup_session`, which runs for each new session's main view.
   `app.connect(view=app.main_view...)` is replayed on every new session: the callback gets
   that session's own `view` and `main_view`, never the template no browser displays.
-- **Models are per session too:** `WebModelApplication(build_main_view=..., build_model=...)`
-  builds one model per session, and callbacks asking for `model` get their session's. A
-  model shared between browsers would leave the others showing stale views, since each
-  browser only sees what its own requests return.
+- **Models are per session too:** `run(..., build_model=..., setup_model=...)` (or
+  `WebModelApplication`, which takes the same arguments) builds one model per session,
+  wired to its main view by `setup_model`, and callbacks asking for `model` get their
+  session's. A model shared between browsers would leave the others showing stale views,
+  since each browser only sees what its own requests return.
 - **Save and Open** download the state as a file and upload one; the File menu sits in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves) because browsers keep the
   Ctrl ones for themselves.
@@ -400,9 +388,10 @@ class PipeModel(SqliteModel):
         self.runs = self.add_table(Runs)
 ```
 
-Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`,
-`WebModelApplication`), and callbacks asking for `model` reach the tables
-(`model.runs.add(...)`):
+Give it to the app, `run(PipeMainView, build_model=PipeModel, setup_model=connect_model)`
+(or a `ModelApplication`: `QtModelApplication`, `TextualModelApplication`,
+`WebModelApplication`, taking the same arguments), and callbacks asking for `model` reach
+the tables (`model.runs.add(...)`):
 
 - **Transactions.** `with self.connection() as db:` commits once the block ends and rolls
   back if it raises; a block inside another joins it.
@@ -423,9 +412,8 @@ Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`
   `cell_edited` callback, the edit is refused as well.
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
   rows through it, and after New and Open once the views are loaded too, so the views
-  showing the rows can follow: connect it once the app is built (`app.model.runs.changed`),
-  or, on the web, in `WebModelApplication.setup_model`, which gets each session's main
-  view and model.
+  showing the rows can follow: connect it in `setup_model(main_view, model)`, which the
+  app calls once both are built, and on the web for each session.
 - **Studies.** New starts an empty database, and Save and Open (and `-f`) save and open
   the views' state and the database together, as a zip archive under the app's
   `extension`. The model works on a scratch copy in a temporary file, so the user's file

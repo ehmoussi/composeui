@@ -56,14 +56,19 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
 
 - **`composeui.core` must never import a backend** (Qt, Textual, Starlette) at import time.
   Backends are resolved lazily through `composeui.core.registry`.
-- **Backend registration:** each `RendererType` member's value is the dotted path of a backend
-  module exposing a `RENDERERS: dict[str, Callable[[Any], Renderer]]` mapping. A view picks
-  its renderer by its `_renderer_key` class variable. A backend that doesn't register a key
-  simply doesn't render that view (returns `None`), so partial backends are fine.
+- **Backend registration:** each `RendererType` member's value is a `Backend`: the dotted
+  paths of the backend's renderers module, exposing a
+  `RENDERERS: dict[str, Callable[[Any], Renderer]]` mapping, and of its application module,
+  exposing `APPLICATION` and `MODEL_APPLICATION` (what `core.application.run` starts). A
+  view picks its renderer by its `_renderer_key` class variable. A backend that doesn't
+  register a key simply doesn't render that view (returns `None`), so partial backends are
+  fine.
 - **Adding a widget:** define the view in `core/view.py` (set `_renderer_key`), then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
-- **Adding a backend:** add one `RendererType` member in `core/registry.py` and one
-  `RENDERERS` mapping in the new backend module. `core/view.py` should not need changes.
+- **Adding a backend:** add one `RendererType` member in `core/registry.py`, one
+  `RENDERERS` mapping in the new backend's renderers module, and its application classes
+  (built from `build_main_view=`, plus `build_model=`/`setup_model=` for the model one) as
+  `APPLICATION`/`MODEL_APPLICATION`. `core/view.py` should not need changes.
 - **Renderer contract:** implement `render`, `refresh_attribute`, `_update_state` and the
   `_refresh_dispatcher` (one handler per view attribute the renderer cares about; a missing
   handler raises `MissingRefreshAttributeFunctionError`).

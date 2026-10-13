@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib
 import inspect
 import logging
 import sys
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
 import attrs
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core.registry import RendererType
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
@@ -22,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from composeui.core.model import Model
-    from composeui.core.view import MainView, RendererType
+    from composeui.core.view import MainView
 
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -131,8 +133,14 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
 
 
 class Application(Generic[MainViewT]):
-    def __init__(self, *, main_view: MainViewT) -> None:
-        self._main_view = main_view
+    """An app showing the main view `build_main_view` builds; each backend has its own.
+
+    The app builds its main view itself, so every backend takes the same arguments: a web
+    app builds one per browser session.
+    """
+
+    def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
+        self._main_view = build_main_view()
         self._args: argparse.Namespace | None = None
         self._parser = argparse.ArgumentParser()
         self._parser.add_argument("--debug", help="Run the app in debug mode", action="store_true")
@@ -227,10 +235,24 @@ class Application(Generic[MainViewT]):
 
 
 class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
-    def __init__(self, *, main_view: MainViewT, model: ModelT) -> None:
+    """An app with a model beside its main view, given to the callbacks asking for `model`.
+
+    `setup_model` wires them once both are built, e.g. to refresh views when the model
+    changes.
+    """
+
+    def __init__(
+        self,
+        *,
+        build_main_view: Callable[[], MainViewT],
+        build_model: Callable[[], ModelT],
+        setup_model: Callable[[MainViewT, ModelT], None] | None = None,
+    ) -> None:
         # first: the base class gives it to the signals
-        self._model = model
-        super().__init__(main_view=main_view)
+        self._model = build_model()
+        super().__init__(build_main_view=build_main_view)
+        if setup_model is not None:
+            setup_model(self._main_view, self._model)
 
     @override
     def _add_reference_to_signals(self) -> None:
@@ -272,3 +294,37 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
             return callback
 
         return cast("_ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]", wrapper)
+
+
+def run(
+    build_main_view: Callable[[], MainViewT],
+    *,
+    build_model: Callable[[], ModelT] | None = None,
+    setup_model: Callable[[MainViewT, ModelT], None] | None = None,
+    default_backend: RendererType = RendererType.WEB,
+) -> None:
+    """Run the app on the backend the command line names, e.g. ``--backend qt``.
+
+    Without ``--backend``, on `default_backend`. The rest of the command line goes to the
+    backend's app (``-f``, ``--language``, ``--port``, ``--help``...). Only that backend is
+    imported, so the others' extras needn't be installed. With `build_model`, the app has
+    a model, wired to its main view by `setup_model`: once, or per session on the web.
+    """
+    if build_model is None and setup_model is not None:
+        msg = "setup_model needs a model: pass build_model too"
+        raise ValueError(msg)
+    backends = {backend.name.lower(): backend for backend in RendererType}
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--backend", choices=backends, default=default_backend.name.lower())
+    args, rest = parser.parse_known_args()
+    # the app parses the command line itself when it runs
+    sys.argv = [sys.argv[0], *rest]
+    module = importlib.import_module(backends[args.backend].value.applications)
+    app: Application[MainViewT]
+    if build_model is None:
+        app = module.APPLICATION(build_main_view=build_main_view)
+    else:
+        app = module.MODEL_APPLICATION(
+            build_main_view=build_main_view, build_model=build_model, setup_model=setup_model
+        )
+    app.run()

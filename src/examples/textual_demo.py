@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from attrs import Factory
 
+from composeui.core.application import run
+from composeui.core.registry import RendererType
 from composeui.core.view import (
     GroupFormView,
     LabelRowFloatInputView,
@@ -10,8 +12,6 @@ from composeui.core.view import (
     MainView,
     define_view,
 )
-from composeui.qtcore.qtapplication import QtApplication
-from composeui.textualcore.textualapplication import TextualApplication
 
 
 @define_view
@@ -71,19 +71,8 @@ class TextualDemoMainView(MainView):
             self.status_bar.show_message(f"Shape changed: {value}")
 
 
-class TextualDemoApp(TextualApplication[TextualDemoMainView]):
-    def __init__(self) -> None:
-        super().__init__(main_view=TextualDemoMainView())
-
-
-class QtDemoApp(QtApplication[TextualDemoMainView]):
-    def __init__(self) -> None:
-        super().__init__(main_view=TextualDemoMainView())
-
-
 def main() -> None:
-    app = TextualDemoApp()
-    app.run()
+    run(TextualDemoMainView, default_backend=RendererType.TEXTUAL)
 
 
 if __name__ == "__main__":

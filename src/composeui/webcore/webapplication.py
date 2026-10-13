@@ -194,7 +194,7 @@ class WebApplication(Application[MainViewT]):
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         self._build_main_view = build_main_view
         self._connections: list[_Connection] = []
-        super().__init__(main_view=build_main_view())
+        super().__init__(build_main_view=build_main_view)
         self._parser.add_argument(
             "--host", metavar="HOST", help="Host to serve on.", default="127.0.0.1"
         )
@@ -310,13 +310,18 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
     fragments its own requests return, so a model shared between sessions would leave
     every other browser showing stale views (and would need its own locking). Callbacks
     asking for `model`, whether a view's own or connected through `connect`, get their
-    session's.
+    session's, and `setup_model` wires each session's model to its main view.
     """
 
     def __init__(
-        self, *, build_main_view: Callable[[], MainViewT], build_model: Callable[[], ModelT]
+        self,
+        *,
+        build_main_view: Callable[[], MainViewT],
+        build_model: Callable[[], ModelT],
+        setup_model: Callable[[MainViewT, ModelT], None] | None = None,
     ) -> None:
         self._build_model = build_model
+        self._model_setup = setup_model
         super().__init__(build_main_view=build_main_view)
 
     def connect(
@@ -328,10 +333,12 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         )
 
     def setup_model(self, main_view: MainViewT, model: ModelT) -> None:
-        """Wire a new session's model to its main view; override to connect model signals.
+        """Wire a new session's model to its main view: calls the `setup_model` given.
 
         Runs after `setup_session`, e.g. to refresh views when a `SqliteTable` changes.
         """
+        if self._model_setup is not None:
+            self._model_setup(main_view, model)
 
     def _new_session_model(self) -> ModelT:
         return self._build_model()
@@ -339,3 +346,8 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
     @override
     def _setup_model(self, main_view: MainViewT, model: Model) -> None:
         self.setup_model(main_view, cast("ModelT", model))
+
+
+#: the backend's applications, for `composeui.core.application.run`
+APPLICATION = WebApplication
+MODEL_APPLICATION = WebModelApplication

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import argparse
 import enum
 import functools
-import sys
 from pathlib import Path
 
 import attrs
 from attrs import Factory
 
+from composeui.core.application import run
 from composeui.core.view import (
     OMIT,
     ActionView,
@@ -367,26 +366,7 @@ class PipeMainView(MainView):
 
 
 def main() -> None:
-    # every app parses `sys.argv` itself when it runs (`-f`, `--debug`, `--port`, ...), so
-    # take `--backend` out and leave the rest, `--help` included, to the chosen app
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--backend", choices=["qt", "textual", "web"], default="web")
-    args, rest = parser.parse_known_args()
-    sys.argv = [sys.argv[0], *rest]
-    # imported only once chosen, so importing the views (as the tests do) or running one
-    # backend doesn't need the other backends' extras
-    if args.backend == "qt":
-        from composeui.qtcore.qtapplication import QtApplication  # noqa: PLC0415
-
-        QtApplication(main_view=PipeMainView()).run()
-    elif args.backend == "textual":
-        from composeui.textualcore.textualapplication import TextualApplication  # noqa: PLC0415
-
-        TextualApplication(main_view=PipeMainView()).run()
-    else:
-        from composeui.webcore.webapplication import WebApplication  # noqa: PLC0415
-
-        WebApplication(build_main_view=PipeMainView).run()
+    run(PipeMainView)
 
 
 if __name__ == "__main__":
