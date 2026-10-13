@@ -20,6 +20,7 @@ from composeui.core.view import (
     InvalidStateError,
     LabelView,
     MainView,
+    ProgressBarView,
     RadioGroupView,
     SelectionMode,
     _is_omitted_type,
@@ -140,6 +141,16 @@ def test_radio_group_keeps_value_when_still_a_member_of_new_values() -> None:
     view.radio.value = "a"
     view.radio.values = {"a": "a", "c": "c"}
     assert view.radio.value == "a"
+
+
+def test_a_progress_bar_shows_a_count_within_its_range_of_steps() -> None:
+    assert ProgressBarView.clamp(120, 100) == 100  # a count overshooting its total
+    assert ProgressBarView.clamp(-1, 100) == 0
+    assert ProgressBarView.clamp(120, None) == 120  # a task of unknown length
+    bar = ProgressBarView()
+    with pytest.raises(ValueError, match="maximum"):
+        bar.maximum = 0
+    assert bar.maximum == 100
 
 
 def test_unstructure_serializes_a_string_choice_as_itself() -> None:

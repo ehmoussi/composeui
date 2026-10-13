@@ -44,6 +44,7 @@ from composeui.core.view import (
     NewAction,
     OpenFileAction,
     PageView,
+    ProgressBarView,
     Router,
     SaveAction,
     SaveAsAction,
@@ -533,6 +534,30 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         if event != "click" or not self.is_enabled:
             super().dispatch(event, form)
         self._view.clicked.emit()
+
+
+class ProgressBarViewLike(ViewLike, Protocol):
+    value: int
+    maximum: int | None
+
+
+class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
+    """A `<progress>` bar; one with no value is the browser's own for a task of unknown length."""
+
+    _role = "progress_bar"
+
+    def __init__(self, view: ProgressBarViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"value": self._mark_dirty, "maximum": self._mark_dirty})
+
+    def to_html(self, *, oob: bool = False) -> str:
+        value, maximum = self._view.value, self._view.maximum
+        clamped = ProgressBarView.clamp(value, maximum)
+        progress = "" if maximum is None else f' value="{clamped}" max="{maximum}"'
+        return (
+            f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
+            f"{progress}></progress>"
+        )
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1788,6 +1813,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "main": WebMainRenderer,
     "menu": WebMenuRenderer,
     "page": WebPageRenderer,
+    "progress_bar": WebProgressBarRenderer,
     "radio_group": WebRadioGroupRenderer,
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,

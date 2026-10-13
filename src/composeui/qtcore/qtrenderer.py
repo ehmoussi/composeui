@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QStackedWidget,
     QStatusBar,
@@ -50,6 +51,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     PageView,
+    ProgressBarView,
     Router,
     SelectionMode,
     SeparatorAction,
@@ -452,6 +454,43 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
 
     def _emit_clicked(self) -> None:
         self._view.clicked.emit()
+
+
+class ProgressBarViewLike(ViewLike, Protocol):
+    value: int
+    maximum: int | None
+
+
+class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar]):
+    def __init__(self, view: ProgressBarViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"value": self._refresh_value, "maximum": self._refresh_maximum}
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QProgressBar()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(
+        view: ProgressBarViewLike, rendered_object: QProgressBar, value: int
+    ) -> None:
+        # clamped: Qt ignores a value out of range, leaving the bar where it was
+        rendered_object.setValue(ProgressBarView.clamp(value, view.maximum))
+
+    @staticmethod
+    def _refresh_maximum(
+        view: ProgressBarViewLike, rendered_object: QProgressBar, value: int | None
+    ) -> None:
+        # an empty range is Qt's busy bar, for a task of unknown length
+        rendered_object.setRange(0, 0 if value is None else value)
+        rendered_object.setValue(ProgressBarView.clamp(view.value, value))
+
+    @staticmethod
+    def _update_state(view: ProgressBarViewLike, rendered_object: QProgressBar) -> None:
+        pass  # the user can't move a progress bar; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1336,6 +1375,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "main": QtMainRenderer,
     "menu": QtMenuRenderer,
     "page": QtPageRenderer,
+    "progress_bar": QtProgressBarRenderer,
     "radio_group": QtRadioGroupRenderer,
     "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,
