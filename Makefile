@@ -25,8 +25,18 @@ mypy:
 		--always-true=PYSIDE6 \
 		--show-traceback
 
+# the main views of the apps with catalogs, as module:Class
+TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView
+
+# every catalog against the text its app translates; each app reported before failing
+.PHONY: translations
+translations:
+	@status=0; for main_view in $(TRANSLATED_MAIN_VIEWS); do \
+		uv run python -m composeui.core.translationcheck $$main_view || status=1; \
+	done; exit $$status
+
 .PHONY: check
-check: lint mypy
+check: lint mypy translations
 
 .PHONY: test
 test:
