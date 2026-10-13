@@ -20,13 +20,13 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar, Union, cast
 
 from composeui.core.model import InvalidStateError, Model, RefusedError
-from composeui.core.signal import SignalNoArgs
+from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.view import CONVERTER
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping, Sequence
 
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias, Unpack
 
     #: a query's parameters: by position, or by name
     Parameters: TypeAlias = Union[Sequence[Any], Mapping[str, Any]]
@@ -126,6 +126,15 @@ class SqliteModel(Model):
         self._depth = 0
         self._changed: list[SqliteTable] = []
         self._database = self._new_database()
+
+    @property
+    def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
+        """Get the model's signals, its tables' (`SqliteTable.changed`) among them."""
+        tables = [vars(table).values() for table in self._tables]
+        return [
+            *super().signals,
+            *(value for values in tables for value in values if isinstance(value, Signal)),
+        ]
 
     def add_table(self, table_type: type[SqliteTableT]) -> SqliteTableT:
         """Add a table, created in the current database too, and return it."""

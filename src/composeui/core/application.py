@@ -129,6 +129,10 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
                 child.set_main_view(main_view)
                 if model is not None:
                     child.set_model(model)
+    if model is not None:
+        for signal in model.signals:
+            signal.set_main_view(main_view)
+            signal.set_model(model)
 
 
 class Application(Generic[MainViewT]):

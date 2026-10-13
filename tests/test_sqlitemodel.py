@@ -331,6 +331,9 @@ class TagsMainView(MainView):
         with self.table.refusing(self.tr("Can't rename the tag: {error}")):
             model.tags.rename(self.table.rows[row][column], text)
 
+    def show_tags(self, model: TagsModel) -> None:
+        self.table.rows = [[name] for name in model.tags.names()]
+
 
 TagsApp = ModelApplication[TagsMainView, TagsModel]
 
@@ -385,3 +388,16 @@ def test_a_refusal_outside_an_edit_only_says_why(tags_app: TagsApp) -> None:
 
     assert main_view.status_bar.message == "Can't add the tag: a tag needs a name"
     assert tags_app.model.tags.names() == ["blue", "red"]
+
+
+def test_a_table_s_changed_signal_gives_a_view_s_method_the_model() -> None:
+    def setup_model(main_view: TagsMainView, model: TagsModel) -> None:
+        model.tags.add("red")
+        # no lambda to hand it the model, nor a first call of its own
+        model.tags.changed.connect(main_view.show_tags, now=True)
+
+    app = TagsApp(build_main_view=TagsMainView, build_model=TagsModel, setup_model=setup_model)
+    assert app.main_view.table.rows == [["red"]]
+    app.model.tags.add("blue")
+    assert app.main_view.table.rows == [["blue"], ["red"]]
+    app.model.close()
