@@ -61,27 +61,20 @@ Found writing `examples/indoorenvironments.py` (~400 lines, most of it wiring ra
 app logic); `pipeform.py` and `pipecatalogue.py` repeat the same patterns. In order of
 lines saved.
 
-1. **A table of typed records.** `rows: list[list[str]]` makes the app format every cell
-   with `str()`, parse edits back (`map(float, ...)` and its own "must be a number"
-   message), switch on column indexes (`column == 0`) and read
-   `rows[selected_rows[0]][0]` for the selected item. Add
-   `RecordTableView[RecordT]` (an `attrs` class) built from `Column(field, header, editable=...)`,
-   with `records`, `selected_record` and `record_edited` emitting the old and new record,
-   parsed by `CONVERTER`; a cell that doesn't parse refuses the edit (`View.refusing`).
-2. **Model-to-view wiring.**
+1. **Model-to-view wiring.**
    - `changed.connect(callback, now=True)` (or `model.watch(table, callback)`), calling it
      once right away, instead of `connect` followed by a manual first call.
    - Inject `model`/`main_view` into model signals as into view signals, so
      `table.changed.connect(view.show_table)` needs no lambda.
    - A callback may take fewer positional arguments than its signal emits:
      `_show_rooms(self, _rows, model)` only exists to drop `_rows`.
-3. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
+2. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
    ...), replacing the example's two near-identical `_create_unique_*_name`;
    `fetch_column(sql, parameters) -> list[Any]` for a list of names; tables declared on
    the model (`indoor_environments = table(IndoorEnvironments)`) instead of an `__init__`
    calling `add_table`.
 
-Together, they would take the example from ~400 to about 300 lines.
+With the record tables in, the example is down to ~380 lines; these would take it to about 300.
 
 ## 4 — Adoption
 

@@ -1,8 +1,19 @@
-"""A table whose notes the user edits, shared by the backend tests of editable cells."""
+"""Tables whose cells the user edits, shared by the backend tests of editable cells."""
 
+from typing import Optional
+
+import attrs
 from attrs import Factory
 
-from composeui.core.view import MainView, TableView, define_view
+from composeui.core.view import (
+    Column,
+    MainView,
+    RecordTableView,
+    T,
+    TableView,
+    child,
+    define_view,
+)
 
 
 @define_view
@@ -18,3 +29,38 @@ class EditableTableMainView(MainView):
         # the harbour has no note yet: its row is short of the cell
         self.places.rows = [["Lake", "Calm"], ["Harbour"]]
         self.places.editable_columns = [1]
+
+
+@attrs.define
+class Room:
+    name: str
+    temperature: float
+    occupants: Optional[int] = None
+    is_heated: bool = False
+
+
+COLUMNS = [
+    Column("name", T("Room"), editable=True),
+    Column("temperature", T("Temperature"), editable=True),
+    Column("occupants", T("Occupants"), editable=True),
+    Column("is_heated", T("Heated"), editable=True),
+]
+
+
+@define_view
+class RoomsTableView(RecordTableView[Room]):
+    """Its records' type from its base, rather than from ``RecordTableView[Room]``."""
+
+
+@define_view
+class RoomsMainView(MainView):
+    app_title = "Rooms"
+    extension = ".rooms"
+
+    rooms: RecordTableView[Room] = child(RecordTableView[Room], columns=COLUMNS)
+    others: RoomsTableView = child(RoomsTableView, columns=COLUMNS[:2])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.status_bar.timeout = 0
+        self.rooms.records = [Room("Hall", 18), Room("Kitchen", 20.5, 2, is_heated=True)]
