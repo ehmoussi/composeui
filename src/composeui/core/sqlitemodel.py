@@ -19,7 +19,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar, Union, cast
 
-from composeui.core.model import InvalidStateError, Model
+from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import CONVERTER
 
@@ -47,18 +47,35 @@ class SqliteTable:
     `create` is the SQL script creating it, run in every new study. Its methods read and
     write through `connection()`; `changed` is emitted once a transaction that changed
     rows through it has committed, so the views showing them can refresh.
+
+    A constraint failing in a transaction refuses it: `connection()` raises a
+    `RefusedError` with the message of the first key of `refusals` found in SQLite's
+    (a constraint's name, or e.g. "UNIQUE constraint failed: room.name"), else SQLite's.
     """
 
     create: ClassVar[str] = ""
+    #: by a part of SQLite's message, the user's message when a constraint fails, as
+    #: written in the code: the view showing it translates it (see `View.refusing`)
+    refusals: ClassVar[Mapping[str, str]] = MappingProxyType({})
 
     def __init__(self, model: SqliteModel) -> None:
         # weak: the model owns its tables, and should go (with its file) once unused
         self._model = cast("SqliteModel", weakref.proxy(model))
         self.changed = SignalNoArgs()
 
-    def connection(self) -> contextlib.AbstractContextManager[sqlite3.Connection]:
-        """Give the database's connection for one transaction; see `SqliteModel.connection`."""
-        return self._model.connection(changing=self)
+    @contextlib.contextmanager
+    def connection(self) -> Generator[sqlite3.Connection]:
+        """Give the database's connection for one transaction; see `SqliteModel.connection`.
+
+        Raises `RefusedError` when a constraint fails, the transaction rolled back.
+        """
+        try:
+            with self._model.connection(changing=self) as db:
+                yield db
+        except sqlite3.IntegrityError as error:
+            message = str(error)
+            refusal = next((text for key, text in self.refusals.items() if key in message), message)
+            raise RefusedError(refusal) from error
 
     def fetch(self, cls: type[T], sql: str, parameters: Parameters = ()) -> list[T]:
         """Run the query `sql` and get its rows as `cls` instances (an `attrs` class)."""

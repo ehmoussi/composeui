@@ -55,7 +55,59 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
    already lets one share the connection; an example should show the views updated
    through `call_on_main_thread`, not from the worker.
 
-## 3 — Adoption
+## 3 — Less boilerplate for apps
+
+Found writing `examples/indoorenvironments.py` (~480 lines, most of it wiring rather than
+app logic); `pipeform.py` and `pipecatalogue.py` repeat the same patterns. In order of
+lines saved. Start with declarative text (2): every app uses it and it touches no
+backend.
+
+1. **Run any backend with one call.** Every example's `main()` parses `--backend`,
+   rewrites `sys.argv`, imports the backend lazily and builds the app, and the backends
+   disagree: Qt and Textual take instances and need `connect_model` called by hand, the
+   web takes builders and needs a subclass only to override `setup_model`. Add
+   `run(MainView, model=Model, setup_model=connect_model, default_backend="web")`,
+   resolving the backend through `core.registry` (core still imports none). A smaller
+   first step: a `setup_model=` argument to `WebModelApplication`, and the same
+   builder-style constructor on every backend.
+2. **Translatable text in class bodies.** Most `__attrs_post_init__` methods only exist
+   because `self.tr` needs an instance: button texts, headers, titles, a page's route, the
+   app's title and extension. `View._default_texts` already does it internally; make it
+   public with a lazily translated marker, so they're declared:
+   `add: ButtonView = button(T("Add"))`,
+   `remove = button(T("Remove"), variant=ButtonVariant.DANGER)`,
+   `TableView(headers=[T("Room"), ...])`, `route = "indoor-environments"` and
+   `page_title = T(...)` on a page instead of `_init_route`, `app_title`/`extension` on
+   `MainView` instead of `_init_app_info`.
+3. **A built-in `LanguageMenu`.** `pipeform.py` and `indoorenvironments.py` carry the same
+   ~45 lines: the menu, its `check()`, the `triggered` wiring and a `set_language`
+   override. Ship one in `core.view`, its languages from `translations_dir/*.json` plus
+   `source_language`, each named in itself, omitted from the state by default, and wired
+   and kept checked by `MainView` when it's a field:
+   `language_menu: LanguageMenu = Factory(LanguageMenu)`.
+4. **A table of typed records.** `rows: list[list[str]]` makes the app format every cell
+   with `str()`, parse edits back (`map(float, ...)` and its own "must be a number"
+   message), switch on column indexes (`column == 0`) and read
+   `rows[selected_rows[0]][0]` for the selected item. Add
+   `RecordTableView[T]` (an `attrs` class) built from `Column(field, header, editable=...)`,
+   with `records`, `selected_record` and `record_edited` emitting the old and new record,
+   parsed by `CONVERTER`; a cell that doesn't parse refuses the edit (`View.refusing`).
+5. **Model-to-view wiring.**
+   - `changed.connect(callback, now=True)` (or `model.watch(table, callback)`), calling it
+     once right away, instead of `connect` followed by a manual first call.
+   - Inject `model`/`main_view` into model signals as into view signals, so
+     `table.changed.connect(view.show_table)` needs no lambda.
+   - A callback may take fewer positional arguments than its signal emits:
+     `_show_rooms(self, _rows, model)` only exists to drop `_rows`.
+6. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
+   ...), replacing the example's two near-identical `_create_unique_*_name`;
+   `fetch_column(sql, parameters) -> list[Any]` for a list of names; tables declared on
+   the model (`indoor_environments = table(IndoorEnvironments)`) instead of an `__init__`
+   calling `add_table`.
+
+Together, (1)–(4) would take the example from ~480 to about 300 lines.
+
+## 4 — Adoption
 
 1. **API reference docs** (mkdocs + mkdocstrings; the code is fully typed), with a widget
    catalog and a short architecture page (views, signals, renderers, the registry).
@@ -63,7 +115,7 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
    plain `uvicorn` deployment note for the web.
 3. **`CHANGELOG.md`, semantic versions and a PyPI release.**
 
-## 4 — Later, when needed
+## 5 — Later, when needed
 
 - **Web: keep sessions across restarts.** Persist each session's `save_state` JSON (a
   directory, or Redis) and reload it when a cookie for an unknown session arrives; needs a

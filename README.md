@@ -414,6 +414,13 @@ Give it to a `ModelApplication` (`QtModelApplication`, `TextualModelApplication`
 - **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
   views' `cattrs` converter; `as_parameters(row)` gives an instance's fields as a query's
   named parameters.
+- **Refusals.** A constraint failing refuses the transaction: `connection()` raises a
+  `RefusedError` (`composeui.core.model`) with the table's message for it, from
+  `refusals` (`{"thin_wall": "its wall must be thinner than its radius"}`, by a part of
+  SQLite's message), else SQLite's. A view shows it in the status bar with
+  `with self.refusing(self.tr("Can't add the pipe: {error}")):`, the message translated
+  too (a catalog's check finds a table's `refusals` in a view's module); in a
+  `cell_edited` callback, the edit is refused as well.
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
   rows through it, and after New and Open once the views are loaded too, so the views
   showing the rows can follow: connect it once the app is built (`app.model.runs.changed`),

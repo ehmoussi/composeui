@@ -10,9 +10,8 @@ database together.
 
 import argparse
 import enum
-import sqlite3
 import sys
-from typing import Optional
+from typing import ClassVar, Optional
 
 import attrs
 from attrs import Factory
@@ -108,8 +107,17 @@ class Pipes(SqliteTable):
         FROM pipe JOIN material ON material.name = pipe.material;
     """
 
+    #: why the table refused a pipe, by the constraint the error names
+    refusals: ClassVar[dict[str, str]] = {
+        "UNIQUE constraint failed: pipe.name": "another pipe has this name",
+        "named": "it needs a name",
+        "NOT NULL": "every dimension is needed",
+        "positive_": "its dimensions must be positive",
+        "thin_wall": "its wall must be thinner than its radius",
+    }
+
     def add(self, pipe: Pipe) -> None:
-        """Add a pipe; raises `sqlite3.IntegrityError` for one the table refuses."""
+        """Add a pipe; raises `RefusedError` for one the table refuses."""
         with self.connection() as db:
             db.execute(
                 "INSERT INTO pipe(name, material, radius, thickness, length)"
@@ -156,20 +164,6 @@ class PipeCatalogueModel(SqliteModel):
     def __init__(self) -> None:
         super().__init__()
         self.pipes = self.add_table(Pipes)
-
-
-#: why the table refused a pipe, by the constraint the error names
-_REFUSALS = {
-    "UNIQUE constraint failed: pipe.name": "another pipe has this name",
-    "named": "it needs a name",
-    "NOT NULL": "every dimension is needed",
-    "positive_": "its dimensions must be positive",
-    "thin_wall": "its wall must be thinner than its radius",
-}
-
-
-def _refusal(error: sqlite3.IntegrityError) -> str:
-    return next((text for key, text in _REFUSALS.items() if key in str(error)), str(error))
 
 
 @define_view
@@ -350,11 +344,8 @@ class PipeCatalogueMainView(MainView):
 
     def _add_pipe(self, *, model: PipeCatalogueModel) -> None:
         pipe = self.pages.add.pipe.pipe()
-        try:
+        with self.refusing("Can't add the pipe: {error}."):
             model.pipes.add(pipe)
-        except sqlite3.IntegrityError as error:
-            self.status_bar.show_message(f"Can't add the pipe: {_refusal(error)}.")
-        else:
             self.status_bar.show_message(f"Added {pipe.name!r}")
 
     def _remove_shown(self, *, model: PipeCatalogueModel) -> None:

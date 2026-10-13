@@ -9,8 +9,9 @@ With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated
 translator to fill; until then, the text shows as written.
 
 The text is found two ways: the string literals passed to ``tr`` (or set in a view's
-``_default_texts``) in the source of every view of the main view, and the text the views
-translate as they show it, which finds text ``tr`` gets from a variable, e.g. an enum's.
+``_default_texts`` or a ``SqliteTable``'s ``refusals``) in the source of every view of the
+main view, and the text the views translate as they show it, which finds text ``tr`` gets
+from a variable, e.g. an enum's. A table's refusals are found only in a module of a view.
 """
 
 from __future__ import annotations
@@ -68,13 +69,18 @@ class CatalogReport:
 
 
 def find_texts(paths: Iterable[Path]) -> set[str]:
-    """Find the text the code in `paths` translates: ``tr`` literals, ``_default_texts``."""
+    """Find the text the code in `paths` translates: ``tr`` literals, `_TEXT_DICTS`."""
     texts: set[str] = set()
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             texts.update(_literal_texts(node))
     return texts
+
+
+#: class variables whose dict values are text to translate: a view's starting text, and a
+#: `SqliteTable`'s refusals (`View.refusing` translates them)
+_TEXT_DICTS = ("_default_texts", "refusals")
 
 
 def _literal_texts(node: ast.AST) -> Iterator[str]:
@@ -85,7 +91,7 @@ def _literal_texts(node: ast.AST) -> Iterator[str]:
             yield from _strings([node.args[0]])
     elif isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict):
         targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if any(getattr(target, "id", None) == "_default_texts" for target in targets):
+        if any(getattr(target, "id", None) in _TEXT_DICTS for target in targets):
             yield from _strings(node.value.values)
 
 
