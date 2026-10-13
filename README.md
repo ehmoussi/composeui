@@ -136,7 +136,7 @@ How it differs from a desktop window:
 | Concept | Role |
 | --- | --- |
 | `View` (`composeui.core.view`) | A typed `attrs` data class describing UI state (`MainView`, `InputView`, `FormView`, `ActionView`, etc). Composed by nesting view fields inside other views. |
-| `Signal` (`composeui.core.signal`) | A typed event emitter. `signal.connect(callback)` supports callbacks that optionally take `view`, `main_view`, and/or `model` keyword arguments, injected automatically. |
+| `Signal` (`composeui.core.signal`) | A typed event emitter. `signal.connect(callback)` supports callbacks that optionally take `view`, `main_view`, and/or `model` keyword arguments, injected automatically, on the views' signals and the model's alike. A callback may take fewer of the signal's arguments than it emits (the first ones, or none), and `connect(callback, now=True)` also calls it once right away. |
 | `Renderer` / `RendererContainer` (`composeui.core.renderer`) | Binds a `View` to a concrete toolkit widget and keeps them in sync in both directions (`refresh_attribute` / `update_state`). |
 | `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView` (and optionally a `Model`), parses CLI args (`--debug`, `--log`, `--log-signals`, `-f FILE`), and drives rendering. |
 | `Model` (`composeui.core.model`) | Base class for the app's data, meant to be subclassed; `SqliteModel` keeps it in a [SQLite database](#a-sqlite-model). |
@@ -418,7 +418,9 @@ the tables (`model.runs.add(...)`):
 - **Refreshing views.** A table's `changed` signal is emitted after a commit that changed
   rows through it, and after New and Open once the views are loaded too, so the views
   showing the rows can follow: connect it in `setup_model(main_view, model)`, which the
-  app calls once both are built, and on the web for each session.
+  app calls once both are built, and on the web for each session. A view's method asking
+  for `model` is given it, and `now=True` shows the rows right away:
+  `model.runs.changed.connect(main_view.show_runs, now=True)`.
 - **Studies.** New starts an empty database, and Save and Open (and `-f`) save and open
   the views' state and the database together, as a zip archive under the app's
   `extension`. The model works on a scratch copy in a temporary file, so the user's file

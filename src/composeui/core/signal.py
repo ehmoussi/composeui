@@ -69,6 +69,20 @@ CallbackT = TypeAliasType(
 )
 
 
+def _positional_count(callback: Callable[..., None]) -> int | None:
+    """Get how many positional arguments `callback` takes; None for any number."""
+    try:
+        params = inspect.signature(callback).parameters.values()
+    except (TypeError, ValueError):
+        return None
+    positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    if any(param.kind is inspect.Parameter.VAR_POSITIONAL for param in params):
+        return None
+    return sum(
+        param.kind in positional and param.name not in ("main_view", "model") for param in params
+    )
+
+
 class Signal(Generic[Unpack[Ts]]):
     def __init__(self) -> None:
         self._name = ""
@@ -98,17 +112,37 @@ class Signal(Generic[Unpack[Ts]]):
         self._qt_signal.add_signal(signal, self._callbacks)
 
     @overload
-    def connect(self, callback: Callable[[Unpack[Ts]], None]) -> None: ...
+    def connect(self, callback: Callable[[Unpack[Ts]], None], *, now: bool = False) -> None: ...
     @overload
-    def connect(self, callback: _MainViewCallback[_MainViewT, Unpack[Ts]]) -> None: ...
+    def connect(
+        self, callback: _MainViewCallback[_MainViewT, Unpack[Ts]], *, now: bool = False
+    ) -> None: ...
     @overload
-    def connect(self, callback: _ModelCallback[Any, Unpack[Ts]]) -> None: ...
+    def connect(self, callback: _ModelCallback[Any, Unpack[Ts]], *, now: bool = False) -> None: ...
     @overload
-    def connect(self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]]) -> None: ...
-    def connect(self, callback: CallbackT[Unpack[Ts]]) -> None:
+    def connect(
+        self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]], *, now: bool = False
+    ) -> None: ...
+    # a callback taking none of the arguments
+    @overload
+    def connect(self, callback: Callable[[], None], *, now: bool = False) -> None: ...
+    @overload
+    def connect(self, callback: _MainViewCallback[_MainViewT], *, now: bool = False) -> None: ...
+    @overload
+    def connect(self, callback: _ModelCallback[Any], *, now: bool = False) -> None: ...
+    @overload
+    def connect(self, callback: _BoundCallback[_MainViewT, Any], *, now: bool = False) -> None: ...
+    def connect(self, callback: Callable[..., None], *, now: bool = False) -> None:
+        """Call `callback` on each emit, and once right away too if `now`.
+
+        It's given the `main_view` and the `model` it asks for by name, and only as many of
+        the signal's arguments as it takes, the first ones: none when called `now`.
+        """
         injected_callback = self._inject_callback(callback)
         self._callbacks.append(injected_callback)
         self._qt_signal.connect(injected_callback)
+        if now:
+            cast("Callable[[], None]", injected_callback)()
 
     def disconnect(self) -> None:
         self._qt_signal.disconnect(self._callbacks)
@@ -140,21 +174,28 @@ class Signal(Generic[Unpack[Ts]]):
             self._logger.debug("\n".join(log_msgs), *log_args)
 
     def _inject_callback(
-        self, callback: CallbackT[Unpack[Ts]]
-    ) -> Callable[[Unpack[Ts]], None] | InjectedCallback[Unpack[Ts]]:
+        self, callback: Callable[..., None]
+    ) -> (
+        Callable[[Unpack[Ts]], None]
+        | InjectedCallback[Unpack[Ts]]
+        | _FirstArgumentsCallback[Unpack[Ts]]
+    ):
         requested_bounds = self._requested_bounds(callback)
         if len(requested_bounds) > 0:
-            return InjectedCallback(
+            return InjectedCallback[Unpack[Ts]](
                 callback=callback,
                 requested_bounds=requested_bounds,
                 optional_bounds=self._optional_bounds(callback),
                 main_view=self._main_view,
                 model=self._model,
             )
+        count = _positional_count(callback)
+        if count is not None:
+            return _FirstArgumentsCallback[Unpack[Ts]](callback, count)
         return cast("Callable[[Unpack[Ts]], None]", callback)
 
     @staticmethod
-    def _requested_bounds(callback: CallbackT[Unpack[Ts]]) -> frozenset[str]:
+    def _requested_bounds(callback: Callable[..., None]) -> frozenset[str]:
         names = ("main_view", "model")
         try:
             params = inspect.signature(callback).parameters
@@ -163,7 +204,7 @@ class Signal(Generic[Unpack[Ts]]):
         return frozenset(name for name in names if name in params)
 
     @staticmethod
-    def _optional_bounds(callback: CallbackT[Unpack[Ts]]) -> frozenset[str]:
+    def _optional_bounds(callback: Callable[..., None]) -> frozenset[str]:
         """Get the bounds `callback` has a default for, left out when there is none to give."""
         try:
             params = inspect.signature(callback).parameters
@@ -177,7 +218,7 @@ class Signal(Generic[Unpack[Ts]]):
 
     @staticmethod
     def get_function_name(callback: CallbackT[Any]) -> str:
-        if isinstance(callback, InjectedCallback):
+        if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
             return Signal.get_function_name(callback.get_callback())  # type: ignore[arg-type]
         if isinstance(callback, functools.partial):
             inner = Signal.get_function_name(callback.func)
@@ -189,7 +230,7 @@ class Signal(Generic[Unpack[Ts]]):
 
     @staticmethod
     def get_function_file(callback: CallbackT[Any]) -> str:
-        if isinstance(callback, InjectedCallback):
+        if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
             return Signal.get_function_file(callback.get_callback())  # type: ignore[arg-type]
         if isinstance(callback, functools.partial):
             return Signal.get_function_file(callback.func)
@@ -226,11 +267,25 @@ class _QtSignal:
                 qt_signal.disconnect(callback)
 
 
+class _FirstArgumentsCallback(Generic[Unpack[Ts]]):
+    """A callback taking fewer positional arguments than its signal emits: the first ones."""
+
+    def __init__(self, callback: Callable[..., None], count: int) -> None:
+        self._callback = callback
+        self._count = count
+
+    def get_callback(self) -> Callable[..., None]:
+        return self._callback
+
+    def __call__(self, *args: Unpack[Ts]) -> None:
+        self._callback(*args[: self._count])
+
+
 class InjectedCallback(Generic[Unpack[Ts]]):
     def __init__(
         self,
         *,
-        callback: CallbackT[Unpack[Ts]],
+        callback: Callable[..., None],
         requested_bounds: frozenset[str],
         optional_bounds: frozenset[str] = frozenset(),
         main_view: ReferenceType[MainView] | None,
@@ -238,7 +293,7 @@ class InjectedCallback(Generic[Unpack[Ts]]):
     ) -> None:
         # a view's own method stays weak, so its signals don't keep the view alive; a function
         # or a partial (e.g. `Application.connect`'s) has no owner that would hold it
-        self._callback: Callable[[], CallbackT[Unpack[Ts]] | None]
+        self._callback: Callable[[], Callable[..., None] | None]
         if inspect.ismethod(callback):
             self._callback = cast("Callable[[], Any]", weakref.WeakMethod(callback))
         else:
@@ -247,6 +302,8 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         self._optional_bounds = optional_bounds
         self._main_view = main_view
         self._model = model
+        #: how many of the signal's arguments the callback takes, the first ones; None for all
+        self._count = _positional_count(callback)
 
     def set_main_view(self, main_view: ReferenceType[MainView]) -> None:
         self._main_view = main_view
@@ -254,7 +311,7 @@ class InjectedCallback(Generic[Unpack[Ts]]):
     def set_model(self, model: ReferenceType[Model]) -> None:
         self._model = model
 
-    def get_callback(self) -> CallbackT[Unpack[Ts]]:
+    def get_callback(self) -> Callable[..., None]:
         callback = self._callback()
         if callback is None:
             msg = "callback has been garbage collected"
@@ -280,4 +337,4 @@ class InjectedCallback(Generic[Unpack[Ts]]):
             elif "model" not in self._optional_bounds:
                 msg = "The model is missing."
                 raise ValueError(msg)
-        return callback(*args, **kwargs)  # type: ignore[arg-type]
+        return callback(*args[: self._count], **kwargs)

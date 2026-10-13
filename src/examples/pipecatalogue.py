@@ -306,8 +306,8 @@ class PipeCatalogueMainView(MainView):
         self.pages.catalogue.remove_shown.clicked.connect(self.confirm_remove.open)
         self.confirm_remove.accepted.connect(self._remove_shown)
         shown = self.pages.catalogue.shown
-        shown.material.value_changed.connect(self._show_pipes)
-        shown.min_radius.editing_finished.connect(self._show_pipes)
+        shown.material.value_changed.connect(self.show_pipes)
+        shown.min_radius.editing_finished.connect(self.show_pipes)
 
     def show_pipes(self, model: PipeCatalogueModel) -> None:
         """List the pipes the filter shows, and their total."""
@@ -328,9 +328,6 @@ class PipeCatalogueMainView(MainView):
         pipes = "pipe" if total.count == 1 else "pipes"
         catalogue.total.text = f"{total.count} {pipes}, {total.mass:.1f} kg"
 
-    def _show_pipes(self, *_: object, model: PipeCatalogueModel) -> None:
-        self.show_pipes(model)
-
     def _add_pipe(self, *, model: PipeCatalogueModel) -> None:
         pipe = self.pages.add.pipe.pipe()
         with self.refusing("Can't add the pipe: {error}."):
@@ -344,8 +341,7 @@ class PipeCatalogueMainView(MainView):
 
 def connect_model(main_view: PipeCatalogueMainView, model: PipeCatalogueModel) -> None:
     """Keep the catalogue listing the database's pipes, whatever changes them."""
-    model.pipes.changed.connect(lambda: main_view.show_pipes(model))
-    main_view.show_pipes(model)
+    model.pipes.changed.connect(main_view.show_pipes, now=True)
 
 
 def main() -> None:

@@ -51,3 +51,41 @@ def test_app_connect_injects_the_view_and_main_view() -> None:
     assert len(calls) == 1
     assert calls[0][0] is status_bar
     assert calls[0][1] is app.main_view
+
+
+def test_a_callback_gets_as_many_of_the_signal_s_arguments_as_it_takes() -> None:
+    app = Application(build_main_view=_MainView)
+    signal: Signal[int, str] = Signal()
+    signal.set_main_view(app.main_view)
+    calls: list[tuple[object, ...]] = []
+
+    def first(value: int) -> None:
+        calls.append((value,))
+
+    def none_but_the_main_view(main_view: _MainView) -> None:
+        calls.append((main_view,))
+
+    def every(*args: object) -> None:
+        calls.append(args)
+
+    signal.connect(first)
+    signal.connect(none_but_the_main_view)
+    signal.connect(every)
+    signal.emit(3, "three")
+
+    assert calls == [(3,), (app.main_view,), (3, "three")]
+
+
+def test_now_calls_the_callback_right_away_then_on_each_emit() -> None:
+    app = Application(build_main_view=_MainView)
+    signal: Signal[int] = Signal()
+    signal.set_main_view(app.main_view)
+    calls: list[tuple[object, ...]] = []
+
+    def record(*values: int, main_view: _MainView) -> None:
+        calls.append((*values, main_view))
+
+    signal.connect(record, now=True)
+    assert calls == [(app.main_view,)]
+    signal.emit(3)
+    assert calls == [(app.main_view,), (3, app.main_view)]

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from composeui.core.signal import Signal
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from typing_extensions import Unpack
 
 
 class InvalidStateError(ValueError):
@@ -31,6 +35,15 @@ class Model:
 
     #: the model's file inside a saved study; None for a model with nothing to save
     data_name: ClassVar[str | None] = None
+
+    @property
+    def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
+        """Get the model's signals: its attributes that are one, unless a subclass adds some.
+
+        The app gives them the main view and the model, as the views' own signals: a
+        callback asking for `main_view` or `model` by name gets it.
+        """
+        return [value for value in vars(self).values() if isinstance(value, Signal)]
 
     def new(self) -> None:
         """Start the data of a new study."""

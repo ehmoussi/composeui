@@ -61,20 +61,14 @@ Found writing `examples/indoorenvironments.py` (~400 lines, most of it wiring ra
 app logic); `pipeform.py` and `pipecatalogue.py` repeat the same patterns. In order of
 lines saved.
 
-1. **Model-to-view wiring.**
-   - `changed.connect(callback, now=True)` (or `model.watch(table, callback)`), calling it
-     once right away, instead of `connect` followed by a manual first call.
-   - Inject `model`/`main_view` into model signals as into view signals, so
-     `table.changed.connect(view.show_table)` needs no lambda.
-   - A callback may take fewer positional arguments than its signal emits:
-     `_show_rooms(self, _rows, model)` only exists to drop `_rows`.
-2. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
+1. **`SqliteTable` helpers.** `unique_name(db, table, column, base)` ("Room", "Room 2",
    ...), replacing the example's two near-identical `_create_unique_*_name`;
    `fetch_column(sql, parameters) -> list[Any]` for a list of names; tables declared on
    the model (`indoor_environments = table(IndoorEnvironments)`) instead of an `__init__`
    calling `add_table`.
 
-With the record tables in, the example is down to ~380 lines; these would take it to about 300.
+With the record tables and the model-to-view wiring in, the example is down to ~370 lines;
+this would take it to about 300.
 
 ## 4 — Adoption
 
