@@ -143,6 +143,7 @@ How it differs from a desktop window:
 | `Renderer` / `RendererContainer` (`composeui.core.renderer`) | Binds a `View` to a concrete toolkit widget and keeps them in sync in both directions (`refresh_attribute` / `update_state`). |
 | `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView` (and optionally a `Model`), parses CLI args (`--debug`, `--log`, `--log-signals`, `-f FILE`), and drives rendering. |
 | `Model` (`composeui.core.model`) | Base class for the app's data, meant to be subclassed; `SqliteModel` keeps it in a [SQLite database](#a-sqlite-model). |
+| `Jobs` (`composeui.core.jobs`) | `main_view.jobs`: functions [run in threads](#running-work-in-threads), their results emitted on the main thread. |
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
@@ -471,6 +472,47 @@ through the views' `cattrs` converter, and `record_edited` emits the old and the
 a cell that doesn't parse refuses the edit and says why in the status bar. The records are
 saved and loaded with the study by their type, so build the table as
 `RecordTableView[Run]` (or subclass it).
+
+## Running work in threads
+
+A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`
+runs `work(job, *args)` in a thread of its own instead. The function must not touch a
+view, since a toolkit's widgets belong to the main thread: it returns its result, which
+its job's `finished` signal emits on the main thread, where the callbacks update the views:
+
+```python
+def simulate(job: Job[float], radius: float) -> float:  # in its thread
+    for step in range(100):
+        if job.is_canceled:
+            return float("nan")
+        ...  # a step of the computation
+    return stress
+
+
+@define_view
+class PipeMainView(MainView):
+    ...
+    def _run(self) -> None:
+        job = self.jobs.start(simulate, self.form.radius.value)
+        job.finished.connect(self._show_stress)  # on the main thread
+
+    def _show_stress(self, stress: float) -> None:
+        self.results.stress.text = f"{stress:g} MPa"
+```
+
+- **Failures.** What the function raises is logged and emitted by the job's `failed`.
+- **Canceling.** `job.cancel()`, or `jobs.cancel()` for them all, asks the functions to
+  stop: Python can't stop a thread, so each one checks `job.is_canceled`, or waits with
+  `job.sleep(seconds)`, which returns False once canceled. It still finishes, and
+  `finished` emits what it returned.
+- **Running or not.** `jobs.is_running` tells whether any job is running, and
+  `jobs.running_changed` emits it as it changes, e.g. to disable a Run button.
+- **New, Open and closing the app** cancel the jobs running and drop their results: they
+  belong to the study replaced. Closing doesn't wait for them either.
+- **Callbacks** connected to a job's signals get the `main_view` and `model` they ask for,
+  as any signal's.
+- **Tests.** A main view no toolkit shows emits its jobs' results when the test calls
+  `main_view.jobs.wait()`, on the test's thread.
 
 ## Development
 

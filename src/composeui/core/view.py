@@ -33,6 +33,7 @@ from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
+from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, RefusedError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
@@ -786,6 +787,14 @@ class MainView(View):
     file_view: FileView = attrs.field(factory=FileView, metadata={OMIT: True})
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
+    #: functions run in threads, their results given back on the main thread
+    jobs: Jobs = attrs.field(
+        default=attrs.Factory(Jobs, takes_self=True),
+        init=False,
+        repr=False,
+        eq=False,
+        metadata={OMIT: True},
+    )
 
     #: the directory of the app's catalogs, `<language>.json` files (see
     #: `composeui.core.translation`); a subclass sets it, e.g. to
@@ -853,6 +862,7 @@ class MainView(View):
         it (see `check_state_data`).
         """
         self.check_state_data(data)
+        self.jobs.drop()  # working for the study replaced
         _apply_state(self, data)
 
     def check_state_data(self, data: Any) -> None:
@@ -880,6 +890,7 @@ class MainView(View):
         The tree is reset in place, as `load_state` loads into it, so renderers and
         connected signals keep working.
         """
+        self.jobs.drop()  # working for the study replaced
         _reset_state(self, type(self)())
         # the new view's text is as written in the code
         _retranslate(self, self._tr)
@@ -903,6 +914,7 @@ class MainView(View):
         return self.file_view.filepath
 
     def close(self) -> None:
+        self.jobs.drop()
         if isinstance(self.renderer, MainRenderer):
             self.renderer.close()
 
