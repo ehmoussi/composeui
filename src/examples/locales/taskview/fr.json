@@ -1,0 +1,22 @@
+{
+  "Canceled": "Annulée",
+  "Configuration": "Configuration",
+  "Duration (s)": "Durée (s)",
+  "Error": "Erreur",
+  "Every value is needed": "Toutes les valeurs sont nécessaires",
+  "Failed": "Échouée",
+  "Fix the configuration first": "Corrigez d'abord la configuration",
+  "Maximum Duration (s)": "Durée maximale (s)",
+  "Minimum Duration (s)": "Durée minimale (s)",
+  "Pending": "En attente",
+  "Percentage of Failure (%)": "Pourcentage d'échec (%)",
+  "Random error: task {number} failed": "Erreur aléatoire : la tâche {number} a échoué",
+  "Run": "Lancer",
+  "Running": "En cours",
+  "Status": "Statut",
+  "Succeeded": "Réussie",
+  "Task": "Tâche",
+  "Task View": "Vue des tâches",
+  "The minimum duration can't be greater than the maximum duration": "La durée minimale ne peut pas dépasser la durée maximale",
+  "{done} of {total} tasks done: {succeeded} succeeded, {failed} failed, {canceled} canceled": "{done} tâches terminées sur {total} : {succeeded} réussies, {failed} échouées, {canceled} annulées"
+}
