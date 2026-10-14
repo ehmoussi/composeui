@@ -106,6 +106,7 @@ class WebSession(RenderTarget):
         with self.lock:
             if not isinstance(self.main_view.renderer, WebMainRenderer):
                 raise NoRenderedObjectError
+            self.take_pending()  # the whole page shows them
             return self.main_view.renderer.page_html()
 
     def handle_event(
@@ -113,8 +114,9 @@ class WebSession(RenderTarget):
     ) -> tuple[str, str | None] | None:
         """Apply a browser event to one of this session's widgets; None if it isn't one.
 
-        Returns the fragments the event changed, and the address of the page it
-        navigated to, if it did (e.g. a toolbar link, or an app's own `navigate`).
+        Returns the fragments the event changed, with those changed outside any request
+        since the last response, and the address of the page it navigated to, if it did
+        (e.g. a toolbar link, or an app's own `navigate`).
         """
         with self.lock:
             renderer = self.renderers.get(widget_id)
@@ -124,7 +126,10 @@ class WebSession(RenderTarget):
             route = None if router is None else router.current_route
             main_view = self.main_view
             language, title = main_view.language, main_view.title
-            body = handle_event(renderer, event, form)
+            with collect_dirty() as dirty:
+                renderer.dispatch(event, form)
+                # after: the event may hand changes over with `call_on_main_thread` too
+                body = render_dirty({**self.take_pending(), **dirty})
             if main_view.title != title and isinstance(main_view.renderer, WebMainRenderer):
                 body += main_view.renderer.brand_html(oob=True)
             if (main_view.language, main_view.title) != (language, title):
@@ -175,10 +180,18 @@ class WebSession(RenderTarget):
         return None
 
     def fragment(self, widget_id: str) -> str | None:
-        """Render one of this session's widgets as it is now; None if it isn't one."""
+        """Render one of this session's widgets as it is now; None if it isn't one.
+
+        The fragments changed outside any request come along, e.g. for a progress bar
+        fetching itself while a thread works (see `WebProgressBarRenderer`).
+        """
         with self.lock:
             renderer = self.renderers.get(widget_id)
-            return None if renderer is None else renderer.to_html()
+            if renderer is None:
+                return None
+            pending = self.take_pending()
+            pending.pop(widget_id, None)  # swapped in already
+            return renderer.to_html() + render_dirty(pending)
 
 
 class SessionStore:

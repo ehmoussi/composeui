@@ -129,7 +129,10 @@ How it differs from a desktop window:
   the light and dark themes: only its shape counts, as with a Lucide or Material icon.
   PNG, JPEG, GIF, WebP and ICO files show as they are.
 - Single process only, and no push from the server: the page changes in response to the
-  user's own actions (a status bar message still clears itself after its timeout).
+  user's own actions, with two exceptions that fetch themselves again. A status bar
+  message clears itself after its timeout, and a progress bar shown and not yet full
+  fetches itself every second, bringing along what threads changed meanwhile (through
+  `call_on_main_thread`). Hide or fill the bar once its task is over.
 
 ## Core concepts
 
