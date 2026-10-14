@@ -504,6 +504,11 @@ class PipeMainView(MainView):
   stop: Python can't stop a thread, so each one checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once canceled. It still finishes, and
   `finished` emits what it returned.
+- **On the main thread only.** Call `jobs.start`, `jobs.cancel` and `jobs.drop` from a
+  callback, never from a job's function: the jobs aren't locked, since the main thread
+  alone changes them (`job.cancel()` works from any thread). Called from a job's function,
+  they raise `CalledInJobError`: to start another job, return what it needs, and start it
+  from the callback getting it.
 - **Running or not.** `jobs.is_running` tells whether any job is running, and
   `jobs.running_changed` emits it as it changes, e.g. to disable a Run button.
 - **New, Open and closing the app** cancel the jobs running and drop their results: they

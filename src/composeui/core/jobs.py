@@ -23,6 +23,23 @@ LOGGER = logging.getLogger("COMPOSEUI")
 R = TypeVar("R")
 P = ParamSpec("P")
 
+#: the job a thread runs, in a job's thread (see `Jobs.start`)
+_CURRENT = threading.local()
+
+
+class CalledInJobError(RuntimeError):
+    """`Jobs.start`, `cancel` or `drop` called by a job's function, not on the main thread."""
+
+
+def _check_main_thread(method: str) -> None:
+    """Raise `CalledInJobError` in a job's thread: `Jobs` is only changed on the main one."""
+    if getattr(_CURRENT, "job", None) is not None:
+        msg = (
+            f"Jobs.{method} is called on the main thread, not by a job's function: call it"
+            " from a callback of the job's finished signal instead"
+        )
+        raise CalledInJobError(msg)
+
 
 class Job(Generic[R]):
     """A function running in a thread of its own, started by `Jobs.start`.
@@ -60,6 +77,12 @@ class Jobs:
     the views. Connected like any signal's, they get the `main_view` and `model` they ask
     for.
 
+    Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback, never
+    from a job's function: the jobs aren't locked, the main thread alone changing them.
+    `Job.cancel` is the exception, called from any thread. Called from a job's function,
+    they raise `CalledInJobError`: to start another job, return what it needs instead,
+    and start it from the callback getting it.
+
     New, Open and closing the app cancel the jobs running, and drop their results: they
     belong to the study replaced.
     """
@@ -90,8 +113,10 @@ class Jobs:
         """Run `work(job, *args, **kwargs)` in a thread; call it on the main thread.
 
         Connect to the job's signals right away: its outcome is emitted on the main
-        thread, so no sooner than the code calling `start` is done.
+        thread, so no sooner than the code calling `start` is done. Raises
+        `CalledInJobError` in a job's thread.
         """
+        _check_main_thread("start")
         job: Job[R] = Job()
         name = getattr(work, "__name__", "job")
         main_view = self._main_view()
@@ -111,12 +136,20 @@ class Jobs:
         return job
 
     def cancel(self) -> None:
-        """Cancel every job running; each still finishes, as soon as it notices."""
+        """Cancel every job running; each still finishes, as soon as it notices.
+
+        Raises `CalledInJobError` in a job's thread: a job cancels itself with `Job.cancel`.
+        """
+        _check_main_thread("cancel")
         for job in self._running:
             job.cancel()
 
     def drop(self) -> None:
-        """Cancel every job running and forget it: its result won't be emitted."""
+        """Cancel every job running and forget it: its result won't be emitted.
+
+        Raises `CalledInJobError` in a job's thread.
+        """
+        _check_main_thread("drop")
         self.cancel()
         was_running = self.is_running
         self._running.clear()
@@ -152,6 +185,7 @@ class Jobs:
         kwargs: dict[str, Any],
     ) -> None:
         """Run `work` in the job's thread, and hand its outcome to the main thread."""
+        _CURRENT.job = job  # for the thread's life: a thread of its own per job
         try:
             result = work(job, *args, **kwargs)
         except Exception as error:  # the app's code: whatever it raises, the job is over

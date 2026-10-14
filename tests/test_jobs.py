@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from composeui.core.application import ModelApplication
+from composeui.core.jobs import CalledInJobError
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
 from composeui.core.view import MainView
@@ -75,6 +76,30 @@ def test_what_a_job_raises_is_emitted_and_ends_it(
     assert [str(error) for error in errors] == ["no luck"]
     assert finished == []
     assert not jobs.is_running
+
+
+@pytest.mark.parametrize("method", ["start", "cancel", "drop"])
+def test_a_job_changing_the_jobs_fails(
+    app: ModelApplication[MainView, _Model], method: str
+) -> None:
+    jobs = app.main_view.jobs
+    calls = {
+        "start": lambda: jobs.start(_double, 1),
+        "cancel": jobs.cancel,
+        "drop": jobs.drop,
+    }
+
+    def change_the_jobs(job: Job[bool]) -> bool:
+        calls[method]()
+        return job.is_canceled
+
+    errors: list[Exception] = []
+    job = jobs.start(change_the_jobs)
+    job.failed.connect(errors.append)
+    jobs.wait()
+
+    assert [type(error) for error in errors] == [CalledInJobError]
+    assert not job.is_canceled  # nothing else canceled, nor started
 
 
 def test_a_canceled_job_stops_sleeping_and_still_finishes(
