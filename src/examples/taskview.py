@@ -1,22 +1,23 @@
-"""Tasks run side by side in worker threads: `python -m examples.taskview --backend qt`.
+"""Tasks run side by side in threads: `python -m examples.taskview --backend qt`.
 
-The workers never touch a view: each hands its task's outcome to the main thread with
-`call_on_main_thread`, which updates the views. On the web, the page follows them through
-the progress bar, which fetches itself while not full.
+Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
+view. It returns the task's status, which its job emits on the main thread, where the
+views show it. On the web, the page follows them through the progress bar, which fetches
+itself while not full.
 """
 
 import enum
 import functools
 import random
-import threading
 from collections import Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import attrs
 from attrs import Factory
 
 from composeui.core import application
+from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     OMIT,
@@ -36,15 +37,11 @@ from composeui.core.view import (
     define_view,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 #: the tasks a run starts, all at once
 TASK_COUNT = 25
 
 
 class TaskStatus(enum.Enum):
-    PENDING = T("Pending")
     RUNNING = T("Running")
     SUCCEEDED = T("Succeeded")
     FAILED = T("Failed")
@@ -56,11 +53,16 @@ class Task:
     number: int
     #: how long it works, in seconds
     duration: float
-    status: TaskStatus = TaskStatus.PENDING
+    status: TaskStatus = TaskStatus.RUNNING
 
-    @property
-    def is_done(self) -> bool:
-        return self.status in (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED)
+
+def run_task(job: Job[TaskStatus], duration: float, failure_rate: float) -> TaskStatus:
+    """Work for `duration` seconds, in the job's thread; then fail at `failure_rate`."""
+    if not job.sleep(duration):
+        return TaskStatus.CANCELED
+    # not cryptography: a failure only needs to happen at random
+    failed = random.random() < failure_rate  # noqa: S311
+    return TaskStatus.FAILED if failed else TaskStatus.SUCCEEDED
 
 
 @define_view
@@ -121,14 +123,6 @@ class RunButtons(HorizontalView):
     )
 
 
-@attrs.define
-class _Run:
-    """The tasks of one run, and the event telling its workers to stop."""
-
-    tasks: list[Task]
-    canceled: threading.Event = Factory(threading.Event)
-
-
 @define_view
 class TaskMainView(MainView):
     app_title = T("Task View")
@@ -145,17 +139,18 @@ class TaskMainView(MainView):
     tasks: TableView = child(
         TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
     )
-    #: the run going on, None between runs; only ever read and changed on the main thread
-    _run: Optional[_Run] = attrs.field(default=None, init=False, metadata={OMIT: True})
+    #: the tasks of the last run
+    _tasks: list[Task] = attrs.field(factory=list, init=False, metadata={OMIT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.run.clicked.connect(self.start)
-        self.buttons.cancel.clicked.connect(self.cancel)
+        self.buttons.cancel.clicked.connect(self.jobs.cancel)
+        self.jobs.running_changed.connect(self._show_running)
 
     def start(self) -> None:
-        """Start a run of `TASK_COUNT` tasks, each in a worker thread of its own."""
-        if self._run is not None:
+        """Start a run of `TASK_COUNT` tasks, each a job of its own."""
+        if self.jobs.is_running:
             return
         self.config.validate()
         if self.config.log_view.log_message != "":
@@ -164,54 +159,23 @@ class TaskMainView(MainView):
         minimum = self.config.min_duration.value or 0.0
         maximum = self.config.max_duration.value or 0.0
         failure_rate = (self.config.failure_percentage.value or 0.0) / 100
-        tasks = [
+        self._tasks = [
             # not cryptography: a task's duration only needs to vary
             Task(number, round(random.uniform(minimum, maximum), 1))  # noqa: S311
             for number in range(1, TASK_COUNT + 1)
         ]
-        self._run = run = _Run(tasks)
-        self._show_running(is_running=True)
+        for task in self._tasks:
+            job = self.jobs.start(run_task, task.duration, failure_rate)
+            job.finished.connect(functools.partial(self._report, task))
         self.progress.is_visible = True
-        self._show(run)
-        for index in range(len(tasks)):
-            # daemons: closing the app doesn't wait for the tasks
-            worker = threading.Thread(
-                target=self._work, args=(run, index, failure_rate), daemon=True
-            )
-            worker.start()
+        self._show()
 
-    def cancel(self) -> None:
-        """Stop the run's tasks still working; each reports itself canceled."""
-        if self._run is not None:
-            self._run.canceled.set()
+    def _report(self, task: Task, status: TaskStatus) -> None:
+        """Show a task's outcome, on the main thread."""
+        task.status = status
+        self._show()
 
-    def _work(self, run: _Run, index: int, failure_rate: float) -> None:
-        """Run a task on its worker thread: it waits its duration, then may fail."""
-        self._on_main_thread(functools.partial(self._report, run, index, TaskStatus.RUNNING))
-        if run.canceled.wait(run.tasks[index].duration):
-            status = TaskStatus.CANCELED
-        elif random.random() < failure_rate:  # noqa: S311
-            status = TaskStatus.FAILED
-        else:
-            status = TaskStatus.SUCCEEDED
-        self._on_main_thread(functools.partial(self._report, run, index, status))
-
-    def _on_main_thread(self, callback: "Callable[[], None]") -> None:
-        # a worker never sets a view: a toolkit's widgets belong to the main thread
-        if self.renderer is None:
-            callback()
-        else:
-            self.renderer.call_on_main_thread(callback)
-
-    def _report(self, run: _Run, index: int, status: TaskStatus) -> None:
-        """Show a task's new status, on the main thread; the run ends with its last task."""
-        run.tasks[index] = attrs.evolve(run.tasks[index], status=status)
-        self._show(run)
-        if all(task.is_done for task in run.tasks):
-            self._run = None
-            self._show_running(is_running=False)
-
-    def _show(self, run: _Run) -> None:
+    def _show(self) -> None:
         error = self.tr("Random error: task {number} failed")
         self.tasks.rows = [
             [
@@ -220,9 +184,9 @@ class TaskMainView(MainView):
                 self.tr(task.status.value),
                 error.format(number=task.number) if task.status is TaskStatus.FAILED else "",
             ]
-            for task in run.tasks
+            for task in self._tasks
         ]
-        counts = Counter(task.status for task in run.tasks)
+        counts = Counter(task.status for task in self._tasks)
         done = counts[TaskStatus.SUCCEEDED] + counts[TaskStatus.FAILED]
         self.progress.value = done + counts[TaskStatus.CANCELED]
         summary = self.tr(
@@ -231,13 +195,13 @@ class TaskMainView(MainView):
         )
         self.summary.text = summary.format(
             done=done,
-            total=len(run.tasks),
+            total=len(self._tasks),
             succeeded=counts[TaskStatus.SUCCEEDED],
             failed=counts[TaskStatus.FAILED],
             canceled=counts[TaskStatus.CANCELED],
         )
 
-    def _show_running(self, *, is_running: bool) -> None:
+    def _show_running(self, is_running: bool) -> None:
         self.config.is_enabled = not is_running
         self.buttons.run.is_enabled = not is_running
         self.buttons.cancel.is_enabled = is_running

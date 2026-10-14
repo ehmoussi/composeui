@@ -8,7 +8,6 @@
   "Fix the configuration first": "Corrigez d'abord la configuration",
   "Maximum Duration (s)": "Durée maximale (s)",
   "Minimum Duration (s)": "Durée minimale (s)",
-  "Pending": "En attente",
   "Percentage of Failure (%)": "Pourcentage d'échec (%)",
   "Random error: task {number} failed": "Erreur aléatoire : la tâche {number} a échoué",
   "Run": "Lancer",

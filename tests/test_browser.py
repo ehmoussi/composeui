@@ -675,8 +675,8 @@ def test_the_page_follows_tasks_running_in_threads_until_they_end(tasks_page: Pa
     expect(bar).to_be_hidden()  # no task yet: nothing to follow
     with _posted(tasks_page):
         tasks_page.get_by_role("button", name="Run").click()
-    # as the click left them: the threads wait for its response to be done
-    expect(tasks_page.get_by_role("cell", name="Pending")).to_have_count(TASK_COUNT)
+    # as the click left them: the jobs' results wait for its response to be done
+    expect(tasks_page.get_by_role("cell", name="Running")).to_have_count(TASK_COUNT)
     # nothing else is sent: the bar fetches itself, bringing the threads' changes along
     expect(tasks_page.get_by_text(f"{TASK_COUNT} of {TASK_COUNT} tasks done")).to_be_visible(
         timeout=10_000
