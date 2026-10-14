@@ -61,9 +61,9 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
+from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
-    PROGRESS_POLL_MS,
     RESERVED_ROUTES,
     UnsupportedEventError,
     WebActionRenderer,
@@ -96,6 +96,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from starlette.applications import Starlette
+
+    from composeui.core.jobs import Job
 
 
 class _HelloApp(HelloApp):
@@ -1913,29 +1915,42 @@ def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(
     assert "max" not in bar.attributes
 
 
-def test_a_progress_bar_fetches_itself_while_shown_and_not_full(
+def test_the_page_asks_for_what_jobs_change_while_they_run(
     pages_views: list[PagesMainView], pages_client: TestClient
 ) -> None:
-    pages_client.get("/results")
+    page = pages_client.get("/results").text
+    assert "hx-get" not in _element(page, "cui-jobs").attributes  # no job yet
     (main_view,) = pages_views
-    progress = main_view.router.results.progress
-    bar_id = _widget_id(progress.renderer)
+    results, submit = main_view.router.results, main_view.router.inputs.submit
+    total_id = _widget_id(results.total.renderer)
+    release = threading.Event()
 
-    def attributes() -> dict[str, str | None]:
-        return _element(pages_client.get(f"/widget/{bar_id}").text, bar_id).attributes
+    def work(_job: Job[int]) -> int:
+        release.wait(10)
+        return 7
 
-    assert attributes()["hx-get"] == f"/widget/{bar_id}"
-    assert attributes()["hx-trigger"] == f"load delay:{PROGRESS_POLL_MS}ms"
-    assert attributes()["hx-swap"] == "outerHTML"
-    progress.maximum = None  # a task of unknown length goes on too
-    assert "hx-get" in attributes()
+    def show(total: int) -> None:
+        results.total.text = f"Total: {total}"
 
-    progress.maximum = 10
-    progress.value = 10  # the task is over
-    assert "hx-get" not in attributes()
-    progress.value = 0
-    progress.is_visible = False  # no task yet
-    assert "hx-get" not in attributes()
+    def start() -> None:
+        main_view.jobs.start(work).finished.connect(show)
+
+    submit.clicked.connect(start)
+    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    poller = _swapped(response.text, "cui-jobs").attributes
+    assert poller["hx-get"] == "/jobs"
+    assert poller["hx-trigger"] == f"load delay:{JOBS_POLL_MS}ms"
+    assert poller["hx-swap"] == "outerHTML"
+    assert "hx-get" in _element(pages_client.get("/jobs").text, "cui-jobs").attributes
+
+    release.set()
+    deadline = time.monotonic() + 10
+    while main_view.jobs.is_running and time.monotonic() < deadline:
+        time.sleep(0.01)
+    polled = pages_client.get("/jobs").text
+
+    assert "hx-get" not in _element(polled, "cui-jobs").attributes  # over: done asking
+    assert _swapped(polled, total_id).text == "Total: 7"
 
 
 # handed over by the view it changes, or by the main view, as an app does

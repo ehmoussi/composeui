@@ -82,8 +82,6 @@ _RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
 #: seconds a status bar waits past its message's timeout before fetching itself again
 _AUTO_CLEAR_MARGIN = 0.25
-#: milliseconds a progress bar not yet full waits before fetching itself again
-PROGRESS_POLL_MS = 1000
 
 
 class UnsupportedEventError(Exception):
@@ -564,13 +562,7 @@ class ProgressBarViewLike(ViewLike, Protocol):
 
 
 class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
-    """A `<progress>` bar; one with no value is the browser's own for a task of unknown length.
-
-    The task usually runs in a thread, whose changes no response carries (see
-    `RenderTarget.pending`). So while the bar is shown and not full, it fetches itself
-    every `PROGRESS_POLL_MS`, which brings them along. Hide it, or fill it, once the task
-    is over, or before it starts.
-    """
+    """A `<progress>` bar; one with no value is the browser's own for a task of unknown length."""
 
     _role = "progress_bar"
 
@@ -583,17 +575,8 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
         clamped = ProgressBarView.clamp(value, maximum)
         progress = "" if maximum is None else f' value="{clamped}" max="{maximum}"'
         return (
-            f"<progress {self._root_attributes(oob=oob)}{self._poll_attributes()}"
-            f' class="progress progress-primary w-full"{progress}></progress>'
-        )
-
-    def _poll_attributes(self) -> str:
-        value, maximum = self._view.value, self._view.maximum
-        if not self._view.is_visible or (maximum is not None and value >= maximum):
-            return ""
-        return (
-            f' hx-get="/widget/{self.widget_id}" hx-trigger="load delay:{PROGRESS_POLL_MS}ms"'
-            ' hx-swap="outerHTML"'
+            f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
+            f"{progress}></progress>"
         )
 
 
@@ -1659,7 +1642,7 @@ class WebRouterRenderer(WebRenderer[Router]):
 
 
 #: first segments of the backend's own addresses, which no page's address can take
-RESERVED_ROUTES: Final = frozenset({"icon", "state", "static", "widget"})
+RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "state", "static", "widget"})
 
 
 def check_routes(main_view: MainView) -> None:
@@ -1788,6 +1771,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             "</div></div></main>"
             f"{status_bar}{self._dialogs_html()}",
             self._view.language,
+            jobs_running=self._view.jobs.is_running,
         )
 
     def _dialogs_html(self) -> str:

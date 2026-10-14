@@ -20,7 +20,7 @@ from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError
 from composeui.core.study import has_data, open_study, save_study
-from composeui.webcore.page import page_marker
+from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
@@ -126,6 +126,7 @@ class WebSession(RenderTarget):
             route = None if router is None else router.current_route
             main_view = self.main_view
             language, title = main_view.language, main_view.title
+            jobs_running = main_view.jobs.is_running
             with collect_dirty() as dirty:
                 renderer.dispatch(event, form)
                 # after: the event may hand changes over with `call_on_main_thread` too
@@ -134,6 +135,8 @@ class WebSession(RenderTarget):
                 body += main_view.renderer.brand_html(oob=True)
             if (main_view.language, main_view.title) != (language, title):
                 body += page_marker(main_view.language, main_view.title, oob=True)
+            if main_view.jobs.is_running != jobs_running:
+                body += jobs_poller(is_running=main_view.jobs.is_running, oob=True)
             if router is None or router.current_route == route:
                 return body, None
             return body, page_path(router.current_route)
@@ -182,8 +185,7 @@ class WebSession(RenderTarget):
     def fragment(self, widget_id: str) -> str | None:
         """Render one of this session's widgets as it is now; None if it isn't one.
 
-        The fragments changed outside any request come along, e.g. for a progress bar
-        fetching itself while a thread works (see `WebProgressBarRenderer`).
+        The fragments changed outside any request come along too.
         """
         with self.lock:
             renderer = self.renderers.get(widget_id)
@@ -192,6 +194,15 @@ class WebSession(RenderTarget):
             pending = self.take_pending()
             pending.pop(widget_id, None)  # swapped in already
             return renderer.to_html() + render_dirty(pending)
+
+    def poll_jobs(self) -> str:
+        """Render the jobs' poller as it is now, and what changed outside any request.
+
+        The poller fetches this while the main view's jobs run (see `jobs_poller`).
+        """
+        with self.lock:
+            pending = render_dirty(self.take_pending())
+            return jobs_poller(is_running=self.main_view.jobs.is_running) + pending
 
 
 class SessionStore:

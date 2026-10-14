@@ -2,8 +2,7 @@
 
 Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
 view. It returns the task's status, which its job emits on the main thread, where the
-views show it. On the web, the page follows them through the progress bar, which fetches
-itself while not full.
+views show it.
 """
 
 import enum
@@ -133,8 +132,7 @@ class TaskMainView(MainView):
 
     config: TaskConfigForm = Factory(TaskConfigForm)
     buttons: RunButtons = Factory(RunButtons)
-    # hidden until the first run: on the web, a bar not full polls the server
-    progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT, is_visible=False)
+    progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT)
     summary: LabelView = Factory(LabelView)
     tasks: TableView = child(
         TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
@@ -167,7 +165,6 @@ class TaskMainView(MainView):
         for task in self._tasks:
             job = self.jobs.start(run_task, task.duration, failure_rate)
             job.finished.connect(functools.partial(self._report, task))
-        self.progress.is_visible = True
         self._show()
 
     def _report(self, task: Task, status: TaskStatus) -> None:

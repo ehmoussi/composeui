@@ -85,9 +85,10 @@ The README's "Web backend" section covers what users see.
   field left with unparsable text, swapped back to the view's value.
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's
   lock and keeps what it changed in the session's `pending`, sent with the next event's
-  response or widget fetch (a full page drops them). Nothing asks for them but a
-  progress bar shown and not full, which fetches itself every `PROGRESS_POLL_MS`: no
-  push, no websocket, and an idle page sends nothing.
+  response or fetch (a full page drops them). While the main view's jobs run, the page's
+  `cui-jobs` poller fetches `/jobs` every `JOBS_POLL_MS`, which brings them: no push, no
+  websocket, and an idle page sends nothing. A response whose event starts or ends the
+  jobs swaps the poller in, as it does the page's marker.
 - **Sessions.** A signed cookie maps to a `WebSession` holding its renderers by id and an
   `RLock` (the status bar timer takes it through `call_on_main_thread`). A request whose
   session is gone answers `HX-Refresh`.

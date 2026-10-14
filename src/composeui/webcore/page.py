@@ -176,6 +176,7 @@ document.addEventListener("DOMContentLoaded", function () {
 $content
 </div>
 $page_marker
+$jobs_poller
 </body>
 
 </html>
@@ -195,13 +196,34 @@ def page_marker(language: str, title: str, *, oob: bool = False) -> str:
     )
 
 
-def get_page(title: str, content: str, language: str) -> str:
+#: milliseconds the page waits, while jobs run, before asking for what they changed
+JOBS_POLL_MS = 1000
+
+
+def jobs_poller(*, is_running: bool, oob: bool = False) -> str:
+    """Get the element asking the server for what the jobs changed, while they run.
+
+    No response carries what a job's result changes (see `RenderTarget.pending`): while
+    the main view's jobs run, this element fetches itself every `JOBS_POLL_MS`, which
+    brings the changes along, until it comes back without a fetch once they are over.
+    """
+    swap = ' hx-swap-oob="true"' if oob else ""
+    poll = (
+        f' hx-get="/jobs" hx-trigger="load delay:{JOBS_POLL_MS}ms" hx-swap="outerHTML"'
+        if is_running
+        else ""
+    )
+    return f'<div id="cui-jobs"{poll}{swap} hidden></div>'
+
+
+def get_page(title: str, content: str, language: str, *, jobs_running: bool) -> str:
     return _PAGE.substitute(
         {
             "title": html.escape(title),
             "content": content,
             "language": html.escape(language),
             "page_marker": page_marker(language, title),
+            "jobs_poller": jobs_poller(is_running=jobs_running),
             **_STATIC_URLS,
         }
     )
