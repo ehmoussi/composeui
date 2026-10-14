@@ -130,6 +130,7 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
                 if model is not None:
                     child.set_model(model)
     if model is not None:
+        main_view.jobs.set_model(model)
         for signal in model.signals:
             signal.set_main_view(main_view)
             signal.set_model(model)
