@@ -3,7 +3,9 @@
 There is no live widget to mutate between requests, so a renderer's rendered object is
 just the stable id of its fragment. Changing a view attribute marks the renderer dirty
 in a request-scoped set (`collect_dirty`); the route then re-renders every dirty
-fragment as an htmx out-of-band swap (`render_dirty`).
+fragment as an htmx out-of-band swap (`render_dirty`). A change made outside any request,
+by a thread handing it over with `call_on_main_thread`, waits in its session's `pending`
+for the next response.
 """
 
 from __future__ import annotations
@@ -80,6 +82,8 @@ _RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
 #: seconds a status bar waits past its message's timeout before fetching itself again
 _AUTO_CLEAR_MARGIN = 0.25
+#: milliseconds a progress bar not yet full waits before fetching itself again
+PROGRESS_POLL_MS = 1000
 
 
 class UnsupportedEventError(Exception):
@@ -134,6 +138,28 @@ class RenderTarget:
         #: serializes requests against the tree, and the `StatusBar` timer thread with
         #: them (see `WebRenderer.call_on_main_thread`)
         self.lock = threading.RLock()
+        #: the renderers changed outside any request (`call_on_main_thread` from another
+        #: thread), to send with the next response: no response was there to carry them
+        self.pending: dict[str, WebRenderer[Any]] = {}
+
+    def take_pending(self) -> dict[str, WebRenderer[Any]]:
+        """Get the renderers changed outside any request, sending them is then the caller's."""
+        pending, self.pending = self.pending, {}
+        return pending
+
+
+def call_in_session(target: RenderTarget | None, callback: Callable[[], None]) -> None:
+    """Run `callback` under `target`'s lock, keeping what it changes in its `pending`.
+
+    The `call_on_main_thread` of every web renderer: a request alone touches a session's
+    tree otherwise, and its response sends what it changed.
+    """
+    if target is None:
+        callback()  # rendered outside any session: nothing else touches the tree
+        return
+    with target.lock, collect_dirty() as dirty:
+        callback()
+        target.pending.update(dirty)
 
 
 @contextlib.contextmanager
@@ -154,7 +180,7 @@ class WebRenderer(Renderer[TView, str]):
 
     def __init__(self, view: TView) -> None:
         super().__init__(view)
-        self._lock: threading.RLock | None = None
+        self._target: RenderTarget | None = None
         #: the container drawing this view, if it passes its enabled state on (`is_enabled`)
         self.parent: WebRenderer[Any] | None = None
         #: the renderers this one is the `parent` of
@@ -178,7 +204,7 @@ class WebRenderer(Renderer[TView, str]):
             target = _RENDER_TARGET.get()
             if target is not None:
                 target.renderers[self._rendered_object] = self
-                self._lock = target.lock
+                self._target = target
 
     @property
     def is_enabled(self) -> bool:
@@ -201,11 +227,7 @@ class WebRenderer(Renderer[TView, str]):
                     self.children.append(child)
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
-        if self._lock is None:
-            callback()  # rendered outside any session: nothing else touches the tree
-            return
-        with self._lock:
-            callback()
+        call_in_session(self._target, callback)
 
     @abstractmethod
     def to_html(self, *, oob: bool = False) -> str:
@@ -542,7 +564,13 @@ class ProgressBarViewLike(ViewLike, Protocol):
 
 
 class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
-    """A `<progress>` bar; one with no value is the browser's own for a task of unknown length."""
+    """A `<progress>` bar; one with no value is the browser's own for a task of unknown length.
+
+    The task usually runs in a thread, whose changes no response carries (see
+    `RenderTarget.pending`). So while the bar is shown and not full, it fetches itself
+    every `PROGRESS_POLL_MS`, which brings them along. Hide it, or fill it, once the task
+    is over, or before it starts.
+    """
 
     _role = "progress_bar"
 
@@ -555,8 +583,17 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
         clamped = ProgressBarView.clamp(value, maximum)
         progress = "" if maximum is None else f' value="{clamped}" max="{maximum}"'
         return (
-            f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
-            f"{progress}></progress>"
+            f"<progress {self._root_attributes(oob=oob)}{self._poll_attributes()}"
+            f' class="progress progress-primary w-full"{progress}></progress>'
+        )
+
+    def _poll_attributes(self) -> str:
+        value, maximum = self._view.value, self._view.maximum
+        if not self._view.is_visible or (maximum is not None and value >= maximum):
+            return ""
+        return (
+            f' hx-get="/widget/{self.widget_id}" hx-trigger="load delay:{PROGRESS_POLL_MS}ms"'
+            ' hx-swap="outerHTML"'
         )
 
 
@@ -1672,6 +1709,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         super().__init__(view)
         #: set by `MainView.close()` (the Exit action); the route then ends the session
         self.is_closed = False
+        self._target: RenderTarget | None = None
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 (
@@ -1695,6 +1733,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-main"
+            self._target = _RENDER_TARGET.get()
         check_routes(self._view)
         # the children are rendered first: hand the Open actions the file type they load
         views: list[View] = list(self._view.children_views)
@@ -1703,6 +1742,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             views.extend(view.children_views)
             if isinstance(view, OpenFileAction) and isinstance(view.renderer, WebActionRenderer):
                 view.renderer.accept = self._view.extension
+
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        call_in_session(self._target, callback)
 
     def page_html(self) -> str:
         menus: list[str] = []

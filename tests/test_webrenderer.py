@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import types
 from html.parser import HTMLParser
@@ -62,6 +63,7 @@ from composeui.core.view import (
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
+    PROGRESS_POLL_MS,
     RESERVED_ROUTES,
     UnsupportedEventError,
     WebActionRenderer,
@@ -1909,6 +1911,72 @@ def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(
     # no value: the browser's own bar for a task of unknown length
     assert "value" not in bar.attributes
     assert "max" not in bar.attributes
+
+
+def test_a_progress_bar_fetches_itself_while_shown_and_not_full(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    pages_client.get("/results")
+    (main_view,) = pages_views
+    progress = main_view.router.results.progress
+    bar_id = _widget_id(progress.renderer)
+
+    def attributes() -> dict[str, str | None]:
+        return _element(pages_client.get(f"/widget/{bar_id}").text, bar_id).attributes
+
+    assert attributes()["hx-get"] == f"/widget/{bar_id}"
+    assert attributes()["hx-trigger"] == f"load delay:{PROGRESS_POLL_MS}ms"
+    assert attributes()["hx-swap"] == "outerHTML"
+    progress.maximum = None  # a task of unknown length goes on too
+    assert "hx-get" in attributes()
+
+    progress.maximum = 10
+    progress.value = 10  # the task is over
+    assert "hx-get" not in attributes()
+    progress.value = 0
+    progress.is_visible = False  # no task yet
+    assert "hx-get" not in attributes()
+
+
+# handed over by the view it changes, or by the main view, as an app does
+@pytest.mark.parametrize("through_main_view", [False, True])
+def test_what_a_thread_changes_comes_with_the_session_s_next_response(
+    pages_views: list[PagesMainView], pages_client: TestClient, *, through_main_view: bool
+) -> None:
+    pages_client.get("/results")
+    (main_view,) = pages_views
+    results, submit = main_view.router.results, main_view.router.inputs.submit
+    bar_id, total_id = _widget_id(results.progress.renderer), _widget_id(results.total.renderer)
+
+    def work(value: int) -> None:
+        def advance() -> None:
+            results.progress.value = value
+            results.total.text = f"Total: {value}"
+
+        renderer = (main_view if through_main_view else results.progress).renderer
+        assert renderer is not None
+        worker = threading.Thread(target=renderer.call_on_main_thread, args=(advance,))
+        worker.start()
+        worker.join()
+
+    work(40)
+    fetched = pages_client.get(f"/widget/{bar_id}").text
+    assert _element(fetched, bar_id).attributes["value"] == "40"
+    assert "hx-swap-oob" not in _element(fetched, bar_id).attributes  # the fetch's own swap
+    assert _swapped(fetched, total_id).text == "Total: 40"
+    # sent once
+    assert _find(pages_client.get(f"/widget/{bar_id}").text, total_id) is None
+
+    work(50)
+    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    assert _swapped(response.text, bar_id).attributes["value"] == "50"
+    # changed by both, swapped once, as the click left it
+    assert response.text.count(f'id="{total_id}"') == 1
+    assert _swapped(response.text, total_id).text == "Submitted: "
+
+    work(60)
+    assert _element(pages_client.get("/results").text, total_id).text == "Total: 60"
+    assert _find(pages_client.get(f"/widget/{bar_id}").text, total_id) is None  # shown already
 
 
 def test_clicking_the_button_swaps_in_what_its_view_changed(
