@@ -9,6 +9,7 @@ without them, these tests are skipped.
 from __future__ import annotations
 
 import contextlib
+import re
 import socket
 import threading
 import time
@@ -25,6 +26,7 @@ from playwright.sync_api import Error, expect, sync_playwright
 
 from composeui.webcore.webapplication import WebApplication
 from examples.pipeform import PipeMainView
+from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -74,6 +76,16 @@ def base_url() -> Iterator[str]:
     """Serve the hello app for the whole module."""
     with _serve(_BrowserHelloApp().create_starlette_app()) as url:
         yield url
+
+
+class _QuickTasksApp(WebApplication[TaskMainView]):
+    """The task example, its tasks short enough for a test to wait for them."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=TaskMainView)
+
+    def setup_session(self, main_view: TaskMainView) -> None:
+        main_view.config.min_duration.value = main_view.config.max_duration.value = 1
 
 
 @pytest.fixture(scope="module")
@@ -132,6 +144,13 @@ def places_base_url() -> Iterator[str]:
     """Serve an app with a table whose notes are editable, for the whole module."""
     app = WebApplication(build_main_view=EditableTableMainView).create_starlette_app()
     with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def tasks_base_url() -> Iterator[str]:
+    """Serve the task example, whose tasks run in threads, for the whole module."""
+    with _serve(_QuickTasksApp().create_starlette_app()) as url:
         yield url
 
 
@@ -222,6 +241,15 @@ def wide_page(browser: Browser, wide_page_base_url: str) -> Iterator[Page]:
 def vertical_page(browser: Browser, vertical_base_url: str) -> Iterator[Page]:
     """Open the app with a table above its button like `page`, in a session of its own."""
     context = browser.new_context(base_url=vertical_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def tasks_page(browser: Browser, tasks_base_url: str) -> Iterator[Page]:
+    """Open the task example like `page`, in a session of its own."""
+    context = browser.new_context(base_url=tasks_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -639,3 +667,20 @@ def test_the_language_menu_sets_the_page_s_language_and_title(pipe_page: Page) -
     expect(pipe_page).to_have_title("Formulaire de conduite")
     expect(pipe_page.get_by_role("heading", name="Formulaire de conduite")).to_be_visible()
     expect(pipe_page.get_by_label("Matériau")).to_be_visible()
+
+
+def test_the_page_follows_tasks_running_in_threads_until_they_end(tasks_page: Page) -> None:
+    tasks_page.goto("/")
+    bar = tasks_page.get_by_role("progressbar")
+    expect(bar).to_be_hidden()  # no task yet: nothing to follow
+    with _posted(tasks_page):
+        tasks_page.get_by_role("button", name="Run").click()
+    # as the click left them: the threads wait for its response to be done
+    expect(tasks_page.get_by_role("cell", name="Pending")).to_have_count(TASK_COUNT)
+    # nothing else is sent: the bar fetches itself, bringing the threads' changes along
+    expect(tasks_page.get_by_text(f"{TASK_COUNT} of {TASK_COUNT} tasks done")).to_be_visible(
+        timeout=10_000
+    )
+    expect(bar).to_have_attribute("value", str(TASK_COUNT))
+    expect(bar).not_to_have_attribute("hx-get", re.compile(".*"))  # full: done polling
+    expect(tasks_page.get_by_role("button", name="Run")).to_be_enabled()
