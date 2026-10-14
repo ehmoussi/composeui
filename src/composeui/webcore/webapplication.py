@@ -28,6 +28,7 @@ from composeui.core.view import View
 from composeui.webcore.routes import (
     homepage,
     icon,
+    jobs_poll,
     page,
     state_download,
     state_upload,
@@ -101,6 +102,7 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
             Route("/icon/{name}", icon),
+            Route("/jobs", jobs_poll),
             Mount(
                 "/static",
                 app=StaticFiles(directory=Path(__file__).parent / "static"),

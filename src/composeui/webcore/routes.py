@@ -114,6 +114,14 @@ def widget_fragment(request: Request) -> Response:
     return HTMLResponse(body, headers=_NO_STORE)
 
 
+def jobs_poll(request: Request) -> Response:
+    """Return the jobs' poller and what they changed, which it fetches while they run."""
+    session = _session(request)
+    if session is None:
+        return Response(headers=_RELOAD)
+    return HTMLResponse(session.poll_jobs(), headers=_NO_STORE)
+
+
 def state_download(request: Request) -> Response:
     """Download the session's state as a file, the web side of `MainView.save_state`.
 

@@ -122,17 +122,16 @@ How it differs from a desktop window:
 - **Pages have their own address.** With a router (see [Pages](#pages)), each page is at
   `/<route>`, and `/` sends the browser to the first page. The pages' toolbar sits in the
   header; changing pages puts the new address in the browser's history, so back, forward,
-  bookmarks and reloads land on that page. A route can't be `icon`, `state`, `static` or
-  `widget`, which the backend uses.
+  bookmarks and reloads land on that page. A route can't be `icon`, `jobs`, `state`,
+  `static` or `widget`, which the backend uses.
 - **Icons** are the image files actions name (`action.icon = "icons/run.svg"`, the path
   Qt reads), served by the backend. An SVG is drawn in the text's color, so it follows
   the light and dark themes: only its shape counts, as with a Lucide or Material icon.
   PNG, JPEG, GIF, WebP and ICO files show as they are.
 - Single process only, and no push from the server: the page changes in response to the
-  user's own actions, with two exceptions that fetch themselves again. A status bar
-  message clears itself after its timeout, and a progress bar shown and not yet full
-  fetches itself every second, bringing along what threads changed meanwhile (through
-  `call_on_main_thread`). Hide or fill the bar once its task is over.
+  user's own actions, with two exceptions. A status bar message clears itself after its
+  timeout, and while [jobs](#running-work-in-threads) run, the page asks every second
+  for what their results changed.
 
 ## Core concepts
 
@@ -511,6 +510,8 @@ class PipeMainView(MainView):
   belong to the study replaced. Closing doesn't wait for them either.
 - **Callbacks** connected to a job's signals get the `main_view` and `model` they ask for,
   as any signal's.
+- **On the web,** the page asks the server for what the jobs changed every second while
+  any is running, and stops once they are over.
 - **Tests.** A main view no toolkit shows emits its jobs' results when the test calls
   `main_view.jobs.wait()`, on the test's thread.
 
