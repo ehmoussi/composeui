@@ -155,9 +155,9 @@ under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, d
 tells the main action from the others and from one destroying something.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
-[`src/examples/taskview.py`](src/examples/taskview.py) runs tasks in worker threads
-behind one, each handing its outcome to the views through `call_on_main_thread`
-(`uv run python -m examples.taskview`, or `--backend qt`, or `textual`).
+[`src/examples/taskview.py`](src/examples/taskview.py) follows tasks running in
+[threads](#running-work-in-threads) with one (`uv run python -m examples.taskview`, or
+`--backend qt`, or `textual`).
 
 ## Pages
 
@@ -513,6 +513,9 @@ class PipeMainView(MainView):
   as any signal's.
 - **Tests.** A main view no toolkit shows emits its jobs' results when the test calls
   `main_view.jobs.wait()`, on the test's thread.
+
+[`src/examples/taskview.py`](src/examples/taskview.py) runs 25 jobs at once, and cancels
+them.
 
 ## Development
 
