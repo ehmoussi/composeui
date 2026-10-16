@@ -2,10 +2,12 @@
 
 Each click on Add Curve sweeps the flow rate through the pipe of the form's diameter and
 plots the pressure drop it causes, one curve per diameter, each with its own flow rates.
-Between laminar and turbulent flow neither law holds: the curve leaves a gap there.
+Between laminar and turbulent flow neither law holds: the curve leaves a gap there. Add
+Measurements plots, as dots over the curves, what a test rig measured on that pipe.
 """
 
 import math
+from collections.abc import Callable
 from typing import Optional
 
 from attrs import Factory
@@ -16,6 +18,7 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ButtonView,
+    ChartKind,
     ChartView,
     GroupFormView,
     HorizontalView,
@@ -36,6 +39,9 @@ LAMINAR_LIMIT = 2300.0
 TURBULENT_LIMIT = 4000.0
 #: the flow rates a sweep computes
 SWEEP_POINTS = 200
+#: the test rig's measurements of a pipe, as the shares of its maximum flow rate measured
+#: and the ratio of each measured drop to the computed one
+MEASUREMENTS = ((0.2, 1.06), (0.35, 0.95), (0.5, 1.03), (0.65, 0.98), (0.8, 1.04), (0.95, 0.97))
 
 
 def friction_factor(reynolds: float, diameter: float) -> float:
@@ -63,6 +69,20 @@ def pressure_drop_curve(diameter_mm: float, length: float, max_flow: float) -> S
         flows.append(flow)
         drops.append(factor * length / diameter * DENSITY * velocity**2 / 2 / 1000)
     return Series(name=f"D = {diameter_mm:g} mm", x=flows, y=drops)
+
+
+def measured_drops(diameter_mm: float, length: float, max_flow: float) -> Series:
+    """Get what the test rig measured on a pipe: dots near its computed curve."""
+    model = pressure_drop_curve(diameter_mm, length, max_flow)
+    flows: list[float] = []
+    drops: list[float] = []
+    for share, ratio in MEASUREMENTS:
+        index = round(share * SWEEP_POINTS) - 1
+        flows.append(model.x[index])
+        drops.append(model.y[index] * ratio)
+    return Series(
+        name=f"Measured, D = {diameter_mm:g} mm", x=flows, y=drops, kind=ChartKind.SCATTER
+    )
 
 
 @define_view
@@ -95,6 +115,9 @@ class PipeForm(GroupFormView):
 class CurveButtons(HorizontalView):
     align = Align.END
     add: ButtonView = child(ButtonView, text="Add Curve")
+    measure: ButtonView = child(
+        ButtonView, text="Add Measurements", variant=ButtonVariant.SECONDARY
+    )
     clear: ButtonView = child(ButtonView, text="Clear", variant=ButtonVariant.DANGER)
 
 
@@ -117,10 +140,18 @@ class PipeChartMainView(MainView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.add.clicked.connect(self.add_curve)
+        self.buttons.measure.clicked.connect(self.add_measurements)
         self.buttons.clear.clicked.connect(self.clear_curves)
 
     def add_curve(self) -> None:
         """Plot the form's pipe, replacing the curve of a pipe of the same diameter."""
+        self._plot(pressure_drop_curve)
+
+    def add_measurements(self) -> None:
+        """Plot what the rig measured on the form's pipe, replacing earlier ones of it."""
+        self._plot(measured_drops)
+
+    def _plot(self, compute: Callable[[float, float, float], Series]) -> None:
         self.pipe.validate()  # shows why, when the form can't be plotted
         diameter, length = self.pipe.diameter.value, self.pipe.length.value
         max_flow = self.pipe.max_flow.value
@@ -128,7 +159,7 @@ class PipeChartMainView(MainView):
             return
         if min(diameter, length, max_flow) <= 0:
             return
-        curve = pressure_drop_curve(diameter, length, max_flow)
+        curve = compute(diameter, length, max_flow)
         others = [series for series in self.chart.series if series.name != curve.name]
         self.chart.series = [*others, curve]
 

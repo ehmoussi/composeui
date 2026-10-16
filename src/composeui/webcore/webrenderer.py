@@ -34,6 +34,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ButtonVariant,
+    ChartKind,
     ChartView,
     DialogKind,
     DialogView,
@@ -586,6 +587,7 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
 
 
 class ChartViewLike(ViewLike, Protocol):
+    kind: ChartKind
     title: str
     x_title: str
     y_title: str
@@ -649,7 +651,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             dict.fromkeys(
-                ("title", "x_title", "y_title", "x_unit", "y_unit", "series"), self._mark_dirty
+                ("kind", "title", "x_title", "y_title", "x_unit", "y_unit", "series"),
+                self._mark_dirty,
             )
         )
 
@@ -661,7 +664,10 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         spec: dict[str, Any] = {
             "x": {"label": ChartView.axis_label(view.x_title, x_unit), "unit": x_unit},
             "y": {"label": ChartView.axis_label(view.y_title, y_unit), "unit": y_unit},
-            "series": [{"name": series.name} for series in view.series],
+            "series": [
+                {"name": series.name, "kind": ChartView.kind_of(series, view.kind).name.lower()}
+                for series in view.series
+            ],
         }
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y

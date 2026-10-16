@@ -71,14 +71,11 @@ alike, tested), rather than raising mid-job.
 
 Each step on Qt, Textual and the web, with tests, before the next:
 
-1. **Scatter** (`SCATTER`), e.g. measurements over a model curve: needs one chart with a
-   line series and a scatter series, so `kind` may then move to `Series`; decide at this
-   step, not before.
-2. **Bars** (`BAR` with `categories`): one bar group per category, one bar per series.
-3. **Log axes** (`x_log`, `y_log`).
-4. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
+1. **Bars** (`BAR` with `categories`): one bar group per category, one bar per series.
+2. **Log axes** (`x_log`, `y_log`).
+3. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
    image" action on each backend.
-5. **Web: full resolution on zoom** (see below), once a real app needs it.
+4. **Web: full resolution on zoom** (see below), once a real app needs it.
 
 ### Qt: pyqtgraph
 

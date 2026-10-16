@@ -476,7 +476,9 @@ saved and loaded with the study by their type, so build the table as
 
 A `ChartView` plots results, e.g. a quantity against time or a swept dimension: a list of
 `Series`, each a curve with its own `x` and `y` (as many of each) and a `name` for the
-legend; a NaN leaves a gap in its curve.
+legend; a NaN leaves a gap in its curve. The chart's `kind` (`ChartKind`) draws them as
+lines (`LINE`, the default) or dots (`SCATTER`), and a series' own `kind` overrides it,
+e.g. measurements as dots over a model's curve.
 
 ```python
 from composeui.core.view import ChartView, Series, child
@@ -498,7 +500,7 @@ the legend shows the values at the cursor; a long series is thinned to the extre
 each bucket of its points before it's sent. Textual draws it with `textual-plotext` (in the
 `tui` extra), without zoom or hover. A new `series` list keeps the user's zoom.
 [`src/examples/pipechart.py`](src/examples/pipechart.py) plots a pipe's pressure drop
-against its flow rate (`uv run python -m examples.pipechart --backend qt`, or `textual`,
+against its flow rate, and measurements over it (`uv run python -m examples.pipechart --backend qt`, or `textual`,
 or `web`).
 
 ## Running work in threads

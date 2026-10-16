@@ -16,6 +16,7 @@ from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
     ActionView,
+    ChartKind,
     ChartView,
     ComboboxView,
     InputView,
@@ -164,6 +165,14 @@ def test_a_series_has_one_y_per_x() -> None:
         Series(name="Pressure", x=[0, 1], y=[2])
 
 
+def test_a_series_is_drawn_as_its_chart_unless_it_says_otherwise() -> None:
+    line = Series(name="Model", x=[0], y=[0])
+    dots = Series(name="Measured", x=[0], y=[0], kind=ChartKind.SCATTER)
+    assert ChartView.kind_of(line, ChartKind.LINE) is ChartKind.LINE
+    assert ChartView.kind_of(line, ChartKind.SCATTER) is ChartKind.SCATTER
+    assert ChartView.kind_of(dots, ChartKind.LINE) is ChartKind.SCATTER
+
+
 def test_an_axis_label_shows_its_unit() -> None:
     assert ChartView.axis_label("Time", "s") == "Time (s)"
     assert ChartView.axis_label("Time", "") == "Time"
@@ -180,8 +189,9 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     loaded = PipeChartMainView()
     loaded.load_state(path)
 
+    loaded.add_measurements()  # one series of its own kind
     names = [series.name for series in loaded.chart.series]
-    assert names == ["D = 50 mm", "Gap"]
+    assert names == ["D = 50 mm", "Gap", "Measured, D = 50 mm"]
     saved, back = view.chart.series[0], loaded.chart.series[0]
     assert back.x == saved.x
     # the transitional flow's gap too: NaN is no number equal to itself

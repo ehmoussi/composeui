@@ -1088,6 +1088,15 @@ def _to_floats(values: "Iterable[float]") -> list[float]:
     return [float(value) for value in values]
 
 
+class ChartKind(enum.Enum):
+    """How a chart draws its series' points."""
+
+    #: joined by a line, e.g. a result against time
+    LINE = enum.auto()
+    #: as dots, e.g. measurements over a model's curve
+    SCATTER = enum.auto()
+
+
 @attrs.frozen
 class Series:
     """A curve of a `ChartView`: its points, x against y, under `name` in the legend.
@@ -1104,6 +1113,8 @@ class Series:
     name: str
     x: list[float] = attrs.field(converter=_to_floats)
     y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
+    #: how it is drawn; None: as its chart's `kind`
+    kind: Optional[ChartKind] = None
 
 
 @define_view
@@ -1117,6 +1128,8 @@ class ChartView(View):
 
     _renderer_key = "chart"
 
+    #: how its series are drawn, unless one says otherwise (`Series.kind`)
+    kind: ChartKind = attrs.field(default=ChartKind.LINE)
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     x_title: str = attrs.field(default="", metadata={UI_TEXT: True})
     y_title: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -1124,6 +1137,14 @@ class ChartView(View):
     x_unit: str = attrs.field(default="")
     y_unit: str = attrs.field(default="")
     series: list[Series] = attrs.field(factory=list[Series])
+
+    @staticmethod
+    def kind_of(series: Series, kind: ChartKind) -> ChartKind:
+        """Get how `series` is drawn on a chart of `kind`.
+
+        Takes the chart's kind, as a renderer refreshes it before the view holds it.
+        """
+        return kind if series.kind is None else series.kind
 
     @staticmethod
     def axis_label(title: str, unit: str) -> str:
