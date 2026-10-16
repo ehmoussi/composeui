@@ -18,6 +18,7 @@ from typing import (
     Any,
     ClassVar,
     Generic,
+    NamedTuple,
     Optional,
     TypeVar,
     Union,
@@ -75,6 +76,9 @@ OMIT = "omit"
 #: width, against its siblings' (its view's `default_stretch` when unset); 0 keeps it
 #: as wide as its content
 STRETCH = "stretch"
+#: Field metadata key for a view field of a `GridView`: its cell, a `GridPosition` (or a
+#: tuple of its values)
+GRID_POSITION = "grid_position"
 #: Field metadata key for text the user reads rather than enters (labels, titles...): it
 #: belongs to the app's code and language, not to a study, so it's never saved or loaded
 UI_TEXT = "ui_text"
@@ -1685,6 +1689,86 @@ class VerticalView(View):
     """
 
     _renderer_key = "vertical"
+
+
+class GridPosition(NamedTuple):
+    """A view's cell in a `GridView`, counted from 0, spanning more cells to its right or below."""
+
+    row: int
+    column: int
+    row_span: int = 1
+    column_span: int = 1
+
+    @property
+    def cells(self) -> "list[tuple[int, int]]":
+        """Get the (row, column) cells the view covers."""
+        return [
+            (row, column)
+            for row in range(self.row, self.row + self.row_span)
+            for column in range(self.column, self.column + self.column_span)
+        ]
+
+
+class GridPositionError(ValueError):
+    """A `GridView`'s view field has no cell, or one outside the grid or another view's."""
+
+
+@define_view
+class GridView(View):
+    """Its view fields laid out in a grid: equally wide columns, rows as tall as their views.
+
+    Each field sets its cell with its `GRID_POSITION` metadata:
+    ``chart: ChartView = attrs.field(factory=ChartView, metadata={GRID_POSITION: (1, 0)})``,
+    or ``GridPosition(1, 0, column_span=2)`` to span two columns. Cells no view takes are
+    left empty, as are those of a hidden view. A view shorter than its row stays at its
+    top; one with no share of a row (`default_stretch` 0, e.g. a button) keeps its
+    content's width, at its cell's start.
+    """
+
+    _renderer_key = "grid"
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        taken: dict[tuple[int, int], str] = {}
+        for name, (_, position) in self._named_positions().items():
+            if position.row < 0 or position.column < 0:
+                msg = f"{type(self).__name__}.{name}: no cell before row or column 0"
+                raise GridPositionError(msg)
+            if position.row_span < 1 or position.column_span < 1:
+                msg = f"{type(self).__name__}.{name}: a span is at least 1"
+                raise GridPositionError(msg)
+            for cell in position.cells:
+                if cell in taken:
+                    msg = f"{type(self).__name__}.{name}: cell {cell} is {taken[cell]}'s"
+                    raise GridPositionError(msg)
+                taken[cell] = name
+
+    @property
+    def positioned_views(self) -> list[tuple[View, GridPosition]]:
+        """Get the views in the grid with their cells, row by row."""
+        return sorted(self._named_positions().values(), key=lambda vp: (vp[1].row, vp[1].column))
+
+    @property
+    def row_count(self) -> int:
+        """Get the number of rows: down to the lowest view's last."""
+        return max((p.row + p.row_span for _, p in self.positioned_views), default=0)
+
+    @property
+    def column_count(self) -> int:
+        """Get the number of columns: up to the rightmost view's last."""
+        return max((p.column + p.column_span for _, p in self.positioned_views), default=0)
+
+    def _named_positions(self) -> dict[str, tuple[View, GridPosition]]:
+        """Get each view field's view and cell, by field name."""
+        positions: dict[str, tuple[View, GridPosition]] = {}
+        for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
+            if isinstance(view := getattr(self, f.name), View):
+                position = f.metadata.get(GRID_POSITION)
+                if position is None:
+                    msg = f"{type(self).__name__}.{f.name}: no GRID_POSITION in its metadata"
+                    raise GridPositionError(msg)
+                positions[f.name] = (view, GridPosition(*position))
+        return positions
 
 
 #: what a page's route can be: it also names the page in a web address (`/<route>`)

@@ -47,6 +47,7 @@ from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, Compose
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
+from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView
@@ -539,6 +540,32 @@ async def test_a_vertical_view_stacks_its_views_at_its_top() -> None:
         assert button.y == table.bottom
         # next to a taller table, the column's spare height is left below its views
         assert button.bottom < tall.bottom
+
+
+@pytest.mark.asyncio
+async def test_a_grid_view_places_its_views_in_equally_wide_columns() -> None:
+    view = GridMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    widgets = []
+    for child in (view.tables.first, view.tables.button, view.tables.spanning, view.tables):
+        assert isinstance(child.renderer, TextualWidgetRenderer)
+        assert child.renderer.widget is not None
+        widgets.append(child.renderer.widget)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        first, button, spanning, grid = (widget.region for widget in widgets)
+        assert (first.x, first.y, button.y) == (grid.x, grid.y, grid.y)
+        assert first.width == grid.width // 3
+        # the hidden table's column is kept: the button is in the third one
+        assert button.x == grid.x + 2 * first.width
+        # as wide as its text, unlike the table filling its column
+        assert button.width < first.width // 2
+        # the next row starts below the taller of the views above it, spanning the columns
+        assert (spanning.x, spanning.y, spanning.right) == (grid.x, first.bottom, grid.right)
 
 
 @pytest.mark.asyncio

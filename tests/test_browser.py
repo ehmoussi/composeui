@@ -28,6 +28,7 @@ from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.dialogs import DialogsMainView
+from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.tables import EditableTableMainView
@@ -139,6 +140,13 @@ def vertical_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def grid_base_url() -> Iterator[str]:
+    """Serve an app with views in a grid, for the whole module."""
+    with _serve(WebApplication(build_main_view=GridMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def places_base_url() -> Iterator[str]:
     """Serve an app with a table whose notes are editable, for the whole module."""
     app = WebApplication(build_main_view=EditableTableMainView).create_starlette_app()
@@ -240,6 +248,15 @@ def wide_page(browser: Browser, wide_page_base_url: str) -> Iterator[Page]:
 def vertical_page(browser: Browser, vertical_base_url: str) -> Iterator[Page]:
     """Open the app with a table above its button like `page`, in a session of its own."""
     context = browser.new_context(base_url=vertical_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def grid_page(browser: Browser, grid_base_url: str) -> Iterator[Page]:
+    """Open the app with views in a grid like `page`, in a session of its own."""
+    context = browser.new_context(base_url=grid_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -550,6 +567,30 @@ def test_a_vertical_view_stacks_its_views_at_its_top(vertical_page: Page) -> Non
     )
     # next to a taller table, the column's spare height is left below its views
     assert button["y"] + button["height"] < tall["y"] + tall["height"]
+
+
+def test_a_grid_view_places_its_views_in_equally_wide_columns(grid_page: Page) -> None:
+    page = grid_page
+    page.set_viewport_size({"width": 1000, "height": 600})
+    page.goto("/")
+    first = page.get_by_role("table").filter(has_text="First").bounding_box()
+    button = page.get_by_role("button", name="Add").bounding_box()
+    spanning = page.get_by_role("table").filter(has_text="Spanning").bounding_box()
+    assert first is not None
+    assert button is not None
+    assert spanning is not None
+    # within 2px: a table is inset in its cell by its border, the button isn't
+    gap = (spanning["width"] - 3 * first["width"]) / 2
+
+    assert first["y"] == pytest.approx(button["y"], abs=1)
+    assert gap > 0
+    # the hidden table's column is kept: the button is in the third one
+    assert button["x"] - first["x"] == pytest.approx(2 * (first["width"] + gap), abs=2)
+    # as wide as its text, unlike the table filling its column
+    assert button["width"] < first["width"] / 2
+    # the next row starts below the taller of the views above it, spanning the columns
+    assert spanning["y"] - (first["y"] + first["height"]) == pytest.approx(gap, abs=2)
+    assert spanning["x"] + spanning["width"] == pytest.approx(1000 - first["x"], abs=1)
 
 
 def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
