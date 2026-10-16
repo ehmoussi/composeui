@@ -200,3 +200,10 @@ body {
 .u-inline.u-live .chart-unnamed th::after {
   content: none;
 }
+
+/* a chart's legend values in digits of one width, from the left of their cells: the
+   values at the cursor change without moving the legend (see `keepLegendWidths`) */
+.u-legend .u-value {
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
