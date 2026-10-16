@@ -63,7 +63,8 @@ var SERIES_COLORS = ["primary", "warning", "accent", "secondary", "success", "in
 function chartValue(unit) {
   return function (chart, value) {
     if (value === null || value === undefined) return "-";
-    return String(parseFloat(value.toPrecision(4))) + (unit === "" ? "" : " " + unit);
+    // its trailing zeros kept: as many digits wherever the cursor is
+    return value.toPrecision(4) + (unit === "" ? "" : " " + unit);
   };
 }
 function chartOptions(element, spec, width) {
@@ -153,6 +154,7 @@ function chartOptions(element, spec, width) {
     // under the plot, out of its element: the element's height is the plot's
     legend: {
       mount: function (chart, legend) {
+        element.chartLegend = legend;
         element.after(legend);
       },
     },
@@ -167,13 +169,28 @@ function chartData(spec) {
 function drawChart(element, zoom) {
   var spec = JSON.parse(element.dataset.chart);
   var options = chartOptions(element, spec, element.clientWidth);
-  // the image's download follows the zoom
-  options.hooks = { setScale: [function (chart) { updateImageLink(element, chart); }] };
+  options.hooks = {
+    // the image's download follows the zoom
+    setScale: [function (chart) { updateImageLink(element, chart); }],
+    setLegend: [function () { keepLegendWidths(element.chartLegend); }],
+  };
   var chart = new uPlot(options, chartData(spec), element);
   if (zoom !== undefined) chart.setScale("x", zoom);
   charts.set(element, chart);
   updateImageLink(element, chart);
   postClicks(element, chart);
+}
+/* each value of the legend as wide as the widest it has shown: a value of other digits
+   at the cursor, e.g. a minus sign or an exponent, would move its neighbours */
+function keepLegendWidths(legend) {
+  if (legend === undefined) return;
+  legend.querySelectorAll(".u-value").forEach(function (cell) {
+    var width = cell.getBoundingClientRect().width;
+    if (width > (cell.widestValue || 0)) {
+      cell.widestValue = width;
+      cell.style.minWidth = width + "px";
+    }
+  });
 }
 /* a click on the plot posts its point, in the axes' values (see `WebChartRenderer`);
    not the end of a drag, which zooms */

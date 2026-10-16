@@ -941,7 +941,7 @@ def test_a_bar_chart_draws_its_bars_by_category(chart_pages_page: Page) -> None:
 
     legend = energy.locator(".u-legend")
     expect(legend).to_contain_text("Bedroom")
-    expect(legend).to_contain_text("80 kWh")
+    expect(legend).to_contain_text("80.00 kWh")
 
 
 def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
@@ -1042,3 +1042,33 @@ def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url:
     page.wait_for_timeout(300)
     expect(page.get_by_text("I'm Batman")).to_be_visible()
     context.close()
+
+
+def test_the_legend_stays_put_while_the_cursor_moves(chart_page: Page) -> None:
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+    chart_page.get_by_role("button", name="Add Measurements").click()
+    legend = chart_page.locator(".u-legend")
+    expect(legend).to_contain_text("Measured, D = 50 mm")
+    box = chart_page.locator(".u-over").bounding_box()
+    assert box is not None
+
+    def hover(share: float) -> list[float]:
+        """Hover the plot at `share` of its width; get where each legend entry starts."""
+        chart_page.mouse.move(box["x"] + box["width"] * share, box["y"] + box["height"] / 2)
+        chart_page.wait_for_timeout(50)
+        lefts: list[float] = legend.locator(".u-series").evaluate_all(
+            "rows => rows.map(row => row.getBoundingClientRect().left)"
+        )
+        return lefts
+
+    # values of fewer and more digits, and none (a measurement's x not under the cursor)
+    shares = (0.02, 0.5, 0.97)
+    for share in shares:
+        hover(share)
+    first = [hover(share) for share in shares]
+    again = [hover(share) for share in shares]
+
+    assert first[0] == first[1] == first[2] == again[0]
+    # trailing zeros kept: the same digits wherever the cursor is
+    expect(legend).to_contain_text(re.compile(r"\d\.\d{3} L/s|\d{2}\.\d{2} L/s"))
