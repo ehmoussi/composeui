@@ -43,6 +43,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         super().__init__(parent)
         self._series: list[Series] = []
         self._kind = ChartKind.LINE
+        self._categories: list[str] = []
+        self._bars: list[pg.BarGraphItem] = []
         self._units = ("", "")
         self._items: list[pg.PlotDataItem] = []
         plot = self.getPlotItem()
@@ -75,22 +77,44 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     def set_kind(self, kind: ChartKind) -> None:
         """Draw the series as `kind`, unless they say otherwise (`Series.kind`)."""
         self._kind = kind
-        self._apply_styles()
+        self._draw()
+
+    def set_categories(self, categories: list[str]) -> None:
+        """Name a bar chart's categories, under their groups of bars."""
+        self._categories = categories
+        self._draw()
 
     def set_series(self, series: list[Series]) -> None:
-        """Show `series`, reusing the curves drawn: the zoom stays where the user put it."""
+        """Show `series`, reusing the items drawn: the zoom stays where the user put it."""
         self._series = series
-        plot = self.getPlotItem()
-        while len(self._items) > len(series):
-            plot.removeItem(self._items.pop())
-        while len(self._items) < len(series):
-            self._items.append(plot.plot(connect="finite"))
-        for item, curve in zip(self._items, series):
-            item.setData(np.asarray(curve.x, dtype=float), np.asarray(curve.y, dtype=float))
-            item.opts["name"] = curve.name
-        self._apply_styles()
+        self._draw()
         self._hover.setVisible(False)
         self._crosshair.setVisible(False)
+
+    def _draw(self) -> None:
+        """Draw the series as curves, or as a bar chart's bars, and their legend."""
+        plot = self.getPlotItem()
+        is_bar = self._kind is ChartKind.BAR
+        curve_count, bar_count = (0, len(self._series)) if is_bar else (len(self._series), 0)
+        for items, count, make in (
+            (self._items, curve_count, lambda: plot.plot(connect="finite")),
+            (self._bars, bar_count, self._make_bars),
+        ):
+            while len(items) > count:
+                plot.removeItem(items.pop())
+            while len(items) < count:
+                items.append(make())
+        for item, curve in zip(self._items, self._series):
+            item.setData(np.asarray(curve.x, dtype=float), np.asarray(curve.y, dtype=float))
+            item.opts["name"] = curve.name
+        ticks = [list(enumerate(self._categories))] if is_bar else None
+        plot.getAxis("bottom").setTicks(ticks)
+        self._apply_styles()
+
+    def _make_bars(self) -> pg.BarGraphItem:
+        bars = pg.BarGraphItem(x0=[], height=[], width=1)
+        self.getPlotItem().addItem(bars)
+        return bars
 
     def legend_names(self) -> list[str]:
         return [label.text for _sample, label in self._legend.items]
@@ -119,6 +143,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             axis.setTextPen(text)
         plot.titleLabel.setText(plot.titleLabel.text, color=text)
         self._legend.setLabelTextColor(text)
+        # over the data, so its names stay readable over a curve or a bar
+        legend_background = QColor(background)
+        legend_background.setAlpha(200)
+        self._legend.setBrush(legend_background)
         self._hover.setColor(text)
         crosshair = QColor(text)
         crosshair.setAlpha(120)
@@ -142,9 +170,22 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 item.setSymbol(None)
                 style = {"dash": [6, 4]} if is_dashed(index) else {}
                 item.setPen(pg.mkPen(color, width=2, **style))
-        # the legend's samples draw the pens their curves had when added
+        for index, (bars, curve) in enumerate(zip(self._bars, self._series)):
+            heights = np.asarray(ChartView.bar_heights(curve, len(self._categories)))
+            categories = np.flatnonzero(np.isfinite(heights))  # a NaN: no bar
+            offset, width = ChartView.bar_slot(index, len(self._series))
+            bars.setOpts(
+                x0=categories + offset - width / 2,
+                height=heights[categories],
+                width=width,
+                brush=series_color(index, is_dark=is_dark),
+                # a line of the background between neighbouring bars
+                pen=pg.mkPen(background, width=1),
+                name=curve.name,
+            )
+        # the legend's samples draw the styles their items had when added
         self._legend.clear()
-        for item, curve in zip(self._items, self._series):
+        for item, curve in zip(self._items or self._bars, self._series):
             self._legend.addItem(item, curve.name)
 
     def _on_mouse_moved(self, event: tuple[Any, ...]) -> None:
@@ -158,17 +199,36 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             self._crosshair.setVisible(False)
             return
         position = view_box.mapSceneToView(scene_position)
-        x_unit, y_unit = self._units
-        lines = [_format(position.x(), x_unit)]
-        for curve in self._series:
-            point = _nearest(curve, position.x())
-            if point is not None:
-                lines.append(f"{curve.name}: {_format(point[1], y_unit)}")
+        lines = self._hover_lines(position.x())
+        if len(lines) == 0:  # between a bar chart's categories, or past them
+            self._hover.setVisible(False)
+            self._crosshair.setVisible(False)
+            return
         self._crosshair.setPos(position.x())
         self._crosshair.setVisible(True)
         self._hover.setText("\n".join(lines))
         self._hover.setPos(position)
         self._hover.setVisible(True)
+
+    def _hover_lines(self, x: float) -> list[str]:
+        """Get what the hover shows at `x`: where it is, then each series' value there."""
+        x_unit, y_unit = self._units
+        if self._kind is ChartKind.BAR:
+            category = round(x)
+            if not 0 <= category < len(self._categories):
+                return []
+            lines = [self._categories[category]]
+            for curve in self._series:
+                height = ChartView.bar_heights(curve, len(self._categories))[category]
+                if math.isfinite(height):
+                    lines.append(f"{curve.name}: {_format(height, y_unit)}")
+            return lines
+        lines = [_format(x, x_unit)]
+        for curve in self._series:
+            point = _nearest(curve, x)
+            if point is not None:
+                lines.append(f"{curve.name}: {_format(point[1], y_unit)}")
+        return lines
 
 
 def _nearest(series: Series, x: float) -> tuple[float, float] | None:

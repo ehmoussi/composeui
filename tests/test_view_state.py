@@ -173,6 +173,21 @@ def test_a_series_is_drawn_as_its_chart_unless_it_says_otherwise() -> None:
     assert ChartView.kind_of(dots, ChartKind.LINE) is ChartKind.SCATTER
 
 
+def test_a_bar_chart_draws_only_bars_a_bar_per_category() -> None:
+    dots = Series(name="Measured", x=[0, 2, 0.5, 7, 2], y=[1, 2, 3, 4, 5], kind=ChartKind.SCATTER)
+    assert ChartView.kind_of(dots, ChartKind.BAR) is ChartKind.BAR
+    # by the category its x names; none past the categories, the last of one wins
+    assert str(ChartView.bar_heights(dots, 3)) == str([1.0, math.nan, 5.0])
+    with pytest.raises(ValueError, match="as bars"):
+        Series(name="Measured", x=[0], y=[1], kind=ChartKind.BAR)
+
+
+def test_a_category_s_bars_are_side_by_side_around_its_index() -> None:
+    assert ChartView.bar_slot(0, 1) == (0, 0.8)
+    assert ChartView.bar_slot(0, 2) == (-0.2, 0.4)
+    assert ChartView.bar_slot(1, 2) == (0.2, 0.4)
+
+
 def test_an_axis_label_shows_its_unit() -> None:
     assert ChartView.axis_label("Time", "s") == "Time (s)"
     assert ChartView.axis_label("Time", "") == "Time"

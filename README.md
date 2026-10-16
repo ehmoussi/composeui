@@ -478,7 +478,19 @@ A `ChartView` plots results, e.g. a quantity against time or a swept dimension: 
 `Series`, each a curve with its own `x` and `y` (as many of each) and a `name` for the
 legend; a NaN leaves a gap in its curve. The chart's `kind` (`ChartKind`) draws them as
 lines (`LINE`, the default) or dots (`SCATTER`), and a series' own `kind` overrides it,
-e.g. measurements as dots over a model's curve.
+e.g. measurements as dots over a model's curve. A `BAR` chart draws values per case: a
+group of bars for each of its `categories`, one per series, each series' x naming a
+category by its index and its y the bar's height.
+
+```python
+energy: ChartView = child(
+    ChartView,
+    kind=ChartKind.BAR,
+    y_unit="kWh",
+    categories=["Kitchen", "Bedroom", "Office"],
+    series=[Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95])],
+)
+```
 
 ```python
 from composeui.core.view import ChartView, Series, child

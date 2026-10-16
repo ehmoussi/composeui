@@ -14,6 +14,7 @@ import json
 import math
 from typing import TYPE_CHECKING
 
+import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QPoint, QPointF, Qt
 from qtpy.QtGui import QAction, QColor, QPalette
@@ -57,6 +58,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
+from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -1040,3 +1042,54 @@ def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
     view.chart.kind = ChartKind.SCATTER  # the series without a kind of their own follow
     assert model.opts["symbol"] == "o"
     assert model.opts["pen"].style() == Qt.PenStyle.NoPen
+
+
+def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
+    view = ChartPagesMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(900, 900)
+    window.show()
+    view.router.current_route = "chart"
+    energy = view.router.chart.energy
+    assert isinstance(energy.renderer, QtWidgetRenderer)
+    chart = energy.renderer.qt_object
+    assert isinstance(chart, QChart)
+    return view, chart
+
+
+def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot)
+    plot = chart.getPlotItem()
+    assert not any(isinstance(item, pg.PlotDataItem) for item in plot.items)
+    heating, cooling = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+
+    assert list(heating.opts["height"]) == [120, 80, 95]
+    assert list(cooling.opts["height"]) == [30, 45]  # none in the bedroom
+    # side by side in each category's group, centered on its index
+    assert heating.opts["width"] == cooling.opts["width"] == pytest.approx(0.4)
+    assert list(heating.opts["x0"]) == pytest.approx([-0.4, 0.6, 1.6])
+    assert list(cooling.opts["x0"]) == pytest.approx([0.0, 2.0])
+    assert pg.mkBrush(heating.opts["brush"]).color().name() == SERIES_COLORS[False][0]
+    assert chart.legend_names() == ["Heating", "Cooling"]
+    ticks = plot.getAxis("bottom")._tickLevels  # noqa: SLF001
+    assert ticks == [[(0, "Kitchen"), (1, "Bedroom"), (2, "Office")]]
+
+    view.router.chart.energy.kind = ChartKind.LINE  # its series as curves again
+    assert sum(isinstance(item, pg.PlotDataItem) for item in plot.items) == 2
+    assert not any(isinstance(item, pg.BarGraphItem) for item in plot.items)
+    assert plot.getAxis("bottom")._tickLevels is None  # noqa: SLF001
+
+
+def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
+    _view, chart = _chart_page_chart(qtbot)
+    view_box = chart.getPlotItem().vb
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 2)
+
+    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.1, 50)))
+
+    qtbot.waitUntil(lambda: chart.hover_text() != "")
+    assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80 kWh"]

@@ -7,6 +7,7 @@ import enum
 import functools
 import json
 import logging
+import math
 import re
 import sys
 import threading
@@ -1095,6 +1096,13 @@ class ChartKind(enum.Enum):
     LINE = enum.auto()
     #: as dots, e.g. measurements over a model's curve
     SCATTER = enum.auto()
+    #: as bars, a group of one bar per series in each of the chart's `categories`; the
+    #: chart's own kind only
+    BAR = enum.auto()
+
+
+#: the share of a category's width a bar chart's group of bars takes
+BAR_GROUP_WIDTH = 0.8
 
 
 @attrs.frozen
@@ -1109,12 +1117,17 @@ class Series:
             msg = f"Cannot make the series {self.name!r}: {len(self.x)} x for {len(y)} y."
             raise ValueError(msg)
 
+    def _check_kind(self, _attribute: "attrs.Attribute[Any]", kind: Optional[ChartKind]) -> None:
+        if kind is ChartKind.BAR:
+            msg = f"Cannot draw the series {self.name!r} as bars: a BAR chart draws its series so."
+            raise ValueError(msg)
+
     #: the legend's entry
     name: str
     x: list[float] = attrs.field(converter=_to_floats)
     y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
-    #: how it is drawn; None: as its chart's `kind`
-    kind: Optional[ChartKind] = None
+    #: how it is drawn, as a line or dots; None: as its chart's `kind`
+    kind: Optional[ChartKind] = attrs.field(default=None, validator=[_check_kind])
 
 
 @define_view
@@ -1124,6 +1137,9 @@ class ChartView(View):
     Data and labels only: each backend draws it in its own theme's colors and fonts.
     Assign a new `series` list to redraw it, e.g. a job adding points; the user's zoom
     stays where the backend has one.
+
+    A `BAR` chart draws a group of bars for each of its `categories`, a bar per series: a
+    series' x is the index of a category, and its y the bar's height.
     """
 
     _renderer_key = "chart"
@@ -1137,14 +1153,39 @@ class ChartView(View):
     x_unit: str = attrs.field(default="")
     y_unit: str = attrs.field(default="")
     series: list[Series] = attrs.field(factory=list[Series])
+    #: a `BAR` chart's categories, by the index each series' x names
+    categories: list[str] = attrs.field(factory=list[str])
 
     @staticmethod
     def kind_of(series: Series, kind: ChartKind) -> ChartKind:
-        """Get how `series` is drawn on a chart of `kind`.
+        """Get how `series` is drawn on a chart of `kind`: a bar chart draws only bars.
 
         Takes the chart's kind, as a renderer refreshes it before the view holds it.
         """
-        return kind if series.kind is None else series.kind
+        if kind is ChartKind.BAR or series.kind is None:
+            return kind
+        return series.kind
+
+    @staticmethod
+    def bar_heights(series: Series, category_count: int) -> list[float]:
+        """Get the height of a series' bar in each category, NaN where it has none.
+
+        A point whose x isn't a category's index has no bar; the last of a category wins.
+        """
+        heights = [math.nan] * category_count
+        for x, y in zip(series.x, series.y):
+            if x.is_integer() and 0 <= x < category_count:
+                heights[int(x)] = y
+        return heights
+
+    @staticmethod
+    def bar_slot(index: int, series_count: int) -> tuple[float, float]:
+        """Get the offset of a series' bar from its category's index, and its width.
+
+        In categories: the bar's middle is at the offset, its group centered on the index.
+        """
+        width = BAR_GROUP_WIDTH / series_count
+        return (index - (series_count - 1) / 2) * width, width
 
     @staticmethod
     def axis_label(title: str, unit: str) -> str:

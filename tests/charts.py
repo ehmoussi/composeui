@@ -1,8 +1,9 @@
-"""A chart on the second of two pages, shared by the backend tests of `ChartView`."""
+"""Charts on the second of two pages, shared by the backend tests of `ChartView`."""
 
 from attrs import Factory
 
 from composeui.core.view import (
+    ChartKind,
     ChartView,
     LabelView,
     MainView,
@@ -34,6 +35,18 @@ class ChartPage(PageView):
         x_unit="s",
         y_unit="kPa",
         series=[Series(name="Inlet", x=[0, 1, 2, 3], y=[1, 3, 2, 4])],
+    )
+    energy: ChartView = child(
+        ChartView,
+        kind=ChartKind.BAR,
+        title="Energy",
+        y_unit="kWh",
+        categories=["Kitchen", "Bedroom", "Office"],
+        series=[
+            Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95]),
+            # no cooling in the bedroom
+            Series(name="Cooling", x=[0, 2], y=[30, 45]),
+        ],
     )
 
 

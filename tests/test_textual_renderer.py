@@ -51,6 +51,7 @@ from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, Compose
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
+from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -1108,3 +1109,24 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
         view.chart.kind = ChartKind.SCATTER
         await pilot.pause()
         assert chart.plt._active.monitor.lines == [False, False]  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_a_bar_chart_plots_a_bar_per_series_in_each_category() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    energy = view.router.chart.energy
+    assert isinstance(energy.renderer, TextualWidgetRenderer)
+    chart = energy.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        for name in ("Heating", "Cooling", "Kitchen", "Bedroom", "Office", "Energy"):
+            assert name in text
+        assert "120" in text  # the tallest bar's height, on the y axis

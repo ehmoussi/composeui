@@ -71,11 +71,10 @@ alike, tested), rather than raising mid-job.
 
 Each step on Qt, Textual and the web, with tests, before the next:
 
-1. **Bars** (`BAR` with `categories`): one bar group per category, one bar per series.
-2. **Log axes** (`x_log`, `y_log`).
-3. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
+1. **Log axes** (`x_log`, `y_log`).
+2. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
    image" action on each backend.
-4. **Web: full resolution on zoom** (see below), once a real app needs it.
+3. **Web: full resolution on zoom** (see below), once a real app needs it.
 
 ### Qt: pyqtgraph
 
