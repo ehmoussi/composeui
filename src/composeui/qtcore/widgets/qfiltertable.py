@@ -204,8 +204,17 @@ class QTableFilterBar(QWidget):
         self.clear = QToolButton()
         self.clear.clicked.connect(self.filters_cleared)
         self.count = QLabel()
+        # as tall as the first line's fields, its text in their middle
+        self.count.setMinimumHeight(self.search.sizeHint().height())
+        self.count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._chips: list[QFilterChip] = []
-        self._layout = QFlowLayout(self)
+        # the fields and the chips wrap in the width left; the count stays at the right end
+        flow = QWidget()
+        self._layout = QFlowLayout(flow)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(flow, 1)
+        layout.addWidget(self.count, 0, Qt.AlignmentFlag.AlignTop)
         for widget in (
             self.search,
             self.add_filter,
@@ -216,7 +225,6 @@ class QTableFilterBar(QWidget):
         ):
             self._layout.addWidget(widget)
         self._layout.addWidget(self.clear)
-        self._layout.addWidget(self.count)
         self.search.setMinimumWidth(160)
         self.value.setMinimumWidth(120)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
