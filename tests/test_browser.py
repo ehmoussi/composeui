@@ -37,7 +37,7 @@ from tests.vertical import VerticalMainView
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from playwright.sync_api import Browser, Locator, Page, Route
+    from playwright.sync_api import Browser, FloatRect, Locator, Page, Route
     from starlette.applications import Starlette
 
 pytestmark = pytest.mark.browser
@@ -514,6 +514,13 @@ def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) 
     expect(name).to_be_hidden()
 
 
+def _box(locator: Locator) -> FloatRect:
+    """Where `locator`'s element is on the page, now."""
+    box = locator.bounding_box()
+    assert box is not None
+    return box
+
+
 def test_a_horizontal_view_shares_the_row_by_stretch(horizontal_page: Page) -> None:
     page = horizontal_page
     page.set_viewport_size({"width": 1000, "height": 600})
@@ -528,6 +535,24 @@ def test_a_horizontal_view_shares_the_row_by_stretch(horizontal_page: Page) -> N
     assert wide["width"] == pytest.approx(3 * narrow["width"], rel=0.02)
     # the hidden table takes no share: the two shown span the row, inset alike both sides
     assert wide["x"] + wide["width"] == pytest.approx(1000 - narrow["x"], abs=1)
+
+
+def test_a_narrow_horizontal_view_stacks_its_views(horizontal_page: Page) -> None:
+    page = horizontal_page
+    narrow = page.get_by_role("table").filter(has_text="Narrow")
+    wide = page.get_by_role("table").filter(has_text="Wide")
+    page.set_viewport_size({"width": 500, "height": 600})
+    page.goto("/")
+
+    narrow_box, wide_box = _box(narrow), _box(wide)
+    # in order, one above the other, each as wide as the row
+    assert wide_box["y"] > narrow_box["y"] + narrow_box["height"]
+    assert (wide_box["x"], wide_box["width"]) == (narrow_box["x"], narrow_box["width"])
+
+    page.set_viewport_size({"width": 1000, "height": 600})
+    narrow_box, wide_box = _box(narrow), _box(wide)
+    assert narrow_box["y"] == wide_box["y"]
+    assert wide_box["width"] == pytest.approx(3 * narrow_box["width"], rel=0.02)
 
 
 def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(buttons_page: Page) -> None:
@@ -591,6 +616,31 @@ def test_a_grid_view_places_its_views_in_equally_wide_columns(grid_page: Page) -
     # the next row starts below the taller of the views above it, spanning the columns
     assert spanning["y"] - (first["y"] + first["height"]) == pytest.approx(gap, abs=2)
     assert spanning["x"] + spanning["width"] == pytest.approx(1000 - first["x"], abs=1)
+
+
+def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None:
+    page = grid_page
+    tables = page.get_by_role("table")
+    views = (
+        tables.filter(has_text="First"),
+        page.get_by_role("button", name="Add"),
+        tables.filter(has_text="Spanning"),
+    )
+    page.set_viewport_size({"width": 500, "height": 600})
+    page.goto("/")
+
+    first, button, spanning = (_box(view) for view in views)
+    # in order, one above the other, at the column's start, the tables as wide as it
+    assert first["y"] + first["height"] < button["y"]
+    assert button["y"] + button["height"] < spanning["y"]
+    assert button["x"] == pytest.approx(first["x"], abs=1)
+    assert spanning["width"] == first["width"]
+
+    page.set_viewport_size({"width": 1000, "height": 600})
+    first, button, spanning = (_box(view) for view in views)
+    # back in their cells
+    assert first["y"] == pytest.approx(button["y"], abs=1)
+    assert spanning["width"] > 2 * first["width"]
 
 
 def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(

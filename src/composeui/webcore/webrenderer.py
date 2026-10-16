@@ -1538,7 +1538,9 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
     """Views side by side, each as wide as its share of the row.
 
     Each view sits in a cell carrying its share, an inline style rather than a class
-    per share; the cell hides with its view, which swaps on its own.
+    per share; the cell hides with its view, which swaps on its own. A row narrower than
+    42rem stacks its views instead, as a column, unless none has a share (e.g. buttons):
+    the share is a variable only the wide row's cells use.
     """
 
     _role = "horizontal"
@@ -1548,16 +1550,30 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
         self._adopt(self._view.children_views)
 
     def to_html(self, *, oob: bool = False) -> str:
+        stretched_views = self._view.stretched_views
+        if not any(stretch > 0 for _, stretch in stretched_views):
+            # as wide as their content: a container query would measure them as 0 wide
+            cells = "".join(
+                '<div class="min-w-0 has-[>[hidden]]:hidden" style="flex: none">'
+                f"{view.renderer.to_html()}</div>"
+                for view, _ in stretched_views
+                if isinstance(view.renderer, WebRenderer)
+            )
+            align = " justify-end" if self._view.align is Align.END else ""
+            return f'<div {self._root_attributes(oob=oob)} class="flex gap-6{align}">{cells}</div>'
         cells = "".join(
-            '<div class="min-w-0 has-[>[hidden]]:hidden"'
+            '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
             # no share: as wide as its content
-            f' style="flex: {f"{stretch} 1 0%" if stretch > 0 else "none"}">'
+            f' style="--share: {f"{stretch} 1 0%" if stretch > 0 else "none"}">'
             f"{view.renderer.to_html()}</div>"
-            for view, stretch in self._view.stretched_views
+            for view, stretch in stretched_views
             if isinstance(view.renderer, WebRenderer)
         )
-        align = " justify-end" if self._view.align is Align.END else ""
-        return f'<div {self._root_attributes(oob=oob)} class="flex gap-6{align}">{cells}</div>'
+        # the row's own width is queried from its root, the views laid out inside it
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="@container">'
+            f'<div class="flex flex-col gap-6 @2xl:flex-row">{cells}</div></div>'
+        )
 
 
 class WebVerticalRenderer(WebRenderer[VerticalView]):
@@ -1581,8 +1597,10 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
 class WebGridRenderer(WebRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
-    The columns and each view's cell are inline styles rather than a class per count;
-    a cell placed rather than flowed stays where it is when an earlier one hides.
+    The columns and each view's cell are variables rather than a class per count; a cell
+    placed rather than flowed stays where it is when an earlier one hides. A grid
+    narrower than 42rem stacks its views instead, in one column, row by row: only the
+    wide grid uses the variables.
     """
 
     _role = "grid"
@@ -1593,16 +1611,18 @@ class WebGridRenderer(WebRenderer[GridView]):
 
     def to_html(self, *, oob: bool = False) -> str:
         cells = "".join(
-            '<div class="min-w-0 has-[>[hidden]]:hidden" style="grid-area:'
-            f' {row + 1} / {column + 1} / span {row_span} / span {column_span}">'
+            '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:[grid-area:var(--area)]"'
+            f' style="--area: {row + 1} / {column + 1} / span {row_span} / span {column_span}">'
             f"{view.renderer.to_html()}</div>"
             for view, (row, column, row_span, column_span) in self._view.positioned_views
             if isinstance(view.renderer, WebRenderer)
         )
         columns = f"repeat({self._view.column_count}, minmax(0, 1fr))"
+        # the grid's own width is queried from its root, the views laid out inside it
         return (
-            f'<div {self._root_attributes(oob=oob)} class="grid items-start gap-6"'
-            f' style="grid-template-columns: {columns}">{cells}</div>'
+            f'<div {self._root_attributes(oob=oob)} class="@container">'
+            '<div class="grid grid-cols-1 items-start gap-6 @2xl:grid-cols-(--columns)"'
+            f' style="--columns: {columns}">{cells}</div></div>'
         )
 
 
