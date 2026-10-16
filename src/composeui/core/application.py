@@ -5,6 +5,7 @@ import functools
 import importlib
 import inspect
 import logging
+import os
 import sys
 import weakref
 from collections import deque
@@ -300,6 +301,11 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
         return cast("_ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]", wrapper)
 
 
+#: environment variable naming the backend `run` started: a process the app starts again,
+#: e.g. the web's `--reload` server, gets the command line without `--backend`
+BACKEND_VARIABLE = "COMPOSEUI_BACKEND"
+
+
 def run(
     build_main_view: Callable[[], MainViewT],
     *,
@@ -309,9 +315,10 @@ def run(
 ) -> None:
     """Run the app on the backend the command line names, e.g. ``--backend qt``.
 
-    Without ``--backend``, on `default_backend`. The rest of the command line goes to the
-    backend's app (``-f``, ``--language``, ``--port``, ``--help``...). Only that backend is
-    imported, so the others' extras needn't be installed. With `build_model`, the app has
+    Without ``--backend``, on the one `BACKEND_VARIABLE` names, else on `default_backend`.
+    The rest of the command line goes to the backend's app (``-f``, ``--language``,
+    ``--port``, ``--help``...). Only that backend is imported, so the others' extras
+    needn't be installed. With `build_model`, the app has
     a model, wired to its main view by `setup_model`: once, or per session on the web.
     """
     if build_model is None and setup_model is not None:
@@ -319,10 +326,15 @@ def run(
         raise ValueError(msg)
     backends = {backend.name.lower(): backend for backend in RendererType}
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--backend", choices=backends, default=default_backend.name.lower())
+    default = os.environ.get(BACKEND_VARIABLE, "")
+    if default not in backends:
+        default = default_backend.name.lower()
+    parser.add_argument("--backend", choices=backends, default=default)
     args, rest = parser.parse_known_args()
-    # the app parses the command line itself when it runs
+    # the app parses the command line itself when it runs; a process it starts again
+    # inherits its environment, and so the backend
     sys.argv = [sys.argv[0], *rest]
+    os.environ[BACKEND_VARIABLE] = args.backend
     module = importlib.import_module(backends[args.backend].value.applications)
     app: Application[MainViewT]
     if build_model is None:
