@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyqtgraph as pg
 from qtpy.QtCore import QEvent, QPointF
-from qtpy.QtGui import QColor, QPalette
+from qtpy.QtCore import Signal as QtSignal
+from qtpy.QtGui import QAction, QColor, QPalette
 
+from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
 from composeui.core.view import ChartKind, ChartView
 
@@ -36,6 +38,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     Its colors follow the application's palette, changing with it (a dark scheme).
     """
 
+    #: the user asked for the chart's image, from its context menu's Save Image
+    save_image_requested = QtSignal()
     #: whether `__init__` is done: pyqtgraph's own changes the palette before it is
     _is_built = False
 
@@ -64,6 +68,12 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._mouse_proxy = pg.SignalProxy(
             self.scene().sigMouseMoved, rateLimit=_HOVER_RATE, slot=self._on_mouse_moved
         )
+        #: beside pyqtgraph's own Export, which stays for CSV; only with matplotlib, which
+        #: draws the image
+        self.save_image_action = QAction(self)
+        self.save_image_action.triggered.connect(self.save_image_requested.emit)
+        if chartimage.is_available():
+            plot.getViewBox().menu.addAction(self.save_image_action)
         self._is_built = True
         self._apply_palette()
 
@@ -126,6 +136,15 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         bars = pg.BarGraphItem(x0=[], height=[], width=1)
         self.getPlotItem().addItem(bars)
         return bars
+
+    def shown_range(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Get the x and y ranges the chart shows, e.g. zoomed into; not their logs."""
+        (x_min, x_max), (y_min, y_max) = self.getPlotItem().getViewBox().viewRange()
+        if self._x_log and self._kind is not ChartKind.BAR:
+            x_min, x_max = 10**x_min, 10**x_max
+        if self._y_log:
+            y_min, y_max = 10**y_min, 10**y_max
+        return (float(x_min), float(x_max)), (float(y_min), float(y_max))
 
     def legend_names(self) -> list[str]:
         return [label.text for _sample, label in self._legend.items]

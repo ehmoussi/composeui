@@ -166,9 +166,139 @@ function chartData(spec) {
 }
 function drawChart(element, zoom) {
   var spec = JSON.parse(element.dataset.chart);
-  var chart = new uPlot(chartOptions(element, spec, element.clientWidth), chartData(spec), element);
+  var options = chartOptions(element, spec, element.clientWidth);
+  // the image's download follows the zoom
+  options.hooks = { setScale: [function (chart) { updateImageLink(element, chart); }] };
+  var chart = new uPlot(options, chartData(spec), element);
   if (zoom !== undefined) chart.setScale("x", zoom);
   charts.set(element, chart);
+  updateImageLink(element, chart);
+}
+/* the address of a chart's image (see `WebChartRenderer`): its format picked beside it,
+   and the region the user zoomed into, which the server draws */
+function updateImageLink(element, chart) {
+  var figure = element.closest("figure");
+  var link = figure === null ? null : figure.querySelector("[data-chart-image]");
+  if (link === null) return;
+  var query = new URLSearchParams({ format: figure.querySelector("[data-chart-format]").value });
+  if (chart !== null && chart !== undefined && chartZoom(chart) !== undefined) {
+    query.set("x_min", chart.scales.x.min);
+    query.set("x_max", chart.scales.x.max);
+    query.set("y_min", chart.scales.y.min);
+    query.set("y_max", chart.scales.y.max);
+  }
+  link.setAttribute("href", link.getAttribute("href").split("?")[0] + "?" + query);
+}
+document.addEventListener("change", function (event) {
+  if (!("chartFormat" in event.target.dataset)) return;
+  var element = event.target.closest("figure").querySelector("[data-chart]");
+  updateImageLink(element, charts.get(element));
+});
+/* no matplotlib on the server: the page draws the chart's PNG itself, a second chart
+   off-screen at the image's size, in the light theme whatever the page's (a figure for
+   a document), at the zoom shown. Its canvas, under the title, over the legend (both
+   HTML in uPlot, not on its canvas), on a white canvas of its own, downloaded. */
+var PNG_WIDTH = 1600;
+var PNG_HEIGHT = 1000;
+var PNG_TITLE_HEIGHT = 80;
+var PNG_LEGEND_HEIGHT = 70;
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-chart-png]");
+  if (button !== null) savePng(button.closest("figure"), button.dataset.chartPng);
+});
+function savePng(figure, name) {
+  var element = figure.querySelector("[data-chart]");
+  var spec = JSON.parse(element.dataset.chart);
+  var shown = charts.get(element);
+  var zoom = shown === null || shown === undefined ? undefined : chartZoom(shown);
+  var titleHeight = spec.title === "" ? 0 : PNG_TITLE_HEIGHT;
+  var stage = document.createElement("div");
+  stage.dataset.theme = "composeui";
+  stage.dataset.chartStage = "";
+  stage.style.cssText = "position: fixed; left: -100000px; top: 0; width: " + PNG_WIDTH + "px";
+  var plot = document.createElement("div");
+  plot.style.height = PNG_HEIGHT - titleHeight - PNG_LEGEND_HEIGHT + "px";
+  stage.appendChild(plot);
+  document.body.appendChild(stage);
+  var options = chartOptions(plot, spec, PNG_WIDTH);
+  options.legend = { show: false };
+  // the screen's fonts would be tiny on an image this large
+  options.axes.forEach(function (axis, index) {
+    axis.font = "22px system-ui, sans-serif";
+    axis.labelFont = "600 24px system-ui, sans-serif";
+    axis.size = index === 0 ? 60 : 90;
+    axis.labelSize = 40;
+  });
+  options.series.slice(1).forEach(function (series) {
+    if (series.points.show) series.points.size = 14;
+    else if (series.paths === undefined) series.width = 3;
+  });
+  if (zoom !== undefined) {
+    options.scales.x.range = function () { return [zoom.min, zoom.max]; };
+  }
+  // read before uPlot takes the options over
+  var entries = options.series.slice(1).map(function (series, index) {
+    return { name: spec.series[index].name, color: series.fill || series.stroke };
+  });
+  var ink = resolveColor(plot, "var(--color-base-content)");
+  var isSaved = false;
+  options.hooks = {
+    draw: [
+      function (chart) {
+        if (isSaved) return;
+        isSaved = true;
+        var canvas = composePng(chart.ctx.canvas, spec.title, entries, ink, titleHeight);
+        chart.destroy();
+        stage.remove();
+        canvas.toBlob(function (blob) { download(blob, name); });
+      },
+    ],
+  };
+  new uPlot(options, chartData(spec), plot);
+}
+function composePng(plotCanvas, title, entries, ink, titleHeight) {
+  var canvas = document.createElement("canvas");
+  canvas.width = PNG_WIDTH;
+  canvas.height = PNG_HEIGHT;
+  var context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, PNG_WIDTH, PNG_HEIGHT);
+  context.fillStyle = ink;
+  context.textBaseline = "middle";
+  if (title !== "") {
+    context.font = "600 36px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.fillText(title, PNG_WIDTH / 2, titleHeight / 2);
+  }
+  var plotHeight = PNG_HEIGHT - titleHeight - PNG_LEGEND_HEIGHT;
+  context.drawImage(plotCanvas, 0, titleHeight, PNG_WIDTH, plotHeight);
+  // the legend in a row, centered: each series' color, then its name
+  context.font = "28px system-ui, sans-serif";
+  context.textAlign = "left";
+  var widths = entries.map(function (entry) { return 36 + context.measureText(entry.name).width; });
+  var gap = 40;
+  var total = widths.reduce(function (sum, width) { return sum + width; }, 0);
+  var x = Math.max(0, (PNG_WIDTH - total - gap * (entries.length - 1)) / 2);
+  var y = PNG_HEIGHT - PNG_LEGEND_HEIGHT / 2;
+  entries.forEach(function (entry, index) {
+    context.fillStyle = entry.color;
+    context.fillRect(x, y - 12, 24, 24);
+    context.fillStyle = ink;
+    context.fillText(entry.name, x + 36, y);
+    x += widths[index] + gap;
+  });
+  return canvas;
+}
+function download(blob, name) {
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // once the browser has the file
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
 }
 /* the x range the user zoomed into; undefined while the chart shows all its data */
 function chartZoom(chart) {

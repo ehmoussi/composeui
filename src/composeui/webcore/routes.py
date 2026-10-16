@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -12,6 +13,7 @@ from starlette.responses import (
     Response,
 )
 
+from composeui.core import chartimage
 from composeui.webcore.icons import icon_path
 from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.webrenderer import UnsupportedEventError
@@ -112,6 +114,35 @@ def widget_fragment(request: Request) -> Response:
     if body is None:
         return PlainTextResponse("Unknown widget", status_code=404)
     return HTMLResponse(body, headers=_NO_STORE)
+
+
+async def chart_image(request: Request) -> Response:
+    """Download a chart's image as a report's figure, drawn by matplotlib at its zoom.
+
+    A plain link, like the state's download. Without matplotlib (the `report` extra), not
+    found: the page draws its PNG itself.
+    """
+    session = _session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=303)
+    if not chartimage.is_available():
+        return PlainTextResponse("Not Found", status_code=404)
+    query = dict(request.query_params)
+    image_format = query.pop("format", "pdf").lower()
+    widget_id = request.path_params["widget_id"]
+    try:
+        # matplotlib takes a while: off the event loop
+        result = await run_in_threadpool(session.chart_image, widget_id, image_format, query)
+    except ValueError as error:
+        return PlainTextResponse(str(error), status_code=400)
+    if result is None:
+        return PlainTextResponse("Unknown widget", status_code=404)
+    filename, body = result
+    # the title's own letters, which a header's latin-1 may not have, and a fallback
+    ascii_name = filename.encode("ascii", "replace").decode().replace("?", "_")
+    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    headers = {**_NO_STORE, "Content-Disposition": disposition}
+    return Response(body, media_type=chartimage.MEDIA_TYPES[image_format], headers=headers)
 
 
 def jobs_poll(request: Request) -> Response:

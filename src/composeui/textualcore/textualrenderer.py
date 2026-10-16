@@ -15,6 +15,7 @@ from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
 
+from composeui.core import chartimage
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -722,6 +723,7 @@ class ChartViewLike(ViewLike, Protocol):
     categories: list[str]
     x_log: bool
     y_log: bool
+    save_image_text: str
 
 
 class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
@@ -739,12 +741,14 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "categories": self._refresh_categories,
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
+                "save_image_text": self._refresh_save_image_text,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeChart()
+            self._rendered_object.image_path_chosen.connect(self._save_image)
 
     @staticmethod
     def _refresh_kind(
@@ -757,6 +761,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.chart_title = value
+        rendered_object.image_name = chartimage.image_name(value, "pdf")
         rendered_object.refresh()
 
     @staticmethod
@@ -802,6 +807,17 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
     def _refresh_y_log(_view: ChartViewLike, rendered_object: ComposeChart, value: bool) -> None:
         rendered_object.y_log = value
         rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_save_image_text(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: str
+    ) -> None:
+        rendered_object.set_save_image_text(value)
+
+    def _save_image(self, path: Path) -> None:
+        """Save the whole chart's image: a terminal has no zoom."""
+        if isinstance(self._view, ChartView):
+            chartimage.save_chart_image(self._view, path)
 
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: ComposeChart) -> None:

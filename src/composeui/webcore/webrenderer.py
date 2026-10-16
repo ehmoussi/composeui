@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeV
 
 from typing_extensions import Protocol
 
+from composeui.core import chartimage
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -597,6 +598,7 @@ class ChartViewLike(ViewLike, Protocol):
     categories: list[str]
     x_log: bool
     y_log: bool
+    save_image_text: str
 
 
 #: the points a series sends at most, about twice a wide chart's pixels: a longer one is
@@ -643,12 +645,28 @@ def _chart_points(series: Series, *, x_log: bool, y_log: bool) -> tuple[list[flo
     return _thin(x, y, CHART_MAX_POINTS)
 
 
+def _query_range(query: Mapping[str, str], axis: str) -> tuple[float, float] | None:
+    """Get an axis' range from a query's `x_min` and `x_max` (or `y_...`), if it has one."""
+    low, high = query.get(f"{axis}_min"), query.get(f"{axis}_max")
+    if low is None or high is None:
+        return None
+    bounds = (float(low), float(high))  # a ValueError for text that isn't a number
+    if not all(math.isfinite(bound) for bound in bounds):
+        msg = f"Cannot draw the {axis} range {bounds}."
+        raise ValueError(msg)
+    return bounds
+
+
 class WebChartRenderer(WebRenderer[ChartViewLike]):
     """A chart the page's script draws with uPlot, from the JSON in its `data-chart`.
 
     The user zooms by dragging across it, back out with a double click, and reads the
     values at the cursor in its legend; a series' legend entry hides or shows it. A new
     `series` list swaps the figure, the page keeping the user's zoom (see `page.py`).
+
+    Its corner downloads its image as a report's figure, in the format picked beside:
+    matplotlib draws it from the view's data at the user's zoom (see `image`), the same
+    file as Qt saves. Without matplotlib, the page draws a PNG of what it shows instead.
     """
 
     _role = "chart"
@@ -669,6 +687,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "categories",
                     "x_log",
                     "y_log",
+                    "save_image_text",
                 ),
                 self._mark_dirty,
             )
@@ -679,6 +698,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         view = self._view
         x_unit, y_unit = view.x_unit, view.y_unit
         spec: dict[str, Any] = {
+            "title": view.title,
             "x": {
                 "label": ChartView.axis_label(view.x_title, x_unit),
                 "unit": x_unit,
@@ -740,20 +760,60 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         description = f"{names} {link} {x_label}" if names and x_label else names or x_label
         return f"{view.title}: {description}" if view.title and description else view.title
 
+    def image(self, image_format: str, query: Mapping[str, str]) -> tuple[str, bytes]:
+        """Draw the chart's image, e.g. at the zoom in `query` (`x_min`, `x_max`...).
+
+        Returns the file's name and content; raises `ValueError` for a format or a
+        range it can't draw, and `ImportError` without matplotlib.
+        """
+        view = self._view
+        if not isinstance(view, ChartView):
+            raise TypeError(type(view).__name__)
+        options = chartimage.ImageOptions(
+            x_range=_query_range(query, "x"), y_range=_query_range(query, "y")
+        )
+        content = chartimage.chart_image_bytes(view, image_format, options)
+        return chartimage.image_name(view.title, image_format.lower()), content
+
     def to_html(self, *, oob: bool = False) -> str:
         title = self._view.title
+        # the corner's controls at the end of the row, the title in the middle of the rest
         caption = (
-            f'<figcaption class="text-center font-semibold">{html.escape(title)}</figcaption>'
+            '<figcaption class="min-w-0 flex-1 text-center font-semibold">'
+            f"{html.escape(title)}</figcaption>"
             if title
-            else ""
+            else '<span class="flex-1"></span>'
         )
         return (
             # a column: a card's figures are rows of images otherwise (daisyUI's `card`)
             f'<figure {self._root_attributes(oob=oob)} class="flex w-full flex-col gap-2">'
-            f"{caption}"
+            f'<div class="flex w-full items-center gap-2">{caption}{self._save_image_html()}</div>'
             f'<div id="{self.widget_id}-plot" data-chart="{html.escape(self.chart_json())}"'
             f' role="img" aria-label="{html.escape(self._description())}"'
             ' class="h-72 w-full"></div></figure>'
+        )
+
+    def _save_image_html(self) -> str:
+        """Get the figure's corner: its image's download, in a format picked beside it."""
+        text = html.escape(self._view.save_image_text)
+        if not chartimage.is_available():
+            # no matplotlib: the page draws what it shows, as a PNG
+            name = html.escape(chartimage.image_name(self._view.title, "png"))
+            return (
+                f'<button type="button" class="btn btn-ghost btn-xs" data-chart-png="{name}">'
+                f"{text} (PNG)</button>"
+            )
+        options = "".join(
+            f'<option value="{image_format}">{image_format.upper()}</option>'
+            for image_format in ("pdf", "svg", "png")
+        )
+        # a plain link: htmx can't start a download. The page's script adds the zoom
+        return (
+            '<div class="join">'
+            '<select class="select select-xs join-item w-auto" aria-label="Image format"'
+            f" data-chart-format>{options}</select>"
+            f'<a class="btn btn-ghost btn-xs join-item" data-chart-image download'
+            f' href="/widget/{self.widget_id}/image?format=pdf">{text}</a></div>'
         )
 
 

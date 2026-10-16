@@ -9,5 +9,6 @@
   "Cancel": "Annuler",
   "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}.",
   "Language": "Langue",
+  "Save Image": "Enregistrer l'image",
   "{header}: \"{text}\" isn't a valid value": "{header} : « {text} » n'est pas une valeur valide"
 }

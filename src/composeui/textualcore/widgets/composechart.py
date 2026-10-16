@@ -1,22 +1,45 @@
 from __future__ import annotations
 
+import functools
 import math
 from typing import TYPE_CHECKING
 
 from textual.color import Color
+from textual_fspicker import FileSave, Filters
+from textual_fspicker.path_filters import Filter
 from textual_plotext import PlotextPlot
 
+from composeui.core import chartimage
 from composeui.core.chartcolors import series_color
+from composeui.core.signal import Signal
 from composeui.core.view import ChartKind, ChartView
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from textual.app import RenderResult
 
     from composeui.core.view import Series
 
 
+#: the key saving the chart's image
+SAVE_IMAGE_KEY = "s"
+#: the formats the save dialog offers, the vector ones first, by its filters' names
+_IMAGE_FILTERS = {"PDF": "pdf", "SVG": "svg", "PNG": "png"}
+
+
+def _has_suffix(path: Path, suffix: str) -> bool:
+    return path.suffix.lower() == suffix
+
+
 class ComposeChart(PlotextPlot):
-    """A chart drawn with plotext's characters: no zoom or hover in a terminal."""
+    """A chart drawn with plotext's characters: no zoom or hover in a terminal.
+
+    With the `report` extra, its key `s` asks where to save its image, which
+    `image_path_chosen` emits.
+    """
+
+    can_focus = True
 
     DEFAULT_CSS = """
     ComposeChart {
@@ -35,6 +58,37 @@ class ComposeChart(PlotextPlot):
         self.categories: list[str] = []
         self.x_log = False
         self.y_log = False
+        self.image_name = "chart.pdf"
+        self.image_path_chosen: Signal[Path] = Signal()
+        self.set_save_image_text("Save Image")
+
+    def set_save_image_text(self, text: str) -> None:
+        """Describe the key saving the chart's image, e.g. in the app's footer."""
+        self._bindings.key_to_bindings.pop(SAVE_IMAGE_KEY, None)
+        self._bindings.bind(SAVE_IMAGE_KEY, "save_image", text)
+        self.refresh_bindings()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "save_image":
+            return chartimage.is_available()  # matplotlib draws the image
+        return super().check_action(action, parameters)
+
+    def action_save_image(self) -> None:
+        filters = Filters(
+            *(
+                Filter(name, functools.partial(_has_suffix, suffix=f".{suffix}"))
+                for name, suffix in _IMAGE_FILTERS.items()
+            )
+        )
+        dialog = FileSave(filters=filters, default_file=self.image_name)
+        self.app.push_screen(dialog, self._image_path_chosen)
+
+    def _image_path_chosen(self, path: Path | None) -> None:
+        if path is None:
+            return
+        if path.suffix.lstrip(".").lower() not in chartimage.FORMATS:
+            path = path.with_name(f"{path.name}.pdf")
+        self.image_path_chosen.emit(path)
 
     def render(self) -> RenderResult:
         # the figure afresh at each render, from the attributes: building a figure with a

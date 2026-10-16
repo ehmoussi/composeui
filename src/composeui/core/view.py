@@ -1162,6 +1162,9 @@ class ChartView(View):
     categories: list[str] = attrs.field(factory=list[str])
     x_log: bool = attrs.field(default=False)
     y_log: bool = attrs.field(default=False)
+    #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
+    #: where the backend has one: with the `report` extra installed
+    save_image_text: str = attrs.field(default=T("Save Image"), metadata={UI_TEXT: True})
 
     @staticmethod
     def kind_of(series: Series, kind: ChartKind) -> ChartKind:

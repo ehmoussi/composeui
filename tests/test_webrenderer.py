@@ -33,6 +33,7 @@ from attrs import Factory
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
+from composeui.core import chartimage
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
@@ -2671,6 +2672,7 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     figure = _element(page, _widget_id(chart.renderer))
     assert figure.tag == "figure"
     assert _chart_spec(page, chart) == {
+        "title": "Pressure Drop",
         "x": {"label": "Flow Rate (L/s)", "unit": "L/s", "log": False},
         "y": {"label": "Pressure Drop (kPa)", "unit": "kPa", "log": False},
         "series": [],
@@ -2812,3 +2814,82 @@ def test_a_log_axis_sends_only_what_it_can_show() -> None:
     bars = json.loads(energy.renderer.chart_json())
     assert (bars["x"]["log"], bars["y"]["log"]) == (False, True)  # x: its categories
     assert bars["data"] == [[0, 1, 2], [1000, None, 50]]
+
+
+def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
+    chart_views: list[PipeChartMainView],
+    chart_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("matplotlib")
+    page = chart_client.get("/").text
+    (main_view,) = chart_views
+    main_view.add_curve()
+    chart_id = _widget_id(main_view.chart.renderer)
+    figure = _element(page, chart_id)
+    links = [element for element in figure.descendants if element[0] == "a"]
+    ((_, link),) = links
+    assert link["href"] == f"/widget/{chart_id}/image?format=pdf"
+    assert "download" in link
+    assert (
+        "select",
+        {
+            "class": "select select-xs join-item w-auto",
+            "aria-label": "Image format",
+            "data-chart-format": None,
+        },
+    ) in figure.descendants
+    drawn: list[chartimage.ImageOptions] = []
+    draw = chartimage.chart_image_bytes
+
+    def chart_image_bytes(
+        chart: ChartView, image_format: str, options: chartimage.ImageOptions
+    ) -> bytes:
+        drawn.append(options)
+        return draw(chart, image_format, options)
+
+    monkeypatch.setattr(chartimage, "chart_image_bytes", chart_image_bytes)
+
+    response = chart_client.get(
+        f"/widget/{chart_id}/image", params={"format": "svg", "x_min": 0.5, "x_max": "1.5"}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/svg+xml"
+    assert response.headers["content-disposition"] == (
+        "attachment; filename=\"Pressure Drop.svg\"; filename*=UTF-8''Pressure%20Drop.svg"
+    )
+    assert "Flow Rate (L/s)" in response.text
+    (options,) = drawn
+    assert (options.x_range, options.y_range) == ((0.5, 1.5), None)
+    bad = chart_client.get(f"/widget/{chart_id}/image", params={"format": "jpg"})
+    assert bad.status_code == 400
+    assert (
+        chart_client.get(
+            f"/widget/{chart_id}/image", params={"x_min": "a", "x_max": "1"}
+        ).status_code
+        == 400
+    )
+    assert (
+        chart_client.get(f"/widget/{_widget_id(main_view.buttons.add.renderer)}/image").status_code
+        == 404
+    )
+
+
+def test_without_matplotlib_the_page_draws_the_chart_s_png(
+    chart_views: list[PipeChartMainView],
+    chart_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(chartimage, "is_available", lambda: False)
+    page = chart_client.get("/").text
+    (main_view,) = chart_views
+    chart_id = _widget_id(main_view.chart.renderer)
+    figure = _element(page, chart_id)
+
+    tags = [tag for tag, _ in figure.descendants]
+    assert "select" not in tags
+    assert "a" not in tags
+    (button,) = [attributes for tag, attributes in figure.descendants if tag == "button"]
+    assert button["data-chart-png"] == "Pressure Drop.png"
+    assert chart_client.get(f"/widget/{chart_id}/image").status_code == 404

@@ -27,6 +27,7 @@ from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import View
 from composeui.webcore.routes import (
+    chart_image,
     homepage,
     icon,
     jobs_poll,
@@ -100,6 +101,7 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/", homepage),
             Route("/widget/{widget_id}", widget_event, methods=["POST"]),
             Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
+            Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
             Route("/icon/{name}", icon),
