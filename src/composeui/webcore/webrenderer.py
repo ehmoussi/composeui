@@ -848,18 +848,34 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
 
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
+    filter_texts: dict[str, str]
     selection_mode: SelectionMode
     rows: list[list[str]]
+    sortable_columns: list[int]
+    filterable_columns: list[int]
+    sort_column: int | None
+    sort_descending: bool
+    search: str
+    filters: dict[int, str]
     selected_rows: list[int]
+    shown_rows: list[int]
     selection_changed: Signal[list[int]]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def sort_by(self, column: int) -> None: ...
+    def filter_error(self, column: int, text: str) -> str | None: ...
+    def filter_placeholder(self, column: int) -> str: ...
+    def filter_chip(self, column: int) -> str: ...
+
+
+#: the order a sortable column's header shows, as `aria-sort` says it
+_ARIA_SORT: Final[dict[bool | None, str]] = {None: "none", False: "ascending", True: "descending"}
 
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
-    """A table, scrolling sideways on its own when wider than the page.
+    """A table under its filter bar, scrolling sideways on its own when wider than the page.
 
     Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
     show it selected, each row keeping its own id so htmx gives the focus back to the
@@ -872,6 +888,14 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     header, its text selected. Enter or leaving the field posts the text, Escape puts the
     old text back first; either way the cell is text again. The page keeps the text the
     user is typing through a swap of the table, e.g. answering the double click's clicks.
+
+    The table shows `shown_rows`, each row keeping the id of its index in `rows`. A
+    sortable column's header is a button sorting by it. While a column filters, the bar
+    above the table has a search, posted as the user types, and "+ Filter", opening an
+    editor in the bar: a column, a value and Add. The filters show as chips. A sort, a
+    search or a filter swaps only what it changes (the headers, the body, the count, the
+    bar), never the field the user types in; a value that can't filter swaps only its
+    message in, the page marking the field invalid.
     """
 
     _role = "table"
@@ -880,12 +904,29 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         super().__init__(view)
         #: the cell the user is editing, by row and column
         self._editing: tuple[int, int] | None = None
+        #: the filter editor, while open: its column (None for the first) and its text
+        self._editor: tuple[int | None, str] | None = None
+        #: why the editor's text can't filter, once the user added it
+        self._editor_error: str | None = None
+        #: whether "+ Filter" takes the focus back, the editor or a chip just gone
+        self._focus_add_filter = False
+        #: the parts to swap, unless the whole table is (`_mark_dirty`)
+        self._dirty_parts: set[str] = set()
+        self._is_whole_dirty = False
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
+                "filter_texts": self._mark_dirty,
                 "selection_mode": self._mark_dirty,
                 "rows": self._refresh_rows,
+                "sortable_columns": self._mark_dirty,
+                "filterable_columns": self._mark_dirty,
+                "sort_column": self._part_marker("head"),
+                "sort_descending": self._part_marker("head"),
+                "search": self._part_marker("bar"),
+                "filters": self._part_marker("bar"),
                 "selected_rows": self._mark_dirty,
+                "shown_rows": self._part_marker("body", "count"),
                 "editable_columns": self._mark_dirty,
             }
         )
@@ -894,15 +935,212 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._editing = None  # its row may have moved, or be gone
         self._mark_dirty(view, rendered_object, value)
 
+    def _mark_dirty(self, view: TableViewLike, rendered_object: str, value: Any) -> None:
+        self._is_whole_dirty = True
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _part_marker(self, *parts: str) -> Callable[[TableViewLike, str, Any], None]:
+        def mark(_view: TableViewLike, _rendered_object: str, _value: Any) -> None:
+            self._mark_parts(*parts)
+
+        return mark
+
+    def _mark_parts(self, *parts: str) -> None:
+        dirty = _DIRTY.get()
+        if dirty is not None:
+            self._dirty_parts.update(parts)
+            dirty[self.widget_id] = self
+
     def to_html(self, *, oob: bool = False) -> str:
-        headers = "".join(f"<th>{html.escape(header)}</th>" for header in self._view.headers)
-        rows = "".join(self._row_html(index, row) for index, row in enumerate(self._view.rows))
+        parts, self._dirty_parts = self._dirty_parts, set()
+        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
+        if not is_whole:
+            if "bar" in parts:
+                parts.discard("count")  # in the bar
+            renders = {
+                "bar": self._bar_html,
+                "head": self._head_html,
+                "body": self._body_html,
+                "count": self._count_html,
+                "error": self._error_html,
+            }
+            # the bar last: it may hold the element that sent the request, which htmx
+            # swaps nothing more from once it's gone
+            order = ("head", "body", "count", "error", "bar")
+            fragments = "".join(renders[part](oob=True) for part in order if part in parts)
+            self._focus_add_filter = False
+            return fragments
         grid = ' role="grid" aria-multiselectable="true"' if self._is_multiple() else ""
-        return (
-            f"<div {self._root_attributes(oob=oob)}"
-            ' class="overflow-x-auto rounded-box border border-base-300">'
+        html_ = (
+            f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-2">'
+            f"{self._bar_html()}"
+            '<div class="overflow-x-auto rounded-box border border-base-300">'
             f'<table class="table table-zebra table-sm"{grid}>'
-            f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
+            f"<thead>{self._head_html()}</thead>{self._body_html()}</table></div></div>"
+        )
+        self._focus_add_filter = False
+        return html_
+
+    def _oob(self, *, oob: bool) -> str:
+        return ' hx-swap-oob="true"' if oob else ""
+
+    def _post(self, values: Mapping[str, str | int]) -> str:
+        """Attributes posting an event of the table, without swapping its element back."""
+        return (
+            f" hx-post=\"/widget/{self.widget_id}\" hx-vals='{html.escape(json.dumps(values))}'"
+            ' hx-swap="none"'
+        )
+
+    def _head_html(self, *, oob: bool = False) -> str:
+        cells = []
+        for column, header in enumerate(self._view.headers):
+            if column not in self._view.sortable_columns:
+                cells.append(f"<th>{html.escape(header)}</th>")
+                continue
+            order = self._view.sort_descending if self._view.sort_column == column else None
+            arrow = {None: "", False: " ▲", True: " ▼"}[order]
+            disabled = "" if self.is_enabled else " disabled"
+            cells.append(
+                f'<th aria-sort="{_ARIA_SORT[order]}" class="p-0">'
+                f'<button type="button" class="btn btn-ghost btn-sm w-full justify-start'
+                f' font-semibold"{self._post({"event": "sort", "column": column})}{disabled}>'
+                f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></th>'
+            )
+        return self._table_part(
+            f'<tr id="{self.widget_id}-head"{self._oob(oob=oob)}>{"".join(cells)}</tr>', oob=oob
+        )
+
+    def _body_html(self, *, oob: bool = False) -> str:
+        shown = self._view.shown_rows
+        rows = "".join(self._row_html(index, self._view.rows[index]) for index in shown)
+        if len(shown) == 0 and len(self._view.rows) > 0:
+            no_match = html.escape(self._view.filter_texts.get("no_match", ""))
+            columns = max(len(self._view.headers), 1)
+            rows = (
+                f'<tr><td colspan="{columns}" class="text-center opacity-70">{no_match}</td></tr>'
+            )
+        return self._table_part(
+            f'<tbody id="{self.widget_id}-body"{self._oob(oob=oob)}>{rows}</tbody>', oob=oob
+        )
+
+    @staticmethod
+    def _table_part(markup: str, *, oob: bool) -> str:
+        """Wrap a part of the `<table>` swapped out of band in a `<template>` of its own.
+
+        htmx parses an answer as a template's content: a `<tr>` or a `<tbody>` among the
+        rest would switch the parser to a table's rules for what follows, mangling the
+        next fragments, e.g. another table swapped whole.
+        """
+        return f"<template>{markup}</template>" if oob else markup
+
+    def _count_html(self, *, oob: bool = False) -> str:
+        shown, total = len(self._view.shown_rows), len(self._view.rows)
+        text = ""
+        if shown != total:
+            text = self._view.filter_texts.get("count", "").format(shown=shown, total=total)
+        return (
+            f'<span id="{self.widget_id}-count" class="ms-auto text-sm opacity-70"'
+            f' aria-live="polite"{self._oob(oob=oob)}>{html.escape(text)}</span>'
+        )
+
+    def _filterable_columns(self) -> list[int]:
+        return [
+            column for column in self._view.filterable_columns if column < len(self._view.headers)
+        ]
+
+    def _bar_html(self, *, oob: bool = False) -> str:
+        bar_id = f"{self.widget_id}-bar"
+        if len(self._filterable_columns()) == 0:
+            return f'<div id="{bar_id}" hidden{self._oob(oob=oob)}></div>'
+        texts = self._view.filter_texts
+        disabled = "" if self.is_enabled else " disabled"
+        search_label = html.escape(texts.get("search", ""))
+        search = (
+            '<label class="input input-sm w-56">'
+            f'{_icon("search")}<input id="{self.widget_id}-search" type="search"'
+            f' name="search" value="{html.escape(self._view.search)}"'
+            f' placeholder="{search_label}" aria-label="{search_label}"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, search"'
+            """ hx-vals='{"event": "search"}' hx-swap="none" hx-sync="this:queue last\""""
+            f' autocomplete="off"{disabled}></label>'
+        )
+        if self._editor is None:
+            focus = " autofocus" if self._focus_add_filter else ""
+            editor = (
+                f'<button id="{self.widget_id}-add-filter" type="button"'
+                f' class="btn btn-sm btn-soft"{self._post({"event": "open_editor"})}'
+                f"{focus}{disabled}>{html.escape(texts.get('add_filter', ''))}</button>"
+            )
+        else:
+            editor = self._editor_html()
+        chips = "".join(self._chip_html(column) for column in sorted(self._view.filters))
+        clear = ""
+        if len(self._view.filters) >= 2:  # noqa: PLR2004
+            clear = (
+                f'<button type="button" class="btn btn-sm btn-ghost"'
+                f"{self._post({'event': 'clear_filters'})}{disabled}>"
+                f"{html.escape(texts.get('clear', ''))}</button>"
+            )
+        return (
+            f'<div id="{bar_id}" role="search" class="flex flex-wrap items-center gap-2"'
+            f"{self._oob(oob=oob)}>{search}{editor}{chips}{clear}{self._count_html()}</div>"
+        )
+
+    def _editor_html(self) -> str:
+        assert self._editor is not None
+        texts = self._view.filter_texts
+        columns = self._filterable_columns()
+        column, text = self._editor
+        chosen = column if column in columns else columns[0]
+        options = "".join(
+            f'<option value="{option}"'
+            f' data-placeholder="{html.escape(self._view.filter_placeholder(option))}"'
+            f"{' selected' if option == chosen else ''}>"
+            f"{html.escape(self._view.headers[option])}</option>"
+            for option in columns
+        )
+        value_id = f"{self.widget_id}-value"
+        value_label = html.escape(texts.get("value", ""))
+        return (
+            f'<form id="{self.widget_id}-editor" class="flex flex-wrap items-center gap-2"'
+            f"{self._post({'event': 'add_filter'})}>"
+            f'<select name="column" class="select select-sm w-auto" data-filter-column'
+            f' aria-label="{html.escape(texts.get("column", ""))}">{options}</select>'
+            f'<input id="{value_id}" name="value" class="input input-sm w-44" type="text"'
+            f' value="{html.escape(text)}" aria-label="{value_label}"'
+            f' placeholder="{html.escape(self._view.filter_placeholder(chosen))}"'
+            f' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="keydown[key==&apos;Escape&apos;]"'
+            """ hx-vals='{"event": "close_editor"}' hx-swap="none">"""
+            f"{self._error_html()}"
+            f'<button type="submit" class="btn btn-sm btn-primary">'
+            f"{html.escape(texts.get('add', ''))}</button></form>"
+        )
+
+    def _error_html(self, *, oob: bool = False) -> str:
+        """Render the editor's message, why its text can't filter; the page marks the field."""
+        error = self._editor_error
+        hidden = "" if error else " hidden"
+        return (
+            f'<span id="{self.widget_id}-value-error" class="text-sm text-error" data-log="error"'
+            f"{hidden}{self._oob(oob=oob)}>{html.escape(error or '')}</span>"
+        )
+
+    def _chip_html(self, column: int) -> str:
+        if column >= len(self._view.headers):
+            return ""
+        texts = self._view.filter_texts
+        remove = texts.get("remove", "{header}").format(header=self._view.headers[column])
+        disabled = "" if self.is_enabled else " disabled"
+        return (
+            '<span class="badge badge-soft badge-primary gap-1 pe-0">'
+            f'<button type="button" class="cursor-pointer"'
+            f"{self._post({'event': 'open_editor', 'column': column})}{disabled}>"
+            f"{html.escape(self._view.filter_chip(column))}</button>"
+            f'<button type="button" class="btn btn-ghost btn-xs btn-circle"'
+            f' aria-label="{html.escape(remove)}" title="{html.escape(remove)}"'
+            f"{self._post({'event': 'remove_filter', 'column': column})}{disabled}>\u00d7</button>"
+            "</span>"
         )
 
     def _row_html(self, index: int, row: list[str]) -> str:
@@ -955,14 +1193,28 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event in ("start_edit", "edit") and self.is_enabled:
+        # a disabled table can't be clicked: a post saying otherwise is refused
+        if not self.is_enabled:
+            super().dispatch(event, form)
+        if event in ("start_edit", "edit"):
             self._edit(event, form)
             return
-        # a disabled table can't be clicked: a post saying otherwise is refused
-        if event != "select" or not self.is_enabled:
+        handlers = {
+            "sort": self._sort,
+            "search": self._search,
+            "open_editor": self._open_editor,
+            "close_editor": self._close_editor,
+            "add_filter": self._add_filter,
+            "remove_filter": self._remove_filter,
+            "clear_filters": self._clear_filters,
+        }
+        if event in handlers:
+            handlers[event](form)
+            return
+        if event != "select":
             super().dispatch(event, form)
         row = form.get("row", "")
-        if not row.isdigit() or int(row) >= len(self._view.rows):
+        if not row.isdigit() or int(row) not in self._view.shown_rows:
             # a row a stale page still shows: swap the table back as it now is
             self._mark_dirty(self._view, self.widget_id, self._view.rows)
             return
@@ -975,6 +1227,63 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
 
+    def _column(self, form: Mapping[str, str], columns: list[int]) -> int | None:
+        """Get the column posted, if one of `columns`: a stale page may post another."""
+        column = form.get("column", "")
+        return int(column) if column.isdigit() and int(column) in columns else None
+
+    def _sort(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._view.sortable_columns)
+        if column is None:
+            self._mark_parts("head", "body")  # as it now is
+            return
+        self._view.sort_by(column)
+
+    def _search(self, form: Mapping[str, str]) -> None:
+        # not swapped back: the user is typing in it
+        with self.stop_refresh():
+            self._view.search = form.get("search", "")
+
+    def _open_editor(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._filterable_columns())
+        text = self._view.filters.get(column, "") if column is not None else ""
+        self._editor, self._editor_error = (column, text), None
+        self._mark_parts("bar")
+
+    def _close_editor(self, _form: Mapping[str, str]) -> None:
+        self._editor, self._editor_error = None, None
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+
+    def _add_filter(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._filterable_columns())
+        if column is None or self._editor is None:
+            self._mark_parts("bar")  # a stale page: the bar as it now is
+            return
+        text = form.get("value", "")
+        error = self._view.filter_error(column, text)
+        if error is not None:
+            # the field keeps the text typed: only its message is swapped in
+            self._editor, self._editor_error = (column, text), error
+            self._mark_parts("error")
+            return
+        self._close_editor(form)
+        self._view.filters = {**self._view.filters, column: text}
+
+    def _remove_filter(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, list(self._view.filters))
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+        if column is not None:
+            self._view.filters = {
+                other: text for other, text in self._view.filters.items() if other != column
+            }
+
+    def _clear_filters(self, _form: Mapping[str, str]) -> None:
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+        self._view.filters = {}
+
     def _edit(self, event: str, form: Mapping[str, str]) -> None:
         """Start editing a cell, or end it with the text posted."""
         # either way the table comes back: with the field, or with the cell's text
@@ -982,7 +1291,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         row, column = form.get("row", ""), form.get("column", "")
         if (
             not row.isdigit()
-            or int(row) >= len(self._view.rows)
+            or int(row) not in self._view.shown_rows
             or not column.isdigit()
             or int(column) not in self._editable_columns()
         ):
@@ -1342,6 +1651,7 @@ _ICONS: Final[dict[str, str]] = {
     "more": '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/>'
     '<circle cx="19" cy="12" r="1"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
+    "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 }
 
 

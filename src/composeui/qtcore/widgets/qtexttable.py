@@ -98,11 +98,14 @@ class QTextTableView(QTableView):
     a row, as Qt's `MultiSelection`. `selected_rows_changed` emits the selected rows'
     indexes, in order, only when the user changes them: setting them or the table from
     code stays silent. The user edits a cell of `set_editable_columns` with a double click
-    or F2, and `cell_edited` emits its row, column and new text.
+    or F2, and `cell_edited` emits its row, column and new text. `header_clicked` emits
+    the column whose header the user clicked; the header shows the order
+    `set_sort_indicator` gives, the table never sorting its rows itself.
     """
 
     selected_rows_changed = Signal(list)
     cell_edited = Signal(int, int, str)
+    header_clicked = Signal(int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -125,6 +128,24 @@ class QTextTableView(QTableView):
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.selectionModel().selectionChanged.connect(self._emit_selected_rows_changed)
         self._model.cell_edited.connect(self.cell_edited)
+        self._sort: tuple[int, bool] | None = None
+        self.horizontalHeader().sectionClicked.connect(self._header_clicked)
+
+    def set_sort_indicator(self, sort: tuple[int, bool] | None, *, is_shown: bool) -> None:
+        """Show the order: by a column, descending or not; None for the rows' own."""
+        self._sort = sort
+        header = self.horizontalHeader()
+        header.setSortIndicatorShown(is_shown and sort is not None)
+        header.setSectionsClickable(is_shown)
+        if sort is not None:
+            column, is_descending = sort
+            order = Qt.SortOrder.DescendingOrder if is_descending else Qt.SortOrder.AscendingOrder
+            header.setSortIndicator(column, order)
+
+    def _header_clicked(self, column: int) -> None:
+        # the header flips its indicator on a click: the order is the view's to say
+        self.set_sort_indicator(self._sort, is_shown=self.horizontalHeader().sectionsClickable())
+        self.header_clicked.emit(column)
 
     def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
         self._is_setting = True

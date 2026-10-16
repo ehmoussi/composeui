@@ -67,9 +67,9 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
-from composeui.qtcore.widgets.qtexttable import QTextTableView
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 
 if TYPE_CHECKING:
@@ -631,86 +631,188 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
 
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
+    filter_texts: dict[str, str]
     selection_mode: SelectionMode
     rows: list[list[str]]
+    sortable_columns: list[int]
+    filterable_columns: list[int]
+    sort_column: int | None
+    sort_descending: bool
+    search: str
+    filters: dict[int, str]
     selected_rows: list[int]
+    shown_rows: list[int]
     selection_changed: Signal[list[int]]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def sort_by(self, column: int) -> None: ...
+    def filter_error(self, column: int, text: str) -> str | None: ...
+    def filter_placeholder(self, column: int) -> str: ...
+    def filter_chip(self, column: int) -> str: ...
 
 
-class QtTableRenderer(QtWidgetRenderer[TableViewLike, QTextTableView]):
+class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
+    """A table under its filter bar; the table shows `shown_rows`, in their order.
+
+    The widgets know the rows only as shown: their indexes map back to `rows` through
+    `shown_rows`.
+    """
+
     def __init__(self, view: TableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "headers": self._refresh_headers,
+                "filter_texts": self._refresh_filter_texts,
                 "selection_mode": self._refresh_selection_mode,
-                "rows": self._refresh_rows,
+                # shown with `shown_rows`, which the view always sends next
+                "rows": lambda _view, _table, _value: None,
+                "sortable_columns": self._refresh_sort,
+                "filterable_columns": self._refresh_filterable_columns,
+                "sort_column": self._refresh_sort,
+                "sort_descending": self._refresh_sort,
+                "search": self._refresh_search,
+                "filters": self._refresh_filters,
                 "selected_rows": self._refresh_selected_rows,
+                "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QTextTableView()
-            self._rendered_object.selected_rows_changed.connect(self._update_selected_rows)
-            self._rendered_object.cell_edited.connect(self._update_cell)
+            self._rendered_object = QFilterTable()
+            table, bar = self._rendered_object.table, self._rendered_object.bar
+            table.selected_rows_changed.connect(self._update_selected_rows)
+            table.cell_edited.connect(self._update_cell)
+            table.header_clicked.connect(self._sort_by)
+            bar.check = self._view.filter_error
+            bar.placeholder = self._view.filter_placeholder
+            bar.search_edited.connect(self._update_search)
+            bar.filter_added.connect(self._add_filter)
+            bar.filter_removed.connect(self._remove_filter)
+            bar.filters_cleared.connect(self._clear_filters)
             self.refresh()
 
-    @staticmethod
+    @classmethod
     def _refresh_headers(
-        view: TableViewLike, rendered_object: QTextTableView, value: list[str]
+        cls, view: TableViewLike, rendered_object: QFilterTable, _value: list[str]
     ) -> None:
-        # resetting the table drops its selection: reapply it
-        rendered_object.set_table(value, view.rows)
-        rendered_object.set_selected_rows(view.selected_rows)
+        cls._refresh_shown_rows(view, rendered_object, view.shown_rows)
+        cls._refresh_filterable_columns(view, rendered_object, view.filterable_columns)
+        cls._refresh_filters(view, rendered_object, view.filters)
+        cls._refresh_sort(view, rendered_object, None)
+
+    @staticmethod
+    def _refresh_filter_texts(
+        view: TableViewLike, rendered_object: QFilterTable, value: dict[str, str]
+    ) -> None:
+        rendered_object.bar.set_texts(value)
+        rendered_object.bar.set_count(_count_text(view, view.shown_rows))
+        rendered_object.empty.setText(value.get("no_match", ""))
 
     @staticmethod
     def _refresh_selection_mode(
-        _view: TableViewLike, rendered_object: QTextTableView, value: SelectionMode
+        _view: TableViewLike, rendered_object: QFilterTable, value: SelectionMode
     ) -> None:
-        rendered_object.set_multiple_selection(is_multiple=value is SelectionMode.MULTIPLE)
+        rendered_object.table.set_multiple_selection(is_multiple=value is SelectionMode.MULTIPLE)
 
     @staticmethod
-    def _refresh_rows(
-        view: TableViewLike, rendered_object: QTextTableView, value: list[list[str]]
+    def _refresh_sort(view: TableViewLike, rendered_object: QFilterTable, _value: Any) -> None:
+        sort = None if view.sort_column is None else (view.sort_column, view.sort_descending)
+        rendered_object.table.set_sort_indicator(sort, is_shown=len(view.sortable_columns) > 0)
+
+    @staticmethod
+    def _refresh_filterable_columns(
+        view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
-        rendered_object.set_table(view.headers, value)
+        columns = [(column, view.headers[column]) for column in value if column < len(view.headers)]
+        rendered_object.bar.set_columns(columns)
+        rendered_object.bar.setVisible(len(columns) > 0)
+
+    @staticmethod
+    def _refresh_search(_view: TableViewLike, rendered_object: QFilterTable, value: str) -> None:
+        rendered_object.bar.set_search(value)
+
+    @staticmethod
+    def _refresh_filters(
+        view: TableViewLike, rendered_object: QFilterTable, value: dict[int, str]
+    ) -> None:
+        rendered_object.bar.set_filters(
+            [(column, view.filter_chip(column), text) for column, text in sorted(value.items())]
+        )
 
     @staticmethod
     def _refresh_selected_rows(
-        _view: TableViewLike, rendered_object: QTextTableView, value: list[int]
+        view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
-        rendered_object.set_selected_rows(value)
+        positions = {row: position for position, row in enumerate(view.shown_rows)}
+        rendered_object.table.set_selected_rows(
+            sorted(positions[row] for row in value if row in positions)
+        )
+
+    @classmethod
+    def _refresh_shown_rows(
+        cls, view: TableViewLike, rendered_object: QFilterTable, value: list[int]
+    ) -> None:
+        rendered_object.table.set_table(view.headers, [view.rows[row] for row in value])
+        # resetting the table drops its selection: reapply it
+        cls._refresh_selected_rows(view, rendered_object, view.selected_rows)
+        rendered_object.bar.set_count(_count_text(view, value))
+        rendered_object.empty.setVisible(len(value) == 0 and len(view.rows) > 0)
 
     @staticmethod
     def _refresh_editable_columns(
-        _view: TableViewLike, rendered_object: QTextTableView, value: list[int]
+        _view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
-        rendered_object.set_editable_columns(value)
+        rendered_object.table.set_editable_columns(value)
 
     @staticmethod
-    def _update_state(view: TableViewLike, rendered_object: QTextTableView) -> None:
-        view.selected_rows = rendered_object.selected_rows()
+    def _update_state(view: TableViewLike, rendered_object: QFilterTable) -> None:
+        shown = view.shown_rows
+        view.selected_rows = sorted(shown[row] for row in rendered_object.table.selected_rows())
 
-    def _update_selected_rows(self, rows: list[int]) -> None:
+    def _update_selected_rows(self, positions: list[int]) -> None:
+        shown = self._view.shown_rows
+        rows = sorted(shown[position] for position in positions)
         with self.stop_refresh():
             self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
 
-    def _update_cell(self, row: int, column: int, text: str) -> None:
-        rows = self._view.rows
+    def _update_cell(self, position: int, column: int, text: str) -> None:
+        rows, row = self._view.rows, self._view.shown_rows[position]
         self._view.emit_cell_edited(row, column, text)
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)
-        elif self._view.rows == rows:
-            # the app put the same rows back, which reached nothing: show them again
-            self.refresh()
+
+    def _sort_by(self, column: int) -> None:
+        if column in self._view.sortable_columns:
+            self._view.sort_by(column)
+
+    def _update_search(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.search = text
+
+    def _add_filter(self, column: int, text: str) -> None:
+        self._view.filters = {**self._view.filters, column: text}
+
+    def _remove_filter(self, column: int) -> None:
+        self._view.filters = {
+            other: text for other, text in self._view.filters.items() if other != column
+        }
+
+    def _clear_filters(self) -> None:
+        self._view.filters = {}
+
+
+def _count_text(view: TableViewLike, shown: list[int]) -> str:
+    """Count the rows shown, while the search or the filters hide some."""
+    if len(shown) == len(view.rows):
+        return ""
+    return view.filter_texts.get("count", "").format(shown=len(shown), total=len(view.rows))
 
 
 TValue = TypeVar("TValue")

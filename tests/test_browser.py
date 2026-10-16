@@ -38,7 +38,7 @@ from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView, WidePageMainView
-from tests.tables import EditableTableMainView
+from tests.tables import EditableTableMainView, SortedRoomsMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
@@ -162,6 +162,25 @@ def places_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def rooms_base_url() -> Iterator[str]:
+    """Serve an app with a table sorted and filtered by every column, for the whole module.
+
+    The notes count the rooms selected: a change to one table brings the other along.
+    """
+
+    class RoomsApp(WebApplication[SortedRoomsMainView]):
+        def setup_session(self, main_view: SortedRoomsMainView) -> None:
+            def count(rows: list[int]) -> None:
+                main_view.notes.rows = [[f"{len(rows)} selected"]]
+
+            main_view.rooms.selection_changed.connect(count)
+
+    app = RoomsApp(build_main_view=SortedRoomsMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def tasks_base_url() -> Iterator[str]:
     """Serve the task example, whose tasks run in threads, for the whole module."""
     with _serve(_QuickTasksApp().create_starlette_app()) as url:
@@ -235,6 +254,15 @@ def dialogs_page(browser: Browser, dialogs_base_url: str) -> Iterator[Page]:
 def horizontal_page(browser: Browser, horizontal_base_url: str) -> Iterator[Page]:
     """Open the app with tables side by side like `page`, in a session of its own."""
     context = browser.new_context(base_url=horizontal_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def rooms_page(browser: Browser, rooms_base_url: str) -> Iterator[Page]:
+    """Open the app with a sorted, filtered table like `page`, in a session of its own."""
+    context = browser.new_context(base_url=rooms_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -1088,3 +1116,82 @@ def test_the_plot_is_drawn_as_tall_as_the_chart_s_height(
     assert box is not None
     assert box["height"] == 420
     context.close()
+
+
+def test_typing_in_a_table_s_search_keeps_the_caret_while_its_rows_update(
+    rooms_page: Page,
+) -> None:
+    page = rooms_page
+    page.goto("/")
+    search = page.get_by_label("Search")
+    with _posted(page):
+        search.press_sequentially("Bdroom")
+    expect(page.get_by_text("No rows match the filters")).to_be_visible()
+    search.press("Home")
+    search.press("ArrowRight")
+    with _posted(page):
+        search.press("e")
+    expect(page.get_by_role("row").filter(has_text="Bedroom")).to_have_count(1)
+    expect(page.get_by_role("row").filter(has_text="Hall")).to_have_count(0)
+    expect(page.get_by_text("1 of 4")).to_be_visible()
+    expect(search).to_have_value("Bedroom")
+    expect(search).to_be_focused()
+    expect(search).to_have_js_property("selectionStart", 2)
+
+
+def test_the_filter_editor_marks_a_value_it_can_t_take_and_gives_the_focus_back_once_added(
+    rooms_page: Page,
+) -> None:
+    page = rooms_page
+    page.goto("/")
+    add_filter = page.get_by_role("button", name="+ Filter")
+    with _posted(page):
+        add_filter.click()
+    value = page.get_by_label("Value")
+    expect(value).to_be_focused()
+    # the hint follows the column picked
+    page.get_by_label("Column").select_option(label="Temperature")
+    expect(value).to_have_attribute("placeholder", ">=20, 18..24")
+
+    with _posted(page):
+        value.press_sequentially("warm")
+        value.press("Enter")
+    expect(page.get_by_text('"warm" isn\'t a number')).to_be_visible()
+    expect(value).to_have_attribute("aria-invalid", "true")
+    expect(value).to_be_focused()
+
+    value.fill("")
+    with _posted(page):
+        value.press_sequentially(">=20")
+        value.press("Enter")
+    expect(page.get_by_role("button", name="Temperature >=20")).to_be_visible()
+    expect(page.get_by_role("row").filter(has_text="Hall")).to_have_count(0)
+    expect(add_filter).to_be_focused()
+
+    # Escape closes the editor, adding nothing, the focus back on "+ Filter" too
+    with _posted(page):
+        add_filter.click()
+    # focused once the swap has settled, its triggers bound
+    expect(value).to_be_focused()
+    with _posted(page):
+        value.press("Escape")
+    expect(page.get_by_label("Value")).to_have_count(0)
+    expect(add_filter).to_be_focused()
+
+
+def test_a_table_s_body_swapped_with_another_table_leaves_that_one_whole(
+    rooms_page: Page,
+) -> None:
+    page = rooms_page
+    page.goto("/")
+    with _posted(page):
+        page.get_by_role("row").filter(has_text="Hall").click()
+    expect(page.get_by_role("cell", name="1 selected")).to_be_visible()
+    # htmx binds the swapped table's triggers once the swap has settled
+    expect(page.locator(".htmx-added")).to_have_count(0)
+    # hiding the hall deselects it: the rooms' body, then the notes whole, in one answer
+    with _posted(page):
+        page.get_by_label("Search").press_sequentially("room")
+    expect(page.get_by_role("cell", name="0 selected")).to_be_visible()
+    expect(page.get_by_role("columnheader", name="Note")).to_be_visible()
+    expect(page.get_by_role("row").filter(has_text="Bedroom")).to_have_count(1)

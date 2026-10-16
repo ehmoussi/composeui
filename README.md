@@ -473,6 +473,28 @@ a cell that doesn't parse refuses the edit and says why in the status bar. The r
 saved and loaded with the study by their type, so build the table as
 `RecordTableView[Run]` (or subclass it).
 
+### Sorting and filtering
+
+A column the user sorts and filters is marked so, `Column("radius", T("Radius"),
+sortable=True, filterable=True)` (on a `TableView`, `sortable_columns` and
+`filterable_columns` list them). Clicking a sortable header sorts by it, ascending, then
+descending, then back in the app's order. While a column is filterable, a bar above the
+table has a search over the filterable columns' text, and "+ Filter", adding a filter on
+a column, shown as a chip:
+
+- in a text column, the cells containing the text, ignoring case;
+- in a number or a date column, `>20`, `>=20`, `<20`, `<=20`, `!=20`, a range `18..24`
+  (both ends included), or a bare value meaning `=`;
+- in a boolean column, `true` or `false`;
+- in any column, `=` alone: the empty cells.
+
+A `RecordTableView` sorts by the fields' values, so numbers and dates sort as such; a
+`TableView` sorts its text. The app sets the order and the filters too (`sort_column`,
+`sort_descending`, `search`, `filters`, or `sort_by(column)` as a click does), and they're
+saved with the study. `shown_rows` lists the rows shown, in order, as indexes into `rows`;
+`selected_rows`, `selection_changed` and the edited row keep meaning indexes into `rows`
+whatever the order, and a search or a filter hiding a selected row deselects it.
+
 ## Charts
 
 A `ChartView` plots results, e.g. a quantity against time or a swept dimension: a list of

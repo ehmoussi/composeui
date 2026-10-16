@@ -64,3 +64,34 @@ class RoomsMainView(MainView):
         super().__attrs_post_init__()
         self.status_bar.timeout = 0
         self.rooms.records = [Room("Hall", 18), Room("Kitchen", 20.5, 2, is_heated=True)]
+
+
+#: every column sortable and filterable
+SORTED_COLUMNS = [
+    Column(column.field, column.header, editable=True, sortable=True, filterable=True)
+    for column in COLUMNS
+]
+
+
+@define_view
+class SortedRoomsMainView(MainView):
+    """A table the user sorts and filters by every column; a table of text that doesn't."""
+
+    app_title = "Sorted rooms"
+    extension = ".sorted"
+
+    rooms: RecordTableView[Room] = child(RecordTableView[Room], columns=SORTED_COLUMNS)
+    notes: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.status_bar.timeout = 0
+        # numbers that sort otherwise as text (9 < 10), an empty cell, names in mixed case
+        self.rooms.records = [
+            Room("Hall", 18),
+            Room("kitchen", 20.5, 10, is_heated=True),
+            Room("Attic", 9, 2),
+            Room("Bedroom", 21, 9, is_heated=True),
+        ]
+        self.notes.headers = ["Note"]
+        self.notes.rows = [["Calm"], ["Busy"]]

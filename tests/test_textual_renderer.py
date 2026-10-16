@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from attrs import Factory
+from textual.app import App
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
+from textual.pilot import Pilot
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Label, ProgressBar
+from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar
 
 from composeui.core import chartimage
 from composeui.core.application import _add_reference_to_signals
@@ -46,8 +48,13 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
+from composeui.textualcore.widgets.composefiltertable import (
+    ComposeFilterBar,
+    ComposeFilterChip,
+    ComposeFilterTable,
+)
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
-from composeui.textualcore.widgets.composetable import ComposeRowEditor
+from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
@@ -58,7 +65,7 @@ from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import PagesMainView
-from tests.tables import EditableTableMainView
+from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -234,8 +241,9 @@ async def test_the_summary_table_shows_each_edit_as_plain_text() -> None:
     async with app.run_test(size=(100, 60)) as pilot:
         await pilot.pause()
         assert isinstance(view.pages.results.summary.renderer, TextualWidgetRenderer)
-        table = view.pages.results.summary.renderer.widget
-        assert isinstance(table, DataTable)
+        box = view.pages.results.summary.renderer.widget
+        assert isinstance(box, ComposeFilterTable)
+        table = box.table
 
         def lines() -> list[str]:
             return [table.render_line(y).text.strip() for y in range(table.size.height)]
@@ -804,8 +812,9 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
     app = view.renderer.app
     assert app is not None
     assert isinstance(view.tables.narrow.renderer, TextualWidgetRenderer)
-    table = view.tables.narrow.renderer.widget
-    assert isinstance(table, DataTable)
+    box = view.tables.narrow.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
     emitted: list[list[int]] = []
     view.tables.narrow.selection_changed.connect(emitted.append)
 
@@ -849,8 +858,9 @@ async def test_a_click_or_enter_adds_or_removes_its_row_in_a_table_selecting_sev
     app = view.renderer.app
     assert app is not None
     assert isinstance(table_view.renderer, TextualWidgetRenderer)
-    table = table_view.renderer.widget
-    assert isinstance(table, DataTable)
+    box = table_view.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
     emitted: list[list[int]] = []
     table_view.selection_changed.connect(emitted.append)
 
@@ -891,8 +901,9 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
     app = view.renderer.app
     assert app is not None
     assert isinstance(view.places.renderer, TextualWidgetRenderer)
-    table = view.places.renderer.widget
-    assert isinstance(table, DataTable)
+    box = view.places.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
     edited: list[tuple[int, int, str, list[str]]] = []
 
     def record(row: int, column: int, text: str) -> None:
@@ -958,8 +969,9 @@ async def test_a_refused_edit_leaves_its_cell_and_the_selection_as_they_were() -
     app = view.renderer.app
     assert app is not None
     assert isinstance(view.places.renderer, TextualWidgetRenderer)
-    table = view.places.renderer.widget
-    assert isinstance(table, DataTable)
+    box = view.places.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
 
     def refuse(_row: int, _column: int, _text: str) -> None:
         raise EditRefusedError
@@ -1256,3 +1268,158 @@ async def test_the_chart_is_as_tall_as_its_view_says_in_rows() -> None:
         view.chart.height = None
         await pilot.pause()
         assert chart.size.height == 20
+
+
+def _sorted_rooms(
+    view: Optional[SortedRoomsMainView] = None,
+) -> tuple[SortedRoomsMainView, App[Any], ComposeFilterTable]:
+    """Render the rooms (`view`, or new ones): set them up before, the app not yet running."""
+    view = SortedRoomsMainView() if view is None else view
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.rooms.renderer, TextualWidgetRenderer)
+    box = view.rooms.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    return view, app, box
+
+
+def _shown_column(table: ComposeTable, column: int) -> list[str]:
+    return [str(table.get_row_at(row)[column]) for row in range(table.row_count)]
+
+
+@pytest.mark.asyncio
+async def test_clicking_a_sortable_header_sorts_by_it_then_back_and_marks_the_order() -> None:
+    view, app, box = _sorted_rooms()
+    table = box.table
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+
+        async def click_header(column: int) -> None:
+            x = sum(c.get_render_width(table) for c in list(table.columns.values())[:column])
+            await pilot.click(table, offset=(x + 1, 0))
+            await pilot.pause()
+
+        await click_header(2)  # the occupants
+        assert _shown_column(table, 2) == ["2", "9", "10", ""]
+        assert str(list(table.columns.values())[2].label) == "Occupants ▲"
+        await click_header(2)
+        assert _shown_column(table, 2) == ["10", "9", "2", ""]
+        assert str(list(table.columns.values())[2].label) == "Occupants ▼"
+        await click_header(2)
+        assert view.rooms.sort_column is None
+        assert _shown_column(table, 0) == ["Hall", "kitchen", "Attic", "Bedroom"]
+        assert str(list(table.columns.values())[2].label) == "Occupants"
+
+        # a table sorting and filtering by no column: no bar
+        assert isinstance(view.notes.renderer, TextualWidgetRenderer)
+        notes = view.notes.renderer.widget
+        assert isinstance(notes, ComposeFilterTable)
+        assert not notes.bar.display
+        assert box.bar.display
+
+
+async def _add_filter(pilot: Pilot[Any], bar: ComposeFilterBar, option: int, text: str) -> None:
+    """Add a filter through the bar's editor, on the column at `option` in its picker."""
+    if not bar.is_editing():
+        await pilot.click(bar.add_filter)
+        await pilot.pause()
+    # the column picker's options: a blank one, then the columns
+    await pilot.click(bar.column)
+    await pilot.pause()
+    await pilot.press("home", *["down"] * (option + 1), "enter")
+    await pilot.click(bar.value)
+    await pilot.press("end", *["backspace"] * len(bar.value.value), *text, "enter")
+    await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None:
+    view, app, box = _sorted_rooms()
+    bar, table = box.bar, box.table
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(bar.search)
+        await pilot.press(*"ROOM")
+        await pilot.pause()
+        assert _shown_column(table, 0) == ["Bedroom"]
+        assert str(bar.count.render()) == "1 of 4"
+        await pilot.press(*["backspace"] * 4)
+        await pilot.pause()
+        assert table.row_count == 4
+        assert not bar.count.display
+
+        # a value that doesn't parse isn't added: the field says why, the editor stays
+        await _add_filter(pilot, bar, 1, "warm")  # the temperature
+        assert bar.is_editing()
+        assert bar.value.has_class("-invalid")
+        assert str(bar.value.tooltip) == '"warm" isn\'t a number'
+        assert bar.value.placeholder == ">=20, 18..24"
+        await _add_filter(pilot, bar, 1, ">=20")
+        assert not bar.is_editing()
+        assert app.focused is bar.add_filter
+        assert _shown_column(table, 0) == ["kitchen", "Bedroom"]
+        chips = list(bar.chips.query(ComposeFilterChip))
+        assert [str(chip.open_button.label) for chip in chips] == ["Temperature >=20"]
+        # a second filter on its column replaces it, from its chip; another column combines
+        await pilot.click(chips[0].open_button)
+        await pilot.pause()
+        assert bar.value.value == ">=20"
+        await _add_filter(pilot, bar, 1, ">=21")
+        await _add_filter(pilot, bar, 3, "true")  # heated
+        assert view.rooms.filters == {1: ">=21", 3: "true"}
+        assert _shown_column(table, 0) == ["Bedroom"]
+
+        chips = list(bar.chips.query(ComposeFilterChip))
+        await pilot.click(chips[0].remove_button)
+        await pilot.pause()
+        assert view.rooms.filters == {3: "true"}
+        await _add_filter(pilot, bar, 2, ">100")  # occupants
+        assert table.row_count == 0
+        assert box.empty.display
+        assert str(box.empty.render()) == "No rows match the filters"
+        # Escape closes the editor, adding nothing
+        await pilot.click(bar.add_filter)
+        await pilot.pause()
+        await pilot.press(*"=", "escape")
+        await pilot.pause()
+        assert not bar.is_editing()
+        assert view.rooms.filters == {2: ">100", 3: "true"}
+
+
+@pytest.mark.asyncio
+async def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows() -> None:
+    view = SortedRoomsMainView()
+    rooms = view.rooms
+    rooms.filters = {3: "true"}
+    rooms.sort_by(0)
+    rooms.sort_by(0)  # descending: the kitchen, then the bedroom
+    view, app, box = _sorted_rooms(view)
+    table = box.table
+    emitted: list[list[int]] = []
+    rooms.selection_changed.connect(emitted.append)
+    edited: list[tuple[Room, Room]] = []
+    rooms.record_edited.connect(lambda old, new: edited.append((old, new)))
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        # the header, then the rows: the bedroom is the second
+        await pilot.click(table, offset=(2, 2))
+        await pilot.pause()
+        assert rooms.selected_records == [Room("Bedroom", 21, 9, is_heated=True)]
+        assert emitted == [[3]]
+
+        # renamed, the bedroom sorts first and stays selected
+        await pilot.press("f2")
+        await pilot.pause()
+        await pilot.press("end", *["backspace"] * len("Bedroom"), *"Study", "enter")
+        await pilot.pause()
+        assert edited == [
+            (Room("Bedroom", 21, 9, is_heated=True), Room("Study", 21, 9, is_heated=True))
+        ]
+        assert _shown_column(table, 0) == ["Study", "kitchen"]
+        assert rooms.selected_rows == [3]
+        assert table.cursor_row == 0
