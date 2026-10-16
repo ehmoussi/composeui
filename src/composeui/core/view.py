@@ -1662,7 +1662,8 @@ class HorizontalView(View):
     ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``, or its
     `default_stretch` when unset (1). A view with a share of 0 keeps its content's width,
     as a button does by default; when they all do, `align` packs them at the row's start
-    or end: a subclass sets ``align = Align.END``.
+    or end: a subclass sets ``align = Align.END``. On the web, a row narrower than 42rem
+    stacks its views, unless none takes a share.
     """
 
     _renderer_key = "horizontal"
@@ -1722,7 +1723,8 @@ class GridView(View):
     or ``GridPosition(1, 0, column_span=2)`` to span two columns. Cells no view takes are
     left empty, as are those of a hidden view. A view shorter than its row stays at its
     top; one with no share of a row (`default_stretch` 0, e.g. a button) keeps its
-    content's width, at its cell's start.
+    content's width, at its cell's start. On the web, a grid narrower than 42rem stacks
+    its views in one column, row by row.
     """
 
     _renderer_key = "grid"
