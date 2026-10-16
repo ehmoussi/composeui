@@ -96,7 +96,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
-from tests.tables import EditableTableMainView, Room, RoomsMainView
+from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -2957,3 +2957,166 @@ def test_the_chart_s_plot_is_as_tall_as_its_view_says() -> None:
 
     assert plot.attributes["style"] == "height: 420px"
     assert plot.attributes["class"] == "w-full"
+
+
+class _SortedRooms(NamedTuple):
+    """The sortable, filterable table's view and its fragment's id, and a client."""
+
+    client: TestClient
+    view: SortedRoomsMainView
+    table_id: str
+
+    def post(self, event: str, **values: str) -> str:
+        data = {"event": event, **values}
+        response = self.client.post(f"/widget/{self.table_id}", data=data)
+        assert response.status_code == 200
+        return str(response.text)
+
+    def shown(self, markup: str) -> list[str | None]:
+        """Get the ids of the rows the swapped body shows, in order."""
+        body = _swapped(markup, f"{self.table_id}-body")
+        return [attributes.get("id") for tag, attributes in body.descendants if tag == "tr"]
+
+    def row_ids(self, *rows: int) -> list[str | None]:
+        return [f"{self.table_id}-row-{row}" for row in rows]
+
+
+@pytest.fixture
+def sorted_rooms() -> Iterator[_SortedRooms]:
+    views: list[SortedRoomsMainView] = []
+
+    class SortedRoomsApp(WebApplication[SortedRoomsMainView]):
+        def setup_session(self, main_view: SortedRoomsMainView) -> None:
+            views.append(main_view)
+
+    app = SortedRoomsApp(build_main_view=SortedRoomsMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield _SortedRooms(client, view, _widget_id(view.rooms.renderer))
+
+
+def test_a_sortable_header_posts_its_sort_swapping_only_the_headers_and_the_body(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    table_id = sorted_rooms.table_id
+
+    def sort_state(markup: str) -> list[str | None]:
+        head = _swapped(markup, f"{table_id}-head")
+        return [attributes.get("aria-sort") for tag, attributes in head.descendants if tag == "th"]
+
+    body = sorted_rooms.post("sort", column="2")  # the occupants
+    assert sort_state(body) == ["none", "none", "ascending", "none"]
+    # each row keeps its id from its index in the rows, the empty cell last
+    assert sorted_rooms.shown(body) == sorted_rooms.row_ids(2, 3, 1, 0)
+    # the table isn't swapped whole: its search field stays as the user left it
+    assert _find(body, table_id) is None
+    assert _find(body, f"{table_id}-search") is None
+    body = sorted_rooms.post("sort", column="2")
+    assert sort_state(body)[2] == "descending"
+    body = sorted_rooms.post("sort", column="2")
+    assert sort_state(body)[2] == "none"
+    assert sorted_rooms.shown(body) == sorted_rooms.row_ids(0, 1, 2, 3)
+
+    # a table sorting and filtering by no column: plain headers, no bar
+    page = sorted_rooms.client.get("/").text
+    notes_id = _widget_id(sorted_rooms.view.notes.renderer)
+    notes = _element(page, notes_id)
+    assert not any(tag == "button" for tag, _ in notes.descendants)
+    assert "hidden" in _element(page, f"{notes_id}-bar").attributes
+    assert _element(page, f"{table_id}-bar").attributes["role"] == "search"
+
+
+def test_the_search_swaps_the_body_and_the_count_never_its_field(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    table_id = sorted_rooms.table_id
+    body = sorted_rooms.post("search", search="ROOM")
+    assert sorted_rooms.shown(body) == sorted_rooms.row_ids(3)
+    count = _swapped(body, f"{table_id}-count")
+    assert (count.text, count.attributes["aria-live"]) == ("1 of 4", "polite")
+    assert _find(body, f"{table_id}-search") is None
+
+    body = sorted_rooms.post("search", search="nowhere")
+    (no_match,) = [
+        attributes
+        for tag, attributes in _swapped(body, f"{table_id}-body").descendants
+        if tag == "td"
+    ]
+    assert no_match["colspan"] == "4"
+    assert "No rows match the filters" in body
+
+
+def test_the_filter_editor_adds_a_filter_as_a_chip_or_says_why_it_can_t(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    table, table_id = sorted_rooms.view.rooms, sorted_rooms.table_id
+    value_id = f"{table_id}-value"
+
+    body = sorted_rooms.post("open_editor")
+    _swapped(body, f"{table_id}-bar")
+    field = _element(body, value_id)
+    assert "autofocus" in field.attributes
+    assert field.attributes["aria-describedby"] == f"{value_id}-error"
+
+    # a value that doesn't parse: only its message is swapped in, the field left alone
+    body = sorted_rooms.post("add_filter", column="1", value="warm")
+    error = _swapped(body, f"{value_id}-error")
+    assert (error.text, error.attributes["data-log"]) == ('"warm" isn\'t a number', "error")
+    assert "hidden" not in error.attributes
+    assert _find(body, value_id) is None
+    assert table.filters == {}
+
+    body = sorted_rooms.post("add_filter", column="1", value=">=20")
+    assert table.filters == {1: ">=20"}
+    assert sorted_rooms.shown(body) == sorted_rooms.row_ids(1, 3)
+    bar = _swapped(body, f"{table_id}-bar")
+    # the editor closed, "+ Filter" taking the focus back
+    assert _find(body, value_id) is None
+    assert "autofocus" in _element(body, f"{table_id}-add-filter").attributes
+    assert "Temperature >=20" in bar.text
+    labels = [attributes.get("aria-label") for tag, attributes in bar.descendants]
+    assert "Remove the filter on Temperature" in labels
+
+    # its chip opens the editor on it; a second filter on its column replaces it
+    body = sorted_rooms.post("open_editor", column="1")
+    assert _element(body, value_id).attributes["value"] == ">=20"
+    sorted_rooms.post("add_filter", column="1", value=">=21")
+    sorted_rooms.post("open_editor")
+    sorted_rooms.post("add_filter", column="3", value="true")
+    assert table.filters == {1: ">=21", 3: "true"}
+    sorted_rooms.post("remove_filter", column="1")
+    assert table.filters == {3: "true"}
+    sorted_rooms.post("open_editor")
+    body = sorted_rooms.post("close_editor")
+    assert _find(body, value_id) is None
+    sorted_rooms.post("clear_filters")
+    assert table.filters == {}
+
+    # disabled, the table refuses a stale page's posts
+    table.is_enabled = False
+    response = sorted_rooms.client.post(
+        f"/widget/{table_id}", data={"event": "sort", "column": "0"}
+    )
+    assert response.status_code == 400
+
+
+def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    table = sorted_rooms.view.rooms
+    table.filters = {3: "true"}
+    emitted: list[list[int]] = []
+    table.selection_changed.connect(emitted.append)
+
+    sorted_rooms.post("select", row="3")
+    assert table.selected_records == [Room("Bedroom", 21, 9, is_heated=True)]
+    # a row the filters hide, which a stale page still shows: not selected
+    sorted_rooms.post("select", row="0")
+    assert (table.selected_rows, emitted) == ([3], [[3]])
+
+    sorted_rooms.post("start_edit", row="3", column="0")
+    body = sorted_rooms.post("edit", row="3", column="0", text="Study")
+    assert table.records[3] == Room("Study", 21, 9, is_heated=True)
+    assert table.selected_rows == [3]
+    assert _rows_with(body, sorted_rooms.table_id, "aria-current") == sorted_rooms.row_ids(3)

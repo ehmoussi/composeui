@@ -3,11 +3,14 @@
 import contextlib
 import contextvars
 import copy
+import datetime
+import decimal
 import enum
 import functools
 import json
 import logging
 import math
+import operator
 import re
 import sys
 import threading
@@ -145,7 +148,8 @@ def _omit_renderer_and_signals(
             # the records by their own type, which the field's `RecordT` doesn't name;
             # the rows only show them, and the columns, the app's, set what's editable
             data["records"] = CONVERTER.unstructure(obj.records)
-            del data["rows"], data["editable_columns"]
+            for name in ("rows", "editable_columns", "sortable_columns", "filterable_columns"):
+                del data[name]
             return data
 
         return unstructure_record_table
@@ -158,6 +162,16 @@ def _omit_renderer_and_signals(
         return data
 
     return unstructure_radio_group
+
+
+#: what a `RecordTableView`'s records and columns set, which loading leaves to them
+_RECORD_TABLE_SETUP = (
+    "rows",
+    "records",
+    "editable_columns",
+    "sortable_columns",
+    "filterable_columns",
+)
 
 
 def _apply_state(view: "View", data: dict[str, Any]) -> None:
@@ -193,18 +207,19 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
                 or not _is_state_field(f)
                 or f.on_setattr is attrs.setters.frozen
                 or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
-                or (
-                    f.name in ("rows", "records", "editable_columns")
-                    and isinstance(current_view, RecordTableView)
-                )
+                or (f.name in _RECORD_TABLE_SETUP and isinstance(current_view, RecordTableView))
             ):
                 continue
             new_value = new_data[f.name]
             current_field = getattr(current_view, f.name, None)
             if isinstance(current_field, View) and isinstance(new_value, dict):
                 states.append((current_field, new_value))
-            else:
-                setattr(current_view, f.name, CONVERTER.structure(new_value, f.type))
+                continue
+            value = CONVERTER.structure(new_value, f.type)
+            if isinstance(current_view, TableMixin):
+                # a sort or a filter on a column the table no longer sorts or filters
+                value = current_view.loadable(f.name, value)
+            setattr(current_view, f.name, value)
 
 
 def _reset_state(view: "View", initial: "View") -> None:
@@ -1277,6 +1292,203 @@ def replace_cell(rows: list[list[str]], row: int, column: int, text: str) -> lis
     return [*rows[:row], cells, *rows[row + 1 :]]
 
 
+def _parse_bool(text: Any, _type: type) -> bool:
+    if isinstance(text, str) and text.lower() in ("true", "false"):
+        return text.lower() == "true"
+    msg = f"{text!r} isn't a boolean"
+    raise ValueError(msg)
+
+
+#: parses a cell's text into a record's field; strict about booleans, which
+#: `bool("False")` would make true
+_CELL_CONVERTER = CONVERTER.copy()
+_CELL_CONVERTER.register_structure_hook(bool, _parse_bool)
+
+
+class FilterProblem(enum.Enum):
+    """Why a filter's text doesn't parse (see `parse_filter`)."""
+
+    #: nothing typed
+    EMPTY = enum.auto()
+    #: not a number, for a number column
+    NOT_A_NUMBER = enum.auto()
+    #: not a date, for a date column
+    NOT_A_DATE = enum.auto()
+    #: neither true nor false, for a boolean column
+    NOT_A_BOOLEAN = enum.auto()
+    #: a range whose start is after its end
+    REVERSED_RANGE = enum.auto()
+
+
+class FilterError(ValueError):
+    """A filter's text that doesn't parse: `problem` says why (see `TableMixin.filter_error`)."""
+
+    def __init__(self, problem: FilterProblem, text: str) -> None:
+        super().__init__(f"{text!r}: {problem.name.lower().replace('_', ' ')}")
+        self.problem = problem
+        self.text = text
+
+
+class FilterOperator(enum.Enum):
+    """How a filter compares a cell with its value."""
+
+    CONTAINS = "contains"
+    EMPTY = "empty"
+    EQUAL = "="
+    NOT_EQUAL = "!="
+    LESS = "<"
+    LESS_OR_EQUAL = "<="
+    GREATER = ">"
+    GREATER_OR_EQUAL = ">="
+    RANGE = ".."
+
+
+#: the comparisons a filter's text starts with, the longer before their prefixes
+_COMPARISONS = (
+    FilterOperator.GREATER_OR_EQUAL,
+    FilterOperator.LESS_OR_EQUAL,
+    FilterOperator.NOT_EQUAL,
+    FilterOperator.GREATER,
+    FilterOperator.LESS,
+    FilterOperator.EQUAL,
+)
+
+
+#: each comparison, as a function of a cell's value and the filter's
+_COMPARE: Mapping[FilterOperator, Callable[[Any, Any], Any]] = {
+    FilterOperator.EQUAL: operator.eq,
+    FilterOperator.NOT_EQUAL: operator.ne,
+    FilterOperator.LESS: operator.lt,
+    FilterOperator.LESS_OR_EQUAL: operator.le,
+    FilterOperator.GREATER: operator.gt,
+    FilterOperator.GREATER_OR_EQUAL: operator.ge,
+}
+
+
+@attrs.frozen
+class Filter:
+    """A column's filter, parsed from the text the user typed (see `parse_filter`)."""
+
+    operator: FilterOperator
+    #: the text a cell contains (casefolded), or the value a cell's is compared with
+    value: Any = None
+    #: a range's end
+    upper: Any = None
+
+    def matches(self, value: Any, text: str) -> bool:
+        """Tell whether a cell passes: its value (its text in a text column) and its text."""
+        if self.operator is FilterOperator.EMPTY:
+            return value is None or text == ""
+        if self.operator is FilterOperator.CONTAINS:
+            return bool(self.value in text.casefold())
+        if value is None:
+            return False
+        try:
+            return self._compares(value)
+        except TypeError:  # a value of another type, e.g. the column's since changed
+            return False
+
+    def _compares(self, value: Any) -> bool:
+        if self.operator is FilterOperator.RANGE:
+            return bool(self.value <= value <= self.upper)
+        return bool(_COMPARE[self.operator](value, self.value))
+
+
+class ColumnKind(enum.Enum):
+    """What a column's cells hold, which sets how they sort and filter."""
+
+    TEXT = enum.auto()
+    NUMBER = enum.auto()
+    DATE = enum.auto()
+    BOOLEAN = enum.auto()
+
+
+def column_kind(field_type: Any) -> ColumnKind:
+    """Get the kind of a column showing a field of `field_type` (`Optional` or not)."""
+    types = [arg for arg in get_args(field_type) if arg is not type(None)]
+    if get_origin(field_type) is Union and len(types) == 1:
+        field_type = types[0]
+    if field_type is bool:
+        return ColumnKind.BOOLEAN
+    if field_type in (int, float, decimal.Decimal):
+        return ColumnKind.NUMBER
+    if field_type in (datetime.date, datetime.datetime):
+        return ColumnKind.DATE
+    return ColumnKind.TEXT
+
+
+def _parse_value(text: str, field_type: Any, kind: ColumnKind) -> Any:
+    """Parse a filter's value as the column's field, the way an edit is parsed."""
+    types = [arg for arg in get_args(field_type) if arg is not type(None)]
+    base = types[0] if get_origin(field_type) is Union and len(types) == 1 else field_type
+    problems = {
+        ColumnKind.NUMBER: FilterProblem.NOT_A_NUMBER,
+        ColumnKind.DATE: FilterProblem.NOT_A_DATE,
+        ColumnKind.BOOLEAN: FilterProblem.NOT_A_BOOLEAN,
+    }
+    try:
+        # as `_cell_text` writes a date: ISO, which the converter doesn't read
+        if base is datetime.datetime:
+            return datetime.datetime.fromisoformat(text)
+        if base is datetime.date:
+            return datetime.date.fromisoformat(text)
+        if base is decimal.Decimal:
+            return decimal.Decimal(text)
+        return _CELL_CONVERTER.structure(text, base)
+    except (*_BAD_STATE_ERRORS, decimal.InvalidOperation) as error:
+        raise FilterError(problems[kind], text) from error
+
+
+def parse_filter(text: str, field_type: Any = str) -> Filter:
+    """Parse a filter's text for a column showing a field of `field_type`.
+
+    In a text column, the cells containing the text, ignoring case. In a number or a date
+    column, a comparison (``>20``, ``>=20``, ``<20``, ``<=20``, ``!=20``), a range
+    (``18..24``, both ends included) or a bare value, meaning ``=``. In a boolean column,
+    ``true`` or ``false``. In any column, ``=`` alone: the empty cells. Raise
+    `FilterError` when the text doesn't parse.
+    """
+    text = text.strip()
+    if text == "":
+        raise FilterError(FilterProblem.EMPTY, text)
+    if text == "=":
+        return Filter(FilterOperator.EMPTY)
+    kind = column_kind(field_type)
+    if kind is ColumnKind.TEXT:
+        return Filter(FilterOperator.CONTAINS, text.casefold())
+    if kind is ColumnKind.BOOLEAN:
+        return Filter(FilterOperator.EQUAL, _parse_value(text, field_type, kind))
+    for comparison in _COMPARISONS:
+        if text.startswith(comparison.value):
+            value = text[len(comparison.value) :].strip()
+            return Filter(comparison, _parse_value(value, field_type, kind))
+    if ".." in text:
+        lower, _, upper = (part.strip() for part in text.partition(".."))
+        range_filter = Filter(
+            FilterOperator.RANGE,
+            _parse_value(lower, field_type, kind),
+            _parse_value(upper, field_type, kind),
+        )
+        if range_filter.value > range_filter.upper:
+            raise FilterError(FilterProblem.REVERSED_RANGE, text)
+        return range_filter
+    return Filter(FilterOperator.EQUAL, _parse_value(text, field_type, kind))
+
+
+#: the text of a table's filter bar, which the renderers show
+FILTER_TEXTS: Mapping[str, str] = {
+    "search": T("Search"),
+    "add_filter": T("+ Filter"),
+    "column": T("Column"),
+    "value": T("Value"),
+    "add": T("Add"),
+    "clear": T("Clear"),
+    "count": T("{shown} of {total}"),
+    "no_match": T("No rows match the filters"),
+    "remove": T("Remove the filter on {header}"),
+}
+
+
 @define_view
 class TableMixin:
     """A table of text: the app formats each cell itself.
@@ -1296,6 +1508,14 @@ class TableMixin:
     as it was (the edit refused). Raising `EditRefusedError` refuses it too, the rows staying
     as they are, e.g. when the model refused the new text and changed nothing; so does a
     `RefusedError` caught by `View.refusing` in the callback.
+
+    The user sorts the rows by a column of `sortable_columns` (`sort_column`, ascending
+    unless `sort_descending`), searches the text of `filterable_columns` (`search`) and
+    filters each of them (`filters`, the text typed, see `parse_filter`). The table shows
+    `shown_rows`, which these compute; the indexes the table emits or takes stay those of
+    `rows` whatever the order, and a search or a filter hiding a selected row deselects
+    it, `selection_changed` emitting. New `rows` keep the order, the search and the
+    filters.
     """
 
     def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
@@ -1309,6 +1529,23 @@ class TableMixin:
         if self.selection_mode is SelectionMode.SINGLE and len(rows) > 1:
             msg = f"Cannot set {name}.selected_rows to {rows}: the table selects a single row."
             raise ValueError(msg)
+
+    def _check_sort_column(self, _attribute: "attrs.Attribute[Any]", column: Optional[int]) -> None:
+        if column is not None and not self._is_column(column, self.sortable_columns):
+            name = type(self).__name__
+            msg = f"Cannot sort {name} by column {column}: it isn't one of its sortable columns."
+            raise ValueError(msg)
+
+    def _check_filters(self, _attribute: "attrs.Attribute[Any]", filters: dict[int, str]) -> None:
+        name = type(self).__name__
+        for column, text in filters.items():
+            if not self._is_column(column, self.filterable_columns):
+                msg = (
+                    f"Cannot filter {name} by column {column}: it isn't one of its filterable"
+                    " columns."
+                )
+                raise ValueError(msg)
+            parse_filter(text, self._column_type(column))
 
     def _reconcile_mode(
         self, attribute: "attrs.Attribute[Any]", mode: SelectionMode
@@ -1324,34 +1561,104 @@ class TableMixin:
         """Move `selected_rows` to their rows in `rows` (or drop them), and notify the renderer."""
         renderer = cast("View", self).renderer
         if isinstance(renderer, (Renderer, RendererContainer)) and renderer.is_updating_state():
-            # the user edited a cell: every row stays where it was, and so does the selection
+            # the user edited a cell: the selection stays on its rows, which may still move
+            # or hide, as their cells sort or filter
+            object.__setattr__(self, "rows", rows)
+            self._show_rows(self.selected_rows, force=False)
             return rows
         edited = self._edited_rows if self._edited_rows is not None else self.rows
         # each selected row as edited, then as it was
         selected = [(edited[row], self.rows[row]) for row in self.selected_rows]
-        # cleared first: refreshing the rows clears a widget's selection, even at the same index
-        self.selected_rows = []
+        # unshown until the rows are: the renderer shows the selection with them
+        object.__setattr__(self, "selected_rows", [])
         rows = notify_renderer(cast("View", self), attribute, rows)
+        object.__setattr__(self, "rows", rows)
         found: set[int] = set()
         for candidates in selected:
             held = [rows.index(cells) for cells in candidates if rows.count(cells) == 1]
             found.update(held[:1])
-        kept = sorted(found)
-        if len(kept) > 0:
-            fields = attrs.fields_dict(cast("type[AttrsInstance]", type(self)))
-            notify_renderer(cast("View", self), fields["selected_rows"], kept)
-            # unvalidated: the validator would check `kept` against the rows being replaced
-            object.__setattr__(self, "selected_rows", kept)
+        self._show_rows(sorted(found), force=True)
         return rows
 
+    def _reconcile_sortable(
+        self, attribute: "attrs.Attribute[Any]", columns: list[int]
+    ) -> list[int]:
+        """Stop sorting by a column no longer sortable, and notify the renderer."""
+        self._store(attribute, columns)
+        if self.sort_column is not None and self.sort_column not in columns:
+            self.sort_column = None
+        return columns
+
+    def _reconcile_filterable(
+        self, attribute: "attrs.Attribute[Any]", columns: list[int]
+    ) -> list[int]:
+        """Drop the filters of columns no longer filterable, and notify the renderer."""
+        self._store(attribute, columns)
+        if any(column not in columns for column in self.filters):
+            self.filters = {
+                column: text for column, text in self.filters.items() if column in columns
+            }
+        if len(columns) == 0 and self.search != "":
+            self.search = ""  # nothing left to search
+        return columns
+
+    def _store(self, attribute: "attrs.Attribute[Any]", value: Any) -> None:
+        """Set an attribute, then notify the renderer: it shows the view as it now is."""
+        old = getattr(self, attribute.name)
+        object.__setattr__(self, attribute.name, value)
+        renderer = cast("View", self).renderer
+        if (
+            old != value
+            and isinstance(renderer, (Renderer, RendererContainer))
+            and not renderer.is_updating_state()
+        ):
+            renderer.refresh_attribute(attribute.name, value)
+
+    def _reshow(self, attribute: "attrs.Attribute[Any]", value: Any) -> Any:
+        """Show the rows as `value` sorts or filters them, and notify the renderer."""
+        if getattr(self, attribute.name) == value:
+            return value
+        self._store(attribute, value)
+        selected = self.selected_rows
+        shown = self._show_rows(selected, force=True)
+        if shown != selected:
+            self.selection_changed.emit(shown)
+        return value
+
     headers: list[str] = attrs.field(factory=list[str], metadata={UI_TEXT: True})
+    #: the filter bar's text, by what it's for (see `FILTER_TEXTS`)
+    filter_texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(FILTER_TEXTS), metadata={UI_TEXT: True}
+    )
     # before `selected_rows`, which it limits
     selection_mode: SelectionMode = attrs.field(
         default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
     )
     rows: list[list[str]] = attrs.field(factory=list[list[str]], on_setattr=_reconcile_rows)
+    # the sort and the filters, after `rows` and before `selected_rows`: loading saved state
+    # shows the rows as they were before selecting them again
+    sortable_columns: list[int] = attrs.field(factory=list[int], on_setattr=_reconcile_sortable)
+    filterable_columns: list[int] = attrs.field(factory=list[int], on_setattr=_reconcile_filterable)
+    sort_column: Optional[int] = attrs.field(
+        default=None,
+        validator=[_check_sort_column],
+        on_setattr=[attrs.setters.validate, _reshow],
+    )
+    sort_descending: bool = attrs.field(default=False, on_setattr=_reshow)
+    #: text the shown rows contain in a filterable column, ignoring case
+    search: str = attrs.field(default="", on_setattr=_reshow)
+    #: the filters by column, as typed (see `parse_filter`)
+    filters: dict[int, str] = attrs.field(
+        factory=dict[int, str],
+        validator=[_check_filters],
+        on_setattr=[attrs.setters.validate, _reshow],
+    )
     # after `rows`: loading saved state checks it against the rows already loaded
     selected_rows: list[int] = attrs.field(factory=list[int], validator=[_check_selected_rows])
+    #: the indexes in `rows` of the rows shown, in their order: computed, never set
+    shown_rows: list[int] = attrs.field(
+        factory=list[int], init=False, on_setattr=attrs.setters.frozen, metadata={OMIT: True}
+    )
     selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
     editable_columns: list[int] = attrs.Factory(list[int])
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
@@ -1359,6 +1666,50 @@ class TableMixin:
     _edited_rows: Optional[list[list[str]]] = attrs.field(
         default=None, init=False, repr=False, metadata={OMIT: True}
     )
+
+    def sort_by(self, column: int) -> None:
+        """Sort as a click on the column's header does: ascending, descending, then not."""
+        if self.sort_column != column:
+            self.sort_descending = False
+            self.sort_column = column
+        elif not self.sort_descending:
+            self.sort_descending = True
+        else:
+            self.sort_column = None
+            self.sort_descending = False
+
+    def filter_error(self, column: int, text: str) -> Optional[str]:
+        """Say why `text` can't filter `column`, translated; None if it can."""
+        try:
+            parse_filter(text, self._column_type(column))
+        except FilterError as error:
+            tr = cast("View", self).tr
+            messages = {
+                FilterProblem.EMPTY: tr("Type a value to filter by"),
+                FilterProblem.NOT_A_NUMBER: tr('"{text}" isn\'t a number'),
+                FilterProblem.NOT_A_DATE: tr('"{text}" isn\'t a date, as 2024-01-31'),
+                FilterProblem.NOT_A_BOOLEAN: tr('"{text}" isn\'t true or false'),
+                FilterProblem.REVERSED_RANGE: tr("The range's start is after its end"),
+            }
+            return messages[error.problem].format(text=error.text)
+        return None
+
+    def filter_placeholder(self, column: int) -> str:
+        """Hint at what filters `column`, translated."""
+        kind = column_kind(self._column_type(column))
+        tr = cast("View", self).tr
+        if kind is ColumnKind.NUMBER:
+            return tr(">=20, 18..24")
+        if kind is ColumnKind.DATE:
+            return tr(">=2024-01-31")
+        if kind is ColumnKind.BOOLEAN:
+            return tr("true or false")
+        return tr("contains…")
+
+    def filter_chip(self, column: int) -> str:
+        """Show a filter as its chip does: its column's header, then the text typed."""
+        header = self.headers[column] if column < len(self.headers) else ""
+        return f"{header} {self.filters[column]}".strip()
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None:
         """Emit `cell_edited` for the user's edit, `rows` still holding the old text.
@@ -1381,10 +1732,107 @@ class TableMixin:
         """Emit the edit's signals, `_edited_rows` holding the rows as it leaves them."""
         self.cell_edited.emit(row, column, text)
 
+    def loadable(self, name: str, value: Any) -> Any:
+        """Get the part of a saved sort or filters (`name`) the table's columns still take."""
+        if name == "sort_column":
+            return value if value is None or self._is_column(value, self.sortable_columns) else None
+        if name == "filters":
+            return {
+                column: text
+                for column, text in value.items()
+                if self._is_column(column, self.filterable_columns)
+                and self.filter_error(column, text) is None
+            }
+        return value
+
+    def _is_column(self, column: int, columns: list[int]) -> bool:
+        return column in columns and 0 <= column < len(self.headers)
+
+    def _column_type(self, _column: int) -> Any:
+        """Get the type of the field a column shows: text, in a table of text."""
+        return str
+
+    def _cell_value(self, row: int, column: int) -> Any:
+        """Get the value a cell sorts and filters by: its text, in a table of text."""
+        return self._cell_text(row, column)
+
+    def _cell_text(self, row: int, column: int) -> str:
+        cells = self.rows[row]
+        return cells[column] if column < len(cells) else ""
+
+    def _shown(self) -> list[int]:
+        """Get the indexes in `rows` of the rows the search and the filters pass, sorted."""
+        filters: dict[int, Filter] = {}
+        for column, text in self.filters.items():
+            # a filter the columns no longer take, e.g. changed since, filters nothing
+            with contextlib.suppress(FilterError):
+                filters[column] = parse_filter(text, self._column_type(column))
+        needle = self.search.strip().casefold()
+        searched = [column for column in self.filterable_columns if column < len(self.headers)]
+        shown = [
+            row
+            for row in range(len(self.rows))
+            if (
+                needle == ""
+                or any(needle in self._cell_text(row, column).casefold() for column in searched)
+            )
+            and all(
+                row_filter.matches(self._cell_value(row, column), self._cell_text(row, column))
+                for column, row_filter in filters.items()
+            )
+        ]
+        if self.sort_column is None or self.sort_column >= len(self.headers):
+            return shown
+        return self._sorted(shown, self.sort_column)
+
+    def _sorted(self, rows: list[int], column: int) -> list[int]:
+        """Sort `rows` by `column`, stably: by value, text by `str.casefold`, empty cells last."""
+        is_text = column_kind(self._column_type(column)) is ColumnKind.TEXT
+
+        def key(row: int) -> Any:
+            value = self._cell_value(row, column)
+            if value is None or value == "":
+                return None
+            return value.casefold() if is_text else value
+
+        keys = {row: key(row) for row in rows}
+        present = [row for row in rows if keys[row] is not None]
+        try:
+            present.sort(key=keys.__getitem__, reverse=self.sort_descending)
+        except TypeError:  # values that don't compare, e.g. the column's type since changed
+            present.sort(
+                key=lambda row: self._cell_text(row, column).casefold(),
+                reverse=self.sort_descending,
+            )
+        return present + [row for row in rows if keys[row] is None]
+
+    def _show_rows(self, selected: list[int], *, force: bool) -> list[int]:
+        """Compute `shown_rows`, keep the shown rows of `selected` selected, and show both.
+
+        The renderer gets `shown_rows` when they changed, or always with `force` (it shows
+        the rows with them); once the view holds them both, so it can show them together.
+        Return the rows still selected.
+        """
+        shown = self._shown()
+        is_shown = set(shown)
+        kept = [row for row in selected if row in is_shown]
+        changed = shown != self.shown_rows
+        object.__setattr__(self, "shown_rows", shown)
+        object.__setattr__(self, "selected_rows", kept)
+        renderer = cast("View", self).renderer
+        if isinstance(renderer, (Renderer, RendererContainer)) and (force or changed):
+            # even while the renderer updates the view: its widget doesn't order the rows
+            renderer.refresh_attribute("shown_rows", shown)
+        return kept
+
 
 @define_view
 class TableView(TableMixin, View):
     _renderer_key = "table"
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        object.__setattr__(self, "shown_rows", self._shown())
 
 
 RecordT = TypeVar("RecordT", bound="AttrsInstance")
@@ -1399,24 +1847,15 @@ class Column:
     header: str
     #: whether the user edits the column's cells
     editable: bool = False
+    #: whether the user sorts the rows by the column
+    sortable: bool = False
+    #: whether the user searches and filters the column
+    filterable: bool = False
 
 
 def _cell_text(value: Any) -> str:
     """Show a record's field in its cell: as saved, None as an empty cell."""
     return "" if value is None else str(CONVERTER.unstructure(value))
-
-
-def _parse_bool(text: Any, _type: type) -> bool:
-    if isinstance(text, str) and text.lower() in ("true", "false"):
-        return text.lower() == "true"
-    msg = f"{text!r} isn't a boolean"
-    raise ValueError(msg)
-
-
-#: parses a cell's text into a record's field; strict about booleans, which
-#: `bool("False")` would make true
-_CELL_CONVERTER = CONVERTER.copy()
-_CELL_CONVERTER.register_structure_hook(bool, _parse_bool)
 
 
 @define_view
@@ -1438,14 +1877,22 @@ class RecordTableView(TableView, Generic[RecordT]):
     def _reconcile_columns(
         self, _attribute: "attrs.Attribute[Any]", columns: list[Column]
     ) -> list[Column]:
+        # first: the rows sort and filter by the columns' fields
+        object.__setattr__(self, "columns", columns)
         self.headers = [translate_again(column.header, self._tr) for column in columns]
         self.editable_columns = [index for index, column in enumerate(columns) if column.editable]
+        self.sortable_columns = [index for index, column in enumerate(columns) if column.sortable]
+        self.filterable_columns = [
+            index for index, column in enumerate(columns) if column.filterable
+        ]
         self.rows = [self._cells(record, columns) for record in self.records]
         return columns
 
     def _reconcile_records(
         self, _attribute: "attrs.Attribute[Any]", records: list[RecordT]
     ) -> list[RecordT]:
+        # first: the rows sort and filter by the records' values
+        object.__setattr__(self, "records", records)
         self.rows = [self._cells(record, self.columns) for record in records]
         return records
 
@@ -1496,6 +1943,24 @@ class RecordTableView(TableView, Generic[RecordT]):
     @staticmethod
     def _cells(record: Any, columns: Sequence[Column]) -> list[str]:
         return [_cell_text(getattr(record, column.field)) for column in columns]
+
+    def _column_type(self, column: int) -> Any:
+        """Get the type of the column's field, by which its cells sort and filter."""
+        if column >= len(self.columns):
+            return str
+        try:
+            fields = attrs.fields_dict(attrs.resolve_types(self.record_type))
+        except TypeError:  # a table not knowing its records' type: its cells are text
+            return str
+        field = fields.get(self.columns[column].field)
+        return str if field is None else field.type
+
+    def _cell_value(self, row: int, column: int) -> Any:
+        if row >= len(self.records) or column >= len(self.columns):
+            return self._cell_text(row, column)
+        value = getattr(self.records[row], self.columns[column].field)
+        # an enum sorts and filters by its text, as shown
+        return _cell_text(value) if isinstance(value, enum.Enum) else value
 
     def _emit_edit(self, row: int, column: int, text: str) -> None:
         old = self.records[row]

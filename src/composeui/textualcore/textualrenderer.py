@@ -60,9 +60,9 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
+from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
-from composeui.textualcore.widgets.composetable import ComposeTable
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
     ComposeToolbarButton,
@@ -843,83 +843,200 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
 
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
+    filter_texts: dict[str, str]
     selection_mode: SelectionMode
     rows: list[list[str]]
+    sortable_columns: list[int]
+    filterable_columns: list[int]
+    sort_column: int | None
+    sort_descending: bool
+    search: str
+    filters: dict[int, str]
     selected_rows: list[int]
+    shown_rows: list[int]
     selection_changed: Signal[list[int]]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def sort_by(self, column: int) -> None: ...
+    def filter_error(self, column: int, text: str) -> str | None: ...
+    def filter_placeholder(self, column: int) -> str: ...
+    def filter_chip(self, column: int) -> str: ...
 
 
-class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeTable]):
+class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTable]):
+    """A table under its filter bar; the table shows `shown_rows`, in their order.
+
+    The widgets know the rows only as shown: their indexes map back to `rows` through
+    `shown_rows`.
+    """
+
     def __init__(self, view: TableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "headers": self._refresh_headers,
+                "filter_texts": self._refresh_filter_texts,
                 "selection_mode": self._refresh_selection_mode,
-                "rows": self._refresh_rows,
+                # shown with `shown_rows`, which the view always sends next
+                "rows": lambda _view, _table, _value: None,
+                "sortable_columns": self._refresh_sort,
+                "filterable_columns": self._refresh_filterable_columns,
+                "sort_column": self._refresh_sort,
+                "sort_descending": self._refresh_sort,
+                "search": self._refresh_search,
+                "filters": self._refresh_filters,
                 "selected_rows": self._refresh_selected_rows,
+                "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeTable()
-            self._rendered_object.selected_rows_changed.connect(self._update_selected_rows)
-            self._rendered_object.cell_edited.connect(self._update_cell)
+            self._rendered_object = ComposeFilterTable()
+            table, bar = self._rendered_object.table, self._rendered_object.bar
+            table.selected_rows_changed.connect(self._update_selected_rows)
+            table.cell_edited.connect(self._update_cell)
+            table.header_clicked.connect(self._sort_by)
+            bar.check = self._view.filter_error
+            bar.placeholder = self._view.filter_placeholder
+            bar.search_edited.connect(self._update_search)
+            bar.filter_added.connect(self._add_filter)
+            bar.filter_removed.connect(self._remove_filter)
+            bar.filters_cleared.connect(self._clear_filters)
+
+    @classmethod
+    def _refresh_headers(
+        cls, view: TableViewLike, rendered_object: ComposeFilterTable, _value: list[str]
+    ) -> None:
+        cls._refresh_shown_rows(view, rendered_object, view.shown_rows)
+        cls._refresh_filterable_columns(view, rendered_object, view.filterable_columns)
+        cls._refresh_filters(view, rendered_object, view.filters)
 
     @staticmethod
-    def _refresh_headers(
-        view: TableViewLike, rendered_object: ComposeTable, value: list[str]
+    def _refresh_filter_texts(
+        view: TableViewLike, rendered_object: ComposeFilterTable, value: dict[str, str]
     ) -> None:
-        rendered_object.fill(value, view.rows)
+        rendered_object.bar.set_texts(value)
+        rendered_object.bar.set_count(_count_text(view, view.shown_rows))
+        rendered_object.empty.update(value.get("no_match", ""))
 
     @staticmethod
     def _refresh_selection_mode(
-        _view: TableViewLike, rendered_object: ComposeTable, value: SelectionMode
+        _view: TableViewLike, rendered_object: ComposeFilterTable, value: SelectionMode
     ) -> None:
-        rendered_object.set_multiple_selection(is_multiple=value is SelectionMode.MULTIPLE)
+        rendered_object.table.set_multiple_selection(is_multiple=value is SelectionMode.MULTIPLE)
 
     @staticmethod
-    def _refresh_rows(
-        view: TableViewLike, rendered_object: ComposeTable, value: list[list[str]]
+    def _refresh_sort(
+        view: TableViewLike, rendered_object: ComposeFilterTable, _value: Any
     ) -> None:
-        rendered_object.fill(view.headers, value)
+        is_sorted = view.sort_column is not None and view.sort_column in view.sortable_columns
+        sort = (view.sort_column, view.sort_descending) if is_sorted else None
+        rendered_object.table.set_sort(cast("tuple[int, bool] | None", sort))
 
     @staticmethod
+    def _refresh_filterable_columns(
+        view: TableViewLike, rendered_object: ComposeFilterTable, value: list[int]
+    ) -> None:
+        columns = [(column, view.headers[column]) for column in value if column < len(view.headers)]
+        rendered_object.bar.set_columns(columns)
+        rendered_object.bar.display = len(columns) > 0
+
+    @staticmethod
+    def _refresh_search(
+        _view: TableViewLike, rendered_object: ComposeFilterTable, value: str
+    ) -> None:
+        rendered_object.bar.set_search(value)
+
+    @staticmethod
+    def _refresh_filters(
+        view: TableViewLike, rendered_object: ComposeFilterTable, value: dict[int, str]
+    ) -> None:
+        rendered_object.bar.set_filters(
+            [
+                (column, view.filter_chip(column), text, view.headers[column])
+                for column, text in sorted(value.items())
+                if column < len(view.headers)
+            ]
+        )
+
+    @staticmethod
+    def _positions(view: TableViewLike, rows: list[int]) -> list[int]:
+        """Get where `rows` show, in order."""
+        positions = {row: position for position, row in enumerate(view.shown_rows)}
+        return sorted(positions[row] for row in rows if row in positions)
+
+    @classmethod
     def _refresh_selected_rows(
-        _view: TableViewLike, rendered_object: ComposeTable, value: list[int]
+        cls, view: TableViewLike, rendered_object: ComposeFilterTable, value: list[int]
     ) -> None:
-        rendered_object.set_selected_rows(value)
+        rendered_object.table.set_selected_rows(cls._positions(view, value))
+
+    @classmethod
+    def _refresh_shown_rows(
+        cls, view: TableViewLike, rendered_object: ComposeFilterTable, value: list[int]
+    ) -> None:
+        rendered_object.table.fill(
+            view.headers,
+            [view.rows[row] for row in value],
+            cls._positions(view, view.selected_rows),
+        )
+        rendered_object.bar.set_count(_count_text(view, value))
+        rendered_object.empty.display = len(value) == 0 and len(view.rows) > 0
 
     @staticmethod
     def _refresh_editable_columns(
-        _view: TableViewLike, rendered_object: ComposeTable, value: list[int]
+        _view: TableViewLike, rendered_object: ComposeFilterTable, value: list[int]
     ) -> None:
-        rendered_object.editable_columns = value
+        rendered_object.table.editable_columns = value
 
     @staticmethod
-    def _update_state(view: TableViewLike, rendered_object: ComposeTable) -> None:
-        view.selected_rows = rendered_object.selected_rows()
+    def _update_state(view: TableViewLike, rendered_object: ComposeFilterTable) -> None:
+        shown = view.shown_rows
+        view.selected_rows = sorted(shown[row] for row in rendered_object.table.selected_rows())
 
-    def _update_selected_rows(self, rows: list[int]) -> None:
+    def _update_selected_rows(self, positions: list[int]) -> None:
+        shown = self._view.shown_rows
+        rows = sorted(shown[position] for position in positions)
         with self.stop_refresh():
             self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
 
-    def _update_cell(self, row: int, column: int, text: str) -> None:
-        rows = self._view.rows
+    def _update_cell(self, position: int, column: int, text: str) -> None:
+        rows, row = self._view.rows, self._view.shown_rows[position]
         self._view.emit_cell_edited(row, column, text)
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)
-        elif self._view.rows == rows:
-            # the app put the same rows back, which reached nothing: show them again
-            self.refresh()
+
+    def _sort_by(self, column: int) -> None:
+        if column in self._view.sortable_columns:
+            self._view.sort_by(column)
+
+    def _update_search(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.search = text
+
+    def _add_filter(self, column: int, text: str) -> None:
+        self._view.filters = {**self._view.filters, column: text}
+
+    def _remove_filter(self, column: int) -> None:
+        self._view.filters = {
+            other: text for other, text in self._view.filters.items() if other != column
+        }
+
+    def _clear_filters(self) -> None:
+        self._view.filters = {}
+
+
+def _count_text(view: TableViewLike, shown: list[int]) -> str:
+    """Count the rows shown, while the search or the filters hide some."""
+    if len(shown) == len(view.rows):
+        return ""
+    return view.filter_texts.get("count", "").format(shown=len(shown), total=len(view.rows))
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

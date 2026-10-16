@@ -35,7 +35,6 @@ from qtpy.QtWidgets import (
     QPushButton,
     QRadioButton,
     QStatusBar,
-    QTableView,
     QToolBar,
     QWidget,
 )
@@ -59,6 +58,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.charts import ChartPagesMainView
@@ -66,7 +66,7 @@ from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
-from tests.tables import EditableTableMainView
+from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -79,6 +79,7 @@ if TYPE_CHECKING:
 
     from composeui.core.chartimage import ImageOptions
     from composeui.core.view import View
+    from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 
 @pytest.fixture(autouse=True)
@@ -255,8 +256,9 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     view = PipeMainView()
     view.render(RendererType.QT)
     assert isinstance(view.pages.results.summary.renderer, QtWidgetRenderer)
-    table = view.pages.results.summary.renderer.qt_object
-    assert isinstance(table, QTableView)
+    box = view.pages.results.summary.renderer.qt_object
+    assert isinstance(box, QFilterTable)
+    table = box.table
     model = table.model()
     assert model.headerData(3, Qt.Orientation.Horizontal) == "Half Length"
     radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius)
@@ -460,6 +462,12 @@ def _widget(view: View) -> QWidget:
     widget = view.renderer.qt_object
     assert isinstance(widget, QWidget)
     return widget
+
+
+def _table(view: View) -> QTextTableView:
+    box = _widget(view)
+    assert isinstance(box, QFilterTable)
+    return box.table
 
 
 def test_a_horizontal_view_shares_the_row_by_stretch(qtbot: QtBot) -> None:
@@ -762,8 +770,7 @@ def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBo
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    table = _widget(view.tables.narrow)
-    assert isinstance(table, QTableView)
+    table = _table(view.tables.narrow)
     emitted: list[list[int]] = []
     view.tables.narrow.selection_changed.connect(emitted.append)
 
@@ -796,8 +803,7 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    table = _widget(view.tables.narrow)
-    assert isinstance(table, QTableView)
+    table = _table(view.tables.narrow)
     emitted: list[list[int]] = []
     view.tables.narrow.selection_changed.connect(emitted.append)
 
@@ -828,8 +834,7 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    table = _widget(view.places)
-    assert isinstance(table, QTableView)
+    table = _table(view.places)
     model = table.model()
     edited: list[tuple[int, int, str, list[str]]] = []
 
@@ -1259,3 +1264,137 @@ def test_the_chart_is_as_tall_as_its_view_says(qtbot: QtBot) -> None:
     view.chart.height = None  # as tall as the layout makes it again
     assert (chart.minimumHeight(), chart.maximumHeight()) == (0, 16777215)
     qtbot.waitUntil(lambda: chart.height() > 250)
+
+
+def _sorted_rooms(qtbot: QtBot) -> tuple[SortedRoomsMainView, QFilterTable]:
+    view = SortedRoomsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    box = _widget(view.rooms)
+    assert isinstance(box, QFilterTable)
+    return view, box
+
+
+def _shown_column(table: QTextTableView, column: int) -> list[str]:
+    model = table.model()
+    return [model.index(row, column).data() or "" for row in range(model.rowCount())]
+
+
+def test_clicking_a_sortable_header_sorts_by_it_then_back_and_shows_the_order(
+    qtbot: QtBot,
+) -> None:
+    view, box = _sorted_rooms(qtbot)
+    table, header = box.table, box.table.horizontalHeader()
+
+    def click_header(column: int) -> None:
+        position = QPoint(header.sectionViewportPosition(column) + 5, header.height() // 2)
+        qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=position)
+
+    click_header(2)  # the occupants
+    assert _shown_column(table, 2) == ["2", "9", "10", ""]
+    assert header.isSortIndicatorShown()
+    assert (header.sortIndicatorSection(), header.sortIndicatorOrder()) == (
+        2,
+        Qt.SortOrder.AscendingOrder,
+    )
+    click_header(2)
+    assert _shown_column(table, 2) == ["10", "9", "2", ""]
+    assert header.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder
+    click_header(2)
+    assert view.rooms.sort_column is None
+    assert _shown_column(table, 0) == ["Hall", "kitchen", "Attic", "Bedroom"]
+    assert not header.isSortIndicatorShown()
+
+    # a table sorting by no column: its headers sort nothing, and it has no filter bar
+    notes = _widget(view.notes)
+    assert isinstance(notes, QFilterTable)
+    assert not notes.table.horizontalHeader().sectionsClickable()
+    assert not notes.bar.isVisible()
+    assert box.bar.isVisible()
+
+
+def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -> None:
+    view, box = _sorted_rooms(qtbot)
+    bar, table = box.bar, box.table
+
+    qtbot.keyClicks(bar.search, "ROOM")
+    assert view.rooms.search == "ROOM"
+    assert _shown_column(table, 0) == ["Bedroom"]
+    assert bar.count.text() == "1 of 4"
+    bar.search.selectAll()
+    qtbot.keyClick(bar.search, Qt.Key.Key_Backspace)
+    assert _shown_column(table, 0) == ["Hall", "kitchen", "Attic", "Bedroom"]
+    assert not bar.count.isVisible()
+
+    def add(column: str, text: str) -> None:
+        if not bar.is_editing():
+            qtbot.mouseClick(bar.add_filter, Qt.MouseButton.LeftButton)
+        bar.column.setCurrentIndex(bar.column.findText(column))
+        bar.value.selectAll()
+        qtbot.keyClicks(bar.value, text)
+        qtbot.keyClick(bar.value, Qt.Key.Key_Return)
+
+    # a value that doesn't parse isn't added: the field says why, the editor stays
+    add("Temperature", "warm")
+    assert bar.is_editing()
+    assert bar.value.property("invalid")
+    assert bar.value.toolTip() == '"warm" isn\'t a number'
+    assert view.rooms.filters == {}
+    assert bar.value.placeholderText() == ">=20, 18..24"
+    add("Temperature", ">=20")
+    assert not bar.is_editing()
+    assert _shown_column(table, 0) == ["kitchen", "Bedroom"]
+    assert [chip.open_button.text() for chip in bar.chips] == ["Temperature >=20"]
+    # a second filter on its column replaces it, from its chip; another column combines
+    qtbot.mouseClick(bar.chips[0].open_button, Qt.MouseButton.LeftButton)
+    assert bar.value.text() == ">=20"
+    add("Temperature", ">=21")
+    add("Heated", "true")
+    assert view.rooms.filters == {1: ">=21", 3: "true"}
+    assert _shown_column(table, 0) == ["Bedroom"]
+    assert bar.clear.isVisible()
+
+    qtbot.mouseClick(bar.chips[0].remove_button, Qt.MouseButton.LeftButton)
+    assert view.rooms.filters == {3: "true"}
+    add("Occupants", ">100")
+    assert table.model().rowCount() == 0
+    assert box.empty.isVisible()
+    assert box.empty.text() == "No rows match the filters"
+    qtbot.mouseClick(bar.clear, Qt.MouseButton.LeftButton)
+    assert table.model().rowCount() == 4
+    assert bar.chips == []
+
+
+def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(qtbot: QtBot) -> None:
+    view, box = _sorted_rooms(qtbot)
+    rooms, table = view.rooms, box.table
+    rooms.filters = {3: "true"}
+    rooms.sort_by(0)
+    rooms.sort_by(0)  # descending: the kitchen, then the bedroom
+    emitted: list[list[int]] = []
+    rooms.selection_changed.connect(emitted.append)
+
+    center = table.visualRect(table.model().index(1, 0)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    assert rooms.selected_records == [Room("Bedroom", 21, 9, is_heated=True)]
+    assert emitted == [[3]]
+
+    edited: list[tuple[Room, Room]] = []
+    rooms.record_edited.connect(lambda old, new: edited.append((old, new)))
+    # renamed, the bedroom sorts first and stays selected
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    editor = table.focusWidget()
+    assert isinstance(editor, QLineEdit)
+    editor.selectAll()
+    qtbot.keyClicks(editor, "Study")
+    qtbot.keyClick(editor, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+    assert edited == [
+        (Room("Bedroom", 21, 9, is_heated=True), Room("Study", 21, 9, is_heated=True))
+    ]
+    assert _shown_column(table, 0) == ["Study", "kitchen"]
+    assert rooms.selected_rows == [3]
+    assert [index.row() for index in table.selectionModel().selectedRows()] == [0]

@@ -82,6 +82,9 @@ class ComposeTable(DataTable[Text]):
     The user edits the cells of `editable_columns` in a `ComposeRowEditor`: F2 opens it
     on the cursor's row, a double click on the clicked cell's. `cell_edited` emits each
     cell the user changed: its row, its column (without the check column) and its text.
+
+    `header_clicked` emits the column whose header the user clicked; the header shows
+    the order `set_sort` gives (▲/▼), the table never sorting its rows itself.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [Binding("f2", "edit_row", "Edit")]
@@ -90,21 +93,49 @@ class ComposeTable(DataTable[Text]):
         super().__init__(cursor_type="row", show_cursor=False, zebra_stripes=True)
         self.selected_rows_changed: Signal[list[int]] = Signal()
         self.cell_edited: Signal[int, int, str] = Signal()
+        self.header_clicked: Signal[int] = Signal()
         self.editable_columns: list[int] = []
+        self._sort: tuple[int, bool] | None = None
         self._selected_rows: list[int] = []
         self._is_multiple = False
         self._headers: list[str] = []
         self._rows: list[list[str]] = []
 
-    def fill(self, headers: list[str], rows: list[list[str]]) -> None:
-        """Rebuild the whole table, as plain text: a string cell would be read as markup."""
+    def fill(
+        self, headers: list[str], rows: list[list[str]], selected: list[int] | None = None
+    ) -> None:
+        """Rebuild the whole table, as plain text: a string cell would be read as markup.
+
+        `selected` replaces the selected rows, which the rows replaced may no longer hold.
+        """
         self._headers, self._rows = headers, rows
+        if selected is not None:
+            self._selected_rows = selected
         self.clear(columns=True)
         check = [""] if self._is_multiple else []
-        self.add_columns(*(Text(header) for header in [*check, *headers]))
+        self.add_columns(*(Text(label) for label in [*check, *self._labels(headers)]))
         self.add_rows([Text(cell) for cell in [*check, *row]] for row in rows)
         # clearing moved the cursor back to the first row
         self.set_selected_rows(self._selected_rows)
+
+    def set_sort(self, sort: tuple[int, bool] | None) -> None:
+        """Show the order: by a column, descending or not; None for the rows' own."""
+        if sort != self._sort:
+            self._sort = sort
+            self.fill(self._headers, self._rows)
+
+    def _labels(self, headers: list[str]) -> list[str]:
+        if self._sort is None or self._sort[0] >= len(headers):
+            return headers
+        column, is_descending = self._sort
+        labels = list(headers)
+        labels[column] = f"{labels[column]} {'▼' if is_descending else '▲'}"
+        return labels
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        column = event.column_index - (1 if self._is_multiple else 0)
+        if column >= 0:
+            self.header_clicked.emit(column)
 
     def set_multiple_selection(self, *, is_multiple: bool) -> None:
         if is_multiple != self._is_multiple:
