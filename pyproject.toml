@@ -38,10 +38,14 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-pyside6 = ["pyside6>=6.10.3"]
+pyside6 = [
+    "pyqtgraph>=0.13.7",
+    "pyside6>=6.10.3",
+]
 tui = [
     "textual>=8.2.8",
     "textual-fspicker>=0.6.0",
+    "textual-plotext>=1.0.1",
 ]
 web = [
     "itsdangerous>=2.2.0",
@@ -71,6 +75,10 @@ dev = [
     "textual-dev>=1.8.0",
 ]
 
+[[tool.mypy.overrides]]
+# pyqtgraph ships no type hints: the chart widget is typed at its edges
+module = ["pyqtgraph", "pyqtgraph.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 markers = [

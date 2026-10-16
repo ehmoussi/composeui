@@ -63,6 +63,7 @@ from composeui.core.view import (
     View,
     replace_cell,
 )
+from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qtexttable import QTextTableView
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from composeui.core.signal import Signal, SignalNoArgs
+    from composeui.core.view import Series
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
@@ -493,6 +495,64 @@ class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar])
     @staticmethod
     def _update_state(view: ProgressBarViewLike, rendered_object: QProgressBar) -> None:
         pass  # the user can't move a progress bar; nothing to read back
+
+
+class ChartViewLike(ViewLike, Protocol):
+    title: str
+    x_title: str
+    y_title: str
+    x_unit: str
+    y_unit: str
+    series: list[Series]
+
+
+class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
+    def __init__(self, view: ChartViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "x_title": self._refresh_x_title,
+                "x_unit": self._refresh_x_unit,
+                "y_title": self._refresh_y_title,
+                "y_unit": self._refresh_y_unit,
+                "series": self._refresh_series,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QChart()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_title(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.set_title(value)
+
+    # each refreshed with its new value, the view still holding the old one
+    @staticmethod
+    def _refresh_x_title(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.set_axis("bottom", value, view.x_unit)
+
+    @staticmethod
+    def _refresh_x_unit(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.set_axis("bottom", view.x_title, value)
+
+    @staticmethod
+    def _refresh_y_title(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.set_axis("left", value, view.y_unit)
+
+    @staticmethod
+    def _refresh_y_unit(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.set_axis("left", view.y_title, value)
+
+    @staticmethod
+    def _refresh_series(_view: ChartViewLike, rendered_object: QChart, value: list[Series]) -> None:
+        rendered_object.set_series(value)
+
+    @staticmethod
+    def _update_state(view: ChartViewLike, rendered_object: QChart) -> None:
+        pass  # the user only looks at a chart; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1392,6 +1452,7 @@ class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
     "button": QtButtonRenderer,
+    "chart": QtChartRenderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "dialog": QtDialogRenderer,

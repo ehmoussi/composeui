@@ -13,6 +13,8 @@ from __future__ import annotations
 import contextlib
 import enum
 import html
+import json
+import math
 import re
 import threading
 from abc import abstractmethod
@@ -32,6 +34,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ButtonVariant,
+    ChartView,
     DialogKind,
     DialogView,
     ExitAppAction,
@@ -67,6 +70,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
+    from composeui.core.view import Series
 
 TView = TypeVar("TView", bound=ViewLike)
 
@@ -578,6 +582,117 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
         return (
             f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
             f"{progress}></progress>"
+        )
+
+
+class ChartViewLike(ViewLike, Protocol):
+    title: str
+    x_title: str
+    y_title: str
+    x_unit: str
+    y_unit: str
+    series: list[Series]
+
+
+#: the points a series sends at most, about twice a wide chart's pixels: a longer one is
+#: thinned to the extremes of each bucket of its points, so its peaks stay
+CHART_MAX_POINTS: Final = 4000
+
+
+def _json_number(value: float) -> float | None:
+    """Get `value` for JSON, which has no NaN or infinity: None, uPlot's gap."""
+    return value if math.isfinite(value) else None
+
+
+def _thin(x: list[float], y: list[float], max_points: int) -> tuple[list[float], list[float]]:
+    """Keep each bucket's lowest and highest point, and a gap it holds, of a long series."""
+    if len(x) <= max_points:
+        return x, y
+    # two points a bucket, and room for a gap in some of them
+    bucket_count = max(1, max_points // 3)
+    kept: list[int] = []
+    for bucket in range(bucket_count):
+        start = bucket * len(x) // bucket_count
+        end = (bucket + 1) * len(x) // bucket_count
+        drawn = [index for index in range(start, end) if math.isfinite(y[index])]
+        indexes = set()
+        if len(drawn) > 0:
+            indexes.add(min(drawn, key=y.__getitem__))
+            indexes.add(max(drawn, key=y.__getitem__))
+        if len(drawn) < end - start:
+            indexes.add(next(i for i in range(start, end) if not math.isfinite(y[i])))
+        kept.extend(sorted(indexes))
+    return [x[index] for index in kept], [y[index] for index in kept]
+
+
+def _chart_points(series: Series) -> tuple[list[float], list[float]]:
+    """Get a series' points as uPlot draws them: by ascending x, thinned when long."""
+    points = [(x, y) for x, y in zip(series.x, series.y) if math.isfinite(x)]
+    if any(a[0] > b[0] for a, b in zip(points, points[1:])):
+        points.sort(key=lambda point: point[0])
+    x, y = [point[0] for point in points], [point[1] for point in points]
+    return _thin(x, y, CHART_MAX_POINTS)
+
+
+class WebChartRenderer(WebRenderer[ChartViewLike]):
+    """A chart the page's script draws with uPlot, from the JSON in its `data-chart`.
+
+    The user zooms by dragging across it, back out with a double click, and reads the
+    values at the cursor in its legend; a series' legend entry hides or shows it. A new
+    `series` list swaps the figure, the page keeping the user's zoom (see `page.py`).
+    """
+
+    _role = "chart"
+    is_labelable = False
+
+    def __init__(self, view: ChartViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("title", "x_title", "y_title", "x_unit", "y_unit", "series"), self._mark_dirty
+            )
+        )
+
+    def chart_json(self) -> str:
+        """Get what the page's script draws, as JSON."""
+        view = self._view
+        points = [_chart_points(series) for series in view.series]
+        x_unit, y_unit = view.x_unit, view.y_unit
+        spec: dict[str, Any] = {
+            "x": {"label": ChartView.axis_label(view.x_title, x_unit), "unit": x_unit},
+            "y": {"label": ChartView.axis_label(view.y_title, y_unit), "unit": y_unit},
+            "series": [{"name": series.name} for series in view.series],
+        }
+        if len(points) > 0 and all(x == points[0][0] for x, _y in points):
+            # uPlot's own columns: the x shared, then each series' y
+            spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]
+        else:
+            # each series by its own x, joined in the browser
+            spec["pairs"] = [[x, [_json_number(v) for v in y]] for x, y in points]
+        return json.dumps(spec, allow_nan=False, separators=(",", ":"))
+
+    def _description(self) -> str:
+        """Describe the chart to a screen reader, which can't read its canvas."""
+        view = self._view
+        names = ", ".join(series.name for series in view.series)
+        x_label = ChartView.axis_label(view.x_title, view.x_unit)
+        description = f"{names} against {x_label}" if names and x_label else names or x_label
+        return f"{view.title}: {description}" if view.title and description else view.title
+
+    def to_html(self, *, oob: bool = False) -> str:
+        title = self._view.title
+        caption = (
+            f'<figcaption class="text-center font-semibold">{html.escape(title)}</figcaption>'
+            if title
+            else ""
+        )
+        return (
+            # a column: a card's figures are rows of images otherwise (daisyUI's `card`)
+            f'<figure {self._root_attributes(oob=oob)} class="flex w-full flex-col gap-2">'
+            f"{caption}"
+            f'<div id="{self.widget_id}-plot" data-chart="{html.escape(self.chart_json())}"'
+            f' role="img" aria-label="{html.escape(self._description())}"'
+            ' class="h-72 w-full"></div></figure>'
         )
 
 
@@ -1874,6 +1989,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
     "button": WebButtonRenderer,
+    "chart": WebChartRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "dialog": WebDialogRenderer,

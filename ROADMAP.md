@@ -71,17 +71,14 @@ alike, tested), rather than raising mid-job.
 
 Each step on Qt, Textual and the web, with tests, before the next:
 
-1. **Line charts**: `ChartView` with `LINE`, title, axis titles and units, legend, several
-   series (each with its own x), NaN gaps; an example plotting a swept result
-   (`examples/` app, also used by the tests).
-2. **Scatter** (`SCATTER`), e.g. measurements over a model curve: needs one chart with a
+1. **Scatter** (`SCATTER`), e.g. measurements over a model curve: needs one chart with a
    line series and a scatter series, so `kind` may then move to `Series`; decide at this
    step, not before.
-3. **Bars** (`BAR` with `categories`): one bar group per category, one bar per series.
-4. **Log axes** (`x_log`, `y_log`).
-5. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
+2. **Bars** (`BAR` with `categories`): one bar group per category, one bar per series.
+3. **Log axes** (`x_log`, `y_log`).
+4. **Report images** (see below): `chart_figure`/`save_chart_image`, then the "Save
    image" action on each backend.
-6. **Web: full resolution on zoom** (see below), once a real app needs it.
+5. **Web: full resolution on zoom** (see below), once a real app needs it.
 
 ### Qt: pyqtgraph
 

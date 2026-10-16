@@ -472,6 +472,35 @@ a cell that doesn't parse refuses the edit and says why in the status bar. The r
 saved and loaded with the study by their type, so build the table as
 `RecordTableView[Run]` (or subclass it).
 
+## Charts
+
+A `ChartView` plots results, e.g. a quantity against time or a swept dimension: a list of
+`Series`, each a curve with its own `x` and `y` (as many of each) and a `name` for the
+legend; a NaN leaves a gap in its curve.
+
+```python
+from composeui.core.view import ChartView, Series, child
+
+chart: ChartView = child(
+    ChartView, title="Pressure Drop", x_title="Flow Rate", x_unit="L/s", y_unit="kPa"
+)
+
+chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
+```
+
+The view holds data and labels only: each backend draws it in its theme's colors. Like a
+table's rows, assign a new `series` list to redraw it (a job adding points too), and the
+series are saved with the study. Qt draws it with [pyqtgraph](https://www.pyqtgraph.org/)
+(in the `pyside6` extra): the mouse zooms and pans, and hovering shows each series' value
+at the cursor. The web draws it with [uPlot](https://github.com/leeoniya/uPlot), loaded by
+the page once it shows a chart: dragging across zooms, a double click zooms back out, and
+the legend shows the values at the cursor; a long series is thinned to the extremes of
+each bucket of its points before it's sent. Textual draws it with `textual-plotext` (in the
+`tui` extra), without zoom or hover. A new `series` list keeps the user's zoom.
+[`src/examples/pipechart.py`](src/examples/pipechart.py) plots a pipe's pressure drop
+against its flow rate (`uv run python -m examples.pipechart --backend qt`, or `textual`,
+or `web`).
+
 ## Running work in threads
 
 A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`

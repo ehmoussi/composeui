@@ -24,9 +24,11 @@ import uvicorn
 from playwright.sync_api import Error, expect, sync_playwright
 
 from composeui.webcore.webapplication import WebApplication
+from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
+from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -162,6 +164,22 @@ def tasks_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def chart_base_url() -> Iterator[str]:
+    """Serve the pipe chart example, for the whole module."""
+    app = WebApplication(build_main_view=PipeChartMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def chart_pages_base_url() -> Iterator[str]:
+    """Serve an app with a chart on its second page, for the whole module."""
+    app = WebApplication(build_main_view=ChartPagesMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     with sync_playwright() as playwright:
         try:
@@ -266,6 +284,24 @@ def grid_page(browser: Browser, grid_base_url: str) -> Iterator[Page]:
 def tasks_page(browser: Browser, tasks_base_url: str) -> Iterator[Page]:
     """Open the task example like `page`, in a session of its own."""
     context = browser.new_context(base_url=tasks_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def chart_page(browser: Browser, chart_base_url: str) -> Iterator[Page]:
+    """Open the pipe chart example like `page`, in a session of its own."""
+    context = browser.new_context(base_url=chart_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def chart_pages_page(browser: Browser, chart_pages_base_url: str) -> Iterator[Page]:
+    """Open the app with a chart on its second page like `page`, in a session of its own."""
+    context = browser.new_context(base_url=chart_pages_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -771,3 +807,99 @@ def test_the_page_follows_tasks_running_in_threads_until_they_end(tasks_page: Pa
     )
     expect(tasks_page.get_by_role("progressbar")).to_have_attribute("value", str(TASK_COUNT))
     expect(tasks_page.get_by_role("button", name="Run")).to_be_enabled()
+
+
+def _x_range(page: Page) -> list[float]:
+    """Get the x range of the page's one chart."""
+    x_range: list[float] = page.evaluate(
+        "(() => { const [chart] = charts.values();"
+        " return [chart.scales.x.min, chart.scales.x.max]; })()"
+    )
+    return x_range
+
+
+def test_a_chart_draws_its_series_with_their_legend(chart_page: Page) -> None:
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+
+    figure = chart_page.locator("figure")
+    expect(figure.locator("canvas")).to_have_count(1)
+    expect(figure.locator(".u-legend")).to_contain_text("D = 50 mm")
+    expect(figure.locator(".u-legend")).to_contain_text("Flow Rate (L/s)")
+    expect(figure.get_by_role("img")).to_have_attribute(
+        "aria-label", "Pressure Drop: D = 50 mm against Flow Rate (L/s)"
+    )
+
+
+def test_the_chart_script_loads_only_once_a_chart_shows(page: Page, chart_pages_page: Page) -> None:
+    page.goto("/")
+    expect(page.locator("#app")).to_be_visible()
+    assert page.evaluate("typeof uPlot") == "undefined"
+
+    chart_pages_page.goto("/notes")
+    chart_pages_page.wait_for_function("typeof uPlot !== 'undefined'")
+    # its page hidden: no width to draw at yet
+    figure = chart_pages_page.locator("figure")
+    expect(figure.locator("canvas")).to_have_count(0)
+
+    chart_pages_page.get_by_role("link", name="Chart").click()
+
+    expect(figure.locator("canvas")).to_have_count(1)
+    expect(figure.locator(".u-legend")).to_contain_text("Inlet")
+
+
+def test_a_swapped_chart_is_destroyed_and_keeps_the_zoom(chart_page: Page) -> None:
+    chart_page.goto("/")
+    add = chart_page.get_by_role("button", name="Add Curve")
+    add.click()
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
+    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+
+    chart_page.get_by_label("Diameter (mm)").fill("80")
+    with _posted(chart_page):
+        add.click()
+
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 80 mm")
+    # one chart, the old one gone with its legend
+    expect(chart_page.locator(".uplot")).to_have_count(1)
+    expect(chart_page.locator(".u-legend")).to_have_count(1)
+    assert chart_page.evaluate("charts.size") == 1
+    assert _x_range(chart_page) == [0.5, 1]
+
+
+def test_the_chart_follows_the_theme(chart_page: Page) -> None:
+    chart_page.emulate_media(color_scheme="light")
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
+    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+    canvas = chart_page.locator("figure canvas")
+    light = canvas.evaluate("canvas => canvas.toDataURL()")
+
+    chart_page.get_by_role("button", name="Theme").click()
+    chart_page.get_by_role("button", name="Dark").click()
+
+    assert canvas.evaluate("canvas => canvas.toDataURL()") != light
+    expect(chart_page.locator(".uplot")).to_have_count(1)
+    assert _x_range(chart_page) == [0.5, 1]  # rebuilt at the same zoom
+
+
+def test_the_chart_follows_its_element_s_width(chart_page: Page) -> None:
+    chart_page.set_viewport_size({"width": 1200, "height": 900})
+    chart_page.goto("/")
+    canvas = chart_page.locator("figure canvas")
+    expect(canvas).to_have_count(1)
+    wide = canvas.bounding_box()
+
+    chart_page.set_viewport_size({"width": 600, "height": 900})
+
+    assert wide is not None
+    chart_page.wait_for_function(
+        "width => document.querySelector('figure canvas').getBoundingClientRect().width < width",
+        arg=wide["width"],
+    )
+    plot = chart_page.locator("[data-chart]").bounding_box()
+    narrow = canvas.bounding_box()
+    assert plot is not None
+    assert narrow is not None
+    assert narrow["width"] <= plot["width"]

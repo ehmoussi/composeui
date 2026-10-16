@@ -30,6 +30,142 @@ _PAGE = Template("""<!DOCTYPE html>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="$css_url" rel="stylesheet" type="text/css" />
 <script>
+/* charts (see `WebChartRenderer`): uPlot draws each `[data-chart]` element from its
+   JSON. The page loads uPlot only once it shows its first chart, from a swap too. A
+   chart waits to be drawn until its element has a width (one on a hidden page has
+   none), follows its element's width, and is rebuilt when the theme changes: uPlot
+   can't recolor a chart. One swapped out is destroyed, leaving the x range the user
+   zoomed into to the chart swapped in with its id (a job adding points). */
+var charts = new Map();  // each element drawn, or waiting for a width, to its chart
+var chartZooms = new Map();  // the zoom of a chart swapped out, by its element's id
+var uPlotLoading = false;
+function loadCharts() {
+  if (document.querySelector("[data-chart]") === null || uPlotLoading) return;
+  uPlotLoading = true;
+  var script = document.createElement("script");
+  script.src = "$uplot_url";
+  script.onload = syncCharts;
+  document.head.appendChild(script);
+}
+/* a CSS color as the canvas takes it: daisyUI's variables, mixed, resolved */
+function resolveColor(element, color) {
+  var probe = document.createElement("span");
+  probe.hidden = true;
+  probe.style.color = color;
+  element.appendChild(probe);
+  var resolved = getComputedStyle(probe).color;
+  probe.remove();
+  return resolved;
+}
+var SERIES_COLORS = ["primary", "secondary", "accent", "info", "success", "warning", "error"];
+function chartValue(unit) {
+  return function (chart, value) {
+    if (value === null || value === undefined) return "-";
+    return String(parseFloat(value.toPrecision(4))) + (unit === "" ? "" : " " + unit);
+  };
+}
+function chartOptions(element, spec, width) {
+  var ink = resolveColor(element, "var(--color-base-content)");
+  var faint = resolveColor(
+    element, "color-mix(in oklch, var(--color-base-content) 12%, transparent)"
+  );
+  function axis(side) {
+    return {
+      label: side.label,
+      stroke: ink,
+      grid: { stroke: faint, width: 1 },
+      ticks: { stroke: faint, width: 1 },
+    };
+  }
+  var series = spec.series.map(function (series, index) {
+    var color = "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")";
+    return {
+      label: series.name,
+      stroke: resolveColor(element, color),
+      width: 2,
+      // past the theme's colors, around again dashed
+      dash: index < SERIES_COLORS.length ? undefined : [6, 4],
+      spanGaps: false,
+      points: { show: false },
+      value: chartValue(spec.y.unit),
+    };
+  });
+  return {
+    width: width,
+    height: element.clientHeight,
+    scales: { x: { time: false } },
+    axes: [axis(spec.x), axis(spec.y)],
+    series: [{ label: spec.x.label, value: chartValue(spec.x.unit) }].concat(series),
+    // under the plot, out of its element: the element's height is the plot's
+    legend: {
+      mount: function (chart, legend) {
+        element.after(legend);
+      },
+    },
+  };
+}
+function chartData(spec) {
+  if ("data" in spec) return spec.data;
+  if (spec.pairs.length === 0) return [[]];  // no series yet: the axes alone
+  // each series by its own x: joined on every x, a series' own gaps kept
+  return uPlot.join(spec.pairs);
+}
+function drawChart(element, zoom) {
+  var spec = JSON.parse(element.dataset.chart);
+  var chart = new uPlot(chartOptions(element, spec, element.clientWidth), chartData(spec), element);
+  if (zoom !== undefined) chart.setScale("x", zoom);
+  charts.set(element, chart);
+}
+/* the x range the user zoomed into; undefined while the chart shows all its data */
+function chartZoom(chart) {
+  var xs = chart.data[0];
+  var scale = chart.scales.x;
+  if (xs.length === 0 || (scale.min <= xs[0] && scale.max >= xs[xs.length - 1])) return undefined;
+  return { min: scale.min, max: scale.max };
+}
+function destroyChart(element) {
+  var chart = charts.get(element);
+  charts.delete(element);
+  element.chartObserver.disconnect();
+  if (chart === null) return;
+  var zoom = chartZoom(chart);
+  if (zoom !== undefined) chartZooms.set(element.id, zoom);
+  chart.destroy();
+}
+function syncCharts() {
+  charts.forEach(function (chart, element) {
+    if (!element.isConnected) destroyChart(element);
+  });
+  if (typeof uPlot === "undefined") {
+    loadCharts();
+    return;
+  }
+  document.querySelectorAll("[data-chart]").forEach(function (element) {
+    if (charts.has(element)) return;
+    charts.set(element, null);
+    element.chartObserver = new ResizeObserver(function () {
+      var chart = charts.get(element);
+      var width = element.clientWidth;
+      if (width === 0) return;
+      if (chart === null) {
+        drawChart(element, chartZooms.get(element.id));
+        chartZooms.delete(element.id);
+      } else if (chart.width !== width) {
+        chart.setSize({ width: width, height: element.clientHeight });
+      }
+    });
+    element.chartObserver.observe(element);
+  });
+}
+/* the theme changed: each chart drawn again in its colors, at the same zoom */
+function redrawCharts() {
+  charts.forEach(function (chart, element) {
+    if (chart === null) return;
+    var zoom = chartZoom(chart);
+    chart.destroy();
+    drawChart(element, zoom);
+  });
+}
 /* the theme picked in the header's Theme menu: Light or Dark win over the browser's
    light/dark preference and are remembered by this browser; System forgets the choice
    and follows the browser again. Applied here, before the body renders, so a reload
@@ -48,7 +184,9 @@ function applyTheme(choice) {
   document.querySelectorAll("[data-theme-option]").forEach(function (option) {
     option.setAttribute("aria-pressed", String(option.dataset.themeOption === choice));
   });
+  redrawCharts();
 }
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawCharts);
 function setTheme(choice) {
   try {
     if (choice === "system") localStorage.removeItem("composeui-theme");
@@ -159,10 +297,12 @@ function syncPage() {
 }
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
+  syncCharts();
   new MutationObserver(function () {
     syncInvalidFields();
     openDialogs();
     syncPage();
+    syncCharts();
   }).observe(document.body, {
     childList: true,
     subtree: true,
@@ -184,7 +324,12 @@ $jobs_poller
 
 
 #: read once: the files only change with a new version of the package
-_STATIC_URLS = {"htmx_url": _static_url("htmx.min.js"), "css_url": _static_url("app.css")}
+_STATIC_URLS = {
+    "htmx_url": _static_url("htmx.min.js"),
+    "css_url": _static_url("app.css"),
+    # uPlot 1.6.32 (https://github.com/leeoniya/uPlot), its stylesheet in css/uPlot.min.css
+    "uplot_url": _static_url("uPlot.iife.min.js"),
+}
 
 
 def page_marker(language: str, title: str, *, oob: bool = False) -> str:
