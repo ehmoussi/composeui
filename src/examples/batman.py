@@ -1,9 +1,10 @@
 """Click the bat: `python -m examples.batman --backend qt` (or `web`).
 
-The Batman logo's outline, drawn as two curves, its upper and its lower edge. Clicking
-the chart inside the bat says so: the chart's `clicked` emits the point, which the view
-checks against the curves. Textual draws the logo too, but a terminal has no pointer to
-click it with.
+The Batman logo: a yellow oval, its upper and lower halves filled down to 0, under the
+bat's upper and lower edges filled in black; each series has the logo's color, whatever
+the theme. Clicking the chart inside the bat says so: the chart's `clicked` emits the
+point, which the view checks against the bat's edges. Textual draws the logo too, but a
+terminal has no pointer to click it with.
 """
 
 import math
@@ -58,6 +59,11 @@ LOWER: tuple[tuple[float, float, Callable[[float], float]], ...] = (
 )
 #: the points each piece is drawn with
 POINTS_PER_PIECE = 200
+#: the oval's half width and half height, around the bat
+OVAL = (8.0, 4.0)
+#: the logo's colors
+YELLOW = "#ffd700"
+BLACK = "#000000"
 
 
 def _edge(pieces: tuple[tuple[float, float, Callable[[float], float]], ...], x: float) -> float:
@@ -73,15 +79,23 @@ def is_in_bat(x: float, y: float) -> bool:
     return _edge(LOWER, x) <= y <= _edge(UPPER, x)
 
 
+def _oval(x: float) -> float:
+    width, height = OVAL
+    return height * math.sqrt(max(0.0, 1 - (x / width) ** 2))
+
+
 def _outline(
-    name: str, pieces: tuple[tuple[float, float, Callable[[float], float]], ...]
+    name: str,
+    pieces: tuple[tuple[float, float, Callable[[float], float]], ...],
+    color: str,
 ) -> Series:
+    """Get the edge drawn by `pieces`, filled down to 0 in `color`."""
     xs: list[float] = []
     for x_min, x_max, _curve in pieces:
         step = (x_max - x_min) / POINTS_PER_PIECE
         xs.extend(x_min + index * step for index in range(POINTS_PER_PIECE))
     xs.append(pieces[-1][1])
-    return Series(name=name, x=xs, y=[_edge(pieces, x) for x in xs])
+    return Series(name=name, x=xs, y=[_edge(pieces, x) for x in xs], color=color, fill=True)
 
 
 @define_view
@@ -93,7 +107,13 @@ class BatmanMainView(MainView):
     chart: ChartView = child(
         ChartView,
         title="Batman",
-        series=[_outline("Upper Edge", UPPER), _outline("Lower Edge", LOWER)],
+        # the oval first: the bat is drawn over it
+        series=[
+            _outline("Upper Oval", ((-OVAL[0], OVAL[0], _oval),), YELLOW),
+            _outline("Lower Oval", ((-OVAL[0], OVAL[0], lambda x: -_oval(x)),), YELLOW),
+            _outline("Upper Edge", UPPER, BLACK),
+            _outline("Lower Edge", LOWER, BLACK),
+        ],
     )
 
     def __attrs_post_init__(self) -> None:

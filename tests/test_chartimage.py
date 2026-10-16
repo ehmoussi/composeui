@@ -139,3 +139,20 @@ def test_an_unknown_format_is_refused(tmp_path: Path) -> None:
 def test_an_image_is_named_after_its_chart_s_title() -> None:
     assert image_name("Drop / Flow: 50 mm", "pdf") == "Drop _ Flow_ 50 mm.pdf"
     assert image_name("", "png") == "chart.png"
+
+
+def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
+    chart = ChartView(
+        series=[
+            Series(name="Oval", x=[0, 1], y=[1, 1], color="#ffd700", fill=True),
+            Series(name="Theme", x=[0, 1], y=[2, 2]),
+        ]
+    )
+
+    (axes,) = chart_figure(chart).axes
+
+    oval, theme = axes.get_lines()
+    assert oval.get_color() == "#ffd700"
+    assert theme.get_color() == "#D55E00"  # Okabe and Ito's second
+    (filled,) = axes.collections  # the oval's alone
+    assert mpl.colors.to_hex(filled.get_facecolor()[0]) == "#ffd700"

@@ -713,7 +713,13 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                 "log": view.y_log,
             },
             "series": [
-                {"name": series.name, "kind": ChartView.kind_of(series, view.kind).name.lower()}
+                {
+                    "name": series.name,
+                    "kind": ChartView.kind_of(series, view.kind).name.lower(),
+                    # None: the theme's
+                    "color": series.color,
+                    "fill": series.fill,
+                }
                 for series in view.series
             ],
         }

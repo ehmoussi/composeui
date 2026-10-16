@@ -1221,3 +1221,24 @@ def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
     chart.click(QPointF(-10, -10))  # off the plot
 
     assert clicks == [pytest.approx((10, 2)), pytest.approx((10, 2))]
+
+
+def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [
+        Series(name="Oval", x=[0, 1], y=[1, 1], color="#ffd700", fill=True),
+        Series(name="Theme", x=[0, 1], y=[2, 2]),
+    ]
+    oval, theme = (item for item in chart.getPlotItem().items if isinstance(item, pg.PlotDataItem))
+
+    assert oval.opts["pen"].color().name() == "#ffd700"
+    assert (oval.opts["fillLevel"], pg.mkBrush(oval.opts["fillBrush"]).color().name()) == (
+        0,
+        "#ffd700",
+    )
+    assert theme.opts["pen"].color().name() == SERIES_COLORS[False][1]
+    assert theme.opts["fillLevel"] is None
+    palette = chart.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
+    chart.setPalette(palette)
+    assert oval.opts["pen"].color().name() == "#ffd700"  # the same in a dark theme

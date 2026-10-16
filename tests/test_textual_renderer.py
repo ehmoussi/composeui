@@ -49,6 +49,7 @@ from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
+from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
@@ -1212,3 +1213,21 @@ async def test_without_matplotlib_the_chart_has_no_key_saving_it(
         await pilot.press("s")
         await pilot.pause()
         assert len(app.screen_stack) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_series_of_its_own_color_is_plotted_so_filled() -> None:
+    view = BatmanMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        await pilot.pause()
+        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        assert [colors[0] for colors in plotted.color] == [(255, 215, 0)] * 2 + [(0, 0, 0)] * 2
+        assert plotted.fillx == [0] * 4  # filled down to 0; an unfilled one is False

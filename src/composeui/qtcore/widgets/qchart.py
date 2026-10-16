@@ -201,7 +201,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         is_dark = self._is_dark()
         background = self.palette().color(QPalette.ColorRole.Window)
         for index, (item, curve) in enumerate(zip(self._items, self._series)):
-            color = series_color(index, is_dark=is_dark)
+            color = curve.color or series_color(index, is_dark=is_dark)
+            # filled down to 0, e.g. a shape
+            item.setFillLevel(0 if curve.fill else None)
+            item.setBrush(color if curve.fill else None)
             if ChartView.kind_of(curve, self._kind) is ChartKind.SCATTER:
                 item.setPen(None)
                 # past the palette, around again as triangles
@@ -231,7 +234,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 y0=base,
                 height=tops - base,
                 width=width,
-                brush=series_color(index, is_dark=is_dark),
+                brush=curve.color or series_color(index, is_dark=is_dark),
                 # a line of the background between neighbouring bars
                 pen=pg.mkPen(background, width=1),
                 name=curve.name,

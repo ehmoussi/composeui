@@ -177,7 +177,7 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
         axes.set_yscale("log")
     for index, series in enumerate(chart.series):
         x, y = ChartView.drawn_points(series, x_log=chart.x_log, y_log=chart.y_log)
-        color = SERIES_COLORS[index % len(SERIES_COLORS)]
+        color = series.color or SERIES_COLORS[index % len(SERIES_COLORS)]
         if ChartView.kind_of(series, chart.kind) is ChartKind.SCATTER:
             axes.plot(
                 x,
@@ -201,6 +201,8 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
                 color=color,
                 label=series.name,
             )
+            if series.fill:  # down to 0, e.g. a shape
+                axes.fill_between(x, y, 0, color=color, linewidth=0)
 
 
 def _draw_bars(axes: Axes, chart: ChartView) -> None:
@@ -215,7 +217,7 @@ def _draw_bars(axes: Axes, chart: ChartView) -> None:
             [category + offset for category in drawn],
             [heights[category] for category in drawn],
             width=width,
-            color=SERIES_COLORS[index % len(SERIES_COLORS)],
+            color=series.color or SERIES_COLORS[index % len(SERIES_COLORS)],
             hatch=HATCHES[index % len(HATCHES)],
             edgecolor="white",
             linewidth=0.5,
