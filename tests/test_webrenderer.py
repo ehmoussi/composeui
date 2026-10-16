@@ -13,6 +13,7 @@ import enum
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import sys
@@ -40,6 +41,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     ButtonView,
+    ChartView,
     DialogView,
     EditRefusedError,
     LabelRowFloatInputView,
@@ -55,6 +57,7 @@ from composeui.core.view import (
     SaveAsAction,
     SelectionMode,
     SeparatorAction,
+    Series,
     StatusBar,
     TableView,
     View,
@@ -64,9 +67,11 @@ from composeui.core.view import (
 from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
+    CHART_MAX_POINTS,
     RESERVED_ROUTES,
     UnsupportedEventError,
     WebActionRenderer,
+    WebChartRenderer,
     WebFloatInputRenderer,
     WebInputRenderer,
     WebLabelRenderer,
@@ -81,6 +86,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from examples import pipeform
+from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.dialogs import DialogsMainView
@@ -1634,6 +1640,10 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
         button.render(RendererType.WEB)
         assert isinstance(button.renderer, WebRenderer)
         markup.append(button.renderer.to_html())
+    chart = ChartView(title="x")
+    chart.render(RendererType.WEB)
+    assert isinstance(chart.renderer, WebRenderer)
+    markup.append(chart.renderer.to_html())
     main_view.file_menu.new.is_enabled = False  # a disabled menu item
     markup.append(client.get("/").text)
     classes = {
@@ -2623,3 +2633,117 @@ def test_a_page_outside_a_router_swaps_nothing_for_its_entry() -> None:
         main_view.file_menu.new.text = "Nouveau"
 
     assert list(dirty) == [new.widget_id]
+
+
+@pytest.fixture
+def chart_views() -> list[PipeChartMainView]:
+    """Each session's main view, kept by `chart_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def chart_client(chart_views: list[PipeChartMainView]) -> Iterator[TestClient]:
+    class ChartApp(WebApplication[PipeChartMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=PipeChartMainView)
+
+        def setup_session(self, main_view: PipeChartMainView) -> None:
+            chart_views.append(main_view)
+
+    with TestClient(ChartApp().create_starlette_app()) as client:
+        yield client
+
+
+def _chart_spec(markup: str, chart: ChartView) -> dict[str, Any]:
+    plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
+    spec: dict[str, Any] = json.loads(plot.attributes["data-chart"] or "")
+    return spec
+
+
+def test_the_chart_sends_its_series_for_the_page_to_draw(
+    chart_views: list[PipeChartMainView], chart_client: TestClient
+) -> None:
+    page = chart_client.get("/").text
+    (main_view,) = chart_views
+    chart = main_view.chart
+    figure = _element(page, _widget_id(chart.renderer))
+    assert figure.tag == "figure"
+    assert _chart_spec(page, chart) == {
+        "x": {"label": "Flow Rate (L/s)", "unit": "L/s"},
+        "y": {"label": "Pressure Drop (kPa)", "unit": "kPa"},
+        "series": [],
+        "pairs": [],
+    }
+
+    chart.series = [
+        Series(name="Pressure", x=[0, 1, 2], y=[1, math.nan, math.inf]),
+        Series(name="Temperature", x=[0, 1, 2], y=[5, 6, 7]),
+    ]
+    markup = chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text
+    spec = _chart_spec(markup, chart)
+    # uPlot's columns, the x shared; no NaN in JSON: a gap is null
+    assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
+    assert spec["series"] == [{"name": "Pressure"}, {"name": "Temperature"}]
+    plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
+    assert plot.attributes["role"] == "img"
+    assert plot.attributes["aria-label"] == (
+        "Pressure Drop: Pressure, Temperature against Flow Rate (L/s)"
+    )
+
+    chart.series = [
+        Series(name="Model", x=[2, 0, 1], y=[4, 0, 1]),  # sorted for uPlot
+        Series(name="Measured", x=[0.5], y=[0.4]),
+    ]
+    spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
+    # each series by its own x, joined by the page
+    assert spec["pairs"] == [[[0, 1, 2], [0, 1, 4]], [[0.5], [0.4]]]
+
+
+def test_a_long_series_is_thinned_keeping_its_peaks_and_gaps() -> None:
+    count = 100_000
+    y = [math.sin(index / 50) for index in range(count)]
+    y[500], y[70_000] = 5.0, -5.0  # spikes the thinning must keep
+    y[30_000] = math.nan
+    chart = ChartView(series=[Series(name="Signal", x=range(count), y=y)])
+    chart.render(RendererType.WEB)
+    assert isinstance(chart.renderer, WebChartRenderer)
+
+    spec = json.loads(chart.renderer.chart_json())
+
+    xs, ys = spec["data"]
+    assert len(xs) <= CHART_MAX_POINTS
+    assert xs == sorted(xs)
+    assert max(ys, key=lambda v: -math.inf if v is None else v) == 5.0
+    assert min(ys, key=lambda v: math.inf if v is None else v) == -5.0
+    assert ys[xs.index(30_000)] is None  # the gap stays a gap
+
+
+def test_a_new_series_list_swaps_the_figure(
+    chart_views: list[PipeChartMainView], chart_client: TestClient
+) -> None:
+    chart_client.get("/")
+    (main_view,) = chart_views
+    add = main_view.buttons.add
+
+    response = chart_client.post(f"/widget/{_widget_id(add.renderer)}", data={"event": "click"})
+
+    figure = _swapped(response.text, _widget_id(main_view.chart.renderer))
+    assert figure.tag == "figure"
+    spec = _chart_spec(response.text, main_view.chart)
+    assert spec["series"] == [{"name": "D = 50 mm"}]
+
+
+def test_the_page_loads_the_chart_script_only_from_its_own_script(
+    client: TestClient, chart_client: TestClient
+) -> None:
+    """No tag loads the chart library with the page: its script does, once a chart shows."""
+    for page in (client.get("/").text, chart_client.get("/").text):
+        assert re.findall(r"<script src=\"[^\"]*uPlot", page) == []
+    (address,) = re.findall(r'"(/static/uPlot\.iife\.min\.js[^"]*)"', client.get("/").text)
+    assert chart_client.get(address).is_success
+
+
+def test_the_server_compresses_what_it_sends(client: TestClient) -> None:
+    response = client.get("/static/app.css", headers={"Accept-Encoding": "gzip"})
+
+    assert response.headers["Content-Encoding"] == "gzip"

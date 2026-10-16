@@ -3,6 +3,7 @@
 import enum
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -15,6 +16,7 @@ from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
     ActionView,
+    ChartView,
     ComboboxView,
     InputView,
     InvalidStateError,
@@ -23,10 +25,12 @@ from composeui.core.view import (
     ProgressBarView,
     RadioGroupView,
     SelectionMode,
+    Series,
     _is_omitted_type,
     define_view,
     replace_cell,
 )
+from examples.pipechart import PipeChartMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -151,6 +155,40 @@ def test_a_progress_bar_shows_a_count_within_its_range_of_steps() -> None:
     with pytest.raises(ValueError, match="maximum"):
         bar.maximum = 0
     assert bar.maximum == 100
+
+
+def test_a_series_has_one_y_per_x() -> None:
+    series = Series(name="Pressure", x=(0, 1), y=[2, math.nan])  # any numbers, as floats
+    assert (series.x, series.y[0]) == ([0.0, 1.0], 2.0)
+    with pytest.raises(ValueError, match="2 x for 1 y"):
+        Series(name="Pressure", x=[0, 1], y=[2])
+
+
+def test_an_axis_label_shows_its_unit() -> None:
+    assert ChartView.axis_label("Time", "s") == "Time (s)"
+    assert ChartView.axis_label("Time", "") == "Time"
+    assert ChartView.axis_label("", "s") == "(s)"
+
+
+def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
+    view = PipeChartMainView()
+    view.add_curve()
+    view.chart.series = [*view.chart.series, Series(name="Gap", x=[0, 1], y=[math.nan, 1])]
+    path = tmp_path / "study.pipechart"
+    view.save_state(path)
+
+    loaded = PipeChartMainView()
+    loaded.load_state(path)
+
+    names = [series.name for series in loaded.chart.series]
+    assert names == ["D = 50 mm", "Gap"]
+    saved, back = view.chart.series[0], loaded.chart.series[0]
+    assert back.x == saved.x
+    # the transitional flow's gap too: NaN is no number equal to itself
+    assert str(back.y) == str(saved.y)
+    assert math.isnan(loaded.chart.series[1].y[0])
+    # the app's text, not the study's
+    assert "title" not in json.loads(path.read_text())["chart"]
 
 
 def test_unstructure_serializes_a_string_choice_as_itself() -> None:

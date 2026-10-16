@@ -26,6 +26,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ButtonVariant,
+    ChartView,
     DialogKind,
     DialogView,
     FormLabelRowView,
@@ -53,6 +54,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
+from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
@@ -74,6 +76,7 @@ if TYPE_CHECKING:
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
+    from composeui.core.view import Series
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="Widget")
@@ -705,6 +708,71 @@ class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, Prog
     @staticmethod
     def _update_state(view: ProgressBarViewLike, rendered_object: ProgressBar) -> None:
         pass  # the user can't move a progress bar; nothing to read back
+
+
+class ChartViewLike(ViewLike, Protocol):
+    title: str
+    x_title: str
+    y_title: str
+    x_unit: str
+    y_unit: str
+    series: list[Series]
+
+
+class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
+    def __init__(self, view: ChartViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "x_title": self._refresh_x_title,
+                "x_unit": self._refresh_x_unit,
+                "y_title": self._refresh_y_title,
+                "y_unit": self._refresh_y_unit,
+                "series": self._refresh_series,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeChart()
+
+    # each refreshed with its new value, the view still holding the old one
+    @staticmethod
+    def _refresh_title(_view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
+        rendered_object.chart_title = value
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_x_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
+        rendered_object.x_label = ChartView.axis_label(value, view.x_unit)
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_x_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
+        rendered_object.x_label = ChartView.axis_label(view.x_title, value)
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_y_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
+        rendered_object.y_label = ChartView.axis_label(value, view.y_unit)
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_y_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
+        rendered_object.y_label = ChartView.axis_label(view.y_title, value)
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_series(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: list[Series]
+    ) -> None:
+        rendered_object.series = value
+        rendered_object.replot()
+
+    @staticmethod
+    def _update_state(view: ChartViewLike, rendered_object: ComposeChart) -> None:
+        pass  # the user only looks at a chart; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1493,6 +1561,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
     "button": TextualButtonRenderer,
+    "chart": TextualChartRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
     "dialog": TextualDialogRenderer,

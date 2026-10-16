@@ -2,6 +2,8 @@
    Every class the web backend uses is written in its Python renderers, so those are
    the only files scanned. */
 @import "tailwindcss" source(none);
+/* uPlot 1.6.32's own, for the charts (see `WebChartRenderer`) */
+@import "./uPlot.min.css";
 @source "../src/composeui/webcore";
 @plugin "./vendor/daisyui.mjs" {
   themes: false;

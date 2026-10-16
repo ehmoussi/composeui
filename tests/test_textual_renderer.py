@@ -11,6 +11,7 @@ import pytest
 pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
+import math
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -30,6 +31,7 @@ from composeui.core.view import (
     MainView,
     RendererType,
     SelectionMode,
+    Series,
     View,
     define_view,
     replace_cell,
@@ -39,11 +41,13 @@ from composeui.textualcore.textualrenderer import (
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
+from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
+from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.dialogs import DialogsMainView
@@ -1045,3 +1049,36 @@ async def test_the_language_menu_shortcut_relabels_the_widgets() -> None:
         assert isinstance(main_pipe, TextualWidgetRenderer)
         assert main_pipe.widget is not None
         assert main_pipe.widget.border_title == "Conduite principale"
+
+
+@pytest.mark.asyncio
+async def test_the_chart_draws_its_titles_and_series() -> None:
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        await pilot.pause()
+        view.add_curve()
+        view.chart.series = [
+            *view.chart.series,
+            Series(name="Measured", x=[0.5, 1, 1.5], y=[1, math.nan, 3]),
+        ]
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        assert "Pressure Drop" in text
+        assert "Flow Rate (L/s)" in text
+        assert "Pressure Drop (kPa)" in text
+        assert "D = 50 mm" in text
+        assert "Measured" in text
+        view.chart.x_unit = "m3/h"
+        view.chart.series = []
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        assert "Flow Rate (m3/h)" in text
+        assert "D = 50 mm" not in text

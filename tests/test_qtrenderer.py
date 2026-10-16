@@ -11,11 +11,12 @@ already uses for the Textual backend.
 from __future__ import annotations
 
 import json
+import math
 from typing import TYPE_CHECKING
 
 import pytest
-from qtpy.QtCore import QPoint, Qt
-from qtpy.QtGui import QAction
+from qtpy.QtCore import QPoint, QPointF, Qt
+from qtpy.QtGui import QAction, QColor, QPalette
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -38,6 +39,7 @@ from qtpy.QtWidgets import (
 )
 
 from composeui.core.application import _add_reference_to_signals
+from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     ActionView,
@@ -47,9 +49,12 @@ from composeui.core.view import (
     LabelView,
     RendererType,
     SelectionMode,
+    Series,
     replace_cell,
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
+from composeui.qtcore.widgets.qchart import QChart
+from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
@@ -925,3 +930,94 @@ def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
     assert isinstance(main_pipe, QtWidgetRenderer)
     assert isinstance(main_pipe.qt_object, QGroupBox)
     assert main_pipe.qt_object.title() == "Conduite principale"
+
+
+def _rendered_chart(qtbot: QtBot) -> tuple[PipeChartMainView, QChart]:
+    view = PipeChartMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(900, 700)
+    window.show()
+    assert isinstance(view.chart.renderer, QtWidgetRenderer)
+    chart = view.chart.renderer.qt_object
+    assert isinstance(chart, QChart)
+    return view, chart
+
+
+def test_the_chart_shows_its_titles_units_and_series(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    plot = chart.getPlotItem()
+    assert plot.titleLabel.text == "Pressure Drop"
+    assert plot.getAxis("bottom").labelText == "Flow Rate"
+    assert plot.getAxis("bottom").labelUnits == "L/s"
+    assert plot.getAxis("left").labelUnits == "kPa"
+    view.chart.x_unit = "m3/h"
+    view.chart.y_title = "Drop"
+    assert plot.getAxis("bottom").labelUnits == "m3/h"
+    assert plot.getAxis("bottom").labelText == "Flow Rate"
+    assert plot.getAxis("left").labelText == "Drop"
+
+    view.chart.series = [
+        Series(name="Pressure", x=[0, 1, 2, 3], y=[1, math.nan, 3, 4]),
+        Series(name="Temperature", x=[0, 0.5], y=[2, 2]),  # an x of its own
+    ]
+
+    assert chart.legend_names() == ["Pressure", "Temperature"]
+    pressure, temperature = plot.listDataItems()
+    x, y = pressure.getData()
+    assert list(x) == [0, 1, 2, 3]
+    assert math.isnan(y[1])  # a gap: drawn with `connect="finite"`
+    assert pressure.opts["connect"] == "finite"
+    assert len(temperature.getData()[0]) == 2
+    view.chart.series = view.chart.series[1:]
+    assert chart.legend_names() == ["Temperature"]
+    assert len(plot.listDataItems()) == 1
+
+
+def test_new_series_keep_the_user_s_zoom(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.add_curve()
+    view_box = chart.getPlotItem().vb
+    view_box.setXRange(0.5, 1.0, padding=0)  # as the mouse wheel would
+
+    view.pipe.diameter.value = 80
+    view.add_curve()
+
+    assert len(view.chart.series) == 2
+    assert view_box.viewRange()[0] == [0.5, 1.0]
+
+
+def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Pressure", x=[0, 1, 2], y=[10, 20, 30])]
+    qtbot.waitUntil(lambda: chart.getPlotItem().vb.viewRange()[0][1] >= 2)
+    view_box = chart.getPlotItem().vb
+    assert chart.hover_text() == ""
+
+    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.05, 15)))
+
+    qtbot.waitUntil(lambda: chart.hover_text() != "")
+    lines = chart.hover_text().splitlines()
+    assert lines[0].endswith(" L/s")
+    assert lines[1] == "Pressure: 20 kPa"
+    chart.scene().sigMouseMoved.emit(QPointF(-10, -10))  # off the plot
+    qtbot.waitUntil(lambda: chart.hover_text() == "")
+
+
+def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Pressure", x=[0, 1], y=[0, 1])]
+    (curve,) = chart.getPlotItem().listDataItems()
+    assert curve.opts["pen"].color().name() == SERIES_COLORS[False][0]
+    palette = chart.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#f0f0f0"))
+
+    chart.setPalette(palette)
+
+    assert curve.opts["pen"].color().name() == SERIES_COLORS[True][0]
+    assert chart.backgroundBrush().color().name() == "#202020"
+    assert chart.getPlotItem().getAxis("left").textPen().color().name() == "#f0f0f0"

@@ -52,7 +52,7 @@ from composeui.core.translation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     from attrs import AttrsInstance
 
@@ -1081,6 +1081,56 @@ class ProgressBarView(View):
         """
         value = max(0, value)
         return value if maximum is None else min(value, maximum)
+
+
+def _to_floats(values: "Iterable[float]") -> list[float]:
+    """Get `values` as a new list of floats, e.g. from a tuple or a numpy array."""
+    return [float(value) for value in values]
+
+
+@attrs.frozen
+class Series:
+    """A curve of a `ChartView`: its points, x against y, under `name` in the legend.
+
+    A point whose x or y is NaN is not drawn: the curve has a gap there.
+    """
+
+    def _check_y(self, _attribute: "attrs.Attribute[Any]", y: list[float]) -> None:
+        if len(y) != len(self.x):
+            msg = f"Cannot make the series {self.name!r}: {len(self.x)} x for {len(y)} y."
+            raise ValueError(msg)
+
+    #: the legend's entry
+    name: str
+    x: list[float] = attrs.field(converter=_to_floats)
+    y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
+
+
+@define_view
+class ChartView(View):
+    """A chart of results, e.g. a quantity against time or a swept dimension.
+
+    Data and labels only: each backend draws it in its own theme's colors and fonts.
+    Assign a new `series` list to redraw it, e.g. a job adding points; the user's zoom
+    stays where the backend has one.
+    """
+
+    _renderer_key = "chart"
+
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    x_title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    y_title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: the x axis' unit, shown as "Time (s)", and with the values the user hovers
+    x_unit: str = attrs.field(default="")
+    y_unit: str = attrs.field(default="")
+    series: list[Series] = attrs.field(factory=list[Series])
+
+    @staticmethod
+    def axis_label(title: str, unit: str) -> str:
+        """Get an axis' label: its title with its unit, as "Time (s)"."""
+        if unit == "":
+            return title
+        return f"({unit})" if title == "" else f"{title} ({unit})"
 
 
 class SelectionMode(enum.Enum):

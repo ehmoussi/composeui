@@ -16,6 +16,7 @@ import attrs
 import uvicorn
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
@@ -117,6 +118,8 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             # `same_site="lax"`: cross-site POSTs carry no session cookie, so another
             # site can't drive a user's session (the CSRF story for now).
             Middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), same_site="lax"),
+            # the stylesheet, the scripts and a chart's points shrink several times
+            Middleware(GZipMiddleware, minimum_size=1024),
         ],
     )
     app.state.sessions = sessions
