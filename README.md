@@ -508,7 +508,9 @@ chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
 
 The view holds data and labels: each backend draws it in its theme's colors, unless a
 series has a `color` of its own (`"#rrggbb"`, the same in every theme, e.g. a logo's), and
-`fill=True` fills between its line and 0 in it. Like a
+`fill=True` fills between its line and 0 in it. `height` sets its height on screen, in
+pixels (a terminal's rows of about 16), e.g. to keep a shape's proportions; `None`, the
+default, leaves it to the backend. Like a
 table's rows, assign a new `series` list to redraw it (a job adding points too), and the
 series are saved with the study. Qt draws it with [pyqtgraph](https://www.pyqtgraph.org/)
 (in the `pyside6` extra): the mouse zooms and pans, and hovering shows each series' value

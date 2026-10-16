@@ -513,8 +513,11 @@ class ChartViewLike(ViewLike, Protocol):
     y_log: bool
     save_image_text: str
     clicked: Signal[float, float]
+    height: int | None
 
 
+#: Qt's largest widget size, a widget's maximum when nothing limits it
+_QWIDGETSIZE_MAX = 16777215
 #: the formats the Save Image dialog offers, the vector ones first, by its filters
 _IMAGE_FILTERS = {"PDF (*.pdf)": "pdf", "SVG (*.svg)": "svg", "PNG (*.png)": "png"}
 
@@ -535,6 +538,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
                 "save_image_text": self._refresh_save_image_text,
+                "height": self._refresh_height,
             }
         )
 
@@ -591,6 +595,14 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _refresh_save_image_text(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:
         rendered_object.save_image_action.setText(f"{value}…")
+
+    @staticmethod
+    def _refresh_height(_view: ChartViewLike, rendered_object: QChart, value: int | None) -> None:
+        # None: as tall as the layout makes it
+        rendered_object.setMinimumHeight(0 if value is None else value)
+        rendered_object.setMaximumHeight(_QWIDGETSIZE_MAX if value is None else value)
+        # the layout lays it out again, back at its share of the column too
+        rendered_object.updateGeometry()
 
     def _save_image(self) -> None:
         """Ask where to save the chart's image, and save it as it shows, zoomed in too."""

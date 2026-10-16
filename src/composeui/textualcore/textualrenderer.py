@@ -724,6 +724,13 @@ class ChartViewLike(ViewLike, Protocol):
     x_log: bool
     y_log: bool
     save_image_text: str
+    height: int | None
+
+
+#: the pixels of a terminal's row, about: a chart's height is in pixels
+PIXELS_PER_ROW = 16
+#: the rows a chart takes at least, to show its axes and a curve between them
+MIN_CHART_ROWS = 5
 
 
 class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
@@ -742,6 +749,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
                 "save_image_text": self._refresh_save_image_text,
+                "height": self._refresh_height,
             }
         )
 
@@ -813,6 +821,15 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: str
     ) -> None:
         rendered_object.set_save_image_text(value)
+
+    @staticmethod
+    def _refresh_height(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: int | None
+    ) -> None:
+        # None: the widget's own CSS height; its minimum too, under a smaller height
+        rows = None if value is None else max(MIN_CHART_ROWS, round(value / PIXELS_PER_ROW))
+        rendered_object.styles.height = rows
+        rendered_object.styles.min_height = rows
 
     def _save_image(self, path: Path) -> None:
         """Save the whole chart's image: a terminal has no zoom."""

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import QEvent, QPointF, Qt
+from qtpy.QtCore import QEvent, QPointF, QSize, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QColor, QFont, QPalette
 
@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 _HOVER_RATE = 30
 #: the lightness (of 255) under which a background is dark
 _DARK_LIGHTNESS = 128
+#: the size a chart asks of its layout, in pixels: pyqtgraph's own, before it is shown
+_SIZE_HINT = (600, 480)
 #: a scatter's dots, in pixels
 _DOT_SIZE = 8
 
@@ -159,6 +161,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         if self._y_log:
             y_min, y_max = 10**y_min, 10**y_max
         return (float(x_min), float(x_max)), (float(y_min), float(y_max))
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        # not its scene's, which follows its own size: a height it was given once would stay
+        return QSize(*_SIZE_HINT)
 
     def legend_names(self) -> list[str]:
         return [label.text for _sample, label in self._legend.items]

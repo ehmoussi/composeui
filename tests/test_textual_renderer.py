@@ -1231,3 +1231,28 @@ async def test_a_series_of_its_own_color_is_plotted_so_filled() -> None:
         plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
         assert [colors[0] for colors in plotted.color] == [(255, 215, 0)] * 2 + [(0, 0, 0)] * 2
         assert plotted.fillx == [0] * 4  # filled down to 0; an unfilled one is False
+
+
+@pytest.mark.asyncio
+async def test_the_chart_is_as_tall_as_its_view_says_in_rows() -> None:
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 80)) as pilot:
+        await pilot.pause()
+        assert chart.size.height == 20  # its own CSS's
+        view.chart.height = 480
+        await pilot.pause()
+        assert chart.size.height == 30  # rows of about 16 pixels
+        view.chart.height = 10
+        await pilot.pause()
+        assert chart.size.height == 5  # enough for its axes still
+        view.chart.height = None
+        await pilot.pause()
+        assert chart.size.height == 20
