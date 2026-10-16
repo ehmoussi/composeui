@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import QEvent, QPointF
+from qtpy.QtCore import QEvent, QPointF, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QColor, QPalette
 
@@ -40,6 +40,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
 
     #: the user asked for the chart's image, from its context menu's Save Image
     save_image_requested = QtSignal()
+    #: the user clicked the plot at a point, as the axes' values (not their logs)
+    point_clicked = QtSignal(float, float)
     #: whether `__init__` is done: pyqtgraph's own changes the palette before it is
     _is_built = False
 
@@ -65,6 +67,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._hover.setVisible(False)
         for item in (self._crosshair, self._hover):
             plot.addItem(item, ignoreBounds=True)
+        self.scene().sigMouseClicked.connect(self._on_mouse_clicked)
         self._mouse_proxy = pg.SignalProxy(
             self.scene().sigMouseMoved, rateLimit=_HOVER_RATE, slot=self._on_mouse_moved
         )
@@ -226,6 +229,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._legend.clear()
         for item, curve in zip(self._items or self._bars, self._series):
             self._legend.addItem(item, curve.name)
+
+    def _on_mouse_clicked(self, event: Any) -> None:
+        if event.button() != Qt.MouseButton.LeftButton or event.double():
+            return  # the right button opens the context menu
+        self.click(event.scenePos())
+
+    def click(self, scene_position: QPointF) -> None:
+        """Emit `point_clicked` for a click at `scene_position`, if it is on the plot."""
+        view_box = self.getPlotItem().getViewBox()
+        if not view_box.sceneBoundingRect().contains(scene_position):
+            return
+        position = view_box.mapSceneToView(scene_position)
+        x, y = position.x(), position.y()
+        # the view's values are their logs on a log axis
+        if self._x_log and self._kind is not ChartKind.BAR:
+            x = 10**x
+        if self._y_log:
+            y = 10**y
+        self.point_clicked.emit(float(x), float(y))
 
     def _on_mouse_moved(self, event: tuple[Any, ...]) -> None:
         self.show_hover(event[0])

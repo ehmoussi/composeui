@@ -88,6 +88,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from examples import pipeform
+from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
@@ -2893,3 +2894,21 @@ def test_without_matplotlib_the_page_draws_the_chart_s_png(
     (button,) = [attributes for tag, attributes in figure.descendants if tag == "button"]
     assert button["data-chart-png"] == "Pressure Drop.png"
     assert chart_client.get(f"/widget/{chart_id}/image").status_code == 404
+
+
+def test_a_click_on_the_chart_reaches_the_view() -> None:
+    main_view = BatmanMainView()
+    main_view.render(RendererType.WEB)
+    chart = main_view.chart
+    assert isinstance(chart.renderer, WebChartRenderer)
+
+    with collect_dirty() as dirty:
+        chart.renderer.dispatch("click", {"x": "0", "y": "0.5"})
+        message = _swapped(render_dirty(dirty), _widget_id(main_view.message.renderer))
+    assert message.text == "I'm Batman"
+    for form in ({"x": "a", "y": "0"}, {"x": "nan", "y": "0"}, {}):
+        with pytest.raises(UnsupportedEventError):
+            chart.renderer.dispatch("click", form)
+    chart.is_enabled = False
+    with pytest.raises(UnsupportedEventError):
+        chart.renderer.dispatch("click", {"x": "0", "y": "0"})

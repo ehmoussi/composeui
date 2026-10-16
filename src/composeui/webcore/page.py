@@ -173,6 +173,32 @@ function drawChart(element, zoom) {
   if (zoom !== undefined) chart.setScale("x", zoom);
   charts.set(element, chart);
   updateImageLink(element, chart);
+  postClicks(element, chart);
+}
+/* a click on the plot posts its point, in the axes' values (see `WebChartRenderer`);
+   not the end of a drag, which zooms */
+var CLICK_SLOP = 3;
+function postClicks(element, chart) {
+  var down = null;
+  chart.over.addEventListener("mousedown", function (event) {
+    down = { x: event.clientX, y: event.clientY };
+  });
+  chart.over.addEventListener("click", function (event) {
+    if (down === null) return;
+    var moved = Math.abs(event.clientX - down.x) + Math.abs(event.clientY - down.y);
+    down = null;
+    if (moved > CLICK_SLOP) return;
+    var figure = element.closest("figure");
+    htmx.ajax("POST", "/widget/" + figure.id, {
+      source: figure,
+      swap: "none",
+      values: {
+        event: "click",
+        x: chart.posToVal(event.offsetX, "x"),
+        y: chart.posToVal(event.offsetY, "y"),
+      },
+    });
+  });
 }
 /* the address of a chart's image (see `WebChartRenderer`): its format picked beside it,
    and the region the user zoomed into, which the server draws */
