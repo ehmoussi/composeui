@@ -200,6 +200,13 @@ def test_a_log_axis_leaves_out_what_it_cannot_show() -> None:
     assert str(ChartView.bar_heights(series, 2, y_log=True)) == str([5.0, math.nan])
 
 
+def test_a_series_color_is_given_as_rrggbb() -> None:
+    assert Series(name="Oval", x=[0], y=[0], color="#FFD700", fill=True).color == "#FFD700"
+    for color in ("yellow", "#ffd70", "ffd700"):
+        with pytest.raises(ValueError, match="#rrggbb"):
+            Series(name="Oval", x=[0], y=[0], color=color)
+
+
 def test_an_axis_label_shows_its_unit() -> None:
     assert ChartView.axis_label("Time", "s") == "Time (s)"
     assert ChartView.axis_label("Time", "") == "Time"

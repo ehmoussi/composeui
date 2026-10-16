@@ -82,7 +82,8 @@ function chartOptions(element, spec, width) {
     };
   }
   var series = spec.series.map(function (series, index) {
-    var color = resolveColor(
+    // its own color, the same in every theme, or the theme's
+    var color = series.color || resolveColor(
       element, "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")"
     );
     var options = { label: series.name, stroke: color, value: chartValue(spec.y.unit) };
@@ -108,6 +109,8 @@ function chartOptions(element, spec, width) {
       options.points = { show: true, size: 8, fill: color, stroke: background, width: 1 };
     } else {
       options.width = 2;
+      // down to 0, uPlot's own fill, e.g. a shape
+      if (series.fill) options.fill = color;
       // past the theme's colors, around again dashed
       options.dash = index < SERIES_COLORS.length ? undefined : [6, 4];
       options.spanGaps = false;

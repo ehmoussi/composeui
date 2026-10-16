@@ -2689,8 +2689,9 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     # uPlot's columns, the x shared; no NaN in JSON: a gap is null
     assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
     assert spec["series"] == [
-        {"name": "Pressure", "kind": "line"},
-        {"name": "Temperature", "kind": "line"},
+        # the theme's colors, no fill
+        {"name": "Pressure", "kind": "line", "color": None, "fill": False},
+        {"name": "Temperature", "kind": "line", "color": None, "fill": False},
     ]
     plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
     assert plot.attributes["role"] == "img"
@@ -2757,7 +2758,7 @@ def test_a_new_series_list_swaps_the_figure(
     figure = _swapped(response.text, _widget_id(main_view.chart.renderer))
     assert figure.tag == "figure"
     spec = _chart_spec(response.text, main_view.chart)
-    assert spec["series"] == [{"name": "D = 50 mm", "kind": "line"}]
+    assert spec["series"] == [{"name": "D = 50 mm", "kind": "line", "color": None, "fill": False}]
 
 
 def test_the_page_loads_the_chart_script_only_from_its_own_script(
@@ -2789,8 +2790,22 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
     # x, the categories' indexes; no cooling in the bedroom
     assert spec["data"] == [[0, 1, 2], [120, 80, 95], [30, None, 45]]
     assert spec["series"] == [
-        {"name": "Heating", "kind": "bar", "offset": pytest.approx(-0.2), "width": 0.4},
-        {"name": "Cooling", "kind": "bar", "offset": pytest.approx(0.2), "width": 0.4},
+        {
+            "name": "Heating",
+            "kind": "bar",
+            "color": None,
+            "fill": False,
+            "offset": pytest.approx(-0.2),
+            "width": 0.4,
+        },
+        {
+            "name": "Cooling",
+            "kind": "bar",
+            "color": None,
+            "fill": False,
+            "offset": pytest.approx(0.2),
+            "width": 0.4,
+        },
     ]
     plot = _element(markup, f"{_widget_id(energy.renderer)}-plot")
     assert plot.attributes["aria-label"] == "Energy: Heating, Cooling for Kitchen, Bedroom, Office"
@@ -2912,3 +2927,18 @@ def test_a_click_on_the_chart_reaches_the_view() -> None:
     chart.is_enabled = False
     with pytest.raises(UnsupportedEventError):
         chart.renderer.dispatch("click", {"x": "0", "y": "0"})
+
+
+def test_a_series_sends_its_own_color_and_fill() -> None:
+    main_view = BatmanMainView()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.chart.renderer, WebChartRenderer)
+
+    spec = json.loads(main_view.chart.renderer.chart_json())
+
+    assert [(series["color"], series["fill"]) for series in spec["series"]] == [
+        ("#ffd700", True),
+        ("#ffd700", True),
+        ("#000000", True),
+        ("#000000", True),
+    ]

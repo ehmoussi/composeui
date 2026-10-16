@@ -1,6 +1,6 @@
 """Tests of the example batman: a click on the chart says whether it was on the bat."""
 
-from examples.batman import BatmanMainView, is_in_bat
+from examples.batman import BLACK, YELLOW, BatmanMainView, is_in_bat
 
 
 def test_a_point_is_in_the_bat_between_its_edges() -> None:
@@ -13,7 +13,11 @@ def test_a_point_is_in_the_bat_between_its_edges() -> None:
 
 def test_a_click_says_whether_it_was_on_the_bat() -> None:
     view = BatmanMainView()
-    assert [series.name for series in view.chart.series] == ["Upper Edge", "Lower Edge"]
+    names = [series.name for series in view.chart.series]
+    assert names == ["Upper Oval", "Lower Oval", "Upper Edge", "Lower Edge"]
+    # yellow under the bat in black, whatever the theme
+    assert [series.color for series in view.chart.series] == [YELLOW, YELLOW, BLACK, BLACK]
+    assert all(series.fill for series in view.chart.series)
 
     view.chart.clicked.emit(0, 0)
     assert view.message.text == "I'm Batman"

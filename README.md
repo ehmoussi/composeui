@@ -506,7 +506,9 @@ chart: ChartView = child(
 chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
 ```
 
-The view holds data and labels only: each backend draws it in its theme's colors. Like a
+The view holds data and labels: each backend draws it in its theme's colors, unless a
+series has a `color` of its own (`"#rrggbb"`, the same in every theme, e.g. a logo's), and
+`fill=True` fills between its line and 0 in it. Like a
 table's rows, assign a new `series` list to redraw it (a job adding points too), and the
 series are saved with the study. Qt draws it with [pyqtgraph](https://www.pyqtgraph.org/)
 (in the `pyside6` extra): the mouse zooms and pans, and hovering shows each series' value
@@ -521,8 +523,8 @@ against its flow rate, and measurements over it (`uv run python -m examples.pipe
 
 A click on the chart emits its point, in the axes' values, from `clicked` (`x`, then `y`):
 in Qt, and on the web, where a drag still zooms; a terminal has no pointer to click with.
-[`src/examples/batman.py`](src/examples/batman.py) draws the Batman logo and says whether
-a click was on the bat (`uv run python -m examples.batman --backend web`, or `qt`).
+[`src/examples/batman.py`](src/examples/batman.py) draws the Batman logo, in its own
+yellow and black, and says whether a click was on the bat (`uv run python -m examples.batman --backend web`, or `qt`).
 
 ### Report images
 

@@ -1105,6 +1105,9 @@ class ChartKind(enum.Enum):
 BAR_GROUP_WIDTH = 0.8
 
 
+_COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
+
+
 @attrs.frozen
 class Series:
     """A curve of a `ChartView`: its points, x against y, under `name` in the legend.
@@ -1115,6 +1118,11 @@ class Series:
     def _check_y(self, _attribute: "attrs.Attribute[Any]", y: list[float]) -> None:
         if len(y) != len(self.x):
             msg = f"Cannot make the series {self.name!r}: {len(self.x)} x for {len(y)} y."
+            raise ValueError(msg)
+
+    def _check_color(self, _attribute: "attrs.Attribute[Any]", color: Optional[str]) -> None:
+        if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
+            msg = f"Cannot color the series {self.name!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
 
     def _check_kind(self, _attribute: "attrs.Attribute[Any]", kind: Optional[ChartKind]) -> None:
@@ -1128,13 +1136,19 @@ class Series:
     y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
     #: how it is drawn, as a line or dots; None: as its chart's `kind`
     kind: Optional[ChartKind] = attrs.field(default=None, validator=[_check_kind])
+    #: its color, as #rrggbb, the same in every theme, e.g. a logo's or a code's; None:
+    #: the backend's theme picks it
+    color: Optional[str] = attrs.field(default=None, validator=[_check_color])
+    #: whether the area between its line and 0 is filled with its color, e.g. a shape
+    fill: bool = False
 
 
 @define_view
 class ChartView(View):
     """A chart of results, e.g. a quantity against time or a swept dimension.
 
-    Data and labels only: each backend draws it in its own theme's colors and fonts.
+    Data and labels: each backend draws it in its own theme's colors and fonts, unless a
+    series has a color of its own (`Series.color`).
     Assign a new `series` list to redraw it, e.g. a job adding points; the user's zoom
     stays where the backend has one.
 

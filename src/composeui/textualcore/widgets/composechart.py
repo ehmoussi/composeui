@@ -106,8 +106,8 @@ class ComposeChart(PlotextPlot):
         plt.ylabel(self.y_label)
         is_dark = self.app.current_theme.dark if self.is_mounted else False
         colors = [
-            Color.parse(series_color(index, is_dark=is_dark)).rgb
-            for index in range(len(self.series))
+            Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
+            for index, curve in enumerate(self.series)
         ]
         if self.kind is ChartKind.BAR:
             self._plot_bars(colors)
@@ -130,6 +130,8 @@ class ComposeChart(PlotextPlot):
                 label=curve.name,
                 color=colors[index],
                 marker="braille",
+                # down to y = 0, e.g. a shape
+                fillx=curve.fill,
             )
 
     def _plot_bars(self, colors: list[tuple[int, int, int]]) -> None:
