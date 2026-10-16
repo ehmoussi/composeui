@@ -53,6 +53,8 @@ class QFlowLayout(QLayout):
 
     def insert_widget(self, index: int, widget: QWidget) -> None:
         self.addChildWidget(widget)
+        # now: Qt would show it on its next pass, after laying it out as if hidden
+        widget.show()
         self._items.insert(index, QWidgetItem(widget))
         self.invalidate()
 
@@ -89,8 +91,7 @@ class QFlowLayout(QLayout):
         """Place the items in `rect`'s width (if `move`); return the height they take."""
         x, y, line_height = rect.x(), rect.y(), 0
         for item in self._items:
-            widget = item.widget()
-            if widget is not None and not widget.isVisible() and move:
+            if item.isEmpty():  # a hidden widget takes no room
                 continue
             hint = item.sizeHint()
             if x + hint.width() > rect.right() + 1 and line_height > 0:
