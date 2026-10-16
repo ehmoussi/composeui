@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QPoint, QPointF, Qt
-from qtpy.QtGui import QAction, QColor, QPalette
+from qtpy.QtGui import QAction, QColor, QFont, QPalette
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -1019,7 +1019,9 @@ def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     lines = chart.hover_text().splitlines()
     assert lines[0].endswith(" L/s")
-    assert lines[1] == "Pressure: 20 kPa"
+    assert lines[1] == "Pressure: 20.00 kPa"  # its trailing zeros kept, as on the web
+    if hasattr(QFont, "Tag"):  # digits of one width, from Qt 6.7
+        assert QFont.Tag("tnum") in chart._hover.textItem.font().featureTags()  # noqa: SLF001
     chart.scene().sigMouseMoved.emit(QPointF(-10, -10))  # off the plot
     qtbot.waitUntil(lambda: chart.hover_text() == "")
 
@@ -1107,7 +1109,7 @@ def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
     chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.1, 50)))
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
-    assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80 kWh"]
+    assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80.00 kWh"]
 
 
 def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
@@ -1140,7 +1142,7 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
-    assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2 kPa"]
+    assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2.000 kPa"]
 
 
 def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> None:

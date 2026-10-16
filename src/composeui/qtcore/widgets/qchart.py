@@ -9,7 +9,7 @@ import numpy as np
 import pyqtgraph as pg
 from qtpy.QtCore import QEvent, QPointF, Qt
 from qtpy.QtCore import Signal as QtSignal
-from qtpy.QtGui import QAction, QColor, QPalette
+from qtpy.QtGui import QAction, QColor, QFont, QPalette
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
@@ -29,7 +29,16 @@ _DOT_SIZE = 8
 
 
 def _format(value: float, unit: str) -> str:
-    return f"{value:.4g} {unit}".rstrip()
+    # its trailing zeros kept: as many digits wherever the cursor is, as on the web
+    return f"{value:#.4g} {unit}".rstrip()
+
+
+def _tabular_font() -> QFont:
+    """Get the application's font with digits of one width, where Qt has them (6.7)."""
+    font = QFont()
+    if hasattr(font, "setFeature") and hasattr(QFont, "Tag"):
+        font.setFeature(QFont.Tag("tnum"), 1)
+    return font
 
 
 class QChart(pg.PlotWidget):  # type: ignore[misc]
@@ -64,6 +73,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._crosshair = pg.InfiniteLine(angle=90, movable=False)
         self._crosshair.setVisible(False)
         self._hover = pg.TextItem(anchor=(0, 1))
+        # its values change as the cursor moves, without changing their width
+        self._hover.setFont(_tabular_font())
         self._hover.setVisible(False)
         for item in (self._crosshair, self._hover):
             plot.addItem(item, ignoreBounds=True)
