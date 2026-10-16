@@ -7,7 +7,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.types import NoActiveAppError
 from textual.validation import Number
 from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static
@@ -31,6 +31,8 @@ from composeui.core.view import (
     FormLabelRowView,
     FormRowView,
     FormView,
+    GridPosition,
+    GridView,
     GroupFormView,
     HorizontalView,
     LogType,
@@ -1111,6 +1113,53 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
         pass  # a column has no user-editable state of its own
 
 
+class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
+    """Views in a grid's cells: equally wide columns, rows as tall as their views.
+
+    Textual's grid flows its widgets into the next free cell: each view sits in a cell
+    widget, empty for cells no view takes, so a hidden view leaves its cell in place.
+    """
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            at_cell = {
+                (position.row, position.column): (view, position)
+                for view, position in self._view.positioned_views
+            }
+            taken: set[tuple[int, int]] = set()
+            cells: list[Widget] = []
+            for row in range(self._view.row_count):
+                for column in range(self._view.column_count):
+                    if (row, column) in taken:
+                        continue
+                    view, position = at_cell.get((row, column), (None, GridPosition(row, column)))
+                    taken.update(position.cells)
+                    cell = Container()
+                    if (
+                        view is not None
+                        and isinstance(view.renderer, TextualWidgetRenderer)
+                        and view.renderer.widget is not None
+                    ):
+                        # with no share of a row, as wide as its content
+                        view.renderer.widget.styles.width = (
+                            "1fr" if view.default_stretch > 0 else "auto"
+                        )
+                        cell = Container(view.renderer.widget)
+                    cell.styles.row_span = position.row_span
+                    cell.styles.column_span = position.column_span
+                    cell.styles.height = "auto"
+                    cells.append(cell)
+            self._rendered_object = Grid(*cells)
+            self._rendered_object.styles.grid_size_columns = self._view.column_count
+            self._rendered_object.styles.grid_columns = "1fr"
+            self._rendered_object.styles.grid_rows = "auto"
+            self._rendered_object.styles.height = "auto"
+
+    @staticmethod
+    def _update_state(view: GridView, rendered_object: Grid) -> None:
+        pass  # a grid has no user-editable state of its own
+
+
 class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
     """The pages, one shown at a time, and a toolbar of their actions docked at the top.
 
@@ -1450,6 +1499,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": TextualFloatInputRenderer,
     "form": TextualFormRenderer,
     "form_label": TextualFormLabelRenderer,
+    "grid": TextualGridRenderer,
     "group_form": TextualGroupFormRenderer,
     "horizontal": TextualHorizontalRenderer,
     "input": TextualInputRenderer,

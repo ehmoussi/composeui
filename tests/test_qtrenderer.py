@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QLabel,
     QLineEdit,
@@ -51,6 +52,7 @@ from composeui.core.view import (
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from examples.pipeform import EdgeType, PipeMainView
 from tests.dialogs import DialogsMainView
+from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView
@@ -493,6 +495,33 @@ def test_a_view_shorter_than_its_row_stays_at_the_row_s_top(qtbot: QtBot) -> Non
         window.resize(800, height)
         qtbot.waitUntil(lambda height=height: window.height() == height)
         assert _widget(view.tables.tall).geometry().top() == 0
+
+
+def test_a_grid_view_places_its_views_in_equally_wide_columns(qtbot: QtBot) -> None:
+    view = GridMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(900, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    grid = view.tables
+    first, button, spanning = (
+        _widget(child).geometry() for child in (grid.first, grid.button, grid.spanning)
+    )
+    layout = _widget(grid).layout()
+    assert isinstance(layout, QGridLayout)
+    gap = layout.horizontalSpacing()
+
+    assert (first.left(), first.top(), button.top()) == (0, 0, 0)
+    # the hidden table's column is kept: the button is in the third one
+    assert button.left() == pytest.approx(2 * (first.width() + gap), abs=2)
+    # as wide as its text, unlike the table filling its column
+    assert button.width() < first.width() // 2
+    # the next row starts below the taller of the views above it, spanning the columns
+    assert spanning.top() == first.bottom() + 1 + layout.verticalSpacing()
+    assert spanning.width() == pytest.approx(3 * first.width() + 2 * gap, abs=2)
+    assert spanning.right() == _widget(grid).width() - 1
 
 
 def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) -> None:

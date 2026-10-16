@@ -38,6 +38,7 @@ from composeui.core.view import (
     FormLabelRowView,
     FormRowView,
     FormView,
+    GridView,
     GroupFormView,
     HorizontalView,
     LogType,
@@ -1577,6 +1578,34 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
         return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
 
 
+class WebGridRenderer(WebRenderer[GridView]):
+    """Views in a grid's cells: equally wide columns, rows as tall as their views.
+
+    The columns and each view's cell are inline styles rather than a class per count;
+    a cell placed rather than flowed stays where it is when an earlier one hides.
+    """
+
+    _role = "grid"
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        cells = "".join(
+            '<div class="min-w-0 has-[>[hidden]]:hidden" style="grid-area:'
+            f' {row + 1} / {column + 1} / span {row_span} / span {column_span}">'
+            f"{view.renderer.to_html()}</div>"
+            for view, (row, column, row_span, column_span) in self._view.positioned_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        columns = f"repeat({self._view.column_count}, minmax(0, 1fr))"
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="grid items-start gap-6"'
+            f' style="grid-template-columns: {columns}">{cells}</div>'
+        )
+
+
 #: the main column's width, following the shown page's `PageView.width`: switching pages
 #: only swaps the router, so CSS picks the width from the page neither hidden nor in a
 #: hidden slot
@@ -1831,6 +1860,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "float_input": WebFloatInputRenderer,
     "form": WebFormRenderer,
     "form_label": WebFormLabelRenderer,
+    "grid": WebGridRenderer,
     "group_form": WebGroupFormRenderer,
     "horizontal": WebHorizontalRenderer,
     "input": WebInputRenderer,

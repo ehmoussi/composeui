@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -45,6 +46,7 @@ from composeui.core.view import (
     FormLabelRowView,
     FormRowView,
     FormView,
+    GridView,
     GroupFormView,
     HorizontalView,
     LogType,
@@ -998,6 +1000,35 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
         pass  # a column has no user-editable state of its own
 
 
+class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
+    """Views in a grid's cells: equally wide columns, rows as tall as their views."""
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QGridLayout(self._rendered_object)
+            # the column holding the grid already insets it
+            layout.setContentsMargins(0, 0, 0, 0)
+            for view, position in self._view.positioned_views:
+                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
+                    view.renderer.qt_object, QWidget
+                ):
+                    # at the top, as in a row; with no share of a row, as wide as its content
+                    alignment = Qt.AlignmentFlag.AlignTop
+                    if view.default_stretch == 0:
+                        alignment |= Qt.AlignmentFlag.AlignLeft
+                    layout.addWidget(view.renderer.qt_object, *position, alignment)
+            for column in range(self._view.column_count):
+                layout.setColumnStretch(column, 1)
+            # height to spare, next to a taller view, goes below the rows, not between them
+            layout.setRowStretch(self._view.row_count, 1)
+            self.refresh()
+
+    @staticmethod
+    def _update_state(view: GridView, rendered_object: QWidget) -> None:
+        pass  # a grid has no user-editable state of its own
+
+
 class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
     """The pages, stacked, and a toolbar of their actions that the window docks.
 
@@ -1367,6 +1398,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": QtFloatInputRenderer,
     "form": QtFormRenderer,
     "form_label": QtFormLabelRenderer,
+    "grid": QtGridRenderer,
     "group_form": QtGroupFormRenderer,
     "horizontal": QtHorizontalRenderer,
     "input": QtInputRenderer,
