@@ -1203,3 +1203,19 @@ def test_without_matplotlib_the_chart_offers_only_its_own_export(
     assert "Save Image…" not in texts
     # pyqtgraph's own, saving an image of the screen's chart
     assert [action.text() for action in chart.scene().contextMenu] == ["Export..."]
+
+
+def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
+    view_box = chart.getPlotItem().getViewBox()
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100)
+    clicks: list[tuple[float, float]] = []
+    view.chart.clicked.connect(lambda x, y: clicks.append((x, y)))
+
+    chart.click(view_box.mapViewToScene(QPointF(10, 2)))
+    view.chart.x_log = True
+    chart.click(view_box.mapViewToScene(QPointF(1, 2)))  # the log of 10
+    chart.click(QPointF(-10, -10))  # off the plot
+
+    assert clicks == [pytest.approx((10, 2)), pytest.approx((10, 2))]

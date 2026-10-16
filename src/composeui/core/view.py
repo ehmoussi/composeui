@@ -1165,6 +1165,9 @@ class ChartView(View):
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed
     save_image_text: str = attrs.field(default=T("Save Image"), metadata={UI_TEXT: True})
+    #: the user clicked the chart at a point, as the axes' values (x, then y), e.g. to
+    #: pick a curve's point; where the backend has a pointer: Qt and the web, not Textual
+    clicked: Signal[float, float] = attrs.Factory(Signal[float, float])
 
     @staticmethod
     def kind_of(series: Series, kind: ChartKind) -> ChartKind:

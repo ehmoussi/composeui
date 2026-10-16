@@ -519,6 +519,11 @@ each bucket of its points before it's sent. Textual draws it with `textual-plote
 against its flow rate, and measurements over it (`uv run python -m examples.pipechart
 --backend qt`, or `textual`, or `web`).
 
+A click on the chart emits its point, in the axes' values, from `clicked` (`x`, then `y`):
+in Qt, and on the web, where a drag still zooms; a terminal has no pointer to click with.
+[`src/examples/batman.py`](src/examples/batman.py) draws the Batman logo and says whether
+a click was on the bat (`uv run python -m examples.batman --backend web`, or `qt`).
+
 ### Report images
 
 A screen chart follows its window and theme; a report's figure has the page's size and

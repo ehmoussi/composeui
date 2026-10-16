@@ -599,6 +599,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_log: bool
     y_log: bool
     save_image_text: str
+    clicked: Signal[float, float]
 
 
 #: the points a series sends at most, about twice a wide chart's pixels: a longer one is
@@ -664,7 +665,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
     values at the cursor in its legend; a series' legend entry hides or shows it. A new
     `series` list swaps the figure, the page keeping the user's zoom (see `page.py`).
 
-    Its corner downloads its image as a report's figure, in the format picked beside:
+    A click on the plot, rather than the end of a drag, posts its point: `clicked` emits
+    it. Its corner downloads its image as a report's figure, in the format picked beside:
     matplotlib draws it from the view's data at the user's zoom (see `image`), the same
     file as Qt saves. Without matplotlib, the page draws a PNG of what it shows instead.
     """
@@ -759,6 +761,18 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             x_label, link = ChartView.axis_label(view.x_title, view.x_unit), "against"
         description = f"{names} {link} {x_label}" if names and x_label else names or x_label
         return f"{view.title}: {description}" if view.title and description else view.title
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        # a click on the plot (see `page.py`), at a point in the axes' values
+        if event != "click" or not self.is_enabled:
+            super().dispatch(event, form)
+        try:
+            x, y = float(form.get("x", "")), float(form.get("y", ""))
+        except ValueError:
+            super().dispatch(event, form)
+        if not (math.isfinite(x) and math.isfinite(y)):
+            super().dispatch(event, form)
+        self._view.clicked.emit(x, y)
 
     def image(self, image_format: str, query: Mapping[str, str]) -> tuple[str, bytes]:
         """Draw the chart's image, e.g. at the zoom in `query` (`x_min`, `x_max`...).

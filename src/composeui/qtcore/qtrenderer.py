@@ -512,6 +512,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_log: bool
     y_log: bool
     save_image_text: str
+    clicked: Signal[float, float]
 
 
 #: the formats the Save Image dialog offers, the vector ones first, by its filters
@@ -541,6 +542,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         if self._rendered_object is None:
             self._rendered_object = QChart()
             self._rendered_object.save_image_requested.connect(self._save_image)
+            self._rendered_object.point_clicked.connect(self._view.clicked.emit)
             self.refresh()
 
     @staticmethod

@@ -28,6 +28,7 @@ from playwright.sync_api import Error, expect, sync_playwright
 
 from composeui.core import chartimage
 from composeui.webcore.webapplication import WebApplication
+from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
@@ -1007,3 +1008,37 @@ def test_without_matplotlib_the_page_draws_a_light_png(
     # the off-screen chart is gone
     expect(chart_page.locator("[data-chart-stage]")).to_have_count(0)
     expect(chart_page.locator(".uplot")).to_have_count(1)
+
+
+@pytest.fixture(scope="module")
+def batman_base_url() -> Iterator[str]:
+    """Serve the batman example, for the whole module."""
+    with _serve(WebApplication(build_main_view=BatmanMainView).create_starlette_app()) as url:
+        yield url
+
+
+def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url: str) -> None:
+    context = browser.new_context(base_url=batman_base_url)
+    page = context.new_page()
+    page.goto("/")
+    over = page.locator(".u-over")
+    expect(over).to_have_count(1)
+    point = page.evaluate(
+        "(() => { const chart = charts.values().next().value;"
+        " return [chart.valToPos(0, 'x'), chart.valToPos(0, 'y')]; })()"
+    )
+
+    with _posted(page):
+        over.click(position={"x": point[0], "y": point[1]})
+    expect(page.get_by_text("I'm Batman")).to_be_visible()
+
+    # dragging zooms, and posts no click
+    box = over.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + 10, box["y"] + 10)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 200, box["y"] + 10, steps=5)
+    page.mouse.up()
+    page.wait_for_timeout(300)
+    expect(page.get_by_text("I'm Batman")).to_be_visible()
+    context.close()
