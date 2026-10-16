@@ -22,6 +22,7 @@ from qtpy.QtGui import QAction, QColor, QFont, QPalette
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -1348,6 +1349,10 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     assert not bar.is_editing()
     assert _shown_column(table, 0) == ["kitchen", "Bedroom"]
     (chip,) = bar.chips
+    # laid out in the bar, after "+ Filter" and before the count
+    QApplication.processEvents()  # the layout's pass
+    assert bar.rect().contains(chip.geometry())
+    assert bar.add_filter.geometry().right() < chip.x() < bar.count.x()
     assert chip.open_button.accessibleName() == "Temperature: >=20"
     assert chip.open_button.toolTip() == "Edit the filter on Temperature"
     # its chip has the focus: Enter opens it again, to replace the filter on its column;
