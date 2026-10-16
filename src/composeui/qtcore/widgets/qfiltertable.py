@@ -128,7 +128,7 @@ class _ChipButton(QToolButton):
 class QFilterChip(QWidget):
     """A filter, as its column's header then its text, opening it, and a button removing it.
 
-    The pencil after the text, the hand cursor and the tooltip say a click edits it.
+    The pencil after the text and the tooltip say a click edits it.
     """
 
     def __init__(self, text: str, edit_text: str, remove_text: str) -> None:
@@ -137,7 +137,6 @@ class QFilterChip(QWidget):
         self.open_button.setText(f"{text} {EDIT}")
         self.open_button.setAccessibleName(text)
         self.open_button.setToolTip(edit_text)
-        self.open_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_button.setAutoRaise(True)
         self.remove_button = QToolButton()
         self.remove_button.setText(REMOVE)
