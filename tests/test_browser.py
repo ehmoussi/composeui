@@ -937,3 +937,16 @@ def test_a_bar_chart_draws_its_bars_by_category(chart_pages_page: Page) -> None:
     legend = energy.locator(".u-legend")
     expect(legend).to_contain_text("Bedroom")
     expect(legend).to_contain_text("80 kWh")
+
+
+def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    decay = chart_pages_page.locator("figure").filter(has_text="Decay")
+    expect(decay.locator("canvas")).to_have_count(1)
+
+    scales = decay.locator("[data-chart]").evaluate(
+        "element => { const chart = charts.get(element);"
+        " return [chart.scales.x.distr, chart.scales.y.distr, chart.scales.x.min > 0]; }"
+    )
+
+    assert scales == [3, 3, True]  # uPlot's log scales, from above 0

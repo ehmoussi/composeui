@@ -595,6 +595,8 @@ class ChartViewLike(ViewLike, Protocol):
     y_unit: str
     series: list[Series]
     categories: list[str]
+    x_log: bool
+    y_log: bool
 
 
 #: the points a series sends at most, about twice a wide chart's pixels: a longer one is
@@ -628,9 +630,13 @@ def _thin(x: list[float], y: list[float], max_points: int) -> tuple[list[float],
     return [x[index] for index in kept], [y[index] for index in kept]
 
 
-def _chart_points(series: Series) -> tuple[list[float], list[float]]:
-    """Get a series' points as uPlot draws them: by ascending x, thinned when long."""
-    points = [(x, y) for x, y in zip(series.x, series.y) if math.isfinite(x)]
+def _chart_points(series: Series, *, x_log: bool, y_log: bool) -> tuple[list[float], list[float]]:
+    """Get a series' points as uPlot draws them: by ascending x, thinned when long.
+
+    A log axis' values it can't show are left out (`ChartView.drawn_points`).
+    """
+    xs, ys = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
+    points = [(x, y) for x, y in zip(xs, ys) if math.isfinite(x)]
     if any(a[0] > b[0] for a, b in zip(points, points[1:])):
         points.sort(key=lambda point: point[0])
     x, y = [point[0] for point in points], [point[1] for point in points]
@@ -661,6 +667,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "y_unit",
                     "series",
                     "categories",
+                    "x_log",
+                    "y_log",
                 ),
                 self._mark_dirty,
             )
@@ -671,8 +679,17 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         view = self._view
         x_unit, y_unit = view.x_unit, view.y_unit
         spec: dict[str, Any] = {
-            "x": {"label": ChartView.axis_label(view.x_title, x_unit), "unit": x_unit},
-            "y": {"label": ChartView.axis_label(view.y_title, y_unit), "unit": y_unit},
+            "x": {
+                "label": ChartView.axis_label(view.x_title, x_unit),
+                "unit": x_unit,
+                # a bar chart's x is its categories, never a log axis
+                "log": view.x_log and view.kind is not ChartKind.BAR,
+            },
+            "y": {
+                "label": ChartView.axis_label(view.y_title, y_unit),
+                "unit": y_unit,
+                "log": view.y_log,
+            },
             "series": [
                 {"name": series.name, "kind": ChartView.kind_of(series, view.kind).name.lower()}
                 for series in view.series
@@ -681,7 +698,9 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         if view.kind is ChartKind.BAR:
             self._add_bars(spec)
             return json.dumps(spec, allow_nan=False, separators=(",", ":"))
-        points = [_chart_points(series) for series in view.series]
+        points = [
+            _chart_points(series, x_log=view.x_log, y_log=view.y_log) for series in view.series
+        ]
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y
             spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]
@@ -699,7 +718,10 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         spec["data"] = [
             list(range(count)),
             *(
-                [_json_number(height) for height in ChartView.bar_heights(series, count)]
+                [
+                    _json_number(height)
+                    for height in ChartView.bar_heights(series, count, y_log=view.y_log)
+                ]
                 for series in view.series
             ),
         ]

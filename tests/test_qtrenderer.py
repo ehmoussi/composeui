@@ -1093,3 +1093,50 @@ def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80 kWh"]
+
+
+def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    plot = chart.getPlotItem()
+    view.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+
+    view.chart.x_log = True
+    view.chart.y_log = True
+
+    assert plot.getAxis("bottom").logMode
+    assert plot.getAxis("left").logMode
+    (curve,) = (item for item in plot.items if isinstance(item, pg.PlotDataItem))
+    # no x of 0 on a log axis: left out; a y of -1: a gap
+    assert list(curve.xData) == [1, 10, 100]
+    assert math.isnan(curve.yData[0])
+    assert list(curve.yData[1:]) == [10, 100]
+    view.chart.x_log = False
+    assert not plot.getAxis("bottom").logMode
+    assert list(curve.xData) == [0, 1, 10, 100]
+
+
+def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
+    view.chart.x_log = True
+    view_box = chart.getPlotItem().vb
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 2)
+
+    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
+
+    qtbot.waitUntil(lambda: chart.hover_text() != "")
+    assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2 kPa"]
+
+
+def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot)
+    energy = view.router.chart.energy
+    energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+
+    energy.y_log = True
+
+    (bars,) = (item for item in chart.getPlotItem().items if isinstance(item, pg.BarGraphItem))
+    assert list(bars.opts["x0"]) == pytest.approx([-0.4, 1.6])  # none of 0 in the bedroom
+    assert bars.opts["y0"] == 1  # 10 kWh, under 50
+    assert list(bars.opts["height"]) == pytest.approx([2, math.log10(50) - 1])
+    assert chart.getPlotItem().getAxis("left").logMode

@@ -2671,8 +2671,8 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     figure = _element(page, _widget_id(chart.renderer))
     assert figure.tag == "figure"
     assert _chart_spec(page, chart) == {
-        "x": {"label": "Flow Rate (L/s)", "unit": "L/s"},
-        "y": {"label": "Pressure Drop (kPa)", "unit": "kPa"},
+        "x": {"label": "Flow Rate (L/s)", "unit": "L/s", "log": False},
+        "y": {"label": "Pressure Drop (kPa)", "unit": "kPa", "log": False},
         "series": [],
         "pairs": [],
     }
@@ -2791,3 +2791,24 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
     ]
     plot = _element(markup, f"{_widget_id(energy.renderer)}-plot")
     assert plot.attributes["aria-label"] == "Energy: Heating, Cooling for Kitchen, Bedroom, Office"
+
+
+def test_a_log_axis_sends_only_what_it_can_show() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    page = main_view.router.chart
+    chart, energy = page.chart, page.energy
+    assert isinstance(chart.renderer, WebChartRenderer)
+    assert isinstance(energy.renderer, WebChartRenderer)
+    chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+    chart.x_log = chart.y_log = True
+    energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+    energy.x_log = energy.y_log = True
+
+    spec = json.loads(chart.renderer.chart_json())
+    assert (spec["x"]["log"], spec["y"]["log"]) == (True, True)
+    # no x of 0 on a log axis: left out; a y of -1: a gap
+    assert spec["data"] == [[1, 10, 100], [None, 10, 100]]
+    bars = json.loads(energy.renderer.chart_json())
+    assert (bars["x"]["log"], bars["y"]["log"]) == (False, True)  # x: its categories
+    assert bars["data"] == [[0, 1, 2], [1000, None, 50]]

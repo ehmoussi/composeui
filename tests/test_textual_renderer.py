@@ -1130,3 +1130,35 @@ async def test_a_bar_chart_plots_a_bar_per_series_in_each_category() -> None:
         for name in ("Heating", "Cooling", "Kitchen", "Bedroom", "Office", "Energy"):
             assert name in text
         assert "120" in text  # the tallest bar's height, on the y axis
+
+
+@pytest.mark.asyncio
+async def test_a_log_axis_plots_what_it_can_show() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    page = view.router.chart
+    assert isinstance(page.chart.renderer, TextualWidgetRenderer)
+    chart = page.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+    assert isinstance(page.energy.renderer, TextualWidgetRenderer)
+    energy = page.energy.renderer.widget
+    assert isinstance(energy, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        view.router.current_route = "chart"
+        page.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+        page.chart.x_log = page.chart.y_log = True
+        page.energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+        page.energy.y_log = True
+        await pilot.pause()
+        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        # the scales of the axes at the bottom and left, those drawn
+        assert (plotted.xscale[0], plotted.yscale[0]) == ("log", "log")
+        assert list(plotted.x[0]) == [0, 1, 2]  # 1, 10 and 100, as their logs: no x of 0
+        assert math.isnan(plotted.y[0][0])  # a y of -1: a gap
+        text = energy.render().plain  # type: ignore[union-attr]
+        assert "1000" in text  # its axis, log from 10
+        assert energy.plt._active.monitor.yscale[0] == "log"  # noqa: SLF001
