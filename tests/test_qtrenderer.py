@@ -10,6 +10,7 @@ already uses for the Textual backend.
 
 from __future__ import annotations
 
+import gc
 import json
 import math
 from typing import TYPE_CHECKING
@@ -39,6 +40,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from composeui.core import chartimage
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
@@ -46,6 +48,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     ChartKind,
+    ChartView,
     DialogKind,
     EditRefusedError,
     LabelView,
@@ -73,6 +76,7 @@ if TYPE_CHECKING:
 
     from pytestqt.qtbot import QtBot
 
+    from composeui.core.chartimage import ImageOptions
     from composeui.core.view import View
 
 
@@ -935,7 +939,17 @@ def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
     assert main_pipe.qt_object.title() == "Conduite principale"
 
 
+def _collect_windows() -> None:
+    """Destroy the windows earlier tests left to the garbage collector, before a chart.
+
+    Collected while pyqtgraph paints (its items paint in Python, where a collection can
+    run), a window's widgets die under a painter, which crashes.
+    """
+    gc.collect()
+
+
 def _rendered_chart(qtbot: QtBot) -> tuple[PipeChartMainView, QChart]:
+    _collect_windows()
     view = PipeChartMainView()
     view.render(RendererType.QT)
     assert isinstance(view.renderer, QtWidgetRenderer)
@@ -1045,6 +1059,7 @@ def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
 
 
 def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
+    _collect_windows()
     view = ChartPagesMainView()
     view.render(RendererType.QT)
     assert isinstance(view.renderer, QtWidgetRenderer)
@@ -1140,3 +1155,51 @@ def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> No
     assert bars.opts["y0"] == 1  # 10 kWh, under 50
     assert list(bars.opts["height"]) == pytest.approx([2, math.log10(50) - 1])
     assert chart.getPlotItem().getAxis("left").logMode
+
+
+def test_save_image_saves_the_chart_as_it_shows(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("matplotlib")
+    view, chart = _rendered_chart(qtbot)
+    view.add_curve()
+    chart.getPlotItem().getViewBox().setRange(xRange=(0.5, 1.5), yRange=(0, 10), padding=0)
+    asked: list[tuple[str, str]] = []
+
+    def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
+        asked.append((caption, name))
+        assert filters.startswith("PDF (*.pdf)")  # vector first
+        return str(tmp_path / "drop"), "SVG (*.svg)"
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    saved: list[ImageOptions] = []
+    save = chartimage.save_chart_image
+
+    def save_chart_image(chart_view: ChartView, path: Path, options: ImageOptions) -> None:
+        saved.append(options)
+        save(chart_view, path, options)
+
+    monkeypatch.setattr(chartimage, "save_chart_image", save_chart_image)
+    menu = chart.getPlotItem().getViewBox().menu
+    (action,) = (action for action in menu.actions() if action.text() == "Save Image…")
+
+    action.trigger()
+
+    assert asked == [("Save Image", "Pressure Drop.pdf")]
+    assert (tmp_path / "drop.svg").read_text().startswith("<?xml")  # by the filter chosen
+    (options,) = saved
+    assert options.x_range == pytest.approx((0.5, 1.5))  # the zoom the user looks at
+    assert options.y_range == pytest.approx((0, 10))
+
+
+def test_without_matplotlib_the_chart_offers_only_its_own_export(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chartimage, "is_available", lambda: False)
+
+    _view, chart = _rendered_chart(qtbot)
+
+    texts = [action.text() for action in chart.getPlotItem().getViewBox().menu.actions()]
+    assert "Save Image…" not in texts
+    # pyqtgraph's own, saving an image of the screen's chart
+    assert [action.text() for action in chart.scene().contextMenu] == ["Export..."]

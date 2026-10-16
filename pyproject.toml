@@ -53,6 +53,9 @@ web = [
     "starlette>=0.49.3",
     "uvicorn>=0.39.0",
 ]
+report = [
+    "matplotlib>=3.9",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

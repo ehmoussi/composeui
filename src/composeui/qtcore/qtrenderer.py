@@ -30,6 +30,7 @@ from qtpy.QtWidgets import (
 )
 from typing_extensions import Protocol
 
+from composeui.core import chartimage
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -42,6 +43,7 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ChartKind,
+    ChartView,
     DialogKind,
     DialogView,
     FormLabelRowView,
@@ -509,6 +511,11 @@ class ChartViewLike(ViewLike, Protocol):
     categories: list[str]
     x_log: bool
     y_log: bool
+    save_image_text: str
+
+
+#: the formats the Save Image dialog offers, the vector ones first, by its filters
+_IMAGE_FILTERS = {"PDF (*.pdf)": "pdf", "SVG (*.svg)": "svg", "PNG (*.png)": "png"}
 
 
 class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
@@ -526,12 +533,14 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "categories": self._refresh_categories,
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
+                "save_image_text": self._refresh_save_image_text,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QChart()
+            self._rendered_object.save_image_requested.connect(self._save_image)
             self.refresh()
 
     @staticmethod
@@ -576,6 +585,30 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _refresh_y_log(view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
         rendered_object.set_log(x_log=view.x_log, y_log=value)
+
+    @staticmethod
+    def _refresh_save_image_text(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:
+        rendered_object.save_image_action.setText(f"{value}…")
+
+    def _save_image(self) -> None:
+        """Ask where to save the chart's image, and save it as it shows, zoomed in too."""
+        chart, view = self._rendered_object, self._view
+        if chart is None or not isinstance(view, ChartView):
+            return
+        path, chosen = QFileDialog.getSaveFileName(
+            chart,
+            view.save_image_text,
+            chartimage.image_name(view.title, "pdf"),
+            ";;".join(_IMAGE_FILTERS),
+        )
+        if path == "":
+            return
+        filepath = Path(path)
+        if filepath.suffix.lstrip(".").lower() not in chartimage.FORMATS:
+            filepath = filepath.with_name(f"{filepath.name}.{_IMAGE_FILTERS.get(chosen, 'pdf')}")
+        x_range, y_range = chart.shown_range()
+        options = chartimage.ImageOptions(x_range=x_range, y_range=y_range)
+        chartimage.save_chart_image(view, filepath, options)
 
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: QChart) -> None:

@@ -24,6 +24,7 @@ from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
+    WebChartRenderer,
     WebMainRenderer,
     collect_dirty,
     handle_event,
@@ -194,6 +195,19 @@ class WebSession(RenderTarget):
             pending = self.take_pending()
             pending.pop(widget_id, None)  # swapped in already
             return renderer.to_html() + render_dirty(pending)
+
+    def chart_image(
+        self, widget_id: str, image_format: str, query: Mapping[str, str]
+    ) -> tuple[str, bytes] | None:
+        """Draw the image of one of this session's charts; None if it isn't one.
+
+        Raises `ValueError` for a format or a range it can't draw.
+        """
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+            if not isinstance(renderer, WebChartRenderer):
+                return None
+            return renderer.image(image_format, query)
 
     def poll_jobs(self) -> str:
         """Render the jobs' poller as it is now, and what changed outside any request.

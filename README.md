@@ -34,6 +34,7 @@ uv sync                     # core dependencies
 uv sync --extra pyside6     # + PySide6, needed to actually render a window
 uv sync --extra tui         # + Textual, for the terminal backend
 uv sync --extra web         # + Starlette/uvicorn, for the web backend
+uv sync --extra report      # + matplotlib, for charts' report images
 ```
 
 Requires Python >= 3.9.
@@ -515,8 +516,29 @@ the legend shows the values at the cursor; a long series is thinned to the extre
 each bucket of its points before it's sent. Textual draws it with `textual-plotext` (in the
 `tui` extra), without zoom or hover. A new `series` list keeps the user's zoom.
 [`src/examples/pipechart.py`](src/examples/pipechart.py) plots a pipe's pressure drop
-against its flow rate, and measurements over it (`uv run python -m examples.pipechart --backend qt`, or `textual`,
-or `web`).
+against its flow rate, and measurements over it (`uv run python -m examples.pipechart
+--backend qt`, or `textual`, or `web`).
+
+### Report images
+
+A screen chart follows its window and theme; a report's figure has the page's size and
+fonts and a light background. `composeui.core.chartimage` draws one from the chart's
+data with matplotlib (the `report` extra), the same whatever the backend, and without any
+UI, e.g. a batch run writing a report's figures:
+
+```python
+from composeui.core.chartimage import ImageOptions, chart_figure, save_chart_image
+
+save_chart_image(chart, Path("drop.pdf"), ImageOptions(width_mm=80, font_size=8))
+figure = chart_figure(chart)  # a matplotlib `Figure`, to annotate before saving it
+```
+
+The suffix picks the format: PDF, SVG and EPS keep their text as text, PNG is drawn at
+`dpi`; `x_range` and `y_range` show a region of the data. Each backend offers it as Save
+Image (its text translated like the other built-in ones): in Qt's chart context menu, at
+the region shown; in the web figure's corner, with a format to pick, at the user's zoom;
+with the `s` key on a Textual chart. Without the extra, Qt keeps pyqtgraph's own Export,
+and the web page draws a PNG of the chart itself.
 
 ## Running work in threads
 

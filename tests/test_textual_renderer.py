@@ -21,6 +21,7 @@ from textual.coordinate import Coordinate
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, DataTable, Footer, Input, Label, ProgressBar
 
+from composeui.core import chartimage
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
@@ -1162,3 +1163,52 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
         text = energy.render().plain  # type: ignore[union-attr]
         assert "1000" in text  # its axis, log from 10
         assert energy.plt._active.monitor.yscale[0] == "log"  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_its_key_saves_the_chart_s_image(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        view.add_curve()
+        chart.focus()
+        await pilot.pause()
+        footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
+        assert "Save Image" in footer
+
+        await pilot.press("s")
+        await pilot.pause()
+        assert [type(screen).__name__ for screen in app.screen_stack] == ["Screen", "FileSave"]
+        app.screen.dismiss(tmp_path / "drop")  # as the dialog's Save button does
+        await pilot.pause()
+
+    assert (tmp_path / "drop.pdf").read_bytes().startswith(b"%PDF")  # PDF unless named
+
+
+@pytest.mark.asyncio
+async def test_without_matplotlib_the_chart_has_no_key_saving_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(chartimage, "is_available", lambda: False)
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        chart.focus()
+        await pilot.press("s")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1

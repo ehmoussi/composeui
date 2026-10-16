@@ -9,9 +9,12 @@ without them, these tests are skipped.
 from __future__ import annotations
 
 import contextlib
+import re
 import socket
+import struct
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -23,6 +26,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from playwright.sync_api import Error, expect, sync_playwright
 
+from composeui.core import chartimage
 from composeui.webcore.webapplication import WebApplication
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
@@ -950,3 +954,56 @@ def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
     )
 
     assert scales == [3, 3, True]  # uPlot's log scales, from above 0
+
+
+def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:
+    pytest.importorskip("matplotlib")
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
+    link = chart_page.get_by_role("link", name="Save Image")
+    expect(link).to_have_attribute("href", re.compile(r"/image\?format=pdf$"))
+
+    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+    chart_page.get_by_label("Image format").select_option("svg")
+
+    expect(link).to_have_attribute("href", re.compile(r"\?format=svg&x_min=0\.5&x_max=1&y_min="))
+    with chart_page.expect_download() as download_info:
+        link.click()
+    download = download_info.value
+    assert download.suggested_filename == "Pressure Drop.svg"
+    assert "Flow Rate (L/s)" in Path(download.path()).read_text()
+
+
+def test_without_matplotlib_the_page_draws_a_light_png(
+    chart_page: Page, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chartimage, "is_available", lambda: False)
+    chart_page.emulate_media(color_scheme="dark")
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
+    expect(chart_page.get_by_label("Image format")).to_have_count(0)
+
+    with chart_page.expect_download() as download_info:
+        chart_page.get_by_role("button", name="Save Image (PNG)").click()
+
+    download = download_info.value
+    assert download.suggested_filename == "Pressure Drop.png"
+    content = Path(download.path()).read_bytes()
+    assert struct.unpack(">II", content[16:24]) == (1600, 1000)
+    # its corner's pixel: white, the light theme's, under the page's dark one
+    corner = chart_page.evaluate(
+        """async (bytes) => {
+            const image = await createImageBitmap(new Blob([new Uint8Array(bytes)]));
+            const canvas = new OffscreenCanvas(image.width, image.height);
+            const context = canvas.getContext("2d");
+            context.drawImage(image, 0, 0);
+            return Array.from(context.getImageData(2, 2, 1, 1).data);
+        }""",
+        list(content),
+    )
+    assert corner == [255, 255, 255, 255]
+    # the off-screen chart is gone
+    expect(chart_page.locator("[data-chart-stage]")).to_have_count(0)
+    expect(chart_page.locator(".uplot")).to_have_count(1)
