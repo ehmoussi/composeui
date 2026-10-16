@@ -72,12 +72,27 @@ from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
 
     from composeui.core.chartimage import ImageOptions
     from composeui.core.view import View
+
+
+@pytest.fixture(autouse=True)
+def _collect_between_tests() -> Iterator[None]:
+    """Destroy the windows tests leave to the garbage collector only between tests.
+
+    Collected while pyqtgraph paints (its items paint in Python, where a collection can
+    run), a window's widgets die under a painter, which crashes.
+    """
+    gc.collect()
+    gc.disable()
+    yield
+    gc.enable()
+    gc.collect()
 
 
 def _field_widget(view: object) -> QWidget:
@@ -939,17 +954,7 @@ def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
     assert main_pipe.qt_object.title() == "Conduite principale"
 
 
-def _collect_windows() -> None:
-    """Destroy the windows earlier tests left to the garbage collector, before a chart.
-
-    Collected while pyqtgraph paints (its items paint in Python, where a collection can
-    run), a window's widgets die under a painter, which crashes.
-    """
-    gc.collect()
-
-
 def _rendered_chart(qtbot: QtBot) -> tuple[PipeChartMainView, QChart]:
-    _collect_windows()
     view = PipeChartMainView()
     view.render(RendererType.QT)
     assert isinstance(view.renderer, QtWidgetRenderer)
@@ -1061,7 +1066,6 @@ def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
 
 
 def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
-    _collect_windows()
     view = ChartPagesMainView()
     view.render(RendererType.QT)
     assert isinstance(view.renderer, QtWidgetRenderer)
