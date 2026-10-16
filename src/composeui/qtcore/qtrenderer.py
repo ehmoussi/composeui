@@ -649,7 +649,8 @@ class TableViewLike(ViewLike, Protocol):
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
     def sort_by(self, column: int) -> None: ...
     def filter_error(self, column: int, text: str) -> str | None: ...
-    def filter_placeholder(self, column: int) -> str: ...
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str: ...
+    def filter_takes_pattern(self, column: int) -> bool: ...
     def filter_chip(self, column: int) -> str: ...
 
 
@@ -689,7 +690,10 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             table.cell_edited.connect(self._update_cell)
             table.header_clicked.connect(self._sort_by)
             bar.check = self._view.filter_error
-            bar.placeholder = self._view.filter_placeholder
+            bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
+                column, is_pattern=is_pattern
+            )
+            bar.takes_pattern = self._view.filter_takes_pattern
             bar.search_edited.connect(self._update_search)
             bar.filter_added.connect(self._add_filter)
             bar.filter_removed.connect(self._remove_filter)
@@ -741,7 +745,11 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         view: TableViewLike, rendered_object: QFilterTable, value: dict[int, str]
     ) -> None:
         rendered_object.bar.set_filters(
-            [(column, view.filter_chip(column), text) for column, text in sorted(value.items())]
+            [
+                (column, view.filter_chip(column), text, view.headers[column])
+                for column, text in sorted(value.items())
+                if column < len(view.headers)
+            ]
         )
 
     @staticmethod

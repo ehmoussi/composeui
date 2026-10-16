@@ -102,13 +102,30 @@ def test_a_filter_compares_a_number_a_date_or_a_boolean_by_value(
     assert parse_filter(text, field_type).matches(value, cell) is matches
 
 
-def test_a_text_filter_keeps_the_cells_containing_it_ignoring_case() -> None:
-    contains = parse_filter("CHEN", str)
-    assert contains.matches("Kitchen", "Kitchen")
-    assert not contains.matches("Hall", "Hall")
-    # ">" is text in a text column
-    assert parse_filter(">2", str).matches("a>2", "a>2")
-    assert parse_filter("=", str).matches("", "")
+@pytest.mark.parametrize(
+    ("text", "kept"),
+    [
+        ("CHEN", ["Kitchen"]),
+        ("*chen*", ["Kitchen"]),
+        ("=kitchen", ["Kitchen"]),
+        ("=kit", []),
+        ("!=kitchen", ["Hall", "Bedroom", ""]),
+        ("!room", ["Kitchen", "Hall", ""]),
+        ("b*", ["Bedroom"]),
+        ("*L", ["Hall"]),
+        ("/^(hall|kitchen)$/", ["Kitchen", "Hall"]),
+        ("/o{2}/", ["Bedroom"]),
+        # "<" and ">" are text in a text column
+        (">2", []),
+        ("=", [""]),
+    ],
+)
+def test_a_text_filter_keeps_the_cells_as_its_syntax_says_ignoring_case(
+    text: str, kept: list[str]
+) -> None:
+    text_filter = parse_filter(text, str)
+    cells = ["Kitchen", "Hall", "Bedroom", ""]
+    assert [cell for cell in cells if text_filter.matches(cell, cell)] == kept
 
 
 @pytest.mark.parametrize(
@@ -120,6 +137,7 @@ def test_a_text_filter_keeps_the_cells_containing_it_ignoring_case() -> None:
         ("24..18", float, FilterProblem.REVERSED_RANGE),
         ("2024-13-01", datetime.date, FilterProblem.NOT_A_DATE),
         ("yes", bool, FilterProblem.NOT_A_BOOLEAN),
+        ("/(kitchen/", str, FilterProblem.NOT_A_PATTERN),
     ],
 )
 def test_a_filter_that_doesn_t_parse_says_why(

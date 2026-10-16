@@ -1360,12 +1360,14 @@ async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None
         assert bar.value.placeholder == ">=20, 18..24"
         await _add_filter(pilot, bar, 1, ">=20")
         assert not bar.is_editing()
-        assert app.focused is bar.add_filter
         assert _shown_column(table, 0) == ["kitchen", "Bedroom"]
-        chips = list(bar.chips.query(ComposeFilterChip))
-        assert [str(chip.open_button.label) for chip in chips] == ["Temperature >=20"]
-        # a second filter on its column replaces it, from its chip; another column combines
-        await pilot.click(chips[0].open_button)
+        (chip,) = bar.chips.query(ComposeFilterChip)
+        assert str(chip.open_button.label) == "Temperature: >=20 \u270e"
+        assert str(chip.open_button.tooltip) == "Edit the filter on Temperature"
+        # its chip has the focus: Enter opens it again, to replace the filter on its
+        # column; another column's combines
+        assert app.focused is chip.open_button
+        await pilot.press("enter")
         await pilot.pause()
         assert bar.value.value == ">=20"
         await _add_filter(pilot, bar, 1, ">=21")
@@ -1388,6 +1390,37 @@ async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None
         await pilot.pause()
         assert not bar.is_editing()
         assert view.rooms.filters == {2: ">100", 3: "true"}
+
+
+@pytest.mark.asyncio
+async def test_the_filter_editor_s_toggle_makes_the_value_a_regular_expression() -> None:
+    view, app, box = _sorted_rooms()
+    bar, table = box.bar, box.table
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(bar.add_filter)
+        await pilot.pause()
+        # only for text, the first column: a number column takes comparisons
+        assert bar.pattern.display
+        await pilot.click(bar.pattern)
+        await pilot.pause()
+        assert bar.value.placeholder == "a regular expression, as Room [1-3]"
+        await pilot.click(bar.value)
+        await pilot.press(*"^(hall|attic)$", "enter")
+        await pilot.pause()
+        assert _shown_column(table, 0) == ["Hall", "Attic"]
+        (chip,) = bar.chips.query(ComposeFilterChip)
+        assert str(chip.open_button.label) == "Room matches ^(hall|attic)$ \u270e"
+
+        # reopened, the toggle is on and the value the pattern as typed
+        await pilot.press("enter")
+        await pilot.pause()
+        assert bar.is_pattern()
+        assert bar.value.value == "^(hall|attic)$"
+        await _add_filter(pilot, bar, 1, ">=20")  # the temperature
+        assert not bar.pattern.display
+        assert view.rooms.filters == {0: "/^(hall|attic)$/", 1: ">=20"}
 
 
 @pytest.mark.asyncio

@@ -62,7 +62,9 @@ from composeui.core.view import (
     ToolBar,
     VerticalView,
     View,
+    as_pattern,
     replace_cell,
+    split_pattern,
 )
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import get_page
@@ -866,7 +868,8 @@ class TableViewLike(ViewLike, Protocol):
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
     def sort_by(self, column: int) -> None: ...
     def filter_error(self, column: int, text: str) -> str | None: ...
-    def filter_placeholder(self, column: int) -> str: ...
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str: ...
+    def filter_takes_pattern(self, column: int) -> bool: ...
     def filter_chip(self, column: int) -> str: ...
 
 
@@ -910,6 +913,8 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._editor_error: str | None = None
         #: whether "+ Filter" takes the focus back, the editor or a chip just gone
         self._focus_add_filter = False
+        #: the column whose chip takes the focus, its filter just added: Enter reopens it
+        self._focused_chip: int | None = None
         #: the parts to swap, unless the whole table is (`_mark_dirty`)
         self._dirty_parts: set[str] = set()
         self._is_whole_dirty = False
@@ -968,7 +973,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             # swaps nothing more from once it's gone
             order = ("head", "body", "count", "error", "bar")
             fragments = "".join(renders[part](oob=True) for part in order if part in parts)
-            self._focus_add_filter = False
+            self._focus_add_filter, self._focused_chip = False, None
             return fragments
         grid = ' role="grid" aria-multiselectable="true"' if self._is_multiple() else ""
         html_ = (
@@ -978,7 +983,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f'<table class="table table-zebra table-sm"{grid}>'
             f"<thead>{self._head_html()}</thead>{self._body_html()}</table></div></div>"
         )
-        self._focus_add_filter = False
+        self._focus_add_filter, self._focused_chip = False, None
         return html_
 
     def _oob(self, *, oob: bool) -> str:
@@ -1090,25 +1095,40 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         assert self._editor is not None
         texts = self._view.filter_texts
         columns = self._filterable_columns()
-        column, text = self._editor
+        column, typed = self._editor
         chosen = column if column in columns else columns[0]
+        text, is_pattern = split_pattern(typed)
+        takes_pattern = self._view.filter_takes_pattern(chosen)
+        is_pattern = is_pattern and takes_pattern
         options = "".join(
             f'<option value="{option}"'
             f' data-placeholder="{html.escape(self._view.filter_placeholder(option))}"'
+            f' data-pattern-placeholder="{html.escape(self._pattern_placeholder(option))}"'
             f"{' selected' if option == chosen else ''}>"
             f"{html.escape(self._view.headers[option])}</option>"
             for option in columns
         )
         value_id = f"{self.widget_id}-value"
         value_label = html.escape(texts.get("value", ""))
+        pattern_label = html.escape(texts.get("pattern", ""))
+        placeholder = self._view.filter_placeholder(chosen, is_pattern=is_pattern)
+        # a checkbox drawn as a button: on, the value is a regular expression; the page
+        # shows it only for a column a pattern filters, and hints at what to type
+        pattern = (
+            '<label class="btn btn-sm btn-soft font-mono has-checked:btn-primary"'
+            f' title="{pattern_label}" data-filter-pattern{"" if takes_pattern else " hidden"}>'
+            f'<input type="checkbox" name="pattern" value="1" class="sr-only"'
+            f' aria-label="{pattern_label}"{" checked" if is_pattern else ""}>.*</label>'
+        )
         return (
             f'<form id="{self.widget_id}-editor" class="flex flex-wrap items-center gap-2"'
             f"{self._post({'event': 'add_filter'})}>"
             f'<select name="column" class="select select-sm w-auto" data-filter-column'
             f' aria-label="{html.escape(texts.get("column", ""))}">{options}</select>'
-            f'<input id="{value_id}" name="value" class="input input-sm w-44" type="text"'
+            f"{pattern}"
+            f'<input id="{value_id}" name="value" class="input input-sm w-60" type="text"'
             f' value="{html.escape(text)}" aria-label="{value_label}"'
-            f' placeholder="{html.escape(self._view.filter_placeholder(chosen))}"'
+            f' placeholder="{html.escape(placeholder)}"'
             f' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="keydown[key==&apos;Escape&apos;]"'
             """ hx-vals='{"event": "close_editor"}' hx-swap="none">"""
@@ -1116,6 +1136,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f'<button type="submit" class="btn btn-sm btn-primary">'
             f"{html.escape(texts.get('add', ''))}</button></form>"
         )
+
+    def _pattern_placeholder(self, column: int) -> str:
+        """Hint at a regular expression filtering `column`, or "" if none does."""
+        if not self._view.filter_takes_pattern(column):
+            return ""
+        return self._view.filter_placeholder(column, is_pattern=True)
 
     def _error_html(self, *, oob: bool = False) -> str:
         """Render the editor's message, why its text can't filter; the page marks the field."""
@@ -1129,14 +1155,19 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     def _chip_html(self, column: int) -> str:
         if column >= len(self._view.headers):
             return ""
-        texts = self._view.filter_texts
-        remove = texts.get("remove", "{header}").format(header=self._view.headers[column])
+        texts, header = self._view.filter_texts, self._view.headers[column]
+        remove = texts.get("remove", "{header}").format(header=header)
+        edit = texts.get("edit", "{header}").format(header=header)
         disabled = "" if self.is_enabled else " disabled"
+        focus = " autofocus" if self._focused_chip == column else ""
+        # named by its text, the filter; the pencil and the tooltip say it edits it
         return (
             '<span class="badge badge-soft badge-primary gap-1 pe-0">'
-            f'<button type="button" class="cursor-pointer"'
-            f"{self._post({'event': 'open_editor', 'column': column})}{disabled}>"
-            f"{html.escape(self._view.filter_chip(column))}</button>"
+            f'<button id="{self.widget_id}-chip-{column}" type="button"'
+            ' class="inline-flex cursor-pointer items-center gap-1 hover:underline"'
+            f' title="{html.escape(edit)}"'
+            f"{self._post({'event': 'open_editor', 'column': column})}{focus}{disabled}>"
+            f"{html.escape(self._view.filter_chip(column))}{_icon('pencil', 'size-3')}</button>"
             f'<button type="button" class="btn btn-ghost btn-xs btn-circle"'
             f' aria-label="{html.escape(remove)}" title="{html.escape(remove)}"'
             f"{self._post({'event': 'remove_filter', 'column': column})}{disabled}>\u00d7</button>"
@@ -1261,6 +1292,8 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             self._mark_parts("bar")  # a stale page: the bar as it now is
             return
         text = form.get("value", "")
+        if form.get("pattern") == "1" and self._view.filter_takes_pattern(column):
+            text = as_pattern(text)
         error = self._view.filter_error(column, text)
         if error is not None:
             # the field keeps the text typed: only its message is swapped in
@@ -1268,6 +1301,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             self._mark_parts("error")
             return
         self._close_editor(form)
+        self._focus_add_filter, self._focused_chip = False, column
         self._view.filters = {**self._view.filters, column: text}
 
     def _remove_filter(self, form: Mapping[str, str]) -> None:
@@ -1652,12 +1686,14 @@ _ICONS: Final[dict[str, str]] = {
     '<circle cx="19" cy="12" r="1"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
     "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "pencil": '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
+    ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
 }
 
 
-def _icon(name: str) -> str:
+def _icon(name: str, size: str = "size-4") -> str:
     return (
-        '<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        f'<svg class="{size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
         ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
         f"{_ICONS[name]}</svg>"
     )

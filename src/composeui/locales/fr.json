@@ -28,5 +28,11 @@
   ">=20, 18..24": ">=20, 18..24",
   ">=2024-01-31": ">=2024-01-31",
   "true or false": "true ou false",
-  "contains…": "contient…"
+  "\"{text}\" isn't a valid regular expression": "« {text} » n'est pas une expression régulière valide",
+  "Edit the filter on {header}": "Modifier le filtre sur {header}",
+  "{header}: {filter}": "{header} : {filter}",
+  "contains, =exact, start*, !not": "contient, =exact, début*, !sauf",
+  "a regular expression, as Room [1-3]": "une expression régulière, comme Pièce [1-3]",
+  "{header} matches {filter}": "{header} correspond à {filter}",
+  "Regular expression": "Expression régulière"
 }

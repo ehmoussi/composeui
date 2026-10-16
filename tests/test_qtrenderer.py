@@ -1347,9 +1347,13 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     add("Temperature", ">=20")
     assert not bar.is_editing()
     assert _shown_column(table, 0) == ["kitchen", "Bedroom"]
-    assert [chip.open_button.text() for chip in bar.chips] == ["Temperature >=20"]
-    # a second filter on its column replaces it, from its chip; another column combines
-    qtbot.mouseClick(bar.chips[0].open_button, Qt.MouseButton.LeftButton)
+    (chip,) = bar.chips
+    assert chip.open_button.accessibleName() == "Temperature: >=20"
+    assert chip.open_button.toolTip() == "Edit the filter on Temperature"
+    # its chip has the focus: Enter opens it again, to replace the filter on its column;
+    # another column's combines
+    qtbot.waitUntil(chip.open_button.hasFocus)
+    qtbot.keyClick(chip.open_button, Qt.Key.Key_Return)
     assert bar.value.text() == ">=20"
     add("Temperature", ">=21")
     add("Heated", "true")
@@ -1366,6 +1370,35 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     qtbot.mouseClick(bar.clear, Qt.MouseButton.LeftButton)
     assert table.model().rowCount() == 4
     assert bar.chips == []
+
+
+def test_the_filter_editor_s_toggle_makes_the_value_a_regular_expression(qtbot: QtBot) -> None:
+    view, box = _sorted_rooms(qtbot)
+    bar = box.bar
+
+    qtbot.mouseClick(bar.add_filter, Qt.MouseButton.LeftButton)
+    # only for text: a number column takes comparisons
+    bar.column.setCurrentIndex(bar.column.findText("Temperature"))
+    assert not bar.pattern.isVisible()
+    bar.column.setCurrentIndex(bar.column.findText("Room"))
+    assert bar.pattern.isVisible()
+    qtbot.mouseClick(bar.pattern, Qt.MouseButton.LeftButton)
+    assert bar.value.placeholderText() == "a regular expression, as Room [1-3]"
+    qtbot.keyClicks(bar.value, "^(hall|attic)$")
+    qtbot.keyClick(bar.value, Qt.Key.Key_Return)
+    assert _shown_column(box.table, 0) == ["Hall", "Attic"]
+    (chip,) = bar.chips
+    assert chip.open_button.accessibleName() == "Room matches ^(hall|attic)$"
+
+    # reopened, the toggle is on and the value the pattern as typed
+    qtbot.mouseClick(chip.open_button, Qt.MouseButton.LeftButton)
+    assert bar.pattern.isChecked()
+    assert bar.value.text() == "^(hall|attic)$"
+    bar.value.selectAll()
+    qtbot.keyClicks(bar.value, "(hall")
+    qtbot.keyClick(bar.value, Qt.Key.Key_Return)
+    assert bar.value.toolTip() == '"(hall" isn\'t a valid regular expression'
+    assert view.rooms.filters == {0: "/^(hall|attic)$/"}
 
 
 def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(qtbot: QtBot) -> None:

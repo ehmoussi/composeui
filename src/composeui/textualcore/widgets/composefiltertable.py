@@ -7,6 +7,7 @@ from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.widgets import Button, Input, Select, Static
 
 from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.view import as_pattern, split_pattern
 from composeui.textualcore.widgets.composetable import ComposeTable
 
 if TYPE_CHECKING:
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
 
 #: a chip's remove button: a multiplication sign, as a close button often is
 REMOVE = "\u00d7"
+#: after a chip's text: a pencil, as its click edits the filter
+EDIT = "\u270e"
 
 
 class _ValueInput(Input):
@@ -31,7 +34,10 @@ class _ValueInput(Input):
 
 
 class ComposeFilterChip(Horizontal):
-    """A filter, as its column's header then its text, opening it, and a button removing it."""
+    """A filter, as its column's header then its text, opening it, and a button removing it.
+
+    The pencil after the text and the tooltip say a click edits it.
+    """
 
     DEFAULT_CSS = """
     ComposeFilterChip {
@@ -41,10 +47,12 @@ class ComposeFilterChip(Horizontal):
     }
     """
 
-    def __init__(self, column: int, text: str, remove_text: str) -> None:
+    def __init__(self, column: int, text: str, edit_text: str, remove_text: str) -> None:
         super().__init__()
         self.column = column
-        self.open_button = Button(text, compact=True, classes="chip-text")
+        self.open_button = Button(
+            f"{text} {EDIT}", compact=True, classes="chip-text", tooltip=edit_text
+        )
         self.remove_button = Button(
             REMOVE, compact=True, classes="chip-remove", tooltip=remove_text
         )
@@ -59,9 +67,11 @@ class ComposeFilterBar(Horizontal):
 
     The chips scroll sideways when they don't fit.
 
-    "+ Filter" opens an editor in the bar, of a column, a value and an Add button: Enter
-    or Add adds the filter, unless `check` says why its value can't filter, marking the
-    value field `-invalid` with the reason as its tooltip; Escape closes it. A chip's
+    "+ Filter" opens an editor in the bar, of a column, a value and an Add button, and in
+    a text column a toggle (`pattern`, primary while on) making the value a regular
+    expression: Enter or Add adds the filter, unless `check` says why its value can't
+    filter, marking the value field `-invalid` with the reason as its tooltip; Escape
+    closes it. A chip's
     text opens the editor on its filter, its remove button removes it. The signals emit only for the
     user: `search_edited` the text typed, `filter_added` a column and its text,
     `filter_removed` a column, and `filters_cleared`.
@@ -101,17 +111,22 @@ class ComposeFilterBar(Horizontal):
         super().__init__()
         #: why a column's text can't filter it, or None if it can
         self.check: Callable[[int, str], str | None] = lambda _column, _text: None
-        #: a hint at what filters a column
-        self.placeholder: Callable[[int], str] = lambda _column: ""
+        #: a hint at what filters a column, as a regular expression or not
+        self.placeholder: Callable[[int, bool], str] = lambda _column, _is_pattern: ""
+        #: whether a regular expression filters a column
+        self.takes_pattern: Callable[[int], bool] = lambda _column: False
         self.search_edited: Signal[str] = Signal()
         self.filter_added: Signal[int, str] = Signal()
         self.filter_removed: Signal[int] = Signal()
         self.filters_cleared: SignalNoArgs = SignalNoArgs()
         self._texts: dict[str, str] = {}
         self._filters: list[tuple[int, str, str, str]] = []
+        #: the column whose chip takes the focus once shown, its filter just added
+        self._focused_chip: int | None = None
         self.search = Input(id="search", compact=True)
         self.add_filter = Button("", id="add-filter", compact=True)
         self.column: Select[int] = Select([], id="column", compact=True, allow_blank=True)
+        self.pattern = Button(".*", id="pattern", compact=True)
         self.value = _ValueInput()
         self.value.id = "value"
         self.value.escaped.connect(self.close_editor)
@@ -126,6 +141,7 @@ class ComposeFilterBar(Horizontal):
         yield self.search
         yield self.add_filter
         yield self.column
+        yield self.pattern
         yield self.value
         yield self.add
         yield self.chips
@@ -143,6 +159,7 @@ class ComposeFilterBar(Horizontal):
         self.add.label = texts.get("add", "")
         self.clear.label = texts.get("clear", "")
         self.column.tooltip = texts.get("column", "")
+        self.pattern.tooltip = texts.get("pattern", "")
         self.value.tooltip = None
         self._show_chips()
 
@@ -179,6 +196,8 @@ class ComposeFilterBar(Horizontal):
     def open_editor(self, column: int | None = None, text: str = "") -> None:
         if column is not None and self.is_mounted:
             self.column.value = column
+        text, is_pattern = split_pattern(text)
+        self.set_pattern(is_pattern=is_pattern)
         with self.value.prevent(Input.Changed):
             self.value.value = text
         self._mark_invalid(None)
@@ -191,11 +210,20 @@ class ComposeFilterBar(Horizontal):
 
     def close_editor(self) -> None:
         had_focus = self.value.has_focus
-        for widget in (self.column, self.value, self.add):
+        for widget in (self.column, self.pattern, self.value, self.add):
             widget.display = False
         self.add_filter.display = True
         if had_focus:
             self.add_filter.focus()
+
+    def is_pattern(self) -> bool:
+        """Tell whether the value is a regular expression: the toggle is on."""
+        return self.pattern.variant == "primary"
+
+    def set_pattern(self, *, is_pattern: bool) -> None:
+        self.pattern.variant = "primary" if is_pattern else "default"
+        if self.is_mounted:
+            self._show_placeholder()
 
     def is_editing(self) -> bool:
         return bool(self.value.display)
@@ -221,6 +249,8 @@ class ComposeFilterBar(Horizontal):
             self.open_editor()
         elif button is self.add:
             self._add()
+        elif button is self.pattern:
+            self.set_pattern(is_pattern=not self.is_pattern())
         elif button is self.clear:
             self.filters_cleared.emit()
         elif isinstance(button.parent, ComposeFilterChip):
@@ -238,23 +268,35 @@ class ComposeFilterBar(Horizontal):
         if not self.is_mounted:
             return
         self.chips.remove_children()
-        remove = self._texts.get("remove", "{header}")
-        self.chips.mount_all(
-            ComposeFilterChip(column, text, remove.format(header=header))
+        remove, edit = self._texts.get("remove", "{header}"), self._texts.get("edit", "{header}")
+        chips = [
+            ComposeFilterChip(
+                column, text, edit.format(header=header), remove.format(header=header)
+            )
             for column, text, _typed, header in self._filters
-        )
+        ]
+        self.chips.mount_all(chips)
+        for chip in chips:
+            if chip.column == self._focused_chip:
+                self.call_after_refresh(chip.open_button.focus)
+        self._focused_chip = None
 
     def _add(self) -> None:
         column = self.column.value
         if not isinstance(column, int):
             return
-        reason = self.check(column, self.value.value)
+        text = self.value.value
+        if self.is_pattern() and self.takes_pattern(column):
+            text = as_pattern(text)
+        reason = self.check(column, text)
         if reason is not None:
             self._mark_invalid(reason)
             return
-        text = self.value.value
         self.close_editor()
+        # its chip takes the focus: Enter opens it again
+        self._focused_chip = column
         self.filter_added.emit(column, text)
+        self._focused_chip = None
 
     def _mark_invalid(self, reason: str | None) -> None:
         self.value.set_class(reason is not None, "-invalid")
@@ -262,7 +304,13 @@ class ComposeFilterBar(Horizontal):
 
     def _show_placeholder(self) -> None:
         column = self.column.value
-        self.value.placeholder = self.placeholder(column) if isinstance(column, int) else ""
+        if not isinstance(column, int):
+            self.value.placeholder = ""
+            return
+        # a toggle only where a regular expression filters, while editing
+        takes_pattern = self.takes_pattern(column)
+        self.pattern.display = takes_pattern and bool(self.value.display)
+        self.value.placeholder = self.placeholder(column, takes_pattern and self.is_pattern())
 
 
 class ComposeFilterTable(Vertical):

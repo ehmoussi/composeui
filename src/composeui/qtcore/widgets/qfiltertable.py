@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from qtpy.QtCore import QMargins, QPoint, QRect, QSize, Qt, Signal
+from qtpy.QtCore import QMargins, QPoint, QRect, QSize, Qt, QTimer, Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
     QWidgetItem,
 )
 
+from composeui.core.view import as_pattern, split_pattern
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 if TYPE_CHECKING:
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
 
 #: a chip's remove button: a multiplication sign, as a close button often is
 REMOVE = "\u00d7"
+#: after a chip's text: a pencil, as its click edits the filter
+EDIT = "\u270e"
 #: the value field's style while what it holds can't filter, as a form's invalid field
 _INVALID_STYLE = "QLineEdit { border: 1px solid red; }"
 
@@ -111,13 +114,29 @@ class _ValueEdit(QLineEdit):
         super().keyPressEvent(event)
 
 
-class QFilterChip(QWidget):
-    """A filter, as its column's header then its text, opening it, and a button removing it."""
+class _ChipButton(QToolButton):
+    """A chip's text, which Enter clicks too, as Space does: the focus lands on a new one."""
 
-    def __init__(self, text: str, remove_text: str) -> None:
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.click()
+            return
+        super().keyPressEvent(event)
+
+
+class QFilterChip(QWidget):
+    """A filter, as its column's header then its text, opening it, and a button removing it.
+
+    The pencil after the text, the hand cursor and the tooltip say a click edits it.
+    """
+
+    def __init__(self, text: str, edit_text: str, remove_text: str) -> None:
         super().__init__()
-        self.open_button = QToolButton()
-        self.open_button.setText(text)
+        self.open_button = _ChipButton()
+        self.open_button.setText(f"{text} {EDIT}")
+        self.open_button.setAccessibleName(text)
+        self.open_button.setToolTip(edit_text)
+        self.open_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_button.setAutoRaise(True)
         self.remove_button = QToolButton()
         self.remove_button.setText(REMOVE)
@@ -137,7 +156,8 @@ class QFilterChip(QWidget):
 class QTableFilterBar(QWidget):
     """A table's filter bar: a search, the filters as chips and the count of rows shown.
 
-    "+ Filter" opens an editor in the bar, of a column, a value and an Add button: Enter
+    "+ Filter" opens an editor in the bar, of a column, a value and an Add button, and in
+    a text column a toggle (`pattern`) making the value a regular expression: Enter
     or Add adds the filter, unless `check` says why its value can't filter, marking the
     value field invalid; Escape closes it. Clicking a chip opens the editor on its
     filter, its remove button removes it. The signals emit only for the user: `search_edited` the
@@ -154,10 +174,14 @@ class QTableFilterBar(QWidget):
         super().__init__()
         #: why a column's text can't filter it, or None if it can
         self.check: Callable[[int, str], str | None] = lambda _column, _text: None
-        #: a hint at what filters a column
-        self.placeholder: Callable[[int], str] = lambda _column: ""
+        #: a hint at what filters a column, as a regular expression or not
+        self.placeholder: Callable[[int, bool], str] = lambda _column, _is_pattern: ""
+        #: whether a regular expression filters a column
+        self.takes_pattern: Callable[[int], bool] = lambda _column: False
         self._texts: dict[str, str] = {}
-        self._filters: list[tuple[int, str, str]] = []
+        self._filters: list[tuple[int, str, str, str]] = []
+        #: the column whose chip takes the focus once shown, its filter just added
+        self._focused_chip: int | None = None
         self.search = QLineEdit()
         self.search.setClearButtonEnabled(True)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView)
@@ -167,6 +191,10 @@ class QTableFilterBar(QWidget):
         self.add_filter.clicked.connect(self._open_new_editor)
         self.column = QComboBox()
         self.column.currentIndexChanged.connect(self._show_placeholder)
+        self.pattern = QToolButton()
+        self.pattern.setText(".*")
+        self.pattern.setCheckable(True)
+        self.pattern.toggled.connect(self._show_placeholder)
         self.value = _ValueEdit()
         self.value.returnPressed.connect(self._add)
         self.value.escaped.connect(self.close_editor)
@@ -178,7 +206,14 @@ class QTableFilterBar(QWidget):
         self.count = QLabel()
         self._chips: list[QFilterChip] = []
         self._layout = QFlowLayout(self)
-        for widget in (self.search, self.add_filter, self.column, self.value, self.add):
+        for widget in (
+            self.search,
+            self.add_filter,
+            self.column,
+            self.pattern,
+            self.value,
+            self.add,
+        ):
             self._layout.addWidget(widget)
         self._layout.addWidget(self.clear)
         self._layout.addWidget(self.count)
@@ -193,6 +228,8 @@ class QTableFilterBar(QWidget):
         self.add_filter.setText(texts.get("add_filter", ""))
         self.add.setText(texts.get("add", ""))
         self.clear.setText(texts.get("clear", ""))
+        self.pattern.setToolTip(texts.get("pattern", ""))
+        self.pattern.setAccessibleName(texts.get("pattern", ""))
         self.column.setAccessibleName(texts.get("column", ""))
         self.value.setAccessibleName(texts.get("value", ""))
         self.set_filters(self._filters)
@@ -213,17 +250,20 @@ class QTableFilterBar(QWidget):
         if self.search.text() != text:
             self.search.setText(text)
 
-    def set_filters(self, filters: list[tuple[int, str, str]]) -> None:
-        """Show each filter as a chip: its column, its chip's text and the text typed."""
+    def set_filters(self, filters: list[tuple[int, str, str, str]]) -> None:
+        """Show each filter as a chip: its column, the chip's text, the text typed, the header."""
         self._filters = filters
         for chip in self._chips:
             self._layout.removeWidget(chip)
             chip.deleteLater()
         self._chips = []
         position = self._layout.indexOf(self.clear)
-        for column, text, typed in filters:
-            header = text[: len(text) - len(typed)].strip()
-            chip = QFilterChip(text, self._texts.get("remove", "{header}").format(header=header))
+        for column, text, typed, header in filters:
+            chip = QFilterChip(
+                text,
+                self._texts.get("edit", "{header}").format(header=header),
+                self._texts.get("remove", "{header}").format(header=header),
+            )
             chip.open_button.clicked.connect(
                 lambda _checked=False, c=column, t=typed: self.open_editor(c, t)
             )
@@ -233,6 +273,10 @@ class QTableFilterBar(QWidget):
             self._layout.insert_widget(position, chip)
             position += 1
             self._chips.append(chip)
+            if column == self._focused_chip:
+                # once shown: the layout shows a widget it takes on the next pass
+                QTimer.singleShot(0, chip.open_button.setFocus)
+        self._focused_chip = None
         self.clear.setVisible(len(filters) >= 2)  # noqa: PLR2004
 
     @property
@@ -246,10 +290,13 @@ class QTableFilterBar(QWidget):
     def open_editor(self, column: int | None = None, text: str = "") -> None:
         if column is not None:
             self.column.setCurrentIndex(max(self.column.findData(column), 0))
+        text, is_pattern = split_pattern(text)
+        self.pattern.setChecked(is_pattern)
         self.value.setText(text)
         self._mark_invalid(None)
         for widget in (self.column, self.value, self.add):
             widget.setVisible(True)
+        self._show_placeholder()
         self.add_filter.setVisible(False)
         self.value.setFocus()
 
@@ -258,7 +305,7 @@ class QTableFilterBar(QWidget):
 
     def close_editor(self) -> None:
         had_focus = self.value.hasFocus()
-        for widget in (self.column, self.value, self.add):
+        for widget in (self.column, self.pattern, self.value, self.add):
             widget.setVisible(False)
         self.add_filter.setVisible(True)
         if had_focus:
@@ -272,12 +319,17 @@ class QTableFilterBar(QWidget):
         if not isinstance(column, int):
             return
         text = self.value.text()
+        if self.pattern.isChecked() and self.takes_pattern(column):
+            text = as_pattern(text)
         reason = self.check(column, text)
         if reason is not None:
             self._mark_invalid(reason)
             return
         self.close_editor()
+        # its chip takes the focus: Enter opens it again
+        self._focused_chip = column
         self.filter_added.emit(column, text)
+        self._focused_chip = None
 
     def _mark_invalid(self, reason: str | None) -> None:
         self.value.setStyleSheet(_INVALID_STYLE if reason is not None else "")
@@ -286,7 +338,14 @@ class QTableFilterBar(QWidget):
 
     def _show_placeholder(self) -> None:
         column = self.column.currentData()
-        self.value.setPlaceholderText(self.placeholder(column) if isinstance(column, int) else "")
+        if not isinstance(column, int):
+            self.value.setPlaceholderText("")
+            return
+        # a toggle only where a regular expression filters, while editing
+        takes_pattern = self.takes_pattern(column)
+        self.pattern.setVisible(takes_pattern and not self.value.isHidden())
+        is_pattern = takes_pattern and self.pattern.isChecked()
+        self.value.setPlaceholderText(self.placeholder(column, is_pattern))
 
 
 class QFilterTable(QWidget):
