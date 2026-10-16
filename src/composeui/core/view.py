@@ -1163,6 +1163,11 @@ class ChartView(View):
 
     _renderer_key = "chart"
 
+    def _check_height(self, _attribute: "attrs.Attribute[Any]", height: Optional[int]) -> None:
+        if height is not None and height <= 0:
+            msg = f"Cannot set {type(self).__name__}.height to {height}: it must be positive."
+            raise ValueError(msg)
+
     #: how its series are drawn, unless one says otherwise (`Series.kind`)
     kind: ChartKind = attrs.field(default=ChartKind.LINE)
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -1179,6 +1184,11 @@ class ChartView(View):
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed
     save_image_text: str = attrs.field(default=T("Save Image"), metadata={UI_TEXT: True})
+    #: its height on screen, in pixels (a terminal's rows of about 16), e.g. to keep a
+    #: shape's proportions; None: the backend's own. The app's layout, not a study's
+    height: Optional[int] = attrs.field(
+        default=None, validator=[_check_height], metadata={OMIT: True}
+    )
     #: the user clicked the chart at a point, as the axes' values (x, then y), e.g. to
     #: pick a curve's point; where the backend has a pointer: Qt and the web, not Textual
     clicked: Signal[float, float] = attrs.Factory(Signal[float, float])

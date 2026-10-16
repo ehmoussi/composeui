@@ -1242,3 +1242,16 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
     palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
     chart.setPalette(palette)
     assert oval.opts["pen"].color().name() == "#ffd700"  # the same in a dark theme
+
+
+def test_the_chart_is_as_tall_as_its_view_says(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    assert chart.height() > 250  # its share of the window's 700 pixels
+
+    view.chart.height = 250
+    qtbot.waitUntil(lambda: chart.height() == 250)
+    assert (chart.minimumHeight(), chart.maximumHeight()) == (250, 250)
+
+    view.chart.height = None  # as tall as the layout makes it again
+    assert (chart.minimumHeight(), chart.maximumHeight()) == (0, 16777215)
+    qtbot.waitUntil(lambda: chart.height() > 250)

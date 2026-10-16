@@ -107,6 +107,8 @@ class BatmanMainView(MainView):
     chart: ChartView = child(
         ChartView,
         title="Batman",
+        # tall enough for the logo's proportions, twice as wide as it is high
+        height=420,
         # the oval first: the bat is drawn over it
         series=[
             _outline("Upper Oval", ((-OVAL[0], OVAL[0], _oval),), YELLOW),

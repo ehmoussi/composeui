@@ -600,6 +600,7 @@ class ChartViewLike(ViewLike, Protocol):
     y_log: bool
     save_image_text: str
     clicked: Signal[float, float]
+    height: int | None
 
 
 #: the points a series sends at most, about twice a wide chart's pixels: a longer one is
@@ -690,6 +691,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "x_log",
                     "y_log",
                     "save_image_text",
+                    "height",
                 ),
                 self._mark_dirty,
             )
@@ -810,8 +812,15 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             f'<div class="flex w-full items-center gap-2">{caption}{self._save_image_html()}</div>'
             f'<div id="{self.widget_id}-plot" data-chart="{html.escape(self.chart_json())}"'
             f' role="img" aria-label="{html.escape(self._description())}"'
-            ' class="h-72 w-full"></div></figure>'
+            f"{self._height_attributes()}></div></figure>"
         )
+
+    def _height_attributes(self) -> str:
+        """Get the plot's height: the view's, or the page's own (the script fits it to it)."""
+        height = self._view.height
+        if height is None:
+            return ' class="h-72 w-full"'
+        return f' class="w-full" style="height: {int(height)}px"'
 
     def _save_image_html(self) -> str:
         """Get the figure's corner: its image's download, in a format picked beside it."""

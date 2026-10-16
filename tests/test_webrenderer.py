@@ -2942,3 +2942,18 @@ def test_a_series_sends_its_own_color_and_fill() -> None:
         ("#000000", True),
         ("#000000", True),
     ]
+
+
+def test_the_chart_s_plot_is_as_tall_as_its_view_says() -> None:
+    chart = ChartView(title="Pressure")
+    chart.render(RendererType.WEB)
+    assert isinstance(chart.renderer, WebChartRenderer)
+    plot_id = f"{_widget_id(chart.renderer)}-plot"
+    assert _element(chart.renderer.to_html(), plot_id).attributes["class"] == "h-72 w-full"
+
+    with collect_dirty() as dirty:
+        chart.height = 420
+        plot = _element(render_dirty(dirty), plot_id)  # the figure swapped, at its height
+
+    assert plot.attributes["style"] == "height: 420px"
+    assert plot.attributes["class"] == "w-full"

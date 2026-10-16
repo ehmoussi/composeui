@@ -1072,3 +1072,19 @@ def test_the_legend_stays_put_while_the_cursor_moves(chart_page: Page) -> None:
     assert first[0] == first[1] == first[2] == again[0]
     # trailing zeros kept: the same digits wherever the cursor is
     expect(legend).to_contain_text(re.compile(r"\d\.\d{3} L/s|\d{2}\.\d{2} L/s"))
+
+
+def test_the_plot_is_drawn_as_tall_as_the_chart_s_height(
+    browser: Browser, batman_base_url: str
+) -> None:
+    context = browser.new_context(base_url=batman_base_url)
+    page = context.new_page()
+    page.goto("/")
+
+    canvas = page.locator("figure canvas")
+    expect(canvas).to_have_count(1)
+    # the plot's element, its axes in it with the canvas
+    box = page.locator("[data-chart]").bounding_box()
+    assert box is not None
+    assert box["height"] == 420
+    context.close()

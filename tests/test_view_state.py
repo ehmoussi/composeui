@@ -207,6 +207,13 @@ def test_a_series_color_is_given_as_rrggbb() -> None:
             Series(name="Oval", x=[0], y=[0], color=color)
 
 
+def test_a_chart_s_height_is_positive_and_not_a_study_s() -> None:
+    chart = ChartView(height=300)
+    with pytest.raises(ValueError, match="positive"):
+        chart.height = 0
+    assert "height" not in CONVERTER.unstructure(chart)  # the app's layout
+
+
 def test_an_axis_label_shows_its_unit() -> None:
     assert ChartView.axis_label("Time", "s") == "Time (s)"
     assert ChartView.axis_label("Time", "") == "Time"
