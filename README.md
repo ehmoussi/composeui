@@ -480,9 +480,13 @@ sortable=True, filterable=True)` (on a `TableView`, `sortable_columns` and
 `filterable_columns` list them). Clicking a sortable header sorts by it, ascending, then
 descending, then back in the app's order. While a column is filterable, a bar above the
 table has a search over the filterable columns' text, and "+ Filter", adding a filter on
-a column, shown as a chip:
+a column, shown as a chip, which a click (or Enter, the focus landing on it) opens to edit:
 
-- in a text column, the cells containing the text, ignoring case;
+- in a text column, ignoring case: the cells containing the text, or `=kitchen` equal to
+  it, `!=kitchen` not equal, `!kit` not containing it, `kit*` starting with it, `*en`
+  ending with it; with the editor's `.*` toggle on, the cells matching a regular
+  expression, e.g. `Room [1-3]` (the chip reads "Room matches Room [1-3]"; the app sets
+  one as `as_pattern("Room [1-3]")`, between slashes);
 - in a number or a date column, `>20`, `>=20`, `<20`, `<=20`, `!=20`, a range `18..24`
   (both ends included), or a bare value meaning `=`;
 - in a boolean column, `true` or `false`;

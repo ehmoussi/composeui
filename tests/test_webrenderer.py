@@ -3071,10 +3071,13 @@ def test_the_filter_editor_adds_a_filter_as_a_chip_or_says_why_it_can_t(
     assert table.filters == {1: ">=20"}
     assert sorted_rooms.shown(body) == sorted_rooms.row_ids(1, 3)
     bar = _swapped(body, f"{table_id}-bar")
-    # the editor closed, "+ Filter" taking the focus back
+    # the editor closed, the filter's chip taking the focus: it edits the filter
     assert _find(body, value_id) is None
-    assert "autofocus" in _element(body, f"{table_id}-add-filter").attributes
-    assert "Temperature >=20" in bar.text
+    chip = _element(body, f"{table_id}-chip-1")
+    assert chip.text == "Temperature: >=20"
+    assert chip.attributes["title"] == "Edit the filter on Temperature"
+    assert "autofocus" in chip.attributes
+    assert "autofocus" not in _element(body, f"{table_id}-add-filter").attributes
     labels = [attributes.get("aria-label") for tag, attributes in bar.descendants]
     assert "Remove the filter on Temperature" in labels
 
@@ -3099,6 +3102,43 @@ def test_the_filter_editor_adds_a_filter_as_a_chip_or_says_why_it_can_t(
         f"/widget/{table_id}", data={"event": "sort", "column": "0"}
     )
     assert response.status_code == 400
+
+
+def test_the_filter_editor_s_toggle_makes_the_value_a_regular_expression(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    table, table_id = sorted_rooms.view.rooms, sorted_rooms.table_id
+
+    def toggle(markup: str) -> tuple[dict[str, str | None], dict[str, str | None]]:
+        """Get the toggle's label and its checkbox."""
+        tags = _element(markup, f"{table_id}-editor").descendants
+        label = next(attributes for tag, attributes in tags if "data-filter-pattern" in attributes)
+        box = next(attributes for tag, attributes in tags if attributes.get("name") == "pattern")
+        return label, box
+
+    label, box = toggle(sorted_rooms.post("open_editor"))  # the first column, text
+    assert "hidden" not in label
+    assert (box["type"], box["aria-label"]) == ("checkbox", "Regular expression")
+    # a number column takes comparisons: the page hides the toggle for it
+    label, _ = toggle(sorted_rooms.post("open_editor", column="1"))
+    assert "hidden" in label
+
+    body = sorted_rooms.post("add_filter", column="0", value="^(hall|attic)$", pattern="1")
+    assert table.filters == {0: "/^(hall|attic)$/"}
+    assert sorted_rooms.shown(body) == sorted_rooms.row_ids(0, 2)
+    assert _element(body, f"{table_id}-chip-0").text == "Room matches ^(hall|attic)$"
+    # reopened: the toggle on, the pattern as typed
+    body = sorted_rooms.post("open_editor", column="0")
+    _, box = toggle(body)
+    assert "checked" in box
+    assert _element(body, f"{table_id}-value").attributes["value"] == "^(hall|attic)$"
+    # a pattern that doesn't compile is refused, saying why; a number column takes none
+    body = sorted_rooms.post("add_filter", column="0", value="(hall", pattern="1")
+    assert _swapped(body, f"{table_id}-value-error").text == (
+        '"(hall" isn\'t a valid regular expression'
+    )
+    sorted_rooms.post("add_filter", column="1", value=">=20", pattern="1")
+    assert table.filters == {0: "/^(hall|attic)$/", 1: ">=20"}
 
 
 def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(

@@ -1139,7 +1139,7 @@ def test_typing_in_a_table_s_search_keeps_the_caret_while_its_rows_update(
     expect(search).to_have_js_property("selectionStart", 2)
 
 
-def test_the_filter_editor_marks_a_value_it_can_t_take_and_gives_the_focus_back_once_added(
+def test_the_filter_editor_marks_a_value_it_can_t_take_and_focuses_the_chip_it_adds(
     rooms_page: Page,
 ) -> None:
     page = rooms_page
@@ -1164,19 +1164,22 @@ def test_the_filter_editor_marks_a_value_it_can_t_take_and_gives_the_focus_back_
     with _posted(page):
         value.press_sequentially(">=20")
         value.press("Enter")
-    expect(page.get_by_role("button", name="Temperature >=20")).to_be_visible()
+    chip = page.get_by_role("button", name="Temperature: >=20")
     expect(page.get_by_role("row").filter(has_text="Hall")).to_have_count(0)
-    expect(add_filter).to_be_focused()
-
-    # Escape closes the editor, adding nothing, the focus back on "+ Filter" too
+    # the filter's chip has the focus: Enter opens it again
+    expect(chip).to_be_focused()
     with _posted(page):
-        add_filter.click()
-    # focused once the swap has settled, its triggers bound
+        page.keyboard.press("Enter")
+    expect(value).to_have_value(">=20")
+
+    # Escape closes the editor, changing nothing, the focus on "+ Filter"; focused once
+    # the swap has settled, its triggers bound
     expect(value).to_be_focused()
     with _posted(page):
         value.press("Escape")
-    expect(page.get_by_label("Value")).to_have_count(0)
+    expect(value).to_have_count(0)
     expect(add_filter).to_be_focused()
+    expect(chip).to_be_visible()
 
 
 def test_a_table_s_body_swapped_with_another_table_leaves_that_one_whole(
@@ -1195,3 +1198,28 @@ def test_a_table_s_body_swapped_with_another_table_leaves_that_one_whole(
     expect(page.get_by_role("cell", name="0 selected")).to_be_visible()
     expect(page.get_by_role("columnheader", name="Note")).to_be_visible()
     expect(page.get_by_role("row").filter(has_text="Bedroom")).to_have_count(1)
+
+
+def test_the_filter_editor_s_toggle_shows_for_text_and_hints_at_a_pattern(
+    rooms_page: Page,
+) -> None:
+    page = rooms_page
+    page.goto("/")
+    with _posted(page):
+        page.get_by_role("button", name="+ Filter").click()
+    value, pattern = page.get_by_label("Value"), page.get_by_label("Regular expression")
+    expect(value).to_have_attribute("placeholder", "contains, =exact, start*, !not")
+    page.get_by_title("Regular expression").click()  # the button drawing the checkbox
+    expect(pattern).to_be_checked()
+    expect(value).to_have_attribute("placeholder", "a regular expression, as Room [1-3]")
+    # a number column takes comparisons, not a pattern
+    page.get_by_label("Column").select_option(label="Temperature")
+    expect(page.get_by_title("Regular expression")).to_be_hidden()
+    expect(value).to_have_attribute("placeholder", ">=20, 18..24")
+    page.get_by_label("Column").select_option(label="Room")
+    with _posted(page):
+        value.press_sequentially("^(hall|attic)$")
+        value.press("Enter")
+    expect(page.get_by_role("button", name="Room matches ^(hall|attic)$")).to_be_focused()
+    expect(page.get_by_role("row").filter(has_text="kitchen")).to_have_count(0)
+    expect(page.get_by_role("row").filter(has_text="Attic")).to_have_count(1)

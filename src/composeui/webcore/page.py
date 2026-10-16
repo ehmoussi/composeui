@@ -517,12 +517,19 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
 });
-/* a table's filter editor: its value's placeholder hints at what filters the column picked */
+/* a table's filter editor: its regular expression toggle shows only for a column a
+   pattern filters, and the value's placeholder hints at what filters the column picked */
 document.addEventListener("change", function (event) {
-  var select = event.target;
-  if (!("filterColumn" in select.dataset)) return;
-  var value = select.form.querySelector('[name="value"]');
-  value.placeholder = select.selectedOptions[0].dataset.placeholder;
+  var form = event.target.form;
+  if (!form || form.querySelector("[data-filter-column]") === null) return;
+  var option = form.querySelector("[data-filter-column]").selectedOptions[0];
+  var toggle = form.querySelector("[data-filter-pattern]");
+  var patternHint = option.dataset.patternPlaceholder;
+  toggle.hidden = patternHint === "";
+  var isPattern = patternHint !== "" && toggle.querySelector("input").checked;
+  form.querySelector('[name="value"]').placeholder = isPattern
+    ? patternHint
+    : option.dataset.placeholder;
 });
 /* the page's language, for screen readers and the browser's spell checker, and its
    title: the server swaps in its marker when the app changes them (see `page_marker`) */

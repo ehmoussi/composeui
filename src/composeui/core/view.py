@@ -1318,6 +1318,8 @@ class FilterProblem(enum.Enum):
     NOT_A_BOOLEAN = enum.auto()
     #: a range whose start is after its end
     REVERSED_RANGE = enum.auto()
+    #: not a valid regular expression, for a text column's ``/pattern/``
+    NOT_A_PATTERN = enum.auto()
 
 
 class FilterError(ValueError):
@@ -1333,6 +1335,12 @@ class FilterOperator(enum.Enum):
     """How a filter compares a cell with its value."""
 
     CONTAINS = "contains"
+    NOT_CONTAINS = "!"
+    TEXT_EQUAL = "=text"
+    TEXT_NOT_EQUAL = "!=text"
+    STARTS_WITH = "start*"
+    ENDS_WITH = "*end"
+    MATCHES = "/regex/"
     EMPTY = "empty"
     EQUAL = "="
     NOT_EQUAL = "!="
@@ -1365,12 +1373,25 @@ _COMPARE: Mapping[FilterOperator, Callable[[Any, Any], Any]] = {
 }
 
 
+#: each text comparison, as a function of the filter's value and a cell's text
+_TEXT_MATCHES: Mapping[FilterOperator, Callable[[Any, str], Any]] = {
+    FilterOperator.CONTAINS: lambda value, text: value in text.casefold(),
+    FilterOperator.NOT_CONTAINS: lambda value, text: value not in text.casefold(),
+    FilterOperator.TEXT_EQUAL: lambda value, text: text.casefold() == value,
+    FilterOperator.TEXT_NOT_EQUAL: lambda value, text: text.casefold() != value,
+    FilterOperator.STARTS_WITH: lambda value, text: text.casefold().startswith(value),
+    FilterOperator.ENDS_WITH: lambda value, text: text.casefold().endswith(value),
+    FilterOperator.MATCHES: lambda value, text: value.search(text) is not None,
+}
+
+
 @attrs.frozen
 class Filter:
     """A column's filter, parsed from the text the user typed (see `parse_filter`)."""
 
     operator: FilterOperator
-    #: the text a cell contains (casefolded), or the value a cell's is compared with
+    #: the text a cell is compared with (casefolded), a compiled regular expression, or
+    #: the value a cell's is compared with
     value: Any = None
     #: a range's end
     upper: Any = None
@@ -1379,8 +1400,8 @@ class Filter:
         """Tell whether a cell passes: its value (its text in a text column) and its text."""
         if self.operator is FilterOperator.EMPTY:
             return value is None or text == ""
-        if self.operator is FilterOperator.CONTAINS:
-            return bool(self.value in text.casefold())
+        if self.operator in _TEXT_MATCHES:
+            return bool(_TEXT_MATCHES[self.operator](self.value, text))
         if value is None:
             return False
         try:
@@ -1439,11 +1460,54 @@ def _parse_value(text: str, field_type: Any, kind: ColumnKind) -> Any:
         raise FilterError(problems[kind], text) from error
 
 
+def as_pattern(text: str) -> str:
+    """Write a regular expression as a text column's filter: between slashes."""
+    return f"/{text}/"
+
+
+def split_pattern(text: str) -> tuple[str, bool]:
+    """Get a filter's text without its slashes, and whether it's a regular expression.
+
+    The user writes a pattern without them, a toggle saying it is one (see `as_pattern`).
+    """
+    is_pattern = len(text) >= 2 and text.startswith("/") and text.endswith("/")  # noqa: PLR2004
+    return (text[1:-1], True) if is_pattern else (text, False)
+
+
+def _parse_text(text: str) -> Filter:
+    """Parse a text column's filter, its text stripped and neither empty nor ``=``.
+
+    A regular expression (`as_pattern`) searches the cells (ignoring case), ``=kitchen``
+    keeps the cells equal to the text and ``!=kitchen`` the others, ``!kit`` the cells not
+    containing it, ``kit*`` those starting with it and ``*en`` those ending with it. Else
+    the cells containing it.
+    """
+    pattern, is_pattern = split_pattern(text)
+    if is_pattern:
+        try:
+            return Filter(FilterOperator.MATCHES, re.compile(pattern, re.IGNORECASE))
+        except re.error as error:
+            raise FilterError(FilterProblem.NOT_A_PATTERN, pattern) from error
+    for prefix, comparison in (
+        ("!=", FilterOperator.TEXT_NOT_EQUAL),
+        ("=", FilterOperator.TEXT_EQUAL),
+        ("!", FilterOperator.NOT_CONTAINS),
+    ):
+        if text.startswith(prefix) and len(text) > len(prefix):
+            return Filter(comparison, text[len(prefix) :].strip().casefold())
+    if len(text) > 1 and text.endswith("*") and not text.startswith("*"):
+        return Filter(FilterOperator.STARTS_WITH, text[:-1].casefold())
+    if len(text) > 1 and text.startswith("*") and not text.endswith("*"):
+        return Filter(FilterOperator.ENDS_WITH, text[1:].casefold())
+    return Filter(FilterOperator.CONTAINS, text.strip("*").casefold())
+
+
 def parse_filter(text: str, field_type: Any = str) -> Filter:
     """Parse a filter's text for a column showing a field of `field_type`.
 
-    In a text column, the cells containing the text, ignoring case. In a number or a date
-    column, a comparison (``>20``, ``>=20``, ``<20``, ``<=20``, ``!=20``), a range
+    In a text column, ignoring case: the cells containing the text, or as `_parse_text`
+    says (``=exact``, ``!=exact``, ``!not``, ``start*``, ``*end``, ``/regex/``). In a number
+    or a date column, a comparison (``>20``, ``>=20``, ``<20``, ``<=20``, ``!=20``), a range
     (``18..24``, both ends included) or a bare value, meaning ``=``. In a boolean column,
     ``true`` or ``false``. In any column, ``=`` alone: the empty cells. Raise
     `FilterError` when the text doesn't parse.
@@ -1455,7 +1519,7 @@ def parse_filter(text: str, field_type: Any = str) -> Filter:
         return Filter(FilterOperator.EMPTY)
     kind = column_kind(field_type)
     if kind is ColumnKind.TEXT:
-        return Filter(FilterOperator.CONTAINS, text.casefold())
+        return _parse_text(text)
     if kind is ColumnKind.BOOLEAN:
         return Filter(FilterOperator.EQUAL, _parse_value(text, field_type, kind))
     for comparison in _COMPARISONS:
@@ -1486,6 +1550,10 @@ FILTER_TEXTS: Mapping[str, str] = {
     "count": T("{shown} of {total}"),
     "no_match": T("No rows match the filters"),
     "remove": T("Remove the filter on {header}"),
+    "edit": T("Edit the filter on {header}"),
+    "chip": T("{header}: {filter}"),
+    "chip_pattern": T("{header} matches {filter}"),
+    "pattern": T("Regular expression"),
 }
 
 
@@ -1690,26 +1758,42 @@ class TableMixin:
                 FilterProblem.NOT_A_DATE: tr('"{text}" isn\'t a date, as 2024-01-31'),
                 FilterProblem.NOT_A_BOOLEAN: tr('"{text}" isn\'t true or false'),
                 FilterProblem.REVERSED_RANGE: tr("The range's start is after its end"),
+                FilterProblem.NOT_A_PATTERN: tr('"{text}" isn\'t a valid regular expression'),
             }
             return messages[error.problem].format(text=error.text)
         return None
 
-    def filter_placeholder(self, column: int) -> str:
-        """Hint at what filters `column`, translated."""
+    def filter_takes_pattern(self, column: int) -> bool:
+        """Tell whether a regular expression filters `column`: a text column."""
+        return column_kind(self._column_type(column)) is ColumnKind.TEXT
+
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
+        """Hint at what filters `column`, translated: a regular expression, or else text."""
         kind = column_kind(self._column_type(column))
         tr = cast("View", self).tr
+        if is_pattern and kind is ColumnKind.TEXT:
+            return tr("a regular expression, as Room [1-3]")
         if kind is ColumnKind.NUMBER:
             return tr(">=20, 18..24")
         if kind is ColumnKind.DATE:
             return tr(">=2024-01-31")
         if kind is ColumnKind.BOOLEAN:
             return tr("true or false")
-        return tr("contains…")
+        return tr("contains, =exact, start*, !not")
 
     def filter_chip(self, column: int) -> str:
-        """Show a filter as its chip does: its column's header, then the text typed."""
+        """Show a filter as its chip does: its column's header, then the text typed.
+
+        Apart, as a label and its value: the header isn't part of what's typed. A regular
+        expression without its slashes: "Room matches Room [1-3]".
+        """
         header = self.headers[column] if column < len(self.headers) else ""
-        return f"{header} {self.filters[column]}".strip()
+        text, is_pattern = split_pattern(self.filters[column])
+        if is_pattern and self.filter_takes_pattern(column):
+            chip = self.filter_texts.get("chip_pattern", "{header} {filter}")
+        else:
+            chip, text = self.filter_texts.get("chip", "{header}: {filter}"), self.filters[column]
+        return chip.format(header=header, filter=text)
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None:
         """Emit `cell_edited` for the user's edit, `rows` still holding the old text.
