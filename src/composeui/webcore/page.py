@@ -85,7 +85,23 @@ function chartOptions(element, spec, width) {
       element, "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")"
     );
     var options = { label: series.name, stroke: color, value: chartValue(spec.y.unit) };
-    if (series.kind === "scatter") {
+    if (series.kind === "bar") {
+      // its bar in each category's group, by its left edge: offsets from the server
+      function lefts(chart) {
+        return chart.data[0].map(function (x) { return x + series.offset - series.width / 2; });
+      }
+      function widths(chart) {
+        return chart.data[0].map(function () { return series.width; });
+      }
+      options.paths = uPlot.paths.bars({
+        disp: { x0: { unit: 1, values: lefts }, size: { unit: 1, values: widths } },
+      });
+      options.fill = color;
+      // a line of the background between neighbouring bars
+      options.stroke = background;
+      options.width = 1;
+      options.points = { show: false };
+    } else if (series.kind === "scatter") {
       // dots alone, ringed with the background: overlapping ones stay apart
       options.paths = function () { return null; };
       options.points = { show: true, size: 8, fill: color, stroke: background, width: 1 };
@@ -98,12 +114,37 @@ function chartOptions(element, spec, width) {
     }
     return options;
   });
+  // no title: no name, rather than uPlot's "Value"
+  var x = { label: spec.x.label || " ", value: chartValue(spec.x.unit) };
+  var scales = { x: { time: false } };
+  var axes = [axis(spec.x), axis(spec.y)];
+  if ("categories" in spec) {
+    // a category's index stands for its name; the bars stand on 0
+    var categories = spec.categories;
+    var name = function (chart, index) {
+      return index === null || index === undefined ? "-" : categories[index] || "";
+    };
+    x = { label: x.label, value: name };
+    scales.x.range = function () { return [-0.5, categories.length - 0.5]; };
+    scales.y = {
+      range: function (chart, min, max) {
+        return uPlot.rangeNum(Math.min(0, min), Math.max(0, max), 0.1, true);
+      },
+    };
+    axes[0].splits = function () {
+      return categories.map(function (_, index) { return index; });
+    };
+    axes[0].values = function (chart, splits) {
+      return splits.map(function (split) { return name(chart, split); });
+    };
+    axes[0].grid = { show: false };
+  }
   return {
     width: width,
     height: element.clientHeight,
-    scales: { x: { time: false } },
-    axes: [axis(spec.x), axis(spec.y)],
-    series: [{ label: spec.x.label, value: chartValue(spec.x.unit) }].concat(series),
+    scales: scales,
+    axes: axes,
+    series: [x].concat(series),
     // under the plot, out of its element: the element's height is the plot's
     legend: {
       mount: function (chart, legend) {

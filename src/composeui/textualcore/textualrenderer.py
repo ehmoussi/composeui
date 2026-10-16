@@ -719,6 +719,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_unit: str
     y_unit: str
     series: list[Series]
+    categories: list[str]
 
 
 class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
@@ -733,6 +734,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "y_title": self._refresh_y_title,
                 "y_unit": self._refresh_y_unit,
                 "series": self._refresh_series,
+                "categories": self._refresh_categories,
             }
         )
 
@@ -778,6 +780,13 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[Series]
     ) -> None:
         rendered_object.series = value
+        rendered_object.replot()
+
+    @staticmethod
+    def _refresh_categories(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: list[str]
+    ) -> None:
+        rendered_object.categories = value
         rendered_object.replot()
 
     @staticmethod

@@ -90,6 +90,7 @@ from examples import pipeform
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.pages import InputsPage, PagesMainView
@@ -2770,3 +2771,23 @@ def test_the_server_compresses_what_it_sends(client: TestClient) -> None:
     response = client.get("/static/app.css", headers={"Accept-Encoding": "gzip"})
 
     assert response.headers["Content-Encoding"] == "gzip"
+
+
+def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    energy = main_view.router.chart.energy
+    assert isinstance(energy.renderer, WebChartRenderer)
+
+    markup = energy.renderer.to_html()
+
+    spec = _chart_spec(markup, energy)
+    assert spec["categories"] == ["Kitchen", "Bedroom", "Office"]
+    # x, the categories' indexes; no cooling in the bedroom
+    assert spec["data"] == [[0, 1, 2], [120, 80, 95], [30, None, 45]]
+    assert spec["series"] == [
+        {"name": "Heating", "kind": "bar", "offset": pytest.approx(-0.2), "width": 0.4},
+        {"name": "Cooling", "kind": "bar", "offset": pytest.approx(0.2), "width": 0.4},
+    ]
+    plot = _element(markup, f"{_widget_id(energy.renderer)}-plot")
+    assert plot.attributes["aria-label"] == "Energy: Heating, Cooling for Kitchen, Bedroom, Office"

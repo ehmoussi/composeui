@@ -839,7 +839,7 @@ def test_the_chart_script_loads_only_once_a_chart_shows(page: Page, chart_pages_
     chart_pages_page.goto("/notes")
     chart_pages_page.wait_for_function("typeof uPlot !== 'undefined'")
     # its page hidden: no width to draw at yet
-    figure = chart_pages_page.locator("figure")
+    figure = chart_pages_page.locator("figure").filter(has_text="Pressure")
     expect(figure.locator("canvas")).to_have_count(0)
 
     chart_pages_page.get_by_role("link", name="Chart").click()
@@ -921,3 +921,19 @@ def test_measurements_are_drawn_as_dots_over_the_curve(chart_page: Page) -> None
         " })()"
     )
     assert drawn == [[False, True], [True, False]]
+
+
+def test_a_bar_chart_draws_its_bars_by_category(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    energy = chart_pages_page.locator("figure").filter(has_text="Energy")
+    expect(energy.locator("canvas")).to_have_count(1)
+    expect(energy.locator(".u-legend")).to_contain_text("Cooling")
+
+    box = energy.locator(".u-over").bounding_box()
+    assert box is not None
+    # the middle of the bedroom's group: its heating bar, and no cooling
+    chart_pages_page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+    legend = energy.locator(".u-legend")
+    expect(legend).to_contain_text("Bedroom")
+    expect(legend).to_contain_text("80 kWh")

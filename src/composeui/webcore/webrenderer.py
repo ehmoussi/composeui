@@ -594,6 +594,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_unit: str
     y_unit: str
     series: list[Series]
+    categories: list[str]
 
 
 #: the points a series sends at most, about twice a wide chart's pixels: a longer one is
@@ -651,7 +652,16 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             dict.fromkeys(
-                ("kind", "title", "x_title", "y_title", "x_unit", "y_unit", "series"),
+                (
+                    "kind",
+                    "title",
+                    "x_title",
+                    "y_title",
+                    "x_unit",
+                    "y_unit",
+                    "series",
+                    "categories",
+                ),
                 self._mark_dirty,
             )
         )
@@ -659,7 +669,6 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
     def chart_json(self) -> str:
         """Get what the page's script draws, as JSON."""
         view = self._view
-        points = [_chart_points(series) for series in view.series]
         x_unit, y_unit = view.x_unit, view.y_unit
         spec: dict[str, Any] = {
             "x": {"label": ChartView.axis_label(view.x_title, x_unit), "unit": x_unit},
@@ -669,6 +678,10 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                 for series in view.series
             ],
         }
+        if view.kind is ChartKind.BAR:
+            self._add_bars(spec)
+            return json.dumps(spec, allow_nan=False, separators=(",", ":"))
+        points = [_chart_points(series) for series in view.series]
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y
             spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]
@@ -677,12 +690,32 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             spec["pairs"] = [[x, [_json_number(v) for v in y]] for x, y in points]
         return json.dumps(spec, allow_nan=False, separators=(",", ":"))
 
+    def _add_bars(self, spec: dict[str, Any]) -> None:
+        """Add a bar chart's categories, and its bars: their heights, offsets and widths."""
+        view = self._view
+        count = len(view.categories)
+        spec["categories"] = view.categories
+        # x, the categories' indexes, shared; each series' height in each of them
+        spec["data"] = [
+            list(range(count)),
+            *(
+                [_json_number(height) for height in ChartView.bar_heights(series, count)]
+                for series in view.series
+            ),
+        ]
+        for index, series_spec in enumerate(spec["series"]):
+            offset, width = ChartView.bar_slot(index, len(view.series))
+            series_spec.update({"offset": offset, "width": width})
+
     def _description(self) -> str:
         """Describe the chart to a screen reader, which can't read its canvas."""
         view = self._view
         names = ", ".join(series.name for series in view.series)
-        x_label = ChartView.axis_label(view.x_title, view.x_unit)
-        description = f"{names} against {x_label}" if names and x_label else names or x_label
+        if view.kind is ChartKind.BAR:
+            x_label, link = ", ".join(view.categories), "for"
+        else:
+            x_label, link = ChartView.axis_label(view.x_title, view.x_unit), "against"
+        description = f"{names} {link} {x_label}" if names and x_label else names or x_label
         return f"{view.title}: {description}" if view.title and description else view.title
 
     def to_html(self, *, oob: bool = False) -> str:
