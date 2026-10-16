@@ -11,6 +11,7 @@ from qtpy.QtCore import QEvent, QPointF
 from qtpy.QtGui import QColor, QPalette
 
 from composeui.core.chartcolors import is_dashed, series_color
+from composeui.core.view import ChartKind, ChartView
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 _HOVER_RATE = 30
 #: the lightness (of 255) under which a background is dark
 _DARK_LIGHTNESS = 128
+#: a scatter's dots, in pixels
+_DOT_SIZE = 8
 
 
 def _format(value: float, unit: str) -> str:
@@ -39,6 +42,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._series: list[Series] = []
+        self._kind = ChartKind.LINE
         self._units = ("", "")
         self._items: list[pg.PlotDataItem] = []
         plot = self.getPlotItem()
@@ -68,6 +72,11 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         x_unit, y_unit = self._units
         self._units = (unit, y_unit) if axis == "bottom" else (x_unit, unit)
 
+    def set_kind(self, kind: ChartKind) -> None:
+        """Draw the series as `kind`, unless they say otherwise (`Series.kind`)."""
+        self._kind = kind
+        self._apply_styles()
+
     def set_series(self, series: list[Series]) -> None:
         """Show `series`, reusing the curves drawn: the zoom stays where the user put it."""
         self._series = series
@@ -79,7 +88,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         for item, curve in zip(self._items, series):
             item.setData(np.asarray(curve.x, dtype=float), np.asarray(curve.y, dtype=float))
             item.opts["name"] = curve.name
-        self._apply_colors()
+        self._apply_styles()
         self._hover.setVisible(False)
         self._crosshair.setVisible(False)
 
@@ -114,13 +123,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         crosshair = QColor(text)
         crosshair.setAlpha(120)
         self._crosshair.setPen(pg.mkPen(crosshair))
-        self._apply_colors()
+        self._apply_styles()
 
-    def _apply_colors(self) -> None:
+    def _apply_styles(self) -> None:
         is_dark = self._is_dark()
-        for index, item in enumerate(self._items):
-            style = {"dash": [6, 4]} if is_dashed(index) else {}
-            item.setPen(pg.mkPen(series_color(index, is_dark=is_dark), width=2, **style))
+        background = self.palette().color(QPalette.ColorRole.Window)
+        for index, (item, curve) in enumerate(zip(self._items, self._series)):
+            color = series_color(index, is_dark=is_dark)
+            if ChartView.kind_of(curve, self._kind) is ChartKind.SCATTER:
+                item.setPen(None)
+                # past the palette, around again as triangles
+                item.setSymbol("t" if is_dashed(index) else "o")
+                item.setSymbolSize(_DOT_SIZE)
+                item.setSymbolBrush(color)
+                # a ring of the background: overlapping dots stay apart
+                item.setSymbolPen(pg.mkPen(background, width=1))
+            else:
+                item.setSymbol(None)
+                style = {"dash": [6, 4]} if is_dashed(index) else {}
+                item.setPen(pg.mkPen(color, width=2, **style))
         # the legend's samples draw the pens their curves had when added
         self._legend.clear()
         for item, curve in zip(self._items, self._series):

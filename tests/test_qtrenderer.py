@@ -44,6 +44,7 @@ from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
+    ChartKind,
     DialogKind,
     EditRefusedError,
     LabelView,
@@ -1021,3 +1022,21 @@ def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
     assert curve.opts["pen"].color().name() == SERIES_COLORS[True][0]
     assert chart.backgroundBrush().color().name() == "#202020"
     assert chart.getPlotItem().getAxis("left").textPen().color().name() == "#f0f0f0"
+
+
+def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.add_curve()
+    view.add_measurements()
+    model, measured = chart.getPlotItem().listDataItems()
+
+    assert model.opts["symbol"] is None
+    assert model.opts["pen"].color().name() == SERIES_COLORS[False][0]
+    assert measured.opts["pen"].style() == Qt.PenStyle.NoPen
+    assert measured.opts["symbol"] == "o"
+    assert measured.opts["symbolBrush"].color().name() == SERIES_COLORS[False][1]
+    assert chart.legend_names() == ["D = 50 mm", "Measured, D = 50 mm"]
+
+    view.chart.kind = ChartKind.SCATTER  # the series without a kind of their own follow
+    assert model.opts["symbol"] == "o"
+    assert model.opts["pen"].style() == Qt.PenStyle.NoPen

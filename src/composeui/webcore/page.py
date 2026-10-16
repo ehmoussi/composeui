@@ -57,7 +57,9 @@ function resolveColor(element, color) {
   probe.remove();
   return resolved;
 }
-var SERIES_COLORS = ["primary", "secondary", "accent", "info", "success", "warning", "error"];
+/* the theme's colors, ordered so neighbours differ in hue: primary and secondary alike
+   are blue to violet */
+var SERIES_COLORS = ["primary", "warning", "accent", "secondary", "success", "info", "error"];
 function chartValue(unit) {
   return function (chart, value) {
     if (value === null || value === undefined) return "-";
@@ -66,6 +68,7 @@ function chartValue(unit) {
 }
 function chartOptions(element, spec, width) {
   var ink = resolveColor(element, "var(--color-base-content)");
+  var background = resolveColor(element, "var(--color-base-100)");
   var faint = resolveColor(
     element, "color-mix(in oklch, var(--color-base-content) 12%, transparent)"
   );
@@ -78,17 +81,22 @@ function chartOptions(element, spec, width) {
     };
   }
   var series = spec.series.map(function (series, index) {
-    var color = "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")";
-    return {
-      label: series.name,
-      stroke: resolveColor(element, color),
-      width: 2,
+    var color = resolveColor(
+      element, "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")"
+    );
+    var options = { label: series.name, stroke: color, value: chartValue(spec.y.unit) };
+    if (series.kind === "scatter") {
+      // dots alone, ringed with the background: overlapping ones stay apart
+      options.paths = function () { return null; };
+      options.points = { show: true, size: 8, fill: color, stroke: background, width: 1 };
+    } else {
+      options.width = 2;
       // past the theme's colors, around again dashed
-      dash: index < SERIES_COLORS.length ? undefined : [6, 4],
-      spanGaps: false,
-      points: { show: false },
-      value: chartValue(spec.y.unit),
-    };
+      options.dash = index < SERIES_COLORS.length ? undefined : [6, 4];
+      options.spanGaps = false;
+      options.points = { show: false };
+    }
+    return options;
   });
   return {
     width: width,

@@ -903,3 +903,21 @@ def test_the_chart_follows_its_element_s_width(chart_page: Page) -> None:
     assert plot is not None
     assert narrow is not None
     assert narrow["width"] <= plot["width"]
+
+
+def test_measurements_are_drawn_as_dots_over_the_curve(chart_page: Page) -> None:
+    chart_page.goto("/")
+    chart_page.get_by_role("button", name="Add Curve").click()
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
+
+    chart_page.get_by_role("button", name="Add Measurements").click()
+
+    expect(chart_page.locator(".u-legend")).to_contain_text("Measured, D = 50 mm")
+    # whether uPlot draws each series' points, and its line
+    drawn = chart_page.evaluate(
+        "(() => { const chart = charts.values().next().value;"
+        " return chart.series.slice(1).map((series, index) =>"
+        " [series.points.show(chart, index + 1), series.paths(chart, index + 1, 0, 1) !== null]);"
+        " })()"
+    )
+    assert drawn == [[False, True], [True, False]]

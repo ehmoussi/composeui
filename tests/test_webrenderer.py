@@ -41,6 +41,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     ButtonView,
+    ChartKind,
     ChartView,
     DialogView,
     EditRefusedError,
@@ -2683,7 +2684,10 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     spec = _chart_spec(markup, chart)
     # uPlot's columns, the x shared; no NaN in JSON: a gap is null
     assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
-    assert spec["series"] == [{"name": "Pressure"}, {"name": "Temperature"}]
+    assert spec["series"] == [
+        {"name": "Pressure", "kind": "line"},
+        {"name": "Temperature", "kind": "line"},
+    ]
     plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
     assert plot.attributes["role"] == "img"
     assert plot.attributes["aria-label"] == (
@@ -2697,6 +2701,25 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
     # each series by its own x, joined by the page
     assert spec["pairs"] == [[[0, 1, 2], [0, 1, 4]], [[0.5], [0.4]]]
+
+
+def test_each_series_is_sent_with_how_it_is_drawn(
+    chart_views: list[PipeChartMainView], chart_client: TestClient
+) -> None:
+    chart_client.get("/")
+    (main_view,) = chart_views
+    main_view.add_curve()
+    main_view.add_measurements()
+    chart = main_view.chart
+
+    spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
+    assert [series["kind"] for series in spec["series"]] == ["line", "scatter"]
+    assert len(spec["pairs"][1][0]) == 6  # the measured flow rates, their own x
+
+    with collect_dirty() as dirty:
+        chart.kind = ChartKind.SCATTER
+        spec = _chart_spec(render_dirty(dirty), chart)
+    assert [series["kind"] for series in spec["series"]] == ["scatter", "scatter"]
 
 
 def test_a_long_series_is_thinned_keeping_its_peaks_and_gaps() -> None:
@@ -2730,7 +2753,7 @@ def test_a_new_series_list_swaps_the_figure(
     figure = _swapped(response.text, _widget_id(main_view.chart.renderer))
     assert figure.tag == "figure"
     spec = _chart_spec(response.text, main_view.chart)
-    assert spec["series"] == [{"name": "D = 50 mm"}]
+    assert spec["series"] == [{"name": "D = 50 mm", "kind": "line"}]
 
 
 def test_the_page_loads_the_chart_script_only_from_its_own_script(

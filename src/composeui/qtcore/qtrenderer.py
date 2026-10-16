@@ -41,6 +41,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ButtonVariant,
+    ChartKind,
     DialogKind,
     DialogView,
     FormLabelRowView,
@@ -498,6 +499,7 @@ class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar])
 
 
 class ChartViewLike(ViewLike, Protocol):
+    kind: ChartKind
     title: str
     x_title: str
     y_title: str
@@ -511,6 +513,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
+                "kind": self._refresh_kind,
                 "title": self._refresh_title,
                 "x_title": self._refresh_x_title,
                 "x_unit": self._refresh_x_unit,
@@ -524,6 +527,10 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         if self._rendered_object is None:
             self._rendered_object = QChart()
             self.refresh()
+
+    @staticmethod
+    def _refresh_kind(_view: ChartViewLike, rendered_object: QChart, value: ChartKind) -> None:
+        rendered_object.set_kind(value)
 
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:

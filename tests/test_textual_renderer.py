@@ -26,6 +26,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
+    ChartKind,
     DialogKind,
     EditRefusedError,
     MainView,
@@ -1082,3 +1083,28 @@ async def test_the_chart_draws_its_titles_and_series() -> None:
         text = chart.render().plain  # type: ignore[union-attr]
         assert "Flow Rate (m3/h)" in text
         assert "D = 50 mm" not in text
+
+
+@pytest.mark.asyncio
+async def test_a_scatter_series_is_plotted_as_dots() -> None:
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        await pilot.pause()
+        view.add_curve()
+        view.add_measurements()
+        await pilot.pause()
+        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        assert plotted.label == ["D = 50 mm", "Measured, D = 50 mm"]
+        assert plotted.lines == [True, False]  # a line, then dots
+        assert len(plotted.x[1]) == 6
+        view.chart.kind = ChartKind.SCATTER
+        await pilot.pause()
+        assert chart.plt._active.monitor.lines == [False, False]  # noqa: SLF001

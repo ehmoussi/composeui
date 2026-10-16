@@ -6,6 +6,7 @@ from textual.color import Color
 from textual_plotext import PlotextPlot
 
 from composeui.core.chartcolors import series_color
+from composeui.core.view import ChartKind, ChartView
 
 if TYPE_CHECKING:
     from composeui.core.view import Series
@@ -27,6 +28,7 @@ class ComposeChart(PlotextPlot):
         self.x_label = ""
         self.y_label = ""
         self.series: list[Series] = []
+        self.kind = ChartKind.LINE
 
     def on_mount(self) -> None:
         super().on_mount()
@@ -43,8 +45,13 @@ class ComposeChart(PlotextPlot):
         plt.ylabel(self.y_label)
         is_dark = self.app.current_theme.dark if self.is_mounted else False
         for index, curve in enumerate(self.series):
+            draw = (
+                plt.scatter
+                if ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
+                else plt.plot
+            )
             # plotext leaves a gap at a NaN itself
-            plt.plot(
+            draw(
                 curve.x,
                 curve.y,
                 label=curve.name,
