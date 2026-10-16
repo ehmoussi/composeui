@@ -188,6 +188,18 @@ def test_a_category_s_bars_are_side_by_side_around_its_index() -> None:
     assert ChartView.bar_slot(1, 2) == (0.2, 0.4)
 
 
+def test_a_log_axis_leaves_out_what_it_cannot_show() -> None:
+    series = Series(name="Decay", x=[-1, 0, 1, 10], y=[5, 5, 0, 10])
+    assert ChartView.drawn_points(series, x_log=False, y_log=False) == (series.x, series.y)
+    # an x of 0 or less: no point; a y of 0 or less: a gap
+    x, y = ChartView.drawn_points(series, x_log=True, y_log=True)
+    assert x == [1, 10]
+    assert str(y) == str([math.nan, 10.0])
+    assert ChartView.drawn_points(series, x_log=True, y_log=False) == ([1, 10], [0, 10])
+    # the bars of 5 and 0 high: on a log axis, no bar of 0
+    assert str(ChartView.bar_heights(series, 2, y_log=True)) == str([5.0, math.nan])
+
+
 def test_an_axis_label_shows_its_unit() -> None:
     assert ChartView.axis_label("Time", "s") == "Time (s)"
     assert ChartView.axis_label("Time", "") == "Time"

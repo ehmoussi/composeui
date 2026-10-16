@@ -114,9 +114,14 @@ function chartOptions(element, spec, width) {
     }
     return options;
   });
-  // no title: no name, rather than uPlot's "Value"
-  var x = { label: spec.x.label || " ", value: chartValue(spec.x.unit) };
-  var scales = { x: { time: false } };
+  var x = { label: spec.x.label, value: chartValue(spec.x.unit) };
+  if (spec.x.label === "") {
+    // no title: the value alone, rather than uPlot's "Value:" before it
+    x.label = document.createElement("span");
+    x.class = "chart-unnamed";
+  }
+  // a log scale: uPlot's distribution 3
+  var scales = { x: { time: false, distr: spec.x.log ? 3 : 1 }, y: { distr: spec.y.log ? 3 : 1 } };
   var axes = [axis(spec.x), axis(spec.y)];
   if ("categories" in spec) {
     // a category's index stands for its name; the bars stand on 0
@@ -124,13 +129,13 @@ function chartOptions(element, spec, width) {
     var name = function (chart, index) {
       return index === null || index === undefined ? "-" : categories[index] || "";
     };
-    x = { label: x.label, value: name };
+    x.value = name;
     scales.x.range = function () { return [-0.5, categories.length - 0.5]; };
-    scales.y = {
-      range: function (chart, min, max) {
+    if (!spec.y.log) {
+      scales.y.range = function (chart, min, max) {
         return uPlot.rangeNum(Math.min(0, min), Math.max(0, max), 0.1, true);
-      },
-    };
+      };
+    }
     axes[0].splits = function () {
       return categories.map(function (_, index) { return index; });
     };

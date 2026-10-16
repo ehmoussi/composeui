@@ -507,6 +507,8 @@ class ChartViewLike(ViewLike, Protocol):
     y_unit: str
     series: list[Series]
     categories: list[str]
+    x_log: bool
+    y_log: bool
 
 
 class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
@@ -522,6 +524,8 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "y_unit": self._refresh_y_unit,
                 "series": self._refresh_series,
                 "categories": self._refresh_categories,
+                "x_log": self._refresh_x_log,
+                "y_log": self._refresh_y_log,
             }
         )
 
@@ -564,6 +568,14 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         _view: ChartViewLike, rendered_object: QChart, value: list[str]
     ) -> None:
         rendered_object.set_categories(value)
+
+    @staticmethod
+    def _refresh_x_log(view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
+        rendered_object.set_log(x_log=value, y_log=view.y_log)
+
+    @staticmethod
+    def _refresh_y_log(view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
+        rendered_object.set_log(x_log=view.x_log, y_log=value)
 
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: QChart) -> None:

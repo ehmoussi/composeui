@@ -482,6 +482,9 @@ e.g. measurements as dots over a model's curve. A `BAR` chart draws values per c
 group of bars for each of its `categories`, one per series, each series' x naming a
 category by its index and its y the bar's height.
 
+`x_log` and `y_log` make an axis a log axis, which leaves out what it can't show: a point
+at an x of 0 or less isn't drawn, and a y of 0 or less leaves a gap.
+
 ```python
 energy: ChartView = child(
     ChartView,

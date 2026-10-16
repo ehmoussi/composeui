@@ -48,6 +48,15 @@ class ChartPage(PageView):
             Series(name="Cooling", x=[0, 2], y=[30, 45]),
         ],
     )
+    decay: ChartView = child(
+        ChartView,
+        title="Decay",
+        x_unit="s",
+        x_log=True,
+        y_log=True,
+        # a log axis shows neither 0 nor -1
+        series=[Series(name="Activity", x=[0, 1, 10, 100, 1000], y=[1, 1000, -1, 10, 1])],
+    )
 
 
 @define_view

@@ -195,3 +195,8 @@ body {
 .table tbody tr[aria-selected="true"] {
   background-color: color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
+
+/* a chart's x without a title: its value in the legend has no name, so no colon either */
+.u-inline.u-live .chart-unnamed th::after {
+  content: none;
+}

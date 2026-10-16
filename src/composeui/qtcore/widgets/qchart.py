@@ -44,6 +44,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._series: list[Series] = []
         self._kind = ChartKind.LINE
         self._categories: list[str] = []
+        self._x_log = False
+        self._y_log = False
         self._bars: list[pg.BarGraphItem] = []
         self._units = ("", "")
         self._items: list[pg.PlotDataItem] = []
@@ -84,6 +86,11 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._categories = categories
         self._draw()
 
+    def set_log(self, *, x_log: bool, y_log: bool) -> None:
+        """Make the axes log axes or linear ones; a bar chart's x stays its categories."""
+        self._x_log, self._y_log = x_log, y_log
+        self._draw()
+
     def set_series(self, series: list[Series]) -> None:
         """Show `series`, reusing the items drawn: the zoom stays where the user put it."""
         self._series = series
@@ -104,9 +111,13 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 plot.removeItem(items.pop())
             while len(items) < count:
                 items.append(make())
+        x_log = self._x_log and not is_bar
         for item, curve in zip(self._items, self._series):
-            item.setData(np.asarray(curve.x, dtype=float), np.asarray(curve.y, dtype=float))
+            x, y = ChartView.drawn_points(curve, x_log=x_log, y_log=self._y_log)
+            item.setData(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
             item.opts["name"] = curve.name
+        # the curves draw their log themselves; the bars are given theirs (see `_bar_opts`)
+        plot.setLogMode(x=x_log, y=self._y_log)
         ticks = [list(enumerate(self._categories))] if is_bar else None
         plot.getAxis("bottom").setTicks(ticks)
         self._apply_styles()
@@ -170,13 +181,22 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 item.setSymbol(None)
                 style = {"dash": [6, 4]} if is_dashed(index) else {}
                 item.setPen(pg.mkPen(color, width=2, **style))
-        for index, (bars, curve) in enumerate(zip(self._bars, self._series)):
-            heights = np.asarray(ChartView.bar_heights(curve, len(self._categories)))
+        all_heights = [
+            np.asarray(ChartView.bar_heights(curve, len(self._categories), y_log=self._y_log))
+            for curve in self._series
+        ]
+        drawn = np.concatenate([[], *all_heights])
+        drawn = drawn[np.isfinite(drawn)]
+        # on a log axis, the bars rise from the power of 10 under the lowest of them
+        base = math.floor(np.log10(drawn.min())) if self._y_log and len(drawn) > 0 else 0
+        for index, (bars, curve, heights) in enumerate(zip(self._bars, self._series, all_heights)):
             categories = np.flatnonzero(np.isfinite(heights))  # a NaN: no bar
+            tops = np.log10(heights[categories]) if self._y_log else heights[categories]
             offset, width = ChartView.bar_slot(index, len(self._series))
             bars.setOpts(
                 x0=categories + offset - width / 2,
-                height=heights[categories],
+                y0=base,
+                height=tops - base,
                 width=width,
                 brush=series_color(index, is_dark=is_dark),
                 # a line of the background between neighbouring bars
@@ -199,7 +219,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             self._crosshair.setVisible(False)
             return
         position = view_box.mapSceneToView(scene_position)
-        lines = self._hover_lines(position.x())
+        is_log = self._x_log and self._kind is not ChartKind.BAR
+        # the view's x is its log on a log axis
+        lines = self._hover_lines(10 ** position.x() if is_log else position.x())
         if len(lines) == 0:  # between a bar chart's categories, or past them
             self._hover.setVisible(False)
             self._crosshair.setVisible(False)
@@ -219,22 +241,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 return []
             lines = [self._categories[category]]
             for curve in self._series:
-                height = ChartView.bar_heights(curve, len(self._categories))[category]
+                heights = ChartView.bar_heights(curve, len(self._categories), y_log=self._y_log)
+                height = heights[category]
                 if math.isfinite(height):
                     lines.append(f"{curve.name}: {_format(height, y_unit)}")
             return lines
         lines = [_format(x, x_unit)]
         for curve in self._series:
-            point = _nearest(curve, x)
+            point = _nearest(
+                *ChartView.drawn_points(curve, x_log=self._x_log, y_log=self._y_log), x
+            )
             if point is not None:
                 lines.append(f"{curve.name}: {_format(point[1], y_unit)}")
         return lines
 
 
-def _nearest(series: Series, x: float) -> tuple[float, float] | None:
-    """Get the drawn point of `series` with the x nearest `x`, None when none is drawn."""
-    xs = np.asarray(series.x, dtype=float)
-    ys = np.asarray(series.y, dtype=float)
+def _nearest(x_values: list[float], y_values: list[float], x: float) -> tuple[float, float] | None:
+    """Get the drawn point with the x nearest `x`, None when none is drawn."""
+    xs = np.asarray(x_values, dtype=float)
+    ys = np.asarray(y_values, dtype=float)
     drawn = np.isfinite(xs) & np.isfinite(ys)
     if not drawn.any():
         return None

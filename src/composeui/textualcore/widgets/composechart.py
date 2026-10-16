@@ -10,6 +10,8 @@ from composeui.core.chartcolors import series_color
 from composeui.core.view import ChartKind, ChartView
 
 if TYPE_CHECKING:
+    from textual.app import RenderResult
+
     from composeui.core.view import Series
 
 
@@ -31,15 +33,18 @@ class ComposeChart(PlotextPlot):
         self.series: list[Series] = []
         self.kind = ChartKind.LINE
         self.categories: list[str] = []
+        self.x_log = False
+        self.y_log = False
 
-    def on_mount(self) -> None:
-        super().on_mount()
-        # the series' colors are stepped for a light or a dark theme
-        self.app.theme_changed_signal.subscribe(self, lambda _theme: self.replot())
-        self.replot()
+    def render(self) -> RenderResult:
+        # the figure afresh at each render, from the attributes: building a figure with a
+        # log scale takes the log of its data in place, so building it twice would take
+        # the log of the logs. In the theme's colors too, its series' stepped for it
+        self._fill_figure()
+        return super().render()
 
-    def replot(self) -> None:
-        """Draw the chart again from its attributes."""
+    def _fill_figure(self) -> None:
+        """Give plotext the chart's title, labels and series."""
         plt = self.plt
         plt.clear_figure()
         plt.title(self.chart_title)
@@ -51,36 +56,48 @@ class ComposeChart(PlotextPlot):
             for index in range(len(self.series))
         ]
         if self.kind is ChartKind.BAR:
-            if len(self.series) > 0 and len(self.categories) > 0:
-                heights = [
-                    # plotext draws numbers only: no bar is a bar of nothing
-                    [
-                        height if math.isfinite(height) else 0
-                        for height in ChartView.bar_heights(curve, len(self.categories))
-                    ]
-                    for curve in self.series
-                ]
-                # plotext takes a label and a color per series, as its stub doesn't say
-                plt.multiple_bar(  # type: ignore[call-arg]
-                    self.categories,
-                    heights,
-                    labels=[curve.name for curve in self.series],
-                    color=colors,  # type: ignore[arg-type]
-                )
-            self.refresh()
+            self._plot_bars(colors)
             return
+        if self.x_log:
+            plt.xscale("log")
+        if self.y_log:
+            plt.yscale("log")
         for index, curve in enumerate(self.series):
             draw = (
                 plt.scatter
                 if ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
                 else plt.plot
             )
+            x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
             # plotext leaves a gap at a NaN itself
             draw(
-                curve.x,
-                curve.y,
+                x,
+                y,
                 label=curve.name,
                 color=colors[index],
                 marker="braille",
             )
-        self.refresh()
+
+    def _plot_bars(self, colors: list[tuple[int, int, int]]) -> None:
+        if len(self.series) == 0 or len(self.categories) == 0:
+            return
+        heights = [
+            ChartView.bar_heights(curve, len(self.categories), y_log=self.y_log)
+            for curve in self.series
+        ]
+        drawn = [height for bars in heights for height in bars if math.isfinite(height)]
+        base = 0.0
+        if self.y_log:
+            self.plt.yscale("log")
+            # from the power of 10 under the lowest bar: a log axis has no 0
+            base = 10.0 ** math.floor(math.log10(min(drawn))) if len(drawn) > 0 else 1.0
+        # plotext draws numbers only: no bar is a bar from the base to itself
+        heights = [[h if math.isfinite(h) else base for h in bars] for bars in heights]
+        # plotext takes a label and a color per series, as its stub doesn't say
+        self.plt.multiple_bar(  # type: ignore[call-arg]
+            self.categories,
+            heights,
+            labels=[curve.name for curve in self.series],
+            color=colors,  # type: ignore[arg-type]
+            minimum=base,
+        )

@@ -1140,6 +1140,11 @@ class ChartView(View):
 
     A `BAR` chart draws a group of bars for each of its `categories`, a bar per series: a
     series' x is the index of a category, and its y the bar's height.
+
+    A log axis (`x_log`, `y_log`) leaves out the values it can't show, those <= 0: a
+    point at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`), rather
+    than a job's points making the chart fail. A bar chart's x, its categories, is never
+    a log axis.
     """
 
     _renderer_key = "chart"
@@ -1155,6 +1160,8 @@ class ChartView(View):
     series: list[Series] = attrs.field(factory=list[Series])
     #: a `BAR` chart's categories, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
+    x_log: bool = attrs.field(default=False)
+    y_log: bool = attrs.field(default=False)
 
     @staticmethod
     def kind_of(series: Series, kind: ChartKind) -> ChartKind:
@@ -1167,15 +1174,36 @@ class ChartView(View):
         return series.kind
 
     @staticmethod
-    def bar_heights(series: Series, category_count: int) -> list[float]:
+    def drawn_points(
+        series: Series, *, x_log: bool, y_log: bool
+    ) -> tuple[list[float], list[float]]:
+        """Get the points of `series` its axes can show: a log axis can't show 0 or less.
+
+        A point whose x a log x axis can't show is left out; a y a log y axis can't show
+        is NaN, a gap. As they are without a log axis.
+        """
+        if not x_log and not y_log:
+            return series.x, series.y
+        xs: list[float] = []
+        ys: list[float] = []
+        for x, y in zip(series.x, series.y):
+            if x_log and not x > 0:
+                continue
+            xs.append(x)
+            ys.append(math.nan if y_log and not y > 0 else y)
+        return xs, ys
+
+    @staticmethod
+    def bar_heights(series: Series, category_count: int, *, y_log: bool = False) -> list[float]:
         """Get the height of a series' bar in each category, NaN where it has none.
 
         A point whose x isn't a category's index has no bar; the last of a category wins.
+        On a log y axis, a height of 0 or less is no bar either.
         """
         heights = [math.nan] * category_count
         for x, y in zip(series.x, series.y):
             if x.is_integer() and 0 <= x < category_count:
-                heights[int(x)] = y
+                heights[int(x)] = math.nan if y_log and not y > 0 else y
         return heights
 
     @staticmethod

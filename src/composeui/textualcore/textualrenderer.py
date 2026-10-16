@@ -720,6 +720,8 @@ class ChartViewLike(ViewLike, Protocol):
     y_unit: str
     series: list[Series]
     categories: list[str]
+    x_log: bool
+    y_log: bool
 
 
 class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
@@ -735,6 +737,8 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "y_unit": self._refresh_y_unit,
                 "series": self._refresh_series,
                 "categories": self._refresh_categories,
+                "x_log": self._refresh_x_log,
+                "y_log": self._refresh_y_log,
             }
         )
 
@@ -747,47 +751,57 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: ChartKind
     ) -> None:
         rendered_object.kind = value
-        rendered_object.replot()
+        rendered_object.refresh()
 
     # each refreshed with its new value, the view still holding the old one
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.chart_title = value
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_x_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.x_label = ChartView.axis_label(value, view.x_unit)
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_x_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.x_label = ChartView.axis_label(view.x_title, value)
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_y_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.y_label = ChartView.axis_label(value, view.y_unit)
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_y_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.y_label = ChartView.axis_label(view.y_title, value)
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_series(
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[Series]
     ) -> None:
         rendered_object.series = value
-        rendered_object.replot()
+        rendered_object.refresh()
 
     @staticmethod
     def _refresh_categories(
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[str]
     ) -> None:
         rendered_object.categories = value
-        rendered_object.replot()
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_x_log(_view: ChartViewLike, rendered_object: ComposeChart, value: bool) -> None:
+        rendered_object.x_log = value
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_y_log(_view: ChartViewLike, rendered_object: ComposeChart, value: bool) -> None:
+        rendered_object.y_log = value
+        rendered_object.refresh()
 
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: ComposeChart) -> None:
