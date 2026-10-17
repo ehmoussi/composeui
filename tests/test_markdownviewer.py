@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,7 +13,6 @@ from qtpy.QtWidgets import QFileDialog, QMainWindow, QTextBrowser
 from composeui.core.application import Application
 from composeui.core.registry import RendererType
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
-from examples import markdownviewer
 from examples.markdownviewer import MarkdownViewerMainView
 
 if TYPE_CHECKING:
@@ -76,18 +75,11 @@ def test_the_picked_file_fills_the_window(
     assert status_bar_top - browser_bottom < 30
 
 
-def test_the_file_named_first_on_the_command_line_is_shown(
+def test_the_file_on_the_command_line_is_shown(
     monkeypatch: pytest.MonkeyPatch, markdown_file: Path
 ) -> None:
-    built: list[MarkdownViewerMainView] = []
-
-    def run(build_main_view: Callable[[], MarkdownViewerMainView]) -> None:
-        built.append(build_main_view())
-
-    monkeypatch.setattr(markdownviewer, "run", run)
-    monkeypatch.setattr(sys, "argv", ["markdownviewer", str(markdown_file), "--backend", "qt"])
-    markdownviewer.main()
-    (main_view,) = built
-    assert main_view.document.text == "# Notes\n\n- été\n"
-    # the rest of the command line is the app's
-    assert sys.argv == ["markdownviewer", "--backend", "qt"]
+    monkeypatch.setattr(sys, "argv", ["markdownviewer", "--markdown", str(markdown_file)])
+    app = Application(build_main_view=MarkdownViewerMainView)
+    app.main_view.status_bar.timeout = 0
+    app.run()
+    assert app.main_view.document.text == "# Notes\n\n- été\n"
