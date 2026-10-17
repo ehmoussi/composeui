@@ -79,6 +79,7 @@ from composeui.webcore.webrenderer import (
     WebLabelRenderer,
     WebLogRenderer,
     WebMainRenderer,
+    WebMarkdownRenderer,
     WebRadioGroupRenderer,
     WebRenderer,
     WebStatusBarRenderer,
@@ -95,6 +96,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
+from tests.markdown import HelpMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -393,6 +395,31 @@ def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> 
     assert _element(field.to_html(), field.widget_id).attributes["value"] == hostile
     assert _element(label.to_html(), label.widget_id).text == hostile
     assert _element(table.to_html(), table.widget_id).text == hostile * 2
+
+
+def test_markdown_is_shown_as_html_its_own_markup_escaped() -> None:
+    main_view = HelpMainView()
+    main_view.render(RendererType.WEB)
+    renderer = main_view.help.renderer
+    assert isinstance(renderer, WebMarkdownRenderer)
+    element = _element(renderer.to_html(), renderer.widget_id)
+    assert (element.tag, element.attributes["class"]) == ("div", "cui-markdown")
+    assert [tag for tag, _ in element.descendants] == ["h1", "ul", "li", "li"]
+    assert element.text == "Help\n\nOpen a study\nRun it\n\n"
+
+    with collect_dirty() as dirty:
+        main_view.help.text = (
+            "## Results\n\n<script>alert(1)</script>\n\n"
+            "[the report](https://example.com/report) [no](javascript:alert(1))"
+        )
+        element = _swapped(render_dirty(dirty), renderer.widget_id)
+    assert [(tag, attributes) for tag, attributes in element.descendants if tag != "p"] == [
+        ("h2", {}),
+        ("a", {"href": "https://example.com/report"}),
+    ]
+    # shown as text, not run: the browser shows the tag the text has
+    assert "<script>alert(1)</script>" in element.text
+    assert "<script>" not in renderer.to_html()
 
 
 def test_a_changed_field_inside_a_changed_group_is_swapped_once(

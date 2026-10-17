@@ -148,13 +148,16 @@ How it differs from a desktop window:
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`) for the available building blocks, `PageView`/`Router` for
+`LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
 an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
 for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
 under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, danger)
 tells the main action from the others and from one destroying something.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
+`MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
+its links open in the browser. On the web its raw HTML is left out, so the text can't
+inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page.
 [`src/examples/taskview.py`](src/examples/taskview.py) follows tasks running in
 [threads](#running-work-in-threads) with one (`uv run python -m examples.taskview`, or
 `--backend qt`, or `textual`).

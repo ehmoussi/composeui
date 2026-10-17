@@ -22,6 +22,7 @@ from textual.coordinate import Coordinate
 from textual.pilot import Pilot
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar
+from textual.widgets.markdown import MarkdownBlock
 
 from composeui.core import chartimage
 from composeui.core.application import _add_reference_to_signals
@@ -53,6 +54,7 @@ from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterChip,
     ComposeFilterTable,
 )
+from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
@@ -64,6 +66,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.markdown import HelpMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -705,6 +708,43 @@ async def test_the_progress_bar_follows_its_view() -> None:
         progress.maximum = None
         await pilot.pause()
         assert bar.percentage is None  # Textual's bar for a task of unknown length
+
+
+def _shown_blocks(markdown: ComposeMarkdown) -> list[tuple[str, str]]:
+    """Return the document's top blocks: each one's kind and Markdown."""
+    return [
+        (type(block).__name__, block.source or "")
+        for block in markdown.children
+        if isinstance(block, MarkdownBlock)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_markdown_shows_its_text_formatted() -> None:
+    view = HelpMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.help.renderer, TextualWidgetRenderer)
+    markdown = view.help.renderer.widget
+    assert isinstance(markdown, ComposeMarkdown)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert _shown_blocks(markdown) == [
+            ("MarkdownH1", "# Help\n"),
+            ("MarkdownBulletList", "- Open a study\n- Run it\n"),
+        ]
+        # set twice in a row: only the last text shows, once
+        view.help.text = "## Results"
+        view.help.text = "## Results\n\nAll done."
+        await pilot.pause()
+        await pilot.pause()
+        assert _shown_blocks(markdown) == [
+            ("MarkdownH2", "## Results\n"),
+            ("MarkdownParagraph", "All done."),
+        ]
 
 
 @pytest.mark.asyncio

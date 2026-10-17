@@ -36,6 +36,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QRadioButton,
     QStatusBar,
+    QTextBrowser,
     QToolBar,
     QWidget,
 )
@@ -66,6 +67,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.markdown import HelpMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -116,6 +118,55 @@ def test_label_renderer_pushes_view_state_to_the_widget(qtbot: QtBot) -> None:
 
     view.text = "hello"
     assert widget.text() == "hello"
+
+
+def _blocks(browser: QTextBrowser) -> list[tuple[str, int, bool]]:
+    """Each paragraph of `browser`: its text, its heading level and whether it's listed."""
+    blocks = []
+    block = browser.document().firstBlock()
+    while block.isValid():
+        blocks.append(
+            (block.text(), block.blockFormat().headingLevel(), block.textList() is not None)
+        )
+        block = block.next()
+    return blocks
+
+
+def test_markdown_renderer_shows_the_text_formatted(qtbot: QtBot) -> None:
+    view = HelpMainView()
+    view.render(RendererType.QT)
+    renderer = view.help.renderer
+    assert isinstance(renderer, QtWidgetRenderer)
+    browser = renderer.qt_object
+    assert isinstance(browser, QTextBrowser)
+    assert browser.isReadOnly()
+    assert browser.openExternalLinks()
+    assert _blocks(browser) == [
+        ("Help", 1, False),
+        ("Open a study", 0, True),
+        ("Run it", 0, True),
+    ]
+
+    view.help.text = "## Results\n\nAll [done](https://example.com)."
+    assert _blocks(browser) == [("Results", 2, False), ("All done.", 0, False)]
+
+
+def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
+    view = HelpMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    renderer = view.help.renderer
+    assert isinstance(renderer, QtWidgetRenderer)
+    browser = renderer.qt_object
+    assert isinstance(browser, QTextBrowser)
+    # it scrolls within itself: down to the status bar, no empty space under it
+    browser_bottom = browser.mapTo(window, browser.rect().bottomLeft()).y()
+    assert window.statusBar().geometry().top() - browser_bottom < 30
 
 
 def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:

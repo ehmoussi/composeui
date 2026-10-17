@@ -1035,6 +1035,17 @@ class LabelView(LabelMixin, View):
 
 
 @define_view
+class MarkdownMixin:
+    #: read-only Markdown, e.g. a help page; its links open in the browser
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
+
+
+@define_view
+class MarkdownView(MarkdownMixin, View):
+    _renderer_key = "markdown"
+
+
+@define_view
 class CheckBoxMixin:
     #: shown next to the box
     text: str = attrs.field(default="", metadata={UI_TEXT: True})

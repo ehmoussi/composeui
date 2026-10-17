@@ -9,38 +9,13 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, label, log, button, progress bar, checkbox, radio group, combobox, table (editable cells, sorting and filtering included), forms, pages, message
-and confirm dialogs.
+input, label, log, button, progress bar, checkbox, radio group, combobox, table (editable
+cells, sorting and filtering included), Markdown, forms, pages, message and confirm
+dialogs.
 
 1. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
    routes.
 2. **Tree view** (`TreeView`).
-3. **Markdown** (`MarkdownView`): read-only Markdown text, e.g. a help page or a report's
-   summary. Steps:
-   - **View** (`core/view.py`): a `MarkdownMixin` with
-     `text: str = attrs.field(default="", metadata={UI_TEXT: True})`, as `LabelMixin`
-     (the app's text, set through `self.tr`, never saved in a study), and
-     `MarkdownView(MarkdownMixin, View)` with `_renderer_key = "markdown"`.
-   - **Qt** (`qtcore/qtrenderer.py`): `QtMarkdownRenderer` on a read-only `QTextBrowser`
-     with `setOpenExternalLinks(True)`; the `text` handler calls `setMarkdown`;
-     `_update_state` does nothing (the user can't edit it). `"markdown"` in `RENDERERS`.
-   - **Textual** (`textualcore/textualrenderer.py`): `TextualMarkdownRenderer` on
-     `textual.widgets.Markdown`; the `text` handler calls its `update` (it returns an
-     awaitable: check it applies without being awaited, as the other handlers aren't);
-     links open in the browser (`Markdown.LinkClicked` → `app.open_url`).
-   - **Web** (`webcore/webrenderer.py`): `WebMarkdownRenderer`, role `"markdown"`, the
-     `text` handler `_mark_dirty`; `to_html` renders `<div class="cui-markdown">` around
-     `MarkdownIt("commonmark", {"html": False}).render(text)`: raw HTML off, so the text
-     can't inject markup (markdown-it already refuses `javascript:` links). Add
-     `markdown-it-py` to the `web` extra (Textual already pulls it in) and `uv lock`.
-     Tailwind's preflight strips headings, lists and code of their look, so style
-     `.cui-markdown h1…h3, p, ul, ol, code, pre, a, table` in `css/app.css` with the
-     theme's colors, then `make css`.
-   - **Tests**, per backend: a heading and a list are shown, setting `text` replaces
-     them, and on the web a `<script>` in the text comes out escaped and a link is an
-     `<a href>`. The registry test checks all three register `"markdown"`.
-   - **Docs and example**: the README's widget list, and a help page in
-     `examples/pipeform.py` (its text through the translation catalogs, `make translations`).
 
 Charts (2) have a section of their own.
 
