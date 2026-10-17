@@ -56,6 +56,7 @@ from composeui.core.translation import (
 )
 
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Iterable, Iterator
 
     from attrs import AttrsInstance
@@ -859,6 +860,21 @@ class MainView(View):
             for action in menu.actions:
                 action.triggered.connect(functools.partial(self.set_language, action.data))
             menu.check(self.language)
+
+    @classmethod
+    def add_arguments(cls, parser: "argparse.ArgumentParser") -> None:
+        """Add the app's own command-line options to `parser`, e.g. a file to show.
+
+        After the backend's (`-f`, `--language`, `--port`...); `apply_arguments` gets
+        their values. None by default.
+        """
+
+    def apply_arguments(self, args: "argparse.Namespace") -> None:
+        """Apply the app's own command-line options (`add_arguments`), parsed in `args`.
+
+        Once the main view is wired and `-f`'s study is open: once on Qt and Textual, for
+        every session on the web.
+        """
 
     @property
     def language(self) -> str:

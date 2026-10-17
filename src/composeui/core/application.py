@@ -209,12 +209,15 @@ class Application(Generic[MainViewT]):
             self.main_view.set_language(self._args.language)
         if self._args.f is not None:
             open_study(self.main_view, self._study_model(), self._args.f)
+        self.main_view.apply_arguments(self._args)
 
     def _study_model(self) -> Model | None:
         """Get the model opened, saved and started over with the views: none here."""
         return None
 
     def _parse_arguments(self) -> argparse.Namespace:
+        # last: after the backend's own, which a subclass adds once built
+        type(self.main_view).add_arguments(self._parser)
         args = self._parser.parse_args()
         if (
             args.f is not None

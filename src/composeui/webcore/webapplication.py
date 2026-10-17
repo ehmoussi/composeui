@@ -288,6 +288,8 @@ class WebApplication(Application[MainViewT]):
         # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
         if self._args is not None and self._args.f is not None:
             open_study(main_view, model, self._args.f)
+        if self._args is not None:
+            main_view.apply_arguments(self._args)
         return main_view, model
 
     def _new_session_model(self) -> Model | None:
