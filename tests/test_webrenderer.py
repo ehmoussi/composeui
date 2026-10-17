@@ -104,6 +104,7 @@ from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Iterator
     from pathlib import Path
 
@@ -1206,6 +1207,42 @@ def test_a_state_file_opens_in_every_new_session(
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in app.session_views] == ["Bob", "Bob"]
     assert all('value="Bob"' in page for page in pages)
+
+
+@define_view
+class _GreetedMainView(HelloMainView):
+    """The hello app, greeting a name of its own command-line option."""
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--greet", metavar="NAME")
+
+    def apply_arguments(self, args: argparse.Namespace) -> None:
+        if args.greet is not None:
+            self.form.name.text = args.greet
+
+
+def test_an_app_s_own_options_apply_to_every_new_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    served: list[Starlette] = []
+    monkeypatch.setattr("sys.argv", ["webhello", "--greet", "Ada", "--port", "8001"])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **_: served.append(app),
+    )
+    views: list[_GreetedMainView] = []
+
+    class GreetedApp(WebApplication[_GreetedMainView]):
+        def setup_session(self, main_view: _GreetedMainView) -> None:
+            views.append(main_view)
+
+    GreetedApp(build_main_view=_GreetedMainView).run()
+
+    with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
+        pages = [alice.get("/").text, bob.get("/").text]
+    assert [view.form.name.text for view in views] == ["Ada", "Ada"]
+    assert all('value="Ada"' in page for page in pages)
 
 
 def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(

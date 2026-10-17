@@ -141,7 +141,7 @@ How it differs from a desktop window:
 | `View` (`composeui.core.view`) | A typed `attrs` data class describing UI state (`MainView`, `InputView`, `FormView`, `ActionView`, etc). Composed by nesting view fields inside other views. |
 | `Signal` (`composeui.core.signal`) | A typed event emitter. `signal.connect(callback)` supports callbacks that optionally take `view`, `main_view`, and/or `model` keyword arguments, injected automatically, on the views' signals and the model's alike. A callback may take fewer of the signal's arguments than it emits (the first ones, or none), and `connect(callback, now=True)` also calls it once right away. |
 | `Renderer` / `RendererContainer` (`composeui.core.renderer`) | Binds a `View` to a concrete toolkit widget and keeps them in sync in both directions (`refresh_attribute` / `update_state`). |
-| `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView` (and optionally a `Model`), parses CLI args (`--debug`, `--log`, `--log-signals`, `-f FILE`), and drives rendering. |
+| `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView` (and optionally a `Model`), parses CLI args (`--debug`, `--log`, `--log-signals`, `-f FILE`), and drives rendering. A `MainView` adds options of its own with its `add_arguments` classmethod and gets their values in `apply_arguments`, once it's wired (for every session on the web). |
 | `Model` (`composeui.core.model`) | Base class for the app's data, meant to be subclassed; `SqliteModel` keeps it in a [SQLite database](#a-sqlite-model). |
 | `Jobs` (`composeui.core.jobs`) | `main_view.jobs`: functions [run in threads](#running-work-in-threads), their results emitted on the main thread. |
 

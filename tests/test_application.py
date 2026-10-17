@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -12,11 +13,35 @@ from composeui.core.model import Model
 from composeui.core.registry import RendererType
 from composeui.core.view import MainView, define_view
 
+if TYPE_CHECKING:
+    import argparse
+    from pathlib import Path
+
 
 @define_view
 class _CountMainView(MainView):
     app_title = "Count"
     extension = ".count"
+
+
+@define_view
+class _StartMainView(MainView):
+    """An app with an option of its own: the count it starts from."""
+
+    app_title = "Start"
+    extension = ".start"
+
+    start: int = 0
+    #: the study's count when the option applied; -1 until then
+    count_then: int = -1
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--start", type=int, default=1, help="Count from START.")
+
+    def apply_arguments(self, args: argparse.Namespace) -> None:
+        self.count_then = self.start
+        self.start = args.start
 
 
 @pytest.mark.parametrize(
@@ -102,6 +127,31 @@ def test_run_without_backend_starts_the_one_its_environment_names(
 
     (app,) = started
     assert type(app) is applications[backend]
+
+
+def test_an_app_s_own_options_apply_once_its_study_is_open(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    study = _StartMainView(start=7)
+    state_file = tmp_path / "a.start"
+    study.save_state(state_file)
+    monkeypatch.setattr("sys.argv", ["start", "-f", str(state_file), "--start", "3"])
+    app = Application(build_main_view=_StartMainView)
+
+    app.run()
+
+    assert (app.main_view.count_then, app.main_view.start) == (7, 3)
+
+
+def test_an_app_s_own_options_are_in_its_help(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.argv", ["start", "--help"])
+    with pytest.raises(SystemExit):
+        Application(build_main_view=_StartMainView).run()
+    help_text = capsys.readouterr().out
+    assert "[--start START]" in help_text
+    assert "Count from START." in help_text
 
 
 def test_run_refuses_to_set_up_a_model_it_isn_t_given() -> None:
