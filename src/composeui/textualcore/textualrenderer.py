@@ -62,6 +62,7 @@ from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeinput import ComposeInput
+from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
@@ -569,6 +570,30 @@ class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, Label]):
     @staticmethod
     def _update_state(view: LabelViewLike, rendered_object: Label) -> None:
         pass  # a Label's text isn't user-editable; nothing to read back
+
+
+class MarkdownViewLike(ViewLike, Protocol):
+    text: str
+
+
+class TextualMarkdownRenderer(TextualWidgetRenderer[MarkdownViewLike, ComposeMarkdown]):
+    def __init__(self, view: MarkdownViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._refresh_text})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeMarkdown()
+
+    @staticmethod
+    def _refresh_text(
+        _view: MarkdownViewLike, rendered_object: ComposeMarkdown, value: str
+    ) -> None:
+        rendered_object.set_text(value)
+
+    @staticmethod
+    def _update_state(view: MarkdownViewLike, rendered_object: ComposeMarkdown) -> None:
+        pass  # read-only: nothing to read back
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
@@ -1762,6 +1787,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "label": TextualLabelRenderer,
     "log": TextualLogRenderer,
     "main": TextualMainRenderer,
+    "markdown": TextualMarkdownRenderer,
     "menu": TextualMenuRenderer,
     "page": TextualPageRenderer,
     "progress_bar": TextualProgressBarRenderer,

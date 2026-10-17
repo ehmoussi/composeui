@@ -21,6 +21,7 @@ from composeui.core.view import (
     LabelRowRadioGroupView,
     LanguageMenu,
     MainView,
+    MarkdownView,
     Menu,
     PageView,
     Router,
@@ -242,9 +243,28 @@ class ResultsPageView(PageView):
 
 
 @define_view
+class HelpPageView(PageView):
+    route = "help"
+    page_title = T("Help")
+    help: MarkdownView = child(
+        MarkdownView,
+        text=T(
+            "# Pipe Form\n\n"
+            "Two pipes meet at a junction: describe them on **Inputs**, then compare them "
+            "on **Results**.\n\n"
+            "- **Inputs**: each pipe's name, dimensions, edge and material.\n"
+            "- **Results**: both pipes' dimensions side by side.\n\n"
+            "*Pipe > Reset Dimensions* (`Ctrl+R`) puts both pipes back to their starting "
+            "dimensions."
+        ),
+    )
+
+
+@define_view
 class PipePagesView(Router):
     inputs: InputsPageView = Factory(InputsPageView)
     results: ResultsPageView = Factory(ResultsPageView)
+    help: HelpPageView = Factory(HelpPageView)
 
 
 @define_view

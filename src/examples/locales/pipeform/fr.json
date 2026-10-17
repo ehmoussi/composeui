@@ -30,5 +30,7 @@
   "Reset": "Réinitialiser",
   "Dimensions reset": "Dimensions réinitialisées",
   "Edge type changed: {edge_type}": "Type d'arête changé : {edge_type}",
-  "Pipe Form": "Formulaire de conduite"
+  "Pipe Form": "Formulaire de conduite",
+  "Help": "Aide",
+  "# Pipe Form\n\nTwo pipes meet at a junction: describe them on **Inputs**, then compare them on **Results**.\n\n- **Inputs**: each pipe's name, dimensions, edge and material.\n- **Results**: both pipes' dimensions side by side.\n\n*Pipe > Reset Dimensions* (`Ctrl+R`) puts both pipes back to their starting dimensions.": "# Formulaire de conduite\n\nDeux conduites se rejoignent : décrivez-les dans **Données**, puis comparez-les dans **Résultats**.\n\n- **Données** : le nom, les dimensions, l'arête et le matériau de chaque conduite.\n- **Résultats** : les dimensions des deux conduites côte à côte.\n\n*Conduite > Réinitialiser les dimensions* (`Ctrl+R`) rend aux deux conduites leurs dimensions de départ."
 }

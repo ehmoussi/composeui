@@ -21,6 +21,7 @@ from abc import abstractmethod
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
 
+from markdown_it import MarkdownIt
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
@@ -1467,6 +1468,31 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
         return f"<span {self._root_attributes(oob=oob)}>{html.escape(self._view.text)}</span>"
 
 
+class MarkdownViewLike(ViewLike, Protocol):
+    text: str
+
+
+class WebMarkdownRenderer(WebRenderer[MarkdownViewLike]):
+    """Markdown as HTML, tables included, as Qt and Textual show them.
+
+    Raw HTML is off: the text can't inject markup (and markdown-it refuses `javascript:`
+    links).
+    """
+
+    _role = "markdown"
+
+    def __init__(self, view: MarkdownViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._mark_dirty})
+
+    def to_html(self, *, oob: bool = False) -> str:
+        parser = MarkdownIt("commonmark", {"html": False}).enable("table")
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="cui-markdown">'
+            f"{parser.render(self._view.text)}</div>"
+        )
+
+
 class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
     """The label of a form row, pointing at the row's field for clicks/screen readers."""
 
@@ -2499,6 +2525,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "label": WebLabelRenderer,
     "log": WebLogRenderer,
     "main": WebMainRenderer,
+    "markdown": WebMarkdownRenderer,
     "menu": WebMenuRenderer,
     "page": WebPageRenderer,
     "progress_bar": WebProgressBarRenderer,

@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (
     QStackedWidget,
     QStatusBar,
     QStyle,
+    QTextBrowser,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -350,6 +351,30 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     @staticmethod
     def _update_state(view: LabelViewLike, rendered_object: QLabel) -> None:
         view.text = rendered_object.text()
+
+
+class MarkdownViewLike(ViewLike, Protocol):
+    text: str
+
+
+class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
+    def __init__(self, view: MarkdownViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._refresh_text})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QTextBrowser()
+            self._rendered_object.setOpenExternalLinks(True)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_text(_view: MarkdownViewLike, rendered_object: QTextBrowser, value: str) -> None:
+        rendered_object.setMarkdown(value)
+
+    @staticmethod
+    def _update_state(view: MarkdownViewLike, rendered_object: QTextBrowser) -> None:
+        pass  # read-only: nothing to read back
 
 
 class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QLabel]):
@@ -1085,7 +1110,9 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
             inset.addWidget(widget, alignment=Qt.AlignmentFlag.AlignLeft)
         else:
             inset.addWidget(widget)
-        layout.addLayout(inset)
+        # a document scrolls within itself: it takes the column's spare height, ahead of
+        # the spacer under the views
+        layout.addLayout(inset, 1 if isinstance(widget, QTextBrowser) else 0)
 
 
 class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
@@ -1650,6 +1677,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "label": QtLabelRenderer,
     "log": QtLogRenderer,
     "main": QtMainRenderer,
+    "markdown": QtMarkdownRenderer,
     "menu": QtMenuRenderer,
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
