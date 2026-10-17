@@ -818,6 +818,9 @@ class MainView(View):
     app_title: ClassVar[str] = ""
     #: the extension of the app's study files; a subclass sets it: ``extension = ".pipe"``
     extension: ClassVar[str] = ""
+    #: whether the window has `file_menu`, the studies' New, Open, Save, Save As and Exit;
+    #: an app without studies, e.g. a viewer, sets it to False and leaves it out
+    has_file_menu: ClassVar[bool] = True
     #: `app_title`, in the main view's language
     title: str = attrs.field(
         default=attrs.Factory(lambda self: self.app_title, takes_self=True),
@@ -860,6 +863,14 @@ class MainView(View):
             for action in menu.actions:
                 action.triggered.connect(functools.partial(self.set_language, action.data))
             menu.check(self.language)
+
+    @property
+    def children_views(self) -> list[View]:
+        views = super().children_views
+        if self.has_file_menu:
+            return views
+        # never rendered: no backend shows it, or binds its shortcuts
+        return [view for view in views if view is not self.file_menu]
 
     @classmethod
     def add_arguments(cls, parser: "argparse.ArgumentParser") -> None:

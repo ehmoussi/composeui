@@ -96,7 +96,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
-from tests.markdown import HelpMainView
+from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -1435,6 +1435,23 @@ def test_the_file_menu_is_buttons_in_the_header(
     menu_html = header[header.index(f'id="{_widget_id(menu.renderer)}"') :]
     assert "<ul" not in menu_html[: menu_html.index(f'id="{_action_id(menu.save)}"')]
     assert 'role="separator"' not in header
+
+
+def test_an_app_without_studies_has_no_file_buttons() -> None:
+    views: list[HelpViewerMainView] = []
+
+    class ViewerApp(WebApplication[HelpViewerMainView]):
+        def setup_session(self, main_view: HelpViewerMainView) -> None:
+            views.append(main_view)
+
+    app = ViewerApp(build_main_view=HelpViewerMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        page = client.get("/").text
+    header = page[page.index("<header") : page.index("</header>")]
+    assert "Open Help" in header
+    assert not any(text in header for text in (">New<", ">Open<", ">Save<", "/state"))
+    (main_view,) = views
+    assert main_view.file_menu.renderer is None  # never rendered
 
 
 def test_another_menu_is_a_dropdown_under_its_title() -> None:

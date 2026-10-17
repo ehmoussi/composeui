@@ -42,3 +42,10 @@ class HelpMainView(MainView):
 
     def _show_file(self, path: Path) -> None:
         self.help.text = path.read_text(encoding="utf-8")
+
+
+@define_view
+class HelpViewerMainView(HelpMainView):
+    """The help, as an app with no study to open or save: no File menu."""
+
+    has_file_menu = False

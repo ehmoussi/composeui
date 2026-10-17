@@ -160,6 +160,8 @@ its links open in the browser. On the web its raw HTML is left out, so the text 
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page, and
 [`src/examples/markdownviewer.py`](src/examples/markdownviewer.py) shows a Markdown file
 (`uv run python -m examples.markdownviewer --markdown README.md --backend qt`).
+An app without studies sets `has_file_menu = False` on its `MainView`, leaving out the
+File menu (New, Open, Save, Save As, Exit).
 `PickFileAction` is a menu or toolbar action picking a file for the app to read (not a
 study): `extensions` names the types it offers, e.g. `{"Markdown": (".md",)}`, and
 `file_picked` emits the file's path. On the web the browser uploads the file, and the
