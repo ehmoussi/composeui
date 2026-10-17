@@ -44,6 +44,7 @@ class MarkdownMenu(Menu):
 class MarkdownViewerMainView(MainView):
     app_title = T("Markdown Viewer")
     extension = ".mdviewer"
+    has_file_menu = False  # no study to open or save: only Markdown files
 
     markdown_menu: MarkdownMenu = Factory(MarkdownMenu)
     document: MarkdownView = Factory(MarkdownView)
