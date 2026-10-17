@@ -53,6 +53,7 @@ from composeui.core.view import (
     NewAction,
     OpenFileAction,
     PageView,
+    PickFileAction,
     ProgressBarView,
     Router,
     SaveAction,
@@ -1874,6 +1875,8 @@ class WebActionRenderer(WebRenderer[ActionView]):
                 self._mark_dirty,
             )
         )
+        if isinstance(view, PickFileAction):
+            self._refresh_dispatcher["extensions"] = self._mark_dirty  # the picker's types
 
     def _mark_dirty(self, view: ActionView, rendered_object: str, value: Any) -> None:
         # e.g. the entry of a page outside a router: no element on the page to swap
@@ -2005,6 +2008,17 @@ class WebActionRenderer(WebRenderer[ActionView]):
                 f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
                 f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}{key}></label>'
             )
+        if isinstance(view, PickFileAction):
+            types = ",".join(self.file_types)
+            accept = f' accept="{html.escape(types)}"' if types else ""
+            # emptied once sent: picking the same file again is a change too
+            return (
+                f'<label {attributes}>{label}<input type="file" name="file"{accept}'
+                f' class="hidden" hx-post="/widget/{self.widget_id}/file"'
+                ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
+                ' hx-on::after-request="this.value = \'\'" autocomplete="off"'
+                f" {_CLOSE_DROPDOWN}{key}></label>"
+            )
         return (
             f'<button {attributes} type="button"'
             f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
@@ -2016,6 +2030,26 @@ class WebActionRenderer(WebRenderer[ActionView]):
         if event != "triggered" or not self.is_enabled:
             super().dispatch(event, form)
         self._view.triggered.emit()
+
+    @property
+    def file_types(self) -> list[str]:
+        """Get the file types a `PickFileAction` offers, e.g. [".md"]; empty for any."""
+        view = self._view
+        if not isinstance(view, PickFileAction):
+            return []
+        return list(dict.fromkeys(t.lower() for ts in view.extensions.values() for t in ts))
+
+    def pick_file(self, path: Path) -> None:
+        """Hand the file a `PickFileAction`'s picker uploaded to its `file_picked`.
+
+        Its `triggered` first, as on the other backends (its own picker answers nothing
+        on the web). Raises `UnsupportedEventError` for any other action.
+        """
+        view = self._view
+        if not isinstance(view, PickFileAction) or not self.is_enabled:
+            raise UnsupportedEventError(self, "file")
+        view.triggered.emit()
+        view.file_picked.emit(path)
 
 
 class WebSeparatorRenderer(WebRenderer[SeparatorAction]):

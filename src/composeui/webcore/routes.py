@@ -15,7 +15,7 @@ from starlette.responses import (
 
 from composeui.core import chartimage
 from composeui.webcore.icons import icon_path
-from composeui.webcore.session import MAX_STATE_SIZE
+from composeui.webcore.session import MAX_FILE_SIZE, MAX_STATE_SIZE
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
@@ -95,7 +95,13 @@ async def widget_event(request: Request) -> Response:
         return PlainTextResponse(str(e), status_code=400)
     if result is None:
         return PlainTextResponse("Unknown widget", status_code=404)
-    body, path = result
+    return _widget_response(request, session, *result)
+
+
+def _widget_response(
+    request: Request, session: WebSession, body: str, path: str | None
+) -> Response:
+    """Answer a widget request with the fragments it changed, `body`, and its page."""
     if session.closed:
         # e.g. Exit: end the session; the page it lands on starts a fresh one
         _store(request).drop(request.session.get(SESSION_KEY))
@@ -103,6 +109,29 @@ async def widget_event(request: Request) -> Response:
     # a navigation puts the new page's address in the browser's history
     headers = _NO_STORE if path is None else {**_NO_STORE, "HX-Push-Url": path}
     return HTMLResponse(body, headers=headers)
+
+
+async def widget_file(request: Request) -> Response:
+    """Hand an uploaded file to a `PickFileAction`; respond as `widget_event` does."""
+    session = _session(request)
+    if session is None:
+        return Response(headers=_RELOAD)
+    form = await request.form(max_files=1)
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile):
+        return PlainTextResponse("No file uploaded", status_code=400)
+    # one byte over the limit is enough to know the file is too large
+    content = await upload.read(MAX_FILE_SIZE + 1)
+    widget_id = request.path_params["widget_id"]
+    try:
+        result = await run_in_threadpool(
+            session.pick_file, widget_id, upload.filename or "", content
+        )
+    except UnsupportedEventError as e:
+        return PlainTextResponse(str(e), status_code=400)
+    if result is None:
+        return PlainTextResponse("Unknown widget", status_code=404)
+    return _widget_response(request, session, *result)
 
 
 def widget_fragment(request: Request) -> Response:

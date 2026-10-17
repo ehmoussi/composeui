@@ -35,6 +35,7 @@ from composeui.webcore.routes import (
     state_download,
     state_upload,
     widget_event,
+    widget_file,
     widget_fragment,
 )
 from composeui.webcore.session import SessionStore
@@ -102,6 +103,7 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/widget/{widget_id}", widget_event, methods=["POST"]),
             Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
             Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
+            Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
             Route("/icon/{name}", icon),

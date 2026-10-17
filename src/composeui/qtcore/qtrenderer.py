@@ -57,6 +57,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     PageView,
+    PickFileAction,
     ProgressBarView,
     Router,
     SelectionMode,
@@ -1511,6 +1512,9 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
                 "is_checked": self._refresh_is_checked,
             }
         )
+        if isinstance(view, PickFileAction):
+            # read by the picker each time it opens
+            self._refresh_dispatcher["extensions"] = lambda _view, _action, _value: None
 
     def set_parent_rendered_object(self, parent: QWidget) -> None:
         self._parent_rendered_object = parent

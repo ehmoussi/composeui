@@ -37,6 +37,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.tables import EditableTableMainView, SortedRoomsMainView
 from tests.vertical import VerticalMainView
@@ -554,6 +555,40 @@ def test_a_wide_page_with_no_router_widens_the_main_column(
     assert wide is not None
     assert narrow is not None
     assert wide["width"] > narrow["width"]
+
+
+@pytest.fixture
+def help_page(browser: Browser) -> Iterator[Page]:
+    """Open an app showing a picked Markdown file, in a session of its own."""
+    app = WebApplication(build_main_view=HelpMainView).create_starlette_app()
+    with _serve(app) as url:
+        context = browser.new_context(base_url=url)
+        yield context.new_page()
+        context.close()
+
+
+def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) -> None:
+    page = help_page
+    page.goto("/")
+    markdown = page.locator(".cui-markdown")
+    expect(markdown.get_by_role("heading", name="Help")).to_be_visible()
+    notes = tmp_path / "notes.md"
+    notes.write_text("# Notes\n\n- a picked file\n", encoding="utf-8")
+
+    # its shortcut opens the browser's picker, which offers Markdown files
+    with page.expect_file_chooser() as chooser:
+        page.keyboard.press("Alt+Shift+KeyH")  # Ctrl+H, on the web
+    with _posted(page):
+        chooser.value.set_files(notes)
+    expect(markdown.get_by_role("heading", name="Notes")).to_be_visible()
+    expect(markdown.get_by_text("a picked file")).to_be_visible()
+    # emptied once sent: picking the same file again uploads it again
+    picker = page.locator('input[type="file"][accept=".md,.markdown"]')
+    expect(picker).to_have_value("")
+    notes.write_text("# Notes again\n", encoding="utf-8")
+    with _posted(page):
+        picker.set_input_files(notes)
+    expect(markdown.get_by_role("heading", name="Notes again")).to_be_visible()
 
 
 def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) -> None:

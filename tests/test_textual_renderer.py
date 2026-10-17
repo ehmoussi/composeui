@@ -487,6 +487,35 @@ async def test_open_file_action_runs_the_picker_on_a_worker_thread_and_loads_sta
 
 
 @pytest.mark.asyncio
+async def test_pick_file_action_hands_the_picked_file_over(tmp_path: Path) -> None:
+    """Its picker blocks a worker thread, as Open's does: the app keeps driving the modal."""
+    path = tmp_path / "notes.md"
+    path.write_text("# Notes", encoding="utf-8")
+    view = HelpMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+h")
+        await pilot.pause()
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(path)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(4):
+            await pilot.pause()
+        assert len(app.screen_stack) == 1
+        assert view.help.text == "# Notes"
+
+
+@pytest.mark.asyncio
 async def test_open_file_action_can_be_cancelled_without_hanging() -> None:
     """Dismissing the picker (Escape) must resolve the worker cleanly, not hang.
 
