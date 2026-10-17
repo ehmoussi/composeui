@@ -1147,7 +1147,8 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
     view.chart.x_log = True
     view_box = chart.getPlotItem().vb
-    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 2)
+    # the log range, 0 to 2: the linear one, 1 to 100, reaches 2 too
+    qtbot.waitUntil(lambda: 2 <= view_box.viewRange()[0][1] < 3)
 
     chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
 
