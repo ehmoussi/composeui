@@ -1,14 +1,14 @@
-"""A Markdown viewer: `python -m examples.markdownviewer README.md --backend qt`.
+"""A Markdown viewer: `python -m examples.markdownviewer --markdown README.md --backend qt`.
 
-The file comes first on the command line, the rest goes to the app (`--backend textual`,
-`--language`, ...); Markdown > Open Markdown (Ctrl+M) picks one, on the web too (the
-browser uploads it).
+`--markdown` is the app's own command-line option, beside the backend's (`--backend
+textual`, `--language`, ...); Markdown > Open Markdown (Ctrl+M) picks one, on the web
+too (the browser uploads it).
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from attrs import Factory
 
@@ -22,6 +22,9 @@ from composeui.core.view import (
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    import argparse
 
 
 @define_view
@@ -50,6 +53,14 @@ class MarkdownViewerMainView(MainView):
         self.markdown_menu.open_markdown.file_picked.connect(self.open_markdown)
         self.document.text = self.tr("Open a Markdown file: *Markdown > Open Markdown*.")
 
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--markdown", type=Path, metavar="FILE", help="Show the Markdown FILE.")
+
+    def apply_arguments(self, args: argparse.Namespace) -> None:
+        if args.markdown is not None:
+            self.open_markdown(args.markdown)
+
     def open_markdown(self, path: Path) -> None:
         """Show the Markdown file at `path`, or say in the status bar why it can't."""
         try:
@@ -63,19 +74,7 @@ class MarkdownViewerMainView(MainView):
 
 
 def main() -> None:
-    path: Path | None = None
-    # the file first: `run` hands the rest of the command line to the app, which knows
-    # only its own options
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        path = Path(sys.argv.pop(1))
-
-    def build_main_view() -> MarkdownViewerMainView:
-        main_view = MarkdownViewerMainView()
-        if path is not None:
-            main_view.open_markdown(path)
-        return main_view
-
-    run(build_main_view)
+    run(MarkdownViewerMainView)
 
 
 if __name__ == "__main__":
