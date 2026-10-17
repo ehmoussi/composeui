@@ -67,7 +67,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
-from tests.markdown import HelpMainView
+from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -197,6 +197,23 @@ def test_pick_file_action_hands_the_picked_file_over(
     action.trigger()
     assert view.help.text == "# Notes"
     assert offered == ["Markdown (*.md *.markdown)"] * 2
+
+
+def test_an_app_without_studies_has_no_file_menu(qtbot: QtBot) -> None:
+    view = HelpViewerMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    menus = [action.text() for action in window.menuBar().actions()]
+    assert menus == ["Help"]
+    # nor Ctrl+O, Ctrl+S... anywhere in the window
+    shortcuts = [
+        action.shortcut().toString()
+        for action in window.findChildren(QAction)
+        if not action.shortcut().isEmpty()
+    ]
+    assert shortcuts == ["Ctrl+H"]
 
 
 def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:

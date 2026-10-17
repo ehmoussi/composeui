@@ -66,7 +66,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
-from tests.markdown import HelpMainView
+from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -513,6 +513,21 @@ async def test_pick_file_action_hands_the_picked_file_over(tmp_path: Path) -> No
             await pilot.pause()
         assert len(app.screen_stack) == 1
         assert view.help.text == "# Notes"
+
+
+@pytest.mark.asyncio
+async def test_an_app_without_studies_binds_no_file_menu_key() -> None:
+    view = HelpViewerMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        descriptions = [b.binding.description for b in app.screen.active_bindings.values()]
+        assert "Open Help" in descriptions
+        assert not {"New", "Open", "Save", "Save As"} & set(descriptions)
 
 
 @pytest.mark.asyncio
