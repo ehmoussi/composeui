@@ -158,6 +158,10 @@ a bar that only shows the task runs while `maximum` is `None`.
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
 its links open in the browser. On the web its raw HTML is left out, so the text can't
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page.
+`PickFileAction` is a menu or toolbar action picking a file for the app to read (not a
+study): `extensions` names the types it offers, e.g. `{"Markdown": (".md",)}`, and
+`file_picked` emits the file's path. On the web the browser uploads the file, and the
+path is a copy, gone once the callbacks have run.
 [`src/examples/taskview.py`](src/examples/taskview.py) follows tasks running in
 [threads](#running-work-in-threads) with one (`uv run python -m examples.taskview`, or
 `--backend qt`, or `textual`).

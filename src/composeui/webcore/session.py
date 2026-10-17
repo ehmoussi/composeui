@@ -8,6 +8,7 @@ get their own. State lives in this process only: a restart starts every session 
 
 from __future__ import annotations
 
+import functools
 import re
 import secrets
 import tempfile
@@ -44,6 +45,8 @@ if TYPE_CHECKING:
 MAX_STATE_SIZE = 5 * 1024 * 1024
 #: largest a study's archive may unpack to, in bytes (its database compresses well)
 MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
+#: largest file a `PickFileAction` accepts from an upload, in bytes
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
 def safe_filename(name: str) -> str:
@@ -123,13 +126,49 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if renderer is None:
                 return None
+            return self._respond(functools.partial(renderer.dispatch, event, form))
+
+    def pick_file(
+        self, widget_id: str, filename: str, content: bytes
+    ) -> tuple[str, str | None] | None:
+        """Hand an uploaded file to one of this session's `PickFileAction`s.
+
+        None if `widget_id` isn't one of its actions. The file is a copy under its own
+        name, gone once the action's callbacks have run; one of a type the action
+        doesn't offer, or too large, is refused in the status bar. Returns what
+        `handle_event` does.
+        """
+        name = safe_filename(Path(filename).name)
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+            if not isinstance(renderer, WebActionRenderer):
+                return None
+            types = renderer.file_types
+            error = None
+            if len(content) > MAX_FILE_SIZE:
+                error = "the file is too large"
+            elif types and Path(name).suffix.lower() not in types:
+                error = f"expected a {' or '.join(types)} file"
+            if error is not None:
+                message = f"Can't open {filename!r}: {error}."
+                return self._respond(
+                    functools.partial(self.main_view.status_bar.show_message, message)
+                )
+            with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+                path = Path(directory, name)
+                path.write_bytes(content)
+                return self._respond(functools.partial(renderer.pick_file, path))
+
+    def _respond(self, apply: Callable[[], None]) -> tuple[str, str | None]:
+        """Run `apply` against the tree and return what changed, as `handle_event` does."""
+        with self.lock:
             router = self._router
             route = None if router is None else router.current_route
             main_view = self.main_view
             language, title = main_view.language, main_view.title
             jobs_running = main_view.jobs.is_running
             with collect_dirty() as dirty:
-                renderer.dispatch(event, form)
+                apply()
                 # after: the event may hand changes over with `call_on_main_thread` too
                 body = render_dirty({**self.take_pending(), **dirty})
             if main_view.title != title and isinstance(main_view.renderer, WebMainRenderer):

@@ -648,6 +648,33 @@ class OpenFileAction(ActionView):
 
 
 @define_view
+class PickFileAction(ActionView):
+    """An action picking a file to open; `file_picked` emits its path.
+
+    On Qt and Textual, triggering it shows the file picker. On the web, the browser's
+    picker uploads the file: the path is then a copy, gone once `file_picked`'s
+    callbacks have run. Unlike `OpenFileAction`, the file is the app's to read, not a
+    study.
+    """
+
+    #: the file types the picker offers, by name: ``{"Markdown": (".md", ".markdown")}``;
+    #: on the web, a file of another type is refused
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
+    )
+    file_picked: Signal[Path] = attrs.Factory(Signal[Path])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.triggered.connect(self._pick_file)
+
+    def _pick_file(self, *, main_view: "MainView") -> None:
+        path = main_view.ask_open_filepath(extensions=self.extensions)
+        if path is not None:
+            self.file_picked.emit(path)
+
+
+@define_view
 class SaveAction(ActionView):
     text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
 

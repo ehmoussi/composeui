@@ -43,6 +43,7 @@ from composeui.core.view import (
     Menu,
     OpenFileAction,
     PageView,
+    PickFileAction,
     ProgressBarView,
     Router,
     SaveAction,
@@ -250,6 +251,9 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
                 "is_enabled": self._refresh_button_enabled,
             }
         )
+        if isinstance(view, PickFileAction):
+            # read by the picker each time it opens
+            self._refresh_dispatcher["extensions"] = self._noop
 
     def _refresh_label(
         self, name: str, view: ActionView, _rendered_object: ActionView, value: Any
@@ -1550,7 +1554,7 @@ def _to_textual_key(shortcut: str) -> str:
 
 
 # Actions that can show a blocking file-picker modal - see `_ComposeUIApp.action_trigger`.
-_FILE_DIALOG_ACTIONS = (OpenFileAction, SaveAction, SaveAsAction)
+_FILE_DIALOG_ACTIONS = (OpenFileAction, PickFileAction, SaveAction, SaveAsAction)
 
 
 def _register_actions(app: _ComposeUIApp, root: View) -> None:

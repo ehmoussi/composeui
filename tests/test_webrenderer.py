@@ -422,6 +422,68 @@ def test_markdown_is_shown_as_html_its_own_markup_escaped() -> None:
     assert "<script>" not in renderer.to_html()
 
 
+@pytest.fixture
+def help_views() -> list[HelpMainView]:
+    """Each session's main view, kept by `help_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def help_client(help_views: list[HelpMainView]) -> Iterator[TestClient]:
+    class HelpApp(WebApplication[HelpMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=HelpMainView)
+
+        def setup_session(self, main_view: HelpMainView) -> None:
+            main_view.status_bar.timeout = 0
+            help_views.append(main_view)
+
+    with TestClient(HelpApp().create_starlette_app()) as client:
+        yield client
+
+
+def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
+    help_views: list[HelpMainView], help_client: TestClient
+) -> None:
+    page = help_client.get("/").text
+    (main_view,) = help_views
+    action = main_view.help_menu.open_help
+    action_id = _widget_id(action.renderer)
+    (picker,) = [a for tag, a in _element(page, action_id).descendants if tag == "input"]
+    assert picker["type"] == "file"
+    assert picker["accept"] == ".md,.markdown"
+    assert picker["hx-post"] == f"/widget/{action_id}/file"
+    picked: list[tuple[Path, bool]] = []
+    action.file_picked.connect(lambda path: picked.append((path, path.is_file())))
+    help_id = _widget_id(main_view.help.renderer)
+
+    response = help_client.post(
+        f"/widget/{action_id}/file", files={"file": ("notes.md", b"# Notes", "text/markdown")}
+    )
+    assert response.status_code == 200
+    assert _swapped(response.text, help_id).text == "Notes\n"
+    assert main_view.help.text == "# Notes"
+    # a copy under its name while the callbacks run, gone after
+    ((path, was_there),) = picked
+    assert (path.name, was_there) == ("notes.md", True)
+    assert not path.exists()
+
+    # refused: another type, or no file at all
+    response = help_client.post(
+        f"/widget/{action_id}/file", files={"file": ("notes.txt", b"plain", "text/plain")}
+    )
+    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'notes.txt': expected a .md or .markdown file."
+    assert main_view.help.text == "# Notes"
+    assert help_client.post(f"/widget/{action_id}/file").status_code == 400
+    # another action takes no file, and an unknown widget is none of the session's
+    open_id = _widget_id(main_view.file_menu.open_file.renderer)
+    files = {"file": ("notes.md", b"# Other", "text/markdown")}
+    assert help_client.post(f"/widget/{open_id}/file", files=files).status_code == 400
+    assert help_client.post("/widget/cui-0/file", files=files).status_code == 404
+    assert len(picked) == 1
+
+
 def test_a_changed_field_inside_a_changed_group_is_swapped_once(
     pipe_main_view: PipeMainView,
 ) -> None:

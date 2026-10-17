@@ -169,6 +169,36 @@ def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
     assert window.statusBar().geometry().top() - browser_bottom < 30
 
 
+def test_pick_file_action_hands_the_picked_file_over(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = HelpMainView()
+    _add_reference_to_signals(view, None)  # `main_view` for the action, as an app does
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    path = tmp_path / "notes.md"
+    path.write_text("# Notes", encoding="utf-8")
+    offered: list[str] = []
+
+    def pick(*args: object) -> tuple[str, str]:
+        offered.append(str(args[3]))
+        return answer
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(pick))
+    renderer = view.help_menu.open_help.renderer
+    assert isinstance(renderer, QtActionRenderer)
+    action = renderer.qt_object
+    assert isinstance(action, QAction)
+
+    answer = ("", "")  # cancelled: nothing picked
+    action.trigger()
+    assert view.help.text.startswith("# Help")
+    answer = (str(path), "Markdown (*.md *.markdown)")
+    action.trigger()
+    assert view.help.text == "# Notes"
+    assert offered == ["Markdown (*.md *.markdown)"] * 2
+
+
 def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
