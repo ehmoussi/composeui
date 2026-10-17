@@ -13,11 +13,13 @@ from qtpy.QtCore import (
     Signal,
 )
 from qtpy.QtWidgets import (
+    QAbstractItemDelegate,
     QAbstractItemView,
     QAbstractScrollArea,
     QHeaderView,
     QSizePolicy,
     QTableView,
+    QWidget,
 )
 
 from composeui.core.view import replace_cell
@@ -98,9 +100,9 @@ class QTextTableView(QTableView):
     a row, as Qt's `MultiSelection`. `selected_rows_changed` emits the selected rows'
     indexes, in order, only when the user changes them: setting them or the table from
     code stays silent. The user edits a cell of `set_editable_columns` with a double click
-    or F2, and `cell_edited` emits its row, column and new text. `header_clicked` emits
-    the column whose header the user clicked; the header shows the order
-    `set_sort_indicator` gives, the table never sorting its rows itself.
+    or F2, and `cell_edited` emits its row, column and new text once the editor has closed.
+    `header_clicked` emits the column whose header the user clicked; the header shows the
+    order `set_sort_indicator` gives, the table never sorting its rows itself.
     """
 
     selected_rows_changed = Signal(list)
@@ -127,9 +129,27 @@ class QTextTableView(QTableView):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.selectionModel().selectionChanged.connect(self._emit_selected_rows_changed)
-        self._model.cell_edited.connect(self.cell_edited)
+        self._edits: list[tuple[int, int, str]] = []
+        self._model.cell_edited.connect(self._hold_edit)
         self._sort: tuple[int, bool] | None = None
         self.horizontalHeader().sectionClicked.connect(self._header_clicked)
+
+    def _hold_edit(self, row: int, column: int, text: str) -> None:
+        # Qt commits the editor's text before closing it: a callback answering the edit with
+        # new rows would reset the model under the open editor, which Qt then commits again
+        # ("commitData called with an editor that does not belong to this view")
+        self._edits.append((row, column, text))
+
+    def closeEditor(  # noqa: N802
+        self, editor: QWidget, hint: QAbstractItemDelegate.EndEditHint
+    ) -> None:
+        if len(self._edits) > 0:
+            # the cell to edit next may not stay where it is once the edit is answered
+            hint = QAbstractItemDelegate.EndEditHint.NoHint
+        super().closeEditor(editor, hint)
+        edits, self._edits = self._edits, []
+        for edit in edits:
+            self.cell_edited.emit(*edit)
 
     def set_sort_indicator(self, sort: tuple[int, bool] | None, *, is_shown: bool) -> None:
         """Show the order: by a column, descending or not; None for the rows' own."""

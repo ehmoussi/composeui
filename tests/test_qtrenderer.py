@@ -892,6 +892,40 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
 
 
+# Qt warned "commitData called with an editor that does not belong to this view"
+@pytest.mark.qt_log_level_fail("WARNING")
+@pytest.mark.qt_log_ignore("propagateSizeHints")
+def test_an_edit_answered_with_new_rows_closes_its_editor(qtbot: QtBot) -> None:
+    view = EditableTableMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    # active, for the editor to take the focus, and lose it once closed
+    with qtbot.waitActive(window):
+        window.activateWindow()
+    table = _table(view.places)
+    model = table.model()
+
+    def answer(row: int, column: int, text: str) -> None:
+        view.places.rows = replace_cell(view.places.rows, row, column, text)
+
+    view.places.cell_edited.connect(answer)
+    center = table.visualRect(model.index(0, 1)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    editor = QApplication.focusWidget()
+    assert isinstance(editor, QLineEdit)
+    editor.selectAll()
+    qtbot.keyClicks(editor, "Windy")
+    # Tab commits, then would edit the next cell: the new rows reset the table first
+    qtbot.keyClick(editor, Qt.Key.Key_Tab)
+    assert table.state() is not QAbstractItemView.State.EditingState
+    assert view.places.rows[0] == ["Lake", "Windy"]
+    assert model.index(0, 1).data() == "Windy"
+    assert QApplication.focusWidget() is table
+
+
 def test_a_language_set_once_rendered_relabels_the_widgets(qtbot: QtBot) -> None:
     view = TranslatedMainView()
     view.render(RendererType.QT)
