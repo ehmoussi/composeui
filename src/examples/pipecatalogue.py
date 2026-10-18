@@ -258,10 +258,9 @@ class ShownFormView(FormView):
 
 @define_view
 class PipeExpander(ExpanderView):
-    """A pipe of the catalogue: its name, then its material, dimensions and mass."""
+    """A pipe of the catalogue: its name, material and mass, then its dimensions."""
 
     details: LabelView = Factory(LabelView)
-    mass: LabelView = Factory(LabelView)
     delete: ButtonView = child(ButtonView, text="Delete", variant=ButtonVariant.DANGER)
 
 
@@ -270,7 +269,7 @@ class PipeList(ListView[ListedPipe]):
     """The pipes shown, an expander each, told apart by their name, which is unique."""
 
     def build_item(self, item: ListedPipe) -> View:
-        view = PipeExpander(title=item.name)
+        view = PipeExpander()
         self.update_item(view, item)
         view.delete.clicked.connect(functools.partial(self._delete, item.name))
         return view
@@ -281,11 +280,11 @@ class PipeList(ListView[ListedPipe]):
     def update_item(self, view: View, item: ListedPipe) -> bool:
         # in place: an expanded pipe stays expanded
         assert isinstance(view, PipeExpander)
+        # what tells the pipes apart at a glance, the rest once expanded
+        view.title = f"{item.name} · {item.material.value} · {item.mass:.1f} kg"
         view.details.text = (
-            f"{item.material.value}, outer radius {item.radius:g} mm,"
-            f" wall {item.thickness:g} mm, {item.length:g} m long"
+            f"Outer radius {item.radius:g} mm, wall {item.thickness:g} mm, {item.length:g} m long"
         )
-        view.mass.text = f"{item.mass:.1f} kg"
         return True
 
     def _delete(
@@ -298,12 +297,13 @@ class PipeList(ListView[ListedPipe]):
 
 @define_view
 class CataloguePageView(PageView):
+    # the filter and what it shows, then the pipes it shows, however many
     shown: ShownFormView = Factory(ShownFormView)
-    pipes: PipeList = Factory(PipeList)
     total: LabelView = Factory(LabelView)
     remove_shown: ButtonView = child(
         ButtonView, text="Remove the Shown Pipes", variant=ButtonVariant.DANGER
     )
+    pipes: PipeList = Factory(PipeList)
 
 
 @define_view
