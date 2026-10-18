@@ -55,6 +55,7 @@ from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterTable,
 )
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
+from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
@@ -68,6 +69,7 @@ from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -778,6 +780,37 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         await pilot.pause()
         await pilot.pause()
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+
+@pytest.mark.asyncio
+async def test_a_metric_shows_its_change_as_a_badge_colored_by_sign() -> None:
+    view = JobsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    running, failed = view.summary.running.renderer, view.summary.failed.renderer
+    assert isinstance(running, TextualWidgetRenderer)
+    assert isinstance(failed, TextualWidgetRenderer)
+    running_metric, failed_metric = running.widget, failed.widget
+    assert isinstance(running_metric, ComposeMetric)
+    assert isinstance(failed_metric, ComposeMetric)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert str(running_metric.value.render()) == "3"
+        assert str(running_metric.badge.render()) == "↑ 2 since yesterday"
+        assert not failed_metric.badge.display  # no change given
+        # side by side in their row
+        assert failed_metric.region.x > running_metric.region.x
+        rise = running_metric.badge.styles.color
+
+        view.summary.running.delta = -2
+        view.summary.failed.delta = 0
+        await pilot.pause()
+        assert str(running_metric.badge.render()) == "↓ 2 since yesterday"
+        assert running_metric.badge.styles.color != rise
+        assert failed_metric.badge.display
 
 
 @pytest.mark.asyncio

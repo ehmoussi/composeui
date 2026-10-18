@@ -99,6 +99,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.horizontal import HorizontalMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -2103,6 +2104,61 @@ def test_an_icon_is_served_from_its_content_and_only_when_a_view_names_it(
         swapped = _swapped(render_dirty(dirty), _action_id(main_view.toolbar.run))
     assert _icon_url(swapped) != run_url
     assert toolbar_client.get(run_url).status_code == 404
+
+
+@pytest.fixture
+def jobs() -> Iterator[tuple[TestClient, JobsMainView]]:
+    """Serve an app with a row of metrics; yield a client and its main view."""
+    views: list[JobsMainView] = []
+
+    class JobsApp(WebApplication[JobsMainView]):
+        def setup_session(self, main_view: JobsMainView) -> None:
+            views.append(main_view)
+
+    app = JobsApp(build_main_view=JobsMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def _badge(stat: _Element) -> tuple[str, ...] | None:
+    """Get the classes of a stat's badge, None without one."""
+    for tag, attributes in stat.descendants:
+        if tag == "span" and "badge" in (attributes.get("class") or "").split():
+            return tuple((attributes.get("class") or "").split())
+    return None
+
+
+def test_a_metric_is_a_stat_with_its_change_as_a_badge_colored_by_sign(
+    jobs: tuple[TestClient, JobsMainView],
+) -> None:
+    client, view = jobs
+    running, failed = view.summary.running, view.summary.failed
+    running_id, failed_id = _widget_id(running.renderer), _widget_id(failed.renderer)
+    page = client.get("/").text
+    stat = _element(page, running_id)
+    assert "stat" in (stat.attributes.get("class") or "").split()
+    assert "↑ 2 since yesterday" in stat.text
+    badge = _badge(stat)
+    assert badge is not None
+    assert "badge-success" in badge
+    assert _badge(_element(page, failed_id)) is None  # no change given
+
+    running.delta = -2
+    failed.label = "<Failed>"
+    failed.delta = 0
+    stat = _element(client.get(f"/widget/{running_id}").text, running_id)
+    assert "↓ 2 since yesterday" in stat.text
+    badge = _badge(stat)
+    assert badge is not None
+    assert "badge-error" in badge
+    stat = _element(client.get(f"/widget/{failed_id}").text, failed_id)
+    assert "<Failed>" in stat.text  # escaped, shown as text
+    badge = _badge(stat)
+    assert badge is not None
+    assert "badge-success" not in badge
+    assert "badge-error" not in badge
 
 
 def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(

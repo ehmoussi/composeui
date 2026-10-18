@@ -57,6 +57,7 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    MetricView,
     PageView,
     PickFileAction,
     ProgressBarView,
@@ -73,6 +74,7 @@ from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
+from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 
@@ -759,6 +761,59 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: QChart) -> None:
         pass  # the user only looks at a chart; nothing to read back
+
+
+class MetricViewLike(ViewLike, Protocol):
+    label: str
+    value: str
+    delta: float | None
+    delta_text: str
+
+
+class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
+    def __init__(self, view: MetricViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "label": self._refresh_label,
+                "value": self._refresh_value,
+                "delta": self._refresh_delta,
+                "delta_text": self._refresh_delta_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QMetric()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_label(_view: MetricViewLike, rendered_object: QMetric, value: str) -> None:
+        rendered_object.label.setText(value)
+
+    @staticmethod
+    def _refresh_value(_view: MetricViewLike, rendered_object: QMetric, value: str) -> None:
+        rendered_object.value.setText(value)
+
+    @staticmethod
+    def _refresh_delta(view: MetricViewLike, rendered_object: QMetric, value: float | None) -> None:
+        QtMetricRenderer._show_badge(rendered_object, value, view.delta_text)
+
+    @staticmethod
+    def _refresh_delta_text(view: MetricViewLike, rendered_object: QMetric, value: str) -> None:
+        QtMetricRenderer._show_badge(rendered_object, view.delta, value)
+
+    @staticmethod
+    def _show_badge(rendered_object: QMetric, delta: float | None, delta_text: str) -> None:
+        if delta is None:
+            rendered_object.set_delta("", 0)
+        else:
+            sign = (delta > 0) - (delta < 0)
+            rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
+
+    @staticmethod
+    def _update_state(view: MetricViewLike, rendered_object: QMetric) -> None:
+        pass  # a metric is read-only; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1790,6 +1845,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "main": QtMainRenderer,
     "markdown": QtMarkdownRenderer,
     "menu": QtMenuRenderer,
+    "metric": QtMetricRenderer,
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
     "radio_group": QtRadioGroupRenderer,

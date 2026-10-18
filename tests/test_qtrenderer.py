@@ -64,6 +64,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformlabel import QFormLabel
+from composeui.qtcore.widgets.qmetric import QMetric
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.charts import ChartPagesMainView
@@ -72,6 +73,7 @@ from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
@@ -791,6 +793,34 @@ def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
     assert not wrap.isChecked()
     view.toolbar.is_enabled = False
     assert not toolbar.widgetForAction(run).isEnabled()
+
+
+def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(
+    qtbot: QtBot,
+) -> None:
+    view = JobsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    running, failed = _widget(view.summary.running), _widget(view.summary.failed)
+    assert isinstance(running, QMetric)
+    assert isinstance(failed, QMetric)
+    assert (running.label.text(), running.value.text()) == ("Running", "3")
+    assert running.value.font().pointSizeF() > running.label.font().pointSizeF()
+    assert running.badge.text() == "↑ 2 since yesterday"
+    assert not failed.badge.isVisibleTo(window)  # no change given
+
+    window.show()
+    rise = running.badge.palette().color(running.badge.foregroundRole())
+    view.summary.running.delta = -2
+    running.badge.ensurePolished()
+    fall = running.badge.palette().color(running.badge.foregroundRole())
+    assert running.badge.text() == "↓ 2 since yesterday"
+    assert rise != fall
+    view.summary.running.delta_text = ""
+    assert running.badge.text() == "↓ 2"
+    view.summary.failed.delta = 1
+    assert failed.badge.isVisibleTo(window)
 
 
 def test_the_progress_bar_follows_its_view(qtbot: QtBot) -> None:
