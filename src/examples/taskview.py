@@ -2,7 +2,8 @@
 
 Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
 view. It returns the task's status, which its job emits on the main thread, where the
-views show it.
+views show it: in the table, and counted by metrics, which once a run is over show how
+each count changed since the last run.
 """
 
 import enum
@@ -26,9 +27,9 @@ from composeui.core.view import (
     GroupFormView,
     HorizontalView,
     LabelRowFloatInputView,
-    LabelView,
     LanguageMenu,
     MainView,
+    MetricView,
     ProgressBarView,
     T,
     TableView,
@@ -123,6 +124,30 @@ class RunButtons(HorizontalView):
 
 
 @define_view
+class TaskMetrics(HorizontalView):
+    """How many tasks of the run have each status."""
+
+    running: MetricView = child(MetricView, label=T("Tasks running"), value="0")
+    succeeded: MetricView = child(
+        MetricView, label=T("Tasks succeeded"), value="0", delta_text=T("since the last run")
+    )
+    failed: MetricView = child(
+        MetricView, label=T("Tasks failed"), value="0", delta_text=T("since the last run")
+    )
+    canceled: MetricView = child(
+        MetricView, label=T("Tasks canceled"), value="0", delta_text=T("since the last run")
+    )
+
+    def metric(self, status: TaskStatus) -> MetricView:
+        return {
+            TaskStatus.RUNNING: self.running,
+            TaskStatus.SUCCEEDED: self.succeeded,
+            TaskStatus.FAILED: self.failed,
+            TaskStatus.CANCELED: self.canceled,
+        }[status]
+
+
+@define_view
 class TaskMainView(MainView):
     app_title = T("Task View")
     extension = ".tasks"
@@ -133,12 +158,16 @@ class TaskMainView(MainView):
     config: TaskConfigForm = Factory(TaskConfigForm)
     buttons: RunButtons = Factory(RunButtons)
     progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT)
-    summary: LabelView = Factory(LabelView)
+    metrics: TaskMetrics = Factory(TaskMetrics)
     tasks: TableView = child(
         TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
     )
     #: the tasks of the last run
     _tasks: list[Task] = attrs.field(factory=list, init=False, metadata={OMIT: True})
+    #: how many tasks of the run before had each status, once it was over
+    _last_counts: Optional["Counter[TaskStatus]"] = attrs.field(
+        default=None, init=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -186,22 +215,21 @@ class TaskMainView(MainView):
         counts = Counter(task.status for task in self._tasks)
         done = counts[TaskStatus.SUCCEEDED] + counts[TaskStatus.FAILED]
         self.progress.value = done + counts[TaskStatus.CANCELED]
-        summary = self.tr(
-            "{done} of {total} tasks done: {succeeded} succeeded, {failed} failed,"
-            " {canceled} canceled"
-        )
-        self.summary.text = summary.format(
-            done=done,
-            total=len(self._tasks),
-            succeeded=counts[TaskStatus.SUCCEEDED],
-            failed=counts[TaskStatus.FAILED],
-            canceled=counts[TaskStatus.CANCELED],
-        )
+        for status in TaskStatus:
+            self.metrics.metric(status).value = str(counts[status])
 
     def _show_running(self, is_running: bool) -> None:
         self.config.is_enabled = not is_running
         self.buttons.run.is_enabled = not is_running
         self.buttons.cancel.is_enabled = is_running
+        # compared once a run is over: a count is only final then
+        counts = Counter(task.status for task in self._tasks)
+        last = None if is_running else self._last_counts
+        for status in (TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELED):
+            delta = None if last is None else counts[status] - last[status]
+            self.metrics.metric(status).delta = delta
+        if not is_running:
+            self._last_counts = counts
 
 
 def main() -> None:
