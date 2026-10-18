@@ -40,6 +40,7 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QStatusBar,
+    QTabWidget,
     QTextBrowser,
     QToolBar,
     QToolTip,
@@ -85,6 +86,7 @@ from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
+from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -901,6 +903,42 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
     height = window.minimumSizeHint().height()
     view.pipes.items = [Pipe(f"Pipe {number}", 1) for number in range(40)]
     assert window.minimumSizeHint().height() == height
+
+
+def test_a_tab_view_shows_the_tab_the_user_picks(qtbot: QtBot) -> None:
+    view = TabsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    tabs = view.tabs
+    tab_widget = _widget(tabs)
+    assert isinstance(tab_widget, QTabWidget)
+    bar = tab_widget.tabBar()
+    assert [tab_widget.tabText(index) for index in range(tab_widget.count())] == [
+        "Details",
+        "History",
+        "Notes",
+    ]
+    picks: list[int] = []
+    tabs.current_changed.connect(picks.append)
+    created = _widget(tabs.history.created)
+    assert _widget(tabs.details.length).isVisible()
+    assert not created.isVisible()
+
+    qtbot.mouseClick(bar, Qt.MouseButton.LeftButton, pos=bar.tabRect(1).center())
+    assert (tabs.current_index, picks) == (1, [1])
+    assert created.isVisible()
+    assert tabs.current_tab is tabs.history
+
+    tabs.current_index = 0  # set in code: shown, and not reported
+    assert (tab_widget.currentIndex(), picks) == (0, [1])
+    tabs.history.title = "Changes"
+    assert tab_widget.tabText(1) == "Changes"
+    tabs.notes.is_enabled = False
+    assert not tab_widget.isTabEnabled(2)
+    tabs.notes.is_visible = False
+    assert not tab_widget.isTabVisible(2)
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

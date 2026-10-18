@@ -581,6 +581,41 @@ document.addEventListener("keydown", function (event) {
     }
   });
 });
+/* tabs (see `WebTabsRenderer`): a click on a tab shows its panel at once, then htmx
+   posts the pick; the arrow keys, Home and End move to a tab that can be picked, and
+   pick it, as an ARIA tab list does. Only the tab shown is in the tab order. */
+function showTab(tab) {
+  tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]').forEach(function (other) {
+    var isShown = other === tab;
+    other.setAttribute("aria-selected", String(isShown));
+    other.tabIndex = isShown ? 0 : -1;
+    other.classList.toggle("tab-active", isShown);
+    document.getElementById(other.getAttribute("aria-controls")).hidden = !isShown;
+  });
+}
+document.addEventListener("click", function (event) {
+  var tab = event.target.closest("[data-tab]");
+  if (tab !== null && !tab.disabled) showTab(tab);
+});
+document.addEventListener("keydown", function (event) {
+  var tab = event.target;
+  if (!(tab instanceof HTMLElement) || !("tab" in tab.dataset)) return;
+  var tabs = Array.prototype.filter.call(
+    tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]'),
+    function (other) { return !other.hidden && !other.disabled; },
+  );
+  var index = tabs.indexOf(tab);
+  var next = {
+    ArrowRight: tabs[(index + 1) % tabs.length],
+    ArrowLeft: tabs[(index - 1 + tabs.length) % tabs.length],
+    Home: tabs[0],
+    End: tabs[tabs.length - 1],
+  }[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  next.focus();
+  next.click();
+});
 /* the page's language, for screen readers and the browser's spell checker, and its
    title: the server swaps in its marker when the app changes them (see `page_marker`) */
 function syncPage() {

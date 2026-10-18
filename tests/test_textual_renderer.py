@@ -22,7 +22,7 @@ from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.pilot import Pilot
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar
+from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar, TabPane
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 
@@ -62,6 +62,7 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.batman import BatmanMainView
@@ -80,6 +81,7 @@ from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
+from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -932,6 +934,53 @@ async def test_a_list_view_shows_a_view_per_record_as_the_records_change() -> No
         await pilot.pause()
         assert shown() == ["Main line", "Return"]
         assert view.status_bar.message == "Deleted Feed"
+
+
+@pytest.mark.asyncio
+async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
+    view = TabsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    tabs = view.tabs
+    assert isinstance(tabs.renderer, TextualWidgetRenderer)
+    tabbed = tabs.renderer.widget
+    assert isinstance(tabbed, ComposeTabbedContent)
+    panes = []
+    for tab in tabs.tabs:
+        assert isinstance(tab.renderer, TextualWidgetRenderer)
+        panes.append(tab.renderer.widget)
+    details, history, notes = panes
+    assert isinstance(history, TabPane)
+    assert isinstance(notes, TabPane)
+    picks: list[int] = []
+    tabs.current_changed.connect(picks.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert [str(tabbed.get_tab(pane).label) for pane in panes] == [
+            "Details",
+            "History",
+            "Notes",
+        ]
+        assert tabbed.active_pane is details
+
+        await pilot.click(tabbed.get_tab(history))
+        await pilot.pause()
+        assert (tabs.current_index, picks) == (1, [1])
+        assert tabbed.active_pane is history
+
+        tabs.current_index = 0  # set in code: shown, and not reported
+        await pilot.pause()
+        assert (tabbed.active_pane, picks) == (details, [1])
+        tabs.history.title = "Changes"
+        tabs.notes.is_enabled = False
+        tabs.notes.is_visible = False
+        await pilot.pause()
+        assert str(tabbed.get_tab(history).label) == "Changes"
+        assert tabbed.get_tab(notes).disabled
+        assert not tabbed.get_tab(notes).display
 
 
 @pytest.mark.asyncio

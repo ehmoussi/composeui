@@ -11,7 +11,7 @@ from textual.containers import Container, Grid, Horizontal, Vertical, VerticalSc
 from textual.content import Content
 from textual.types import NoActiveAppError
 from textual.validation import Integer, Number
-from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static
+from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static, TabPane
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
@@ -58,6 +58,8 @@ from composeui.core.view import (
     SidebarView,
     SliderMixin,
     StatusBar,
+    TabPage,
+    TabView,
     ToolBar,
     VerticalView,
     View,
@@ -77,6 +79,7 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
     ComposeToolbarButton,
@@ -1776,6 +1779,119 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
         pass  # a list has no user-editable state of its own: its records are the model's
 
 
+class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
+    """A tab's views in a pane; its title, visibility and enabled state are its tab's."""
+
+    def __init__(self, view: TabPage) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "is_visible": self._refresh_tab_visible,
+                "is_enabled": self._refresh_tab_enabled,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets = [
+                view.renderer.widget
+                for view in self._view.children_views
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            # an id: the tabs tell their panes by it
+            self._rendered_object = TabPane(
+                self._view.title, *widgets, id=f"cui-{id(self._view)}-tab"
+            )
+
+    @staticmethod
+    def _tabs(pane: TabPane) -> ComposeTabbedContent | None:
+        """Get the tabs `pane` is a tab of, once mounted."""
+        if not pane.is_attached:
+            return None
+        return next((a for a in pane.ancestors if isinstance(a, ComposeTabbedContent)), None)
+
+    @staticmethod
+    def _refresh_title(_view: TabPage, rendered_object: TabPane, value: str) -> None:
+        tabs = TextualTabPageRenderer._tabs(rendered_object)
+        if tabs is not None:
+            tabs.get_tab(rendered_object).label = value
+
+    @staticmethod
+    def _refresh_tab_visible(_view: TabPage, rendered_object: TabPane, value: bool) -> None:
+        # not the pane's own display: only the current tab's pane shows
+        tabs = TextualTabPageRenderer._tabs(rendered_object)
+        if tabs is not None and rendered_object.id is not None:
+            if value:
+                tabs.show_tab(rendered_object.id)
+            else:
+                tabs.hide_tab(rendered_object.id)
+
+    @staticmethod
+    def _refresh_tab_enabled(_view: TabPage, rendered_object: TabPane, value: bool) -> None:
+        rendered_object.disabled = not value  # its tab follows
+
+    @staticmethod
+    def _update_state(view: TabPage, rendered_object: TabPane) -> None:
+        view.is_enabled = not rendered_object.disabled
+
+
+class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
+    """Textual's tabbed content: the tabs in a row, the current one's pane under them."""
+
+    def __init__(self, view: TabView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["current_index"] = self._refresh_current_index
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            panes = [
+                tab.renderer.widget
+                for tab in self._view.tabs
+                if isinstance(tab.renderer, TextualTabPageRenderer)
+                and tab.renderer.widget is not None
+            ]
+            self._rendered_object = ComposeTabbedContent(*panes)
+            self._rendered_object.picked.connect(self._update_current_index)
+
+    @staticmethod
+    def _pane_id(tab: TabPage) -> str | None:
+        """Get the id of `tab`'s pane, which the tabs tell it by."""
+        renderer = tab.renderer
+        if isinstance(renderer, TextualTabPageRenderer) and renderer.widget is not None:
+            return renderer.widget.id
+        return None
+
+    @staticmethod
+    def _refresh_current_index(
+        view: TabView, rendered_object: ComposeTabbedContent, value: int
+    ) -> None:
+        pane_id = TextualTabsRenderer._pane_id(view.tabs[value])
+        if pane_id is not None and rendered_object.is_attached:
+            rendered_object.set_active(pane_id)
+
+    @staticmethod
+    def _update_state(view: TabView, rendered_object: ComposeTabbedContent) -> None:
+        index = TextualTabsRenderer._index(view, rendered_object.active)
+        if index is not None:
+            view.current_index = index
+
+    @staticmethod
+    def _index(view: TabView, pane_id: str) -> int | None:
+        """Get the index of the tab whose pane is `pane_id`."""
+        ids = [TextualTabsRenderer._pane_id(tab) for tab in view.tabs]
+        return ids.index(pane_id) if pane_id in ids else None
+
+    def _update_current_index(self, pane: TabPane) -> None:
+        index = self._index(self._view, pane.id or "")
+        if index is None or index == self._view.current_index:
+            return
+        with self.stop_refresh():
+            self._view.current_index = index
+        self._view.current_changed.emit(index)
+
+
 class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -2192,6 +2308,8 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "sidebar": TextualSidebarRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
+    "tab_page": TextualTabPageRenderer,
+    "tabs": TextualTabsRenderer,
     "toolbar": TextualToolBarRenderer,
     "vertical": TextualVerticalRenderer,
 }

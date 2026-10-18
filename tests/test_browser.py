@@ -43,6 +43,7 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, SortedRoomsMainView
+from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
@@ -249,6 +250,13 @@ class _PipesApp(WebApplication[PipesMainView]):
 def pipes_base_url() -> Iterator[str]:
     """Serve an app listing pipes, an expander each, for the whole module."""
     with _serve(_PipesApp().create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def tabs_base_url() -> Iterator[str]:
+    """Serve an app with a pipe's details in tabs, for the whole module."""
+    with _serve(WebApplication(build_main_view=TabsMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -897,6 +905,43 @@ def test_a_list_view_adds_and_deletes_items_leaving_the_others_alone(
         feed.get_by_role("button", name="Delete").click()  # the new item's own
     expect(titles).to_have_text(["Main line", "Return"])
     expect(page.locator("footer")).to_have_text("Deleted Feed")
+    context.close()
+
+
+def test_a_tab_view_shows_the_tab_picked_by_a_click_or_the_arrow_keys(
+    browser: Browser, tabs_base_url: str
+) -> None:
+    context = browser.new_context(base_url=tabs_base_url)
+    page = context.new_page()
+    page.goto("/")
+    details, history, notes = (
+        page.get_by_role("tab", name=name) for name in ("Details", "History", "Notes")
+    )
+    length, created = page.get_by_text("Length: 12 m"), page.get_by_text("Created on Monday")
+    expect(details).to_have_attribute("aria-selected", "true")
+    expect(length).to_be_visible()
+    expect(created).to_be_hidden()
+
+    with _posted(page):
+        history.click()
+    expect(created).to_be_visible()
+    expect(length).to_be_hidden()
+    page.reload()  # the server's page: on the tab picked, as the server was told
+    expect(history).to_have_attribute("aria-selected", "true")
+    expect(created).to_be_visible()
+
+    history.focus()
+    with _posted(page):
+        page.keyboard.press("ArrowRight")
+    expect(notes).to_be_focused()
+    expect(page.get_by_text("Insulated in 2024")).to_be_visible()
+    with _posted(page):
+        page.keyboard.press("ArrowRight")  # past the last tab, the first
+    expect(details).to_be_focused()
+    expect(details).to_have_attribute("aria-selected", "true")
+    expect(length).to_be_visible()
+    page.reload()
+    expect(length).to_be_visible()
     context.close()
 
 
