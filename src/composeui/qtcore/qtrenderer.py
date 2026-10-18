@@ -1358,6 +1358,11 @@ class QtGroupFormRenderer(QtFormRenderer):
             rendered_object.setTitle(value)
 
 
+#: widgets scrolling within themselves: as tall as the room they're given, rather than
+#: their content, so they take a column's spare height, and a row's whole height
+_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget)
+
+
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
     """Add `view`'s widget to a column of content: a window's, or a page's."""
     if not isinstance(view.renderer, QtWidgetRenderer):
@@ -1386,9 +1391,15 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
             inset.addWidget(widget, alignment=Qt.AlignmentFlag.AlignLeft)
         else:
             inset.addWidget(widget)
-        # a document, or a list, scrolls within itself: it takes the column's spare height,
-        # ahead of the spacer under the views
-        layout.addLayout(inset, 1 if isinstance(widget, (QTextBrowser, QScrollArea)) else 0)
+        # a document, a list or a tree scrolls within itself, and so does a row holding one:
+        # it takes the column's spare height, ahead of the spacer under the views
+        inner = widget.layout()
+        expands = isinstance(widget, _SCROLLING_WIDGETS) or (
+            isinstance(view, HorizontalView)
+            and inner is not None
+            and bool(inner.expandingDirections() & Qt.Orientation.Vertical)
+        )
+        layout.addLayout(inset, 1 if expands else 0)
 
 
 class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
@@ -1582,9 +1593,16 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
                 if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
                     view.renderer.qt_object, QWidget
                 ):
+                    widget = view.renderer.qt_object
                     # at the top: Qt centres a view shorter than the row (e.g. a table
-                    # as tall as its rows, beside a taller one) as the window grows
-                    layout.addWidget(view.renderer.qt_object, stretch, Qt.AlignmentFlag.AlignTop)
+                    # as tall as its rows, beside a taller one) as the window grows; one
+                    # scrolling within itself, as tall as the row
+                    alignment = (
+                        Qt.AlignmentFlag(0)
+                        if isinstance(widget, _SCROLLING_WIDGETS)
+                        else Qt.AlignmentFlag.AlignTop
+                    )
+                    layout.addWidget(widget, stretch, alignment)
             if self._view.align is Align.START:
                 layout.addStretch(0)
             self.refresh()

@@ -79,6 +79,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
+from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.buildings import SiteMainView
@@ -194,6 +195,24 @@ def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
     # it scrolls within itself: down to the status bar, no empty space under it
     browser_bottom = browser.mapTo(window, browser.rect().bottomLeft()).y()
     assert window.statusBar().geometry().top() - browser_bottom < 30
+
+
+def test_a_row_holding_a_list_and_a_tree_takes_the_spare_height_of_the_window(
+    qtbot: QtBot,
+) -> None:
+    view = PipeCatalogueMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(1100, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    browser = view.catalogue.browser
+    tree, pipes = _widget(browser.tree), _widget(browser.pipes)
+    # both scroll within themselves: as tall as the row, down to the window's bottom
+    assert tree.height() == pipes.height()
+    assert window.height() - pipes.mapTo(window, pipes.rect().bottomLeft()).y() < 40
 
 
 def test_pick_file_action_hands_the_picked_file_over(
