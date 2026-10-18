@@ -3,8 +3,9 @@
 `python -m examples.pipecatalogue --backend qt` (or `textual`, or `web`). The pipes are
 rows of the model's database, not view state: the catalogue lists them, an expander each,
 through a query filtered by material and radius, with their mass computed by a SQL view
-joining each pipe to its material. A form in the sidebar adds a pipe, which the catalogue
-beside it lists at once; each pipe's Edit button changes it in a form dialog, and its
+joining each pipe to its material, and beside them in a tree, under their material:
+selecting a pipe there expands its expander. A form in the sidebar adds a pipe, which the
+catalogue beside it lists at once; each pipe's Edit button changes it in a form dialog, and its
 Delete button removes it. The database checks every pipe added or changed (a name,
 positive dimensions, a wall thinner than the radius) and File saves and opens the views
 and the database together.
@@ -21,6 +22,7 @@ from attrs import Factory
 from composeui.core.application import run
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
 from composeui.core.view import (
+    STRETCH,
     ButtonVariant,
     ButtonView,
     DialogKind,
@@ -37,6 +39,8 @@ from composeui.core.view import (
     MainView,
     PageView,
     SidebarView,
+    TreeNode,
+    TreeView,
     View,
     child,
     define_view,
@@ -325,6 +329,43 @@ class PipeList(ListView[ListedPipe]):
 
 
 @define_view
+class PipeTree(TreeView):
+    """The pipes shown under their material, a material by its enum's name."""
+
+    def show(self, pipes: list[ListedPipe]) -> None:
+        """Show `pipes`: what was expanded or selected and still is there stays so."""
+        self.nodes = [
+            TreeNode(
+                material.value,
+                [TreeNode(pipe.name) for pipe in pipes if pipe.material is material],
+                key=material.name,
+            )
+            for material in Material
+            if any(pipe.material is material for pipe in pipes)
+        ]
+
+
+@define_view
+class PipeBrowser(HorizontalView):
+    """The pipes shown twice: in a narrow tree by material, beside their expanders."""
+
+    tree: PipeTree = attrs.field(factory=PipeTree, metadata={STRETCH: 1})
+    pipes: PipeList = attrs.field(factory=PipeList, metadata={STRETCH: 3})
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.tree.selection_changed.connect(self._expand_selected)
+
+    def _expand_selected(self, path: tuple[str, ...]) -> None:
+        """Expand the selected pipe's expander; a material selected expands nothing."""
+        if len(path) == 1:  # a material
+            return
+        for item, view in zip(self.pipes.items, self.pipes.item_views):
+            if item.name == path[-1] and isinstance(view, PipeExpander):
+                view.is_expanded = True
+
+
+@define_view
 class CataloguePageView(PageView):
     # the filter and what it shows, then the pipes it shows, however many
     shown: ShownFormView = Factory(ShownFormView)
@@ -332,7 +373,7 @@ class CataloguePageView(PageView):
     remove_shown: ButtonView = child(
         ButtonView, text="Remove the Shown Pipes", variant=ButtonVariant.DANGER
     )
-    pipes: PipeList = Factory(PipeList)
+    browser: PipeBrowser = Factory(PipeBrowser)
 
 
 @define_view
@@ -400,13 +441,15 @@ class PipeCatalogueMainView(MainView):
         shown.min_radius.editing_finished.connect(self.show_pipes)
 
     def show_pipes(self, model: PipeCatalogueModel) -> None:
-        """List the pipes the filter shows, and their total."""
+        """List the pipes the filter shows, in the tree too, and their total."""
         catalogue = self.catalogue
         shown = catalogue.shown.shown()
-        catalogue.pipes.items = model.pipes.find(shown)
+        pipes = model.pipes.find(shown)
+        catalogue.browser.tree.show(pipes)
+        catalogue.browser.pipes.items = pipes
         total = model.pipes.total(shown)
-        pipes = "pipe" if total.count == 1 else "pipes"
-        catalogue.total.text = f"{total.count} {pipes}, {total.mass:.1f} kg"
+        noun = "pipe" if total.count == 1 else "pipes"
+        catalogue.total.text = f"{total.count} {noun}, {total.mass:.1f} kg"
 
     def _add_pipe(self, *, model: PipeCatalogueModel) -> None:
         pipe = self.add.pipe.pipe()

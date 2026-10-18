@@ -177,6 +177,8 @@ under its `title`, which the user clicks to expand or collapse it (`toggled`).
 given) from its top-level node down to it, e.g. `("Building A", "Floor 1")`. The user
 expands and collapses the nodes (`expanded`, `toggled`) and selects one (`selected`,
 `selection_changed`); new `nodes` keep the paths still in them.
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) shows its pipes in one,
+under their material, rebuilt from the database's whenever they change.
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
 its links open in the browser. On the web its raw HTML is left out, so the text can't
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page, and
@@ -564,8 +566,8 @@ the tables (`model.runs.add(...)`):
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) puts it together, on
 every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalogue of
 pipes the database checks as they're added, from a form in a [sidebar](#sidebar), listed
-an expander each in a [list of views](#a-list-of-views), through a filtered query with
-their mass from a SQL view joining them to their material.
+an expander each in a [list of views](#a-list-of-views) beside a tree of them by material,
+through a filtered query with their mass from a SQL view joining them to their material.
 
 ## A table of records
 

@@ -1055,7 +1055,7 @@ async def test_a_form_dialog_s_form_gets_its_state_once_its_screen_shows() -> No
 
     async with app.run_test(size=(120, 40)) as pilot:  # the app starts, its dialog closed
         await pilot.pause()
-        (pipe,) = view.catalogue.pipes.item_views
+        (pipe,) = view.catalogue.browser.pipes.item_views
         assert isinstance(pipe, CataloguePipeExpander)
         pipe.is_expanded = True
         await pilot.pause()
