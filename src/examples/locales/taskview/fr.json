@@ -16,6 +16,10 @@
   "Succeeded": "Réussie",
   "Task": "Tâche",
   "Task View": "Vue des tâches",
+  "Tasks canceled": "Tâches annulées",
+  "Tasks failed": "Tâches échouées",
+  "Tasks running": "Tâches en cours",
+  "Tasks succeeded": "Tâches réussies",
   "The minimum duration can't be greater than the maximum duration": "La durée minimale ne peut pas dépasser la durée maximale",
-  "{done} of {total} tasks done: {succeeded} succeeded, {failed} failed, {canceled} canceled": "{done} tâches terminées sur {total} : {succeeded} réussies, {failed} échouées, {canceled} annulées"
+  "since the last run": "depuis la dernière exécution"
 }

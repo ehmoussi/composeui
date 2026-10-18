@@ -69,6 +69,31 @@ def test_a_run_shows_every_task_s_outcome_then_can_run_again(
     assert not main_view.buttons.cancel.is_enabled
 
 
+def test_the_metrics_count_a_run_s_tasks_and_compare_them_with_the_last_run(
+    qtbot: QtBot, main_view: TaskMainView
+) -> None:
+    metrics = main_view.metrics
+    run = _widget(main_view.buttons.run)
+    assert isinstance(run, QPushButton)
+
+    _configure(main_view, 0, 0)
+    run.click()
+    qtbot.waitUntil(run.isEnabled)
+    assert (metrics.succeeded.value, metrics.failed.value) == (str(TASK_COUNT), "0")
+    assert metrics.succeeded.delta is None  # no run before to compare with
+
+    _configure(main_view, 60, 100)  # longer than the test: running until canceled
+    run.click()
+    qtbot.waitUntil(lambda: metrics.running.value == str(TASK_COUNT))
+    assert metrics.succeeded.delta is None  # counts still moving
+    main_view.jobs.cancel()
+    qtbot.waitUntil(run.isEnabled)
+
+    assert (metrics.running.value, metrics.canceled.value) == ("0", str(TASK_COUNT))
+    assert (metrics.succeeded.delta, metrics.failed.delta) == (-TASK_COUNT, 0)
+    assert metrics.canceled.delta == TASK_COUNT
+
+
 def test_cancel_stops_the_tasks_still_running(qtbot: QtBot, main_view: TaskMainView) -> None:
     _configure(main_view, 60, 0)  # longer than the test: only canceling ends them
     run, cancel = _widget(main_view.buttons.run), _widget(main_view.buttons.cancel)
