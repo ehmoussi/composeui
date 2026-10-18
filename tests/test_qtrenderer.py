@@ -78,6 +78,7 @@ from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
+from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
@@ -857,6 +858,41 @@ def test_a_sidebar_retracts_to_a_strip_by_its_button_and_back(qtbot: QtBot) -> N
     assert create.isVisible()
     assert toggles == [False]
     qtbot.waitUntil(lambda: dock.width() == width)  # its width before
+
+
+def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot) -> None:
+    view = PipesMainView()
+    view.status_bar.timeout = 0
+    _add_reference_to_signals(view, None)
+    view.pipes.items = PIPES[:1]  # before rendering, as at startup
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    column = _widget(view.pipes)
+    layout = column.layout()
+    assert layout is not None
+
+    def shown() -> list[str]:
+        titles = []
+        for index in range(layout.count()):
+            item = layout.itemAt(index)
+            expander = None if item is None else item.widget()
+            assert isinstance(expander, QExpander)
+            titles.append(expander.header.text())
+        return titles
+
+    assert shown() == ["Main line"]
+    main_line = _widget(view.pipes.item_views[0])
+    view.pipes.items = [Pipe("Feed", 1), *PIPES]  # built since: rendered as they come
+    assert shown() == ["Feed", "Main line", "Return"]
+    assert _widget(view.pipes.item_views[1]) is main_line  # the record's own widget
+
+    feed = view.pipes.item_views[0]
+    assert isinstance(feed, PipeExpander)
+    qtbot.mouseClick(_widget(feed.delete), Qt.MouseButton.LeftButton)
+    assert shown() == ["Main line", "Return"]
+    assert view.status_bar.message == "Deleted Feed"
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

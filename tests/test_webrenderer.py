@@ -103,6 +103,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.horizontal import HorizontalMainView
+from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
@@ -2284,6 +2285,61 @@ def test_a_sidebar_is_retracted_by_its_button_never_swapped_back(
     page = client.get("/").text
     assert "data-retracted" in _element(page, aside_id).attributes
     assert _element(page, f"{aside_id}-toggle").attributes["aria-expanded"] == "false"
+
+
+@pytest.fixture
+def pipes() -> Iterator[tuple[TestClient, PipesMainView]]:
+    """Serve an app listing pipes, an expander each; yield a client and its main view."""
+    views: list[PipesMainView] = []
+
+    class PipesApp(WebApplication[PipesMainView]):
+        def setup_session(self, main_view: PipesMainView) -> None:
+            main_view.pipes.items = PIPES
+            views.append(main_view)
+
+    app = PipesApp(build_main_view=PipesMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def _contains(element: _Element, element_id: str) -> bool:
+    """Whether `element` holds an element with the id `element_id`."""
+    return any(attributes.get("id") == element_id for _, attributes in element.descendants)
+
+
+def test_a_list_view_swaps_only_the_items_its_records_changed(
+    pipes: tuple[TestClient, PipesMainView],
+) -> None:
+    client, view = pipes
+    list_id = _widget_id(view.pipes.renderer)
+    main_line, ret = view.pipes.item_views
+    main_line_id = _widget_id(main_line.renderer)
+    page = client.get("/").text
+    assert _contains(_element(page, list_id), main_line_id)
+
+    # a pipe added first: the list's items kept, and the one added put in ahead of them
+    body = client.post(f"/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}).text
+    feed = view.pipes.item_views[0]
+    assert f'id="{list_id}" hx-swap-oob="true"' not in body
+    assert f'hx-swap-oob="afterbegin:#{list_id}"' in body
+    assert main_line_id not in body
+    assert isinstance(feed, PipeExpander)
+    feed_delete_id = _widget_id(feed.delete.renderer)
+    assert feed_delete_id in body
+
+    # the new item's controls reach the session: deleting it deletes its item only
+    body = client.post(f"/widget/{feed_delete_id}", data={"event": "click"}).text
+    assert [pipe.name for pipe in view.pipes.items] == ["Main line", "Return"]
+    assert 'hx-swap-oob="delete"' in body
+    assert main_line_id not in body
+    assert client.post(f"/widget/{feed_delete_id}", data={"event": "click"}).status_code == 404
+
+    # reordered: the whole list swaps
+    view.add.clicked.connect(lambda: setattr(view.pipes, "items", PIPES[::-1]))
+    body = client.post(f"/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}).text
+    assert _contains(_swapped(body, list_id), _widget_id(ret.renderer))
 
 
 @pytest.fixture

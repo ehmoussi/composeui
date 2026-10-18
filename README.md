@@ -561,6 +561,46 @@ saved with the study. `shown_rows` lists the rows shown, in order, as indexes in
 `selected_rows`, `selection_changed` and the edited row keep meaning indexes into `rows`
 whatever the order, and a search or a filter hiding a selected row deselects it.
 
+## A list of views
+
+A `ListView` shows a view per record, one above the other, e.g. an expander per record
+with its details and its Delete button. A subclass builds a record's view; setting `items`
+to the records, e.g. the model's, shows them:
+
+```python
+from composeui.core.view import ExpanderView, LabelView, ListView, View, child, define_view
+
+
+@define_view
+class PipeExpander(ExpanderView):
+    length: LabelView = child(LabelView)
+
+
+@define_view
+class PipeList(ListView[Pipe]):  # Pipe: an attrs record
+    def build_item(self, item: Pipe) -> View:
+        view = PipeExpander(title=item.name)
+        self.update_item(view, item)
+        return view
+
+    def item_key(self, item: Pipe) -> str:
+        return item.name
+
+    def update_item(self, view: View, item: Pipe) -> bool:
+        view.length.text = f"Length: {item.length:g} m"
+        return True
+```
+
+A new record gets a view of its own, a record gone takes its view along, and a record
+still there keeps its view, told apart by `item_key` (the record itself by default). A
+record changed keeps its view if `update_item` shows the change in it and returns True,
+so the view keeps what the user did to it (an expander stays expanded); otherwise it gets
+a new view. A view built later is set up like the others: its signals pass `main_view`
+and `model` to the callbacks asking for them, and it shows the main view's language. The
+records and their views are the model's, not study data: saving, opening and New leave
+them alone. On the web, a change swaps only the records' views it adds or removes, never
+the others, unless it reorders them.
+
 ## Charts
 
 A `ChartView` plots results, e.g. a quantity against time or a swept dimension: a list of
