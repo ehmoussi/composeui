@@ -46,7 +46,7 @@ def _configure(main_view: TaskMainView, duration: int, failure_percentage: int) 
 
 
 def _statuses(main_view: TaskMainView) -> set[str]:
-    return {status for _, _, status, _ in main_view.tasks.rows}
+    return {status for _, _, status, _ in main_view.details.tasks.rows}
 
 
 @pytest.mark.parametrize(
@@ -63,9 +63,9 @@ def test_a_run_shows_every_task_s_outcome_then_can_run_again(
     run.click()
     qtbot.waitUntil(run.isEnabled)
 
-    assert len(main_view.tasks.rows) == TASK_COUNT
+    assert len(main_view.details.tasks.rows) == TASK_COUNT
     assert _statuses(main_view) == {status.value}
-    errors = {error != "" for _, _, _, error in main_view.tasks.rows}
+    errors = {error != "" for _, _, _, error in main_view.details.tasks.rows}
     assert errors == {status is TaskStatus.FAILED}
     assert bar.value() == bar.maximum() == TASK_COUNT
     assert main_view.config.is_enabled
@@ -120,7 +120,7 @@ def test_a_run_waits_for_a_valid_configuration(main_view: TaskMainView) -> None:
 
     main_view.buttons.run.clicked.emit()
 
-    assert main_view.tasks.rows == []
+    assert main_view.details.tasks.rows == []
     assert main_view.buttons.run.is_enabled
     assert "greater than the maximum" in main_view.config.log_view.log_message
     assert main_view.status_bar.message == "Fix the configuration first"
