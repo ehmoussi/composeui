@@ -91,6 +91,19 @@ def _save(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
     app.main_view.file_menu.save.triggered.emit()
 
 
+def test_save_as_saves_the_study_where_the_user_picks(app: App, tmp_path: Path) -> None:
+    app.model.runs.add(80.0)
+    path = tmp_path / "copy.hello"
+    app.main_view.file_view.filepath = path
+
+    app.main_view.file_menu.save_as.triggered.emit()
+
+    other = App(build_main_view=HelloMainView, build_model=RunsModel)
+    _open(other, path)
+    assert other.model.runs.radii() == [80.0]
+    other.model.close()
+
+
 def _open(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
     app.main_view.file_view.filepath = path
     app.main_view.file_menu.open_file.triggered.emit()

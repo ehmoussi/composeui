@@ -700,9 +700,6 @@ class SaveAsAction(ActionView):
         self.is_checkable = False
         self.icon = None
         self.data = None
-        self.triggered.connect(self._save_new_study)
-
-    def _save_new_study(self) -> None: ...
 
 
 @define_view
@@ -735,6 +732,7 @@ class FileMenu(Menu):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.save.triggered.connect(self._save_state)
+        self.save_as.triggered.connect(self._save_state)
         self.open_file.triggered.connect(self._load_state)
 
     def _load_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
