@@ -536,10 +536,6 @@ document.addEventListener("change", function (event) {
 document.addEventListener("input", function (event) {
   var slider = event.target;
   if (!("slider" in slider.dataset)) return;
-  var minimum = Number(slider.min);
-  var maximum = Number(slider.max);
-  var fraction = maximum > minimum ? (slider.value - minimum) / (maximum - minimum) : 0;
-  slider.parentElement.style.setProperty("--slider-fraction", String(fraction));
   slider.parentElement.querySelector("output").value = slider.value;
 });
 /* the page's language, for screen readers and the browser's spell checker, and its
