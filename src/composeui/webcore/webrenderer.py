@@ -652,13 +652,15 @@ class SliderViewLike(ViewLike, Protocol):
 
 
 class WebSliderRenderer(WebRenderer[SliderViewLike]):
-    """A range input posting the handle's moves, its value in an `<output>` above the handle.
+    """A range input posting the handle's moves, its value in an `<output>` on its right.
 
     The browser stops the handle on each step. The moves are posted debounced
     (`input`) and on release (`change`); meanwhile the page's script keeps the value
-    over the handle (see `page.py`). The root is a `<div>` holding both, so a row's
-    label names the input with `aria-labelledby`. Like every control, never swapped
-    back after a move; it is when the server changes it.
+    in step (see `page.py`). Beside the track rather than above the handle, and in a
+    slot as wide as the widest value, so the row is as tall as a text field's and the
+    track keeps its length. The root is a `<div>` holding both, so a row's label names
+    the input with `aria-labelledby`. Like every control, never swapped back after a
+    move; it is when the server changes it.
     """
 
     _role = "slider"
@@ -680,21 +682,22 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
         last = SliderMixin.last_position(minimum, self._view.maximum, step)
         position = SliderMixin.position(self._view.value, minimum, self._view.maximum, step)
         value = minimum + position * step
-        # how far along the track the handle is, which the value above it follows
-        fraction = position / last if last > 0 else 0
+        top = minimum + last * step
+        digits = max(len(str(minimum)), len(str(top)))
         disabled = "" if self.is_enabled else " disabled"
         input_id = f"{self.widget_id}-input"
         return (
             f'<div {self._root_attributes(oob=oob)} class="cui-slider"'
-            f' style="--slider-fraction: {fraction:.6g}">'
-            # read out by the input itself, as its value
-            f'<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
+            f' style="--slider-digits: {digits}">'
             f'<input id="{input_id}"{self._row_attributes()} type="range" data-slider'
-            ' class="range range-primary w-full" name="value"'
-            f' min="{minimum}" max="{minimum + last * step}" step="{step}" value="{value}"'
+            ' class="range range-primary" name="value"'
+            f' min="{minimum}" max="{top}" step="{step}" value="{value}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:150ms, change"'
             ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
-            f' autocomplete="off"{disabled}></div>'
+            f' autocomplete="off"{disabled}>'
+            # read out by the input itself, as its value
+            f'<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
+            "</div>"
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:

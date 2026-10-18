@@ -790,30 +790,27 @@ def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None
     assert spanning["width"] > 2 * first["width"]
 
 
-def test_a_slider_value_follows_its_handle(browser: Browser, workers_base_url: str) -> None:
+def test_a_slider_shows_its_value_beside_the_track_as_tall_as_a_text_field(
+    browser: Browser, workers_base_url: str
+) -> None:
     context = browser.new_context(base_url=workers_base_url)
     page = context.new_page()
     page.goto("/")
     slider = page.get_by_role("slider", name="Workers")
     value = page.locator("output")
     expect(value).to_have_text("5")
-    track = _box(slider)
-    # daisyUI's thumb, 1.5rem wide: its center travels the track less its width
-    thumb = 24
+    field, track, shown = _box(page.get_by_label("Retries")), _box(slider), _box(value)
+    # the slider's row as tall as the text field's: its track centered where the text is
+    assert _box(slider.locator(".."))["height"] == field["height"]
+    assert track["y"] + track["height"] / 2 == pytest.approx(
+        shown["y"] + shown["height"] / 2, abs=1
+    )
+    assert shown["x"] >= track["x"] + track["width"]  # on the track's right
 
     with _posted(page):
         slider.press("End")
     expect(value).to_have_text("14")
-    shown = _box(value)
-    assert shown["x"] + shown["width"] / 2 == pytest.approx(
-        track["x"] + track["width"] - thumb / 2, abs=2
-    )
-    assert shown["y"] + shown["height"] <= track["y"]  # above the handle
-    with _posted(page):
-        slider.press("Home")
-    expect(value).to_have_text("2")
-    shown = _box(value)
-    assert shown["x"] + shown["width"] / 2 == pytest.approx(track["x"] + thumb / 2, abs=2)
+    assert _box(value) == shown  # its slot as wide whatever the value: the track keeps its length
     expect(slider).to_be_focused()  # never swapped back
     context.close()
 

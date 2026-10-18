@@ -223,25 +223,26 @@ body {
   color: var(--color-error);
 }
 
-/* a slider's value above its handle: `--slider-fraction` is how far along the track
-   the handle is (set by `WebSliderRenderer`, then the page's script while dragging),
-   and the handle's center travels the track less its own width, daisyUI's thumb */
+/* a slider's track, then its value in a slot as wide as its widest (`--slider-digits`,
+   set by `WebSliderRenderer`, in digits of one width): the track keeps its length as the
+   value changes, and the row is as tall as a text field's (daisyUI's field height) */
 .cui-slider {
-  --slider-thumb: calc(var(--size-selector, 0.25rem) * 6);
-  position: relative;
-  padding-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: calc(var(--size-field, 0.25rem) * 10);
+}
+.cui-slider > .range {
+  flex: 1;
+  min-width: 0;
 }
 .cui-slider-value {
-  position: absolute;
-  top: 0;
-  left: calc(
-    var(--slider-thumb) / 2 + var(--slider-fraction, 0) * (100% - var(--slider-thumb))
-  );
-  transform: translateX(-50%);
+  flex: none;
+  width: calc(var(--slider-digits, 1) * 1ch);
+  text-align: right;
+  /* a text field's text */
   font-size: 0.875rem;
-  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* a table's selected rows, in the theme's colour: over the zebra stripes and the hover */

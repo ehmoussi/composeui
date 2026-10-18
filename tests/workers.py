@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from attrs import Factory
 
-from composeui.core.view import FormView, LabelRowSliderView, MainView, child, define_view
+from composeui.core.view import (
+    FormView,
+    LabelRowIntInputView,
+    LabelRowSliderView,
+    MainView,
+    child,
+    define_view,
+)
 
 
 @define_view
@@ -13,6 +20,8 @@ class WorkersForm(FormView):
     workers: LabelRowSliderView = child(
         LabelRowSliderView, label="Workers", minimum=2, maximum=16, step=3, value=5
     )
+    #: a text field, for the slider's row to match
+    retries: LabelRowIntInputView = child(LabelRowIntInputView, label="Retries", value=1)
 
 
 @define_view
