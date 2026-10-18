@@ -1528,7 +1528,14 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
                 if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
                     view.renderer.qt_object, QWidget
                 ):
-                    self._rendered_object.content_layout.addWidget(view.renderer.qt_object)
+                    widget = view.renderer.qt_object
+                    # a button as wide as its text, as in a window's column, not the section
+                    alignment = (
+                        Qt.AlignmentFlag.AlignLeft
+                        if isinstance(widget, QPushButton)
+                        else Qt.AlignmentFlag(0)
+                    )
+                    self._rendered_object.content_layout.addWidget(widget, 0, alignment)
             # first, so the view's callbacks see the new state
             self._rendered_object.expanded_changed.connect(self._update_expanded)
             self._view.toggled.add_qt_signal(self._rendered_object.expanded_changed)
