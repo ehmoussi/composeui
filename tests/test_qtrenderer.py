@@ -1630,9 +1630,10 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     # the log range, 0 to 2: the linear one, 1 to 100, reaches 2 too
     qtbot.waitUntil(lambda: 2 <= view_box.viewRange()[0][1] < 3)
 
-    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
+    # straight to the hover, not through the mouse's rate-limited proxy: its delay leaves
+    # the range, still settling on the log axis, time to move under the cursor
+    chart.show_hover(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
 
-    qtbot.waitUntil(lambda: chart.hover_text() != "")
     assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2.000 kPa"]
 
 
