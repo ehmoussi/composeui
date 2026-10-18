@@ -576,6 +576,8 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalo
 pipes the database checks as they're added, from a form in a [sidebar](#sidebar), listed
 an expander each in a [list of views](#a-list-of-views) beside a tree of them by material,
 through a filtered query with their mass from a SQL view joining them to their material.
+Each pipe has an installation date, picked with a `DateInputView` and filtered by;
+studies saved before the date column existed get it as they open, through a migration.
 
 ## A table of records
 
