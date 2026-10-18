@@ -531,6 +531,17 @@ document.addEventListener("change", function (event) {
     ? patternHint
     : option.dataset.placeholder;
 });
+/* a slider's value follows its handle while it is dragged: the server only hears of the
+   moves debounced (see `WebSliderRenderer`), and its answer never swaps the slider back */
+document.addEventListener("input", function (event) {
+  var slider = event.target;
+  if (!("slider" in slider.dataset)) return;
+  var minimum = Number(slider.min);
+  var maximum = Number(slider.max);
+  var fraction = maximum > minimum ? (slider.value - minimum) / (maximum - minimum) : 0;
+  slider.parentElement.style.setProperty("--slider-fraction", String(fraction));
+  slider.parentElement.querySelector("output").value = slider.value;
+});
 /* the page's language, for screen readers and the browser's spell checker, and its
    title: the server swaps in its marker when the app changes them (see `page_marker`) */
 function syncPage() {

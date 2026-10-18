@@ -28,6 +28,7 @@ from composeui.core.view import (
     RadioGroupView,
     SelectionMode,
     Series,
+    SliderView,
     _is_omitted_type,
     define_view,
     replace_cell,
@@ -241,6 +242,23 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     assert math.isnan(loaded.chart.series[1].y[0])
     # the app's text, not the study's
     assert "title" not in json.loads(path.read_text())["chart"]
+
+
+def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None:
+    # steps 2, 5, 8, 11 and 14 (positions 0 to 4): 16 is no step
+    assert SliderView.last_position(2, 16, 3) == 4
+    assert SliderView.position(5, 2, 16, 3) == 1
+    assert SliderView.position(7, 2, 16, 3) == 2
+    assert SliderView.position(16, 2, 16, 3) == 4
+    assert SliderView.position(-5, 2, 16, 3) == 0
+    # halfway between two steps goes up, whatever the step
+    assert SliderView.position(1, 0, 10, 2) == 1
+    assert SliderView.position(3, 0, 10, 2) == 2
+    # a maximum below the minimum leaves one step, the minimum
+    assert SliderView.last_position(5, 0, 1) == 0
+    assert SliderView.position(3, 5, 0, 1) == 0
+    with pytest.raises(ValueError, match="step"):
+        SliderView(step=0)
 
 
 def test_a_metric_badge_points_the_way_its_figure_changed() -> None:

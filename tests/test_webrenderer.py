@@ -77,6 +77,7 @@ from composeui.webcore.webrenderer import (
     WebActionRenderer,
     WebChartRenderer,
     WebFloatInputRenderer,
+    WebFormLabelRenderer,
     WebInputRenderer,
     WebLabelRenderer,
     WebLogRenderer,
@@ -105,6 +106,7 @@ from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRooms
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
+from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
@@ -646,6 +648,33 @@ def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
 
     # left with a decimal: the field, otherwise never swapped back, shows 15 again
     assert _swapped(fragments, field.widget_id).attributes["value"] == "15"
+
+
+def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps() -> None:
+    view = WorkersMainView()
+    view.render(RendererType.WEB)
+    workers = view.form.workers
+    label, field = _part(workers, "label"), _part(workers, "field")
+    assert isinstance(label, WebFormLabelRenderer)
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+    slider = _element(field.to_html(), field.widget_id)
+    (range_input,) = [a for tag, a in slider.descendants if tag == "input"]
+    assert range_input["type"] == "range"
+    # the last step, short of 16, is the input's maximum, so the browser never stops past it
+    assert [range_input[name] for name in ("min", "max", "step", "value")] == ["2", "14", "3", "5"]
+    assert range_input["aria-labelledby"] == label.text_id
+    assert slider.text == "5"  # the value above the handle
+
+    fragments = handle_event(field, "input", {"value": "8"})
+    assert (workers.value, moves) == (8, [8])
+    assert field.widget_id not in fragments  # never swapped back while dragged
+    handle_event(field, "change", {"value": "8"})  # the release, after the debounced move
+    assert moves == [8]
+    handle_event(field, "input", {"value": "16"})
+    assert (workers.value, moves) == (14, [8, 14])
+    handle_event(field, "input", {"value": "abc"})
+    assert workers.value == 14
 
 
 def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:

@@ -64,6 +64,7 @@ from composeui.core.view import (
     Router,
     SelectionMode,
     SeparatorAction,
+    SliderMixin,
     StatusBar,
     ToolBar,
     VerticalView,
@@ -77,6 +78,7 @@ from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
+from composeui.qtcore.widgets.qvalueslider import QValueSlider
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -416,6 +418,76 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
         minimum, maximum = rendered_object.minimum(), rendered_object.maximum()
         view.minimum = minimum if minimum != _INT_MINIMUM else None
         view.maximum = maximum if maximum != _INT_MAXIMUM else None
+
+    def _update_value(self, value: int) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+
+
+class SliderViewLike(ViewLike, Protocol):
+    value: int
+    minimum: int
+    maximum: int
+    step: int
+    value_changed: Signal[int]
+
+
+class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
+    """A horizontal slider stopping on each step, its value painted above the handle."""
+
+    _invalid_style = "QSlider { border: 1px solid red; }"
+
+    def __init__(self, view: SliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "step": self._refresh_step,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QValueSlider()
+            # first, so the view's callbacks see the new value
+            self._rendered_object.shown_value_changed.connect(self._update_value)
+            self._view.value_changed.add_qt_signal(self._rendered_object.shown_value_changed)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(view: SliderViewLike, rendered_object: QValueSlider, value: int) -> None:
+        QtSliderRenderer._show(rendered_object, value, view.minimum, view.maximum, view.step)
+
+    @staticmethod
+    def _refresh_minimum(view: SliderViewLike, rendered_object: QValueSlider, value: int) -> None:
+        QtSliderRenderer._show(rendered_object, view.value, value, view.maximum, view.step)
+
+    @staticmethod
+    def _refresh_maximum(view: SliderViewLike, rendered_object: QValueSlider, value: int) -> None:
+        QtSliderRenderer._show(rendered_object, view.value, view.minimum, value, view.step)
+
+    @staticmethod
+    def _refresh_step(view: SliderViewLike, rendered_object: QValueSlider, value: int) -> None:
+        QtSliderRenderer._show(rendered_object, view.value, view.minimum, view.maximum, value)
+
+    @staticmethod
+    def _show(
+        rendered_object: QValueSlider, value: int, minimum: int, maximum: int, step: int
+    ) -> None:
+        last = SliderMixin.last_position(minimum, maximum, step)
+        rendered_object.first, rendered_object.step = minimum, step
+        rendered_object.setRange(0, last)
+        rendered_object.setPageStep(max(1, last // 10))
+        rendered_object.setValue(SliderMixin.position(value, minimum, maximum, step))
+        rendered_object.update()  # the value painted, even if the handle didn't move
+
+    @staticmethod
+    def _update_state(view: SliderViewLike, rendered_object: QValueSlider) -> None:
+        # only the value: the slider's range ends at the last step, short of a `maximum`
+        # that isn't a whole number of steps away
+        view.value = rendered_object.shown_value()
 
     def _update_value(self, value: int) -> None:
         with self.stop_refresh():
@@ -1848,6 +1920,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "metric": QtMetricRenderer,
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
+    "slider": QtSliderRenderer,
     "radio_group": QtRadioGroupRenderer,
     "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,

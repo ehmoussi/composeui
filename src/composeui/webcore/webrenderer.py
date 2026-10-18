@@ -61,6 +61,7 @@ from composeui.core.view import (
     SaveAsAction,
     SelectionMode,
     SeparatorAction,
+    SliderMixin,
     StatusBar,
     ToolBar,
     VerticalView,
@@ -640,6 +641,77 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
             f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
             f"{progress}></progress>"
         )
+
+
+class SliderViewLike(ViewLike, Protocol):
+    value: int
+    minimum: int
+    maximum: int
+    step: int
+    value_changed: Signal[int]
+
+
+class WebSliderRenderer(WebRenderer[SliderViewLike]):
+    """A range input posting the handle's moves, its value in an `<output>` above the handle.
+
+    The browser stops the handle on each step. The moves are posted debounced
+    (`input`) and on release (`change`); meanwhile the page's script keeps the value
+    over the handle (see `page.py`). The root is a `<div>` holding both, so a row's
+    label names the input with `aria-labelledby`. Like every control, never swapped
+    back after a move; it is when the server changes it.
+    """
+
+    _role = "slider"
+    is_labelable = False
+
+    def __init__(self, view: SliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._mark_dirty,
+                "minimum": self._mark_dirty,
+                "maximum": self._mark_dirty,
+                "step": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        minimum, step = self._view.minimum, self._view.step
+        last = SliderMixin.last_position(minimum, self._view.maximum, step)
+        position = SliderMixin.position(self._view.value, minimum, self._view.maximum, step)
+        value = minimum + position * step
+        # how far along the track the handle is, which the value above it follows
+        fraction = position / last if last > 0 else 0
+        disabled = "" if self.is_enabled else " disabled"
+        input_id = f"{self.widget_id}-input"
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="cui-slider"'
+            f' style="--slider-fraction: {fraction:.6g}">'
+            # read out by the input itself, as its value
+            f'<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
+            f'<input id="{input_id}"{self._row_attributes()} type="range" data-slider'
+            ' class="range range-primary w-full" name="value"'
+            f' min="{minimum}" max="{minimum + last * step}" step="{step}" value="{value}"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:150ms, change"'
+            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            f' autocomplete="off"{disabled}></div>'
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event not in ("input", "change"):
+            super().dispatch(event, form)
+        try:
+            posted = int(form.get("value", ""))
+        except ValueError:
+            return  # a range input always posts a number; nothing else is a move
+        minimum, maximum, step = self._view.minimum, self._view.maximum, self._view.step
+        value = minimum + SliderMixin.position(posted, minimum, maximum, step) * step
+        # `change` posts the value of a still-debounced `input` too: emitted once
+        if value == self._view.value:
+            return
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
 
 
 class ChartViewLike(ViewLike, Protocol):
@@ -2711,6 +2783,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "metric": WebMetricRenderer,
     "page": WebPageRenderer,
     "progress_bar": WebProgressBarRenderer,
+    "slider": WebSliderRenderer,
     "radio_group": WebRadioGroupRenderer,
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,
