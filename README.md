@@ -146,7 +146,9 @@ How it differs from a desktop window:
 | `Jobs` (`composeui.core.jobs`) | `main_view.jobs`: functions [run in threads](#running-work-in-threads), their results emitted on the main thread. |
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
-`FormLabelRowView` and `FloatInputMixin`. See the mixins in `composeui/core/view.py`
+`FormLabelRowView` and `FloatInputMixin`; a labelled row's `help` says what to enter, shown
+by a "?" beside its label (a tooltip on Qt and the web, a hint under the label on Textual).
+See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
 an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`

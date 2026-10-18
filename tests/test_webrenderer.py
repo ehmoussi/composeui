@@ -637,6 +637,38 @@ def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView
     assert list(dirty) == [label.widget_id]
 
 
+def test_a_row_s_help_is_a_question_mark_s_tooltip_describing_its_field(
+    rows: _RowsMainView,
+) -> None:
+    label, field = _part(rows.length, "label"), _part(rows.length, "field")
+    help_id, log_id = f"{label.widget_id}-help", _widget_id(_part(rows.length, "log"))
+
+    with collect_dirty() as dirty:
+        rows.length.help = "In metres, <= 100"
+
+    # the field too: its description gains the help
+    assert sorted(dirty) == sorted([label.widget_id, field.widget_id])
+    fragment = label.to_html()
+    assert "In metres, &lt;= 100" in fragment
+    (tip,) = [
+        attributes
+        for _, attributes in _element(fragment, label.widget_id).descendants
+        if "data-tip" in attributes
+    ]
+    assert tip["data-tip"] == "In metres, <= 100"
+    assert tip["aria-hidden"] == "true"  # the "?" isn't part of the field's name
+    help_text = _element(fragment, help_id)
+    assert "hidden" in help_text.attributes
+    assert help_text.text == "In metres, <= 100"
+    described_by = _element(field.to_html(), field.widget_id).attributes["aria-describedby"]
+    assert described_by == f"{help_id} {log_id}"
+
+    rows.length.help = ""
+
+    assert "data-tip" not in label.to_html()
+    assert _element(field.to_html(), field.widget_id).attributes["aria-describedby"] == log_id
+
+
 def test_log_is_hidden_when_empty_and_coloured_by_type(rows: _RowsMainView) -> None:
     renderer = rows.form_log.renderer
     assert isinstance(renderer, WebLogRenderer)
@@ -1672,7 +1704,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
 
         # the page as first served: rows, titled groups, edge options hidden
         for label in ("Name", "Material", "Radius", "Half Length", "Edge Type"):
-            assert f">{label}</label>" in page
+            assert f">{label}<" in page  # Edge Type then its help's "?"
         assert ">Main Pipe</legend>" in page
         assert _element(page, name_log_id).text == "A name is mandatory"
         assert _selected(_element(page, material_id)) == ["Steel"]

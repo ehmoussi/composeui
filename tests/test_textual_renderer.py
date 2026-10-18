@@ -200,6 +200,30 @@ async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_row_s_help_shows_as_a_hint_under_its_label() -> None:
+    view = PipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    edge_type = view.pages.inputs.pipe_form.edge_type
+    assert isinstance(edge_type.renderer, RendererContainer)
+    label = edge_type.renderer.get_renderer("label")
+    assert isinstance(label, TextualWidgetRenderer)
+    assert isinstance(label.widget, Label)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert str(label.widget.render()) == (
+            "Edge Type\nHow the edge joining the two pipes is finished"
+        )
+
+        edge_type.help = ""
+        await pilot.pause()
+        assert str(label.widget.render()) == "Edge Type"
+
+
+@pytest.mark.asyncio
 async def test_pressing_the_checkbox_checks_the_view_and_enables_its_row() -> None:
     view = PipeMainView()
     view.render(RendererType.TEXTUAL)

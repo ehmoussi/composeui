@@ -57,6 +57,8 @@ _MESSAGE_TIMEOUT = 0.5
 class _BrowserHelloApp(HelloApp):
     def setup_session(self, main_view: HelloMainView) -> None:
         main_view.status_bar.timeout = _MESSAGE_TIMEOUT
+        # the name's field then described by its help and its log, its name still "Name"
+        main_view.form.name.help = "As you'd like to be greeted"
 
 
 @contextlib.contextmanager

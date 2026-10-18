@@ -61,6 +61,7 @@ from composeui.core.view import (
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
+from composeui.qtcore.widgets.qformlabel import QFormLabel
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.charts import ChartPagesMainView
@@ -382,7 +383,7 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     assert isinstance(name_renderer, RendererContainer)
     name_label = name_renderer.get_renderer("label")
     assert isinstance(name_label, QtWidgetRenderer)
-    assert isinstance(name_label.qt_object, QLabel)
+    assert isinstance(name_label.qt_object, QFormLabel)
     label_left = name_label.qt_object.mapTo(window, QPoint(0, 0)).x()
     view.pages.navigate("results")
     qtbot.waitUntil(table.isVisible)
@@ -397,16 +398,25 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     assert table.state() is not QAbstractItemView.State.EditingState
 
 
-def test_form_label_renderer_shows_the_row_label(qtbot: QtBot) -> None:
+def test_form_label_shows_the_row_label_and_a_question_mark_for_its_help(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    renderer = view.pages.inputs.pipe_form.edge_type.renderer
+    edge_type = view.pages.inputs.pipe_form.edge_type
+    renderer = edge_type.renderer
     assert isinstance(renderer, RendererContainer)
     label_renderer = renderer.get_renderer("label")
     assert isinstance(label_renderer, QtWidgetRenderer)
     label_widget = label_renderer.qt_object
-    assert isinstance(label_widget, QLabel)
-    assert label_widget.text() == "Edge Type"
+    assert isinstance(label_widget, QFormLabel)
+    assert label_widget.text_label.text() == "Edge Type"
+    assert not label_widget.help_label.isHidden()
+    assert label_widget.help_label.text() == "?"
+    assert label_widget.toolTip() == "How the edge joining the two pipes is finished"
+
+    edge_type.help = ""
+
+    assert label_widget.help_label.isHidden()
+    assert label_widget.toolTip() == ""
 
 
 def test_group_form_renderer_sets_the_qgroupbox_title(qtbot: QtBot) -> None:

@@ -267,7 +267,13 @@ class WebRenderer(Renderer[TView, str]):
         attributes: list[str] = []
         log_id = self._row_part_id("log")
         if log_id is not None:
-            attributes.append(f'aria-describedby="{log_id}"')
+            label = self._row_renderer("label")
+            described_by = (
+                f"{label.help_id} {log_id}"
+                if isinstance(label, WebFormLabelRenderer) and label.has_help()
+                else log_id
+            )
+            attributes.append(f'aria-describedby="{described_by}"')
             if isinstance(self._view, FormRowView) and self._view.is_invalid:
                 attributes.append('aria-invalid="true"')
         label_id = None if self.is_labelable else self._row_part_id("label")
@@ -276,6 +282,11 @@ class WebRenderer(Renderer[TView, str]):
         return "".join(f" {attribute}" for attribute in attributes)
 
     def _row_part_id(self, part: str) -> str | None:
+        renderer = self._row_renderer(part)
+        return None if renderer is None else renderer.widget_id
+
+    def _row_renderer(self, part: str) -> WebRenderer[Any] | None:
+        """Get another renderer of the view's row, e.g. its "log", if it has one."""
         container = self._view.renderer  # type: ignore[attr-defined]
         if not isinstance(container, RendererContainer):
             return None
@@ -285,7 +296,7 @@ class WebRenderer(Renderer[TView, str]):
             return None
         if not isinstance(renderer, WebRenderer) or renderer is self:
             return None
-        return renderer.widget_id
+        return renderer
 
     def _refresh_enabled(self, view: TView, rendered_object: str, value: Any) -> None:
         self._mark_dirty(view, rendered_object, value)
@@ -1501,7 +1512,15 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
 
     def __init__(self, view: FormLabelRowView) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"label": self._mark_dirty})
+        self._refresh_dispatcher.update({"label": self._mark_dirty, "help": self._refresh_help})
+
+    @property
+    def help_id(self) -> str:
+        """Id of the row's help text, which describes the field while there is help."""
+        return f"{self.widget_id}-help"
+
+    def has_help(self) -> bool:
+        return self._view.help != ""
 
     def to_html(self, *, oob: bool = False) -> str:
         field = self._field_renderer()
@@ -1511,8 +1530,31 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         return (
             f"<label {self._root_attributes(oob=oob)}{target}"
             ' class="label text-sm font-medium text-base-content"'
-            f">{html.escape(self._view.label)}</label>"
+            f">{html.escape(self._view.label)}{self._help_html()}</label>"
         )
+
+    def _help_html(self) -> str:
+        """Render the "?" showing the help as a tooltip, and the help describing the field.
+
+        Neither is part of the field's name: the "?" is `aria-hidden` and the text
+        `hidden`, which `aria-describedby` still reads.
+        """
+        if not self.has_help():
+            return ""
+        text = html.escape(self._view.help)
+        return (
+            f'<span class="tooltip tooltip-right" data-tip="{text}" aria-hidden="true">'
+            '<span class="badge badge-ghost badge-xs cursor-help">?</span></span>'
+            f'<span id="{self.help_id}" hidden>{text}</span>'
+        )
+
+    def _refresh_help(self, view: FormLabelRowView, rendered_object: str, value: str) -> None:
+        self._mark_dirty(view, rendered_object, value)
+        dirty = _DIRTY.get()
+        if dirty is not None and (view.help == "") != (value == ""):
+            # its `aria-describedby` gains or loses the help
+            field = self._field_renderer()
+            dirty[field.widget_id] = field
 
     def _field_renderer(self) -> WebRenderer[Any]:
         if not isinstance(self._view.renderer, RendererContainer):

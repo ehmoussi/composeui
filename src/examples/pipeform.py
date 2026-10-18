@@ -70,6 +70,7 @@ class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Edge Type")
+        self.help = self.tr("How the edge joining the two pipes is finished")
         self.values = {self.tr(edge_type.value): edge_type for edge_type in EdgeType}
         self.value = EdgeType.Normal
 
