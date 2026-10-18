@@ -13,7 +13,7 @@ from __future__ import annotations
 import gc
 import json
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
@@ -53,6 +53,9 @@ from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     ActionView,
+    FloatInputView,
+    InputView,
+    IntInputView,
     ButtonVariant,
     ChartKind,
     ChartView,
@@ -93,7 +96,7 @@ from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
@@ -280,6 +283,32 @@ def test_a_failing_pipe_check_outlines_the_fields_it_names(qtbot: QtBot) -> None
     qtbot.keyClicks(radius_widget, "50")
     qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
     assert outlined() == [False, False, False, False]
+
+
+@pytest.mark.parametrize(
+    ("view", "read"),
+    [
+        (InputView(), lambda view: view.text),
+        (FloatInputView(), lambda view: view.value),
+        (IntInputView(), lambda view: view.value),
+    ],
+    ids=["text", "float", "int"],
+)
+def test_an_edit_is_reported_once_the_view_has_it(
+    qtbot: QtBot, view: View, read: Callable[[Any], object]
+) -> None:
+    """A check run on each edit (`text_edited`) reads the edited value, not the one before."""
+    view.render(RendererType.QT)
+    field = _widget(view)
+    qtbot.addWidget(field)
+    seen: list[object] = []
+    view.text_edited.connect(lambda _text: seen.append(read(view)))  # type: ignore[attr-defined]
+    field.show()
+    field.setFocus()
+
+    qtbot.keyClicks(field, "42")
+
+    assert seen[-2:] in (["4", "42"], [4.0, 42.0], [4, 42])
 
 
 def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbot: QtBot) -> None:
