@@ -1041,6 +1041,48 @@ class IntInputView(IntInputMixin, View):
     _renderer_key = "int_input"
 
 
+@define_view
+class SliderMixin:
+    def _check_step(self, _attribute: "attrs.Attribute[Any]", step: int) -> None:
+        if step <= 0:
+            msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
+            raise ValueError(msg)
+
+    #: from `minimum` to `maximum` by `step`; shown at its nearest step (see `position`)
+    value: int = attrs.field(default=0)
+    minimum: int = attrs.field(default=0)
+    #: the last step, if `maximum - minimum` is not a whole number of steps, falls short of it
+    maximum: int = attrs.field(default=100)
+    step: int = attrs.field(default=1, validator=[_check_step])
+    #: the user moved the handle; not emitted when `value` is set in code
+    value_changed: Signal[int] = attrs.Factory(Signal[int])
+
+    @staticmethod
+    def last_position(minimum: int, maximum: int, step: int) -> int:
+        """Get the steps from `minimum` to the last one at most `maximum`; 0 if none."""
+        return max(0, (maximum - minimum) // step)
+
+    @staticmethod
+    def position(value: int, minimum: int, maximum: int, step: int) -> int:
+        """Get the handle's position, in steps from `minimum`: `value`'s nearest, in range.
+
+        Takes them all, as a renderer refreshes one before the view holds the new value.
+        """
+        last = SliderMixin.last_position(minimum, maximum, step)
+        # a value halfway between two steps goes up, whatever the step (`round` goes even)
+        return min(max(0, (value - minimum + step // 2) // step), last)
+
+
+@define_view
+class SliderView(SliderMixin, View):
+    """A whole number picked by dragging a handle, e.g. a number of workers.
+
+    Its value is shown above the handle.
+    """
+
+    _renderer_key = "slider"
+
+
 class LogType(enum.Enum):
     ERROR = enum.auto()
     WARNING = enum.auto()
@@ -2376,6 +2418,16 @@ class RowIntInputView(FormRowView, IntInputMixin):
 @define_view
 class LabelRowIntInputView(FormLabelRowView, IntInputMixin):
     _field_renderer_key = "int_input"
+
+
+@define_view
+class RowSliderView(FormRowView, SliderMixin):
+    _field_renderer_key = "slider"
+
+
+@define_view
+class LabelRowSliderView(FormLabelRowView, SliderMixin):
+    _field_renderer_key = "slider"
 
 
 @define_view

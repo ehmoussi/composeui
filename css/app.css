@@ -217,6 +217,33 @@ body {
   border-color: var(--color-error);
 }
 
+/* a slider's track, the same way */
+.cui-slider:has(+ [data-log="error"]:not([hidden])) .range,
+.cui-slider:has(+ [data-form-error]) .range {
+  color: var(--color-error);
+}
+
+/* a slider's value above its handle: `--slider-fraction` is how far along the track
+   the handle is (set by `WebSliderRenderer`, then the page's script while dragging),
+   and the handle's center travels the track less its own width, daisyUI's thumb */
+.cui-slider {
+  --slider-thumb: calc(var(--size-selector, 0.25rem) * 6);
+  position: relative;
+  padding-top: 1.5rem;
+}
+.cui-slider-value {
+  position: absolute;
+  top: 0;
+  left: calc(
+    var(--slider-thumb) / 2 + var(--slider-fraction, 0) * (100% - var(--slider-thumb))
+  );
+  transform: translateX(-50%);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* a table's selected rows, in the theme's colour: over the zebra stripes and the hover */
 .table tbody tr[aria-current="true"],
 .table tbody tr[aria-selected="true"] {

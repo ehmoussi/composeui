@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from attrs import Factory
+from rich.text import Text
 from textual.app import App
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
@@ -57,6 +58,7 @@ from composeui.textualcore.widgets.composefiltertable import (
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.batman import BatmanMainView
@@ -75,6 +77,7 @@ from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
+from tests.workers import WorkersMainView
 
 
 def _field_widget(
@@ -140,6 +143,52 @@ async def test_an_int_input_takes_only_whole_numbers_marking_those_out_of_range(
         await pilot.pause()
         assert view.form.opening.value == 30
         assert widget.has_class("-invalid")  # past 23
+
+
+def _value_above_handle(slider: ComposeSlider) -> tuple[str, int, int]:
+    """Get a slider's value as drawn, its middle's column and its handle's column."""
+    rendered = slider.render()
+    assert isinstance(rendered, Text)
+    value_line, track = rendered.plain.split("\n")
+    value = value_line.strip()
+    return value, value_line.index(value) + len(value) // 2, track.index("●")
+
+
+@pytest.mark.asyncio
+async def test_a_slider_stops_on_its_steps_its_value_drawn_above_the_handle() -> None:
+    view = WorkersMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    workers = view.form.workers
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(workers.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        value, middle, handle = _value_above_handle(slider)
+        assert (value, middle) == ("5", handle)
+        first_handle = handle
+
+        slider.focus()
+        await pilot.press("right")
+        assert (workers.value, moves) == (8, [8])
+        value, middle, handle = _value_above_handle(slider)
+        assert (value, middle) == ("8", handle)
+        assert handle > first_handle
+        await pilot.press("end")
+        assert (workers.value, moves) == (14, [8, 14])  # the last step, short of 16
+        assert _value_above_handle(slider)[0] == "14"
+
+        await pilot.click(slider, offset=(0, 1))
+        assert (workers.value, moves) == (2, [8, 14, 2])
+
+        workers.value = 6  # set in code: shown at its nearest step, and not reported
+        await pilot.pause()
+        assert (_value_above_handle(slider)[0], moves) == ("5", [8, 14, 2])
 
 
 @pytest.mark.asyncio

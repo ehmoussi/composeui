@@ -41,6 +41,7 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.tables import EditableTableMainView, SortedRoomsMainView
 from tests.vertical import VerticalMainView
+from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -207,6 +208,13 @@ def chart_pages_base_url() -> Iterator[str]:
     """Serve an app with a chart on its second page, for the whole module."""
     app = WebApplication(build_main_view=ChartPagesMainView).create_starlette_app()
     with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def workers_base_url() -> Iterator[str]:
+    """Serve an app with a slider, for the whole module."""
+    with _serve(WebApplication(build_main_view=WorkersMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -780,6 +788,34 @@ def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None
     # back in their cells
     assert first["y"] == pytest.approx(button["y"], abs=1)
     assert spanning["width"] > 2 * first["width"]
+
+
+def test_a_slider_value_follows_its_handle(browser: Browser, workers_base_url: str) -> None:
+    context = browser.new_context(base_url=workers_base_url)
+    page = context.new_page()
+    page.goto("/")
+    slider = page.get_by_role("slider", name="Workers")
+    value = page.locator("output")
+    expect(value).to_have_text("5")
+    track = _box(slider)
+    # daisyUI's thumb, 1.5rem wide: its center travels the track less its width
+    thumb = 24
+
+    with _posted(page):
+        slider.press("End")
+    expect(value).to_have_text("14")
+    shown = _box(value)
+    assert shown["x"] + shown["width"] / 2 == pytest.approx(
+        track["x"] + track["width"] - thumb / 2, abs=2
+    )
+    assert shown["y"] + shown["height"] <= track["y"]  # above the handle
+    with _posted(page):
+        slider.press("Home")
+    expect(value).to_have_text("2")
+    shown = _box(value)
+    assert shown["x"] + shown["width"] / 2 == pytest.approx(track["x"] + thumb / 2, abs=2)
+    expect(slider).to_be_focused()  # never swapped back
+    context.close()
 
 
 def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(

@@ -150,7 +150,7 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 by a "?" button beside its label that a click, a tap or the keyboard opens (a hint under the
 label on Textual).
 See the mixins in `composeui/core/view.py`
-(`InputMixin`, `FloatInputMixin`, `IntInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
+(`InputMixin`, `FloatInputMixin`, `IntInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
 an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
 for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
@@ -159,6 +159,9 @@ tells the main action from the others and from one destroying something.
 `IntInputView` takes a whole number, e.g. an hour of the day, between its `minimum` and
 `maximum`: a spin box on Qt, keeping it in range; elsewhere a text field for digits,
 where a number out of range isn't refused (Textual marks it), so validate it.
+`SliderView` picks a whole number by dragging a handle, e.g. a number of workers: from
+`minimum` to `maximum` by `step`, its value shown above the handle, which only stops on a
+step; `value_changed` reports the user's moves.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
 `MetricView` shows a figure read at a glance, e.g. the jobs running: its `label`, its

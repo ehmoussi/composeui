@@ -52,6 +52,7 @@ from composeui.core.view import (
     SaveAsAction,
     SelectionMode,
     SeparatorAction,
+    SliderMixin,
     StatusBar,
     ToolBar,
     VerticalView,
@@ -68,6 +69,7 @@ from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
     ComposeToolbarButton,
@@ -624,6 +626,70 @@ class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInp
 
     def _editing_finished(self) -> None:
         self._view.editing_finished.emit()
+
+
+class SliderViewLike(ViewLike, Protocol):
+    value: int
+    minimum: int
+    maximum: int
+    step: int
+    value_changed: Signal[int]
+
+
+class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]):
+    _marks_invalid = True
+
+    def __init__(self, view: SliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "step": self._refresh_step,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeSlider()
+            self._rendered_object.moved.connect(self._update_value)
+
+    @staticmethod
+    def _refresh_value(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
+        TextualSliderRenderer._show(rendered_object, value, view.minimum, view.maximum, view.step)
+
+    @staticmethod
+    def _refresh_minimum(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
+        TextualSliderRenderer._show(rendered_object, view.value, value, view.maximum, view.step)
+
+    @staticmethod
+    def _refresh_maximum(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
+        TextualSliderRenderer._show(rendered_object, view.value, view.minimum, value, view.step)
+
+    @staticmethod
+    def _refresh_step(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
+        TextualSliderRenderer._show(rendered_object, view.value, view.minimum, view.maximum, value)
+
+    @staticmethod
+    def _show(
+        rendered_object: ComposeSlider, value: int, minimum: int, maximum: int, step: int
+    ) -> None:
+        rendered_object.set_steps(
+            minimum,
+            step,
+            SliderMixin.last_position(minimum, maximum, step),
+            SliderMixin.position(value, minimum, maximum, step),
+        )
+
+    @staticmethod
+    def _update_state(view: SliderViewLike, rendered_object: ComposeSlider) -> None:
+        view.value = rendered_object.shown_value
+
+    def _update_value(self, value: int) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -1945,6 +2011,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "metric": TextualMetricRenderer,
     "page": TextualPageRenderer,
     "progress_bar": TextualProgressBarRenderer,
+    "slider": TextualSliderRenderer,
     "radio_group": TextualRadioGroupRenderer,
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
