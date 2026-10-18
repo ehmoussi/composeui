@@ -183,10 +183,33 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
         # action, see `_ComposeUIApp.action_trigger`). `call_on_main_thread` already
         # falls back to a direct call when we're already on the right thread, so this
         # is a no-op in the common case.
-        self.call_on_main_thread(super().refresh)
+        self.call_on_main_thread(self._refresh_if_mounted)
 
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
-        self.call_on_main_thread(functools.partial(super().refresh_attribute, attr_name, value))
+        self.call_on_main_thread(
+            functools.partial(self._refresh_attribute_if_mounted, attr_name, value)
+        )
+
+    def _is_waiting_to_mount(self) -> bool:
+        """Whether the app runs but hasn't mounted the widget yet, e.g. on a screen not shown.
+
+        Some widgets refuse their state until mounted (a `Select` its options); whatever
+        mounts them later gives them their state then: the app's own mount, a list's new
+        item, a form dialog's screen.
+        """
+        widget = self._rendered_object
+        if widget is None or widget.is_attached:
+            return False
+        app = _app_of(widget)
+        return app is not None and app.is_running
+
+    def _refresh_if_mounted(self) -> None:
+        if not self._is_waiting_to_mount():
+            super().refresh()
+
+    def _refresh_attribute_if_mounted(self, attr_name: str, value: Any) -> None:
+        if not self._is_waiting_to_mount():
+            super().refresh_attribute(attr_name, value)
 
     @staticmethod
     def _refresh_visible(_view: TView, rendered_object: TWidget, value: bool) -> None:
@@ -456,6 +479,12 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
             if isinstance(form, TextualWidgetRenderer) and form.widget is not None:
                 self.form_screen = ComposeFormDialog(form.widget)
                 self.form_screen.answered.connect(self._answer_form)
+                # its form's widgets mount with it, first pushed: their state only then
+                self.form_screen.mounted.connect(self._refresh_screen)
+
+    def _refresh_screen(self) -> None:
+        _refresh_tree(self._form_view.form)
+        self.refresh()  # the screen's title, text and buttons
 
     def _answer_form(self, answer: str) -> None:
         {"accept": self._view.accept, "reject": self._view.reject}.get(answer, self._view.dismiss)()
