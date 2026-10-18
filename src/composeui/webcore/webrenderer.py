@@ -50,6 +50,7 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    MetricView,
     NewAction,
     OpenFileAction,
     PageView,
@@ -897,6 +898,45 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             f" data-chart-format>{options}</select>"
             f'<a class="btn btn-ghost btn-xs join-item" data-chart-image download'
             f' href="/widget/{self.widget_id}/image?format=pdf">{text}</a></div>'
+        )
+
+
+class MetricViewLike(ViewLike, Protocol):
+    label: str
+    value: str
+    delta: float | None
+    delta_text: str
+
+
+class WebMetricRenderer(WebRenderer[MetricViewLike]):
+    """A daisyUI stat: its label, its value, and its change as a badge colored by its sign."""
+
+    _role = "metric"
+
+    def __init__(self, view: MetricViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "label": self._mark_dirty,
+                "value": self._mark_dirty,
+                "delta": self._mark_dirty,
+                "delta_text": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        delta = self._view.delta
+        badge = ""
+        if delta is not None:
+            color = "badge-success" if delta > 0 else "badge-error" if delta < 0 else "badge-ghost"
+            text = html.escape(MetricView.badge(delta, self._view.delta_text))
+            badge = (
+                f'<div class="stat-desc"><span class="badge badge-soft {color}">{text}</span></div>'
+            )
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="stat px-0">'
+            f'<div class="stat-title">{html.escape(self._view.label)}</div>'
+            f'<div class="stat-value">{html.escape(self._view.value)}</div>{badge}</div>'
         )
 
 
@@ -2668,6 +2708,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "main": WebMainRenderer,
     "markdown": WebMarkdownRenderer,
     "menu": WebMenuRenderer,
+    "metric": WebMetricRenderer,
     "page": WebPageRenderer,
     "progress_bar": WebProgressBarRenderer,
     "radio_group": WebRadioGroupRenderer,

@@ -161,6 +161,9 @@ tells the main action from the others and from one destroying something.
 where a number out of range isn't refused (Textual marks it), so validate it.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
+`MetricView` shows a figure read at a glance, e.g. the jobs running: its `label`, its
+`value` in large type, and its change since some point (`delta`, then `delta_text`, e.g.
+"since yesterday") as a badge colored by its sign; a row of them in a `HorizontalView`.
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
 its links open in the browser. On the web its raw HTML is left out, so the text can't
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page, and

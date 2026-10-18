@@ -42,6 +42,7 @@ from composeui.core.view import (
     LogType,
     MainView,
     Menu,
+    MetricView,
     OpenFileAction,
     PageView,
     PickFileAction,
@@ -65,6 +66,7 @@ from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
+from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
@@ -958,6 +960,62 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
     @staticmethod
     def _update_state(view: ChartViewLike, rendered_object: ComposeChart) -> None:
         pass  # the user only looks at a chart; nothing to read back
+
+
+class MetricViewLike(ViewLike, Protocol):
+    label: str
+    value: str
+    delta: float | None
+    delta_text: str
+
+
+class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]):
+    def __init__(self, view: MetricViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "label": self._refresh_label,
+                "value": self._refresh_value,
+                "delta": self._refresh_delta,
+                "delta_text": self._refresh_delta_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeMetric()
+
+    @staticmethod
+    def _refresh_label(_view: MetricViewLike, rendered_object: ComposeMetric, value: str) -> None:
+        rendered_object.label.update(value)
+
+    @staticmethod
+    def _refresh_value(_view: MetricViewLike, rendered_object: ComposeMetric, value: str) -> None:
+        rendered_object.value.update(value)
+
+    @staticmethod
+    def _refresh_delta(
+        view: MetricViewLike, rendered_object: ComposeMetric, value: float | None
+    ) -> None:
+        TextualMetricRenderer._show_badge(rendered_object, value, view.delta_text)
+
+    @staticmethod
+    def _refresh_delta_text(
+        view: MetricViewLike, rendered_object: ComposeMetric, value: str
+    ) -> None:
+        TextualMetricRenderer._show_badge(rendered_object, view.delta, value)
+
+    @staticmethod
+    def _show_badge(rendered_object: ComposeMetric, delta: float | None, delta_text: str) -> None:
+        if delta is None:
+            rendered_object.set_delta("", 0)
+        else:
+            sign = (delta > 0) - (delta < 0)
+            rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
+
+    @staticmethod
+    def _update_state(view: MetricViewLike, rendered_object: ComposeMetric) -> None:
+        pass  # a metric is read-only; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1884,6 +1942,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "main": TextualMainRenderer,
     "markdown": TextualMarkdownRenderer,
     "menu": TextualMenuRenderer,
+    "metric": TextualMetricRenderer,
     "page": TextualPageRenderer,
     "progress_bar": TextualProgressBarRenderer,
     "radio_group": TextualRadioGroupRenderer,

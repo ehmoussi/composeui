@@ -1177,6 +1177,36 @@ class ProgressBarView(View):
         return value if maximum is None else min(value, maximum)
 
 
+@define_view
+class MetricView(View):
+    """A figure read at a glance, e.g. the jobs running, and how much it changed.
+
+    A row of them in a `HorizontalView` makes a dashboard's summary.
+    """
+
+    _renderer_key = "metric"
+
+    #: what the figure counts, e.g. "Running"
+    label: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: the figure as shown, formatted by the app, e.g. "3" or "12.5 GB"
+    value: str = attrs.field(default="")
+    #: how much the figure changed; None shows no badge, else its sign colors the badge
+    delta: Optional[float] = attrs.field(default=None)
+    #: after the change in its badge, e.g. "since yesterday"
+    delta_text: str = attrs.field(default="", metadata={UI_TEXT: True})
+
+    @staticmethod
+    def badge(delta: float, delta_text: str) -> str:
+        """Get the badge's text, e.g. "↑ 2 since yesterday", a fall "↓ 2", no change "→ 0".
+
+        Takes both, as a renderer refreshes one before the view holds the new value.
+        """
+        arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
+        # 15 digits: 2.0 shows "2" and 0.1 + 0.2 shows "0.3", never an exponent before 1e15
+        text = f"{arrow} {abs(delta):.15g}"
+        return f"{text} {delta_text}" if delta_text != "" else text
+
+
 def _to_floats(values: "Iterable[float]") -> list[float]:
     """Get `values` as a new list of floats, e.g. from a tuple or a numpy array."""
     return [float(value) for value in values]

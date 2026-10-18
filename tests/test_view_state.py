@@ -23,6 +23,7 @@ from composeui.core.view import (
     InvalidStateError,
     LabelView,
     MainView,
+    MetricView,
     ProgressBarView,
     RadioGroupView,
     SelectionMode,
@@ -240,6 +241,15 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     assert math.isnan(loaded.chart.series[1].y[0])
     # the app's text, not the study's
     assert "title" not in json.loads(path.read_text())["chart"]
+
+
+def test_a_metric_badge_points_the_way_its_figure_changed() -> None:
+    assert MetricView.badge(2, "since yesterday") == "↑ 2 since yesterday"
+    assert MetricView.badge(-1.5, "") == "↓ 1.5"
+    assert MetricView.badge(0, "today") == "→ 0 today"
+    # a float's own noise and a large count read as written
+    assert MetricView.badge(0.1 + 0.2, "") == "↑ 0.3"
+    assert MetricView.badge(1_000_000.0, "") == "↑ 1000000"
 
 
 def test_unstructure_serializes_a_string_choice_as_itself() -> None:
