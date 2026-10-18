@@ -1479,7 +1479,7 @@ def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
         name_id = _field_id(view.add.pipe.name)
         client.post(f"/widget/{name_id}", data={"event": "input", "value": "Main line"})
         client.post(f"/widget/{add_id}", data={"event": "click"})
-        (pipe,) = view.catalogue.pipes.item_views
+        (pipe,) = view.catalogue.browser.pipes.item_views
         assert isinstance(pipe, CataloguePipeExpander)
         edit = pipe.buttons.edit.renderer
 
@@ -1526,7 +1526,7 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
 
     with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
         pages = [alice.get("/").text, bob.get("/").text]
-    assert [[pipe.name for pipe in view.catalogue.pipes.items] for view in views] == [
+    assert [[pipe.name for pipe in view.catalogue.browser.pipes.items] for view in views] == [
         ["Main line"],
         ["Main line"],
     ]

@@ -51,7 +51,7 @@ def _add(
 
 
 def _expanders(app: App) -> list[PipeExpander]:
-    views = app.main_view.catalogue.pipes.item_views
+    views = app.main_view.catalogue.browser.pipes.item_views
     expanders = [view for view in views if isinstance(view, PipeExpander)]
     assert len(expanders) == len(views)
     return expanders
@@ -64,6 +64,38 @@ def _listed(app: App) -> list[list[str]]:
 
 def _names(app: App) -> list[str]:
     return [expander.title.split(" · ")[0] for expander in _expanders(app)]
+
+
+def test_the_tree_shows_the_pipes_listed_by_material_and_expands_the_one_selected(
+    app: App,
+) -> None:
+    tree = app.main_view.catalogue.browser.tree
+    _add(app, "Main line")
+    _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
+    _add(app, "Feed")
+    assert [(node.label, [pipe.label for pipe in node.children]) for node in tree.nodes] == [
+        ("Steel", ["Feed", "Main line"]),
+        ("Copper", ["Return"]),
+    ]
+
+    tree.expanded = [("STEEL",)]
+    tree.selected = ("STEEL", "Main line")  # as the user's click leaves it
+    tree.selection_changed.emit(tree.selected)
+    assert [expander.is_expanded for expander in _expanders(app)] == [False, True, False]
+    tree.selected = ("STEEL",)
+    tree.selection_changed.emit(tree.selected)  # a material: nothing more expanded
+    assert [expander.is_expanded for expander in _expanders(app)] == [False, True, False]
+
+    tree.selected = ("STEEL", "Feed")
+    # the filter, then the model, change the tree: what is still there stays as it was
+    material = app.main_view.catalogue.shown.material
+    material.value = Material.STEEL.value
+    material.value_changed.emit(material.value)
+    assert [node.key for node in tree.nodes] == ["STEEL"]
+    app.model.pipes.delete("Main line")
+    assert (tree.expanded, tree.selected) == ([("STEEL",)], ("STEEL", "Feed"))
+    app.model.pipes.delete("Feed")
+    assert (tree.nodes, tree.expanded, tree.selected) == ([], [], None)
 
 
 def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> None:
