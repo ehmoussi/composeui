@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.types import NoActiveAppError
-from textual.validation import Number
+from textual.validation import Integer, Number
 from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
@@ -544,6 +544,79 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
         # transient invalid text while typing (e.g. "-", "1."); ignore it
         with self.stop_refresh(), contextlib.suppress(ValueError):
             self._view.value = float(text) if text != "" else None
+        self._view.text_changed.emit(text)
+        self._view.text_edited.emit(text)
+
+    def _editing_finished(self) -> None:
+        self._view.editing_finished.emit()
+
+
+class IntInputViewLike(ViewLike, Protocol):
+    placeholder: str
+    value: int | None
+    minimum: int | None
+    maximum: int | None
+    text_changed: Signal[str]
+    text_edited: Signal[str]
+    editing_finished: SignalNoArgs
+
+
+class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInput]):
+    """An input taking only a whole number; Textual has no spin box.
+
+    As on the float input, a value out of `minimum`/`maximum` is marked invalid, not refused.
+    """
+
+    _marks_invalid = True
+
+    def __init__(self, view: IntInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._refresh_placeholder,
+                "minimum": self._refresh_range,
+                "maximum": self._refresh_range,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            # `type="integer"` lets in only what can start an int: digits and a sign
+            self._rendered_object = ComposeInput(type="integer")
+            self._rendered_object.value_changed.connect(self._update_text)
+            self._rendered_object.value_submitted.connect(self._editing_finished)
+
+    @staticmethod
+    def _refresh_value(
+        _view: IntInputViewLike, rendered_object: ComposeInput, value: int | None
+    ) -> None:
+        rendered_object.value = str(value) if value is not None else ""
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: IntInputViewLike, rendered_object: ComposeInput, value: str
+    ) -> None:
+        rendered_object.placeholder = value
+
+    @staticmethod
+    def _refresh_range(view: IntInputViewLike, rendered_object: ComposeInput, _value: Any) -> None:
+        # `type="integer"` adds an `Integer` validator of its own, without a range
+        rendered_object.validators = [
+            v for v in rendered_object.validators if not isinstance(v, Number)
+        ]
+        rendered_object.validators.append(Integer(minimum=view.minimum, maximum=view.maximum))
+
+    @staticmethod
+    def _update_state(view: IntInputViewLike, rendered_object: ComposeInput) -> None:
+        text = rendered_object.value
+        view.value = int(text) if text != "" else None
+        view.placeholder = rendered_object.placeholder
+
+    def _update_text(self, text: str) -> None:
+        # transient invalid text while typing (e.g. "-"); ignore it
+        with self.stop_refresh(), contextlib.suppress(ValueError):
+            self._view.value = int(text) if text != "" else None
         self._view.text_changed.emit(text)
         self._view.text_edited.emit(text)
 
@@ -1799,6 +1872,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "combobox": TextualComboboxRenderer,
     "dialog": TextualDialogRenderer,
     "float_input": TextualFloatInputRenderer,
+    "int_input": TextualIntInputRenderer,
     "form": TextualFormRenderer,
     "form_label": TextualFormLabelRenderer,
     "grid": TextualGridRenderer,

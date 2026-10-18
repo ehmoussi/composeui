@@ -35,6 +35,7 @@ from qtpy.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QSpinBox,
     QStatusBar,
     QTextBrowser,
     QToolBar,
@@ -69,6 +70,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
@@ -283,6 +285,32 @@ def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbo
     radius_widget.selectAll()
     qtbot.keyClicks(radius_widget, "abc")
     assert radius_widget.text() != "abc"  # rejected by the QDoubleValidator
+
+
+def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot) -> None:
+    view = HoursMainView()
+    view.render(RendererType.QT)
+    opening = view.form.opening
+    spin_box = _field_widget(opening)
+    assert isinstance(spin_box, QSpinBox)
+    qtbot.addWidget(spin_box)
+    assert (spin_box.minimum(), spin_box.maximum(), spin_box.value()) == (0, 23, 8)
+
+    spin_box.show()
+    spin_box.setFocus()
+    spin_box.selectAll()
+    qtbot.keyClicks(spin_box, "15")
+    assert opening.value == 15
+    qtbot.keyClick(spin_box, Qt.Key.Key_Up)
+    assert opening.value == 16
+    spin_box.selectAll()
+    qtbot.keyClicks(spin_box, "99")
+    assert opening.value == 9  # the second 9 would take it past 23
+
+    opening.value = None
+    assert spin_box.text() == ""
+    opening.minimum = 10  # Qt would show it, as it raises the 9 still held to 10
+    assert (spin_box.minimum(), spin_box.text()) == (10, "")
 
 
 def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbot: QtBot) -> None:

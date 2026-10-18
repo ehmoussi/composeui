@@ -150,12 +150,15 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 by a "?" button beside its label that a click, a tap or the keyboard opens (a hint under the
 label on Textual).
 See the mixins in `composeui/core/view.py`
-(`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
+(`InputMixin`, `FloatInputMixin`, `IntInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
 an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
 for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
 under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, danger)
 tells the main action from the others and from one destroying something.
+`IntInputView` takes a whole number, e.g. an hour of the day, between its `minimum` and
+`maximum`: a spin box on Qt, keeping it in range; elsewhere a text field for digits,
+where a number out of range isn't refused (Textual marks it), so validate it.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;

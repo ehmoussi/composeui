@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QStackedWidget,
     QStatusBar,
     QStyle,
@@ -326,6 +327,97 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
                 self._view.value = float(text)
             else:
                 self._view.value = None
+
+
+class IntInputViewLike(_InputViewLike, Protocol):
+    value: int | None
+    minimum: int | None
+    maximum: int | None
+
+
+#: a spin box's widest range: Qt's spin box holds a 32-bit int
+_INT_MINIMUM, _INT_MAXIMUM = -(2**31), 2**31 - 1
+
+
+class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
+    """A spin box, keeping its value within `minimum`/`maximum`.
+
+    It shows no value while the view's is `None`; once it has one, leaving it emptied
+    puts the last value back, as any Qt spin box does.
+    """
+
+    _invalid_style = "QSpinBox { border: 1px solid red; }"
+
+    def __init__(self, view: IntInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._refresh_placeholder,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QSpinBox()
+            self._rendered_object.setRange(_INT_MINIMUM, _INT_MAXIMUM)
+            # its text only changes once acceptable, so never for a transient "-"
+            self._rendered_object.valueChanged.connect(self._update_value)
+            self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
+            self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
+            self._view.text_edited.add_qt_signal(self._line_edit(self._rendered_object).textEdited)
+            self.refresh()
+
+    @staticmethod
+    def _line_edit(rendered_object: QSpinBox) -> QLineEdit:
+        # `QAbstractSpinBox.lineEdit` is protected
+        line_edit = rendered_object.findChild(QLineEdit)
+        assert line_edit is not None
+        return line_edit
+
+    @staticmethod
+    def _refresh_value(
+        _view: IntInputViewLike, rendered_object: QSpinBox, value: int | None
+    ) -> None:
+        if value is None:
+            rendered_object.clear()
+        else:
+            rendered_object.setValue(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: IntInputViewLike, rendered_object: QSpinBox, value: str
+    ) -> None:
+        QtIntInputRenderer._line_edit(rendered_object).setPlaceholderText(value)
+
+    @staticmethod
+    def _refresh_minimum(
+        view: IntInputViewLike, rendered_object: QSpinBox, value: int | None
+    ) -> None:
+        rendered_object.setMinimum(_INT_MINIMUM if value is None else value)
+        # a new range shows a value even while the view has none
+        QtIntInputRenderer._refresh_value(view, rendered_object, view.value)
+
+    @staticmethod
+    def _refresh_maximum(
+        view: IntInputViewLike, rendered_object: QSpinBox, value: int | None
+    ) -> None:
+        rendered_object.setMaximum(_INT_MAXIMUM if value is None else value)
+        QtIntInputRenderer._refresh_value(view, rendered_object, view.value)
+
+    @staticmethod
+    def _update_state(view: IntInputViewLike, rendered_object: QSpinBox) -> None:
+        view.value = rendered_object.value() if rendered_object.cleanText() != "" else None
+        view.placeholder = QtIntInputRenderer._line_edit(rendered_object).placeholderText()
+        minimum, maximum = rendered_object.minimum(), rendered_object.maximum()
+        view.minimum = minimum if minimum != _INT_MINIMUM else None
+        view.maximum = maximum if maximum != _INT_MAXIMUM else None
+
+    def _update_value(self, value: int) -> None:
+        with self.stop_refresh():
+            self._view.value = value
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -1686,6 +1778,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "combobox": QtComboboxRenderer,
     "dialog": QtDialogRenderer,
     "float_input": QtFloatInputRenderer,
+    "int_input": QtIntInputRenderer,
     "form": QtFormRenderer,
     "form_label": QtFormLabelRenderer,
     "grid": QtGridRenderer,

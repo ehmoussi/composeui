@@ -400,44 +400,27 @@ class WebInputRenderer(_WebTextFieldRenderer[InputViewLike]):
             self._view.text = text
 
 
-class FloatInputViewLike(TextFieldViewLike, Protocol):
-    value: float | None
-    minimum: float | None
-    maximum: float | None
-    decimals: int | None
+class _NumberFieldViewLike(TextFieldViewLike, Protocol):
+    value: Any
 
 
-#: an optionally signed decimal number, partial input ("-", "1.") included
-_DECIMAL_PATTERN = r"[+\-]?[0-9]*([.][0-9]*)?([eE][+\-]?[0-9]*)?"
+TNumberField = TypeVar("TNumberField", bound=_NumberFieldViewLike)
 
 
-def _is_float(text: str) -> bool:
-    """Whether `text` is an acceptable float field value ("" meaning no value)."""
-    if text == "":
-        return True
-    try:
-        float(text)
-    except ValueError:
-        return False
-    return True
-
-
-class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
-    """A decimal text field.
+class _WebNumberFieldRenderer(_WebTextFieldRenderer[TNumberField]):
+    """A text field holding a number, parsed by `_parse`.
 
     Not `type="number"`: while typing e.g. "-5" its value reads "" for the transient
     "-", indistinguishable from a cleared field. A text field posts the raw text and
-    unparsable text is ignored, the same as the Qt/Textual float inputs. Like Textual,
-    `minimum`/`maximum`/`decimals` are tracked on the view but not enforced on input.
+    unparsable text is ignored, the same as the Qt/Textual inputs. Like Textual,
+    `minimum`/`maximum` (and `decimals`) are tracked on the view but not enforced on input.
 
-    Leaving the field (`change`) with unparsable text puts the value back: Qt's
-    validator never lets such text in at all, and a field showing "4a" while the
-    view (and its validators) still sees 4 would contradict every message around it.
+    Leaving the field (`change`) with unparsable text puts the value back: Qt never
+    lets such text in at all, and a field showing "4a" while the view (and its
+    validators) still sees 4 would contradict every message around it.
     """
 
-    _role = "float_input"
-
-    def __init__(self, view: FloatInputViewLike) -> None:
+    def __init__(self, view: TNumberField) -> None:
         super().__init__(view)
         self._last_posted_text: str | None = None
         self._refresh_dispatcher.update(
@@ -446,12 +429,26 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
                 "placeholder": self._mark_dirty,
                 "minimum": self._mark_dirty,
                 "maximum": self._mark_dirty,
-                "decimals": self._mark_dirty,
             }
         )
 
+    @staticmethod
+    @abstractmethod
+    def _parse(text: str) -> Any:
+        """Parse a non-empty text into a value, raising `ValueError` if it can't."""
+
+    def _is_acceptable(self, text: str) -> bool:
+        """Whether `text` is an acceptable field value ("" meaning no value)."""
+        if text == "":
+            return True
+        try:
+            self._parse(text)
+        except ValueError:
+            return False
+        return True
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event == "change" and not _is_float(form.get("value", "")):
+        if event == "change" and not self._is_acceptable(form.get("value", "")):
             # no `editing_finished`, as Qt doesn't emit it for unacceptable text; the
             # field itself is swapped back, which is safe now that it has been left
             self._last_posted_text = None
@@ -459,7 +456,7 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
             return
         super().dispatch(event, form)
 
-    def _refresh_value(self, view: FloatInputViewLike, rendered_object: str, value: Any) -> None:
+    def _refresh_value(self, view: TNumberField, rendered_object: str, value: Any) -> None:
         self._last_posted_text = None  # the server's value wins over what was typed
         self._mark_dirty(view, rendered_object, value)
 
@@ -473,10 +470,58 @@ class WebFloatInputRenderer(_WebTextFieldRenderer[FloatInputViewLike]):
         self._last_posted_text = text
         # transient invalid text while typing (e.g. "-", "1e"); ignore it
         with self.stop_refresh(), contextlib.suppress(ValueError):
-            self._view.value = float(text) if text != "" else None
+            self._view.value = self._parse(text) if text != "" else None
+
+
+class FloatInputViewLike(_NumberFieldViewLike, Protocol):
+    value: float | None
+    minimum: float | None
+    maximum: float | None
+    decimals: int | None
+
+
+#: an optionally signed decimal number, partial input ("-", "1.") included
+_DECIMAL_PATTERN = r"[+\-]?[0-9]*([.][0-9]*)?([eE][+\-]?[0-9]*)?"
+
+
+class WebFloatInputRenderer(_WebNumberFieldRenderer[FloatInputViewLike]):
+    """A decimal text field."""
+
+    _role = "float_input"
+
+    def __init__(self, view: FloatInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["decimals"] = self._mark_dirty
+
+    @staticmethod
+    def _parse(text: str) -> float:
+        return float(text)
 
     def _extra_attributes(self) -> str:
         return f' inputmode="decimal" pattern="{_DECIMAL_PATTERN}"'
+
+
+class IntInputViewLike(_NumberFieldViewLike, Protocol):
+    value: int | None
+    minimum: int | None
+    maximum: int | None
+
+
+#: an optionally signed whole number, partial input ("-") included
+_INTEGER_PATTERN = r"[+\-]?[0-9]*"
+
+
+class WebIntInputRenderer(_WebNumberFieldRenderer[IntInputViewLike]):
+    """A whole number text field: a phone shows its digit keypad."""
+
+    _role = "int_input"
+
+    @staticmethod
+    def _parse(text: str) -> int:
+        return int(text)
+
+    def _extra_attributes(self) -> str:
+        return f' inputmode="numeric" pattern="{_INTEGER_PATTERN}"'
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -2611,6 +2656,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "combobox": WebComboboxRenderer,
     "dialog": WebDialogRenderer,
     "float_input": WebFloatInputRenderer,
+    "int_input": WebIntInputRenderer,
     "form": WebFormRenderer,
     "form_label": WebFormLabelRenderer,
     "grid": WebGridRenderer,
