@@ -58,10 +58,12 @@ def _expanders(app: App) -> list[PipeExpander]:
 
 
 def _listed(app: App) -> list[list[str]]:
-    """Get each pipe listed: its name, its material and dimensions, and its mass."""
-    return [
-        [expander.title, expander.details.text, expander.mass.text] for expander in _expanders(app)
-    ]
+    """Get each pipe listed: its name, material and mass, then its dimensions."""
+    return [[expander.title, expander.details.text] for expander in _expanders(app)]
+
+
+def _names(app: App) -> list[str]:
+    return [expander.title.split(" · ")[0] for expander in _expanders(app)]
 
 
 def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> None:
@@ -70,23 +72,23 @@ def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> No
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
 
     assert _listed(app) == [
-        ["Main line", "Steel, outer radius 50 mm, wall 5 mm, 6 m long", "70.3 kg"],
-        ["Return", "Copper, outer radius 20 mm, wall 2 mm, 3 m long", "6.4 kg"],
+        ["Main line · Steel · 70.3 kg", "Outer radius 50 mm, wall 5 mm, 6 m long"],
+        ["Return · Copper · 6.4 kg", "Outer radius 20 mm, wall 2 mm, 3 m long"],
     ]
     assert catalogue.total.text == "2 pipes, 76.7 kg"
     assert app.main_view.status_bar.message == "Added 'Return'"
 
     catalogue.shown.min_radius.value = 30.0
     catalogue.shown.min_radius.editing_finished.emit()
-    assert [row[0] for row in _listed(app)] == ["Main line"]
+    assert _names(app) == ["Main line"]
     assert catalogue.total.text == "1 pipe, 70.3 kg"
 
     catalogue.remove_shown.clicked.emit()
     app.main_view.confirm_remove.accept()
-    assert _listed(app) == []
+    assert _names(app) == []
     catalogue.shown.min_radius.value = None
     catalogue.shown.min_radius.editing_finished.emit()
-    assert [row[0] for row in _listed(app)] == ["Return"]
+    assert _names(app) == ["Return"]
 
 
 def test_a_pipe_s_delete_button_removes_it_from_the_database(app: App) -> None:
@@ -120,7 +122,7 @@ def test_a_pipe_the_database_refuses_is_not_added_and_says_why(
     _add(app, name, dimensions=(radius, thickness, 6.0))
 
     assert app.main_view.status_bar.message == f"Can't add the pipe: {reason}."
-    assert [row[0] for row in _listed(app)] == ["Main line"]
+    assert _names(app) == ["Main line"]
 
 
 def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
@@ -141,8 +143,8 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
     other.main_view.file_view.filepath = path
     other.main_view.file_menu.open_file.triggered.emit()
 
-    assert [row[0] for row in _listed(other)] == ["Return"]
+    assert _names(other) == ["Return"]
     other.main_view.file_menu.new.triggered.emit()
-    assert _listed(other) == []
+    assert _names(other) == []
     assert other.main_view.catalogue.total.text == "0 pipes, 0.0 kg"
     other.model.close()
