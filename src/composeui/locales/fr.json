@@ -7,6 +7,7 @@
   "Exit": "Quitter",
   "OK": "OK",
   "Cancel": "Annuler",
+  "Help": "Aide",
   "Can't open {name}: {error}.": "Impossible d'ouvrir {name} : {error}.",
   "Language": "Langue",
   "Save Image": "Enregistrer l'image",

@@ -386,6 +386,7 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
             {
                 "label": self._refresh_text,
                 "help": self._refresh_help,
+                "help_button_text": self._refresh_help_button_text,
             }
         )
 
@@ -401,6 +402,12 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
     @staticmethod
     def _refresh_help(_view: FormLabelRowView, rendered_object: QFormLabel, value: str) -> None:
         rendered_object.set_help(value)
+
+    @staticmethod
+    def _refresh_help_button_text(
+        _view: FormLabelRowView, rendered_object: QFormLabel, value: str
+    ) -> None:
+        rendered_object.set_help_button_text(value)
 
     @staticmethod
     def _update_state(view: FormLabelRowView, rendered_object: QFormLabel) -> None:

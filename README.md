@@ -147,7 +147,8 @@ How it differs from a desktop window:
 
 Views can be composed by mixing traits, for example `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`; a labelled row's `help` says what to enter, shown
-by a "?" beside its label (a tooltip on Qt and the web, a hint under the label on Textual).
+by a "?" button beside its label that a click, a tap or the keyboard opens (a hint under the
+label on Textual).
 See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for

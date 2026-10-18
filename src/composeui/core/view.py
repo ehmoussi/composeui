@@ -2288,8 +2288,10 @@ class FormRowView(LogMixin, View):
 @define_view
 class FormLabelRowView(FormRowView):
     label: str = attrs.field(default="", metadata={UI_TEXT: True})
-    #: what to enter in the field, shown by a "?" beside the label (a hint on Textual)
+    #: what to enter in the field, shown by a "?" button beside the label (a hint on Textual)
     help: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: the "?" button's name for screen readers
+    help_button_text: str = attrs.field(default=T("Help"), metadata={UI_TEXT: True})
 
     def _create_row_renderers(
         self, renderer_type: RendererType

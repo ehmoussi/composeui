@@ -258,32 +258,26 @@ class WebRenderer(Renderer[TView, str]):
     def _row_attributes(self) -> str:
         """ARIA links from a form row's field to the row's log and label.
 
-        The field is described by the log, read out with the field, and is
-        `aria-invalid` while the log shows an error (the page script keeps that in step
-        when only the log is swapped, see `page.py`). A field a `<label for>` can't name,
-        a radio group or a checkbox, is labelled by the row's label instead. Nothing
-        outside a row.
+        The field is described by the row's help, if any, and its log, read out with the
+        field, and is `aria-invalid` while the log shows an error (the page script keeps
+        that in step when only the log is swapped, see `page.py`). A field a `<label for>`
+        can't name, a radio group or a checkbox, is labelled by the row's label instead.
+        Nothing outside a row.
         """
         attributes: list[str] = []
-        log_id = self._row_part_id("log")
-        if log_id is not None:
-            label = self._row_renderer("label")
+        log, label = self._row_renderer("log"), self._row_renderer("label")
+        if log is not None:
             described_by = (
-                f"{label.help_id} {log_id}"
+                f"{label.help_id} {log.widget_id}"
                 if isinstance(label, WebFormLabelRenderer) and label.has_help()
-                else log_id
+                else log.widget_id
             )
             attributes.append(f'aria-describedby="{described_by}"')
             if isinstance(self._view, FormRowView) and self._view.is_invalid:
                 attributes.append('aria-invalid="true"')
-        label_id = None if self.is_labelable else self._row_part_id("label")
-        if label_id is not None:
-            attributes.append(f'aria-labelledby="{label_id}"')
+        if not self.is_labelable and isinstance(label, WebFormLabelRenderer):
+            attributes.append(f'aria-labelledby="{label.text_id}"')
         return "".join(f" {attribute}" for attribute in attributes)
-
-    def _row_part_id(self, part: str) -> str | None:
-        renderer = self._row_renderer(part)
-        return None if renderer is None else renderer.widget_id
 
     def _row_renderer(self, part: str) -> WebRenderer[Any] | None:
         """Get another renderer of the view's row, e.g. its "log", if it has one."""
@@ -1506,17 +1500,33 @@ class WebMarkdownRenderer(WebRenderer[MarkdownViewLike]):
 
 
 class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
-    """The label of a form row, pointing at the row's field for clicks/screen readers."""
+    """The label of a form row, pointing at the row's field for clicks/screen readers.
+
+    With help, a "?" button beside the label opens it in a popover: a click, a tap, or
+    Enter once Tab reached it, as hovering can't on a phone. The button is outside the
+    `<label>`, so it isn't part of the field's name.
+    """
 
     _role = "form_label"
 
     def __init__(self, view: FormLabelRowView) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"label": self._mark_dirty, "help": self._refresh_help})
+        self._refresh_dispatcher.update(
+            {
+                "label": self._mark_dirty,
+                "help": self._refresh_help,
+                "help_button_text": self._mark_dirty,
+            }
+        )
+
+    @property
+    def text_id(self) -> str:
+        """Id of the `<label>` itself, which names a field `<label for>` can't."""
+        return f"{self.widget_id}-text"
 
     @property
     def help_id(self) -> str:
-        """Id of the row's help text, which describes the field while there is help."""
+        """Id of the row's help, which describes the field while there is help."""
         return f"{self.widget_id}-help"
 
     def has_help(self) -> bool:
@@ -1528,24 +1538,27 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         # `aria-labelledby` names it instead
         target = f' for="{field.widget_id}"' if field.is_labelable else ""
         return (
-            f"<label {self._root_attributes(oob=oob)}{target}"
+            f'<div {self._root_attributes(oob=oob)} class="flex items-center gap-1">'
+            f'<label id="{self.text_id}"{target}'
             ' class="label text-sm font-medium text-base-content"'
-            f">{html.escape(self._view.label)}{self._help_html()}</label>"
+            f">{html.escape(self._view.label)}</label>{self._help_html()}</div>"
         )
 
     def _help_html(self) -> str:
-        """Render the "?" showing the help as a tooltip, and the help describing the field.
+        """Render the "?" button and the help it opens, which also describes the field.
 
-        Neither is part of the field's name: the "?" is `aria-hidden` and the text
-        `hidden`, which `aria-describedby` still reads.
+        Closed, the popover is hidden, which `aria-describedby` still reads. The page's
+        script places it under the button (see `page.py`).
         """
         if not self.has_help():
             return ""
-        text = html.escape(self._view.help)
         return (
-            f'<span class="tooltip tooltip-right" data-tip="{text}" aria-hidden="true">'
-            '<span class="badge badge-ghost badge-xs cursor-help">?</span></span>'
-            f'<span id="{self.help_id}" hidden>{text}</span>'
+            f'<button type="button" popovertarget="{self.help_id}"'
+            ' class="btn btn-ghost btn-circle btn-xs"'
+            f' aria-label="{html.escape(self._view.help_button_text)}">?</button>'
+            f'<div id="{self.help_id}" popover data-help class="m-0 max-w-xs rounded-box'
+            ' bg-neutral px-3 py-2 text-sm text-neutral-content shadow-lg">'
+            f"{html.escape(self._view.help)}</div>"
         )
 
     def _refresh_help(self, view: FormLabelRowView, rendered_object: str, value: str) -> None:

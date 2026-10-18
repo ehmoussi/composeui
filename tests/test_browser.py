@@ -54,11 +54,15 @@ pytestmark = pytest.mark.browser
 _MESSAGE_TIMEOUT = 0.5
 
 
+#: the help of the hello app's name
+_NAME_HELP = "As you'd like to be greeted"
+
+
 class _BrowserHelloApp(HelloApp):
     def setup_session(self, main_view: HelloMainView) -> None:
         main_view.status_bar.timeout = _MESSAGE_TIMEOUT
         # the name's field then described by its help and its log, its name still "Name"
-        main_view.form.name.help = "As you'd like to be greeted"
+        main_view.form.name.help = _NAME_HELP
 
 
 @contextlib.contextmanager
@@ -387,6 +391,32 @@ def test_a_field_is_invalid_exactly_while_its_log_shows_an_error(page: Page) -> 
     with _posted(page):
         name.press("Backspace")
     expect(name).to_have_attribute("aria-invalid", "true")
+
+
+def test_the_help_button_opens_the_help_under_it_by_click_or_keyboard(page: Page) -> None:
+    page.goto("/")
+    name = page.get_by_label("Name")
+    button = page.get_by_role("button", name="Help")
+    help_text = page.get_by_text(_NAME_HELP)
+    expect(help_text).to_be_hidden()
+    # closed, it still describes the field, before its message
+    expect(name).to_have_accessible_description(f"{_NAME_HELP} A name is mandatory")
+
+    button.click()
+
+    expect(help_text).to_be_visible()
+    button_box, help_box = button.bounding_box(), help_text.bounding_box()
+    assert button_box is not None
+    assert help_box is not None
+    assert button_box["y"] + button_box["height"] <= help_box["y"]  # under it
+    assert help_box["y"] < button_box["y"] + 3 * button_box["height"]  # just under it
+    page.keyboard.press("Escape")
+    expect(help_text).to_be_hidden()
+    name.focus()
+    page.keyboard.press("Shift+Tab")  # the button is just before the field
+    expect(button).to_be_focused()
+    page.keyboard.press("Enter")
+    expect(help_text).to_be_visible()
 
 
 def test_the_page_needs_nothing_from_another_host(page: Page, base_url: str) -> None:

@@ -539,6 +539,24 @@ function syncPage() {
   document.documentElement.lang = marker.dataset.language;
   if (document.title !== marker.dataset.title) document.title = marker.dataset.title;
 }
+/* places a field's help, opened by its "?" button, just under the button, inside the
+   window: a popover otherwise opens in its middle. Placed before it shows, then moved
+   back in once its width is known. */
+function placeHelp(event) {
+  var help = event.target;
+  if (!(help instanceof HTMLElement) || !help.matches("[data-help]")) return;
+  if (event.newState !== "open") return;
+  var button = document.querySelector('[popovertarget="' + help.id + '"]');
+  if (button === null) return;
+  var rect = button.getBoundingClientRect();
+  var right = window.innerWidth - help.offsetWidth - 8;
+  help.style.inset = "auto";
+  help.style.top = rect.bottom + 4 + "px";
+  help.style.left = Math.max(8, Math.min(rect.left, right)) + "px";
+}
+/* neither bubbles */
+document.addEventListener("beforetoggle", placeHelp, true);
+document.addEventListener("toggle", placeHelp, true);
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   syncCharts();
