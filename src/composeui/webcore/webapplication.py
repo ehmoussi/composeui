@@ -355,6 +355,16 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         return self._build_model()
 
     @override
+    def _study_model(self) -> ModelT:
+        """Get a model for the template main view alone, which `-f` is opened into first.
+
+        Not a session's: only so a study that doesn't fit stops the app as it starts,
+        rather than failing every session, each opening it into its own model. A study
+        with the model's data (an archive) needs a model to be read at all.
+        """
+        return self._build_model()
+
+    @override
     def _setup_model(self, main_view: MainViewT, model: Model) -> None:
         self.setup_model(main_view, cast("ModelT", model))
 

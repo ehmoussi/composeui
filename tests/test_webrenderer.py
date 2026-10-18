@@ -34,10 +34,12 @@ from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
 from composeui.core import chartimage
+from composeui.core.application import ModelApplication
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.study import save_study
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
@@ -93,6 +95,7 @@ from composeui.webcore.webrenderer import (
 )
 from examples import pipeform
 from examples.batman import BatmanMainView
+from examples.pipecatalogue import Material, Pipe, PipeCatalogueMainView, PipeCatalogueModel
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
@@ -1328,6 +1331,48 @@ def test_a_state_file_opens_in_every_new_session(
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in app.session_views] == ["Bob", "Bob"]
     assert all('value="Bob"' in page for page in pages)
+
+
+def test_a_study_with_the_model_s_data_opens_in_every_new_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # an archive of the views' state and the database, not the views' JSON alone
+    study = ModelApplication(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=PipeCatalogueMainView.connect_model,
+    )
+    study.model.pipes.add(Pipe("Main line", Material.STEEL, 50.0, 5.0, 6.0))
+    study_file = tmp_path / "plant.pipes"
+    save_study(study.main_view, study.model, study_file)
+    study.model.close()
+    served: list[Starlette] = []
+    monkeypatch.setattr("sys.argv", ["pipecatalogue", "-f", str(study_file)])
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **_: served.append(app),
+    )
+    views: list[PipeCatalogueMainView] = []
+
+    class CatalogueApp(WebModelApplication[PipeCatalogueMainView, PipeCatalogueModel]):
+        def setup_session(self, main_view: PipeCatalogueMainView) -> None:
+            views.append(main_view)
+
+    app = CatalogueApp(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=PipeCatalogueMainView.connect_model,
+    )
+
+    app.run()
+
+    with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
+        pages = [alice.get("/").text, bob.get("/").text]
+    assert [[row[0] for row in view.catalogue.pipes.rows] for view in views] == [
+        ["Main line"],
+        ["Main line"],
+    ]
+    assert all("Main line" in page for page in pages)
 
 
 @define_view
