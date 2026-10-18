@@ -11,6 +11,7 @@ from examples.pipecatalogue import (
     Material,
     PipeCatalogueMainView,
     PipeCatalogueModel,
+    PipeExpander,
 )
 
 if TYPE_CHECKING:
@@ -49,8 +50,18 @@ def _add(
     app.main_view.add.add_pipe.clicked.emit()
 
 
+def _expanders(app: App) -> list[PipeExpander]:
+    views = app.main_view.catalogue.pipes.item_views
+    expanders = [view for view in views if isinstance(view, PipeExpander)]
+    assert len(expanders) == len(views)
+    return expanders
+
+
 def _listed(app: App) -> list[list[str]]:
-    return app.main_view.catalogue.pipes.rows
+    """Get each pipe listed: its name, its material and dimensions, and its mass."""
+    return [
+        [expander.title, expander.details.text, expander.mass.text] for expander in _expanders(app)
+    ]
 
 
 def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> None:
@@ -59,8 +70,8 @@ def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> No
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
 
     assert _listed(app) == [
-        ["Main line", "Steel", "50", "5", "6", "70.3"],
-        ["Return", "Copper", "20", "2", "3", "6.4"],
+        ["Main line", "Steel, outer radius 50 mm, wall 5 mm, 6 m long", "70.3 kg"],
+        ["Return", "Copper, outer radius 20 mm, wall 2 mm, 3 m long", "6.4 kg"],
     ]
     assert catalogue.total.text == "2 pipes, 76.7 kg"
     assert app.main_view.status_bar.message == "Added 'Return'"
@@ -76,6 +87,19 @@ def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> No
     catalogue.shown.min_radius.value = None
     catalogue.shown.min_radius.editing_finished.emit()
     assert [row[0] for row in _listed(app)] == ["Return"]
+
+
+def test_a_pipe_s_delete_button_removes_it_from_the_database(app: App) -> None:
+    _add(app, "Main line")
+    _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
+    main_line, ret = _expanders(app)
+
+    main_line.delete.clicked.emit()  # built from the model's rows: its callback gets the model
+
+    (kept,) = _expanders(app)
+    assert kept is ret
+    assert app.model.pipes.total(app.main_view.catalogue.shown.shown()).count == 1
+    assert app.main_view.status_bar.message == "Deleted 'Main line'"
 
 
 @pytest.mark.parametrize(

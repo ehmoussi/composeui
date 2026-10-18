@@ -1369,7 +1369,7 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
 
     with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
         pages = [alice.get("/").text, bob.get("/").text]
-    assert [[row[0] for row in view.catalogue.pipes.rows] for view in views] == [
+    assert [[pipe.name for pipe in view.catalogue.pipes.items] for view in views] == [
         ["Main line"],
         ["Main line"],
     ]
