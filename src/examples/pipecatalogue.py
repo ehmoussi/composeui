@@ -1,11 +1,11 @@
 """A catalogue of pipes kept in a SQLite database, runnable on every backend.
 
 `python -m examples.pipecatalogue --backend qt` (or `textual`, or `web`). The pipes are
-rows of the model's database, not view state: the Catalogue page lists them through a
-query, filtered by material and radius, with their mass computed by a SQL view joining
-each pipe to its material. The database checks every pipe added (a name, positive
-dimensions, a wall thinner than the radius) and File saves and opens the views and the
-database together.
+rows of the model's database, not view state: the catalogue lists them through a query,
+filtered by material and radius, with their mass computed by a SQL view joining each
+pipe to its material. A form in the sidebar adds a pipe, which the catalogue beside it
+lists at once. The database checks every pipe added (a name, positive dimensions, a wall
+thinner than the radius) and File saves and opens the views and the database together.
 """
 
 import enum
@@ -28,7 +28,8 @@ from composeui.core.view import (
     LabelView,
     MainView,
     PageView,
-    Router,
+    PageWidth,
+    SidebarView,
     TableView,
     child,
     define_view,
@@ -248,8 +249,8 @@ class ShownFormView(FormView):
 
 @define_view
 class CataloguePageView(PageView):
-    route = "catalogue"
-    page_title = "Catalogue"
+    # the table's six columns, beside the sidebar
+    width = PageWidth.WIDE
 
     shown: ShownFormView = Factory(ShownFormView)
     pipes: TableView = child(
@@ -263,19 +264,11 @@ class CataloguePageView(PageView):
 
 
 @define_view
-class AddPageView(PageView):
-    route = "add"
-    page_title = "Add"
+class AddPipeSidebar(SidebarView):
+    """The form adding a pipe, beside the catalogue listing it."""
 
     pipe: PipeFormView = Factory(PipeFormView)
     add_pipe: ButtonView = child(ButtonView, text="Add the Pipe")
-
-
-@define_view
-class CataloguePagesView(Router):
-    # the app starts on its first page: adding a pipe
-    add: AddPageView = Factory(AddPageView)
-    catalogue: CataloguePageView = Factory(CataloguePageView)
 
 
 @define_view
@@ -293,23 +286,24 @@ class PipeCatalogueMainView(MainView):
     app_title = "Pipe Catalogue"
     extension = ".pipes"
 
-    pages: CataloguePagesView = Factory(CataloguePagesView)
+    add: AddPipeSidebar = child(AddPipeSidebar, title="Add a Pipe")
+    catalogue: CataloguePageView = Factory(CataloguePageView)
     confirm_remove: RemoveShownDialog = Factory(RemoveShownDialog)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the callbacks get the model through their `model` parameter
-        self.pages.add.add_pipe.clicked.connect(self._add_pipe)
+        self.add.add_pipe.clicked.connect(self._add_pipe)
         # removing can't be undone: only once the user confirms
-        self.pages.catalogue.remove_shown.clicked.connect(self.confirm_remove.open)
+        self.catalogue.remove_shown.clicked.connect(self.confirm_remove.open)
         self.confirm_remove.accepted.connect(self._remove_shown)
-        shown = self.pages.catalogue.shown
+        shown = self.catalogue.shown
         shown.material.value_changed.connect(self.show_pipes)
         shown.min_radius.editing_finished.connect(self.show_pipes)
 
     def show_pipes(self, model: PipeCatalogueModel) -> None:
         """List the pipes the filter shows, and their total."""
-        catalogue = self.pages.catalogue
+        catalogue = self.catalogue
         shown = catalogue.shown.shown()
         catalogue.pipes.rows = [
             [
@@ -327,13 +321,13 @@ class PipeCatalogueMainView(MainView):
         catalogue.total.text = f"{total.count} {pipes}, {total.mass:.1f} kg"
 
     def _add_pipe(self, *, model: PipeCatalogueModel) -> None:
-        pipe = self.pages.add.pipe.pipe()
+        pipe = self.add.pipe.pipe()
         with self.refusing("Can't add the pipe: {error}."):
             model.pipes.add(pipe)
             self.status_bar.show_message(f"Added {pipe.name!r}")
 
     def _remove_shown(self, *, model: PipeCatalogueModel) -> None:
-        count = model.pipes.remove(self.pages.catalogue.shown.shown())
+        count = model.pipes.remove(self.catalogue.shown.shown())
         self.status_bar.show_message(f"Removed {count} pipe{'' if count == 1 else 's'}")
 
     def connect_model(self, model: PipeCatalogueModel) -> None:

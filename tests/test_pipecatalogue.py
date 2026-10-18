@@ -38,23 +38,23 @@ def _add(
     material: Material = Material.STEEL,
     dimensions: tuple[float | None, float | None, float | None] = (50.0, 5.0, 6.0),
 ) -> None:
-    """Fill the Add page's form and click its button.
+    """Fill the sidebar's form and click its button.
 
     `dimensions` are the outer radius and the wall thickness (mm), and the length (m).
     """
-    form = app.main_view.pages.add.pipe
+    form = app.main_view.add.pipe
     form.name.text = name
     form.material.value = material
     form.radius.value, form.thickness.value, form.length.value = dimensions
-    app.main_view.pages.add.add_pipe.clicked.emit()
+    app.main_view.add.add_pipe.clicked.emit()
 
 
 def _listed(app: App) -> list[list[str]]:
-    return app.main_view.pages.catalogue.pipes.rows
+    return app.main_view.catalogue.pipes.rows
 
 
 def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> None:
-    catalogue = app.main_view.pages.catalogue
+    catalogue = app.main_view.catalogue
     _add(app, "Main line")
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
 
@@ -104,7 +104,7 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
 ) -> None:
     _add(app, "Main line")
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
-    app.main_view.pages.catalogue.shown.material.value = "Copper"
+    app.main_view.catalogue.shown.material.value = "Copper"
     path = tmp_path / "plant.pipes"
     app.main_view.file_view.filepath = path
     app.main_view.file_menu.save.triggered.emit()
@@ -120,5 +120,5 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
     assert [row[0] for row in _listed(other)] == ["Return"]
     other.main_view.file_menu.new.triggered.emit()
     assert _listed(other) == []
-    assert other.main_view.pages.catalogue.total.text == "0 pipes, 0.0 kg"
+    assert other.main_view.catalogue.total.text == "0 pipes, 0.0 kg"
     other.model.close()
