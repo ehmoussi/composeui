@@ -96,12 +96,59 @@ def test_a_pipe_s_delete_button_removes_it_from_the_database(app: App) -> None:
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
     main_line, ret = _expanders(app)
 
-    main_line.delete.clicked.emit()  # built from the model's rows: its callback gets the model
+    # built from the model's rows: its callback gets the model
+    main_line.buttons.delete.clicked.emit()
 
     (kept,) = _expanders(app)
     assert kept is ret
     assert app.model.pipes.total(app.main_view.catalogue.shown.shown()).count == 1
     assert app.main_view.status_bar.message == "Deleted 'Main line'"
+
+
+def test_a_pipe_s_edit_button_changes_it_in_a_form_dialog(app: App) -> None:
+    _add(app, "Main line")
+    (main_line,) = _expanders(app)
+    dialog = app.main_view.edit_dialog
+
+    main_line.buttons.edit.clicked.emit()  # the pipe's values, as the database has them
+    assert dialog.is_visible
+    assert (dialog.form.name.text, dialog.form.radius.value) == ("Main line", 50.0)
+    dialog.form.name.text = "Feed"
+    dialog.form.material.value = Material.COPPER
+    dialog.accept()
+
+    assert not dialog.is_visible
+    # copper: the mass follows its density
+    assert _listed(app) == [["Feed · Copper · 80.2 kg", "Outer radius 50 mm, wall 5 mm, 6 m long"]]
+    assert app.main_view.status_bar.message == "Saved 'Feed'"
+
+
+def test_an_edit_failing_the_form_s_checks_keeps_the_dialog_open(app: App) -> None:
+    _add(app, "Main line")
+    (main_line,) = _expanders(app)
+    dialog = app.main_view.edit_dialog
+    main_line.buttons.edit.clicked.emit()
+
+    dialog.form.name.text = ""
+    dialog.form.name.text_edited.emit("")  # as typing does
+    assert not dialog.is_accept_enabled
+    dialog.accept()
+
+    assert dialog.is_visible
+    assert _names(app) == ["Main line"]
+
+
+def test_an_edit_the_database_refuses_is_not_saved_and_says_why(app: App) -> None:
+    _add(app, "Main line")
+    _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
+    ret = _expanders(app)[1]
+    ret.buttons.edit.clicked.emit()
+
+    app.main_view.edit_dialog.form.name.text = "Main line"  # passes the form, not the table
+    app.main_view.edit_dialog.accept()
+
+    assert app.main_view.status_bar.message == "Can't save the pipe: another pipe has this name."
+    assert _names(app) == ["Main line", "Return"]
 
 
 @pytest.mark.parametrize(

@@ -4,9 +4,10 @@
 rows of the model's database, not view state: the catalogue lists them, an expander each,
 through a query filtered by material and radius, with their mass computed by a SQL view
 joining each pipe to its material. A form in the sidebar adds a pipe, which the catalogue
-beside it lists at once, and each pipe's Delete button removes it. The database checks
-every pipe added (a name, positive dimensions, a wall thinner than the radius) and File
-saves and opens the views and the database together.
+beside it lists at once; each pipe's Edit button changes it in a form dialog, and its
+Delete button removes it. The database checks every pipe added or changed (a name,
+positive dimensions, a wall thinner than the radius) and File saves and opens the views
+and the database together.
 """
 
 import enum
@@ -25,7 +26,9 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
+    FormDialogView,
     FormView,
+    HorizontalView,
     LabelRowComboboxView,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -153,6 +156,21 @@ class Pipes(SqliteTable):
         assert total is not None  # an aggregate always has a row
         return total
 
+    def get(self, name: str) -> Optional[ListedPipe]:
+        """Get the pipe `name`, or None if no pipe has it."""
+        return self.fetch_one(
+            ListedPipe, "SELECT * FROM pipe_mass WHERE name = :name", {"name": name}
+        )
+
+    def update(self, name: str, pipe: Pipe) -> None:
+        """Change the pipe `name` into `pipe`; raises `RefusedError` for one the table refuses."""
+        with self.connection() as db:
+            db.execute(
+                "UPDATE pipe SET name = :name, material = :material, radius = :radius,"
+                " thickness = :thickness, length = :length WHERE name = :old_name",
+                {**as_parameters(pipe), "old_name": name},
+            )
+
     def delete(self, name: str) -> None:
         """Remove the pipe `name`."""
         with self.connection() as db:
@@ -257,11 +275,17 @@ class ShownFormView(FormView):
 
 
 @define_view
+class PipeButtons(HorizontalView):
+    edit: ButtonView = child(ButtonView, text="Edit", variant=ButtonVariant.SECONDARY)
+    delete: ButtonView = child(ButtonView, text="Delete", variant=ButtonVariant.DANGER)
+
+
+@define_view
 class PipeExpander(ExpanderView):
     """A pipe of the catalogue: its name, material and mass, then its dimensions."""
 
     details: LabelView = Factory(LabelView)
-    delete: ButtonView = child(ButtonView, text="Delete", variant=ButtonVariant.DANGER)
+    buttons: PipeButtons = Factory(PipeButtons)
 
 
 @define_view
@@ -271,7 +295,8 @@ class PipeList(ListView[ListedPipe]):
     def build_item(self, item: ListedPipe) -> View:
         view = PipeExpander()
         self.update_item(view, item)
-        view.delete.clicked.connect(functools.partial(self._delete, item.name))
+        view.buttons.edit.clicked.connect(functools.partial(self._edit, item.name))
+        view.buttons.delete.clicked.connect(functools.partial(self._delete, item.name))
         return view
 
     def item_key(self, item: ListedPipe) -> Hashable:
@@ -286,6 +311,10 @@ class PipeList(ListView[ListedPipe]):
             f"Outer radius {item.radius:g} mm, wall {item.thickness:g} mm, {item.length:g} m long"
         )
         return True
+
+    @staticmethod
+    def _edit(name: str, *, main_view: "PipeCatalogueMainView", model: PipeCatalogueModel) -> None:
+        main_view.edit_pipe(name, model=model)
 
     def _delete(
         self, name: str, *, main_view: "PipeCatalogueMainView", model: PipeCatalogueModel
@@ -315,6 +344,30 @@ class AddPipeSidebar(SidebarView):
 
 
 @define_view
+class EditPipeDialog(FormDialogView):
+    """A pipe's values, to change: OK saves them, once its form's checks pass."""
+
+    form: PipeFormView = Factory(PipeFormView)
+    #: the name of the pipe edited, as it was before; the dialog's own, not shown
+    _edited_name: str = attrs.field(default="", init=False)
+
+    @property
+    def edited_name(self) -> str:
+        return self._edited_name
+
+    def edit(self, name: str) -> None:
+        """Open the dialog on the pipe `name`, its form filled with the pipe's values."""
+        self._edited_name = name
+        self.form.check()  # OK as these values leave it
+        self.open()
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "Edit the pipe"
+        self.accept_text = "Save"
+
+
+@define_view
 class RemoveShownDialog(DialogView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -332,6 +385,7 @@ class PipeCatalogueMainView(MainView):
     add: AddPipeSidebar = child(AddPipeSidebar, title="Add a Pipe")
     catalogue: CataloguePageView = Factory(CataloguePageView)
     confirm_remove: RemoveShownDialog = Factory(RemoveShownDialog)
+    edit_dialog: EditPipeDialog = Factory(EditPipeDialog)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -340,6 +394,7 @@ class PipeCatalogueMainView(MainView):
         # removing can't be undone: only once the user confirms
         self.catalogue.remove_shown.clicked.connect(self.confirm_remove.open)
         self.confirm_remove.accepted.connect(self._remove_shown)
+        self.edit_dialog.accepted.connect(self._save_edited_pipe)
         shown = self.catalogue.shown
         shown.material.value_changed.connect(self.show_pipes)
         shown.min_radius.editing_finished.connect(self.show_pipes)
@@ -358,6 +413,25 @@ class PipeCatalogueMainView(MainView):
         with self.refusing("Can't add the pipe: {error}."):
             model.pipes.add(pipe)
             self.status_bar.show_message(f"Added {pipe.name!r}")
+
+    def edit_pipe(self, name: str, *, model: PipeCatalogueModel) -> None:
+        """Open the edit dialog on the pipe `name`, as the database has it."""
+        pipe = model.pipes.get(name)
+        if pipe is None:
+            return
+        form = self.edit_dialog.form
+        form.name.text = pipe.name
+        form.material.value = pipe.material
+        form.radius.value, form.thickness.value = pipe.radius, pipe.thickness
+        form.length.value = pipe.length
+        self.edit_dialog.edit(name)
+
+    def _save_edited_pipe(self, *, model: PipeCatalogueModel) -> None:
+        """Save the dialog's pipe; the database may refuse it still, e.g. a name taken."""
+        pipe = self.edit_dialog.form.pipe()
+        with self.refusing("Can't save the pipe: {error}."):
+            model.pipes.update(self.edit_dialog.edited_name, pipe)
+            self.status_bar.show_message(f"Saved {pipe.name!r}")
 
     def _remove_shown(self, *, model: PipeCatalogueModel) -> None:
         count = model.pipes.remove(self.catalogue.shown.shown())

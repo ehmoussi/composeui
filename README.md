@@ -376,7 +376,9 @@ OK can't be pressed while a check of the form fails (`is_accept_enabled` follows
 checks as they run), and accepting runs every check first, staying open while one fails,
 even one the user hasn't triggered yet (`FormView.check` runs them all, `is_valid` tells
 whether they pass). The answer comes through `accepted` or `rejected`; the form keeps its
-values, for the app to read once accepted, or to fill before `open()`.
+values, for the app to read once accepted, or to fill before `open()`. In
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py), each pipe's Edit button
+changes it in a form dialog.
 
 ## Translating the app
 

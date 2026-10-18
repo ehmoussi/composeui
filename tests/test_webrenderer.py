@@ -95,7 +95,13 @@ from composeui.webcore.webrenderer import (
 )
 from examples import pipeform
 from examples.batman import BatmanMainView
-from examples.pipecatalogue import Material, Pipe, PipeCatalogueMainView, PipeCatalogueModel
+from examples.pipecatalogue import (
+    Material,
+    Pipe,
+    PipeCatalogueMainView,
+    PipeCatalogueModel,
+)
+from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
@@ -1372,6 +1378,37 @@ def test_a_state_file_opens_in_every_new_session(
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in app.session_views] == ["Bob", "Bob"]
     assert all('value="Bob"' in page for page in pages)
+
+
+def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
+    views: list[PipeCatalogueMainView] = []
+
+    class CatalogueApp(WebModelApplication[PipeCatalogueMainView, PipeCatalogueModel]):
+        def setup_session(self, main_view: PipeCatalogueMainView) -> None:
+            views.append(main_view)
+
+    app = CatalogueApp(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=PipeCatalogueMainView.connect_model,
+    )
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        add_id = _widget_id(view.add.add_pipe.renderer)
+        name_id = _field_id(view.add.pipe.name)
+        client.post(f"/widget/{name_id}", data={"event": "input", "value": "Main line"})
+        client.post(f"/widget/{add_id}", data={"event": "click"})
+        (pipe,) = view.catalogue.pipes.item_views
+        assert isinstance(pipe, CataloguePipeExpander)
+        edit = pipe.buttons.edit.renderer
+
+        body = client.post(f"/widget/{_widget_id(edit)}", data={"event": "click"}).text
+
+        dialog = _swapped(body, _widget_id(view.edit_dialog.renderer))
+        assert "hidden" not in dialog.attributes
+        name = _element(body, _field_id(view.edit_dialog.form.name))
+        assert name.attributes["value"] == "Main line"
 
 
 def test_a_study_with_the_model_s_data_opens_in_every_new_session(
