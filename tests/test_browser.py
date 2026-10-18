@@ -33,6 +33,7 @@ from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
+from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -220,6 +221,13 @@ def chart_pages_base_url() -> Iterator[str]:
 def workers_base_url() -> Iterator[str]:
     """Serve an app with a slider, for the whole module."""
     with _serve(WebApplication(build_main_view=WorkersMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def site_base_url() -> Iterator[str]:
+    """Serve an app with a tree, for the whole module."""
+    with _serve(WebApplication(build_main_view=SiteMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1074,6 +1082,34 @@ def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     expect(north).not_to_have_attribute("aria-current", "true")
     # the table was swapped back, the row that had the focus keeps it
     expect(south).to_be_focused()
+
+
+def test_a_tree_node_keeps_the_focus_through_the_swap_its_toggle_or_selection_brings(
+    browser: Browser, site_base_url: str
+) -> None:
+    context = browser.new_context(base_url=site_base_url)
+    page = context.new_page()
+    page.goto("/")
+    toggle = page.get_by_role("button", name="Building B", expanded=False)
+    lobby = page.get_by_role("button", name="Lobby")
+    expect(lobby).to_have_count(0)  # collapsed
+
+    toggle.focus()
+    with _posted(page):
+        page.keyboard.press("Enter")
+    expanded = page.get_by_role("button", name="Building B", expanded=True)
+    expect(expanded).to_be_focused()
+    expect(page.locator(".htmx-added")).to_have_count(0)
+
+    # past the node's own button and its child's arrow, onto its child, then selected
+    for _ in range(3):
+        page.keyboard.press("Tab")
+    with _posted(page):
+        page.keyboard.press("Enter")
+    selected = page.locator("[aria-current=true]")
+    expect(selected).to_have_text("Floor 1")
+    expect(selected).to_be_focused()
+    context.close()
 
 
 def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(
