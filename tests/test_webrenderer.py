@@ -102,6 +102,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.horizontal import HorizontalMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
@@ -2379,6 +2380,52 @@ def test_a_list_view_swaps_only_the_items_its_records_changed(
     view.add.clicked.connect(lambda: setattr(view.pipes, "items", PIPES[::-1]))
     body = client.post(f"/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}).text
     assert _contains(_swapped(body, list_id), _widget_id(ret.renderer))
+
+
+@pytest.fixture
+def edited_pipe() -> Iterator[tuple[TestClient, EditedPipeMainView]]:
+    """Serve an app editing a pipe in a form dialog; yield a client and its main view."""
+    views: list[EditedPipeMainView] = []
+
+    class EditApp(WebApplication[EditedPipeMainView]):
+        def setup_session(self, main_view: EditedPipeMainView) -> None:
+            views.append(main_view)
+
+    app = EditApp(build_main_view=EditedPipeMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def test_a_form_dialog_swaps_only_its_ok_as_its_form_s_checks_change(
+    edited_pipe: tuple[TestClient, EditedPipeMainView],
+) -> None:
+    client, view = edited_pipe
+    dialog_id = _widget_id(view.edit_dialog.renderer)
+    accept_id = f"{dialog_id}-accept"
+    name_id = _field_id(view.edit_dialog.form.name)
+
+    body = client.post(f"/widget/{_widget_id(view.edit.renderer)}", data={"event": "click"}).text
+    dialog = _swapped(body, dialog_id)
+    assert "hidden" not in dialog.attributes
+    assert _contains(dialog, name_id)  # the form, in the dialog
+    assert "disabled" not in _element(body, accept_id).attributes
+
+    # the name emptied: only OK swaps, disabled, the dialog left as the user has it
+    body = client.post(f"/widget/{name_id}", data={"event": "input", "value": ""}).text
+    assert "disabled" in _swapped(body, accept_id).attributes
+    assert "A name is mandatory" in body
+    assert f'id="{dialog_id}"' not in body
+    # OK anyway: refused, the dialog left open as it is
+    body = client.post(f"/widget/{dialog_id}", data={"event": "accept"}).text
+    assert view.edit_dialog.is_visible
+    assert f'id="{dialog_id}"' not in body
+
+    client.post(f"/widget/{name_id}", data={"event": "input", "value": "Return"})
+    body = client.post(f"/widget/{dialog_id}", data={"event": "accept"}).text
+    assert "hidden" in _swapped(body, dialog_id).attributes  # closed
+    assert "Return, 12 m" in body
 
 
 @pytest.fixture

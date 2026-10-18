@@ -44,6 +44,7 @@ from composeui.core.view import (
     DialogView,
     ExitAppAction,
     ExpanderView,
+    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -2411,6 +2412,88 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             answer()
 
 
+class WebFormDialogRenderer(WebDialogRenderer):
+    """A modal `<dialog>` holding its form, then Cancel and OK.
+
+    OK is disabled while a check of the form fails, and only it swaps when that changes:
+    the dialog itself, swapped while open, would take back what the user is typing.
+    Unlike a message's, OK doesn't close the dialog in the browser: the form may refuse
+    it, the dialog then staying open with its checks shown; the server swaps it closed
+    once accepted. Cancel and Escape close it first, as for any dialog.
+    """
+
+    _role = "form_dialog"
+
+    def __init__(self, view: FormDialogView) -> None:
+        super().__init__(view)
+        self._form_view = view
+        #: whether more than OK changed since the dialog was last sent: then it swaps whole
+        self._is_whole = False
+        self._refresh_dispatcher["is_accept_enabled"] = self._refresh_accept
+
+    def render(self) -> None:
+        super().render()
+        self._adopt([self._form_view.form])
+
+    @property
+    def accept_id(self) -> str:
+        return f"{self.widget_id}-accept"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        is_whole, self._is_whole = self._is_whole, False
+        if oob and not is_whole:
+            return self._accept_html(oob=True)
+        view = self._form_view
+        title_id = f"{self.widget_id}-title"
+        text_id = f"{self.widget_id}-text"
+        disabled = "" if self.is_enabled else " disabled"
+        reject = self._button_html("reject", view.reject_text, "btn", disabled)
+        cancel = (
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
+            """ hx-vals='{"event": "dismiss"}'"""
+            if self.is_enabled
+            else ' oncancel="event.preventDefault()"'
+        )
+        title = (
+            f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
+            if view.title
+            else ""
+        )
+        text = (
+            f'<p id="{text_id}" class="whitespace-pre-line">{html.escape(view.text)}</p>'
+            if view.text
+            else ""
+        )
+        labelledby = f' aria-labelledby="{title_id}"' if view.title else ""
+        describedby = f' aria-describedby="{text_id}"' if view.text else ""
+        form = view.form.renderer
+        form_html = form.to_html() if isinstance(form, WebRenderer) else ""
+        return (
+            f'<dialog {self._root_attributes(oob=oob)} class="modal" data-dialog'
+            f'{labelledby}{describedby}{cancel} hx-swap="none">'
+            f'<div class="modal-box flex flex-col gap-4">{title}{text}{form_html}'
+            f'<div class="modal-action">{reject}{self._accept_html(oob=False)}</div>'
+            "</div></dialog>"
+        )
+
+    def _accept_html(self, *, oob: bool) -> str:
+        swap = ' hx-swap-oob="true"' if oob else ""
+        disabled = "" if self.is_enabled and self._form_view.is_accept_enabled else " disabled"
+        return (
+            f'<button id="{self.accept_id}" type="button" class="btn btn-primary"{swap}'
+            f' hx-post="/widget/{self.widget_id}"'
+            f""" hx-vals='{{"event": "accept"}}'{disabled}>"""
+            f"{html.escape(self._form_view.accept_text)}</button>"
+        )
+
+    def _refresh_accept(self, view: DialogView, rendered_object: str, value: Any) -> None:
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _mark_dirty(self, view: DialogView, rendered_object: str, value: Any) -> None:
+        self._is_whole = True
+        super()._mark_dirty(view, rendered_object, value)
+
+
 class WebPageRenderer(WebRenderer[PageView]):
     """A page's views in a column, like the main view's own."""
 
@@ -3140,6 +3223,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "float_input": WebFloatInputRenderer,
     "int_input": WebIntInputRenderer,
     "form": WebFormRenderer,
+    "form_dialog": WebFormDialogRenderer,
     "form_label": WebFormLabelRenderer,
     "grid": WebGridRenderer,
     "group_form": WebGroupFormRenderer,

@@ -363,6 +363,21 @@ alone. Qt shows a `QMessageBox`, Textual a modal screen, and the web a modal `<d
 wherever the view is in the tree. In [`src/examples/pipeform.py`](src/examples/pipeform.py),
 the Pipe menu's Reset Dimensions asks for a confirmation first.
 
+A `FormDialogView` holds a form, e.g. editing a record from its Edit button, with OK and
+Cancel; a subclass gives its form as its `form` field, and its `text` shows above it:
+
+```python
+@define_view
+class EditPipeDialog(FormDialogView):
+    form: PipeForm = Factory(PipeForm)  # a FormView, with its checks
+```
+
+OK can't be pressed while a check of the form fails (`is_accept_enabled` follows the
+checks as they run), and accepting runs every check first, staying open while one fails,
+even one the user hasn't triggered yet (`FormView.check` runs them all, `is_valid` tells
+whether they pass). The answer comes through `accepted` or `rejected`; the form keeps its
+values, for the app to read once accepted, or to fill before `open()`.
+
 ## Translating the app
 
 Write the app's text in one language in the code and translate it from JSON catalogs, one

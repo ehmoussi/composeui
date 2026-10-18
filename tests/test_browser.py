@@ -36,6 +36,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.listview import PIPES, PipesMainView
@@ -257,6 +258,14 @@ def pipes_base_url() -> Iterator[str]:
 def tabs_base_url() -> Iterator[str]:
     """Serve an app with a pipe's details in tabs, for the whole module."""
     with _serve(WebApplication(build_main_view=TabsMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def edited_pipe_base_url() -> Iterator[str]:
+    """Serve an app editing a pipe in a form dialog, for the whole module."""
+    app = WebApplication(build_main_view=EditedPipeMainView).create_starlette_app()
+    with _serve(app) as url:
         yield url
 
 
@@ -951,6 +960,48 @@ def test_a_tab_view_shows_the_tab_picked_by_a_click_or_the_arrow_keys(
     expect(length).to_be_visible()
     page.reload()
     expect(length).to_be_visible()
+    context.close()
+
+
+def test_a_form_dialog_s_ok_follows_its_form_as_the_user_types(
+    browser: Browser, edited_pipe_base_url: str
+) -> None:
+    context = browser.new_context(base_url=edited_pipe_base_url)
+    page = context.new_page()
+    page.goto("/")
+    dialog = page.get_by_role("dialog", name="Edit the pipe")
+    name = dialog.get_by_label("Name")
+    ok = dialog.get_by_role("button", name="OK")
+
+    with _posted(page):
+        page.get_by_role("button", name="Edit").click()
+    expect(dialog).to_be_visible()
+    expect(name).to_have_value("Main line")
+    expect(ok).to_be_enabled()
+
+    name.fill("")
+    with _posted(page):
+        name.press_sequentially("R")  # a debounced edit at a time
+    with _posted(page):
+        name.press("Backspace")
+    expect(ok).to_be_disabled()
+    expect(dialog).to_be_visible()  # left open as the user has it
+    with _posted(page):
+        name.press_sequentially("Return")
+    expect(ok).to_be_enabled()
+    expect(name).to_have_value("Return")
+    with _posted(page):
+        ok.click()
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_text("Return, 12 m")).to_be_visible()
+
+    with _posted(page):
+        page.get_by_role("button", name="Edit").click()
+    expect(dialog).to_be_visible()
+    with _posted(page):
+        page.keyboard.press("Escape")  # Cancel
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_text("Return, 12 m")).to_be_visible()
     context.close()
 
 

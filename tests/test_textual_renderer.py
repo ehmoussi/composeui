@@ -57,6 +57,7 @@ from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterChip,
     ComposeFilterTable,
 )
+from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
@@ -72,6 +73,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
@@ -981,6 +983,49 @@ async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
         assert str(tabbed.get_tab(history).label) == "Changes"
         assert tabbed.get_tab(notes).disabled
         assert not tabbed.get_tab(notes).display
+
+
+@pytest.mark.asyncio
+async def test_a_form_dialog_s_ok_follows_its_form_s_checks() -> None:
+    view = EditedPipeMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    name = _field_widget(view.edit_dialog.form.name.renderer)
+    assert isinstance(name, Input)
+    assert isinstance(view.edit.renderer, TextualWidgetRenderer)
+    edit = view.edit.renderer.widget
+    assert edit is not None
+
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(edit)
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeFormDialog)
+        assert name in screen.walk_children()
+        assert str(screen.title_label.render()) == "Edit the pipe"
+        assert not screen.accept_button.disabled
+        name.focus()
+        await pilot.press("end", *["backspace"] * len("Main line"))
+        await pilot.pause()
+        assert screen.accept_button.disabled  # a name is mandatory
+        await pilot.press(*"Return")
+        await pilot.pause()
+        assert not screen.accept_button.disabled
+        await pilot.click(screen.accept_button)
+        await pilot.pause()
+        assert app.screen is not screen
+        assert view.pipe.text == "Return, 12 m"
+
+        await pilot.click(edit)  # its screen again, its form's widgets kept
+        await pilot.pause()
+        assert app.screen is screen
+        await pilot.press("escape")  # Cancel
+        await pilot.pause()
+        assert app.screen is not screen
+        assert view.pipe.text == "Return, 12 m"
 
 
 @pytest.mark.asyncio

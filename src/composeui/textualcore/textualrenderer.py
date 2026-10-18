@@ -34,6 +34,7 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
+    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -72,6 +73,7 @@ from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
+from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
@@ -431,6 +433,85 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
     @staticmethod
     def _update_state(view: DialogView, rendered_object: DialogView) -> None:
         pass  # the user only answers, through `accepted`/`rejected`
+
+
+class TextualFormDialogRenderer(TextualDialogRenderer):
+    """A modal screen holding the form, installed once: pushed open, popped closed.
+
+    The form's widgets are built once, so its screen is too, unlike a message's. OK is
+    disabled while a check of the form fails; the view closes the dialog once it accepts
+    the answer, so OK on a form refusing it leaves the screen up.
+    """
+
+    def __init__(self, view: FormDialogView) -> None:
+        super().__init__(view)
+        self._form_view = view
+        self.form_screen: ComposeFormDialog | None = None
+        self._refresh_dispatcher["is_accept_enabled"] = self._refresh_is_accept_enabled
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            super().render()
+            form = self._form_view.form.renderer
+            if isinstance(form, TextualWidgetRenderer) and form.widget is not None:
+                self.form_screen = ComposeFormDialog(form.widget)
+                self.form_screen.answered.connect(self._answer_form)
+
+    def _answer_form(self, answer: str) -> None:
+        {"accept": self._view.accept, "reject": self._view.reject}.get(answer, self._view.dismiss)()
+
+    def _refresh_visible(self, view: DialogView, _rendered_object: DialogView, value: bool) -> None:
+        app, screen = self.app, self.form_screen
+        # opened before the app runs: its mount refreshes the tree again
+        if app is None or not app.is_running or screen is None:
+            return
+        if value and not screen.is_current:
+            name = f"cui-{id(view)}-dialog"
+            if not app.is_screen_installed(screen):
+                app.install_screen(screen, name)
+            app.push_screen(name)
+        elif not value and screen.is_current:
+            app.pop_screen()
+
+    def _refresh_enabled(
+        self, _view: DialogView, _rendered_object: DialogView, value: bool
+    ) -> None:
+        if self.form_screen is not None:
+            self.form_screen.reject_button.disabled = not value
+            self.form_screen.accept_button.disabled = not (
+                value and self._form_view.is_accept_enabled
+            )
+
+    def _refresh_title(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
+        if self.form_screen is not None:
+            self.form_screen.title_label.update(value)
+            self.form_screen.title_label.display = value != ""
+
+    def _refresh_text(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
+        if self.form_screen is not None:
+            self.form_screen.text_label.update(value)
+            self.form_screen.text_label.display = value != ""
+
+    def _refresh_kind(self, _view: DialogView, _rendered_object: DialogView, _value: Any) -> None:
+        pass  # always OK and Cancel: a form is confirmed or not
+
+    def _refresh_accept_text(
+        self, _view: DialogView, _rendered_object: DialogView, value: str
+    ) -> None:
+        if self.form_screen is not None:
+            self.form_screen.accept_button.label = value
+
+    def _refresh_reject_text(
+        self, _view: DialogView, _rendered_object: DialogView, value: str
+    ) -> None:
+        if self.form_screen is not None:
+            self.form_screen.reject_button.label = value
+
+    def _refresh_is_accept_enabled(
+        self, _view: DialogView, _rendered_object: DialogView, value: bool
+    ) -> None:
+        if self.form_screen is not None:
+            self.form_screen.accept_button.disabled = not (value and self._view.is_enabled)
 
 
 class InputViewLike(ViewLike, Protocol):
@@ -2287,6 +2368,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": TextualFloatInputRenderer,
     "int_input": TextualIntInputRenderer,
     "form": TextualFormRenderer,
+    "form_dialog": TextualFormDialogRenderer,
     "form_label": TextualFormLabelRenderer,
     "grid": TextualGridRenderer,
     "group_form": TextualGroupFormRenderer,
