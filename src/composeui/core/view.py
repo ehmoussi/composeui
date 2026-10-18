@@ -14,8 +14,9 @@ import operator
 import re
 import sys
 import threading
+import weakref
 from collections import deque
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -39,7 +40,7 @@ from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
 from composeui.core.jobs import Jobs
-from composeui.core.model import InvalidStateError, RefusedError
+from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
@@ -60,8 +61,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from attrs import AttrsInstance
-
-    from composeui.core.model import Model
 
 
 LOGGER = logging.getLogger("COMPOSEUI_VIEW")
@@ -273,6 +272,29 @@ def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
         ):
             instance.renderer.refresh_attribute(attribute.name, value)
     return value
+
+
+def set_references(root: "View", main_view: "MainView", model: "Optional[Model]") -> None:
+    """Give `root` and its children their main view, and their signals the main view and model.
+
+    What the signals pass to a callback asking for ``main_view`` or ``model`` by name.
+    A list of views keeps both, for the views it builds later.
+    """
+    views: deque[View] = deque([root])
+    main_view_reference = weakref.ref(main_view)
+    while len(views) > 0:
+        current_view = views.popleft()
+        current_view._main_view = main_view_reference  # noqa: SLF001
+        if isinstance(current_view, ListView):
+            current_view._model = None if model is None else weakref.ref(model)  # noqa: SLF001
+        # its children, not only its view fields: e.g. a language menu's actions
+        views.extend(current_view.children_views)
+        for f in attrs.fields(cast("type[AttrsInstance]", type(current_view))):
+            signal = getattr(current_view, f.name)
+            if isinstance(signal, Signal):
+                signal.set_main_view(main_view)
+                if model is not None:
+                    signal.set_model(model)
 
 
 def _retranslate(view: "View", translate: Translate) -> None:
@@ -2837,3 +2859,91 @@ class SidebarView(View):
     is_expanded: bool = attrs.field(default=True, metadata={OMIT: True})
     #: the user retracted or expanded the sidebar; not emitted when `is_expanded` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
+
+
+ItemT = TypeVar("ItemT")
+
+
+@define_view
+class ListView(View, Generic[ItemT]):
+    """A view per record, laid out in a column, e.g. an expander per record.
+
+    A subclass builds a record's view (`build_item`). Setting `items` to the records,
+    e.g. the model's, shows them: a new record gets a view of its own, a record gone
+    takes its view along, and a record still there keeps its view, told by its key
+    (`item_key`). A record changed keeps its view if `update_item` shows the change in
+    it, so the view keeps what the user did to it (an expander stays expanded); else it
+    gets a new view. The records and their views are the model's, not study data: never
+    saved, loaded or reset.
+    """
+
+    _renderer_key = "list"
+
+    #: the records' views, in the records' order; made by setting `items`
+    item_views: list[View] = attrs.field(factory=list, init=False, metadata={OMIT: True})
+    _items: list[ItemT] = attrs.field(factory=list, init=False, repr=False, metadata={OMIT: True})
+    #: the model the signals of the views built pass on (see `set_references`)
+    _model: Optional[Callable[[], Optional["Model"]]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    @property
+    def children_views(self) -> list[View]:
+        return [*super().children_views, *self.item_views]
+
+    @property
+    def items(self) -> list[ItemT]:
+        """Get the records shown, in order."""
+        return list(self._items)
+
+    @items.setter
+    def items(self, items: "Iterable[ItemT]") -> None:
+        new_items = list(items)
+        old = {
+            self.item_key(item): (item, view) for item, view in zip(self._items, self.item_views)
+        }
+        views: list[View] = []
+        keys: set[Hashable] = set()
+        for item in new_items:
+            key = self.item_key(item)
+            if key in keys:
+                msg = f"Two records of {type(self).__name__} have the key {key!r}."
+                raise ValueError(msg)
+            keys.add(key)
+            old_item, view = old.get(key, (None, None))
+            if view is None or (old_item != item and not self.update_item(view, item)):
+                view = self._new_item_view(item)
+            views.append(view)
+        self._items = new_items
+        self.item_views = views
+
+    def build_item(self, item: ItemT) -> View:
+        """Get a new view showing `item`; a subclass builds it."""
+        raise NotImplementedError(self.build_item)
+
+    def item_key(self, item: ItemT) -> Hashable:
+        """Get what tells `item` apart from the other records: the record itself by default.
+
+        A record changed, with the same key, keeps its view; e.g. a key of its name or id.
+        """
+        return item
+
+    def update_item(self, view: View, item: ItemT) -> bool:
+        """Show `item`, changed, in `view`, its view; return False to get a new view instead.
+
+        The default, so a subclass only shows a change in place where it's worth it.
+        """
+        return False
+
+    def _new_item_view(self, item: ItemT) -> View:
+        """Build `item`'s view, set up as the views built with the main view were.
+
+        Its signals pass the main view and the model on, and it shows the main view's
+        language; the list's renderer renders it, if the list is rendered.
+        """
+        view = self.build_item(item)
+        main_view = None if self._main_view is None else self._main_view()
+        if main_view is not None:
+            set_references(view, main_view, None if self._model is None else self._model())
+        _retranslate(view, self._tr)
+        return view

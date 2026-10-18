@@ -33,6 +33,7 @@ from qtpy.QtWidgets import (
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
+from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -55,6 +56,7 @@ from composeui.core.view import (
     GridView,
     GroupFormView,
     HorizontalView,
+    ListView,
     LogType,
     MainView,
     Menu,
@@ -1596,6 +1598,50 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
             self._view.is_expanded = is_expanded
 
 
+class QtListRenderer(QtWidgetRenderer["ListView[Any]", QWidget]):
+    """The records' views one above the other, added, moved and removed as they change."""
+
+    def __init__(self, view: ListView[Any]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"item_views": self._refresh_item_views})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QVBoxLayout(self._rendered_object)
+            # the column holding the list already insets it
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_item_views(
+        _view: ListView[Any], rendered_object: QWidget, value: list[View]
+    ) -> None:
+        widgets: list[QWidget] = []
+        for item_view in value:
+            if item_view.renderer is None:
+                item_view.render(RendererType.QT)  # a record's view built since
+            if isinstance(item_view.renderer, QtWidgetRenderer) and isinstance(
+                item_view.renderer.qt_object, QWidget
+            ):
+                widgets.append(item_view.renderer.qt_object)
+        layout = rendered_object.layout()
+        assert layout is not None
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            widget = None if item is None else item.widget()
+            if widget is not None and widget not in widgets:
+                # its record is gone
+                widget.setParent(None)
+                widget.deleteLater()
+        for widget in widgets:
+            layout.addWidget(widget)
+
+    @staticmethod
+    def _update_state(view: ListView[Any], rendered_object: QWidget) -> None:
+        pass  # a list has no user-editable state of its own: its records are the model's
+
+
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
@@ -2020,6 +2066,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "horizontal": QtHorizontalRenderer,
     "input": QtInputRenderer,
     "label": QtLabelRenderer,
+    "list": QtListRenderer,
     "log": QtLogRenderer,
     "main": QtMainRenderer,
     "markdown": QtMarkdownRenderer,

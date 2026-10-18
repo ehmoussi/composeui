@@ -17,6 +17,7 @@ from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
+from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -40,6 +41,7 @@ from composeui.core.view import (
     GridView,
     GroupFormView,
     HorizontalView,
+    ListView,
     LogType,
     MainView,
     Menu,
@@ -85,7 +87,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from textual.widget import Widget
+    from textual.widget import AwaitMount, Widget
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
@@ -1707,6 +1709,73 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
         self._view.toggled.emit(is_expanded)
 
 
+class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", Vertical]):
+    """The records' views one above the other, added, moved and removed as they change.
+
+    Widgets only mount in a running app: the column is put in step with the records once
+    it is mounted (`_refresh_tree` refreshes it then too), a record's widget built since
+    mounted next to its neighbours, then given its view's state.
+    """
+
+    def __init__(self, view: ListView[Any]) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"item_views": self._refresh_item_views})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = Vertical(*self._widgets(self._view.item_views))
+            self._rendered_object.styles.height = "auto"
+
+    @staticmethod
+    def _widgets(views: list[View]) -> list[Widget]:
+        """Get the views' widgets, rendering the views built since the list was."""
+        widgets: list[Widget] = []
+        for view in views:
+            if view.renderer is None:
+                view.render(RendererType.TEXTUAL)
+            if (
+                isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ):
+                widgets.append(view.renderer.widget)
+        return widgets
+
+    @staticmethod
+    def _refresh_item_views(_view: ListView[Any], column: Vertical, value: list[View]) -> None:
+        widgets = TextualListRenderer._widgets(value)
+        if not column.is_attached:
+            return  # put in step once mounted
+        for child in list(column.children):
+            if child not in widgets:
+                child.remove()  # its record is gone
+        previous: Widget | None = None
+        for view, widget in zip(value, widgets):
+            if widget.parent is column:
+                if previous is not None:
+                    column.move_child(widget, after=previous)
+                elif column.children[0] is not widget:
+                    column.move_child(widget, before=0)
+            else:
+                if previous is not None:
+                    mounting = column.mount(widget, after=previous)
+                elif len(column.children) > 0:
+                    mounting = column.mount(widget, before=0)
+                else:
+                    mounting = column.mount(widget)
+                column.call_next(TextualListRenderer._refresh_once_mounted, mounting, view)
+            previous = widget
+
+    @staticmethod
+    async def _refresh_once_mounted(mounting: AwaitMount, view: View) -> None:
+        """Give `view`'s widgets its state once mounted: Textual's widgets take it only then."""
+        await mounting
+        _refresh_tree(view)
+
+    @staticmethod
+    def _update_state(view: ListView[Any], rendered_object: Vertical) -> None:
+        pass  # a list has no user-editable state of its own: its records are the model's
+
+
 class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -2108,6 +2177,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "horizontal": TextualHorizontalRenderer,
     "input": TextualInputRenderer,
     "label": TextualLabelRenderer,
+    "list": TextualListRenderer,
     "log": TextualLogRenderer,
     "main": TextualMainRenderer,
     "markdown": TextualMarkdownRenderer,

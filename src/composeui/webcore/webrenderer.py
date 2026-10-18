@@ -18,6 +18,7 @@ import math
 import re
 import threading
 from abc import abstractmethod
+from collections import deque
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
 
@@ -25,6 +26,7 @@ from markdown_it import MarkdownIt
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
+from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
     NoRenderedObjectError,
@@ -48,6 +50,7 @@ from composeui.core.view import (
     GridView,
     GroupFormView,
     HorizontalView,
+    ListView,
     LogType,
     MainView,
     Menu,
@@ -2633,6 +2636,111 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
         )
 
 
+class WebListRenderer(WebRenderer["ListView[Any]"]):
+    """The records' views one above the other, each in an item of its own.
+
+    As the records change, the response swaps only the items that changed: an item gone
+    is deleted and a new one goes in after its neighbour, so the items kept, the one the
+    user is busy in among them, are never swapped back. A change reordering the items
+    kept, or anything else changing on the list, swaps the whole list instead. A record's
+    view built since is rendered into the session; one gone is dropped from it.
+    """
+
+    _role = "list"
+
+    def __init__(self, view: ListView[Any]) -> None:
+        super().__init__(view)
+        #: the records' views the page shows, as last sent; None until sent
+        self._sent: list[View] | None = None
+        #: whether more than the records changed since, for which the whole list swaps
+        self._is_whole = False
+        self._refresh_dispatcher["item_views"] = self._refresh_item_views
+
+    def render(self) -> None:
+        super().render()
+        self._render_items(self._view.item_views)
+
+    def _render_items(self, views: list[View]) -> None:
+        """Render the views built since the list was, into the session, and adopt them all."""
+        built_since = [view for view in views if view.renderer is None]
+        in_session = (
+            contextlib.nullcontext() if self._target is None else rendering_into(self._target)
+        )
+        with in_session:
+            for view in built_since:
+                view.render(RendererType.WEB)
+        self._adopt(views)
+
+    def _item_id(self, view: View) -> str:
+        return f"{self.widget_id}-item-{id(view)}"
+
+    def _item_html(self, view: View) -> str:
+        content = view.renderer.to_html() if isinstance(view.renderer, WebRenderer) else ""
+        return f'<div id="{self._item_id(view)}">{content}</div>'
+
+    def to_html(self, *, oob: bool = False) -> str:
+        views = self._view.item_views
+        sent, self._sent = self._sent, list(views)
+        is_whole, self._is_whole = self._is_whole, False
+        if oob and not is_whole and sent is not None:
+            kept = [view for view in sent if view in views]
+            if kept == [view for view in views if view in sent]:
+                return self._changes_html(sent, views)
+        items = "".join(self._item_html(view) for view in views)
+        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{items}</div>'
+
+    def _changes_html(self, sent: list[View], views: list[View]) -> str:
+        """Delete the items gone and put each new one after its neighbour, in order."""
+        fragments = [
+            f'<div id="{self._item_id(view)}" hx-swap-oob="delete"></div>'
+            for view in sent
+            if view not in views
+        ]
+        for index, view in enumerate(views):
+            if view in sent:
+                continue
+            place = (
+                f"afterend:#{self._item_id(views[index - 1])}"
+                if index > 0
+                else f"afterbegin:#{self.widget_id}"
+            )
+            fragments.append(f'<div hx-swap-oob="{place}">{self._item_html(view)}</div>')
+        return "".join(fragments)
+
+    def _refresh_item_views(
+        self, view: ListView[Any], _rendered_object: str, value: list[View]
+    ) -> None:
+        self._render_items(value)
+        # still the views before: the change lands in the view after its renderers hear it
+        self._forget([item_view for item_view in view.item_views if item_view not in value])
+        dirty = _DIRTY.get()
+        if dirty is not None:
+            dirty[self.widget_id] = self
+
+    def _forget(self, views: list[View]) -> None:
+        """Drop the renderers of `views`, whose records are gone, from the list and the session."""
+        gone: deque[View] = deque(views)
+        while len(gone) > 0:
+            view = gone.popleft()
+            gone.extend(view.children_views)
+            renderer: Any = view.renderer
+            renderers = (
+                renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
+            )
+            for child in renderers:
+                if not isinstance(child, WebRenderer) or child._rendered_object is None:  # noqa: SLF001
+                    continue
+                if child in self.children:
+                    self.children.remove(child)
+                if self._target is not None:
+                    self._target.renderers.pop(child.widget_id, None)
+                    self._target.pending.pop(child.widget_id, None)
+
+    def _mark_dirty(self, view: ListView[Any], rendered_object: str, value: Any) -> None:
+        self._is_whole = True
+        super()._mark_dirty(view, rendered_object, value)
+
+
 class WebGridRenderer(WebRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -2933,6 +3041,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "horizontal": WebHorizontalRenderer,
     "input": WebInputRenderer,
     "label": WebLabelRenderer,
+    "list": WebListRenderer,
     "log": WebLogRenderer,
     "main": WebMainRenderer,
     "markdown": WebMarkdownRenderer,

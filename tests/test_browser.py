@@ -38,6 +38,7 @@ from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.listview import PIPES, PipesMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
@@ -231,6 +232,23 @@ def records_base_url() -> Iterator[str]:
 def sidebar_base_url() -> Iterator[str]:
     """Serve an app with a sidebar beside two pages, for the whole module."""
     with _serve(WebApplication(build_main_view=SidebarMainView).create_starlette_app()) as url:
+        yield url
+
+
+class _PipesApp(WebApplication[PipesMainView]):
+    """Pipes listed an expander each, two to start with."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=PipesMainView)
+
+    def setup_session(self, main_view: PipesMainView) -> None:
+        main_view.pipes.items = PIPES
+
+
+@pytest.fixture(scope="module")
+def pipes_base_url() -> Iterator[str]:
+    """Serve an app listing pipes, an expander each, for the whole module."""
+    with _serve(_PipesApp().create_starlette_app()) as url:
         yield url
 
 
@@ -850,6 +868,35 @@ def test_a_sidebar_retracts_beside_the_pages_and_is_a_drawer_on_a_phone(
     page.mouse.click(390, 400)  # beside the drawer, on the page it covers
     expect(create).to_be_hidden()
     expect(toggle).to_have_attribute("aria-expanded", "false")
+    context.close()
+
+
+def test_a_list_view_adds_and_deletes_items_leaving_the_others_alone(
+    browser: Browser, pipes_base_url: str
+) -> None:
+    context = browser.new_context(base_url=pipes_base_url)
+    page = context.new_page()
+    page.goto("/")
+    titles = page.locator("summary")
+    expect(titles).to_have_text(["Main line", "Return"])
+    with _posted(page):
+        page.get_by_text("Main line").click()
+    expect(page.get_by_text("Length: 12 m")).to_be_visible()
+
+    with _posted(page):
+        page.get_by_role("button", name="Add a pipe").click()
+    # put in first, the others as the user left them (the response leaves them out)
+    expect(titles).to_have_text(["Feed", "Main line", "Return"])
+    expect(page.get_by_text("Length: 12 m")).to_be_visible()
+
+    with _posted(page):
+        page.get_by_text("Feed").click()
+    expect(page.get_by_text("Length: 1 m")).to_be_visible()
+    feed = page.locator("details").filter(has_text="Feed")
+    with _posted(page):
+        feed.get_by_role("button", name="Delete").click()  # the new item's own
+    expect(titles).to_have_text(["Main line", "Return"])
+    expect(page.locator("footer")).to_have_text("Deleted Feed")
     context.close()
 
 

@@ -74,6 +74,7 @@ from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
+from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
@@ -881,6 +882,54 @@ async def test_a_sidebar_retracts_to_a_strip_by_its_arrow_and_back() -> None:
         await pilot.pause()
         assert create.region.area == 0
         assert toggles == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_a_list_view_shows_a_view_per_record_as_the_records_change() -> None:
+    view = PipesMainView()
+    view.status_bar.timeout = 0
+    _add_reference_to_signals(view, None)
+    view.pipes.items = PIPES[:1]  # before rendering, as at startup
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.pipes.renderer, TextualWidgetRenderer)
+    column = view.pipes.renderer.widget
+    assert column is not None
+
+    def shown() -> list[str]:
+        return [
+            str(child.title) for child in column.children if isinstance(child, ComposeCollapsible)
+        ]
+
+    async with app.run_test(size=(80, 40)) as pilot:
+        await pilot.pause()
+        assert shown() == ["Main line"]
+        main_line = view.pipes.item_views[0]
+        assert isinstance(main_line.renderer, TextualWidgetRenderer)
+        main_line_widget = main_line.renderer.widget
+
+        view.pipes.items = [Pipe("Feed", 1), *PIPES]  # built since: mounted as they come
+        await pilot.pause()
+        assert shown() == ["Feed", "Main line", "Return"]
+        assert column.children[1] is main_line_widget  # the record's own widget
+        feed = view.pipes.item_views[0]
+        assert isinstance(feed, PipeExpander)
+        feed.is_expanded = True
+        await pilot.pause()
+        assert isinstance(feed.length.renderer, TextualWidgetRenderer)
+        length = feed.length.renderer.widget
+        assert isinstance(length, Label)
+        assert str(length.render()) == "Length: 1 m"  # its state, given once mounted
+
+        assert isinstance(feed.delete.renderer, TextualWidgetRenderer)
+        delete = feed.delete.renderer.widget
+        assert delete is not None
+        await pilot.click(delete)
+        await pilot.pause()
+        assert shown() == ["Main line", "Return"]
+        assert view.status_bar.message == "Deleted Feed"
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,8 @@ One widget at a time, each on Qt, Textual and the web with tests (the registry c
 test requires all three backends to register the same keys). Already there: input, float
 input, integer input, slider, label, log, button, progress bar, metric, expander,
 checkbox, radio group, combobox, table (editable cells, sorting and filtering included),
-Markdown, forms, pages, sidebar, message and confirm dialogs. Easiest first.
+Markdown, forms, pages, sidebar, a list of views from data, message and confirm dialogs.
+Easiest first.
 
 1. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
    a calendar, in the main view's language's format, with `minimum`/`maximum`.
@@ -22,11 +23,6 @@ Markdown, forms, pages, sidebar, message and confirm dialogs. Easiest first.
    and the answer (accepted or not) as a signal. Today's dialogs only show a message or
    ask to confirm.
 4. **Tree view** (`TreeView`).
-5. **A list of views from data** (`ListView[ItemT]`): one item view built per record by
-   a factory, added and removed as the records change, e.g. an expander per record.
-   Views are fixed fields today (pages can't be added either); the web needs each
-   item's id stable across swaps, and `save_state` should skip the items (the model
-   holds the records).
 
 Charts (2) have a section of their own.
 
