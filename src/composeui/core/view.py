@@ -2585,6 +2585,23 @@ class VerticalView(View):
     _renderer_key = "vertical"
 
 
+@define_view
+class ExpanderView(View):
+    """A collapsible section: its title always shown, its view fields only while expanded.
+
+    Its view fields are laid out one above the other, as in a `VerticalView`, e.g. a
+    record's details above its Edit and Delete buttons.
+    """
+
+    _renderer_key = "expander"
+
+    #: shown in the header the user clicks to expand or collapse the section
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    is_expanded: bool = attrs.field(default=False)
+    #: the user expanded or collapsed the section; not emitted when `is_expanded` is set in code
+    toggled: Signal[bool] = attrs.Factory(Signal[bool])
+
+
 class GridPosition(NamedTuple):
     """A view's cell in a `GridView`, counted from 0, spanning more cells to its right or below."""
 

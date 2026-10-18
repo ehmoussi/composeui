@@ -35,6 +35,7 @@ from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
+from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.markdown import HelpMainView
@@ -215,6 +216,13 @@ def chart_pages_base_url() -> Iterator[str]:
 def workers_base_url() -> Iterator[str]:
     """Serve an app with a slider, for the whole module."""
     with _serve(WebApplication(build_main_view=WorkersMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def records_base_url() -> Iterator[str]:
+    """Serve an app with a record's details in an expander, for the whole module."""
+    with _serve(WebApplication(build_main_view=RecordMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -788,6 +796,30 @@ def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None
     # back in their cells
     assert first["y"] == pytest.approx(button["y"], abs=1)
     assert spanning["width"] > 2 * first["width"]
+
+
+def test_an_expander_tells_the_server_it_was_opened_or_closed(
+    browser: Browser, records_base_url: str
+) -> None:
+    context = browser.new_context(base_url=records_base_url)
+    page = context.new_page()
+    page.goto("/")
+    title = page.get_by_text("Pipe A")
+    edit = page.get_by_role("button", name="Edit")
+    expect(edit).to_be_hidden()
+
+    with _posted(page):
+        title.click()
+    expect(edit).to_be_visible()
+    page.reload()  # the server's page: open, as the server was told
+    expect(edit).to_be_visible()
+
+    with _posted(page):
+        title.press("Enter")
+    expect(edit).to_be_hidden()
+    page.reload()
+    expect(edit).to_be_hidden()
+    context.close()
 
 
 def test_a_slider_shows_its_value_beside_the_track_as_tall_as_a_text_field(

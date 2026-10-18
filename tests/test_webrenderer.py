@@ -98,6 +98,7 @@ from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
+from tests.expander import RecordMainView
 from tests.horizontal import HorizontalMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
@@ -648,6 +649,36 @@ def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
 
     # left with a decimal: the field, otherwise never swapped back, shows 15 again
     assert _swapped(fragments, field.widget_id).attributes["value"] == "15"
+
+
+def test_an_expander_is_a_details_posting_its_toggles_never_swapped_back() -> None:
+    view = RecordMainView()
+    view.render(RendererType.WEB)
+    record = view.record
+    expander = record.renderer
+    assert isinstance(expander, WebRenderer)
+    toggles: list[bool] = []
+    record.toggled.connect(toggles.append)
+    record.title = "<Pipe A>"
+    details = _element(expander.to_html(), expander.widget_id)
+    assert details.tag == "details"
+    assert "open" not in details.attributes  # collapsed
+    assert "<Pipe A>" in details.text  # escaped, shown as text
+    # its views inside, rendered even while collapsed, for their own swaps
+    assert _widget_id(record.buttons.edit.renderer) in expander.to_html()
+
+    fragments = handle_event(expander, "toggle", {"open": "true"})
+    assert (record.is_expanded, toggles) == (True, [True])
+    assert expander.widget_id not in fragments  # the browser opened it already
+    handle_event(expander, "toggle", {"open": "true"})  # the server's state posted back
+    assert toggles == [True]
+    assert "open" in _element(expander.to_html(), expander.widget_id).attributes
+
+    record.is_enabled = False
+    descendants = _element(expander.to_html(), expander.widget_id).descendants
+    # its own summary, before the nested expander's
+    summary = next(attributes for tag, attributes in descendants if tag == "summary")
+    assert summary["tabindex"] == "-1"  # its title can't be focused to toggle it
 
 
 def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps() -> None:

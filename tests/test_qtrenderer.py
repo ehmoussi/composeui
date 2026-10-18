@@ -63,6 +63,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmetric import QMetric
@@ -71,6 +72,7 @@ from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
+from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
@@ -829,6 +831,35 @@ def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
     assert not wrap.isChecked()
     view.toolbar.is_enabled = False
     assert not toolbar.widgetForAction(run).isEnabled()
+
+
+def test_an_expander_shows_its_views_while_expanded_by_a_click_on_its_header(
+    qtbot: QtBot,
+) -> None:
+    view = RecordMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    record = view.record
+    expander = _widget(record)
+    assert isinstance(expander, QExpander)
+    edit = _widget(record.buttons.edit)
+    toggles: list[bool] = []
+    record.toggled.connect(toggles.append)
+    window.show()
+    assert expander.header.text() == "Pipe A"
+    assert not edit.isVisible()  # collapsed
+
+    qtbot.mouseClick(expander.header, Qt.MouseButton.LeftButton)
+    assert (record.is_expanded, toggles) == (True, [True])
+    assert edit.isVisible()
+    assert expander.header.arrowType() == Qt.ArrowType.DownArrow
+
+    record.is_expanded = False  # set in code: collapsed, and not reported
+    assert not edit.isVisible()
+    assert (expander.header.isChecked(), toggles) == (False, [True])
+    record.title = "Pipe B"
+    assert expander.header.text() == "Pipe B"
 
 
 def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(
