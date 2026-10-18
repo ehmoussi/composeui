@@ -433,7 +433,7 @@ class SliderViewLike(ViewLike, Protocol):
 
 
 class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
-    """A horizontal slider stopping on each step, its value painted above the handle."""
+    """A horizontal slider stopping on each step, its value painted beside the track."""
 
     _invalid_style = "QSlider { border: 1px solid red; }"
 
@@ -481,6 +481,7 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
         rendered_object.setRange(0, last)
         rendered_object.setPageStep(max(1, last // 10))
         rendered_object.setValue(SliderMixin.position(value, minimum, maximum, step))
+        rendered_object.updateGeometry()  # the value's slot follows the widest value
         rendered_object.update()  # the value painted, even if the handle didn't move
 
     @staticmethod
