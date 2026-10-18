@@ -1081,6 +1081,11 @@ def test_a_form_dialog_s_ok_follows_its_form_s_checks(qtbot: QtBot) -> None:
     qtbot.keyClick(dialog, Qt.Key.Key_Escape)  # Cancel
     assert not dialog.isVisible()
     assert view.pipe.text == "Return, 12 m"
+    # its native window released (see the confirmation's), its form kept for next time
+    qtbot.waitUntil(lambda: not dialog.testAttribute(Qt.WidgetAttribute.WA_WState_Created))
+    qtbot.mouseClick(_widget(view.edit), Qt.MouseButton.LeftButton)
+    assert dialog.isVisible()
+    assert dialog.isAncestorOf(name)
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
@@ -1264,6 +1269,11 @@ def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
     assert view.name.text == "Ada"
 
     view.confirm_clear.open()
+    view.confirm_clear.is_visible = False  # closed by the app, not by the box itself
+    # its native window released, which WSLg's compositor could otherwise keep drawing
+    qtbot.waitUntil(lambda: not box.testAttribute(Qt.WidgetAttribute.WA_WState_Created))
+    view.confirm_clear.open()
+    assert box.isVisible()  # in a native window of its own again
     qtbot.mouseClick(buttons["Clear"], Qt.MouseButton.LeftButton)
     assert not box.isVisible()
     assert view.name.text == ""

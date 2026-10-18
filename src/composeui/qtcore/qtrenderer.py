@@ -94,6 +94,7 @@ from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
+from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -1426,6 +1427,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         if self._rendered_object is None:
             box = QMessageBox()
             box.setModal(True)
+            release_when_hidden(box)
             self._accept_button = box.addButton("", QMessageBox.ButtonRole.AcceptRole)
             self._reject_button = box.addButton("", QMessageBox.ButtonRole.RejectRole)
             box.buttonClicked.connect(self._set_clicked)
@@ -1510,6 +1512,7 @@ class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
     def render(self) -> None:
         if self._rendered_object is None:
             dialog = QFormDialog()
+            release_when_hidden(dialog)
             form = self._view.form.renderer
             if isinstance(form, QtWidgetRenderer) and isinstance(form.qt_object, QWidget):
                 dialog.set_form(form.qt_object)
