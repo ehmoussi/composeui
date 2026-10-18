@@ -11,11 +11,36 @@ One widget at a time, each on Qt, Textual and the web with tests (the registry c
 test requires all three backends to register the same keys). Already there: input, float
 input, label, log, button, progress bar, checkbox, radio group, combobox, table (editable
 cells, sorting and filtering included), Markdown, forms, pages, message and confirm
-dialogs.
+dialogs. Easiest first.
 
-1. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
+1. **Field help.** A `help` text on inputs and form rows, shown as a "?" beside the label
+   (a tooltip on Qt and the web, the row's hint on Textual).
+2. **Integer input** (`IntInputView`): a spin box with `minimum`/`maximum`, e.g. an hour
+   of the day; a float input with `decimals=0` still yields floats.
+3. **Metric** (`MetricView`): a label, a big value and an optional delta badge colored by
+   its sign, e.g. "Running: 3, ↑ 2 since yesterday"; a row of them in a `HorizontalView`.
+4. **Slider** (`SliderView`): an int between `minimum` and `maximum` by `step`, its value
+   shown above the handle, e.g. a number of workers.
+5. **Expander** (`ExpanderView`): a collapsible section, its title always shown and its
+   content views shown while `is_expanded`, e.g. a record's details with its Edit and
+   Delete buttons.
+6. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
+   a calendar, in the main view's language's format, with `minimum`/`maximum`.
+7. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
    routes.
-2. **Tree view** (`TreeView`).
+8. **Sidebar.** A column of views beside the pages, shown whatever the page, e.g. a form
+   creating a record; on the web a drawer on a phone. A `MainView` field the router
+   doesn't own, rather than a view repeated on each page.
+9. **Form dialog** (`FormDialogView`): a modal holding a form, e.g. editing a record
+   from its Edit button, with OK and Cancel; OK disabled while the form is invalid,
+   and the answer (accepted or not) as a signal. Today's dialogs only show a message or
+   ask to confirm.
+10. **Tree view** (`TreeView`).
+11. **A list of views from data** (`ListView[ItemT]`): one item view built per record by
+    a factory, added and removed as the records change, e.g. an expander per record.
+    Views are fixed fields today (pages can't be added either); the web needs each
+    item's id stable across swaps, and `save_state` should skip the items (the model
+    holds the records).
 
 Charts (2) have a section of their own.
 
@@ -30,7 +55,16 @@ classes appear (a test fails otherwise).
 images drawn by matplotlib, on Qt (pyqtgraph), Textual (textual-plotext) and the web
 (uPlot); `examples/pipechart.py` shows it. Left:
 
-1. **Web: full resolution on zoom**, once a real app needs it. A thinned curve hides
+1. **A date and time x axis**: x values as timestamps, ticks and hovered values as
+   dates ("Jun 14 2026", "Oct 18 08:00") in the main view's language.
+2. **Step lines**: a `Series.step` drawing a value held until the next point, e.g. the
+   jobs running over time; with `fill`, a step area.
+3. **Reference lines**: a horizontal or vertical line at a value, dashed, colored and
+   labeled, e.g. a capacity ("Max: 40") or now.
+4. **Timeline (Gantt) chart**: a `ChartKind.TIMELINE` of intervals, a row per category,
+   a bar from start to end colored by its series, with a hover text per bar (the
+   interval's details); on a date axis.
+5. **Web: full resolution on zoom**, once a real app needs it. A thinned curve hides
    detail once zoomed in: on uPlot's `setScale` hook (debounced), the page asks
    `GET /widget/{id}?x_min=…&x_max=…` and the renderer answers that range's points,
    thinned to the same cap (`CHART_MAX_POINTS`), as JSON that the script `setData`s
