@@ -1121,6 +1121,8 @@ class LogMixin:
     log_message: str = attrs.field(default="")
     log_type: LogType = attrs.field(default=LogType.ERROR)
     validator: Optional[Validator] = attrs.field(default=None, repr=False, metadata={OMIT: True})
+    #: the row's check ran (`run_validator`), passing or not, e.g. for a form dialog's OK
+    checked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
     def set_validator(
         self, validator: Validator, *signals: Signal[Unpack[tuple[Any, ...]]]
@@ -1148,6 +1150,7 @@ class LogMixin:
         message = self.validator()
         self.log_message = message or ""
         self.log_type = LogType.ERROR if message else LogType.INFO
+        self.checked.emit()
 
 
 @define_view
@@ -2487,6 +2490,8 @@ class FormView(View):
     _renderer_key = "form"
 
     log_view: LogView = attrs.field(factory=LogView)
+    #: the form's cross-field checks ran (`validate`), passing or not
+    checked: SignalNoArgs = attrs.Factory(SignalNoArgs)
     #: each cross-field check with the rows it is about
     _validators: list[tuple[Validator, tuple[FormRowView, ...]]] = attrs.field(
         factory=list, init=False, repr=False, metadata={OMIT: True}
@@ -2553,6 +2558,29 @@ class FormView(View):
             self.log_view.is_visible = False
             self.log_view.log_message = ""
             self.log_view.log_type = LogType.INFO
+        self.checked.emit()
+
+    def check(self) -> None:
+        """Run every check now: each row's, then each form's, nested forms first."""
+        for row in self.field_rows:
+            if isinstance(row, FormView):
+                row.check()
+            else:
+                row.run_validator()
+        self.validate()
+
+    @property
+    def is_valid(self) -> bool:
+        """Whether no check shown fails: a row's own, the form's, or a nested form's.
+
+        As last checked: a check that hasn't run yet passes (see `check`).
+        """
+        if self.log_view.log_type is LogType.ERROR and self.log_view.log_message != "":
+            return False
+        return all(
+            row.is_valid if isinstance(row, FormView) else not row.is_invalid
+            for row in self.field_rows
+        )
 
 
 @define_view
@@ -2560,6 +2588,57 @@ class GroupFormView(FormView):
     _renderer_key = "group_form"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
+
+
+@define_view
+class FormDialogView(DialogView):
+    """A modal holding a form, e.g. editing a record from its Edit button, with OK and Cancel.
+
+    A subclass gives its form as its `form` field, and its `text` shows above it. OK
+    can't be pressed while a check of the form fails (`is_accept_enabled`), and
+    accepting runs every check first, staying open while one fails, even one the user
+    hasn't triggered yet. The answer comes through `accepted` or `rejected`; the form
+    keeps its values, for the app to read, or to fill before opening it again.
+    """
+
+    _renderer_key = "form_dialog"
+
+    form: FormView = attrs.Factory(FormView)
+    #: whether OK can be pressed: no check shown fails on the form
+    is_accept_enabled: bool = attrs.field(default=True)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.kind = DialogKind.CONFIRM
+        forms: list[FormView] = [self.form]
+        while len(forms) > 0:
+            form = forms.pop()
+            form.checked.connect(self._follow_form)
+            for row in form.field_rows:
+                if isinstance(row, FormView):
+                    forms.append(row)
+                else:
+                    row.checked.connect(self._follow_form)
+        self._follow_form()
+
+    def open(self) -> None:
+        """Show the dialog, OK as the form's checks last left it."""
+        self._follow_form()
+        super().open()
+
+    def accept(self) -> None:
+        """Close the dialog with its accepting answer, once every check of the form passes.
+
+        Ignored unless it's open; while a check fails, it stays open, showing why.
+        """
+        if not self.is_visible:
+            return
+        self.form.check()
+        if self.form.is_valid:
+            super().accept()
+
+    def _follow_form(self) -> None:
+        self.is_accept_enabled = self.form.is_valid
 
 
 class Align(enum.Enum):

@@ -52,6 +52,7 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
+    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -82,6 +83,7 @@ from composeui.core.view import (
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
+from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmetric import QMetric
@@ -1471,6 +1473,76 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         view.text = rendered_object.text()
 
 
+class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
+    """A modal dialog holding its form, shown without blocking: its answer reaches the view.
+
+    OK is disabled while a check of the form fails; the view closes the dialog once it
+    accepts the answer, so OK on a form refusing it leaves the dialog open.
+    """
+
+    def __init__(self, view: FormDialogView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_dialog_title,
+                "text": self._refresh_text,
+                "kind": self._refresh_kind,
+                "accept_text": self._refresh_accept_text,
+                "reject_text": self._refresh_reject_text,
+                "is_accept_enabled": self._refresh_is_accept_enabled,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            dialog = QFormDialog()
+            form = self._view.form.renderer
+            if isinstance(form, QtWidgetRenderer) and isinstance(form.qt_object, QWidget):
+                dialog.set_form(form.qt_object)
+            dialog.answered_ok.connect(self._view.accept)
+            dialog.answered_cancel.connect(self._view.reject)
+            dialog.dismissed.connect(self._view.dismiss)
+            self._rendered_object = dialog
+            self.refresh()
+
+    @staticmethod
+    def _refresh_dialog_title(
+        _view: FormDialogView, rendered_object: QFormDialog, value: str
+    ) -> None:
+        rendered_object.setWindowTitle(value)
+
+    @staticmethod
+    def _refresh_text(_view: FormDialogView, rendered_object: QFormDialog, value: str) -> None:
+        rendered_object.text.setText(value)
+        rendered_object.text.setVisible(value != "")
+
+    @staticmethod
+    def _refresh_kind(_view: FormDialogView, _rendered_object: QFormDialog, _value: Any) -> None:
+        pass  # always OK and Cancel: a form is confirmed or not
+
+    @staticmethod
+    def _refresh_accept_text(
+        _view: FormDialogView, rendered_object: QFormDialog, value: str
+    ) -> None:
+        rendered_object.ok_button.setText(value)
+
+    @staticmethod
+    def _refresh_reject_text(
+        _view: FormDialogView, rendered_object: QFormDialog, value: str
+    ) -> None:
+        rendered_object.cancel_button.setText(value)
+
+    @staticmethod
+    def _refresh_is_accept_enabled(
+        _view: FormDialogView, rendered_object: QFormDialog, value: bool
+    ) -> None:
+        rendered_object.ok_button.setEnabled(value)
+
+    @staticmethod
+    def _update_state(view: FormDialogView, rendered_object: QFormDialog) -> None:
+        pass  # the form holds what the user typed; the dialog only its answer
+
+
 class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
     """A page's views in a column, laid out like the window's own."""
 
@@ -2212,6 +2284,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": QtFloatInputRenderer,
     "int_input": QtIntInputRenderer,
     "form": QtFormRenderer,
+    "form_dialog": QtFormDialogRenderer,
     "form_label": QtFormLabelRenderer,
     "grid": QtGridRenderer,
     "group_form": QtGroupFormRenderer,

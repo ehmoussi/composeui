@@ -53,14 +53,14 @@ from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     ActionView,
-    FloatInputView,
-    InputView,
-    IntInputView,
     ButtonVariant,
     ChartKind,
     ChartView,
     DialogKind,
     EditRefusedError,
+    FloatInputView,
+    InputView,
+    IntInputView,
     LabelView,
     RendererType,
     SelectionMode,
@@ -71,6 +71,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
+from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
@@ -80,6 +81,7 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
@@ -968,6 +970,41 @@ def test_a_tab_view_shows_the_tab_the_user_picks(qtbot: QtBot) -> None:
     assert not tab_widget.isTabEnabled(2)
     tabs.notes.is_visible = False
     assert not tab_widget.isTabVisible(2)
+
+
+def test_a_form_dialog_s_ok_follows_its_form_s_checks(qtbot: QtBot) -> None:
+    view = EditedPipeMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    dialog = _widget(view.edit_dialog)
+    assert isinstance(dialog, QFormDialog)
+    parent = dialog.parentWidget()
+    assert parent is not None
+    assert parent.window() is window  # modal over the window
+    name = _field_widget(view.edit_dialog.form.name)
+    assert isinstance(name, QLineEdit)
+    assert dialog.isAncestorOf(name)
+
+    qtbot.mouseClick(_widget(view.edit), Qt.MouseButton.LeftButton)
+    assert dialog.isVisible()
+    assert dialog.windowTitle() == "Edit the pipe"
+    assert dialog.ok_button.isEnabled()
+    name.selectAll()
+    qtbot.keyClick(name, Qt.Key.Key_Delete)
+    assert not dialog.ok_button.isEnabled()  # a name is mandatory
+    qtbot.keyClicks(name, "Return")
+    assert dialog.ok_button.isEnabled()
+    qtbot.mouseClick(dialog.ok_button, Qt.MouseButton.LeftButton)
+    assert not dialog.isVisible()
+    assert view.pipe.text == "Return, 12 m"
+
+    qtbot.mouseClick(_widget(view.edit), Qt.MouseButton.LeftButton)
+    qtbot.keyClicks(name, "!")
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)  # Cancel
+    assert not dialog.isVisible()
+    assert view.pipe.text == "Return, 12 m"
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
