@@ -38,6 +38,7 @@ from qtpy.QtWidgets import (
     QStatusBar,
     QTextBrowser,
     QToolBar,
+    QToolTip,
     QWidget,
 )
 
@@ -398,7 +399,7 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     assert table.state() is not QAbstractItemView.State.EditingState
 
 
-def test_form_label_shows_the_row_label_and_a_question_mark_for_its_help(qtbot: QtBot) -> None:
+def test_the_help_button_beside_a_row_label_shows_the_help_when_clicked(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
     edge_type = view.pages.inputs.pipe_form.edge_type
@@ -408,14 +409,21 @@ def test_form_label_shows_the_row_label_and_a_question_mark_for_its_help(qtbot: 
     assert isinstance(label_renderer, QtWidgetRenderer)
     label_widget = label_renderer.qt_object
     assert isinstance(label_widget, QFormLabel)
+    help_text = "How the edge joining the two pipes is finished"
     assert label_widget.text_label.text() == "Edge Type"
-    assert not label_widget.help_label.isHidden()
-    assert label_widget.help_label.text() == "?"
-    assert label_widget.toolTip() == "How the edge joining the two pipes is finished"
+    assert label_widget.toolTip() == help_text  # on hover
+    button = label_widget.help_button
+    assert button.text() == "?"
+    assert button.accessibleName() == "Help"
+    assert button.focusPolicy() & Qt.FocusPolicy.TabFocus  # Tab reaches it
+    label_widget.show()
+    qtbot.waitExposed(label_widget)
 
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)  # or a tap, or Space
+
+    qtbot.waitUntil(lambda: QToolTip.isVisible() and QToolTip.text() == help_text)
     edge_type.help = ""
-
-    assert label_widget.help_label.isHidden()
+    assert button.isHidden()
     assert label_widget.toolTip() == ""
 
 

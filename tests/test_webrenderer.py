@@ -637,7 +637,7 @@ def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView
     assert list(dirty) == [label.widget_id]
 
 
-def test_a_row_s_help_is_a_question_mark_s_tooltip_describing_its_field(
+def test_a_row_s_help_button_opens_the_help_that_describes_its_field(
     rows: _RowsMainView,
 ) -> None:
     label, field = _part(rows.length, "label"), _part(rows.length, "field")
@@ -650,22 +650,25 @@ def test_a_row_s_help_is_a_question_mark_s_tooltip_describing_its_field(
     assert sorted(dirty) == sorted([label.widget_id, field.widget_id])
     fragment = label.to_html()
     assert "In metres, &lt;= 100" in fragment
-    (tip,) = [
+    (button,) = [
         attributes
-        for _, attributes in _element(fragment, label.widget_id).descendants
-        if "data-tip" in attributes
+        for tag, attributes in _element(fragment, label.widget_id).descendants
+        if tag == "button"
     ]
-    assert tip["data-tip"] == "In metres, <= 100"
-    assert tip["aria-hidden"] == "true"  # the "?" isn't part of the field's name
+    assert button["popovertarget"] == help_id
+    assert button["aria-label"] == "Help"
+    assert button["type"] == "button"  # never submits
     help_text = _element(fragment, help_id)
-    assert "hidden" in help_text.attributes
+    assert "popover" in help_text.attributes
     assert help_text.text == "In metres, <= 100"
+    # the button is beside the `<label>`, not in it: not part of the field's name
+    assert _element(fragment, f"{label.widget_id}-text").text == "Length"
     described_by = _element(field.to_html(), field.widget_id).attributes["aria-describedby"]
     assert described_by == f"{help_id} {log_id}"
 
     rows.length.help = ""
 
-    assert "data-tip" not in label.to_html()
+    assert "<button" not in label.to_html()
     assert _element(field.to_html(), field.widget_id).attributes["aria-describedby"] == log_id
 
 
@@ -902,7 +905,7 @@ def test_the_checkbox_is_named_by_its_text_and_its_group_by_the_row_label(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
     insulated = pipe_main_view.pages.inputs.pipe_form.insulated
-    label_id, field_id = _widget_id(_part(insulated, "label")), _field_id(insulated)
+    label_id, field_id = f"{_widget_id(_part(insulated, 'label'))}-text", _field_id(insulated)
 
     page = pipe_client.get("/").text
 
@@ -1860,7 +1863,7 @@ def test_form_fields_are_linked_to_their_label_and_message(
     assert "aria-invalid" not in age.attributes
     # `<label for>` can't name a radio group's `<div>`: the group points at its label
     style = _element(page, _field_id(form.style))
-    assert style.attributes["aria-labelledby"] == _widget_id(_part(form.style, "label"))
+    assert style.attributes["aria-labelledby"] == f"{_widget_id(_part(form.style, 'label'))}-text"
 
 
 @pytest.fixture
