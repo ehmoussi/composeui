@@ -102,6 +102,33 @@ body {
   grid-column: 1 / -1;
 }
 
+/* a field's help, its arrow pointing at its "?" button: on its left side, or on its
+   top above the button (`--arrow-x`, set by the page's script with `data-side`) */
+.cui-help {
+  overflow: visible;
+}
+.cui-help::before {
+  content: "";
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--color-base-100);
+  border: 0 solid var(--color-base-300);
+  transform: rotate(45deg);
+}
+.cui-help[data-side="right"]::before {
+  left: -0.3125rem;
+  top: calc(50% - 0.25rem);
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+}
+.cui-help[data-side="bottom"]::before {
+  top: -0.3125rem;
+  left: calc(var(--arrow-x, 0.75rem) - 0.25rem);
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
 /* the header's buttons keep only their icon on a phone, their text in the tooltip */
 @media (width < 40rem) {
   .toolbar-label {

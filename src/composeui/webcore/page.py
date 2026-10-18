@@ -539,9 +539,10 @@ function syncPage() {
   document.documentElement.lang = marker.dataset.language;
   if (document.title !== marker.dataset.title) document.title = marker.dataset.title;
 }
-/* places a field's help, opened by its "?" button, just under the button, inside the
-   window: a popover otherwise opens in its middle. Placed before it shows, then moved
-   back in once its width is known. */
+/* places a field's help, opened by its "?" button, right of the button, or under it
+   when the window is too narrow (a phone), never over its field: a popover otherwise
+   opens in the window's middle. Placed again once shown, its size then known.
+   `data-side` points its arrow at the button (see `css/app.css`). */
 function placeHelp(event) {
   var help = event.target;
   if (!(help instanceof HTMLElement) || !help.matches("[data-help]")) return;
@@ -549,10 +550,19 @@ function placeHelp(event) {
   var button = document.querySelector('[popovertarget="' + help.id + '"]');
   if (button === null) return;
   var rect = button.getBoundingClientRect();
-  var right = window.innerWidth - help.offsetWidth - 8;
+  var gap = 8;
   help.style.inset = "auto";
-  help.style.top = rect.bottom + 4 + "px";
-  help.style.left = Math.max(8, Math.min(rect.left, right)) + "px";
+  if (rect.right + gap + help.offsetWidth <= window.innerWidth - gap) {
+    help.dataset.side = "right";
+    help.style.left = rect.right + gap + "px";
+    help.style.top = rect.top + rect.height / 2 - help.offsetHeight / 2 + "px";
+  } else {
+    var left = Math.max(gap, Math.min(rect.left, window.innerWidth - help.offsetWidth - gap));
+    help.dataset.side = "bottom";
+    help.style.left = left + "px";
+    help.style.top = rect.bottom + gap + "px";
+    help.style.setProperty("--arrow-x", rect.left + rect.width / 2 - left + "px");
+  }
 }
 /* neither bubbles */
 document.addEventListener("beforetoggle", placeHelp, true);

@@ -1548,16 +1548,20 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         """Render the "?" button and the help it opens, which also describes the field.
 
         Closed, the popover is hidden, which `aria-describedby` still reads. The page's
-        script places it under the button (see `page.py`).
+        script places it beside the button (see `page.py`).
         """
         if not self.has_help():
             return ""
         return (
             f'<button type="button" popovertarget="{self.help_id}"'
-            ' class="btn btn-ghost btn-circle btn-xs"'
-            f' aria-label="{html.escape(self._view.help_button_text)}">?</button>'
-            f'<div id="{self.help_id}" popover data-help class="m-0 max-w-xs rounded-box'
-            ' bg-neutral px-3 py-2 text-sm text-neutral-content shadow-lg">'
+            ' class="inline-flex cursor-pointer rounded-full text-base-content/40'
+            " transition-colors hover:text-primary focus-visible:text-primary"
+            ' focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"'
+            f' aria-label="{html.escape(self._view.help_button_text)}">{_icon("help")}</button>'
+            # `cui-help`: the arrow pointing at the button, see `css/app.css`
+            f'<div id="{self.help_id}" popover data-help class="cui-help m-0 w-max max-w-80'
+            " rounded-field border border-base-300 bg-base-100 px-3 py-2 text-xs"
+            ' leading-relaxed text-base-content shadow-lg">'
             f"{html.escape(self._view.help)}</div>"
         )
 
@@ -1768,6 +1772,8 @@ _ICONS: Final[dict[str, str]] = {
     '<circle cx="19" cy="12" r="1"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
     "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>'
+    '<path d="M12 17h.01"/>',
     "pencil": '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
     ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
 }

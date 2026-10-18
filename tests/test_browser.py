@@ -393,7 +393,7 @@ def test_a_field_is_invalid_exactly_while_its_log_shows_an_error(page: Page) -> 
     expect(name).to_have_attribute("aria-invalid", "true")
 
 
-def test_the_help_button_opens_the_help_under_it_by_click_or_keyboard(page: Page) -> None:
+def test_the_help_button_opens_the_help_beside_it_by_click_or_keyboard(page: Page) -> None:
     page.goto("/")
     name = page.get_by_label("Name")
     button = page.get_by_role("button", name="Help")
@@ -408,8 +408,11 @@ def test_the_help_button_opens_the_help_under_it_by_click_or_keyboard(page: Page
     button_box, help_box = button.bounding_box(), help_text.bounding_box()
     assert button_box is not None
     assert help_box is not None
-    assert button_box["y"] + button_box["height"] <= help_box["y"]  # under it
-    assert help_box["y"] < button_box["y"] + 3 * button_box["height"]  # just under it
+    # right beside it, on its right while there is room, never over it
+    assert button_box["x"] + button_box["width"] <= help_box["x"]
+    assert help_box["x"] < button_box["x"] + 3 * button_box["width"]
+    assert help_box["y"] < button_box["y"] + button_box["height"] / 2
+    assert button_box["y"] + button_box["height"] / 2 < help_box["y"] + help_box["height"]
     page.keyboard.press("Escape")
     expect(help_text).to_be_hidden()
     name.focus()
