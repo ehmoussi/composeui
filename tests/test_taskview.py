@@ -7,12 +7,14 @@ from typing import TYPE_CHECKING
 import pytest
 
 pytest.importorskip("qtpy")
-from qtpy.QtWidgets import QMainWindow, QProgressBar, QPushButton, QSpinBox
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QMainWindow, QProgressBar, QPushButton
 
 from composeui.core.application import Application
 from composeui.core.registry import RendererType
 from composeui.core.renderer import RendererContainer
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.taskview import TASK_COUNT, TaskMainView, TaskStatus
 
 if TYPE_CHECKING:
@@ -124,19 +126,20 @@ def test_a_run_waits_for_a_valid_configuration(main_view: TaskMainView) -> None:
     assert main_view.status_bar.message == "Fix the configuration first"
 
 
-def test_the_configuration_takes_whole_numbers_within_their_range(
+def test_the_failure_percentage_is_a_slider_of_whole_percents(
     qtbot: QtBot, main_view: TaskMainView
 ) -> None:
     percentage = main_view.config.failure_percentage
     assert isinstance(percentage.renderer, RendererContainer)
     field = percentage.renderer.get_renderer("field")
     assert isinstance(field, QtWidgetRenderer)
-    spin_box = field.qt_object
-    assert isinstance(spin_box, QSpinBox)
-    assert (spin_box.minimum(), spin_box.maximum()) == (0, 100)
+    slider = field.qt_object
+    assert isinstance(slider, QValueSlider)
+    assert slider.shown_value() == 20
 
-    spin_box.show()
-    spin_box.setFocus()
-    spin_box.selectAll()
-    qtbot.keyClicks(spin_box, "150")
-    assert percentage.value == 15  # the 0 would take it past 100
+    slider.show()
+    slider.setFocus()
+    qtbot.keyClick(slider, Qt.Key.Key_Right)
+    assert percentage.value == 21
+    qtbot.keyClick(slider, Qt.Key.Key_End)
+    assert percentage.value == 100

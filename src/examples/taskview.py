@@ -27,6 +27,7 @@ from composeui.core.view import (
     GroupFormView,
     HorizontalView,
     LabelRowIntInputView,
+    LabelRowSliderView,
     LanguageMenu,
     MainView,
     MetricView,
@@ -78,8 +79,9 @@ class TaskConfigForm(GroupFormView):
     max_duration: ConfigInputView = child(
         ConfigInputView, label=T("Maximum Duration (s)"), value=10
     )
-    failure_percentage: ConfigInputView = child(
-        ConfigInputView, label=T("Percentage of Failure (%)"), value=20, maximum=100
+    #: a slider: always a percentage, never empty
+    failure_percentage: LabelRowSliderView = child(
+        LabelRowSliderView, label=T("Percentage of Failure (%)"), value=20, maximum=100
     )
 
     def __attrs_post_init__(self) -> None:
@@ -87,8 +89,8 @@ class TaskConfigForm(GroupFormView):
         self.title = self.tr("Configuration")
         self.add_validator(
             self._check_filled,
-            *(row.editing_finished for row in self.rows),
-            rows=self.rows,
+            *(row.editing_finished for row in self.durations),
+            rows=self.durations,
         )
         self.add_validator(
             self._check_durations_ordered,
@@ -98,11 +100,11 @@ class TaskConfigForm(GroupFormView):
         )
 
     @property
-    def rows(self) -> tuple[ConfigInputView, ...]:
-        return (self.min_duration, self.max_duration, self.failure_percentage)
+    def durations(self) -> tuple[ConfigInputView, ...]:
+        return (self.min_duration, self.max_duration)
 
     def _check_filled(self) -> Optional[str]:
-        if any(row.value is None for row in self.rows):
+        if any(row.value is None for row in self.durations):
             return self.tr("Every value is needed")
         return None
 
@@ -184,7 +186,7 @@ class TaskMainView(MainView):
             return
         minimum = self.config.min_duration.value or 0
         maximum = self.config.max_duration.value or 0
-        failure_rate = (self.config.failure_percentage.value or 0) / 100
+        failure_rate = self.config.failure_percentage.value / 100
         self._tasks = [
             # not cryptography: a task's duration only needs to vary
             Task(number, round(random.uniform(minimum, maximum), 1))  # noqa: S311
