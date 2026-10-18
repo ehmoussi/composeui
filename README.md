@@ -512,7 +512,8 @@ the tables (`model.runs.add(...)`):
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) puts it together, on
 every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalogue of
 pipes the database checks as they're added, from a form in a [sidebar](#sidebar), listed
-through a filtered query with their mass from a SQL view joining them to their material.
+an expander each in a [list of views](#a-list-of-views), through a filtered query with
+their mass from a SQL view joining them to their material.
 
 ## A table of records
 
@@ -598,7 +599,8 @@ so the view keeps what the user did to it (an expander stays expanded); otherwis
 a new view. A view built later is set up like the others: its signals pass `main_view`
 and `model` to the callbacks asking for them, and it shows the main view's language. The
 records and their views are the model's, not study data: saving, opening and New leave
-them alone. On the web, a change swaps only the records' views it adds or removes, never
+them alone. [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) lists its
+pipes this way, each with a Delete button. On the web, a change swaps only the records' views it adds or removes, never
 the others, unless it reorders them.
 
 ## Charts

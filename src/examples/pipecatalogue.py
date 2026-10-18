@@ -1,14 +1,17 @@
 """A catalogue of pipes kept in a SQLite database, runnable on every backend.
 
 `python -m examples.pipecatalogue --backend qt` (or `textual`, or `web`). The pipes are
-rows of the model's database, not view state: the catalogue lists them through a query,
-filtered by material and radius, with their mass computed by a SQL view joining each
-pipe to its material. A form in the sidebar adds a pipe, which the catalogue beside it
-lists at once. The database checks every pipe added (a name, positive dimensions, a wall
-thinner than the radius) and File saves and opens the views and the database together.
+rows of the model's database, not view state: the catalogue lists them, an expander each,
+through a query filtered by material and radius, with their mass computed by a SQL view
+joining each pipe to its material. A form in the sidebar adds a pipe, which the catalogue
+beside it lists at once, and each pipe's Delete button removes it. The database checks
+every pipe added (a name, positive dimensions, a wall thinner than the radius) and File
+saves and opens the views and the database together.
 """
 
 import enum
+import functools
+from collections.abc import Hashable
 from typing import ClassVar, Optional
 
 import attrs
@@ -21,16 +24,17 @@ from composeui.core.view import (
     ButtonView,
     DialogKind,
     DialogView,
+    ExpanderView,
     FormView,
     LabelRowComboboxView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelView,
+    ListView,
     MainView,
     PageView,
-    PageWidth,
     SidebarView,
-    TableView,
+    View,
     child,
     define_view,
 )
@@ -149,6 +153,11 @@ class Pipes(SqliteTable):
         assert total is not None  # an aggregate always has a row
         return total
 
+    def delete(self, name: str) -> None:
+        """Remove the pipe `name`."""
+        with self.connection() as db:
+            db.execute("DELETE FROM pipe WHERE name = :name", {"name": name})
+
     def remove(self, shown: Shown) -> int:
         """Remove the pipes `shown` names; return how many."""
         with self.connection() as db:
@@ -248,15 +257,49 @@ class ShownFormView(FormView):
 
 
 @define_view
-class CataloguePageView(PageView):
-    # the table's six columns, beside the sidebar
-    width = PageWidth.WIDE
+class PipeExpander(ExpanderView):
+    """A pipe of the catalogue: its name, then its material, dimensions and mass."""
 
+    details: LabelView = Factory(LabelView)
+    mass: LabelView = Factory(LabelView)
+    delete: ButtonView = child(ButtonView, text="Delete", variant=ButtonVariant.DANGER)
+
+
+@define_view
+class PipeList(ListView[ListedPipe]):
+    """The pipes shown, an expander each, told apart by their name, which is unique."""
+
+    def build_item(self, item: ListedPipe) -> View:
+        view = PipeExpander(title=item.name)
+        self.update_item(view, item)
+        view.delete.clicked.connect(functools.partial(self._delete, item.name))
+        return view
+
+    def item_key(self, item: ListedPipe) -> Hashable:
+        return item.name
+
+    def update_item(self, view: View, item: ListedPipe) -> bool:
+        # in place: an expanded pipe stays expanded
+        assert isinstance(view, PipeExpander)
+        view.details.text = (
+            f"{item.material.value}, outer radius {item.radius:g} mm,"
+            f" wall {item.thickness:g} mm, {item.length:g} m long"
+        )
+        view.mass.text = f"{item.mass:.1f} kg"
+        return True
+
+    def _delete(
+        self, name: str, *, main_view: "PipeCatalogueMainView", model: PipeCatalogueModel
+    ) -> None:
+        """Remove the pipe `name`: the model's `changed` takes its expander away."""
+        model.pipes.delete(name)
+        main_view.status_bar.show_message(f"Deleted {name!r}")
+
+
+@define_view
+class CataloguePageView(PageView):
     shown: ShownFormView = Factory(ShownFormView)
-    pipes: TableView = child(
-        TableView,
-        headers=["Name", "Material", "Outer radius (mm)", "Wall (mm)", "Length (m)", "Mass (kg)"],
-    )
+    pipes: PipeList = Factory(PipeList)
     total: LabelView = Factory(LabelView)
     remove_shown: ButtonView = child(
         ButtonView, text="Remove the Shown Pipes", variant=ButtonVariant.DANGER
@@ -305,17 +348,7 @@ class PipeCatalogueMainView(MainView):
         """List the pipes the filter shows, and their total."""
         catalogue = self.catalogue
         shown = catalogue.shown.shown()
-        catalogue.pipes.rows = [
-            [
-                pipe.name,
-                pipe.material.value,
-                f"{pipe.radius:g}",
-                f"{pipe.thickness:g}",
-                f"{pipe.length:g}",
-                f"{pipe.mass:.1f}",
-            ]
-            for pipe in model.pipes.find(shown)
-        ]
+        catalogue.pipes.items = model.pipes.find(shown)
         total = model.pipes.total(shown)
         pipes = "pipe" if total.count == 1 else "pipes"
         catalogue.total.text = f"{total.count} {pipes}, {total.mass:.1f} kg"
