@@ -318,7 +318,7 @@ def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot
     assert (spin_box.minimum(), spin_box.text()) == (10, "")
 
 
-def test_a_slider_stops_on_its_steps_its_value_painted_above_the_handle(qtbot: QtBot) -> None:
+def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:
     view = WorkersMainView()
     view.render(RendererType.QT)
     workers = view.form.workers
@@ -328,20 +328,21 @@ def test_a_slider_stops_on_its_steps_its_value_painted_above_the_handle(qtbot: Q
     moves: list[int] = []
     workers.value_changed.connect(moves.append)
     assert slider.shown_value() == 5
-    # room for the value above the handle, and as much below
-    assert slider.sizeHint().height() > QSlider(Qt.Orientation.Horizontal).sizeHint().height()
+    plain = QSlider(Qt.Orientation.Horizontal).sizeHint()
+    # no taller than a plain slider, the value's slot on its right
+    assert slider.sizeHint().height() == plain.height()
+    assert slider.sizeHint().width() > plain.width()
 
     slider.resize(300, slider.sizeHint().height())
     slider.show()
     slider.setFocus()
-    above = slider.value_rect()
-    assert above.bottom() < slider.height() // 2  # the handle is vertically centered
+    slot = slider.value_rect()
+    assert slot.right() == slider.width() - 1
     qtbot.keyClick(slider, Qt.Key.Key_Right)
     assert (workers.value, moves) == (8, [8])
-    assert slider.value_rect().center().x() > above.center().x()  # following the handle
     qtbot.keyClick(slider, Qt.Key.Key_End)
     assert (workers.value, moves) == (14, [8, 14])  # the last step, short of 16
-    assert slider.value_rect().right() <= slider.width()
+    assert slider.value_rect() == slot  # as wide whatever the value: the track keeps its length
 
     workers.value = 6  # set in code: shown at its nearest step, and not reported
     assert (slider.shown_value(), moves) == (5, [8, 14])
