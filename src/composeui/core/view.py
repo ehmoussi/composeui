@@ -2624,6 +2624,53 @@ class ExpanderView(View):
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
 
 
+@define_view
+class TabPage(View):
+    """A tab of a `TabView`: its `title` on the tab, its view fields its content, in a column.
+
+    Hidden, its tab is too; disabled, its tab can't be picked.
+    """
+
+    _renderer_key = "tab_page"
+
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+
+
+@define_view
+class TabView(View):
+    """Views shown a tab at a time, picked from a row of tabs, e.g. a record's details and history.
+
+    Its `TabPage` fields are the tabs, in order; it starts on the first. Distinct from
+    pages: tabs live inside a page or a form, and have no address of their own.
+    """
+
+    _renderer_key = "tabs"
+
+    def _check_current_index(self, _attribute: "attrs.Attribute[Any]", index: int) -> None:
+        count = len(self.tabs)
+        if not 0 <= index < max(count, 1):
+            msg = f"Cannot show tab {index} of {type(self).__name__}: it has {count} tabs."
+            raise ValueError(msg)
+
+    #: the tab shown, counted from 0. Navigation, not study data: never saved, loaded or reset
+    current_index: int = attrs.field(
+        default=0, validator=[_check_current_index], metadata={OMIT: True}
+    )
+    #: the user picked another tab, by its index; not emitted when `current_index` is set in code
+    current_changed: Signal[int] = attrs.Factory(Signal[int])
+
+    @property
+    def tabs(self) -> list[TabPage]:
+        """Get the tabs, in order."""
+        return [view for view in self.children_views if isinstance(view, TabPage)]
+
+    @property
+    def current_tab(self) -> Optional[TabPage]:
+        """Get the tab shown, or None without tabs."""
+        tabs = self.tabs
+        return tabs[self.current_index] if len(tabs) > 0 else None
+
+
 class GridPosition(NamedTuple):
     """A view's cell in a `GridView`, counted from 0, spanning more cells to its right or below."""
 

@@ -149,14 +149,14 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 `FormLabelRowView` and `FloatInputMixin`; a labelled row's `help` says what to enter, shown
 by a "?" button beside its label that a click, a tap or the keyboard opens (a hint under the
 label on Textual).
-See the mixins in `composeui/core/view.py`
-(`InputMixin`, `FloatInputMixin`, `IntInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
-an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
-for [dialogs](#dialogs), `SidebarView` for a [sidebar](#sidebar), and `ButtonView` for a
-button the user clicks (`clicked`), e.g. under a form to submit it; its `variant`
-(`ButtonVariant`: primary, secondary, danger) tells the main action from the others and
-from one destroying something.
+See the mixins in `composeui/core/view.py` (`InputMixin`, `FloatInputMixin`,
+`IntInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
+`LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks,
+`PageView`/`Router` for an app split into [pages](#pages), `TabView` for [tabs](#tabs),
+`ToolBar` for a [toolbar](#toolbars), `DialogView` for [dialogs](#dialogs), `SidebarView`
+for a [sidebar](#sidebar), and `ButtonView` for a button the user clicks (`clicked`),
+e.g. under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary,
+danger) tells the main action from the others and from one destroying something.
 `IntInputView` takes a whole number, e.g. an hour of the day, between its `minimum` and
 `maximum`: a spin box on Qt, keeping it in range; elsewhere a text field for digits,
 where a number out of range isn't refused (Textual marks it), so validate it.
@@ -224,6 +224,35 @@ Which page is shown is navigation, not study data: saving, opening and New leave
 Qt docks the toolbar as a `QToolBar`, Textual shows a row of buttons at the top, and the
 web puts it in the page header, with a web address per page. See
 [`src/examples/pipeform.py`](src/examples/pipeform.py) for an app with two pages.
+
+## Tabs
+
+A `TabView` shows its views a tab at a time, picked from a row of tabs, e.g. a record's
+details and its history. Its `TabPage` fields are the tabs, in order, each with its
+`title` on its tab and its view fields as its content, in a column:
+
+```python
+from composeui.core.view import LabelView, TabPage, TabView, child, define_view
+
+
+@define_view
+class DetailsTab(TabPage):
+    length: LabelView = child(LabelView, text="Length: 12 m")
+
+
+@define_view
+class PipeTabs(TabView):
+    details: DetailsTab = child(DetailsTab, title="Details")
+    history: HistoryTab = child(HistoryTab, title="History")  # another TabPage
+```
+
+It starts on the first tab. Code shows another with `current_index` (counted from 0;
+`current_tab` is the tab shown) and reacts to the user's picks through
+`current_changed`. Which tab shows is navigation, not study data, as for pages. A hidden
+tab page hides its tab, and a disabled one can't be picked. Distinct from
+[pages](#pages): tabs live inside a page or a form and have no address of their own.
+Qt shows a `QTabWidget`, Textual a `TabbedContent`, and the web a row of tabs the arrow
+keys move between.
 
 ## Toolbars
 

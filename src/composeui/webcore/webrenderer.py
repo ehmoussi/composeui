@@ -68,6 +68,8 @@ from composeui.core.view import (
     SidebarView,
     SliderMixin,
     StatusBar,
+    TabPage,
+    TabView,
     ToolBar,
     VerticalView,
     View,
@@ -2745,6 +2747,105 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
         super()._mark_dirty(view, rendered_object, value)
 
 
+class WebTabPageRenderer(WebRenderer[TabPage]):
+    """A tab's views in a column, which its tabs put in a panel under its tab.
+
+    Its title, visibility and enabled state are its tab's too: a change swaps its tabs.
+    """
+
+    _role = "tab_page"
+
+    def __init__(self, view: TabPage) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_tab,
+                "is_visible": self._refresh_tab,
+                "is_enabled": self._refresh_tab,
+            }
+        )
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        content = "".join(
+            view.renderer.to_html()
+            for view in self._view.children_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
+
+    def _refresh_tab(self, view: TabPage, rendered_object: str, value: Any) -> None:
+        self._refresh_enabled(view, rendered_object, value)
+        dirty = _DIRTY.get()
+        if dirty is not None and self.parent is not None:
+            dirty[self.parent.widget_id] = self.parent
+
+
+class WebTabsRenderer(WebRenderer[TabView]):
+    """A row of tabs (an ARIA tab list), then a panel per tab, only the current one shown.
+
+    The browser shows the tab picked, by a click or the arrow keys (see `page.py`),
+    before posting it (`select`): like every control, the tabs are never swapped back
+    after a pick, only when the server changes them.
+    """
+
+    _role = "tabs"
+
+    def __init__(self, view: TabView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["current_index"] = self._mark_dirty
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.tabs)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        current = self._view.current_index
+        tabs: list[str] = []
+        panels: list[str] = []
+        for index, tab in enumerate(self._view.tabs):
+            if not isinstance(tab.renderer, WebRenderer):
+                continue
+            tab_id, panel_id = f"{self.widget_id}-tab-{index}", f"{self.widget_id}-panel-{index}"
+            is_current = index == current
+            active = " tab-active" if is_current else ""
+            hidden = "" if tab.is_visible else " hidden"
+            disabled = "" if tab.is_enabled and self.is_enabled else " disabled"
+            # only the current tab in the tab order: the arrow keys move between them
+            tabs.append(
+                f'<button type="button" role="tab" id="{tab_id}" aria-controls="{panel_id}"'
+                f' aria-selected="{str(is_current).lower()}" tabindex="{0 if is_current else -1}"'
+                f' class="tab{active}" data-tab hx-post="/widget/{self.widget_id}"'
+                f""" hx-vals='{{"event": "select", "index": "{index}"}}' hx-swap='none'"""
+                f"{hidden}{disabled}>{html.escape(tab.title)}</button>"
+            )
+            panels.append(
+                f'<div role="tabpanel" id="{panel_id}" aria-labelledby="{tab_id}"'
+                f"{'' if is_current else ' hidden'}>{tab.renderer.to_html()}</div>"
+            )
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-4">'
+            f'<div role="tablist" class="tabs tabs-border">{"".join(tabs)}</div>'
+            f"{''.join(panels)}</div>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "select":
+            super().dispatch(event, form)
+        try:
+            index = int(form.get("index", ""))
+        except ValueError:
+            return
+        if not 0 <= index < len(self._view.tabs) or index == self._view.current_index:
+            return
+        with self.stop_refresh():
+            self._view.current_index = index
+        self._view.current_changed.emit(index)
+
+
 class WebGridRenderer(WebRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -3060,6 +3161,8 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "sidebar": WebSidebarRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
+    "tab_page": WebTabPageRenderer,
+    "tabs": WebTabsRenderer,
     "toolbar": WebToolBarRenderer,
     "vertical": WebVerticalRenderer,
 }

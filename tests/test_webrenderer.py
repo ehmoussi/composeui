@@ -109,6 +109,7 @@ from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
+from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
@@ -654,6 +655,44 @@ def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
 
     # left with a decimal: the field, otherwise never swapped back, shows 15 again
     assert _swapped(fragments, field.widget_id).attributes["value"] == "15"
+
+
+def test_a_tab_view_is_a_tab_list_posting_the_tab_picked_never_swapped_back() -> None:
+    view = TabsMainView()
+    view.render(RendererType.WEB)
+    tabs = view.tabs
+    renderer = tabs.renderer
+    assert isinstance(renderer, WebRenderer)
+    picks: list[int] = []
+    tabs.current_changed.connect(picks.append)
+    root = _element(renderer.to_html(), renderer.widget_id)
+    buttons = [
+        attributes for tag, attributes in root.descendants if attributes.get("role") == "tab"
+    ]
+    panels = [a for _, a in root.descendants if a.get("role") == "tabpanel"]
+    assert [b["aria-selected"] for b in buttons] == ["true", "false", "false"]
+    assert [b["tabindex"] for b in buttons] == ["0", "-1", "-1"]
+    assert ["hidden" in panel for panel in panels] == [False, True, True]
+    assert [b["aria-controls"] for b in buttons] == [p["id"] for p in panels]
+
+    fragments = handle_event(renderer, "select", {"index": "1"})
+    assert (tabs.current_index, picks) == (1, [1])
+    assert renderer.widget_id not in fragments  # the browser shows it already
+    for index in ("1", "7", "x"):  # the tab shown, or none: nothing changes
+        handle_event(renderer, "select", {"index": index})
+    assert (tabs.current_index, picks) == (1, [1])
+
+    def rename() -> None:
+        tabs.history.title = "<Changes>"
+        tabs.notes.is_visible = False
+
+    tabs.details.edit.clicked.connect(rename)
+    edit = tabs.details.edit.renderer
+    assert isinstance(edit, WebRenderer)
+    swapped = _swapped(handle_event(edit, "click", {}), renderer.widget_id)
+    buttons = [a for _, a in swapped.descendants if a.get("role") == "tab"]
+    assert "<Changes>" in swapped.text  # escaped, shown as text
+    assert ["hidden" in b for b in buttons] == [False, False, True]
 
 
 def test_an_expander_is_a_details_posting_its_toggles_never_swapped_back() -> None:

@@ -26,6 +26,7 @@ from qtpy.QtWidgets import (
     QStackedWidget,
     QStatusBar,
     QStyle,
+    QTabWidget,
     QTextBrowser,
     QToolBar,
     QVBoxLayout,
@@ -71,6 +72,8 @@ from composeui.core.view import (
     SidebarView,
     SliderMixin,
     StatusBar,
+    TabPage,
+    TabView,
     ToolBar,
     VerticalView,
     View,
@@ -1665,6 +1668,109 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
         pass  # a list has no user-editable state of its own: its records are the model's
 
 
+def _tab_of(widget: QWidget) -> tuple[QTabWidget, int] | None:
+    """Get the tab widget showing `widget` as a tab, and its tab's index; None outside one."""
+    parent = widget.parentWidget()
+    while parent is not None and not isinstance(parent, QTabWidget):
+        parent = parent.parentWidget()
+    if parent is None:
+        return None
+    index = parent.indexOf(widget)
+    return None if index < 0 else (parent, index)
+
+
+class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
+    """A tab's views in a column; its title, visibility and enabled state are its tab's."""
+
+    def __init__(self, view: TabPage) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "is_visible": self._refresh_tab_visible,
+                "is_enabled": self._refresh_tab_enabled,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QWidget()
+            layout = QVBoxLayout(self._rendered_object)
+            for view in self._view.children_views:
+                _add_content_widget(layout, view)
+            # height to spare goes below the views, not between them
+            layout.addStretch()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_title(_view: TabPage, rendered_object: QWidget, value: str) -> None:
+        tab = _tab_of(rendered_object)
+        if tab is not None:
+            tab[0].setTabText(tab[1], value)
+
+    @staticmethod
+    def _refresh_tab_visible(_view: TabPage, rendered_object: QWidget, value: bool) -> None:
+        # not the widget's own: only the current tab's shows
+        tab = _tab_of(rendered_object)
+        if tab is not None:
+            tab[0].setTabVisible(tab[1], value)
+
+    @staticmethod
+    def _refresh_tab_enabled(_view: TabPage, rendered_object: QWidget, value: bool) -> None:
+        rendered_object.setEnabled(value)
+        tab = _tab_of(rendered_object)
+        if tab is not None:
+            tab[0].setTabEnabled(tab[1], value)
+
+    def update_state(self) -> None:
+        if self._rendered_object is None:
+            raise NoRenderedObjectError
+        tab = _tab_of(self._rendered_object)
+        if tab is not None:
+            self._view.title = tab[0].tabText(tab[1])
+            self._view.is_visible = tab[0].isTabVisible(tab[1])
+        self._view.is_enabled = self._rendered_object.isEnabled()
+
+    @staticmethod
+    def _update_state(view: TabPage, rendered_object: QWidget) -> None:
+        pass  # see `update_state`: the tab holds the page's state
+
+
+class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
+    """A tab widget: the tabs in a row, the current one's views under them."""
+
+    def __init__(self, view: TabView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["current_index"] = self._refresh_current_index
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QTabWidget()
+            for tab in self._view.tabs:
+                if (
+                    isinstance(tab.renderer, QtTabPageRenderer)
+                    and tab.renderer.qt_object is not None
+                ):
+                    self._rendered_object.addTab(tab.renderer.qt_object, tab.title)
+                    tab.renderer.refresh()  # its tab's state, now that it has one
+            # once the tabs are in: adding the first one makes it current
+            self._rendered_object.currentChanged.connect(self._update_current_index)
+            self._view.current_changed.add_qt_signal(self._rendered_object.currentChanged)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_current_index(_view: TabView, rendered_object: QTabWidget, value: int) -> None:
+        rendered_object.setCurrentIndex(value)
+
+    @staticmethod
+    def _update_state(view: TabView, rendered_object: QTabWidget) -> None:
+        view.current_index = rendered_object.currentIndex()
+
+    def _update_current_index(self, index: int) -> None:
+        with self.stop_refresh():
+            self._view.current_index = index
+
+
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
@@ -2104,6 +2210,8 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "sidebar": QtSidebarRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
+    "tab_page": QtTabPageRenderer,
+    "tabs": QtTabsRenderer,
     "toolbar": QtToolBarRenderer,
     "vertical": QtVerticalRenderer,
 }

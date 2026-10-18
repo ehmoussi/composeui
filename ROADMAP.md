@@ -11,18 +11,16 @@ One widget at a time, each on Qt, Textual and the web with tests (the registry c
 test requires all three backends to register the same keys). Already there: input, float
 input, integer input, slider, label, log, button, progress bar, metric, expander,
 checkbox, radio group, combobox, table (editable cells, sorting and filtering included),
-Markdown, forms, pages, sidebar, a list of views from data, message and confirm dialogs.
-Easiest first.
+Markdown, forms, pages, tabs, sidebar, a list of views from data, message and confirm
+dialogs. Easiest first.
 
 1. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
    a calendar, in the main view's language's format, with `minimum`/`maximum`.
-2. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
-   routes.
-3. **Form dialog** (`FormDialogView`): a modal holding a form, e.g. editing a record
+2. **Form dialog** (`FormDialogView`): a modal holding a form, e.g. editing a record
    from its Edit button, with OK and Cancel; OK disabled while the form is invalid,
    and the answer (accepted or not) as a signal. Today's dialogs only show a message or
    ask to confirm.
-4. **Tree view** (`TreeView`).
+3. **Tree view** (`TreeView`).
 
 Charts (2) have a section of their own.
 
