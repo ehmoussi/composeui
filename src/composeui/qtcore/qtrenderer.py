@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QStatusBar,
@@ -1337,8 +1338,11 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         # a window of its own, over the column's window
         widget.setParent(layout.parentWidget(), widget.windowFlags())
     elif isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
-        # a plain form insets its rows with its own layout's margins, and a page its views
-        layout.addWidget(widget)
+        # a plain form insets its rows with its own layout's margins, and a page its views;
+        # a page holding a view that scrolls within itself takes the spare height, for it
+        inner = widget.layout()
+        expands = inner is not None and bool(inner.expandingDirections() & Qt.Orientation.Vertical)
+        layout.addWidget(widget, 1 if expands else 0)
     else:
         # inset like a plain form's rows
         inset = QVBoxLayout()
@@ -1351,9 +1355,9 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
             inset.addWidget(widget, alignment=Qt.AlignmentFlag.AlignLeft)
         else:
             inset.addWidget(widget)
-        # a document scrolls within itself: it takes the column's spare height, ahead of
-        # the spacer under the views
-        layout.addLayout(inset, 1 if isinstance(widget, QTextBrowser) else 0)
+        # a document, or a list, scrolls within itself: it takes the column's spare height,
+        # ahead of the spacer under the views
+        layout.addLayout(inset, 1 if isinstance(widget, (QTextBrowser, QScrollArea)) else 0)
 
 
 class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
@@ -1605,8 +1609,12 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
             self._view.is_expanded = is_expanded
 
 
-class QtListRenderer(QtWidgetRenderer["ListView[Any]", QWidget]):
-    """The records' views one above the other, added, moved and removed as they change."""
+class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
+    """The records' views one above the other, added, moved and removed as they change.
+
+    In a scroll area taking the column's spare height (see `_add_content_widget`): the
+    window keeps its height however many records there are.
+    """
 
     def __init__(self, view: ListView[Any]) -> None:
         super().__init__(view)
@@ -1614,15 +1622,21 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QWidget]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QWidget()
-            layout = QVBoxLayout(self._rendered_object)
+            self._rendered_object = QScrollArea()
+            self._rendered_object.setWidgetResizable(True)
+            self._rendered_object.setFrameShape(QScrollArea.Shape.NoFrame)
+            column = QWidget()
+            layout = QVBoxLayout(column)
             # the column holding the list already insets it
             layout.setContentsMargins(0, 0, 0, 0)
+            # height to spare goes below the views, not between them
+            layout.addStretch()
+            self._rendered_object.setWidget(column)
             self.refresh()
 
     @staticmethod
     def _refresh_item_views(
-        _view: ListView[Any], rendered_object: QWidget, value: list[View]
+        _view: ListView[Any], rendered_object: QScrollArea, value: list[View]
     ) -> None:
         widgets: list[QWidget] = []
         for item_view in value:
@@ -1632,20 +1646,22 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QWidget]):
                 item_view.renderer.qt_object, QWidget
             ):
                 widgets.append(item_view.renderer.qt_object)
-        layout = rendered_object.layout()
-        assert layout is not None
-        while layout.count() > 0:
+        column = rendered_object.widget()
+        layout = None if column is None else column.layout()
+        assert isinstance(layout, QVBoxLayout)
+        # the views, ahead of the stretch under them
+        while layout.count() > 1:
             item = layout.takeAt(0)
             widget = None if item is None else item.widget()
             if widget is not None and widget not in widgets:
                 # its record is gone
                 widget.setParent(None)
                 widget.deleteLater()
-        for widget in widgets:
-            layout.addWidget(widget)
+        for index, widget in enumerate(widgets):
+            layout.insertWidget(index, widget)
 
     @staticmethod
-    def _update_state(view: ListView[Any], rendered_object: QWidget) -> None:
+    def _update_state(view: ListView[Any], rendered_object: QScrollArea) -> None:
         pass  # a list has no user-editable state of its own: its records are the model's
 
 

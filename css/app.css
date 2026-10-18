@@ -264,6 +264,30 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   font-variant-numeric: tabular-nums;
 }
 
+/* a list's expanders (`WebListRenderer`) join in one box, as an accordion: they share
+   their borders, only the box's corners rounded, and their titles are shorter than a
+   lone expander's, so many records stay at hand */
+.cui-list:has(> div > .collapse) {
+  gap: 0;
+}
+.cui-list > div > .collapse {
+  border-radius: 0;
+}
+.cui-list > div + div > .collapse {
+  border-top-width: 0;
+}
+.cui-list > div:first-child > .collapse {
+  border-start-start-radius: var(--radius-box);
+  border-start-end-radius: var(--radius-box);
+}
+.cui-list > div:last-child > .collapse {
+  border-end-start-radius: var(--radius-box);
+  border-end-end-radius: var(--radius-box);
+}
+.cui-list > div > .collapse > .collapse-title {
+  padding-block: 0.625rem;
+}
+
 /* a table's selected rows, in the theme's colour: over the zebra stripes and the hover */
 .table tbody tr[aria-current="true"],
 .table tbody tr[aria-selected="true"] {

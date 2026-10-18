@@ -913,6 +913,8 @@ async def test_a_list_view_shows_a_view_per_record_as_the_records_change() -> No
         view.pipes.items = [Pipe("Feed", 1), *PIPES]  # built since: mounted as they come
         await pilot.pause()
         assert shown() == ["Feed", "Main line", "Return"]
+        # collapsed, a line apart: a rule, then the title
+        assert [child.region.height for child in column.children] == [2, 2, 2]
         assert column.children[1] is main_line_widget  # the record's own widget
         feed = view.pipes.item_views[0]
         assert isinstance(feed, PipeExpander)

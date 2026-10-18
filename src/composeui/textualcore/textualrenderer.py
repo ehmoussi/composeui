@@ -71,6 +71,7 @@ from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeinput import ComposeInput
+from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
@@ -1709,7 +1710,7 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
         self._view.toggled.emit(is_expanded)
 
 
-class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", Vertical]):
+class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
     """The records' views one above the other, added, moved and removed as they change.
 
     Widgets only mount in a running app: the column is put in step with the records once
@@ -1723,8 +1724,7 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", Vertical]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Vertical(*self._widgets(self._view.item_views))
-            self._rendered_object.styles.height = "auto"
+            self._rendered_object = ComposeList(*self._widgets(self._view.item_views))
 
     @staticmethod
     def _widgets(views: list[View]) -> list[Widget]:
@@ -1741,7 +1741,7 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", Vertical]):
         return widgets
 
     @staticmethod
-    def _refresh_item_views(_view: ListView[Any], column: Vertical, value: list[View]) -> None:
+    def _refresh_item_views(_view: ListView[Any], column: ComposeList, value: list[View]) -> None:
         widgets = TextualListRenderer._widgets(value)
         if not column.is_attached:
             return  # put in step once mounted
@@ -1772,7 +1772,7 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", Vertical]):
         _refresh_tree(view)
 
     @staticmethod
-    def _update_state(view: ListView[Any], rendered_object: Vertical) -> None:
+    def _update_state(view: ListView[Any], rendered_object: ComposeList) -> None:
         pass  # a list has no user-editable state of its own: its records are the model's
 
 

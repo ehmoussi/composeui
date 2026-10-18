@@ -2687,7 +2687,11 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
             if kept == [view for view in views if view in sent]:
                 return self._changes_html(sent, views)
         items = "".join(self._item_html(view) for view in views)
-        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{items}</div>'
+        # `cui-list`: its expanders join in one box (see `css/app.css`)
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="cui-list flex flex-col gap-3">'
+            f"{items}</div>"
+        )
 
     def _changes_html(self, sent: list[View], views: list[View]) -> str:
         """Delete the items gone and put each new one after its neighbour, in order."""

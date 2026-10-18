@@ -36,6 +36,7 @@ from qtpy.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QStatusBar,
@@ -869,8 +870,10 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
     window = _widget(view)
     qtbot.addWidget(window)
     window.show()
-    column = _widget(view.pipes)
-    layout = column.layout()
+    scroll = _widget(view.pipes)
+    assert isinstance(scroll, QScrollArea)
+    column = scroll.widget()
+    layout = None if column is None else column.layout()
     assert layout is not None
 
     def shown() -> list[str]:
@@ -878,8 +881,8 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
         for index in range(layout.count()):
             item = layout.itemAt(index)
             expander = None if item is None else item.widget()
-            assert isinstance(expander, QExpander)
-            titles.append(expander.header.text())
+            if isinstance(expander, QExpander):  # not the stretch under them
+                titles.append(expander.header.text())
         return titles
 
     assert shown() == ["Main line"]
@@ -893,6 +896,11 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
     qtbot.mouseClick(_widget(feed.delete), Qt.MouseButton.LeftButton)
     assert shown() == ["Main line", "Return"]
     assert view.status_bar.message == "Deleted Feed"
+
+    # the list scrolls within itself: many records leave the window's height alone
+    height = window.minimumSizeHint().height()
+    view.pipes.items = [Pipe(f"Pipe {number}", 1) for number in range(40)]
+    assert window.minimumSizeHint().height() == height
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
