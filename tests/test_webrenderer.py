@@ -9,6 +9,7 @@ directly through `handle_event`, the function the route calls.
 
 from __future__ import annotations
 
+import datetime
 import enum
 import hashlib
 import html
@@ -106,6 +107,7 @@ from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
@@ -643,6 +645,58 @@ def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
     assert attributes["inputmode"] == "decimal"
     assert attributes["pattern"]
     assert attributes["value"] == "20.0"
+
+
+def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser() -> None:
+    view = BookingMainView()
+    view.render(RendererType.WEB)
+    view.set_language("fr")
+    arrival = view.form.arrival
+    label, field = _part(arrival, "label"), _part(arrival, "field")
+    assert isinstance(label, WebFormLabelRenderer)
+    changes: list[datetime.date | None] = []
+    arrival.value_changed.connect(changes.append)
+    date_input = _element(field.to_html(), field.widget_id)
+    text, picker = (attributes for tag, attributes in date_input.descendants if tag == "input")
+    assert (text["type"], text["value"], text["placeholder"]) == (
+        "text",
+        "18/10/2026",
+        "dd/mm/yyyy",
+    )
+    assert text["aria-labelledby"] == label.text_id
+    assert [picker[name] for name in ("type", "value", "min", "max")] == [
+        "date",
+        "2026-10-18",
+        "2026-10-01",
+        "2026-12-31",
+    ]
+    (button,) = (attributes for tag, attributes in date_input.descendants if tag == "button")
+    assert button["aria-label"] == "Choisir une date"
+
+    fragments = handle_event(field, "input", {"value": "25/10/20"})
+    assert (arrival.value, changes) == (datetime.date(2026, 10, 18), [])  # not a date yet
+    fragments = handle_event(field, "input", {"value": "1/11/2026"})
+    assert (arrival.value, changes) == (datetime.date(2026, 11, 1), [datetime.date(2026, 11, 1)])
+    assert field.widget_id not in fragments  # never swapped back while typed in
+    fragments = handle_event(field, "change", {"value": "1/11/2026"})
+    assert len(changes) == 1
+    # left: shown as the format writes it, the picker on the date too
+    swapped = _swapped(fragments, field.widget_id)
+    assert [a["value"] for tag, a in swapped.descendants if tag == "input"] == [
+        "01/11/2026",
+        "2026-11-01",
+    ]
+
+    fragments = handle_event(field, "pick", {"picked": "2026-12-24"})
+    assert (arrival.value, changes[-1]) == (datetime.date(2026, 12, 24),) * 2
+    swapped = _swapped(fragments, field.widget_id)
+    assert next(a["value"] for tag, a in swapped.descendants if tag == "input") == "24/12/2026"
+    fragments = handle_event(field, "change", {"value": "31/02/2026"})  # no such day
+    swapped = _swapped(fragments, field.widget_id)
+    assert next(a["value"] for tag, a in swapped.descendants if tag == "input") == "24/12/2026"
+    handle_event(field, "change", {"value": ""})
+    assert (arrival.value, changes[-1]) == (None, None)
+    assert len(changes) == 3
 
 
 def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(

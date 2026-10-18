@@ -11,6 +11,7 @@ for the next response.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import enum
 import html
 import json
@@ -76,6 +77,8 @@ from composeui.core.view import (
     VerticalView,
     View,
     as_pattern,
+    date_hint,
+    parse_date,
     replace_cell,
     split_pattern,
     walk_tree,
@@ -534,6 +537,125 @@ class WebIntInputRenderer(_WebNumberFieldRenderer[IntInputViewLike]):
 
     def _extra_attributes(self) -> str:
         return f' inputmode="numeric" pattern="{_INTEGER_PATTERN}"'
+
+
+class DateInputViewLike(TextFieldViewLike, Protocol):
+    value: datetime.date | None
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    pick_text: str
+    value_changed: Signal[datetime.date | None]
+
+    def shown_text(self, value: datetime.date | None) -> str: ...
+
+
+class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
+    """A text field typing the date as the view's `date_format` says, then a calendar button.
+
+    The field posts like a number's (see `_WebNumberFieldRenderer`): never swapped back
+    while typed in, text that isn't a date ignored. Left (`change`), it is swapped back
+    showing the date as the format writes it, or the date back for text that isn't one.
+    The button opens the browser's own date picker, a hidden date input beside it (see
+    `page.py`), its months and days in the browser's language; the date picked posts
+    as that input's change (`pick`), in ISO 8601. The root is a `<div>` holding them, so
+    a row's label names the field with `aria-labelledby`. Like the number fields, a date
+    out of `minimum`/`maximum` typed isn't refused; the picker offers only those in range.
+    """
+
+    _role = "date_input"
+    is_labelable = False
+
+    def __init__(self, view: DateInputViewLike) -> None:
+        super().__init__(view)
+        #: the text the field last posted, while it stays what the field shows
+        self._last_posted_text: str | None = None
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._mark_dirty,
+                "minimum": self._mark_dirty,
+                "maximum": self._mark_dirty,
+                "date_format": self._refresh_value,
+                "pick_text": self._mark_dirty,
+                # the browser's picker names them, in its own language
+                "month_names": lambda _view, _rendered_object, _value: None,
+                "day_names": lambda _view, _rendered_object, _value: None,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        view = self._view
+        disabled = "" if self.is_enabled else " disabled"
+        pick = html.escape(view.pick_text)
+        limits = "".join(
+            f' {name}="{limit.isoformat()}"'
+            for name, limit in (("min", view.minimum), ("max", view.maximum))
+            if limit is not None
+        )
+        picked = "" if view.value is None else view.value.isoformat()
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="relative flex gap-1">'
+            f'<input id="{self.widget_id}-field"{self._row_attributes()}'
+            ' class="input w-full" type="text" name="value"'
+            f' value="{html.escape(view.shown_text(view.value))}"'
+            f' placeholder="{html.escape(date_hint(view.placeholder, view.date_format))}"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
+            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            f' autocomplete="off"{disabled}>'
+            f'<button id="{self.widget_id}-pick" type="button" class="btn btn-square"'
+            f' aria-label="{pick}" title="{pick}" data-date-pick{disabled}>'
+            f"{_icon('calendar')}</button>"
+            # out of sight and out of the way, under the button, where the picker opens
+            f'<input type="date" name="picked" value="{picked}"{limits}'
+            ' class="pointer-events-none absolute right-0 bottom-0 size-px opacity-0"'
+            ' tabindex="-1" aria-hidden="true"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
+            ' hx-vals=\'{"event": "pick"}\' hx-swap="none"'
+            f' autocomplete="off"{disabled}></div>'
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if not self.is_enabled or event not in ("input", "change", "pick"):
+            super().dispatch(event, form)
+        if event == "pick":
+            with contextlib.suppress(ValueError):  # a date input posts a date, or nothing
+                self._edit(datetime.date.fromisoformat(form.get("picked", "")))
+            # the field shows it: swapped back, as the button had the focus, not the field
+            self._refresh_value(self._view, self.widget_id, self._view.value)
+            return
+        # `change` carries the text too: it can overtake a still-debounced `input`, which
+        # then posts the same text again and must not report it again
+        text = form.get("value", "")
+        if text != self._posted_text():
+            self._last_posted_text = text
+            if text.strip() == "":
+                self._edit(None)
+            else:
+                with contextlib.suppress(ValueError):  # not a date yet, e.g. halfway
+                    self._edit(parse_date(text, self._view.date_format))
+            self._view.text_changed.emit(text)
+            self._view.text_edited.emit(text)
+        if event == "change":
+            # left: the date as the format writes it, or back for text that isn't one
+            self._refresh_value(self._view, self.widget_id, self._view.value)
+            self._view.editing_finished.emit()
+
+    def _edit(self, value: datetime.date | None) -> None:
+        if value == self._view.value:
+            return
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
+
+    def _posted_text(self) -> str:
+        if self._last_posted_text is not None:
+            return self._last_posted_text
+        return self._view.shown_text(self._view.value)
+
+    def _refresh_value(self, view: DateInputViewLike, rendered_object: str, value: Any) -> None:
+        self._last_posted_text = None  # the server's date wins over what was typed
+        self._mark_dirty(view, rendered_object, value)
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -1947,6 +2069,10 @@ _ICONS: Final[dict[str, str]] = {
     "pencil": '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
     ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
     "sidebar": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+    "calendar": (
+        '<rect x="3" y="4" width="18" height="18" rx="2"/>'
+        '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
+    ),
 }
 
 
@@ -3327,6 +3453,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "chart": WebChartRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
+    "date_input": WebDateInputRenderer,
     "dialog": WebDialogRenderer,
     "expander": WebExpanderRenderer,
     "float_input": WebFloatInputRenderer,

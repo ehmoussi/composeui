@@ -11,6 +11,7 @@ import pytest
 pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
+import datetime
 import math
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -53,6 +54,11 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composedateinput import (
+    ComposeCalendar,
+    ComposeDateInput,
+    ComposeMonth,
+)
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterBar,
@@ -77,6 +83,7 @@ from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
+from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
@@ -169,6 +176,98 @@ def _track_and_value(slider: ComposeSlider) -> tuple[str, str]:
     assert isinstance(rendered, Text)
     track, value = rendered.plain.split()
     return track, value
+
+
+#: clears a Textual field of up to 12 characters, the cursor first at its end
+_CLEAR = ("end", *["backspace"] * 12)
+
+
+async def _booking_app() -> tuple[BookingMainView, App[None], list[Optional[datetime.date]]]:
+    """Get the booking app in French, and the dates its arrival reports, as they come."""
+    view = BookingMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    changes: list[Optional[datetime.date]] = []
+    view.form.arrival.value_changed.connect(changes.append)
+    view.set_language("fr")
+    return view, app, changes
+
+
+@pytest.mark.asyncio
+async def test_a_date_input_is_typed_in_the_language_s_format_marking_what_isn_t_allowed() -> None:
+    view, app, changes = await _booking_app()
+    arrival = view.form.arrival
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(arrival.renderer)
+        assert isinstance(field, ComposeDateInput)
+        await pilot.pause()
+        assert field.input.value == "18/10/2026"
+        field.input.focus()
+        await pilot.press(*_CLEAR, *"25/10/20")
+        await pilot.pause()
+        assert (arrival.value, changes) == (None, [None])  # emptied, then not a date yet
+        assert field.input.has_class("-invalid")
+        await pilot.press(*"26")
+        await pilot.pause()
+        assert (arrival.value, changes[-1]) == (datetime.date(2026, 10, 25),) * 2
+        assert not field.input.has_class("-invalid")
+        await pilot.press(*_CLEAR, *"1/1/2027")
+        await pilot.pause()
+        assert arrival.value == datetime.date(2027, 1, 1)
+        assert field.input.has_class("-invalid")  # past the maximum: marked, not refused
+
+        await pilot.press("backspace", "enter")  # "1/1/202" left: the date back
+        await pilot.pause()
+        assert field.input.value == "01/01/2027"
+        arrival.value = datetime.date(2026, 10, 18)  # set in code: shown, not reported
+        await pilot.pause()
+        assert field.input.value == "18/10/2026"
+        assert changes[-1] == datetime.date(2027, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_to_the_range() -> (
+    None
+):
+    view, app, changes = await _booking_app()
+    arrival = view.form.arrival
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(arrival.renderer)
+        assert isinstance(field, ComposeDateInput)
+        await pilot.pause()
+        await pilot.click(field.button)
+        await pilot.pause()
+        month = app.screen.query_one(ComposeMonth)
+        assert month.has_focus
+        title, names, *_ = month.render().plain.split("\n")
+        assert "octobre 2026" in title
+        assert names.split() == ["lu", "ma", "me", "je", "ve", "sa", "di"]
+        await pilot.press("down", "pagedown", "enter")  # a week on, then a month on
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeCalendar)
+        assert (arrival.value, field.input.value) == (datetime.date(2026, 11, 25), "25/11/2026")
+        assert changes == [datetime.date(2026, 11, 25)]
+
+        await pilot.click(field.button)
+        await pilot.pause()
+        month = app.screen.query_one(ComposeMonth)
+        await pilot.press("pagedown", "pagedown")  # past the maximum: its last day
+        await pilot.pause()
+        assert month.cursor == datetime.date(2026, 12, 31)
+        # a click on a day: the 1st, on the first week's Tuesday
+        await pilot.click(month, offset=(1 * 3 + 2, 2))
+        await pilot.pause()
+        assert arrival.value == datetime.date(2026, 12, 1)
+        await pilot.click(field.button)
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeCalendar)
+        assert changes == [datetime.date(2026, 11, 25), datetime.date(2026, 12, 1)]
 
 
 @pytest.mark.asyncio

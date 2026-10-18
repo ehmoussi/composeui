@@ -542,6 +542,20 @@ document.addEventListener("input", function (event) {
   if (!("slider" in slider.dataset)) return;
   slider.parentElement.querySelector("output").value = slider.value;
 });
+/* a date field's calendar button opens the browser's date picker, a hidden date input
+   beside it: the server hears the date picked as that input's change, and swaps the
+   field back showing it (see `WebDateInputRenderer`) */
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-date-pick]");
+  if (button === null) return;
+  var picker = button.parentElement.querySelector('input[type="date"]');
+  if (typeof picker.showPicker === "function") {
+    picker.showPicker();
+  } else {
+    picker.focus();
+    picker.click();
+  }
+});
 /* the sidebar (see `WebSidebarRenderer`): on a wide screen, its button in the header
    retracts and expands the column, then posts its state; on a phone, it shows and hides
    the drawer, through the drawer's checkbox, which a click beside the drawer unchecks

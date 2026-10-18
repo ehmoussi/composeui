@@ -9,13 +9,10 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, integer input, slider, label, log, button, progress bar, metric, expander,
-checkbox, radio group, combobox, table (editable cells, sorting and filtering included),
-tree, Markdown, forms, pages, tabs, sidebar, a list of views from data, message, confirm
-and form dialogs. Easiest first.
-
-1. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
-   a calendar, in the main view's language's format, with `minimum`/`maximum`.
+input, integer input, date input, slider, label, log, button, progress bar, metric,
+expander, checkbox, radio group, combobox, table (editable cells, sorting and filtering
+included), tree, Markdown, forms, pages, tabs, sidebar, a list of views from data,
+message, confirm and form dialogs. None is planned: add one here once an app needs it.
 
 Charts (2) have a section of their own.
 

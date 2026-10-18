@@ -1063,6 +1063,130 @@ class IntInputView(IntInputMixin, View):
     _renderer_key = "int_input"
 
 
+#: how a date is typed and shown when nothing gives it a format: ISO 8601's
+ISO_DATE_FORMAT = "yyyy-MM-dd"
+#: a date format's parts: its day, month and year (see `DateInputMixin.date_format`)
+_DATE_PARTS = {"dd": "day", "MM": "month", "yyyy": "year"}
+_DATE_PART_PATTERN = re.compile("|".join(_DATE_PARTS))
+#: splits a date format into its parts and the separators between them
+_DATE_PART_SPLIT = re.compile(f"({_DATE_PART_PATTERN.pattern})")
+
+
+@CONVERTER.register_unstructure_hook
+def _unstructure_date(value: datetime.date) -> str:
+    return value.isoformat()
+
+
+@CONVERTER.register_structure_hook
+def _structure_date(value: Any, _type: type) -> datetime.date:
+    return datetime.date.fromisoformat(str(value))
+
+
+def is_date_format(date_format: str) -> bool:
+    """Tell whether `date_format` has a day, a month and a year, each once."""
+    parts = _DATE_PART_PATTERN.findall(date_format)
+    return sorted(parts) == sorted(_DATE_PARTS)
+
+
+def format_date(value: datetime.date, date_format: str) -> str:
+    """Show `value` as `date_format` says, e.g. "18/10/2026" for "dd/MM/yyyy".
+
+    A format lacking a part, e.g. a catalog's mistake, shows the date as ISO 8601 does.
+    """
+    if not is_date_format(date_format):
+        date_format = ISO_DATE_FORMAT
+    texts = {"dd": f"{value.day:02d}", "MM": f"{value.month:02d}", "yyyy": f"{value.year:04d}"}
+    return _DATE_PART_PATTERN.sub(lambda part: texts[part.group()], date_format)
+
+
+def date_hint(placeholder: str, date_format: str) -> str:
+    """Get what an empty date field shows: `placeholder`, else the format, as "mm/dd/yyyy"."""
+    return placeholder or date_format.lower()
+
+
+def parse_date(text: str, date_format: str) -> datetime.date:
+    """Read a date typed as `date_format` says, or as ISO 8601 (2026-10-18) whatever it is.
+
+    The day and the month may have a single digit ("1/2/2026"), and a separator ending
+    the format may be left out ("18.10.2026" for "dd.MM.yyyy."). Raises `ValueError`
+    for anything else, or a day the month doesn't have.
+    """
+    text = text.strip()
+    for candidate in dict.fromkeys([date_format, ISO_DATE_FORMAT]):
+        if not is_date_format(candidate):
+            continue
+        pieces = [piece for piece in _DATE_PART_SPLIT.split(candidate) if piece != ""]
+        pattern = ""
+        for index, piece in enumerate(pieces):
+            if piece in _DATE_PARTS:
+                digits = r"\d{4}" if piece == "yyyy" else r"\d{1,2}"
+                pattern += f"(?P<{_DATE_PARTS[piece]}>{digits})"
+            elif index == len(pieces) - 1:
+                # a separator ending the format, e.g. Hungarian's dot, may be left out
+                pattern += rf"(?:\s*{re.escape(piece.strip())})?"
+            else:
+                pattern += rf"\s*{re.escape(piece.strip())}\s*"
+        matched = re.fullmatch(pattern, text)
+        if matched is not None:
+            return datetime.date(*(int(matched[part]) for part in ("year", "month", "day")))
+    msg = f"{text!r} isn't a date as {date_format}"
+    raise ValueError(msg)
+
+
+@define_view
+class DateInputMixin(_InputView):
+    """A date, typed as `date_format` says or picked from a calendar.
+
+    A date typed out of `minimum`/`maximum` isn't refused everywhere (Textual and the web
+    mark or keep it), so validate it; the calendar offers only the dates in range.
+    """
+
+    value: Optional[datetime.date] = attrs.field(default=None)
+    minimum: Optional[datetime.date] = attrs.field(default=None)
+    maximum: Optional[datetime.date] = attrs.field(default=None)
+    #: how the date is typed and shown: its day `dd`, month `MM` and year `yyyy` between
+    #: separators; a text the catalogs translate, so the main view's language's
+    date_format: str = attrs.field(default=T("MM/dd/yyyy"), metadata={UI_TEXT: True})
+    #: the calendar's month names, January first, and its days' short names, Monday first
+    month_names: list[str] = attrs.field(
+        factory=lambda: [
+            T("January"),
+            T("February"),
+            T("March"),
+            T("April"),
+            T("May"),
+            T("June"),
+            T("July"),
+            T("August"),
+            T("September"),
+            T("October"),
+            T("November"),
+            T("December"),
+        ],
+        metadata={UI_TEXT: True},
+    )
+    day_names: list[str] = attrs.field(
+        factory=lambda: [T("Mo"), T("Tu"), T("We"), T("Th"), T("Fr"), T("Sa"), T("Su")],
+        metadata={UI_TEXT: True},
+    )
+    #: the name of the button opening the calendar, as a screen reader reads it out
+    pick_text: str = attrs.field(default=T("Pick a date"), metadata={UI_TEXT: True})
+    #: the user typed or picked a new date (None once the field is emptied); not
+    #: emitted when `value` is set in code
+    value_changed: Signal[Optional[datetime.date]] = attrs.Factory(Signal[Optional[datetime.date]])
+
+    def shown_text(self, value: Optional[datetime.date]) -> str:
+        """Show `value` as `date_format` says, "" for no date."""
+        return "" if value is None else format_date(value, self.date_format)
+
+
+@define_view
+class DateInputView(DateInputMixin, View):
+    """A date, e.g. a booking's first day: typed in the main view's language's format."""
+
+    _renderer_key = "date_input"
+
+
 @define_view
 class SliderMixin:
     def _check_step(self, _attribute: "attrs.Attribute[Any]", step: int) -> None:
@@ -2443,6 +2567,16 @@ class RowIntInputView(FormRowView, IntInputMixin):
 @define_view
 class LabelRowIntInputView(FormLabelRowView, IntInputMixin):
     _field_renderer_key = "int_input"
+
+
+@define_view
+class RowDateInputView(FormRowView, DateInputMixin):
+    _field_renderer_key = "date_input"
+
+
+@define_view
+class LabelRowDateInputView(FormLabelRowView, DateInputMixin):
+    _field_renderer_key = "date_input"
 
 
 @define_view

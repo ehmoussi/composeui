@@ -8,6 +8,7 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
     QAbstractButton,
+    QAbstractSpinBox,
     QCheckBox,
     QFileDialog,
     QFormLayout,
@@ -81,9 +82,11 @@ from composeui.core.view import (
     TreeView,
     VerticalView,
     View,
+    date_hint,
     replace_cell,
 )
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
@@ -97,6 +100,7 @@ from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
 
 if TYPE_CHECKING:
+    import datetime
     from collections.abc import Callable, Iterable
 
     from composeui.core.signal import Signal, SignalNoArgs
@@ -353,6 +357,14 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
                 self._view.value = None
 
 
+def _line_edit(rendered_object: QAbstractSpinBox) -> QLineEdit:
+    """Get the field of a spin box or a date edit."""
+    # `QAbstractSpinBox.lineEdit` is protected
+    line_edit = rendered_object.findChild(QLineEdit)
+    assert line_edit is not None
+    return line_edit
+
+
 class IntInputViewLike(_InputViewLike, Protocol):
     value: int | None
     minimum: int | None
@@ -391,18 +403,11 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
             self._rendered_object.valueChanged.connect(self._update_value)
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
-            line_edit = self._line_edit(self._rendered_object)
+            line_edit = _line_edit(self._rendered_object)
             # Qt reports an edit before the spin box reads it: the view has the value first
             line_edit.textEdited.connect(self._update_edited)
             self._view.text_edited.add_qt_signal(line_edit.textEdited)
             self.refresh()
-
-    @staticmethod
-    def _line_edit(rendered_object: QSpinBox) -> QLineEdit:
-        # `QAbstractSpinBox.lineEdit` is protected
-        line_edit = rendered_object.findChild(QLineEdit)
-        assert line_edit is not None
-        return line_edit
 
     @staticmethod
     def _refresh_value(
@@ -417,7 +422,7 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
     def _refresh_placeholder(
         _view: IntInputViewLike, rendered_object: QSpinBox, value: str
     ) -> None:
-        QtIntInputRenderer._line_edit(rendered_object).setPlaceholderText(value)
+        _line_edit(rendered_object).setPlaceholderText(value)
 
     @staticmethod
     def _refresh_minimum(
@@ -437,7 +442,7 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
     @staticmethod
     def _update_state(view: IntInputViewLike, rendered_object: QSpinBox) -> None:
         view.value = rendered_object.value() if rendered_object.cleanText() != "" else None
-        view.placeholder = QtIntInputRenderer._line_edit(rendered_object).placeholderText()
+        view.placeholder = _line_edit(rendered_object).placeholderText()
         minimum, maximum = rendered_object.minimum(), rendered_object.maximum()
         view.minimum = minimum if minimum != _INT_MINIMUM else None
         view.maximum = maximum if maximum != _INT_MAXIMUM else None
@@ -461,6 +466,91 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
             return  # transient text, e.g. "-": the spin box keeps its value
         if self._rendered_object.minimum() <= value <= self._rendered_object.maximum():
             self._update_value(value)
+
+
+class DateInputViewLike(_InputViewLike, Protocol):
+    value: datetime.date | None
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    pick_text: str
+    value_changed: Signal[datetime.date | None]
+
+
+class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
+    """A field typing the date as the view's `date_format` says, beside a calendar button.
+
+    Its calendar names the months and days in the system's language: Qt's own, as the
+    web's in the browser's.
+    """
+
+    _invalid_style = "QLineEdit { border: 1px solid red; }"
+
+    def __init__(self, view: DateInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._refresh_placeholder,
+                "minimum": self._refresh_range,
+                "maximum": self._refresh_range,
+                "date_format": self._refresh_date_format,
+                "pick_text": self._refresh_pick_text,
+                # Qt's calendar names them, in the system's language
+                "month_names": lambda _view, _rendered_object, _value: None,
+                "day_names": lambda _view, _rendered_object, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QDateField()
+            # first, so the view's callbacks see the new date
+            self._rendered_object.date_edited.connect(self._update_value)
+            line_edit = self._rendered_object.line_edit
+            self._view.editing_finished.add_qt_signal(line_edit.editingFinished)
+            self._view.text_changed.add_qt_signal(line_edit.textChanged)
+            self._view.text_edited.add_qt_signal(line_edit.textEdited)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(
+        _view: DateInputViewLike, rendered_object: QDateField, value: datetime.date | None
+    ) -> None:
+        rendered_object.set_date(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        view: DateInputViewLike, rendered_object: QDateField, value: str
+    ) -> None:
+        rendered_object.line_edit.setPlaceholderText(date_hint(value, view.date_format))
+
+    @staticmethod
+    def _refresh_range(view: DateInputViewLike, rendered_object: QDateField, _value: Any) -> None:
+        rendered_object.set_range(view.minimum, view.maximum)
+
+    @staticmethod
+    def _refresh_date_format(
+        view: DateInputViewLike, rendered_object: QDateField, value: str
+    ) -> None:
+        rendered_object.set_date_format(value)
+        rendered_object.line_edit.setPlaceholderText(date_hint(view.placeholder, value))
+
+    @staticmethod
+    def _refresh_pick_text(
+        _view: DateInputViewLike, rendered_object: QDateField, value: str
+    ) -> None:
+        rendered_object.button.setToolTip(value)
+        rendered_object.button.setAccessibleName(value)
+
+    @staticmethod
+    def _update_state(view: DateInputViewLike, rendered_object: QDateField) -> None:
+        view.value = rendered_object.date()
+
+    def _update_value(self, value: datetime.date | None) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
 
 
 class SliderViewLike(ViewLike, Protocol):
@@ -2420,6 +2510,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": QtChartRenderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
+    "date_input": QtDateInputRenderer,
     "dialog": QtDialogRenderer,
     "expander": QtExpanderRenderer,
     "float_input": QtFloatInputRenderer,

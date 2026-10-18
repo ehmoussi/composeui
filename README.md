@@ -150,7 +150,7 @@ Views can be composed by mixing traits, for example `LabelRowFloatInputView` com
 by a "?" button beside its label that a click, a tap or the keyboard opens (a hint under the
 label on Textual).
 See the mixins in `composeui/core/view.py` (`InputMixin`, `FloatInputMixin`,
-`IntInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
+`IntInputMixin`, `DateInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks,
 `PageView`/`Router` for an app split into [pages](#pages), `TabView` for [tabs](#tabs),
 `ToolBar` for a [toolbar](#toolbars), `DialogView` for [dialogs](#dialogs), `SidebarView`
@@ -160,6 +160,14 @@ danger) tells the main action from the others and from one destroying something.
 `IntInputView` takes a whole number, e.g. an hour of the day, between its `minimum` and
 `maximum`: a spin box on Qt, keeping it in range; elsewhere a text field for digits,
 where a number out of range isn't refused (Textual marks it), so validate it.
+`DateInputView` takes a `datetime.date`, e.g. a booking's first day, or none (`None`):
+typed as its `date_format` says (`dd`, `MM`, `yyyy`; ISO 8601 is always understood), a
+text the catalogs translate, so in the main view's language ("MM/dd/yyyy" in English,
+"dd/MM/yyyy" in French), or picked from a calendar beside the field: Qt's, the
+browser's, or on Textual one of ComposeUI's, naming its months and days as the view's
+`month_names` and `day_names`. The calendar offers only the dates from `minimum` to
+`maximum`, but a date typed out of range isn't refused everywhere, so validate it;
+`value_changed` reports the user's dates.
 `SliderView` picks a whole number by dragging a handle, e.g. a number of workers: from
 `minimum` to `maximum` by `step`, its value shown beside the track, so its row is no
 taller than the others; the handle only stops on a step, and `value_changed` reports the

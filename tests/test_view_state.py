@@ -1,5 +1,6 @@
 """Tests for the cattrs (un)structure hooks and MainView state persistence."""
 
+import datetime
 import enum
 import json
 import logging
@@ -33,9 +34,12 @@ from composeui.core.view import (
     TreeView,
     _is_omitted_type,
     define_view,
+    format_date,
+    parse_date,
     replace_cell,
 )
 from examples.pipechart import PipeChartMainView
+from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
@@ -282,6 +286,38 @@ def test_a_study_saves_its_trees_nodes_expanded_and_selected(tmp_path: Path) -> 
     loaded.load_state(path)
     assert loaded.site.nodes == view.site.nodes
     assert (loaded.site.expanded, loaded.site.selected) == ([("Garden",)], ("Garden", "shed"))
+
+
+def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:
+    day = datetime.date(2026, 1, 2)
+    assert format_date(day, "dd/MM/yyyy") == "02/01/2026"
+    assert format_date(day, "yyyy. MM. dd.") == "2026. 01. 02."
+    assert format_date(day, "dd/MM") == "2026-01-02"  # no year: a catalog's mistake
+    assert parse_date("2/1/2026", "dd/MM/yyyy") == day  # single digits
+    assert parse_date(" 02.01.2026 ", "dd.MM.yyyy.") == day  # the ending dot left out
+    assert parse_date("2026-01-02", "MM/dd/yyyy") == day  # ISO 8601, whatever the format
+    for text in ("31/02/2026", "2/1/26", "2026/01/02", "02/01/2026 x", ""):
+        with pytest.raises(ValueError, match=r"isn't a date|day is out of range"):
+            parse_date(text, "dd/MM/yyyy")
+
+
+def test_a_date_input_follows_the_language_and_its_study_keeps_its_dates(tmp_path: Path) -> None:
+    view = BookingMainView()
+    arrival = view.form.arrival
+    assert arrival.shown_text(arrival.value) == "10/18/2026"
+    view.set_language("fr")
+    assert (arrival.shown_text(arrival.value), arrival.month_names[0]) == ("18/10/2026", "janvier")
+    arrival.value = datetime.date(2027, 3, 4)
+    path = tmp_path / "study.booking"
+    view.save_state(path)
+    saved = json.loads(path.read_text())["form"]["arrival"]
+    assert (saved["value"], saved["minimum"]) == ("2027-03-04", "2026-10-01")
+    assert "date_format" not in saved  # the language's, not the study's
+
+    view.reset_state()  # a new study: its dates back, in the language still shown
+    assert arrival.shown_text(arrival.value) == "18/10/2026"
+    view.load_state(path)
+    assert arrival.value == datetime.date(2027, 3, 4)
 
 
 def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None:
