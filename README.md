@@ -287,7 +287,9 @@ class AppMainView(MainView):
 Qt docks it on the window's left, where the user can't close or move it, Textual shows it
 left of the content, and the web a column left of the pages. On a phone, the web shows it
 as a drawer over the page, opened by a button in the header (named by `toggle_text`) and
-closed by a tap beside it or Escape.
+closed by a tap beside it or Escape. In
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py), the sidebar's form adds
+pipes to the catalogue beside it.
 
 ## Dialogs
 
@@ -506,8 +508,8 @@ the tables (`model.runs.add(...)`):
 
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) puts it together, on
 every backend (`uv run python -m examples.pipecatalogue --backend qt`): a catalogue of
-pipes the database checks as they're added, listed through a filtered query with their
-mass from a SQL view joining them to their material.
+pipes the database checks as they're added, from a form in a [sidebar](#sidebar), listed
+through a filtered query with their mass from a SQL view joining them to their material.
 
 ## A table of records
 
