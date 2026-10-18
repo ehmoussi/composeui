@@ -599,9 +599,12 @@ so the view keeps what the user did to it (an expander stays expanded); otherwis
 a new view. A view built later is set up like the others: its signals pass `main_view`
 and `model` to the callbacks asking for them, and it shows the main view's language. The
 records and their views are the model's, not study data: saving, opening and New leave
-them alone. [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) lists its
-pipes this way, each with a Delete button. On the web, a change swaps only the records' views it adds or removes, never
-the others, unless it reorders them.
+them alone. On the web, a change swaps only the records' views it adds or removes, never
+the others, unless it reorders them. However many records there are, the list stays
+compact: on Qt it scrolls within itself, taking the page's spare height, and expanders
+in a list join in one box on the web, a line apart on Textual.
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) lists its pipes this
+way, each with a Delete button.
 
 ## Charts
 
