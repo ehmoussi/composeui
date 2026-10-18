@@ -26,7 +26,7 @@ from composeui.core.view import (
     ButtonView,
     GroupFormView,
     HorizontalView,
-    LabelRowFloatInputView,
+    LabelRowIntInputView,
     LanguageMenu,
     MainView,
     MetricView,
@@ -66,11 +66,10 @@ def run_task(job: Job[TaskStatus], duration: float, failure_rate: float) -> Task
 
 
 @define_view
-class ConfigInputView(LabelRowFloatInputView):
+class ConfigInputView(LabelRowIntInputView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.minimum = 0
-        self.decimals = 0
 
 
 @define_view
@@ -183,9 +182,9 @@ class TaskMainView(MainView):
         if self.config.log_view.log_message != "":
             self.status_bar.show_message(self.tr("Fix the configuration first"))
             return
-        minimum = self.config.min_duration.value or 0.0
-        maximum = self.config.max_duration.value or 0.0
-        failure_rate = (self.config.failure_percentage.value or 0.0) / 100
+        minimum = self.config.min_duration.value or 0
+        maximum = self.config.max_duration.value or 0
+        failure_rate = (self.config.failure_percentage.value or 0) / 100
         self._tasks = [
             # not cryptography: a task's duration only needs to vary
             Task(number, round(random.uniform(minimum, maximum), 1))  # noqa: S311
