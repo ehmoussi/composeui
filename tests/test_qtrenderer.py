@@ -25,6 +25,7 @@ from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDockWidget,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -61,7 +62,7 @@ from composeui.core.view import (
     Series,
     replace_cell,
 )
-from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
+from composeui.qtcore.qtrenderer import QtActionRenderer, QtSidebarRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
@@ -79,6 +80,7 @@ from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -800,6 +802,35 @@ def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     assert name.qt_object.isVisible()
     assert actions["Inputs"].isChecked()
     assert not actions["Results"].isChecked()
+
+
+def test_a_sidebar_is_docked_left_of_the_pages_whatever_the_page(qtbot: QtBot) -> None:
+    view = SidebarMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    dock = _widget(view.sidebar)
+    assert isinstance(dock, QDockWidget)
+    assert window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
+    # part of the layout: the user can't close, move or float it
+    assert dock.features() == QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+    create = _widget(view.sidebar.create)
+    assert dock.isAncestorOf(create)
+    assert isinstance(view.sidebar.renderer, QtSidebarRenderer)
+    title = view.sidebar.renderer.title_label
+    assert title is not None
+    window.resize(900, 500)
+    window.show()
+    assert title.text() == "New record"
+    assert dock.geometry().right() < window.centralWidget().geometry().left()
+
+    view.router.navigate("results")
+    assert create.isVisible()  # still beside the other page
+    view.sidebar.title = ""
+    assert not title.isVisible()  # no empty heading
+    view.sidebar.is_visible = False
+    assert not dock.isVisible()
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

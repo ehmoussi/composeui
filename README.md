@@ -153,9 +153,10 @@ See the mixins in `composeui/core/view.py`
 (`InputMixin`, `FloatInputMixin`, `IntInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks, `PageView`/`Router` for
 an app split into [pages](#pages), `ToolBar` for a [toolbar](#toolbars), `DialogView`
-for [dialogs](#dialogs), and `ButtonView` for a button the user clicks (`clicked`), e.g.
-under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary, danger)
-tells the main action from the others and from one destroying something.
+for [dialogs](#dialogs), `SidebarView` for a [sidebar](#sidebar), and `ButtonView` for a
+button the user clicks (`clicked`), e.g. under a form to submit it; its `variant`
+(`ButtonVariant`: primary, secondary, danger) tells the main action from the others and
+from one destroying something.
 `IntInputView` takes a whole number, e.g. an hour of the day, between its `minimum` and
 `maximum`: a spin box on Qt, keeping it in range; elsewhere a text field for digits,
 where a number out of range isn't refused (Textual marks it), so validate it.
@@ -258,6 +259,35 @@ a row of buttons at the top, above a router's, and the web puts its buttons in t
 header, before the menus. An action's `icon`, an image file's path, shows on Qt and the
 web (see [Web backend](#web-backend)); a terminal shows the text. An icon is set by the
 app's code, not study data: never saved, loaded or reset.
+
+## Sidebar
+
+A `SidebarView` is a column of views beside the pages, shown whatever the page, e.g. a
+form creating a record. Its view fields are its content, under its `title`; make it a
+field of the main view, not of its router:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import ButtonView, MainView, SidebarView, child, define_view
+
+
+@define_view
+class NewRecordSidebar(SidebarView):
+    form: NewRecordForm = Factory(NewRecordForm)  # a FormView
+    create: ButtonView = child(ButtonView, text="Create")
+
+
+@define_view
+class AppMainView(MainView):
+    sidebar: NewRecordSidebar = child(NewRecordSidebar, title="New record")
+    pages: Pages = Factory(Pages)
+```
+
+Qt docks it on the window's left, where the user can't close or move it, Textual shows it
+left of the content, and the web a column left of the pages. On a phone, the web shows it
+as a drawer over the page, opened by a button in the header (named by `toggle_text`) and
+closed by a tap beside it or Escape.
 
 ## Dialogs
 

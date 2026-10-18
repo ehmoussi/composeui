@@ -538,6 +538,31 @@ document.addEventListener("input", function (event) {
   if (!("slider" in slider.dataset)) return;
   slider.parentElement.querySelector("output").value = slider.value;
 });
+/* the sidebar's drawer on a phone (see `WebSidebarRenderer`): its button in the header
+   shows and hides it, through the drawer's checkbox, which a click beside the drawer
+   unchecks too; the button tells screen readers whether it shows. Escape hides it. */
+function sidebarDrawer(toggle) {
+  return document.getElementById(toggle.dataset.sidebarToggle);
+}
+document.addEventListener("click", function (event) {
+  var toggle = event.target.closest("[data-sidebar-toggle]");
+  if (toggle !== null) sidebarDrawer(toggle).click();
+});
+document.addEventListener("change", function (event) {
+  if (!event.target.classList.contains("drawer-toggle")) return;
+  var toggle = document.querySelector('[data-sidebar-toggle="' + event.target.id + '"]');
+  if (toggle !== null) toggle.setAttribute("aria-expanded", String(event.target.checked));
+});
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll("[data-sidebar-toggle]").forEach(function (toggle) {
+    var drawer = sidebarDrawer(toggle);
+    if (drawer !== null && drawer.checked) {
+      drawer.click();
+      toggle.focus();
+    }
+  });
+});
 /* the page's language, for screen readers and the browser's spell checker, and its
    title: the server swaps in its marker when the app changes them (see `page_marker`) */
 function syncPage() {

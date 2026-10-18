@@ -2812,3 +2812,21 @@ class Router(View):
         for page in self.pages:
             page.action.is_checked = page.route == route
         self.current_route = route
+
+
+@define_view
+class SidebarView(View):
+    """A column of views beside the pages, shown whatever the page, e.g. a form creating a record.
+
+    A field of the main view, not of its router, rather than a view repeated on each page.
+    Its view fields are its content, laid out in a column on the window's left: Qt docks
+    it, Textual shows it left of the scrolling content, and the web a column left of the
+    pages, a drawer opened from a button in the header on a phone.
+    """
+
+    _renderer_key = "sidebar"
+
+    #: a heading above the content; none while empty
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: the button showing and hiding the drawer on a phone, for screen readers
+    toggle_text: str = attrs.field(default=T("Sidebar"), metadata={UI_TEXT: True})
