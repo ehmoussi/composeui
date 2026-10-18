@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import datetime
+import json
+import sqlite3
+import zipfile
 from typing import TYPE_CHECKING
 
 import pytest
 
 from composeui.core.application import ModelApplication
+from composeui.core.study import VIEWS_NAME
 from examples.pipecatalogue import (
     Material,
     PipeCatalogueMainView,
@@ -38,6 +43,7 @@ def _add(
     name: str,
     material: Material = Material.STEEL,
     dimensions: tuple[float | None, float | None, float | None] = (50.0, 5.0, 6.0),
+    installed: datetime.date | None = None,
 ) -> None:
     """Fill the sidebar's form and click its button.
 
@@ -47,6 +53,7 @@ def _add(
     form.name.text = name
     form.material.value = material
     form.radius.value, form.thickness.value, form.length.value = dimensions
+    form.installed.value = installed
     app.main_view.add.add_pipe.clicked.emit()
 
 
@@ -100,15 +107,29 @@ def test_the_tree_shows_the_pipes_listed_by_material_and_expands_the_one_selecte
 
 def test_the_catalogue_lists_filters_and_removes_the_pipes_added(app: App) -> None:
     catalogue = app.main_view.catalogue
-    _add(app, "Main line")
+    _add(app, "Main line", installed=datetime.date(2024, 3, 12))
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
 
     assert _listed(app) == [
-        ["Main line · Steel · 70.3 kg", "Outer radius 50 mm, wall 5 mm, 6 m long"],
-        ["Return · Copper · 6.4 kg", "Outer radius 20 mm, wall 2 mm, 3 m long"],
+        [
+            "Main line · Steel · 70.3 kg",
+            "Outer radius 50 mm, wall 5 mm, 6 m long, installed 03/12/2024",
+        ],
+        [
+            "Return · Copper · 6.4 kg",
+            "Outer radius 20 mm, wall 2 mm, 3 m long, installed on an unknown date",
+        ],
     ]
     assert catalogue.total.text == "2 pipes, 76.7 kg"
     assert app.main_view.status_bar.message == "Added 'Return'"
+
+    installed_from = catalogue.shown.installed_from
+    installed_from.value = datetime.date(2024, 1, 1)
+    installed_from.value_changed.emit(installed_from.value)
+    assert _names(app) == ["Main line"]  # the other's date is unknown
+    installed_from.value = None
+    installed_from.value_changed.emit(None)
+    assert _names(app) == ["Main line", "Return"]
 
     catalogue.shown.min_radius.value = 30.0
     catalogue.shown.min_radius.editing_finished.emit()
@@ -145,13 +166,17 @@ def test_a_pipe_s_edit_button_changes_it_in_a_form_dialog(app: App) -> None:
     main_line.buttons.edit.clicked.emit()  # the pipe's values, as the database has them
     assert dialog.is_visible
     assert (dialog.form.name.text, dialog.form.radius.value) == ("Main line", 50.0)
+    assert dialog.form.installed.value is None
     dialog.form.name.text = "Feed"
     dialog.form.material.value = Material.COPPER
+    dialog.form.installed.value = datetime.date(2025, 6, 1)
     dialog.accept()
 
     assert not dialog.is_visible
     # copper: the mass follows its density
-    assert _listed(app) == [["Feed · Copper · 80.2 kg", "Outer radius 50 mm, wall 5 mm, 6 m long"]]
+    assert _listed(app) == [
+        ["Feed · Copper · 80.2 kg", "Outer radius 50 mm, wall 5 mm, 6 m long, installed 06/01/2025"]
+    ]
     assert app.main_view.status_bar.message == "Saved 'Feed'"
 
 
@@ -202,6 +227,64 @@ def test_a_pipe_the_database_refuses_is_not_added_and_says_why(
 
     assert app.main_view.status_bar.message == f"Can't add the pipe: {reason}."
     assert _names(app) == ["Main line"]
+
+
+def test_a_pipe_can_t_be_installed_in_the_future(app: App) -> None:
+    installed = app.main_view.add.pipe.installed
+    tomorrow = installed.maximum + datetime.timedelta(days=1)  # today's, built with it
+
+    installed.value = tomorrow
+    installed.value_changed.emit(tomorrow)  # as typing it does: only the calendar refuses it
+    assert installed.log_message == "A pipe can't be installed in the future"
+    installed.value = None
+    installed.value_changed.emit(None)
+    assert installed.log_message == ""
+
+
+#: the pipe table and view of a study saved before pipes had an installation date
+_VERSION_1 = """
+    CREATE TABLE material(name TEXT PRIMARY KEY, density REAL NOT NULL);
+    INSERT INTO material(name, density) VALUES ('Steel', 7850);
+    CREATE TABLE pipe(
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, material TEXT NOT NULL,
+        radius REAL NOT NULL, thickness REAL NOT NULL, length REAL NOT NULL
+    );
+    INSERT INTO pipe(name, material, radius, thickness, length)
+        VALUES ('Main line', 'Steel', 50, 5, 6);
+    CREATE VIEW pipe_mass AS SELECT pipe.name, material, radius, thickness, length,
+        3.141592653589793 * (radius * radius - (radius - thickness) * (radius - thickness))
+            * 1e-6 * length * material.density AS mass
+    FROM pipe JOIN material ON material.name = pipe.material;
+    PRAGMA user_version = 1;
+"""
+
+
+def test_a_study_from_before_the_installation_dates_opens_its_pipes_without_one(
+    app: App, tmp_path: Path
+) -> None:
+    data = tmp_path / "data.sqlite"
+    db = sqlite3.connect(data)
+    db.executescript(_VERSION_1)
+    db.close()
+    path = tmp_path / "old.pipes"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(VIEWS_NAME, json.dumps(app.main_view.state_data()))
+        archive.write(data, app.model.data_name)
+
+    app.main_view.file_view.filepath = path
+    app.main_view.file_menu.open_file.triggered.emit()
+
+    assert _listed(app) == [
+        [
+            "Main line · Steel · 70.3 kg",
+            "Outer radius 50 mm, wall 5 mm, 6 m long, installed on an unknown date",
+        ]
+    ]
+    (main_line,) = _expanders(app)
+    main_line.buttons.edit.clicked.emit()
+    app.main_view.edit_dialog.form.installed.value = datetime.date(2020, 5, 4)
+    app.main_view.edit_dialog.accept()
+    assert _listed(app)[0][1].endswith("installed 05/04/2020")  # the column added
 
 
 def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(

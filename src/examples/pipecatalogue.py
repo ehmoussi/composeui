@@ -2,18 +2,22 @@
 
 `python -m examples.pipecatalogue --backend qt` (or `textual`, or `web`). The pipes are
 rows of the model's database, not view state: the catalogue lists them, an expander each,
-through a query filtered by material and radius, with their mass computed by a SQL view
-joining each pipe to its material, and beside them in a tree, under their material:
-selecting a pipe there expands its expander. A form in the sidebar adds a pipe, which the
-catalogue beside it lists at once; each pipe's Edit button changes it in a form dialog, and its
-Delete button removes it. The database checks every pipe added or changed (a name,
-positive dimensions, a wall thinner than the radius) and File saves and opens the views
-and the database together.
+through a query filtered by material, radius and installation date, with their mass
+computed by a SQL view joining each pipe to its material, and beside them in a tree, under
+their material: selecting a pipe there expands its expander. A form in the sidebar adds a
+pipe, which the catalogue beside it lists at once; each pipe's Edit button changes it in a
+form dialog, and its Delete button removes it. The database checks every pipe added or
+changed (a name, positive dimensions, a wall thinner than the radius) and File saves and
+opens the views and the database together; a study saved before pipes had an installation
+date gets the column, empty, as it opens (`PipeCatalogueModel.migrations`).
 """
 
+import datetime
 import enum
 import functools
+import sqlite3
 from collections.abc import Hashable
+from types import MappingProxyType
 from typing import ClassVar, Optional
 
 import attrs
@@ -32,6 +36,7 @@ from composeui.core.view import (
     FormView,
     HorizontalView,
     LabelRowComboboxView,
+    LabelRowDateInputView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelView,
@@ -44,6 +49,7 @@ from composeui.core.view import (
     View,
     child,
     define_view,
+    format_date,
 )
 
 
@@ -66,6 +72,8 @@ class Pipe:
     thickness: Optional[float]
     #: m
     length: Optional[float]
+    #: None while unknown
+    installed: Optional[datetime.date] = None
 
 
 @attrs.define
@@ -77,6 +85,7 @@ class ListedPipe:
     length: float
     #: kg
     mass: float
+    installed: Optional[datetime.date] = None
 
 
 @attrs.define
@@ -86,6 +95,8 @@ class Shown:
     material: Optional[Material]
     #: mm
     min_radius: Optional[float]
+    #: a pipe installed on an unknown date is left out once it's set
+    installed_from: Optional[datetime.date] = None
 
 
 @attrs.define
@@ -95,8 +106,26 @@ class Total:
     mass: float
 
 
+#: the pipes with their mass: their cross-section (mm², hence the 1e-6) times their length
+#: and density
+_PIPE_MASS = """
+    CREATE VIEW pipe_mass AS
+    SELECT pipe.name, material, radius, thickness, length, installed,
+        3.141592653589793 * (radius * radius - (radius - thickness) * (radius - thickness))
+            * 1e-6 * length * material.density AS mass
+    FROM pipe JOIN material ON material.name = pipe.material;
+"""
+#: the pipes a query keeps, `Shown`'s fields as its parameters, None keeping every pipe
+_SHOWN = """
+    (:material IS NULL OR material = :material)
+    AND (:min_radius IS NULL OR radius >= :min_radius)
+    AND (:installed_from IS NULL OR installed >= :installed_from)
+"""
+
+
 class Pipes(SqliteTable):
-    create = """
+    create = (
+        """
         CREATE TABLE material(name TEXT PRIMARY KEY, density REAL NOT NULL);  -- kg/m³
         INSERT INTO material(name, density) VALUES
             ('Steel', 7850), ('Aluminium', 2700), ('Copper', 8960), ('PVC', 1380);
@@ -108,16 +137,14 @@ class Pipes(SqliteTable):
             radius REAL NOT NULL CONSTRAINT positive_radius CHECK (radius > 0),
             thickness REAL NOT NULL CONSTRAINT positive_thickness CHECK (thickness > 0),
             length REAL NOT NULL CONSTRAINT positive_length CHECK (length > 0),
+            -- as ISO 8601 writes it, as SQLite's own dates, sorting as the dates do
+            installed TEXT
+                CONSTRAINT dated CHECK (installed IS NULL OR date(installed) = installed),
             CONSTRAINT thin_wall CHECK (thickness < radius)
         );
-
-        -- the pipe's cross-section (mm², hence the 1e-6) times its length and density
-        CREATE VIEW pipe_mass AS
-        SELECT pipe.name, material, radius, thickness, length,
-            3.141592653589793 * (radius * radius - (radius - thickness) * (radius - thickness))
-                * 1e-6 * length * material.density AS mass
-        FROM pipe JOIN material ON material.name = pipe.material;
-    """
+        """
+        + _PIPE_MASS
+    )
 
     #: why the table refused a pipe, by the constraint the error names
     refusals: ClassVar[dict[str, str]] = {
@@ -126,35 +153,30 @@ class Pipes(SqliteTable):
         "NOT NULL": "every dimension is needed",
         "positive_": "its dimensions must be positive",
         "thin_wall": "its wall must be thinner than its radius",
+        "dated": "its installation date isn't a date",
     }
 
     def add(self, pipe: Pipe) -> None:
         """Add a pipe; raises `RefusedError` for one the table refuses."""
         with self.connection() as db:
             db.execute(
-                "INSERT INTO pipe(name, material, radius, thickness, length)"
-                " VALUES (:name, :material, :radius, :thickness, :length)",
+                "INSERT INTO pipe(name, material, radius, thickness, length, installed)"
+                " VALUES (:name, :material, :radius, :thickness, :length, :installed)",
                 as_parameters(pipe),
             )
-
-    # each query below takes `Shown`'s fields as parameters, None matching every pipe
 
     def find(self, shown: Shown) -> list[ListedPipe]:
         return self.fetch(
             ListedPipe,
-            """SELECT * FROM pipe_mass
-            WHERE (:material IS NULL OR material = :material)
-                AND (:min_radius IS NULL OR radius >= :min_radius)
-            ORDER BY name""",
+            f"SELECT * FROM pipe_mass WHERE {_SHOWN} ORDER BY name",  # noqa: S608 (the app's own SQL)
             as_parameters(shown),
         )
 
     def total(self, shown: Shown) -> Total:
         total = self.fetch_one(
             Total,
-            """SELECT count(*) AS count, total(mass) AS mass FROM pipe_mass
-            WHERE (:material IS NULL OR material = :material)
-                AND (:min_radius IS NULL OR radius >= :min_radius)""",
+            # the app's own SQL, the user's values as parameters
+            f"SELECT count(*) AS count, total(mass) AS mass FROM pipe_mass WHERE {_SHOWN}",  # noqa: S608
             as_parameters(shown),
         )
         assert total is not None  # an aggregate always has a row
@@ -171,7 +193,8 @@ class Pipes(SqliteTable):
         with self.connection() as db:
             db.execute(
                 "UPDATE pipe SET name = :name, material = :material, radius = :radius,"
-                " thickness = :thickness, length = :length WHERE name = :old_name",
+                " thickness = :thickness, length = :length, installed = :installed"
+                " WHERE name = :old_name",
                 {**as_parameters(pipe), "old_name": name},
             )
 
@@ -184,16 +207,24 @@ class Pipes(SqliteTable):
         """Remove the pipes `shown` names; return how many."""
         with self.connection() as db:
             removed = db.execute(
-                """DELETE FROM pipe
-                WHERE (:material IS NULL OR material = :material)
-                    AND (:min_radius IS NULL OR radius >= :min_radius)""",
+                f"DELETE FROM pipe WHERE {_SHOWN}",  # noqa: S608 (the app's own SQL)
                 as_parameters(shown),
             )
             return removed.rowcount
 
 
+def _add_installation_dates(db: sqlite3.Connection) -> None:
+    """Bring a study from before pipes had an installation date: none of its pipes has one."""
+    db.execute("ALTER TABLE pipe ADD COLUMN installed TEXT")
+    db.execute("DROP VIEW pipe_mass")
+    db.execute(_PIPE_MASS)
+
+
 class PipeCatalogueModel(SqliteModel):
     pipes = table(Pipes)
+    # 2: the pipes' installation dates
+    schema_version = 2
+    migrations = MappingProxyType({1: _add_installation_dates})
 
 
 @define_view
@@ -226,12 +257,31 @@ class MaterialRowView(LabelRowComboboxView[Material]):
 
 
 @define_view
+class InstalledRowView(LabelRowDateInputView):
+    """When the pipe was installed, if known: never in the future."""
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = "Installed on"
+        self.placeholder = "Unknown"
+        # the calendar offers no later day; typed, a later one is refused below
+        self.maximum = datetime.datetime.now().astimezone().date()
+        self.set_validator(self._check_installed, self.value_changed)
+
+    def _check_installed(self) -> Optional[str]:
+        if self.value is not None and self.maximum is not None and self.value > self.maximum:
+            return "A pipe can't be installed in the future"
+        return None
+
+
+@define_view
 class PipeFormView(FormView):
     name: NameRowView = Factory(NameRowView)
     material: MaterialRowView = Factory(MaterialRowView)
     radius: DimensionRowView = Factory(DimensionRowView)
     thickness: DimensionRowView = Factory(DimensionRowView)
     length: DimensionRowView = Factory(DimensionRowView)
+    installed: InstalledRowView = Factory(InstalledRowView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -249,6 +299,7 @@ class PipeFormView(FormView):
             radius=self.radius.value,
             thickness=self.thickness.value,
             length=self.length.value,
+            installed=self.installed.value,
         )
 
 
@@ -269,12 +320,16 @@ class ShownFormView(FormView):
     min_radius: DimensionRowView = child(
         DimensionRowView, label="Outer radius at least (mm)", placeholder="Any"
     )
+    installed_from: LabelRowDateInputView = child(
+        LabelRowDateInputView, label="Installed on or after", placeholder="Any"
+    )
 
     def shown(self) -> Shown:
         material = self.material.value
         return Shown(
             material=Material(material) if material else None,
             min_radius=self.min_radius.value,
+            installed_from=self.installed_from.value,
         )
 
 
@@ -311,8 +366,15 @@ class PipeList(ListView[ListedPipe]):
         assert isinstance(view, PipeExpander)
         # what tells the pipes apart at a glance, the rest once expanded
         view.title = f"{item.name} · {item.material.value} · {item.mass:.1f} kg"
+        # the date in the language's format: ComposeUI's text for it, which catalogs translate
+        installed = (
+            "installed on an unknown date"
+            if item.installed is None
+            else f"installed {format_date(item.installed, self.tr('MM/dd/yyyy'))}"
+        )
         view.details.text = (
-            f"Outer radius {item.radius:g} mm, wall {item.thickness:g} mm, {item.length:g} m long"
+            f"Outer radius {item.radius:g} mm, wall {item.thickness:g} mm,"
+            f" {item.length:g} m long, {installed}"
         )
         return True
 
@@ -439,6 +501,7 @@ class PipeCatalogueMainView(MainView):
         shown = self.catalogue.shown
         shown.material.value_changed.connect(self.show_pipes)
         shown.min_radius.editing_finished.connect(self.show_pipes)
+        shown.installed_from.value_changed.connect(self.show_pipes)
 
     def show_pipes(self, model: PipeCatalogueModel) -> None:
         """List the pipes the filter shows, in the tree too, and their total."""
@@ -467,6 +530,7 @@ class PipeCatalogueMainView(MainView):
         form.material.value = pipe.material
         form.radius.value, form.thickness.value = pipe.radius, pipe.thickness
         form.length.value = pipe.length
+        form.installed.value = pipe.installed
         self.edit_dialog.edit(name)
 
     def _save_edited_pipe(self, *, model: PipeCatalogueModel) -> None:
