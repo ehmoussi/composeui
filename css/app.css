@@ -131,13 +131,17 @@ body {
 
 /* the sidebar (`WebSidebarRenderer`): beside the pages on a wide screen, under the
    sticky header (3.5rem, `min-h-14`) and as tall as the window below it, scrolling on
-   its own, the fixed status bar over its bottom; on a phone a drawer over the whole
-   page, header and status bar included. A hidden sidebar takes its button along. */
+   its own, the fixed status bar over its bottom, and gone while retracted (its button
+   in the header brings it back); on a phone a drawer over the whole page, header and
+   status bar included. A hidden sidebar takes its button along. */
 @media (width >= 64rem) {
   .cui-drawer > .drawer-side {
     top: 3.5rem;
     z-index: 10;
     height: calc(100dvh - 3.5rem);
+  }
+  .cui-drawer > .drawer-side:has(> .cui-sidebar[data-retracted]) {
+    display: none;
   }
 }
 body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {

@@ -806,7 +806,7 @@ def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None
     assert spanning["width"] > 2 * first["width"]
 
 
-def test_a_sidebar_is_beside_the_pages_and_a_drawer_on_a_phone(
+def test_a_sidebar_retracts_beside_the_pages_and_is_a_drawer_on_a_phone(
     browser: Browser, sidebar_base_url: str
 ) -> None:
     context = browser.new_context(base_url=sidebar_base_url)
@@ -817,12 +817,24 @@ def test_a_sidebar_is_beside_the_pages_and_a_drawer_on_a_phone(
     page.set_viewport_size({"width": 1200, "height": 600})
     page.goto("/")
     expect(create).to_be_visible()
-    expect(toggle).to_be_hidden()  # no drawer: the sidebar always shows
+    expect(toggle).to_have_attribute("aria-expanded", "true")
     submit = page.get_by_role("button", name="Submit")
     assert _box(create)["x"] + _box(create)["width"] < _box(submit)["x"]
     page.get_by_role("link", name="Results").click()
     expect(page.get_by_text("Total: 0")).to_be_visible()
     expect(create).to_be_visible()  # whatever the page
+
+    # retracted by its button, as the server is told: a reload shows it retracted
+    with _posted(page):
+        toggle.click()
+    expect(create).to_be_hidden()
+    expect(toggle).to_have_attribute("aria-expanded", "false")
+    page.reload()
+    expect(create).to_be_hidden()
+    with _posted(page):
+        toggle.click()
+    expect(create).to_be_visible()
+    expect(toggle).to_have_attribute("aria-expanded", "true")
 
     page.set_viewport_size({"width": 400, "height": 700})
     expect(create).to_be_hidden()

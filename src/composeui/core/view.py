@@ -2821,12 +2821,19 @@ class SidebarView(View):
     A field of the main view, not of its router, rather than a view repeated on each page.
     Its view fields are its content, laid out in a column on the window's left: Qt docks
     it, Textual shows it left of the scrolling content, and the web a column left of the
-    pages, a drawer opened from a button in the header on a phone.
+    pages, a drawer opened from a button in the header on a phone. The user retracts it
+    to a narrow strip, and back, with a button (`is_expanded`).
     """
 
     _renderer_key = "sidebar"
 
     #: a heading above the content; none while empty
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    #: the button showing and hiding the drawer on a phone, for screen readers
+    #: the button retracting and expanding the sidebar (opening the drawer on a phone),
+    #: for screen readers and as its tooltip
     toggle_text: str = attrs.field(default=T("Sidebar"), metadata={UI_TEXT: True})
+    #: whether the content shows, else a narrow strip with the button bringing it back.
+    #: Layout, not study data: never saved, loaded or reset
+    is_expanded: bool = attrs.field(default=True, metadata={OMIT: True})
+    #: the user retracted or expanded the sidebar; not emitted when `is_expanded` is set in code
+    toggled: Signal[bool] = attrs.Factory(Signal[bool])

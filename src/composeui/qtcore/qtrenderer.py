@@ -9,7 +9,6 @@ from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
     QAbstractButton,
     QCheckBox,
-    QDockWidget,
     QFileDialog,
     QFormLayout,
     QGridLayout,
@@ -22,7 +21,6 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QStatusBar,
@@ -82,6 +80,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
+from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 
@@ -1551,75 +1550,50 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
             self._view.is_expanded = is_expanded
 
 
-#: pixels a sidebar is wide at least, e.g. room for a form's fields
-_SIDEBAR_MINIMUM_WIDTH = 280
-
-
-class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QDockWidget]):
-    """A dock on the window's left: its title, then its views in a column, scrolling.
-
-    The dock stays where it is: it can't be closed, moved or floated, as the sidebar is
-    part of the app's layout. Its own title bar is left out for the title above the views,
-    as on the other backends.
-    """
+class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
+    """A dock on the window's left: its title and a button retracting it, then its views."""
 
     def __init__(self, view: SidebarView) -> None:
         super().__init__(view)
-        self._title: QLabel | None = None
-        self._refresh_dispatcher.update({"title": self._refresh_title, "toggle_text": self._noop})
+        self._refresh_dispatcher.update(
+            {
+                "title": self._refresh_title,
+                "toggle_text": self._refresh_toggle_text,
+                "is_expanded": self._refresh_is_expanded,
+            }
+        )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QDockWidget()
-            self._rendered_object.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
-            self._rendered_object.setTitleBarWidget(QWidget())
-            content = QWidget()
-            layout = QVBoxLayout(content)
-            self._title = QLabel()
-            font = self._title.font()
-            font.setBold(True)
-            self._title.setFont(font)
-            # inset like the views under it, as a window's column of content
-            title_inset = QVBoxLayout()
-            style = self._title.style()
-            title_inset.setContentsMargins(
-                style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin),
-                0,
-                style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin),
-                0,
-            )
-            title_inset.addWidget(self._title)
-            layout.addLayout(title_inset)
+            self._rendered_object = QSidebar()
             for view in self._view.children_views:
-                _add_content_widget(layout, view)
-            # height to spare goes below the views, not between them
-            layout.addStretch()
-            scroll = QScrollArea()
-            scroll.setMinimumWidth(_SIDEBAR_MINIMUM_WIDTH)
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-            # as wide as its content: no horizontal scroll bar
-            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll.setWidget(content)
-            self._rendered_object.setWidget(scroll)
+                _add_content_widget(self._rendered_object.content_layout, view)
+            self._rendered_object.finish_content()
+            # first, so the view's callbacks see the new state
+            self._rendered_object.expanded_changed.connect(self._update_expanded)
+            self._view.toggled.add_qt_signal(self._rendered_object.expanded_changed)
             self.refresh()
 
-    @property
-    def title_label(self) -> QLabel | None:
-        return self._title
-
-    def _refresh_title(self, _view: SidebarView, _rendered_object: QDockWidget, value: str) -> None:
-        if self._title is not None:
-            self._title.setText(value)
-            self._title.setVisible(value != "")
+    @staticmethod
+    def _refresh_title(_view: SidebarView, rendered_object: QSidebar, value: str) -> None:
+        rendered_object.set_title(value)
 
     @staticmethod
-    def _noop(_view: SidebarView, _rendered_object: QDockWidget, _value: Any) -> None:
-        pass  # a dock always shows: no button shows or hides it
+    def _refresh_toggle_text(_view: SidebarView, rendered_object: QSidebar, value: str) -> None:
+        rendered_object.toggle.setToolTip(value)
+        rendered_object.toggle.setAccessibleName(value)
 
     @staticmethod
-    def _update_state(view: SidebarView, rendered_object: QDockWidget) -> None:
-        pass  # a sidebar has no user-editable state of its own
+    def _refresh_is_expanded(_view: SidebarView, rendered_object: QSidebar, value: bool) -> None:
+        rendered_object.set_expanded(value)
+
+    @staticmethod
+    def _update_state(view: SidebarView, rendered_object: QSidebar) -> None:
+        view.is_expanded = rendered_object.is_expanded()
+
+    def _update_expanded(self, is_expanded: bool) -> None:
+        with self.stop_refresh():
+            self._view.is_expanded = is_expanded
 
 
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):

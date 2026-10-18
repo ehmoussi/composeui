@@ -2546,8 +2546,10 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
     """An `<aside>`: its title, then its views in a column, left of the pages.
 
     The main renderer wraps it in a daisyUI drawer (`drawer_html`): a column beside the
-    pages on a wide screen, and on a phone a drawer over them, shown and hidden by a
-    button in the header (`toggle_html`; see `page.py`) and closed by a click beside it.
+    pages on a wide screen, and on a phone a drawer over them, closed by a click beside
+    it. A button in the header (`toggle_html`; see `page.py`) retracts and expands the
+    column, which the browser does before posting it (`toggle`), like every control
+    never swapped back after one; on a phone, it shows and hides the drawer instead.
     The button isn't in the aside's fragment: a swap of the aside brings it along.
     """
 
@@ -2556,7 +2558,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
     def __init__(self, view: SidebarView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
-            {"title": self._mark_dirty, "toggle_text": self._mark_dirty}
+            dict.fromkeys(("title", "toggle_text", "is_expanded"), self._mark_dirty)
         )
 
     def render(self) -> None:
@@ -2577,24 +2579,45 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             if isinstance(view.renderer, WebRenderer)
         )
         name = title or html.escape(self._view.toggle_text)
+        retracted = "" if self._view.is_expanded else " data-retracted"
         # bottom padding keeps the last view clear of the fixed status bar
         aside = (
-            f'<aside {self._root_attributes(oob=oob)} aria-label="{name}"'
+            f'<aside {self._root_attributes(oob=oob)}{retracted} aria-label="{name}"'
             ' class="cui-sidebar flex min-h-full w-80 max-w-[85vw] flex-col gap-6 border-r'
             f' border-base-300 bg-base-100 p-4 pb-20">{heading}{content}</aside>'
         )
         return aside + self.toggle_html(oob=True) if oob else aside
 
     def toggle_html(self, *, oob: bool = False) -> str:
-        """Get the header's button showing and hiding the drawer, only on a phone."""
+        """Get the header's button retracting and expanding the sidebar.
+
+        `aria-expanded` tells whether the column shows; the page's script keeps it
+        telling whether the drawer shows on a phone.
+        """
         swap = ' hx-swap-oob="true"' if oob else ""
+        expanded = "true" if self._view.is_expanded else "false"
+        text = html.escape(self._view.toggle_text)
+        # posted by the page's script on a wide screen only, once the column has changed
+        is_expanded = f'!document.getElementById("{self.widget_id}").hasAttribute("data-retracted")'
         return (
             f'<button id="{self.widget_id}-toggle" type="button"{swap}'
-            ' class="btn btn-ghost btn-square btn-sm lg:hidden"'
+            ' class="btn btn-ghost btn-square btn-sm"'
             f' data-sidebar-toggle="{self.drawer_id}" aria-controls="{self.widget_id}"'
-            f' aria-expanded="false" aria-label="{html.escape(self._view.toggle_text)}"'
-            f' title="{html.escape(self._view.toggle_text)}">{_icon("sidebar", "size-5")}</button>'
+            f' aria-expanded="{expanded}" aria-label="{text}" title="{text}"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="sidebar-toggle"'
+            f' hx-vals=\'js:{{event: "toggle", expanded: {is_expanded}}}\' hx-swap="none">'
+            f"{_icon('sidebar', 'size-5')}</button>"
         )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "toggle":
+            super().dispatch(event, form)
+        is_expanded = form.get("expanded") == "true"
+        if is_expanded == self._view.is_expanded:
+            return
+        with self.stop_refresh():
+            self._view.is_expanded = is_expanded
+        self._view.toggled.emit(is_expanded)
 
     def drawer_html(self, content: str) -> str:
         """Lay out `content`, the pages' column, beside the sidebar, in a drawer on a phone."""
