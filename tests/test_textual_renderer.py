@@ -27,7 +27,7 @@ from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 
 from composeui.core import chartimage
-from composeui.core.application import _add_reference_to_signals
+from composeui.core.application import ModelApplication, _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
     ActionView,
@@ -67,6 +67,10 @@ from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedCont
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.batman import BatmanMainView
+from examples.pipecatalogue import Material as CatalogueMaterial
+from examples.pipecatalogue import Pipe as CataloguePipe
+from examples.pipecatalogue import PipeCatalogueMainView, PipeCatalogueModel
+from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
@@ -1026,6 +1030,41 @@ async def test_a_form_dialog_s_ok_follows_its_form_s_checks() -> None:
         await pilot.pause()
         assert app.screen is not screen
         assert view.pipe.text == "Return, 12 m"
+
+
+@pytest.mark.asyncio
+async def test_a_form_dialog_s_form_gets_its_state_once_its_screen_shows() -> None:
+    """Its widgets mount with its screen, not the app: a `Select` takes its options only then."""
+    app_views = ModelApplication(
+        build_main_view=PipeCatalogueMainView,
+        build_model=PipeCatalogueModel,
+        setup_model=PipeCatalogueMainView.connect_model,
+    )
+    app_views.model.pipes.add(CataloguePipe("Main line", CatalogueMaterial.COPPER, 50.0, 5.0, 6.0))
+    view = app_views.main_view
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    material = _field_widget(view.edit_dialog.form.material.renderer)
+    assert isinstance(material, ComposeCombobox)
+
+    async with app.run_test(size=(120, 40)) as pilot:  # the app starts, its dialog closed
+        await pilot.pause()
+        (pipe,) = view.catalogue.pipes.item_views
+        assert isinstance(pipe, CataloguePipeExpander)
+        pipe.is_expanded = True
+        await pilot.pause()
+        assert isinstance(pipe.buttons.edit.renderer, TextualWidgetRenderer)
+        edit = pipe.buttons.edit.renderer.widget
+        assert edit is not None
+
+        await pilot.click(edit)
+        await pilot.pause()
+
+        assert isinstance(app.screen, ComposeFormDialog)
+        assert material.value == CatalogueMaterial.COPPER
+    app_views.model.close()
 
 
 @pytest.mark.asyncio

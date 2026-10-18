@@ -7,7 +7,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
-from composeui.core.signal import Signal
+from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -62,6 +62,8 @@ class ComposeFormDialog(ModalScreen[None]):
         self.accept_button = Button("", variant="primary", id="accept")
         self.reject_button = Button("", id="reject")
         self.answered: Signal[str] = Signal()
+        #: the screen's widgets are mounted, its form's among them: once, as it's installed
+        self.mounted: SignalNoArgs = SignalNoArgs()
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
@@ -71,6 +73,9 @@ class ComposeFormDialog(ModalScreen[None]):
             with Horizontal():
                 yield self.reject_button
                 yield self.accept_button
+
+    def on_mount(self) -> None:
+        self.mounted.emit()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
