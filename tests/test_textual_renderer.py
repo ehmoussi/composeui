@@ -845,6 +845,45 @@ async def test_a_sidebar_is_a_column_left_of_the_pages_whatever_the_page() -> No
 
 
 @pytest.mark.asyncio
+async def test_a_sidebar_retracts_to_a_strip_by_its_arrow_and_back() -> None:
+    view = SidebarMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    widgets = [
+        renderer.widget
+        for renderer in (view.sidebar.renderer, view.sidebar.create.renderer)
+        if isinstance(renderer, TextualWidgetRenderer)
+    ]
+    sidebar, create = widgets
+    assert isinstance(sidebar, ComposeSidebar)
+    toggles: list[bool] = []
+    view.sidebar.toggled.connect(toggles.append)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        width = sidebar.region.width
+        await pilot.click(sidebar.toggle)
+        await pilot.pause()
+        assert (view.sidebar.is_expanded, toggles) == (False, [False])
+        assert create.region.area == 0
+        assert sidebar.region.width < width / 4  # a strip: the pages take the room
+        assert sidebar.toggle.region.area > 0  # its arrow brings it back
+        assert not sidebar.title.display
+
+        sidebar.toggle.focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert (view.sidebar.is_expanded, toggles) == (True, [False, True])
+        assert create.region.area > 0
+        view.sidebar.is_expanded = False  # set in code: retracted, and not reported
+        await pilot.pause()
+        assert create.region.area == 0
+        assert toggles == [False, True]
+
+
+@pytest.mark.asyncio
 async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
     view = ToolBarMainView()
     _add_reference_to_signals(view, None)

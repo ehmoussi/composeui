@@ -285,9 +285,12 @@ class AppMainView(MainView):
 ```
 
 Qt docks it on the window's left, where the user can't close or move it, Textual shows it
-left of the content, and the web a column left of the pages. On a phone, the web shows it
-as a drawer over the page, opened by a button in the header (named by `toggle_text`) and
-closed by a tap beside it or Escape. In
+left of the content, and the web a column left of the pages. The user retracts it, and
+expands it back, with a button named by `toggle_text`: an arrow in its header on Qt and
+Textual, leaving a narrow strip, and a button in the page header on the web. Code does the
+same with `is_expanded`, and reacts to the user's toggles through `toggled`; whether it's
+retracted is layout, not study data. On a phone, the web shows it as a drawer over the
+page, opened by the header's button and closed by a tap beside it or Escape. In
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py), the sidebar's form adds
 pipes to the catalogue beside it.
 

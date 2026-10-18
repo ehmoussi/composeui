@@ -2218,6 +2218,29 @@ def test_a_sidebar_is_a_drawer_beside_the_pages_whatever_the_page(
     assert _swapped(fragments, f"{aside_id}-toggle").attributes["aria-label"] == "<Panel>"
 
 
+def test_a_sidebar_is_retracted_by_its_button_never_swapped_back(
+    sidebar: tuple[TestClient, SidebarMainView],
+) -> None:
+    client, view = sidebar
+    renderer = view.sidebar.renderer
+    assert isinstance(renderer, WebRenderer)
+    aside_id = renderer.widget_id
+    toggles: list[bool] = []
+    view.sidebar.toggled.connect(toggles.append)
+    toggle = _element(client.get("/").text, f"{aside_id}-toggle").attributes
+    assert (toggle["hx-post"], toggle["aria-expanded"]) == (f"/widget/{aside_id}", "true")
+
+    fragments = handle_event(renderer, "toggle", {"expanded": "false"})
+    assert (view.sidebar.is_expanded, toggles) == (False, [False])
+    assert aside_id not in fragments  # the browser retracted it already
+    handle_event(renderer, "toggle", {"expanded": "false"})
+    assert toggles == [False]
+    # a page of the session shows it retracted
+    page = client.get("/").text
+    assert "data-retracted" in _element(page, aside_id).attributes
+    assert _element(page, f"{aside_id}-toggle").attributes["aria-expanded"] == "false"
+
+
 @pytest.fixture
 def jobs() -> Iterator[tuple[TestClient, JobsMainView]]:
     """Serve an app with a row of metrics; yield a client and its main view."""

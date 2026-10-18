@@ -62,12 +62,13 @@ from composeui.core.view import (
     Series,
     replace_cell,
 )
-from composeui.qtcore.qtrenderer import QtActionRenderer, QtSidebarRenderer, QtWidgetRenderer
+from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmetric import QMetric
+from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
@@ -811,26 +812,51 @@ def test_a_sidebar_is_docked_left_of_the_pages_whatever_the_page(qtbot: QtBot) -
     assert isinstance(window, QMainWindow)
     qtbot.addWidget(window)
     dock = _widget(view.sidebar)
-    assert isinstance(dock, QDockWidget)
+    assert isinstance(dock, QSidebar)
     assert window.dockWidgetArea(dock) == Qt.DockWidgetArea.LeftDockWidgetArea
     # part of the layout: the user can't close, move or float it
     assert dock.features() == QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
     create = _widget(view.sidebar.create)
     assert dock.isAncestorOf(create)
-    assert isinstance(view.sidebar.renderer, QtSidebarRenderer)
-    title = view.sidebar.renderer.title_label
-    assert title is not None
     window.resize(900, 500)
     window.show()
-    assert title.text() == "New record"
+    assert dock.title.text() == "New record"
     assert dock.geometry().right() < window.centralWidget().geometry().left()
 
     view.router.navigate("results")
     assert create.isVisible()  # still beside the other page
     view.sidebar.title = ""
-    assert not title.isVisible()  # no empty heading
+    assert not dock.title.isVisible()  # no empty heading
     view.sidebar.is_visible = False
     assert not dock.isVisible()
+
+
+def test_a_sidebar_retracts_to_a_strip_by_its_button_and_back(qtbot: QtBot) -> None:
+    view = SidebarMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    dock = _widget(view.sidebar)
+    assert isinstance(dock, QSidebar)
+    create = _widget(view.sidebar.create)
+    toggles: list[bool] = []
+    view.sidebar.toggled.connect(toggles.append)
+    window.resize(900, 500)
+    window.show()
+    qtbot.waitExposed(window)
+    width = dock.width()
+    assert dock.toggle.toolTip() == "Sidebar"
+
+    qtbot.mouseClick(dock.toggle, Qt.MouseButton.LeftButton)
+    assert (view.sidebar.is_expanded, toggles) == (False, [False])
+    assert not create.isVisible()
+    assert dock.toggle.isVisible()  # the strip's button brings it back
+    qtbot.waitUntil(lambda: dock.width() < width / 4)  # the pages take the room
+
+    view.sidebar.is_expanded = True  # set in code: expanded, and not reported
+    assert create.isVisible()
+    assert toggles == [False]
+    qtbot.waitUntil(lambda: dock.width() == width)  # its width before
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

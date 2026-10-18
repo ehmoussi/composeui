@@ -538,20 +538,38 @@ document.addEventListener("input", function (event) {
   if (!("slider" in slider.dataset)) return;
   slider.parentElement.querySelector("output").value = slider.value;
 });
-/* the sidebar's drawer on a phone (see `WebSidebarRenderer`): its button in the header
-   shows and hides it, through the drawer's checkbox, which a click beside the drawer
-   unchecks too; the button tells screen readers whether it shows. Escape hides it. */
+/* the sidebar (see `WebSidebarRenderer`): on a wide screen, its button in the header
+   retracts and expands the column, then posts its state; on a phone, it shows and hides
+   the drawer, through the drawer's checkbox, which a click beside the drawer unchecks
+   too. The button tells screen readers whether the column, or the drawer, shows; Escape
+   hides the drawer. */
+var wideScreen = window.matchMedia("(width >= 64rem)");
 function sidebarDrawer(toggle) {
   return document.getElementById(toggle.dataset.sidebarToggle);
 }
+function syncSidebarToggles() {
+  document.querySelectorAll("[data-sidebar-toggle]").forEach(function (toggle) {
+    var sidebar = document.getElementById(toggle.getAttribute("aria-controls"));
+    var drawer = sidebarDrawer(toggle);
+    if (sidebar === null || drawer === null) return;
+    var shows = wideScreen.matches ? !sidebar.hasAttribute("data-retracted") : drawer.checked;
+    toggle.setAttribute("aria-expanded", String(shows));
+  });
+}
+wideScreen.addEventListener("change", syncSidebarToggles);
 document.addEventListener("click", function (event) {
   var toggle = event.target.closest("[data-sidebar-toggle]");
-  if (toggle !== null) sidebarDrawer(toggle).click();
+  if (toggle === null) return;
+  if (wideScreen.matches) {
+    document.getElementById(toggle.getAttribute("aria-controls")).toggleAttribute("data-retracted");
+    htmx.trigger(toggle, "sidebar-toggle");
+  } else {
+    sidebarDrawer(toggle).click();
+  }
+  syncSidebarToggles();
 });
 document.addEventListener("change", function (event) {
-  if (!event.target.classList.contains("drawer-toggle")) return;
-  var toggle = document.querySelector('[data-sidebar-toggle="' + event.target.id + '"]');
-  if (toggle !== null) toggle.setAttribute("aria-expanded", String(event.target.checked));
+  if (event.target.classList.contains("drawer-toggle")) syncSidebarToggles();
 });
 document.addEventListener("keydown", function (event) {
   if (event.key !== "Escape") return;
@@ -602,8 +620,10 @@ document.addEventListener("toggle", placeHelp, true);
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   syncCharts();
+  syncSidebarToggles();
   new MutationObserver(function () {
     syncInvalidFields();
+    syncSidebarToggles();
     openDialogs();
     syncPage();
     syncCharts();
