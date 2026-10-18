@@ -453,15 +453,19 @@ function syncInvalidFields() {
 }
 /* opens each dialog the server shows: one swapped in arrives closed, and the browser
    opens a modal `<dialog>` only from a script. Each element opens once: a button closes
-   its dialog before the server's answer swaps it closed too. */
+   its dialog before the server's answer swaps it closed too. htmx processes it first:
+   this runs as soon as it lands, maybe before htmx would, and Escape must post its
+   `cancel` however soon it comes. */
 function openDialogs() {
   document.querySelectorAll("dialog[data-dialog]:not([hidden]):not([data-opened])").forEach(
     function (dialog) {
       dialog.dataset.opened = "";
+      htmx.process(dialog);
       dialog.showModal();
     },
   );
 }
+
 /* the answer to a request whose element a swap has since replaced (e.g. a row clicked
    before the answer to a click on another row) still swaps its fragments: htmx looks
    for them from the element, which is no longer in the page. Whether it is, is read

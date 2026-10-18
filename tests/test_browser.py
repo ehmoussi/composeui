@@ -695,6 +695,15 @@ def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) 
     expect(dialog).to_be_hidden()
     expect(name).to_be_visible()
 
+    # Escape as soon as it shows: it posts all the same
+    with _posted(page):
+        page.keyboard.press("Alt+Shift+KeyL")
+    expect(dialog).to_be_visible()
+    with _posted(page):
+        page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(name).to_be_visible()
+
     with _posted(page):
         page.keyboard.press("Alt+Shift+KeyL")
     with _posted(page):
