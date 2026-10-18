@@ -226,6 +226,8 @@ class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
             self._rendered_object.textChanged.connect(self._update_text)
+            # Qt reports an edit before the change: the view has the text first
+            self._rendered_object.textEdited.connect(self._update_text)
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
@@ -277,6 +279,8 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
             validator = QDoubleValidator()
             self._rendered_object.setValidator(validator)
             self._rendered_object.textChanged.connect(self._update_text)
+            # Qt reports an edit before the change: the view has the value first
+            self._rendered_object.textEdited.connect(self._update_text)
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
@@ -381,7 +385,10 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
             self._rendered_object.valueChanged.connect(self._update_value)
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
-            self._view.text_edited.add_qt_signal(self._line_edit(self._rendered_object).textEdited)
+            line_edit = self._line_edit(self._rendered_object)
+            # Qt reports an edit before the spin box reads it: the view has the value first
+            line_edit.textEdited.connect(self._update_edited)
+            self._view.text_edited.add_qt_signal(line_edit.textEdited)
             self.refresh()
 
     @staticmethod
@@ -432,6 +439,22 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
     def _update_value(self, value: int) -> None:
         with self.stop_refresh():
             self._view.value = value
+
+    def _update_edited(self, _text: str) -> None:
+        """Give the view the value edited, a whole number in range, before the spin box does."""
+        if self._rendered_object is None:
+            return
+        text = self._rendered_object.cleanText()
+        if text == "":
+            with self.stop_refresh():
+                self._view.value = None
+            return
+        try:
+            value = int(text)
+        except ValueError:
+            return  # transient text, e.g. "-": the spin box keeps its value
+        if self._rendered_object.minimum() <= value <= self._rendered_object.maximum():
+            self._update_value(value)
 
 
 class SliderViewLike(ViewLike, Protocol):
