@@ -1077,8 +1077,7 @@ class SliderMixin:
 class SliderView(SliderMixin, View):
     """A whole number picked by dragging a handle, e.g. a number of workers.
 
-    Its value is shown beside the track, so that its row is no taller than a field's; on
-    Textual above the handle.
+    Its value is shown beside the track, so that its row is no taller than a field's.
     """
 
     _renderer_key = "slider"

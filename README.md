@@ -161,8 +161,8 @@ tells the main action from the others and from one destroying something.
 where a number out of range isn't refused (Textual marks it), so validate it.
 `SliderView` picks a whole number by dragging a handle, e.g. a number of workers: from
 `minimum` to `maximum` by `step`, its value shown beside the track, so its row is no
-taller than the others (above the handle on Textual); the handle only stops on a step, and
-`value_changed` reports the user's moves.
+taller than the others; the handle only stops on a step, and `value_changed` reports the
+user's moves.
 `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`, or
 a bar that only shows the task runs while `maximum` is `None`.
 `MetricView` shows a figure read at a glance, e.g. the jobs running: its `label`, its
