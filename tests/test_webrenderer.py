@@ -664,7 +664,7 @@ def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps(
     # the last step, short of 16, is the input's maximum, so the browser never stops past it
     assert [range_input[name] for name in ("min", "max", "step", "value")] == ["2", "14", "3", "5"]
     assert range_input["aria-labelledby"] == label.text_id
-    assert slider.text == "5"  # the value above the handle
+    assert slider.text == "5"  # the value beside the track
 
     fragments = handle_event(field, "input", {"value": "8"})
     assert (workers.value, moves) == (8, [8])

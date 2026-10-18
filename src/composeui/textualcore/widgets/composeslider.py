@@ -10,12 +10,16 @@ from composeui.core.signal import Signal
 
 
 class ComposeSlider(Widget, can_focus=True):
-    """A slider from `first` by `step`, its value on the line above the handle.
+    """A slider from `first` by `step`, its value on the right of the track.
 
     Textual has none. Its positions count steps (0 to `last`), so the handle only stops
     on a step. The arrow keys move it a step, Page Up/Down a tenth of the way, Home/End
     to an end; a click or a drag moves it under the mouse. `moved` reports the user's
     moves only, as Qt's renderers block their widget's signals while refreshing it.
+
+    Three lines tall, the track on the middle one, as an input's text: a form row is as
+    tall as an input's. The value has a slot as wide as the widest one, so the track
+    keeps its length as the value changes.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -37,11 +41,9 @@ class ComposeSlider(Widget, can_focus=True):
     # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`)
     DEFAULT_CSS = """
     ComposeSlider {
-        height: 2;
+        height: 3;
         width: 1fr;
-        & > .slider--value {
-            text-style: bold;
-        }
+        padding: 1 1;
         & > .slider--filled {
             color: $primary;
         }
@@ -80,21 +82,25 @@ class ComposeSlider(Widget, can_focus=True):
         self.refresh()
 
     def render(self) -> RenderResult:
-        width = self.content_size.width
+        width = self._track_width()
         if width <= 0:
             return ""
         handle = self._handle_column(width)
-        value = str(self.shown_value)
-        left = min(max(0, handle - len(value) // 2), max(0, width - len(value)))
         text = Text(no_wrap=True, overflow="crop")
-        text.append(" " * left)
-        text.append(value, style=self.get_component_rich_style("slider--value"))
-        text.append("\n")
         text.append("━" * handle, style=self.get_component_rich_style("slider--filled"))
         text.append("●", style=self.get_component_rich_style("slider--handle"))
         empty = "─" * (width - handle - 1)
         text.append(empty, style=self.get_component_rich_style("slider--empty"))
+        value = str(self.shown_value).rjust(self._slot_width())
+        text.append(f" {value}", style=self.get_component_rich_style("slider--value"))
         return text
+
+    def _slot_width(self) -> int:
+        return max(len(str(self.first)), len(str(self.first + self.last * self.step)))
+
+    def _track_width(self) -> int:
+        """Get the track's columns: the content's, less the value's slot and a space."""
+        return self.content_size.width - self._slot_width() - 1
 
     def _handle_column(self, width: int) -> int:
         return 0 if self.last == 0 else round(self.position * (width - 1) / self.last)
@@ -111,18 +117,18 @@ class ComposeSlider(Widget, can_focus=True):
     def on_mouse_down(self, event: events.MouseDown) -> None:
         self._is_dragging = True
         self.capture_mouse()
-        self._move_to_column(event.x)
+        self._move_to_column(event.get_content_offset_capture(self).x)
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
         if self._is_dragging:
-            self._move_to_column(event.x)
+            self._move_to_column(event.get_content_offset_capture(self).x)
 
     def on_mouse_up(self, _event: events.MouseUp) -> None:
         self._is_dragging = False
         self.release_mouse()
 
     def _move_to_column(self, column: int) -> None:
-        width = self.content_size.width
+        width = self._track_width()
         if width > 1:
             self._move_to(round(column * self.last / (width - 1)))
 

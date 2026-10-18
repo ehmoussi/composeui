@@ -145,17 +145,16 @@ async def test_an_int_input_takes_only_whole_numbers_marking_those_out_of_range(
         assert widget.has_class("-invalid")  # past 23
 
 
-def _value_above_handle(slider: ComposeSlider) -> tuple[str, int, int]:
-    """Get a slider's value as drawn, its middle's column and its handle's column."""
+def _track_and_value(slider: ComposeSlider) -> tuple[str, str]:
+    """Get a slider's track and its value, as drawn on its one line."""
     rendered = slider.render()
     assert isinstance(rendered, Text)
-    value_line, track = rendered.plain.split("\n")
-    value = value_line.strip()
-    return value, value_line.index(value) + len(value) // 2, track.index("●")
+    track, value = rendered.plain.split()
+    return track, value
 
 
 @pytest.mark.asyncio
-async def test_a_slider_stops_on_its_steps_its_value_drawn_above_the_handle() -> None:
+async def test_a_slider_stops_on_its_steps_its_value_drawn_beside_the_track() -> None:
     view = WorkersMainView()
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
@@ -168,27 +167,34 @@ async def test_a_slider_stops_on_its_steps_its_value_drawn_above_the_handle() ->
     async with app.run_test(size=(80, 24)) as pilot:
         slider = _field_widget(workers.renderer)
         assert isinstance(slider, ComposeSlider)
+        retries = _field_widget(view.form.retries.renderer)
         await pilot.pause()
-        value, middle, handle = _value_above_handle(slider)
-        assert (value, middle) == ("5", handle)
-        first_handle = handle
+        assert slider.region.height == retries.region.height  # a row as tall as an input's
+        track, value = _track_and_value(slider)
+        assert value == "5"
+        first_handle = track.index("●")
 
         slider.focus()
         await pilot.press("right")
         assert (workers.value, moves) == (8, [8])
-        value, middle, handle = _value_above_handle(slider)
-        assert (value, middle) == ("8", handle)
-        assert handle > first_handle
+        track, value = _track_and_value(slider)
+        assert value == "8"
+        assert track.index("●") > first_handle
         await pilot.press("end")
         assert (workers.value, moves) == (14, [8, 14])  # the last step, short of 16
-        assert _value_above_handle(slider)[0] == "14"
+        end_track, value = _track_and_value(slider)
+        assert value == "14"
+        assert len(end_track) == len(track)  # the value's slot as wide: the track keeps its length
 
-        await pilot.click(slider, offset=(0, 1))
+        # the track's first column, past the padding, then its last, before the value
+        await pilot.click(slider, offset=(1, 1))
         assert (workers.value, moves) == (2, [8, 14, 2])
+        await pilot.click(slider, offset=(len(track), 1))
+        assert (workers.value, moves) == (14, [8, 14, 2, 14])
 
         workers.value = 6  # set in code: shown at its nearest step, and not reported
         await pilot.pause()
-        assert (_value_above_handle(slider)[0], moves) == ("5", [8, 14, 2])
+        assert (_track_and_value(slider)[1], moves) == ("5", [8, 14, 2, 14])
 
 
 @pytest.mark.asyncio
