@@ -3,7 +3,8 @@
 Each click on Add Curve sweeps the flow rate through the pipe of the form's diameter and
 plots the pressure drop it causes, one curve per diameter, each with its own flow rates.
 Between laminar and turbulent flow neither law holds: the curve leaves a gap there. Add
-Measurements plots, as dots over the curves, what a test rig measured on that pipe.
+Measurements plots, as dots over the curves, what a test rig measured on that pipe, and
+lists them on the Measurements tab beside the chart's, each against the computed drop.
 """
 
 import math
@@ -25,6 +26,9 @@ from composeui.core.view import (
     LabelRowFloatInputView,
     MainView,
     Series,
+    TableView,
+    TabPage,
+    TabView,
     child,
     define_view,
 )
@@ -71,17 +75,26 @@ def pressure_drop_curve(diameter_mm: float, length: float, max_flow: float) -> S
     return Series(name=f"D = {diameter_mm:g} mm", x=flows, y=drops)
 
 
-def measured_drops(diameter_mm: float, length: float, max_flow: float) -> Series:
-    """Get what the test rig measured on a pipe: dots near its computed curve."""
+def measurements(
+    diameter_mm: float, length: float, max_flow: float
+) -> list[tuple[float, float, float]]:
+    """Get what the test rig measured on a pipe: each flow rate, measured and computed drop."""
     model = pressure_drop_curve(diameter_mm, length, max_flow)
-    flows: list[float] = []
-    drops: list[float] = []
+    points: list[tuple[float, float, float]] = []
     for share, ratio in MEASUREMENTS:
         index = round(share * SWEEP_POINTS) - 1
-        flows.append(model.x[index])
-        drops.append(model.y[index] * ratio)
+        points.append((model.x[index], model.y[index] * ratio, model.y[index]))
+    return points
+
+
+def measured_drops(diameter_mm: float, length: float, max_flow: float) -> Series:
+    """Get what the test rig measured on a pipe: dots near its computed curve."""
+    points = measurements(diameter_mm, length, max_flow)
     return Series(
-        name=f"Measured, D = {diameter_mm:g} mm", x=flows, y=drops, kind=ChartKind.SCATTER
+        name=f"Measured, D = {diameter_mm:g} mm",
+        x=[flow for flow, _, _ in points],
+        y=[measured for _, measured, _ in points],
+        kind=ChartKind.SCATTER,
     )
 
 
@@ -122,12 +135,7 @@ class CurveButtons(HorizontalView):
 
 
 @define_view
-class PipeChartMainView(MainView):
-    app_title = "Pipe Chart"
-    extension = ".pipechart"
-
-    pipe: PipeForm = Factory(PipeForm)
-    buttons: CurveButtons = Factory(CurveButtons)
+class ChartTab(TabPage):
     chart: ChartView = child(
         ChartView,
         title="Pressure Drop",
@@ -136,6 +144,42 @@ class PipeChartMainView(MainView):
         y_title="Pressure Drop",
         y_unit="kPa",
     )
+
+
+@define_view
+class MeasurementsTab(TabPage):
+    """The rig's measurements, a row each, against the drop the curve computes there."""
+
+    table: TableView = child(
+        TableView,
+        headers=["Pipe", "Flow Rate (L/s)", "Measured (kPa)", "Computed (kPa)", "Deviation (%)"],
+    )
+
+
+@define_view
+class ResultTabs(TabView):
+    chart_tab: ChartTab = child(ChartTab, title="Chart")
+    measurements_tab: MeasurementsTab = child(MeasurementsTab, title="Measurements")
+
+
+@define_view
+class PipeChartMainView(MainView):
+    app_title = "Pipe Chart"
+    extension = ".pipechart"
+
+    pipe: PipeForm = Factory(PipeForm)
+    buttons: CurveButtons = Factory(CurveButtons)
+    results: ResultTabs = Factory(ResultTabs)
+
+    @property
+    def chart(self) -> ChartView:
+        """The chart, on its tab."""
+        return self.results.chart_tab.chart
+
+    @property
+    def measurements(self) -> TableView:
+        """The measurements' table, on its tab."""
+        return self.results.measurements_tab.table
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -148,23 +192,47 @@ class PipeChartMainView(MainView):
         self._plot(pressure_drop_curve)
 
     def add_measurements(self) -> None:
-        """Plot what the rig measured on the form's pipe, replacing earlier ones of it."""
-        self._plot(measured_drops)
+        """Plot and list what the rig measured on the form's pipe, replacing earlier ones."""
+        pipe = self._plot(measured_drops)
+        if pipe is None:
+            return
+        diameter, length, max_flow = pipe
+        name = f"D = {diameter:g} mm"
+        rows = [
+            [
+                name,
+                f"{flow:.3g}",
+                f"{measured:.3g}",
+                f"{computed:.3g}",
+                f"{(measured - computed) / computed * 100:+.1f}",
+            ]
+            for flow, measured, computed in measurements(diameter, length, max_flow)
+        ]
+        others = [row for row in self.measurements.rows if row[0] != name]
+        self.measurements.rows = [*others, *rows]
 
-    def _plot(self, compute: Callable[[float, float, float], Series]) -> None:
+    def _plot(
+        self, compute: Callable[[float, float, float], Series]
+    ) -> Optional[tuple[float, float, float]]:
+        """Plot the form's pipe with `compute`; return its diameter, length and maximum flow.
+
+        None, without plotting, when the form can't be plotted.
+        """
         self.pipe.validate()  # shows why, when the form can't be plotted
         diameter, length = self.pipe.diameter.value, self.pipe.length.value
         max_flow = self.pipe.max_flow.value
         if diameter is None or length is None or max_flow is None:
-            return
+            return None
         if min(diameter, length, max_flow) <= 0:
-            return
+            return None
         curve = compute(diameter, length, max_flow)
         others = [series for series in self.chart.series if series.name != curve.name]
         self.chart.series = [*others, curve]
+        return diameter, length, max_flow
 
     def clear_curves(self) -> None:
         self.chart.series = []
+        self.measurements.rows = []
 
 
 def main() -> None:
