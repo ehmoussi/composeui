@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 pytest.importorskip("qtpy")
-from qtpy.QtWidgets import QMainWindow, QProgressBar, QPushButton
+from qtpy.QtWidgets import QMainWindow, QProgressBar, QPushButton, QSpinBox
 
 from composeui.core.application import Application
 from composeui.core.registry import RendererType
+from composeui.core.renderer import RendererContainer
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from examples.taskview import TASK_COUNT, TaskMainView, TaskStatus
 
@@ -36,7 +37,7 @@ def main_view(qtbot: QtBot) -> TaskMainView:
     return main_view
 
 
-def _configure(main_view: TaskMainView, duration: float, failure_percentage: float) -> None:
+def _configure(main_view: TaskMainView, duration: int, failure_percentage: int) -> None:
     config = main_view.config
     config.min_duration.value = config.max_duration.value = duration
     config.failure_percentage.value = failure_percentage
@@ -50,7 +51,7 @@ def _statuses(main_view: TaskMainView) -> set[str]:
     ("failure_percentage", "status"), [(0, TaskStatus.SUCCEEDED), (100, TaskStatus.FAILED)]
 )
 def test_a_run_shows_every_task_s_outcome_then_can_run_again(
-    qtbot: QtBot, main_view: TaskMainView, failure_percentage: float, status: TaskStatus
+    qtbot: QtBot, main_view: TaskMainView, failure_percentage: int, status: TaskStatus
 ) -> None:
     _configure(main_view, 0, failure_percentage)
     run, bar = _widget(main_view.buttons.run), _widget(main_view.progress)
@@ -121,3 +122,21 @@ def test_a_run_waits_for_a_valid_configuration(main_view: TaskMainView) -> None:
     assert main_view.buttons.run.is_enabled
     assert "greater than the maximum" in main_view.config.log_view.log_message
     assert main_view.status_bar.message == "Fix the configuration first"
+
+
+def test_the_configuration_takes_whole_numbers_within_their_range(
+    qtbot: QtBot, main_view: TaskMainView
+) -> None:
+    percentage = main_view.config.failure_percentage
+    assert isinstance(percentage.renderer, RendererContainer)
+    field = percentage.renderer.get_renderer("field")
+    assert isinstance(field, QtWidgetRenderer)
+    spin_box = field.qt_object
+    assert isinstance(spin_box, QSpinBox)
+    assert (spin_box.minimum(), spin_box.maximum()) == (0, 100)
+
+    spin_box.show()
+    spin_box.setFocus()
+    spin_box.selectAll()
+    qtbot.keyClicks(spin_box, "150")
+    assert percentage.value == 15  # the 0 would take it past 100
