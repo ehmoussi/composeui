@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
+from textual.content import Content
 from textual.types import NoActiveAppError
 from textual.validation import Number
 from textual.widgets import ContentSwitcher, Footer, Label, ProgressBar, Static
@@ -601,11 +602,17 @@ class TextualMarkdownRenderer(TextualWidgetRenderer[MarkdownViewLike, ComposeMar
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
+    """A form row's label, then the row's help as a dimmed hint under it.
+
+    A hint rather than a tooltip, which only the mouse shows.
+    """
+
     def __init__(self, view: FormLabelRowView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "label": self._refresh_text,
+                "help": self._refresh_help,
             }
         )
 
@@ -614,8 +621,18 @@ class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
             self._rendered_object = Label()
 
     @staticmethod
-    def _refresh_text(_view: FormLabelRowView, rendered_object: Label, value: str) -> None:
-        rendered_object.update(value)
+    def _refresh_text(view: FormLabelRowView, rendered_object: Label, value: str) -> None:
+        rendered_object.update(TextualFormLabelRenderer._content(value, view.help))
+
+    @staticmethod
+    def _refresh_help(view: FormLabelRowView, rendered_object: Label, value: str) -> None:
+        rendered_object.update(TextualFormLabelRenderer._content(view.label, value))
+
+    @staticmethod
+    def _content(label: str, help_text: str) -> Content:
+        if help_text == "":
+            return Content(label)
+        return Content.assemble(label, "\n", (help_text, "dim"))
 
     @staticmethod
     def _update_state(view: FormLabelRowView, rendered_object: Label) -> None:

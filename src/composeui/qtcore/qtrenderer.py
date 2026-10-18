@@ -70,6 +70,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
+from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
@@ -378,27 +379,33 @@ class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
         pass  # read-only: nothing to read back
 
 
-class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QLabel]):
+class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
     def __init__(self, view: FormLabelRowView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "label": self._refresh_text,
+                "help": self._refresh_help,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QLabel()
+            self._rendered_object = QFormLabel()
             self.refresh()
 
     @staticmethod
-    def _refresh_text(_view: FormLabelRowView, rendered_object: QLabel, value: str) -> None:
-        rendered_object.setText(value)
+    def _refresh_text(_view: FormLabelRowView, rendered_object: QFormLabel, value: str) -> None:
+        rendered_object.set_text(value)
 
     @staticmethod
-    def _update_state(view: FormLabelRowView, rendered_object: QLabel) -> None:
+    def _refresh_help(_view: FormLabelRowView, rendered_object: QFormLabel, value: str) -> None:
+        rendered_object.set_help(value)
+
+    @staticmethod
+    def _update_state(view: FormLabelRowView, rendered_object: QFormLabel) -> None:
         view.label = rendered_object.text()
+        view.help = rendered_object.help()
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -1052,7 +1059,7 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
             raise NotQWidgetError
         return log_object
 
-    def _get_label_object(self, field_row_renderer: RendererContainer[View]) -> QLabel:
+    def _get_label_object(self, field_row_renderer: RendererContainer[View]) -> QFormLabel:
         try:
             label_renderer = field_row_renderer.get_renderer("label")
         except KeyError as e:

@@ -444,7 +444,7 @@ document.addEventListener("keydown", function (event) {
    runs after every htmx swap. */
 function syncInvalidFields() {
   document.querySelectorAll("[data-log]").forEach(function (log) {
-    var field = document.querySelector('[aria-describedby="' + log.id + '"]');
+    var field = document.querySelector('[aria-describedby~="' + log.id + '"]');
     if (field === null) return;
     var ownError = log.dataset.log === "error" && !log.hidden;
     if (ownError || "formError" in log.dataset) field.setAttribute("aria-invalid", "true");
