@@ -32,6 +32,7 @@ from composeui.core.view import (
     ChartView,
     DialogKind,
     DialogView,
+    ExpanderView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -62,6 +63,7 @@ from composeui.core.view import (
 from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
+from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
@@ -1611,6 +1613,48 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
         pass  # a column has no user-editable state of its own
 
 
+class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollapsible]):
+    """Textual's collapsible: its title, then the views one above the other while expanded."""
+
+    def __init__(self, view: ExpanderView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"title": self._refresh_title, "is_expanded": self._refresh_is_expanded}
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets = [
+                view.renderer.widget
+                for view in self._view.children_views
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            self._rendered_object = ComposeCollapsible(*widgets)
+            self._rendered_object.toggled.connect(self._update_expanded)
+
+    @staticmethod
+    def _refresh_title(
+        _view: ExpanderView, rendered_object: ComposeCollapsible, value: str
+    ) -> None:
+        rendered_object.title = value
+
+    @staticmethod
+    def _refresh_is_expanded(
+        _view: ExpanderView, rendered_object: ComposeCollapsible, value: bool
+    ) -> None:
+        rendered_object.set_expanded(value)
+
+    @staticmethod
+    def _update_state(view: ExpanderView, rendered_object: ComposeCollapsible) -> None:
+        view.is_expanded = not rendered_object.collapsed
+
+    def _update_expanded(self, is_expanded: bool) -> None:
+        with self.stop_refresh():
+            self._view.is_expanded = is_expanded
+        self._view.toggled.emit(is_expanded)
+
+
 class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -1995,6 +2039,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
     "dialog": TextualDialogRenderer,
+    "expander": TextualExpanderRenderer,
     "float_input": TextualFloatInputRenderer,
     "int_input": TextualIntInputRenderer,
     "form": TextualFormRenderer,

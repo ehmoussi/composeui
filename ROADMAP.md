@@ -9,26 +9,23 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, integer input, slider, label, log, button, progress bar, metric, checkbox, radio
-group, combobox, table (editable cells, sorting and filtering included), Markdown, forms,
-pages, message and confirm dialogs. Easiest first.
+input, integer input, slider, label, log, button, progress bar, metric, expander,
+checkbox, radio group, combobox, table (editable cells, sorting and filtering included),
+Markdown, forms, pages, message and confirm dialogs. Easiest first.
 
-1. **Expander** (`ExpanderView`): a collapsible section, its title always shown and its
-   content views shown while `is_expanded`, e.g. a record's details with its Edit and
-   Delete buttons.
-2. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
+1. **Date input** (`DateInputView`): a `datetime.date` (`Optional`), typed or picked from
    a calendar, in the main view's language's format, with `minimum`/`maximum`.
-3. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
+2. **Tabs** (`TabView`). Distinct from pages: tabs live inside a page or form, and aren't
    routes.
-4. **Sidebar.** A column of views beside the pages, shown whatever the page, e.g. a form
+3. **Sidebar.** A column of views beside the pages, shown whatever the page, e.g. a form
    creating a record; on the web a drawer on a phone. A `MainView` field the router
    doesn't own, rather than a view repeated on each page.
-5. **Form dialog** (`FormDialogView`): a modal holding a form, e.g. editing a record
+4. **Form dialog** (`FormDialogView`): a modal holding a form, e.g. editing a record
    from its Edit button, with OK and Cancel; OK disabled while the form is invalid,
    and the answer (accepted or not) as a signal. Today's dialogs only show a message or
    ask to confirm.
-6. **Tree view** (`TreeView`).
-7. **A list of views from data** (`ListView[ItemT]`): one item view built per record by
+5. **Tree view** (`TreeView`).
+6. **A list of views from data** (`ListView[ItemT]`): one item view built per record by
    a factory, added and removed as the records change, e.g. an expander per record.
    Views are fixed fields today (pages can't be added either); the web needs each
    item's id stable across swaps, and `save_state` should skip the items (the model

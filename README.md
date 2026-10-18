@@ -168,6 +168,9 @@ a bar that only shows the task runs while `maximum` is `None`.
 `MetricView` shows a figure read at a glance, e.g. the jobs running: its `label`, its
 `value` in large type, and its change since some point (`delta`, then `delta_text`, e.g.
 "since yesterday") as a badge colored by its sign; a row of them in a `HorizontalView`.
+`ExpanderView` is a collapsible section, e.g. a record's details with its Edit and Delete
+buttons: a subclass's view fields, one above the other, shown only while `is_expanded`,
+under its `title`, which the user clicks to expand or collapse it (`toggled`).
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
 its links open in the browser. On the web its raw HTML is left out, so the text can't
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page, and

@@ -23,6 +23,7 @@ from textual.coordinate import Coordinate
 from textual.pilot import Pilot
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar
+from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 
 from composeui.core import chartimage
@@ -48,6 +49,7 @@ from composeui.textualcore.textualrenderer import (
     TextualWidgetRenderer,
 )
 from composeui.textualcore.widgets.composechart import ComposeChart
+from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import (
@@ -67,6 +69,7 @@ from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
+from tests.expander import RecordMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
@@ -835,6 +838,48 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         await pilot.pause()
         await pilot.pause()
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+
+@pytest.mark.asyncio
+async def test_an_expander_shows_its_views_while_expanded_by_its_title() -> None:
+    view = RecordMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    record, history = view.record, view.record.history
+    toggles: list[bool] = []
+    history_toggles: list[bool] = []
+    record.toggled.connect(toggles.append)
+    history.toggled.connect(history_toggles.append)
+    widgets = [
+        renderer.widget
+        for renderer in (record.renderer, history.renderer, record.buttons.edit.renderer)
+        if isinstance(renderer, TextualWidgetRenderer)
+    ]
+    expander, history_expander, edit = widgets
+    assert isinstance(expander, ComposeCollapsible)
+    assert isinstance(history_expander, ComposeCollapsible)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        await pilot.pause()
+        assert expander.title == "Pipe A"
+        assert edit.region.area == 0  # collapsed: not laid out
+
+        await pilot.click(expander.query_one(CollapsibleTitle))
+        await pilot.pause()
+        assert (record.is_expanded, toggles) == (True, [True])
+        assert edit.region.area > 0
+        # the nested expander's toggle is its own
+        history_expander.query_one(CollapsibleTitle).focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert (history.is_expanded, history_toggles, toggles) == (True, [True], [True])
+
+        record.is_expanded = False  # set in code: collapsed, and not reported
+        await pilot.pause()
+        assert edit.region.area == 0
+        assert toggles == [True]
 
 
 @pytest.mark.asyncio

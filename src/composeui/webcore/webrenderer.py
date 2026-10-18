@@ -41,6 +41,7 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExitAppAction,
+    ExpanderView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -2486,6 +2487,59 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
         return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
 
 
+class WebExpanderRenderer(WebRenderer[ExpanderView]):
+    """A `<details>` (daisyUI's collapse): its title, then the views one above the other.
+
+    The browser opens and closes it on a click or a key on the title, then posts its
+    `toggle`; like every control, it is never swapped back after one, only when the
+    server changes it. Its views swap on their own, shown or not. Disabled, its title
+    can't be clicked or focused, as a disabled Qt button can't be pressed.
+    """
+
+    _role = "expander"
+
+    def __init__(self, view: ExpanderView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"title": self._mark_dirty, "is_expanded": self._mark_dirty}
+        )
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        is_open = " open" if self._view.is_expanded else ""
+        summary_attributes = "" if self.is_enabled else ' tabindex="-1" aria-disabled="true"'
+        summary_classes = "" if self.is_enabled else " pointer-events-none opacity-50"
+        content = "".join(
+            view.renderer.to_html()
+            for view in self._view.children_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        # `toggle` also fires when the server swaps it in open: posting the state the
+        # server already has, which `dispatch` ignores
+        return (
+            f"<details {self._root_attributes(oob=oob)}{is_open}"
+            ' class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="toggle"'
+            ' hx-vals="js:{event: event.type, open: event.target.open}" hx-swap="none">'
+            f'<summary class="collapse-title font-semibold{summary_classes}"{summary_attributes}>'
+            f"{html.escape(self._view.title)}</summary>"
+            f'<div class="collapse-content flex flex-col gap-6">{content}</div></details>'
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "toggle":
+            super().dispatch(event, form)
+        is_expanded = form.get("open") == "true"
+        if is_expanded == self._view.is_expanded:
+            return
+        with self.stop_refresh():
+            self._view.is_expanded = is_expanded
+        self._view.toggled.emit(is_expanded)
+
+
 class WebGridRenderer(WebRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -2770,6 +2824,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "dialog": WebDialogRenderer,
+    "expander": WebExpanderRenderer,
     "float_input": WebFloatInputRenderer,
     "int_input": WebIntInputRenderer,
     "form": WebFormRenderer,

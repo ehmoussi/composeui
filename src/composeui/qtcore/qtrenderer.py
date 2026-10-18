@@ -48,6 +48,7 @@ from composeui.core.view import (
     ChartView,
     DialogKind,
     DialogView,
+    ExpanderView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -72,6 +73,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
@@ -1506,6 +1508,46 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
         pass  # a column has no user-editable state of its own
 
 
+class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
+    """A header button with an arrow, then the views one above the other while expanded."""
+
+    def __init__(self, view: ExpanderView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"title": self._refresh_title, "is_expanded": self._refresh_is_expanded}
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QExpander()
+            for view in self._view.children_views:
+                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
+                    view.renderer.qt_object, QWidget
+                ):
+                    self._rendered_object.content_layout.addWidget(view.renderer.qt_object)
+            # first, so the view's callbacks see the new state
+            self._rendered_object.expanded_changed.connect(self._update_expanded)
+            self._view.toggled.add_qt_signal(self._rendered_object.expanded_changed)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_title(_view: ExpanderView, rendered_object: QExpander, value: str) -> None:
+        rendered_object.header.setText(value)
+
+    @staticmethod
+    def _refresh_is_expanded(_view: ExpanderView, rendered_object: QExpander, value: bool) -> None:
+        rendered_object.set_expanded(value)
+
+    @staticmethod
+    def _update_state(view: ExpanderView, rendered_object: QExpander) -> None:
+        view.title = rendered_object.header.text()
+        view.is_expanded = rendered_object.is_expanded()
+
+    def _update_expanded(self, is_expanded: bool) -> None:
+        with self.stop_refresh():
+            self._view.is_expanded = is_expanded
+
+
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
@@ -1905,6 +1947,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "dialog": QtDialogRenderer,
+    "expander": QtExpanderRenderer,
     "float_input": QtFloatInputRenderer,
     "int_input": QtIntInputRenderer,
     "form": QtFormRenderer,
