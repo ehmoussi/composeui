@@ -33,6 +33,7 @@ from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
+from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
@@ -221,6 +222,13 @@ def chart_pages_base_url() -> Iterator[str]:
 def workers_base_url() -> Iterator[str]:
     """Serve an app with a slider, for the whole module."""
     with _serve(WebApplication(build_main_view=WorkersMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def bookings_base_url() -> Iterator[str]:
+    """Serve an app with a date input, for the whole module."""
+    with _serve(WebApplication(build_main_view=BookingMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1082,6 +1090,27 @@ def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     expect(north).not_to_have_attribute("aria-current", "true")
     # the table was swapped back, the row that had the focus keeps it
     expect(south).to_be_focused()
+
+
+def test_a_date_picked_in_the_browser_s_picker_shows_in_the_field_s_format(
+    browser: Browser, bookings_base_url: str
+) -> None:
+    context = browser.new_context(base_url=bookings_base_url)
+    page = context.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto("/")
+    field = page.get_by_label("Arrival")
+    expect(field).to_have_value("10/18/2026")
+
+    page.get_by_role("button", name="Pick a date").click()  # opens the browser's picker
+    page.keyboard.press("Escape")
+    assert errors == []
+    with _posted(page):
+        # what the picker does with the day picked: the date input's value, then its change
+        page.locator('input[type="date"]').fill("2026-11-03")
+    expect(field).to_have_value("11/03/2026")
+    context.close()
 
 
 def test_a_tree_node_keeps_the_focus_through_the_swap_its_toggle_or_selection_brings(

@@ -65,6 +65,7 @@ from composeui.core.view import (
     TreeView,
     VerticalView,
     View,
+    date_hint,
     replace_cell,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
@@ -72,6 +73,7 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
@@ -92,6 +94,7 @@ from composeui.textualcore.widgets.composetoolbar import (
 from composeui.textualcore.widgets.composetree import ComposeTree
 
 if TYPE_CHECKING:
+    import datetime
     from collections.abc import Callable
     from pathlib import Path
 
@@ -748,6 +751,117 @@ class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInp
 
     def _editing_finished(self) -> None:
         self._view.editing_finished.emit()
+
+
+class DateInputViewLike(ViewLike, Protocol):
+    placeholder: str
+    value: datetime.date | None
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    month_names: list[str]
+    day_names: list[str]
+    pick_text: str
+    text_changed: Signal[str]
+    text_edited: Signal[str]
+    editing_finished: SignalNoArgs
+    value_changed: Signal[datetime.date | None]
+
+
+class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeDateInput]):
+    """A field typing the date as the view's `date_format` says, beside a calendar button.
+
+    Textual has no date picker: the calendar is a screen of its own, its months and days
+    named as the view's `month_names` and `day_names`, so in the main view's language.
+    """
+
+    _marks_invalid = True
+
+    def __init__(self, view: DateInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "placeholder": self._refresh_placeholder,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "date_format": self._refresh_date_format,
+                "month_names": self._refresh_month_names,
+                "day_names": self._refresh_day_names,
+                "pick_text": self._refresh_pick_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeDateInput()
+            self._rendered_object.date_edited.connect(self._update_value)
+            self._rendered_object.input.value_changed.connect(self._update_text)
+            self._rendered_object.input.value_submitted.connect(self._view.editing_finished.emit)
+
+    @staticmethod
+    def _refresh_value(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: datetime.date | None
+    ) -> None:
+        rendered_object.set_date(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        view: DateInputViewLike, rendered_object: ComposeDateInput, value: str
+    ) -> None:
+        rendered_object.input.placeholder = date_hint(value, view.date_format)
+
+    @staticmethod
+    def _refresh_minimum(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: datetime.date | None
+    ) -> None:
+        rendered_object.minimum = value
+        rendered_object.input.validate(rendered_object.input.value)
+
+    @staticmethod
+    def _refresh_maximum(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: datetime.date | None
+    ) -> None:
+        rendered_object.maximum = value
+        rendered_object.input.validate(rendered_object.input.value)
+
+    @staticmethod
+    def _refresh_date_format(
+        view: DateInputViewLike, rendered_object: ComposeDateInput, value: str
+    ) -> None:
+        rendered_object.set_date_format(value)
+        rendered_object.input.placeholder = date_hint(view.placeholder, value)
+
+    @staticmethod
+    def _refresh_month_names(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: list[str]
+    ) -> None:
+        rendered_object.month_names = list(value)
+
+    @staticmethod
+    def _refresh_day_names(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: list[str]
+    ) -> None:
+        rendered_object.day_names = list(value)
+
+    @staticmethod
+    def _refresh_pick_text(
+        _view: DateInputViewLike, rendered_object: ComposeDateInput, value: str
+    ) -> None:
+        rendered_object.button.tooltip = value
+
+    @staticmethod
+    def _update_state(view: DateInputViewLike, rendered_object: ComposeDateInput) -> None:
+        view.value = rendered_object.date()
+
+    def _update_value(self, value: datetime.date | None) -> None:
+        with self.stop_refresh():
+            self._view.value = value
+        self._view.value_changed.emit(value)
+
+    def _update_text(self, text: str) -> None:
+        self._view.text_changed.emit(text)
+        self._view.text_edited.emit(text)
 
 
 class SliderViewLike(ViewLike, Protocol):
@@ -2443,6 +2557,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": TextualChartRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
+    "date_input": TextualDateInputRenderer,
     "dialog": TextualDialogRenderer,
     "expander": TextualExpanderRenderer,
     "float_input": TextualFloatInputRenderer,

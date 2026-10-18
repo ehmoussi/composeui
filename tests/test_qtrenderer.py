@@ -10,6 +10,7 @@ already uses for the Textual backend.
 
 from __future__ import annotations
 
+import datetime
 import gc
 import json
 import math
@@ -17,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QPoint, QPointF, Qt
+from qtpy.QtCore import QDate, QPoint, QPointF, Qt
 from qtpy.QtGui import QAction, QColor, QFont, QPalette
 from qtpy.QtWidgets import (
     QAbstractButton,
@@ -40,6 +41,7 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QStatusBar,
+    QTableView,
     QTabWidget,
     QTextBrowser,
     QToolBar,
@@ -72,6 +74,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
@@ -82,6 +85,7 @@ from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
+from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
@@ -379,6 +383,54 @@ def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot
     assert spin_box.text() == ""
     opening.minimum = 10  # Qt would show it, as it raises the 9 still held to 10
     assert (spin_box.minimum(), spin_box.text()) == (10, "")
+
+
+def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) -> None:
+    view = BookingMainView()
+    view.render(RendererType.QT)
+    arrival = view.form.arrival
+    field = _field_widget(arrival)
+    assert isinstance(field, QDateField)
+    qtbot.addWidget(field)
+    changes: list[datetime.date | None] = []
+    arrival.value_changed.connect(changes.append)
+    assert field.line_edit.text() == "10/18/2026"  # English's, as the code writes its text
+
+    view.set_language("fr")
+    assert field.line_edit.text() == "18/10/2026"
+    field.show()
+    field.line_edit.selectAll()
+    qtbot.keyClicks(field.line_edit, "25/10/20")
+    assert (arrival.value, changes) == (datetime.date(2026, 10, 18), [])  # not a date yet
+    qtbot.keyClicks(field.line_edit, "26")
+    assert (arrival.value, changes) == (datetime.date(2026, 10, 25), [datetime.date(2026, 10, 25)])
+
+    qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
+    calendar = field.calendar
+    assert calendar.isVisible()
+    assert calendar.selectedDate() == QDate(2026, 10, 25)
+    assert (calendar.minimumDate(), calendar.maximumDate()) == (
+        QDate(2026, 10, 1),
+        QDate(2026, 12, 31),
+    )
+    calendar.setSelectedDate(QDate(2026, 11, 3))  # the arrows' move to a day
+    days = calendar.findChild(QTableView)
+    assert days is not None
+    qtbot.keyClick(days, Qt.Key.Key_Return)
+    assert not calendar.isVisible()
+    assert (arrival.value, field.line_edit.text()) == (datetime.date(2026, 11, 3), "03/11/2026")
+    assert changes[-1] == datetime.date(2026, 11, 3)
+
+    field.line_edit.selectAll()
+    qtbot.keyClicks(field.line_edit, "31/02")
+    qtbot.keyClick(field.line_edit, Qt.Key.Key_Return)  # left as no date: the date back
+    assert field.line_edit.text() == "03/11/2026"
+    field.line_edit.clear()
+    qtbot.keyClick(field.line_edit, Qt.Key.Key_Backspace)
+    arrival.value = None  # set in code: shown empty, the format as its hint, not reported
+    assert field.line_edit.text() == ""
+    assert field.line_edit.placeholderText() == "dd/mm/yyyy"
+    assert len(changes) == 2
 
 
 def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:
