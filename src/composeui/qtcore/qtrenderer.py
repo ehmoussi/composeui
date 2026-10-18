@@ -499,6 +499,8 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
                 # Qt's calendar names them, in the system's language
                 "month_names": lambda _view, _rendered_object, _value: None,
                 "day_names": lambda _view, _rendered_object, _value: None,
+                "previous_month_text": lambda _view, _rendered_object, _value: None,
+                "next_month_text": lambda _view, _rendered_object, _value: None,
             }
         )
 

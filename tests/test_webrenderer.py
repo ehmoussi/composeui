@@ -657,21 +657,30 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
     changes: list[datetime.date | None] = []
     arrival.value_changed.connect(changes.append)
     date_input = _element(field.to_html(), field.widget_id)
-    text, picker = (attributes for tag, attributes in date_input.descendants if tag == "input")
+    (text,) = (attributes for tag, attributes in date_input.descendants if tag == "input")
     assert (text["type"], text["value"], text["placeholder"]) == (
         "text",
         "18/10/2026",
         "dd/mm/yyyy",
     )
     assert text["aria-labelledby"] == label.text_id
-    assert [picker[name] for name in ("type", "value", "min", "max")] == [
-        "date",
+    (button,) = (attributes for tag, attributes in date_input.descendants if tag == "button")
+    assert button["aria-label"] == "Choisir une date"
+    # the calendar, a popover the button opens, on the date and within the range
+    (calendar,) = (
+        attributes for tag, attributes in date_input.descendants if tag == "calendar-date"
+    )
+    assert [calendar[name] for name in ("value", "min", "max")] == [
         "2026-10-18",
         "2026-10-01",
         "2026-12-31",
     ]
-    (button,) = (attributes for tag, attributes in date_input.descendants if tag == "button")
-    assert button["aria-label"] == "Choisir une date"
+    (popover,) = (
+        attributes for tag, attributes in date_input.descendants if "popover" in attributes
+    )
+    assert popover["id"] == button["popovertarget"]
+    month_buttons = [a["aria-label"] for tag, a in date_input.descendants if "slot" in a]
+    assert month_buttons == ["Mois précédent", "Mois suivant"]
 
     fragments = handle_event(field, "input", {"value": "25/10/20"})
     assert (arrival.value, changes) == (datetime.date(2026, 10, 18), [])  # not a date yet
@@ -680,9 +689,9 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
     assert field.widget_id not in fragments  # never swapped back while typed in
     fragments = handle_event(field, "change", {"value": "1/11/2026"})
     assert len(changes) == 1
-    # left: shown as the format writes it, the picker on the date too
+    # left: shown as the format writes it, the calendar on the date too
     swapped = _swapped(fragments, field.widget_id)
-    assert [a["value"] for tag, a in swapped.descendants if tag == "input"] == [
+    assert [a["value"] for tag, a in swapped.descendants if tag in ("input", "calendar-date")] == [
         "01/11/2026",
         "2026-11-01",
     ]

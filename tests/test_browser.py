@@ -225,10 +225,16 @@ def workers_base_url() -> Iterator[str]:
         yield url
 
 
+def _french_booking() -> BookingMainView:
+    view = BookingMainView()
+    view.set_language("fr")
+    return view
+
+
 @pytest.fixture(scope="module")
 def bookings_base_url() -> Iterator[str]:
-    """Serve an app with a date input, for the whole module."""
-    with _serve(WebApplication(build_main_view=BookingMainView).create_starlette_app()) as url:
+    """Serve an app with a date input, in French, for the whole module."""
+    with _serve(WebApplication(build_main_view=_french_booking).create_starlette_app()) as url:
         yield url
 
 
@@ -1092,24 +1098,41 @@ def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     expect(south).to_be_focused()
 
 
-def test_a_date_picked_in_the_browser_s_picker_shows_in_the_field_s_format(
+def test_a_date_input_s_calendar_names_its_days_in_the_page_s_language_and_picks_one(
     browser: Browser, bookings_base_url: str
 ) -> None:
     context = browser.new_context(base_url=bookings_base_url)
     page = context.new_page()
-    errors: list[str] = []
-    page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto("/")
     field = page.get_by_label("Arrival")
-    expect(field).to_have_value("10/18/2026")
+    expect(field).to_have_value("18/10/2026")
+    button = page.get_by_role("button", name="Choisir une date")
+    calendar = page.locator("calendar-date")
 
-    page.get_by_role("button", name="Pick a date").click()  # opens the browser's picker
-    page.keyboard.press("Escape")
-    assert errors == []
+    button.click()
+    expect(calendar).to_be_visible()
     with _posted(page):
-        # what the picker does with the day picked: the date input's value, then its change
-        page.locator('input[type="date"]').fill("2026-11-03")
-    expect(field).to_have_value("11/03/2026")
+        # its days named in the page's language, French, not the browser's
+        calendar.get_by_role("button", name="25 octobre").click()
+    expect(field).to_have_value("25/10/2026")
+    expect(calendar).to_be_hidden()
+    expect(button).to_be_focused()  # back where it was, through the field's swap
+
+    button.press("Enter")
+    # opened on the date, focused, so the arrows move from it
+    expect(calendar.get_by_role("button", name="25 octobre")).to_be_focused()
+    page.keyboard.press("ArrowRight")
+    expect(calendar.get_by_role("button", name="26 octobre")).to_be_focused()
+    with _posted(page):
+        page.keyboard.press("Enter")
+    expect(field).to_have_value("26/10/2026")
+    button.press("Enter")
+    expect(calendar.get_by_role("button", name="26 octobre")).to_be_focused()
+    page.keyboard.press("ArrowRight")
+    expect(calendar.get_by_role("button", name="27 octobre")).to_be_focused()
+    page.keyboard.press("Escape")  # closed, nothing picked
+    expect(calendar).to_be_hidden()
+    expect(field).to_have_value("26/10/2026")
     context.close()
 
 

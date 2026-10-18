@@ -94,8 +94,8 @@ building the main view, because on the web every browser gets its own copy of it
 Run it with `uv run python hello.py` (requires the `web` extra). Pages are rendered on the
 server and updated with [htmx](https://htmx.org/): editing a field posts it, and the
 response swaps in every part of the page that changed (here, the status bar), never the
-field being typed in. Styles ([daisyUI](https://daisyui.com/) on Tailwind) and htmx are
-served by the app itself, so it also works offline. For a fuller example, see
+field being typed in. Styles ([daisyUI](https://daisyui.com/) on Tailwind), htmx and
+the scripts of charts and calendars are served by the app itself, so it also works offline. For a fuller example, see
 [`src/examples/webhello.py`](src/examples/webhello.py) (`uv run python -m
 examples.webhello`), and `pipeform.py` with `--backend web`.
 
@@ -163,11 +163,12 @@ where a number out of range isn't refused (Textual marks it), so validate it.
 `DateInputView` takes a `datetime.date`, e.g. a booking's first day, or none (`None`):
 typed as its `date_format` says (`dd`, `MM`, `yyyy`; ISO 8601 is always understood), a
 text the catalogs translate, so in the main view's language ("MM/dd/yyyy" in English,
-"dd/MM/yyyy" in French), or picked from a calendar beside the field: Qt's, the
-browser's, or on Textual one of ComposeUI's, naming its months and days as the view's
-`month_names` and `day_names`. The calendar offers only the dates from `minimum` to
-`maximum`, but a date typed out of range isn't refused everywhere, so validate it;
-`value_changed` reports the user's dates.
+"dd/MM/yyyy" in French), or picked from a calendar beside the field: Qt's, naming the
+months and days in the system's language; on the web [Cally](https://wicky.nillia.ms/cally/),
+in the theme's colors and the page's language; on Textual one of ComposeUI's, naming them
+as the view's `month_names` and `day_names`. The calendar offers only the dates from
+`minimum` to `maximum`, but a date typed out of range isn't refused everywhere, so
+validate it; `value_changed` reports the user's dates.
 `SliderView` picks a whole number by dragging a handle, e.g. a number of workers: from
 `minimum` to `maximum` by `step`, its value shown beside the track, so its row is no
 taller than the others; the handle only stops on a step, and `value_changed` reports the
