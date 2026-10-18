@@ -62,6 +62,7 @@ from composeui.core.view import (
     SaveAsAction,
     SelectionMode,
     SeparatorAction,
+    SidebarView,
     SliderMixin,
     StatusBar,
     ToolBar,
@@ -1937,6 +1938,7 @@ _ICONS: Final[dict[str, str]] = {
     '<path d="M12 17h.01"/>',
     "pencil": '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
     ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+    "sidebar": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
 }
 
 
@@ -2540,6 +2542,74 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
         self._view.toggled.emit(is_expanded)
 
 
+class WebSidebarRenderer(WebRenderer[SidebarView]):
+    """An `<aside>`: its title, then its views in a column, left of the pages.
+
+    The main renderer wraps it in a daisyUI drawer (`drawer_html`): a column beside the
+    pages on a wide screen, and on a phone a drawer over them, shown and hidden by a
+    button in the header (`toggle_html`; see `page.py`) and closed by a click beside it.
+    The button isn't in the aside's fragment: a swap of the aside brings it along.
+    """
+
+    _role = "sidebar"
+
+    def __init__(self, view: SidebarView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"title": self._mark_dirty, "toggle_text": self._mark_dirty}
+        )
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
+    @property
+    def drawer_id(self) -> str:
+        """The drawer's checkbox, checked while the drawer shows on a phone."""
+        return f"{self.widget_id}-drawer"
+
+    def to_html(self, *, oob: bool = False) -> str:
+        title = html.escape(self._view.title)
+        heading = f'<h2 class="font-semibold text-primary">{title}</h2>' if title else ""
+        content = "".join(
+            view.renderer.to_html()
+            for view in self._view.children_views
+            if isinstance(view.renderer, WebRenderer)
+        )
+        name = title or html.escape(self._view.toggle_text)
+        # bottom padding keeps the last view clear of the fixed status bar
+        aside = (
+            f'<aside {self._root_attributes(oob=oob)} aria-label="{name}"'
+            ' class="cui-sidebar flex min-h-full w-80 max-w-[85vw] flex-col gap-6 border-r'
+            f' border-base-300 bg-base-100 p-4 pb-20">{heading}{content}</aside>'
+        )
+        return aside + self.toggle_html(oob=True) if oob else aside
+
+    def toggle_html(self, *, oob: bool = False) -> str:
+        """Get the header's button showing and hiding the drawer, only on a phone."""
+        swap = ' hx-swap-oob="true"' if oob else ""
+        return (
+            f'<button id="{self.widget_id}-toggle" type="button"{swap}'
+            ' class="btn btn-ghost btn-square btn-sm lg:hidden"'
+            f' data-sidebar-toggle="{self.drawer_id}" aria-controls="{self.widget_id}"'
+            f' aria-expanded="false" aria-label="{html.escape(self._view.toggle_text)}"'
+            f' title="{html.escape(self._view.toggle_text)}">{_icon("sidebar", "size-5")}</button>'
+        )
+
+    def drawer_html(self, content: str) -> str:
+        """Lay out `content`, the pages' column, beside the sidebar, in a drawer on a phone."""
+        return (
+            '<div class="cui-drawer drawer lg:drawer-open">'
+            f'<input id="{self.drawer_id}" type="checkbox" class="drawer-toggle"'
+            ' tabindex="-1" aria-hidden="true">'
+            f'<div class="drawer-content">{content}</div>'
+            '<div class="drawer-side z-30">'
+            f'<label for="{self.drawer_id}" class="drawer-overlay"'
+            f' aria-label="{html.escape(self._view.toggle_text)}"></label>'
+            f"{self.to_html()}</div></div>"
+        )
+
+
 class WebGridRenderer(WebRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -2730,6 +2800,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         content: list[str] = []
         status_bar = ""
         toolbar = ""
+        sidebar: WebSidebarRenderer | None = None
         for child_view in self._view.children_views:
             if not isinstance(child_view.renderer, WebRenderer):
                 continue
@@ -2741,6 +2812,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 menus.append(child_view.renderer.to_html())
             elif isinstance(child_view, ToolBar):
                 toolbars.append(child_view.renderer.to_html())
+            elif isinstance(child_view.renderer, WebSidebarRenderer):
+                sidebar = child_view.renderer
             else:
                 if child_view is self.router and isinstance(child_view.renderer, WebRouterRenderer):
                     toolbar = child_view.renderer.toolbar_html()
@@ -2748,22 +2821,25 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         # the pages' toolbar wraps to a row of its own on a narrow screen
         wrap = " flex-wrap" if toolbar else ""
         # bottom padding keeps the last row clear of the fixed status bar
+        main = (
+            f'<main class="mx-auto {_MAIN_WIDTHS} px-4 pt-8 pb-20">'
+            '<div class="card border border-base-300 bg-base-100 shadow-md">'
+            '<div class="card-body gap-6 p-6">'
+            f"{''.join(content)}"
+            "</div></div></main>"
+        )
         return get_page(
             self._view.title,
             # sticky: the menus stay at hand however long the form is
             f'<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
             " border-base-300"
             ' bg-base-100 px-4">'
-            f"{self.brand_html()}{toolbar}"
+            f"{sidebar.toggle_html() if sidebar else ''}{self.brand_html()}{toolbar}"
             '<nav class="ml-auto flex items-center gap-1">'
             f"{''.join(toolbars)}{''.join(menus)}</nav>"
             f"{_THEME_MENU}"
             "</header>"
-            f'<main class="mx-auto {_MAIN_WIDTHS} px-4 pt-8 pb-20">'
-            '<div class="card border border-base-300 bg-base-100 shadow-md">'
-            '<div class="card-body gap-6 p-6">'
-            f"{''.join(content)}"
-            "</div></div></main>"
+            f"{sidebar.drawer_html(main) if sidebar else main}"
             f"{status_bar}{self._dialogs_html()}",
             self._view.language,
             jobs_running=self._view.jobs.is_running,
@@ -2845,6 +2921,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "radio_group": WebRadioGroupRenderer,
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,
+    "sidebar": WebSidebarRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
     "toolbar": WebToolBarRenderer,

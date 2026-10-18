@@ -53,6 +53,7 @@ from composeui.core.view import (
     SaveAsAction,
     SelectionMode,
     SeparatorAction,
+    SidebarView,
     SliderMixin,
     StatusBar,
     ToolBar,
@@ -71,6 +72,7 @@ from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
@@ -1655,6 +1657,37 @@ class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollaps
         self._view.toggled.emit(is_expanded)
 
 
+class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar]):
+    """A column on the screen's left: its title, then its views, scrolling on their own."""
+
+    def __init__(self, view: SidebarView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"title": self._refresh_title, "toggle_text": self._noop})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            widgets = [
+                view.renderer.widget
+                for view in self._view.children_views
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            self._rendered_object = ComposeSidebar(*widgets)
+
+    @staticmethod
+    def _refresh_title(_view: SidebarView, rendered_object: ComposeSidebar, value: str) -> None:
+        rendered_object.title.update(value)
+        rendered_object.title.display = value != ""
+
+    @staticmethod
+    def _noop(_view: SidebarView, _rendered_object: ComposeSidebar, _value: Any) -> None:
+        pass  # the column always shows: no button shows or hides it
+
+    @staticmethod
+    def _update_state(view: SidebarView, rendered_object: ComposeSidebar) -> None:
+        pass  # a sidebar has no user-editable state of its own
+
+
 class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
@@ -1924,11 +1957,12 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         `StatusBar` is docked to the real bottom of the terminal (see
         `TextualStatusBarRenderer`) and the toolbars to the top; everything else goes in
         a `VerticalScroll` so content taller than the screen stays reachable instead of
-        clipped.
+        clipped, beside the sidebar, if any, scrolling on its own.
         """
         scrollable: list[Widget] = []
         toolbars: list[Widget] = []
         docked: list[Widget] = []
+        sidebars: list[Widget] = []
         for child_view in self._view.children_views:
             if not (
                 isinstance(child_view.renderer, TextualWidgetRenderer)
@@ -1940,6 +1974,8 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                 docked.append(widget)
             elif isinstance(child_view, ToolBar):
                 toolbars.append(widget)
+            elif isinstance(child_view, SidebarView):
+                sidebars.append(widget)
             elif isinstance(child_view.renderer, TextualRouterRenderer):
                 if child_view.renderer.toolbar is not None:
                     toolbars.append(child_view.renderer.toolbar)
@@ -1948,7 +1984,11 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                 scrollable.append(widget)
         if len(toolbars) > 0:
             docked.append(ComposeToolbars(*toolbars))
-        return Vertical(VerticalScroll(*scrollable), *docked)
+        content: Widget = VerticalScroll(*scrollable)
+        if len(sidebars) > 0:
+            # beside the content, scrolling on its own: shown whatever the page
+            content = Horizontal(*sidebars, content)
+        return Vertical(content, *docked)
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self._rendered_object, callback)
@@ -2060,6 +2100,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "radio_group": TextualRadioGroupRenderer,
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
+    "sidebar": TextualSidebarRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
     "toolbar": TextualToolBarRenderer,

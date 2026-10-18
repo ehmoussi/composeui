@@ -35,5 +35,6 @@
   "contains, =exact, start*, !not": "contient, =exact, début*, !sauf",
   "a regular expression, as Room [1-3]": "une expression régulière, comme Pièce [1-3]",
   "{header} matches {filter}": "{header} correspond à {filter}",
-  "Regular expression": "Expression régulière"
+  "Regular expression": "Expression régulière",
+  "Sidebar": "Panneau latéral"
 }

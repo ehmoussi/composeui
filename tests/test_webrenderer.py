@@ -103,6 +103,7 @@ from tests.horizontal import HorizontalMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -2164,6 +2165,57 @@ def test_an_icon_is_served_from_its_content_and_only_when_a_view_names_it(
         swapped = _swapped(render_dirty(dirty), _action_id(main_view.toolbar.run))
     assert _icon_url(swapped) != run_url
     assert toolbar_client.get(run_url).status_code == 404
+
+
+@pytest.fixture
+def sidebar() -> Iterator[tuple[TestClient, SidebarMainView]]:
+    """Serve an app with a sidebar beside its pages; yield a client and its main view."""
+    views: list[SidebarMainView] = []
+
+    class SidebarApp(WebApplication[SidebarMainView]):
+        def setup_session(self, main_view: SidebarMainView) -> None:
+            views.append(main_view)
+
+    app = SidebarApp(build_main_view=SidebarMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def test_a_sidebar_is_a_drawer_beside_the_pages_whatever_the_page(
+    sidebar: tuple[TestClient, SidebarMainView],
+) -> None:
+    client, view = sidebar
+    aside_id = _widget_id(view.sidebar.renderer)
+    router_id = _widget_id(view.router.renderer)
+    for path in ("/", "/results"):
+        page = client.get(path).text
+        aside = _element(page, aside_id)
+        assert aside.tag == "aside"
+        assert aside.attributes["aria-label"] == "New record"
+        assert "New record" in aside.text
+        assert _widget_id(view.sidebar.create.renderer) in page
+        # not one of the pages: shown whatever the page
+        pages = _element(page, router_id).descendants
+        assert all(attributes.get("id") != aside_id for _, attributes in pages)
+    # the drawer's checkbox, which the header's button and the backdrop toggle
+    toggle = _element(page, f"{aside_id}-toggle").attributes
+    drawer = _element(page, str(toggle["data-sidebar-toggle"])).attributes
+    assert (drawer["type"], toggle["aria-controls"]) == ("checkbox", aside_id)
+    assert f'<label for="{drawer["id"]}" class="drawer-overlay"' in page
+
+    def rename() -> None:
+        view.sidebar.title = "<Add>"
+        view.sidebar.toggle_text = "<Panel>"
+
+    view.sidebar.create.clicked.connect(rename)
+    create = view.sidebar.create.renderer
+    assert isinstance(create, WebRenderer)
+    fragments = handle_event(create, "click", {})
+    # the button swaps along with the sidebar, its text escaped as the title is
+    assert "<Add>" in _swapped(fragments, aside_id).text
+    assert _swapped(fragments, f"{aside_id}-toggle").attributes["aria-label"] == "<Panel>"
 
 
 @pytest.fixture

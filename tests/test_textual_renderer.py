@@ -60,6 +60,7 @@ from composeui.textualcore.widgets.composefiltertable import (
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
@@ -76,6 +77,7 @@ from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
+from tests.sidebar import SidebarMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -805,6 +807,41 @@ async def test_the_toolbar_shows_one_page_at_a_time() -> None:
         await pilot.pause()
         assert name.widget.region.height > 0
         assert buttons["Inputs"].variant == "primary"
+
+
+@pytest.mark.asyncio
+async def test_a_sidebar_is_a_column_left_of_the_pages_whatever_the_page() -> None:
+    view = SidebarMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    widgets = [
+        renderer.widget
+        for renderer in (
+            view.sidebar.renderer,
+            view.sidebar.create.renderer,
+            view.router.inputs.submit.renderer,
+            view.router.results.progress.renderer,
+        )
+        if isinstance(renderer, TextualWidgetRenderer)
+    ]
+    sidebar, create, submit, progress = widgets
+    assert isinstance(sidebar, ComposeSidebar)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert str(sidebar.title.render()) == "New record"
+        assert create in sidebar.walk_children()
+        assert sidebar.region.right <= submit.region.x  # on the pages' left
+
+        view.router.navigate("results")
+        await pilot.pause()
+        assert create.region.area > 0  # still shown, beside the other page
+        assert sidebar.region.right <= progress.region.x
+        view.sidebar.title = ""
+        await pilot.pause()
+        assert not sidebar.title.display  # no empty heading
 
 
 @pytest.mark.asyncio

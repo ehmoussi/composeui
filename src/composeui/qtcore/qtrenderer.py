@@ -9,6 +9,7 @@ from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
 from qtpy.QtWidgets import (
     QAbstractButton,
     QCheckBox,
+    QDockWidget,
     QFileDialog,
     QFormLayout,
     QGridLayout,
@@ -21,6 +22,7 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QStatusBar,
@@ -65,6 +67,7 @@ from composeui.core.view import (
     Router,
     SelectionMode,
     SeparatorAction,
+    SidebarView,
     SliderMixin,
     StatusBar,
     ToolBar,
@@ -1548,6 +1551,77 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
             self._view.is_expanded = is_expanded
 
 
+#: pixels a sidebar is wide at least, e.g. room for a form's fields
+_SIDEBAR_MINIMUM_WIDTH = 280
+
+
+class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QDockWidget]):
+    """A dock on the window's left: its title, then its views in a column, scrolling.
+
+    The dock stays where it is: it can't be closed, moved or floated, as the sidebar is
+    part of the app's layout. Its own title bar is left out for the title above the views,
+    as on the other backends.
+    """
+
+    def __init__(self, view: SidebarView) -> None:
+        super().__init__(view)
+        self._title: QLabel | None = None
+        self._refresh_dispatcher.update({"title": self._refresh_title, "toggle_text": self._noop})
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QDockWidget()
+            self._rendered_object.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+            self._rendered_object.setTitleBarWidget(QWidget())
+            content = QWidget()
+            layout = QVBoxLayout(content)
+            self._title = QLabel()
+            font = self._title.font()
+            font.setBold(True)
+            self._title.setFont(font)
+            # inset like the views under it, as a window's column of content
+            title_inset = QVBoxLayout()
+            style = self._title.style()
+            title_inset.setContentsMargins(
+                style.pixelMetric(QStyle.PixelMetric.PM_LayoutLeftMargin),
+                0,
+                style.pixelMetric(QStyle.PixelMetric.PM_LayoutRightMargin),
+                0,
+            )
+            title_inset.addWidget(self._title)
+            layout.addLayout(title_inset)
+            for view in self._view.children_views:
+                _add_content_widget(layout, view)
+            # height to spare goes below the views, not between them
+            layout.addStretch()
+            scroll = QScrollArea()
+            scroll.setMinimumWidth(_SIDEBAR_MINIMUM_WIDTH)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            # as wide as its content: no horizontal scroll bar
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setWidget(content)
+            self._rendered_object.setWidget(scroll)
+            self.refresh()
+
+    @property
+    def title_label(self) -> QLabel | None:
+        return self._title
+
+    def _refresh_title(self, _view: SidebarView, _rendered_object: QDockWidget, value: str) -> None:
+        if self._title is not None:
+            self._title.setText(value)
+            self._title.setVisible(value != "")
+
+    @staticmethod
+    def _noop(_view: SidebarView, _rendered_object: QDockWidget, _value: Any) -> None:
+        pass  # a dock always shows: no button shows or hides it
+
+    @staticmethod
+    def _update_state(view: SidebarView, rendered_object: QDockWidget) -> None:
+        pass  # a sidebar has no user-editable state of its own
+
+
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
@@ -1700,21 +1774,9 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         central_layout = QVBoxLayout()
         central_widget.setLayout(central_layout)
         for child_view in view.children_views:
-            if isinstance(child_view.renderer, QtMenuRenderer):
-                child_view.renderer.set_parent_rendered_object(rendered_object)
-                child_view.renderer.render()
-                menu_obj = child_view.renderer.qt_object
-                if menu_obj is not None:
-                    rendered_object.menuBar().addMenu(menu_obj)
-            elif isinstance(child_view.renderer, QtStatusBarRenderer):
-                status_bar_obj = child_view.renderer.qt_object
-                if isinstance(status_bar_obj, QStatusBar):
-                    rendered_object.setStatusBar(status_bar_obj)
-            elif isinstance(child_view.renderer, QtToolBarRenderer):
-                toolbar_obj = child_view.renderer.qt_object
-                if toolbar_obj is not None:
-                    rendered_object.addToolBar(toolbar_obj)
-            elif isinstance(child_view.renderer, QtRouterRenderer):
+            if QtMainRenderer._add_window_part(child_view, rendered_object):
+                continue
+            if isinstance(child_view.renderer, QtRouterRenderer):
                 toolbar = child_view.renderer.toolbar
                 stack = child_view.renderer.qt_object
                 if toolbar is not None and stack is not None:
@@ -1725,6 +1787,33 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         central_layout.addStretch()
         central_layout.update()
         rendered_object.setCentralWidget(central_widget)
+
+    @staticmethod
+    def _add_window_part(child_view: View, rendered_object: QMainWindow) -> bool:
+        """Add a part of the window around the content, if `child_view` is one.
+
+        Its menus, status bar, toolbars and sidebar; return whether `child_view` is one.
+        """
+        renderer = child_view.renderer
+        if isinstance(renderer, QtMenuRenderer):
+            renderer.set_parent_rendered_object(rendered_object)
+            renderer.render()
+            if renderer.qt_object is not None:
+                rendered_object.menuBar().addMenu(renderer.qt_object)
+        elif isinstance(renderer, QtStatusBarRenderer):
+            if isinstance(renderer.qt_object, QStatusBar):
+                rendered_object.setStatusBar(renderer.qt_object)
+        elif isinstance(renderer, QtToolBarRenderer):
+            if renderer.qt_object is not None:
+                rendered_object.addToolBar(renderer.qt_object)
+        elif isinstance(renderer, QtSidebarRenderer):
+            if renderer.qt_object is not None:
+                rendered_object.addDockWidget(
+                    Qt.DockWidgetArea.LeftDockWidgetArea, renderer.qt_object
+                )
+        else:
+            return False
+        return True
 
     @staticmethod
     def _refresh_title(_view: MainView, rendered_object: QMainWindow, value: str) -> None:
@@ -1968,6 +2057,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "radio_group": QtRadioGroupRenderer,
     "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,
+    "sidebar": QtSidebarRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
     "toolbar": QtToolBarRenderer,
