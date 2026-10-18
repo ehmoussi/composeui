@@ -3,7 +3,8 @@
 Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
 view. It returns the task's status, which its job emits on the main thread, where the
 views show it: in the table, and counted by metrics, which once a run is over show how
-each count changed since the last run.
+each count changed since the last run. The table is a section that collapses, leaving
+only the metrics.
 """
 
 import enum
@@ -24,6 +25,7 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ButtonView,
+    ExpanderView,
     GroupFormView,
     HorizontalView,
     LabelRowIntInputView,
@@ -149,6 +151,15 @@ class TaskMetrics(HorizontalView):
 
 
 @define_view
+class TaskDetails(ExpanderView):
+    """Each task of the run, behind the metrics: collapsed, only they show."""
+
+    tasks: TableView = child(
+        TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
+    )
+
+
+@define_view
 class TaskMainView(MainView):
     app_title = T("Task View")
     extension = ".tasks"
@@ -160,9 +171,7 @@ class TaskMainView(MainView):
     buttons: RunButtons = Factory(RunButtons)
     progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT)
     metrics: TaskMetrics = Factory(TaskMetrics)
-    tasks: TableView = child(
-        TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
-    )
+    details: TaskDetails = child(TaskDetails, title=T("Tasks"), is_expanded=True)
     #: the tasks of the last run
     _tasks: list[Task] = attrs.field(factory=list, init=False, metadata={OMIT: True})
     #: how many tasks of the run before had each status, once it was over
@@ -204,7 +213,7 @@ class TaskMainView(MainView):
 
     def _show(self) -> None:
         error = self.tr("Random error: task {number} failed")
-        self.tasks.rows = [
+        self.details.tasks.rows = [
             [
                 str(task.number),
                 f"{task.duration:.1f}",
