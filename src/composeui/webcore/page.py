@@ -542,20 +542,33 @@ document.addEventListener("input", function (event) {
   if (!("slider" in slider.dataset)) return;
   slider.parentElement.querySelector("output").value = slider.value;
 });
-/* a date field's calendar button opens the browser's date picker, a hidden date input
-   beside it: the server hears the date picked as that input's change, and swaps the
-   field back showing it (see `WebDateInputRenderer`) */
-document.addEventListener("click", function (event) {
-  var button = event.target.closest("[data-date-pick]");
-  if (button === null) return;
-  var picker = button.parentElement.querySelector('input[type="date"]');
-  if (typeof picker.showPicker === "function") {
-    picker.showPicker();
-  } else {
-    picker.focus();
-    picker.click();
-  }
-});
+/* the date fields' calendar, Cally's `<calendar-date>`: the page loads it only once it
+   shows its first date field, from a swap too, as it does uPlot */
+var callyLoading = false;
+function loadCalendars() {
+  if (callyLoading || document.querySelector("calendar-date") === null) return;
+  callyLoading = true;
+  var script = document.createElement("script");
+  script.type = "module";
+  script.src = "$cally_url";
+  document.head.appendChild(script);
+}
+/* a date field's calendar (see `WebDateInputRenderer`), a popover its button opens: it
+   names the months and days in the page's language, and starts on the date, focused,
+   so the arrows move from it. The date picked closes it, the button taking the focus
+   back, once its `change` has posted it: the server swaps the field back showing it. */
+document.addEventListener("toggle", function (event) {
+  var calendar = event.target.querySelector && event.target.querySelector("[data-date-calendar]");
+  if (calendar === null || calendar === undefined || event.newState !== "open") return;
+  calendar.locale = document.documentElement.lang || undefined;
+  calendar.focus();
+}, true);
+document.addEventListener("change", function (event) {
+  if (!("dateCalendar" in event.target.dataset)) return;
+  var popover = event.target.closest("[popover]");
+  popover.hidePopover();
+  document.getElementById(popover.dataset.dateButton).focus();
+}, true);
 /* the sidebar (see `WebSidebarRenderer`): on a wide screen, its button in the header
    retracts and expands the column, then posts its state; on a phone, it shows and hides
    the drawer, through the drawer's checkbox, which a click beside the drawer unchecks
@@ -673,6 +686,7 @@ document.addEventListener("toggle", placeHelp, true);
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   syncCharts();
+  loadCalendars();
   syncSidebarToggles();
   new MutationObserver(function () {
     syncInvalidFields();
@@ -680,6 +694,7 @@ document.addEventListener("DOMContentLoaded", function () {
     openDialogs();
     syncPage();
     syncCharts();
+    loadCalendars();
   }).observe(document.body, {
     childList: true,
     subtree: true,
@@ -706,6 +721,8 @@ _STATIC_URLS = {
     "css_url": _static_url("app.css"),
     # uPlot 1.6.32 (https://github.com/leeoniya/uPlot), its stylesheet in css/uPlot.min.css
     "uplot_url": _static_url("uPlot.iife.min.js"),
+    # Cally 0.9.2 (https://github.com/WickyNilliams/cally), styled by daisyUI's `cally`
+    "cally_url": _static_url("cally.js"),
 }
 
 

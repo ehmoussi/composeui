@@ -545,6 +545,8 @@ class DateInputViewLike(TextFieldViewLike, Protocol):
     maximum: datetime.date | None
     date_format: str
     pick_text: str
+    previous_month_text: str
+    next_month_text: str
     value_changed: Signal[datetime.date | None]
 
     def shown_text(self, value: datetime.date | None) -> str: ...
@@ -553,14 +555,18 @@ class DateInputViewLike(TextFieldViewLike, Protocol):
 class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
     """A text field typing the date as the view's `date_format` says, then a calendar button.
 
-    The field posts like a number's (see `_WebNumberFieldRenderer`): never swapped back
-    while typed in, text that isn't a date ignored. Left (`change`), it is swapped back
-    showing the date as the format writes it, or the date back for text that isn't one.
-    The button opens the browser's own date picker, a hidden date input beside it (see
-    `page.py`), its months and days in the browser's language; the date picked posts
-    as that input's change (`pick`), in ISO 8601. The root is a `<div>` holding them, so
-    a row's label names the field with `aria-labelledby`. Like the number fields, a date
-    out of `minimum`/`maximum` typed isn't refused; the picker offers only those in range.
+    The root is daisyUI's field holding both, so the button takes the field's colors in
+    every theme, and the field's border marks the row invalid (see `css/app.css`); a row's
+    label names the text field with `aria-labelledby`, as a `<div>` can't be labelled. The
+    text posts like a number's (see `_WebNumberFieldRenderer`): never swapped back while
+    typed in, text that isn't a date ignored. Left (`change`), it is swapped back showing
+    the date as the format writes it, or the date back for text that isn't one.
+
+    The button opens a popover holding Cally's calendar (`<calendar-date>`, which daisyUI
+    styles in the theme's colors), its months and days in the page's language (see
+    `page.py`); the date picked posts as its change (`pick`), in ISO 8601. Like the number
+    fields, a date typed out of `minimum`/`maximum` isn't refused; the calendar offers only
+    those in range.
     """
 
     _role = "date_input"
@@ -578,7 +584,9 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
                 "maximum": self._mark_dirty,
                 "date_format": self._refresh_value,
                 "pick_text": self._mark_dirty,
-                # the browser's picker names them, in its own language
+                "previous_month_text": self._mark_dirty,
+                "next_month_text": self._mark_dirty,
+                # the calendar names them, in the page's language (`Intl`'s names)
                 "month_names": lambda _view, _rendered_object, _value: None,
                 "day_names": lambda _view, _rendered_object, _value: None,
             }
@@ -594,25 +602,34 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             if limit is not None
         )
         picked = "" if view.value is None else view.value.isoformat()
+        calendar_id = f"{self.widget_id}-calendar"
         return (
-            f'<div {self._root_attributes(oob=oob)} class="relative flex gap-1">'
+            # daisyUI's field around both, its colors, focus ring and invalid border theirs
+            f'<div {self._root_attributes(oob=oob)} class="input relative w-full pe-1">'
             f'<input id="{self.widget_id}-field"{self._row_attributes()}'
-            ' class="input w-full" type="text" name="value"'
+            ' class="min-w-0 grow" type="text" name="value"'
             f' value="{html.escape(view.shown_text(view.value))}"'
             f' placeholder="{html.escape(date_hint(view.placeholder, view.date_format))}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
             ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
             f' autocomplete="off"{disabled}>'
-            f'<button id="{self.widget_id}-pick" type="button" class="btn btn-square"'
-            f' aria-label="{pick}" title="{pick}" data-date-pick{disabled}>'
+            f'<button id="{self.widget_id}-pick" type="button"'
+            ' class="btn btn-ghost btn-sm btn-square"'
+            f' aria-label="{pick}" title="{pick}" popovertarget="{calendar_id}"'
+            f' style="anchor-name: --{self.widget_id}"{disabled}>'
             f"{_icon('calendar')}</button>"
-            # out of sight and out of the way, under the button, where the picker opens
-            f'<input type="date" name="picked" value="{picked}"{limits}'
-            ' class="pointer-events-none absolute right-0 bottom-0 size-px opacity-0"'
-            ' tabindex="-1" aria-hidden="true"'
+            # in the top layer, under the button: Escape or a click beside it closes it
+            f'<div id="{calendar_id}" popover data-date-button="{self.widget_id}-pick"'
+            ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
+            f' style="position-anchor: --{self.widget_id}">'
+            f'<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
-            ' hx-vals=\'{"event": "pick"}\' hx-swap="none"'
-            f' autocomplete="off"{disabled}></div>'
+            """ hx-vals='js:{event: "pick", picked: event.target.value}' hx-swap="none">"""
+            f'<span slot="previous" aria-label="{html.escape(view.previous_month_text)}">'
+            f"{_icon('chevron', 'size-4 rotate-90')}</span>"
+            f'<span slot="next" aria-label="{html.escape(view.next_month_text)}">'
+            f"{_icon('chevron', 'size-4 -rotate-90')}</span>"
+            "<calendar-month></calendar-month></calendar-date></div></div>"
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:

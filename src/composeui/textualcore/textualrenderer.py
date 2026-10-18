@@ -789,6 +789,9 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
                 "month_names": self._refresh_month_names,
                 "day_names": self._refresh_day_names,
                 "pick_text": self._refresh_pick_text,
+                # its calendar's keys move by month, its title naming the month shown
+                "previous_month_text": lambda _view, _rendered_object, _value: None,
+                "next_month_text": lambda _view, _rendered_object, _value: None,
             }
         )
 

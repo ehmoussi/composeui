@@ -1169,8 +1169,11 @@ class DateInputMixin(_InputView):
         factory=lambda: [T("Mo"), T("Tu"), T("We"), T("Th"), T("Fr"), T("Sa"), T("Su")],
         metadata={UI_TEXT: True},
     )
-    #: the name of the button opening the calendar, as a screen reader reads it out
+    #: the names of the button opening the calendar, and of its month buttons, as a
+    #: screen reader reads them out
     pick_text: str = attrs.field(default=T("Pick a date"), metadata={UI_TEXT: True})
+    previous_month_text: str = attrs.field(default=T("Previous month"), metadata={UI_TEXT: True})
+    next_month_text: str = attrs.field(default=T("Next month"), metadata={UI_TEXT: True})
     #: the user typed or picked a new date (None once the field is emptied); not
     #: emitted when `value` is set in code
     value_changed: Signal[Optional[datetime.date]] = attrs.Factory(Signal[Optional[datetime.date]])
