@@ -29,6 +29,8 @@ from qtpy.QtWidgets import (
     QTabWidget,
     QTextBrowser,
     QToolBar,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -76,6 +78,7 @@ from composeui.core.view import (
     TabPage,
     TabView,
     ToolBar,
+    TreeView,
     VerticalView,
     View,
     replace_cell,
@@ -93,10 +96,10 @@ from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series
+    from composeui.core.view import Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
@@ -1763,6 +1766,123 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
         pass  # a list has no user-editable state of its own: its records are the model's
 
 
+class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
+    """A tree widget without a header, each item holding its node's path.
+
+    The user selects one item at most: a Ctrl+click deselecting it selects it again, as
+    the view always keeps the node the user selected.
+    """
+
+    def __init__(self, view: TreeView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "nodes": self._refresh_nodes,
+                "expanded": self._refresh_expanded,
+                "selected": self._refresh_selected,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QTreeWidget()
+            self._rendered_object.setHeaderHidden(True)
+            self._rendered_object.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+            self._rendered_object.itemSelectionChanged.connect(self._update_selected)
+            self._rendered_object.itemExpanded.connect(
+                lambda item: self._update_expanded(item, is_expanded=True)
+            )
+            self._rendered_object.itemCollapsed.connect(
+                lambda item: self._update_expanded(item, is_expanded=False)
+            )
+            self.refresh()
+
+    @classmethod
+    def _refresh_nodes(
+        cls, view: TreeView, rendered_object: QTreeWidget, value: list[TreeNode]
+    ) -> None:
+        rendered_object.clear()
+
+        def add(
+            parent: QTreeWidget | QTreeWidgetItem, nodes: Iterable[TreeNode], path: TreePath
+        ) -> None:
+            for node in nodes:
+                item = QTreeWidgetItem(parent, [node.label])
+                item.setData(0, Qt.ItemDataRole.UserRole, [*path, node.key])
+                add(item, node.children, (*path, node.key))
+
+        add(rendered_object, value, ())
+        # the view's, already kept to those still in the nodes
+        cls._refresh_expanded(view, rendered_object, view.expanded)
+        cls._refresh_selected(view, rendered_object, view.selected)
+
+    @staticmethod
+    def _refresh_expanded(
+        _view: TreeView, rendered_object: QTreeWidget, value: list[TreePath]
+    ) -> None:
+        expanded = set(value)
+        for path, item in _tree_items(rendered_object):
+            item.setExpanded(path in expanded)
+
+    @staticmethod
+    def _refresh_selected(
+        _view: TreeView, rendered_object: QTreeWidget, value: TreePath | None
+    ) -> None:
+        rendered_object.clearSelection()
+        for path, item in _tree_items(rendered_object):
+            if path == value:
+                rendered_object.setCurrentItem(item)
+                item.setSelected(True)
+
+    @staticmethod
+    def _update_state(view: TreeView, rendered_object: QTreeWidget) -> None:
+        items = _tree_items(rendered_object)
+        view.expanded = [path for path, item in items if item.isExpanded()]
+        selected = [path for path, item in items if item.isSelected()]
+        view.selected = selected[0] if len(selected) > 0 else None
+
+    def _update_selected(self) -> None:
+        assert self._rendered_object is not None
+        selected = self._rendered_object.selectedItems()
+        if len(selected) == 0:
+            self.refresh_attribute("selected", self._view.selected)
+            return
+        path = _tree_path(selected[0])
+        if path == self._view.selected:
+            return
+        with self.stop_refresh():
+            self._view.selected = path
+        self._view.selection_changed.emit(path)
+
+    def _update_expanded(self, item: QTreeWidgetItem, *, is_expanded: bool) -> None:
+        path = _tree_path(item)
+        with self.stop_refresh():
+            self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
+        self._view.toggled.emit(path, is_expanded)
+
+
+def _tree_path(item: QTreeWidgetItem) -> TreePath:
+    return tuple(item.data(0, Qt.ItemDataRole.UserRole))
+
+
+def _tree_items(tree: QTreeWidget) -> list[tuple[TreePath, QTreeWidgetItem]]:
+    """Get the tree's items with their nodes' paths, depth first."""
+    items: list[tuple[TreePath, QTreeWidgetItem]] = []
+
+    def add(item: QTreeWidgetItem) -> None:
+        items.append((_tree_path(item), item))
+        for index in range(item.childCount()):
+            child = item.child(index)
+            if child is not None:
+                add(child)
+
+    for index in range(tree.topLevelItemCount()):
+        item = tree.topLevelItem(index)
+        if item is not None:
+            add(item)
+    return items
+
+
 def _tab_of(widget: QWidget) -> tuple[QTabWidget, int] | None:
     """Get the tab widget showing `widget` as a tab, and its tab's index; None outside one."""
     parent = widget.parentWidget()
@@ -2309,5 +2429,6 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "tab_page": QtTabPageRenderer,
     "tabs": QtTabsRenderer,
     "toolbar": QtToolBarRenderer,
+    "tree": QtTreeRenderer,
     "vertical": QtVerticalRenderer,
 }

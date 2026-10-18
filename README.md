@@ -172,6 +172,11 @@ a bar that only shows the task runs while `maximum` is `None`.
 `ExpanderView` is a collapsible section, e.g. a record's details with its Edit and Delete
 buttons: a subclass's view fields, one above the other, shown only while `is_expanded`,
 under its `title`, which the user clicks to expand or collapse it (`toggled`).
+`TreeView` shows `nodes` in a tree, e.g. a site's buildings, floors and rooms: each a
+`TreeNode` with its `label` and `children`, known by its path, the `key`s (its label unless
+given) from its top-level node down to it, e.g. `("Building A", "Floor 1")`. The user
+expands and collapses the nodes (`expanded`, `toggled`) and selects one (`selected`,
+`selection_changed`); new `nodes` keep the paths still in them.
 `MarkdownView` shows read-only Markdown `text`, e.g. a help page or a report's summary;
 its links open in the browser. On the web its raw HTML is left out, so the text can't
 inject markup; [`src/examples/pipeform.py`](src/examples/pipeform.py) has a help page, and

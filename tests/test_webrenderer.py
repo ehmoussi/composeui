@@ -65,6 +65,7 @@ from composeui.core.view import (
     Series,
     StatusBar,
     TableView,
+    TreeNode,
     View,
     child,
     define_view,
@@ -105,6 +106,7 @@ from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -730,6 +732,84 @@ def test_an_expander_is_a_details_posting_its_toggles_never_swapped_back() -> No
     # its own summary, before the nested expander's
     summary = next(attributes for tag, attributes in descendants if tag == "summary")
     assert summary["tabindex"] == "-1"  # its title can't be focused to toggle it
+
+
+def _tree_buttons(markup: str, tree_id: str) -> dict[str, dict[str, str | None]]:
+    """Get a tree's buttons by their text or name: the nodes', then "toggle " and theirs."""
+    buttons: dict[str, dict[str, str | None]] = {}
+    for tag, attributes in _element(markup, tree_id).descendants:
+        if tag == "button":
+            name = attributes.get("aria-label")
+            node_id = str(attributes["id"])
+            text = _element(markup, node_id).text
+            buttons[f"toggle {name}" if name is not None else text] = attributes
+    return buttons
+
+
+def _tree_post(button: dict[str, str | None]) -> dict[str, str]:
+    values = json.loads(str(button["hx-vals"]))
+    assert isinstance(values, dict)
+    return values
+
+
+def test_a_tree_posts_its_nodes_selections_and_toggles_swapping_itself_back() -> None:
+    view = SiteMainView()
+    view.render(RendererType.WEB)
+    site = view.site
+    tree = site.renderer
+    assert isinstance(tree, WebRenderer)
+    selections: list[tuple[str, ...]] = []
+    toggles: list[tuple[tuple[str, ...], bool]] = []
+    site.selection_changed.connect(selections.append)
+    site.toggled.connect(lambda path, is_expanded: toggles.append((path, is_expanded)))
+    site.nodes = [*site.nodes, TreeNode("<Garden>")]
+    buttons = _tree_buttons(tree.to_html(), tree.widget_id)
+    # a collapsed node's children left out; a leaf has no arrow
+    assert list(buttons) == [
+        "toggle Building A",
+        "Building A",
+        "toggle Floor 1",
+        "Floor 1",
+        "toggle Floor 2",
+        "Floor 2",
+        "toggle Building B",
+        "Building B",
+        "Parking",
+        "<Garden>",  # escaped, shown as text
+    ]
+    assert buttons["toggle Building A"]["aria-expanded"] == "true"
+    assert buttons["toggle Building B"]["aria-expanded"] == "false"
+
+    fragments = handle_event(tree, "select", _tree_post(buttons["Floor 2"]))
+    assert (site.selected, selections) == (("Building A", "Floor 2"), [("Building A", "Floor 2")])
+    _swapped(fragments, tree.widget_id)  # to show it selected
+    buttons = _tree_buttons(fragments, tree.widget_id)
+    assert buttons["Floor 2"]["aria-current"] == "true"
+    assert "aria-current" not in buttons["Floor 1"]
+    handle_event(tree, "select", _tree_post(buttons["Floor 2"]))  # already selected
+    assert len(selections) == 1
+
+    fragments = handle_event(tree, "toggle", _tree_post(buttons["toggle Building B"]))
+    assert site.expanded == [("Building A",), ("Building B",)]
+    assert toggles == [(("Building B",), True)]
+    # each button keeping its id, for htmx to give the focus back
+    swapped = _tree_buttons(fragments, tree.widget_id)
+    assert swapped["toggle Building B"]["aria-expanded"] == "true"
+    assert swapped["Building B"]["id"] == buttons["Building B"]["id"]
+    handle_event(tree, "toggle", _tree_post(buttons["toggle Building B"]))  # posted twice
+    assert len(toggles) == 1
+
+    # a node a stale page still shows: the tree swapped back, nothing selected
+    site.nodes = site.nodes[:1]
+    fragments = handle_event(tree, "select", _tree_post(buttons["Parking"]))
+    assert "Parking" not in _swapped(fragments, tree.widget_id).text
+    handle_event(tree, "toggle", {"path": "not json", "expanded": "true"})
+    assert (len(selections), len(toggles)) == (1, 1)
+
+    site.is_enabled = False
+    assert all("disabled" in b for b in _tree_buttons(tree.to_html(), tree.widget_id).values())
+    with pytest.raises(UnsupportedEventError):  # the route answers 400
+        handle_event(tree, "select", _tree_post(buttons["Building A"]))
 
 
 def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps() -> None:

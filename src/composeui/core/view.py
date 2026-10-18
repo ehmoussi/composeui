@@ -3073,3 +3073,133 @@ class ListView(View, Generic[ItemT]):
             set_references(view, main_view, None if self._model is None else self._model())
         _retranslate(view, self._tr)
         return view
+
+
+#: a node of a `TreeView`, by the keys from its top-level node down to it
+TreePath = tuple[str, ...]
+
+
+def _to_tree_nodes(nodes: "Iterable[TreeNode]") -> tuple["TreeNode", ...]:
+    return tuple(nodes)
+
+
+@attrs.frozen
+class TreeNode:
+    """A node of a `TreeView`: its text, and the nodes under it.
+
+    Its `key`, its label unless given, tells it apart from its siblings: the tree knows a
+    node by its path (see `TreeView`), so nodes under different parents may share one,
+    e.g. a "Pipes" folder under each building.
+    """
+
+    label: str
+    children: tuple["TreeNode", ...] = attrs.field(default=(), converter=_to_tree_nodes)
+    key: str = attrs.field(default=attrs.Factory(lambda node: node.label, takes_self=True))
+
+
+@CONVERTER.register_unstructure_hook
+def _unstructure_tree_node(node: TreeNode) -> dict[str, Any]:
+    # by hand: Python 3.9 doesn't resolve the class naming itself in `children`
+    return {
+        "label": node.label,
+        "key": node.key,
+        "children": [_unstructure_tree_node(child) for child in node.children],
+    }
+
+
+@CONVERTER.register_structure_hook
+def _structure_tree_node(data: Mapping[str, Any], _type: type) -> TreeNode:
+    children = [_structure_tree_node(child, TreeNode) for child in data.get("children", [])]
+    return TreeNode(str(data["label"]), children, str(data.get("key", data["label"])))
+
+
+def walk_tree(
+    nodes: "Iterable[TreeNode]", parent: TreePath = ()
+) -> "Iterator[tuple[TreePath, TreeNode]]":
+    """Get each node of `nodes` and under them with its path, depth first, in order."""
+    for node in nodes:
+        path = (*parent, node.key)
+        yield path, node
+        yield from walk_tree(node.children, path)
+
+
+@define_view
+class TreeView(View):
+    """Nodes in a tree, e.g. a site's buildings, their floors and their rooms.
+
+    A node is known by its path, the keys from its top-level node down to it (see
+    `TreeNode`). The user expands and collapses the nodes with children: `expanded` holds
+    the paths of those expanded, and `toggled` emits a node's path and whether it is now
+    expanded. The user selects one node: `selected` holds its path, and
+    `selection_changed` emits it. Assign new `nodes` to update the tree: they keep the
+    paths of `expanded` and `selected` still in them, and drop the others.
+    """
+
+    _renderer_key = "tree"
+
+    def _check_nodes(self, _attribute: "attrs.Attribute[Any]", nodes: list[TreeNode]) -> None:
+        paths: set[TreePath] = set()
+        for path, _node in walk_tree(nodes):
+            if path in paths:
+                msg = (
+                    f"Cannot set {type(self).__name__}.nodes: two nodes at {list(path)} share"
+                    " the key; give them each a key of their own."
+                )
+                raise ValueError(msg)
+            paths.add(path)
+
+    def _check_expanded(self, _attribute: "attrs.Attribute[Any]", expanded: list[TreePath]) -> None:
+        paths = {path for path, _node in walk_tree(self.nodes)}
+        for path in expanded:
+            if path not in paths:
+                msg = (
+                    f"Cannot expand the node {list(path)} of {type(self).__name__}: none is there."
+                )
+                raise ValueError(msg)
+
+    def _check_selected(
+        self, _attribute: "attrs.Attribute[Any]", selected: Optional[TreePath]
+    ) -> None:
+        if selected is not None and selected not in {path for path, _node in walk_tree(self.nodes)}:
+            msg = (
+                f"Cannot select the node {list(selected)} of {type(self).__name__}: none is there."
+            )
+            raise ValueError(msg)
+
+    def _reconcile_nodes(
+        self, attribute: "attrs.Attribute[Any]", nodes: list[TreeNode]
+    ) -> list[TreeNode]:
+        """Drop the paths of `expanded` and `selected` gone, then notify the renderer.
+
+        Unnotified: the renderer shows them with the nodes.
+        """
+        paths = {path for path, _node in walk_tree(nodes)}
+        object.__setattr__(self, "expanded", [path for path in self.expanded if path in paths])
+        if self.selected not in paths:
+            object.__setattr__(self, "selected", None)
+        return cast("list[TreeNode]", notify_renderer(self, attribute, nodes))
+
+    nodes: list[TreeNode] = attrs.field(
+        factory=list[TreeNode],
+        validator=[_check_nodes],
+        on_setattr=[attrs.setters.validate, _reconcile_nodes],
+    )
+    # after `nodes`: loading saved state checks them against the nodes already loaded
+    expanded: list[TreePath] = attrs.field(factory=list[TreePath], validator=[_check_expanded])
+    selected: Optional[TreePath] = attrs.field(default=None, validator=[_check_selected])
+    #: the user expanded (True) or collapsed a node; not emitted when `expanded` is set in code
+    toggled: Signal[TreePath, bool] = attrs.Factory(Signal[TreePath, bool])
+    #: the user selected a node; not emitted when `selected` is set in code
+    selection_changed: Signal[TreePath] = attrs.Factory(Signal[TreePath])
+
+    def node(self, path: TreePath) -> TreeNode:
+        """Get the node at `path`, e.g. the selected one's label; KeyError if none is there."""
+        for node_path, node in walk_tree(self.nodes):
+            if node_path == path:
+                return node
+        raise KeyError(path)
+
+    def expanded_with(self, path: TreePath, *, is_expanded: bool) -> list[TreePath]:
+        """Get `expanded` with the node at `path` expanded or collapsed, the others kept."""
+        kept = [expanded for expanded in self.expanded if expanded != path]
+        return [*kept, path] if is_expanded else kept

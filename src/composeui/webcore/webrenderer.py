@@ -72,11 +72,13 @@ from composeui.core.view import (
     TabPage,
     TabView,
     ToolBar,
+    TreeView,
     VerticalView,
     View,
     as_pattern,
     replace_cell,
     split_pattern,
+    walk_tree,
 )
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import get_page
@@ -86,7 +88,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series
+    from composeui.core.view import Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 
@@ -2630,6 +2632,113 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
         self._view.toggled.emit(is_expanded)
 
 
+class WebTreeRenderer(WebRenderer[TreeView]):
+    """Nested lists of the nodes, each a button selecting it after an arrow toggling it.
+
+    A click or Enter on a node selects it (`aria-current`), on its arrow expands or
+    collapses it (`aria-expanded`); a collapsed node's children are left out. Either way
+    the tree is swapped back, each button keeping its own id, its node's position depth
+    first, so htmx gives the focus back to the button that had it, as a table's rows do.
+    A button posts its node's path: a node a stale page still shows swaps the tree back.
+    """
+
+    _role = "tree"
+
+    def __init__(self, view: TreeView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"nodes": self._mark_dirty, "expanded": self._mark_dirty, "selected": self._mark_dirty}
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        positions = {
+            path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
+        }
+        return (
+            f'<ul {self._root_attributes(oob=oob)} class="flex flex-col gap-0.5">'
+            f"{self._nodes_html(self._view.nodes, (), positions)}</ul>"
+        )
+
+    def _nodes_html(
+        self, nodes: Iterable[TreeNode], parent: TreePath, positions: Mapping[TreePath, int]
+    ) -> str:
+        disabled = "" if self.is_enabled else " disabled"
+        items: list[str] = []
+        for node in nodes:
+            path = (*parent, node.key)
+            position, label = positions[path], html.escape(node.label)
+            children = ""
+            if len(node.children) == 0:
+                toggle = '<span class="size-6 shrink-0" aria-hidden="true"></span>'
+            else:
+                is_expanded = path in self._view.expanded
+                turn = "" if is_expanded else " -rotate-90"
+                # named by its node, which `aria-expanded` says it expands or collapses
+                toggle = (
+                    f'<button id="{self.widget_id}-toggle-{position}" type="button"'
+                    ' class="btn btn-ghost btn-xs btn-square"'
+                    f' aria-expanded="{str(is_expanded).lower()}" aria-label="{label}"'
+                    f"{self._post('toggle', path, expanded=not is_expanded)}{disabled}>"
+                    f"{_icon('chevron', 'size-3' + turn)}</button>"
+                )
+                if is_expanded:
+                    children = (
+                        '<ul class="ms-3 flex flex-col gap-0.5 border-s border-base-300 ps-1">'
+                        f"{self._nodes_html(node.children, path, positions)}</ul>"
+                    )
+            is_selected = path == self._view.selected
+            selected = ' aria-current="true"' if is_selected else ""
+            variant = "btn-soft btn-primary" if is_selected else "btn-ghost"
+            items.append(
+                f'<li><div class="flex items-center gap-1">{toggle}'
+                f'<button id="{self.widget_id}-node-{position}" type="button"'
+                f' class="btn btn-sm {variant} justify-start font-normal"{selected}'
+                f"{self._post('select', path)}{disabled}>{label}</button></div>"
+                f"{children}</li>"
+            )
+        return "".join(items)
+
+    def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> str:
+        """Attributes posting an event of the node at `path`, without swapping it back."""
+        values = {"event": event, "path": json.dumps(list(path))}
+        if event == "toggle":
+            values["expanded"] = str(expanded).lower()
+        return (
+            f" hx-post=\"/widget/{self.widget_id}\" hx-vals='{html.escape(json.dumps(values))}'"
+            ' hx-swap="none"'
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        # a disabled tree can't be clicked: a post saying otherwise is refused
+        if not self.is_enabled or event not in ("select", "toggle"):
+            super().dispatch(event, form)
+        path = self._posted_path(form.get("path", ""))
+        if path is None or (event == "toggle" and len(self._view.node(path).children) == 0):
+            # a node a stale page still shows: swap the tree back as it now is
+            self._mark_dirty(self._view, self.widget_id, self._view.nodes)
+            return
+        if event == "select":
+            if path != self._view.selected:
+                self._view.selected = path
+                self._view.selection_changed.emit(path)
+            return
+        is_expanded = form.get("expanded") == "true"
+        if is_expanded != (path in self._view.expanded):
+            self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
+            self._view.toggled.emit(path, is_expanded)
+
+    def _posted_path(self, posted: str) -> TreePath | None:
+        """Get the path a button posted, if a node of the tree is there."""
+        try:
+            keys = json.loads(posted)
+        except ValueError:
+            return None
+        if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+            return None
+        path = tuple(keys)
+        return path if path in {path for path, _node in walk_tree(self._view.nodes)} else None
+
+
 class WebSidebarRenderer(WebRenderer[SidebarView]):
     """An `<aside>`: its title, then its views in a column, left of the pages.
 
@@ -3248,5 +3357,6 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "tab_page": WebTabPageRenderer,
     "tabs": WebTabsRenderer,
     "toolbar": WebToolBarRenderer,
+    "tree": WebTreeRenderer,
     "vertical": WebVerticalRenderer,
 }

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from attrs import Factory
+from rich.style import Style
 from rich.text import Text
 from textual.app import App
 from textual.containers import VerticalScroll
@@ -39,6 +40,7 @@ from composeui.core.view import (
     RendererType,
     SelectionMode,
     Series,
+    TreeNode,
     View,
     define_view,
     replace_cell,
@@ -66,6 +68,7 @@ from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
+from composeui.textualcore.widgets.composetree import ComposeTree
 from examples.batman import BatmanMainView
 from examples.pipecatalogue import Material as CatalogueMaterial
 from examples.pipecatalogue import Pipe as CataloguePipe
@@ -74,6 +77,7 @@ from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
+from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -1098,6 +1102,84 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         await pilot.pause()
         await pilot.pause()
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+
+def _tree_lines(tree: ComposeTree) -> list[tuple[str, bool]]:
+    """Get a tree's lines as shown: each node's label, and whether it is marked selected."""
+    lines = []
+    for line in range(tree.last_line + 1):
+        node = tree.get_node_at_line(line)
+        assert node is not None
+        label = tree.render_label(node, Style(), Style())
+        is_marked = any(isinstance(span.style, Style) and span.style.bold for span in label.spans)
+        lines.append((label.plain, is_marked))
+    return lines
+
+
+@pytest.mark.asyncio
+async def test_a_tree_selects_its_nodes_by_enter_or_click_and_expands_them_by_space() -> None:
+    view = SiteMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    site = view.site
+    assert isinstance(site.renderer, TextualWidgetRenderer)
+    tree = site.renderer.widget
+    assert isinstance(tree, ComposeTree)
+    selections: list[tuple[str, ...]] = []
+    toggles: list[tuple[tuple[str, ...], bool]] = []
+    site.selection_changed.connect(selections.append)
+    site.toggled.connect(lambda path, is_expanded: toggles.append((path, is_expanded)))
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        await pilot.pause()
+        assert [label for label, _ in _tree_lines(tree)] == [
+            "▼ Building A",
+            "▶ Floor 1",
+            "▶ Floor 2",
+            "▶ Building B",
+            "Parking",
+        ]
+        await pilot.click(tree, offset=(8, 2))
+        await pilot.pause()
+        assert (site.selected, selections) == (
+            ("Building A", "Floor 2"),
+            [("Building A", "Floor 2")],
+        )
+        assert _tree_lines(tree)[2] == ("▶ Floor 2", True)
+        assert site.expanded == [("Building A",)]  # a click selects, without toggling
+
+        tree.focus()
+        await pilot.press("space")  # the node under the cursor
+        await pilot.pause()
+        assert site.expanded == [("Building A",), ("Building A", "Floor 2")]
+        assert toggles == [(("Building A", "Floor 2"), True)]
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        assert selections[-1] == ("Building A", "Floor 2", "Room 201")
+        assert [marked for _, marked in _tree_lines(tree)] == [
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+        ]
+
+        # set in code: shown, and not reported
+        site.expanded = []
+        site.selected = ("Parking",)
+        await pilot.pause()
+        assert _tree_lines(tree) == [
+            ("▶ Building A", False),
+            ("▶ Building B", False),
+            ("Parking", True),
+        ]
+        assert (len(selections), len(toggles)) == (2, 1)
+        site.nodes = [*site.nodes, TreeNode("Garden")]
+        await pilot.pause()
+        assert _tree_lines(tree)[-2:] == [("Parking", True), ("Garden", False)]
 
 
 @pytest.mark.asyncio

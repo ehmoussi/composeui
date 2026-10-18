@@ -62,6 +62,7 @@ from composeui.core.view import (
     TabPage,
     TabView,
     ToolBar,
+    TreeView,
     VerticalView,
     View,
     replace_cell,
@@ -88,6 +89,7 @@ from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbars,
     ComposeToolbarSeparator,
 )
+from composeui.textualcore.widgets.composetree import ComposeTree
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -97,7 +99,7 @@ if TYPE_CHECKING:
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series
+    from composeui.core.view import Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="Widget")
@@ -1889,6 +1891,55 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
         pass  # a list has no user-editable state of its own: its records are the model's
 
 
+class TextualTreeRenderer(TextualWidgetRenderer[TreeView, ComposeTree]):
+    def __init__(self, view: TreeView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "nodes": self._refresh_nodes,
+                "expanded": self._refresh_expanded,
+                "selected": self._refresh_selected,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeTree()
+            self._rendered_object.selected.connect(self._update_selected)
+            self._rendered_object.toggled.connect(self._update_expanded)
+
+    @staticmethod
+    def _refresh_nodes(view: TreeView, rendered_object: ComposeTree, value: list[TreeNode]) -> None:
+        # the view's, already kept to those still in the nodes
+        rendered_object.set_nodes(value, view.expanded, view.selected)
+
+    @staticmethod
+    def _refresh_expanded(
+        _view: TreeView, rendered_object: ComposeTree, value: list[TreePath]
+    ) -> None:
+        rendered_object.set_expanded(value)
+
+    @staticmethod
+    def _refresh_selected(
+        _view: TreeView, rendered_object: ComposeTree, value: TreePath | None
+    ) -> None:
+        rendered_object.set_selected(value)
+
+    @staticmethod
+    def _update_state(view: TreeView, rendered_object: ComposeTree) -> None:
+        view.selected = rendered_object.selected_path
+
+    def _update_selected(self, path: TreePath) -> None:
+        with self.stop_refresh():
+            self._view.selected = path
+        self._view.selection_changed.emit(path)
+
+    def _update_expanded(self, path: TreePath, is_expanded: bool) -> None:
+        with self.stop_refresh():
+            self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
+        self._view.toggled.emit(path, is_expanded)
+
+
 class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
     """A tab's views in a pane; its title, visibility and enabled state are its tab's."""
 
@@ -2422,5 +2473,6 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "tab_page": TextualTabPageRenderer,
     "tabs": TextualTabsRenderer,
     "toolbar": TextualToolBarRenderer,
+    "tree": TextualTreeRenderer,
     "vertical": TextualVerticalRenderer,
 }

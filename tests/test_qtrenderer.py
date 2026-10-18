@@ -44,6 +44,8 @@ from qtpy.QtWidgets import (
     QTextBrowser,
     QToolBar,
     QToolTip,
+    QTreeWidget,
+    QTreeWidgetItem,
     QWidget,
 )
 
@@ -65,6 +67,7 @@ from composeui.core.view import (
     RendererType,
     SelectionMode,
     Series,
+    TreeNode,
     replace_cell,
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
@@ -78,6 +81,7 @@ from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
+from tests.buildings import SiteMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -892,6 +896,59 @@ def test_a_sidebar_retracts_to_a_strip_by_its_button_and_back(qtbot: QtBot) -> N
     assert create.isVisible()
     assert toggles == [False]
     qtbot.waitUntil(lambda: dock.width() == width)  # its width before
+
+
+def _tree_item(tree: QTreeWidget, *labels: str) -> QTreeWidgetItem:
+    """Get the item down a tree's labels, from a top-level one."""
+    items = tree.findItems(labels[-1], Qt.MatchFlag.MatchExactly | Qt.MatchFlag.MatchRecursive)
+    (item,) = [item for item in items if _labels(item) == labels]
+    return item
+
+
+def _labels(item: QTreeWidgetItem) -> tuple[str, ...]:
+    parent = item.parent()
+    return (*(() if parent is None else _labels(parent)), item.text(0))
+
+
+def test_a_tree_selects_and_expands_its_nodes_by_click_and_key(qtbot: QtBot) -> None:
+    view = SiteMainView()
+    view.render(RendererType.QT)
+    site = view.site
+    assert isinstance(site.renderer, QtWidgetRenderer)
+    tree = site.renderer.qt_object
+    assert isinstance(tree, QTreeWidget)
+    qtbot.addWidget(tree)
+    selections: list[tuple[str, ...]] = []
+    toggles: list[tuple[tuple[str, ...], bool]] = []
+    site.selection_changed.connect(selections.append)
+    site.toggled.connect(lambda path, is_expanded: toggles.append((path, is_expanded)))
+    tree.show()
+    assert _tree_item(tree, "Building A").isExpanded()
+    assert not _tree_item(tree, "Building B").isExpanded()
+
+    room = _tree_item(tree, "Building A", "Floor 1")
+    qtbot.mouseClick(
+        tree.viewport(), Qt.MouseButton.LeftButton, pos=tree.visualItemRect(room).center()
+    )
+    assert (site.selected, selections) == (("Building A", "Floor 1"), [("Building A", "Floor 1")])
+    tree.setFocus()
+    qtbot.keyClick(tree, Qt.Key.Key_Right)
+    assert site.expanded == [("Building A",), ("Building A", "Floor 1")]
+    assert toggles == [(("Building A", "Floor 1"), True)]
+    qtbot.keyClick(tree, Qt.Key.Key_Down)  # onto its first room
+    assert selections[-1] == ("Building A", "Floor 1", "Room 101")
+
+    # set in code: shown, and not reported
+    site.expanded = [("Building B",)]
+    site.selected = ("Building B", "Floor 1")
+    assert not _tree_item(tree, "Building A").isExpanded()
+    assert _tree_item(tree, "Building B").isExpanded()
+    assert tree.selectedItems() == [_tree_item(tree, "Building B", "Floor 1")]
+    assert (len(selections), len(toggles)) == (2, 1)
+    # new nodes keep the selection still in them
+    site.nodes = [*site.nodes, TreeNode("Garden")]
+    assert tree.topLevelItemCount() == 4
+    assert tree.selectedItems() == [_tree_item(tree, "Building B", "Floor 1")]
 
 
 def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot) -> None:

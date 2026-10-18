@@ -29,11 +29,14 @@ from composeui.core.view import (
     SelectionMode,
     Series,
     SliderView,
+    TreeNode,
+    TreeView,
     _is_omitted_type,
     define_view,
     replace_cell,
 )
 from examples.pipechart import PipeChartMainView
+from tests.buildings import SiteMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -242,6 +245,43 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     assert math.isnan(loaded.chart.series[1].y[0])
     # the app's text, not the study's
     assert "title" not in json.loads(path.read_text())["results"]["chart_tab"]["chart"]
+
+
+def test_a_tree_knows_its_nodes_by_path_and_keeps_those_new_nodes_still_hold() -> None:
+    view = SiteMainView()
+    tree = view.site
+    # two "Floor 1": their own parents tell them apart
+    tree.selected = ("Building B", "Floor 1", "Lobby")
+    tree.expanded = [("Building A",), ("Building B", "Floor 1")]
+    assert tree.node(("Building B", "Floor 1")).children == (TreeNode("Lobby"),)
+    with pytest.raises(ValueError, match="none is there"):
+        tree.selected = ("Building C",)
+    with pytest.raises(ValueError, match="none is there"):
+        tree.expanded = [("Parking", "Level 1")]
+    with pytest.raises(ValueError, match="share the key"):
+        TreeView(nodes=[TreeNode("Room"), TreeNode("Room")])
+    TreeView(nodes=[TreeNode("Room", key="1"), TreeNode("Room", key="2")])
+
+    tree.nodes = [TreeNode("Building A", [TreeNode("Floor 1")]), TreeNode("Building B")]
+    assert (tree.expanded, tree.selected) == ([("Building A",)], None)
+    assert tree.expanded_with(("Building B",), is_expanded=True) == [
+        ("Building A",),
+        ("Building B",),
+    ]
+
+
+def test_a_study_saves_its_trees_nodes_expanded_and_selected(tmp_path: Path) -> None:
+    view = SiteMainView()
+    view.site.nodes = [*view.site.nodes, TreeNode("Garden", [TreeNode("Shed", key="shed")])]
+    view.site.expanded = [("Garden",)]
+    view.site.selected = ("Garden", "shed")
+    path = tmp_path / "study.site"
+    view.save_state(path)
+
+    loaded = SiteMainView()
+    loaded.load_state(path)
+    assert loaded.site.nodes == view.site.nodes
+    assert (loaded.site.expanded, loaded.site.selected) == ([("Garden",)], ("Garden", "shed"))
 
 
 def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None:
