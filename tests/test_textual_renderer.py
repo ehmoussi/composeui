@@ -66,6 +66,7 @@ from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.hours import HoursMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.pages import PagesMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
@@ -109,6 +110,34 @@ async def test_textual_app_renders_and_round_trips_input_and_radio_selection() -
         await pilot.pause()
         assert view.form.shape.value == "ROUND"
         assert view.status_bar.message == "Shape changed: ROUND"
+
+
+@pytest.mark.asyncio
+async def test_an_int_input_takes_only_whole_numbers_marking_those_out_of_range() -> None:
+    view = HoursMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        widget = _field_widget(view.form.opening.renderer)
+        assert isinstance(widget, Input)
+        await pilot.pause()
+        assert widget.value == "8"
+        widget.focus()
+        await pilot.press("end", "backspace", *"1.5a")
+        await pilot.pause()
+        assert (widget.value, view.form.opening.value) == ("15", 15)  # "." and "a" never typed
+        assert not widget.has_class("-invalid")
+
+        await pilot.press("backspace", "backspace", "-")
+        await pilot.pause()
+        assert view.form.opening.value is None  # emptied; the "-" alone isn't a value
+        await pilot.press("backspace", *"30")
+        await pilot.pause()
+        assert view.form.opening.value == 30
+        assert widget.has_class("-invalid")  # past 23
 
 
 @pytest.mark.asyncio

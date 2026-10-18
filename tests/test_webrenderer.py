@@ -48,6 +48,7 @@ from composeui.core.view import (
     EditRefusedError,
     LabelRowFloatInputView,
     LabelRowInputView,
+    LabelRowIntInputView,
     LabelRowRadioGroupView,
     LabelView,
     LogType,
@@ -63,6 +64,7 @@ from composeui.core.view import (
     StatusBar,
     TableView,
     View,
+    child,
     define_view,
     replace_cell,
 )
@@ -543,6 +545,7 @@ class _RowsMainView(MainView):
 
     name: _NameRowView = Factory(_NameRowView)
     length: LabelRowFloatInputView = Factory(LabelRowFloatInputView)
+    hour: LabelRowIntInputView = child(LabelRowIntInputView, label="Hour", value=8)
     note: LabelView = Factory(LabelView)
     form_log: LogView = Factory(LogView)
     shape: _ShapeRowView = Factory(_ShapeRowView)
@@ -621,6 +624,27 @@ def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
     assert attributes["inputmode"] == "decimal"
     assert attributes["pattern"]
     assert attributes["value"] == "20.0"
+
+
+def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
+    rows: _RowsMainView,
+) -> None:
+    field = _part(rows.hour, "field")
+    attributes = _element(field.to_html(), field.widget_id).attributes
+    assert (attributes["type"], attributes["inputmode"]) == ("text", "numeric")
+    assert attributes["value"] == "8"
+
+    handle_event(field, "input", {"value": "-"})
+    assert rows.hour.value == 8
+    handle_event(field, "input", {"value": "15"})
+    assert rows.hour.value == 15
+    handle_event(field, "input", {"value": "15.5"})
+    assert rows.hour.value == 15
+
+    fragments = handle_event(field, "change", {"value": "15.5"})
+
+    # left with a decimal: the field, otherwise never swapped back, shows 15 again
+    assert _swapped(fragments, field.widget_id).attributes["value"] == "15"
 
 
 def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:

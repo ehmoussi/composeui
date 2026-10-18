@@ -1026,6 +1026,21 @@ class FloatInputView(FloatInputMixin, View):
     _renderer_key = "float_input"
 
 
+@define_view
+class IntInputMixin(_InputView):
+    # properties
+    value: Optional[int] = attrs.field(default=None)
+    minimum: Optional[int] = attrs.field(default=None)
+    maximum: Optional[int] = attrs.field(default=None)
+
+
+@define_view
+class IntInputView(IntInputMixin, View):
+    """A whole number, e.g. an hour of the day; a spin box where the toolkit has one."""
+
+    _renderer_key = "int_input"
+
+
 class LogType(enum.Enum):
     ERROR = enum.auto()
     WARNING = enum.auto()
@@ -2321,6 +2336,16 @@ class RowFloatInputView(FormRowView, FloatInputMixin):
 @define_view
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
     _field_renderer_key = "float_input"
+
+
+@define_view
+class RowIntInputView(FormRowView, IntInputMixin):
+    _field_renderer_key = "int_input"
+
+
+@define_view
+class LabelRowIntInputView(FormLabelRowView, IntInputMixin):
+    _field_renderer_key = "int_input"
 
 
 @define_view
