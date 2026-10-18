@@ -252,7 +252,8 @@ It starts on the first tab. Code shows another with `current_index` (counted fro
 tab page hides its tab, and a disabled one can't be picked. Distinct from
 [pages](#pages): tabs live inside a page or a form and have no address of their own.
 Qt shows a `QTabWidget`, Textual a `TabbedContent`, and the web a row of tabs the arrow
-keys move between.
+keys move between. [`src/examples/pipechart.py`](src/examples/pipechart.py) shows its
+chart on one tab and the measurements plotted on it, as a table, on another.
 
 ## Toolbars
 

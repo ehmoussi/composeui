@@ -241,7 +241,7 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     assert str(back.y) == str(saved.y)
     assert math.isnan(loaded.chart.series[1].y[0])
     # the app's text, not the study's
-    assert "title" not in json.loads(path.read_text())["chart"]
+    assert "title" not in json.loads(path.read_text())["results"]["chart_tab"]["chart"]
 
 
 def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None:

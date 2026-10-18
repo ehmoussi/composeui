@@ -2,7 +2,9 @@
 
 import math
 
-from examples.pipechart import SWEEP_POINTS, PipeChartMainView, friction_factor
+import pytest
+
+from examples.pipechart import MEASUREMENTS, SWEEP_POINTS, PipeChartMainView, friction_factor
 
 
 def test_the_friction_factor_has_no_value_between_laminar_and_turbulent_flow() -> None:
@@ -36,3 +38,22 @@ def test_a_pipe_without_a_valid_diameter_is_not_plotted() -> None:
 
     assert view.chart.series == []
     assert "Every value must be greater than 0" in view.pipe.log_view.log_message
+
+
+def test_the_measurements_tab_lists_each_measured_drop_against_the_computed_one() -> None:
+    view = PipeChartMainView()
+    view.add_measurements()
+    view.pipe.diameter.value = 80
+    view.add_measurements()
+    view.pipe.diameter.value = 50
+    view.add_measurements()  # the same pipe again: its rows are replaced
+
+    rows = view.measurements.rows
+    assert [row[0] for row in rows] == ["D = 80 mm"] * 6 + ["D = 50 mm"] * 6
+    # each point as plotted, its deviation the rig's ratio to the computed drop
+    measured = next(s for s in view.chart.series if s.name == "Measured, D = 50 mm")
+    assert [float(row[2]) for row in rows[6:]] == pytest.approx(measured.y, rel=1e-2)
+    assert [row[4] for row in rows[6:]] == [f"{(r - 1) * 100:+.1f}" for _, r in MEASUREMENTS]
+
+    view.clear_curves()
+    assert view.measurements.rows == []
