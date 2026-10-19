@@ -123,6 +123,44 @@ def test_cancel_stops_the_tasks_still_running(qtbot: QtBot, main_view: TaskMainV
     assert not cancel.isEnabled()
 
 
+def test_a_task_s_retry_button_runs_it_again_and_its_error_link_opens_a_dialog(
+    qtbot: QtBot, main_view: TaskMainView
+) -> None:
+    tasks = main_view.details.tasks
+    _configure(main_view, 0, 100)
+    main_view.buttons.run.clicked.emit()
+    qtbot.waitUntil(lambda: main_view.buttons.run.is_enabled)
+
+    tasks.cell_clicked.emit(1, 3)
+    assert main_view.error_dialog.is_visible
+    assert main_view.error_dialog.text == (
+        "Task 2 worked 0.0 s, then failed: Random error: task 2 failed"
+    )
+    main_view.error_dialog.accept()
+
+    main_view.config.failure_percentage.value = 0
+    tasks.cell_clicked.emit(1, 0)
+    qtbot.waitUntil(lambda: tasks.rows[1][2] == TaskStatus.SUCCEEDED.value)
+    assert tasks.rows[1][3] == ""
+    assert tasks.rows[0][2] == TaskStatus.FAILED.value
+    assert main_view.metrics.succeeded.value == "1"
+    # a succeeded task has no error to show
+    tasks.cell_clicked.emit(1, 3)
+    assert not main_view.error_dialog.is_visible
+
+
+def test_a_task_still_running_isn_t_run_again(qtbot: QtBot, main_view: TaskMainView) -> None:
+    _configure(main_view, 60, 0)  # longer than the test: only canceling ends them
+    main_view.buttons.run.clicked.emit()
+
+    main_view.details.tasks.cell_clicked.emit(0, 0)
+
+    assert main_view.status_bar.message == "Task 1 is still running"
+    assert main_view.metrics.running.value == str(TASK_COUNT)
+    main_view.jobs.cancel()
+    qtbot.waitUntil(lambda: main_view.buttons.run.is_enabled)
+
+
 def test_a_run_waits_for_a_valid_configuration(main_view: TaskMainView) -> None:
     main_view.config.min_duration.value = 5
     main_view.config.max_duration.value = 2
