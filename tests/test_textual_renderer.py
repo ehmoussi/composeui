@@ -18,6 +18,7 @@ import math
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from attrs import Factory
+from rich.color import Color
 from rich.style import Style
 from rich.text import Text
 from textual.containers import VerticalScroll
@@ -84,7 +85,7 @@ from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView
+from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -1287,6 +1288,52 @@ async def test_a_tree_selects_its_nodes_by_enter_or_click_and_expands_them_by_sp
         site.nodes = [*site.nodes, TreeNode("Garden")]
         await pilot.pause()
         assert _tree_lines(tree)[-2:] == [("Parking", True), ("Garden", False)]
+
+
+@pytest.mark.asyncio
+async def test_a_tree_shows_its_nodes_style_and_mark_after_the_label() -> None:
+    view = SiteMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    site = view.site
+    assert isinstance(site.renderer, TextualWidgetRenderer)
+    tree = site.renderer.widget
+    assert isinstance(tree, ComposeTree)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        site.nodes = styled_site("building.png")  # a terminal shows no icon
+        site.selected = ("Building A", "Room 101")
+        await pilot.pause()
+        labels = {}
+        for line in range(tree.last_line + 1):
+            node = tree.get_node_at_line(line)
+            assert node is not None
+            label = tree.render_label(node, Style(), Style())
+            labels[label.plain] = label
+        assert list(labels) == ["▼ Building A", "Room 101 ✓", "Room 102 ✗", "Parking !"]
+
+        def style_of(label: str, text: str) -> Style:
+            start = label.index(text)
+            return labels[label].get_style_at_offset(app.console, start)
+
+        assert style_of("▼ Building A", "Building").bold
+        assert not style_of("▼ Building A", "Building").underline
+        assert style_of("Parking !", "Parking").underline
+        assert not style_of("Parking !", "Parking").bold
+        # the mark in its own color, the selected label's left out
+        selected, done = style_of("Room 101 ✓", "Room"), style_of("Room 101 ✓", "✓")
+        assert selected.color != done.color
+        assert {
+            done.color,
+            style_of("Room 102 ✗", "✗").color,
+            style_of("Parking !", "!").color,
+        } == {
+            Color.parse("green"),
+            Color.parse("red"),
+            Color.parse("orange1"),
+        }
 
 
 @pytest.mark.asyncio

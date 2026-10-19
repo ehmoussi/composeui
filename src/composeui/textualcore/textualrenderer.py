@@ -2067,6 +2067,10 @@ class TextualTreeRenderer(TextualWidgetRenderer[TreeView, ComposeTree]):
                 "nodes": self._refresh_nodes,
                 "expanded": self._refresh_expanded,
                 "selected": self._refresh_selected,
+                # a terminal shows the marks' glyphs, not their names
+                "done_text": lambda _view, _rendered_object, _value: None,
+                "warning_text": lambda _view, _rendered_object, _value: None,
+                "error_text": lambda _view, _rendered_object, _value: None,
             }
         )
 

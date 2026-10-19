@@ -58,6 +58,7 @@ from composeui.core.view import (
     Menu,
     MetricView,
     NewAction,
+    NodeMark,
     OpenFileAction,
     Orientation,
     PageView,
@@ -2114,6 +2115,16 @@ _ICONS: Final[dict[str, str]] = {
         '<rect x="3" y="4" width="18" height="18" rx="2"/>'
         '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
     ),
+    "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    "circle-alert": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+    "circle-x": '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+}
+
+#: a tree node's mark: its icon and its color, as a log's are colored
+_MARK_ICONS: Final = {
+    NodeMark.DONE: ("circle-check", "text-success"),
+    NodeMark.WARNING: ("circle-alert", "text-warning"),
+    NodeMark.ERROR: ("circle-x", "text-error"),
 }
 
 
@@ -2899,7 +2910,14 @@ class WebTreeRenderer(WebRenderer[TreeView]):
     def __init__(self, view: TreeView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
-            {"nodes": self._mark_dirty, "expanded": self._mark_dirty, "selected": self._mark_dirty}
+            {
+                "nodes": self._mark_dirty,
+                "expanded": self._mark_dirty,
+                "selected": self._mark_dirty,
+                "done_text": self._mark_dirty,
+                "warning_text": self._mark_dirty,
+                "error_text": self._mark_dirty,
+            }
         )
 
     def to_html(self, *, oob: bool = False) -> str:
@@ -2941,14 +2959,40 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             is_selected = path == self._view.selected
             selected = ' aria-current="true"' if is_selected else ""
             variant = "btn-soft btn-primary" if is_selected else "btn-ghost"
+            mark_id = f"{self.widget_id}-mark-{position}"
+            described = "" if node.mark is None else f' aria-describedby="{mark_id}"'
             items.append(
                 f'<li><div class="flex items-center gap-1">{toggle}'
                 f'<button id="{self.widget_id}-node-{position}" type="button"'
-                f' class="btn btn-sm {variant} justify-start font-normal"{selected}'
-                f"{self._post('select', path)}{disabled}>{label}</button></div>"
-                f"{children}</li>"
+                f' class="btn btn-sm {variant} justify-start font-normal"{selected}{described}'
+                f"{self._post('select', path)}{disabled}>{self._node_content(node, mark_id)}"
+                f"</button></div>{children}</li>"
             )
         return "".join(items)
+
+    def _node_content(self, node: TreeNode, mark_id: str) -> str:
+        """Show a node's icon, its label as bold or underlined as it says, then its mark.
+
+        The mark's icon is hidden from screen readers, which read its name (at `mark_id`)
+        as the button's description, after the label naming it.
+        """
+        styles = [
+            style
+            for style, is_on in (("font-bold", node.is_bold), ("underline", node.is_underlined))
+            if is_on
+        ]
+        label = html.escape(node.label)
+        if len(styles) > 0:
+            label = f'<span class="{" ".join(styles)}">{label}</span>'
+        mark = ""
+        if node.mark is not None:
+            icon, color = _MARK_ICONS[node.mark]
+            text = html.escape(self._view.mark_text(node.mark))
+            mark = (
+                f'<span class="{color}">{_icon(icon)}</span>'
+                f'<span id="{mark_id}" hidden>{text}</span>'
+            )
+        return f"{_file_icon(node.icon)}{label}{mark}"
 
     def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> str:
         """Attributes posting an event of the node at `path`, without swapping it back."""

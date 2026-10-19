@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import functools
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Generic, TypeVar
 
-from qtpy.QtCore import QObject, Qt
+from qtpy.QtCore import QObject, QPoint, Qt
 from qtpy.QtCore import Signal as QtSignal
-from qtpy.QtGui import QAction, QDoubleValidator, QIcon, QKeySequence
+from qtpy.QtGui import (
+    QAction,
+    QColor,
+    QDoubleValidator,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractSpinBox,
@@ -15,6 +25,7 @@ from qtpy.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -68,6 +79,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     MetricView,
+    NodeMark,
     Orientation,
     PageView,
     PickFileAction,
@@ -87,6 +99,7 @@ from composeui.core.view import (
     View,
     date_hint,
     replace_cell,
+    walk_tree,
 )
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatefield import QDateField
@@ -1942,8 +1955,9 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
 class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
     """A tree widget without a header, each item holding its node's path.
 
-    The user selects one item at most: a Ctrl+click deselecting it selects it again, as
-    the view always keeps the node the user selected.
+    Its first column shows a node's icon and label, its second the node's mark, hidden
+    while no node has one. The user selects one item at most: a Ctrl+click deselecting
+    it selects it again, as the view always keeps the node the user selected.
     """
 
     def __init__(self, view: TreeView) -> None:
@@ -1953,6 +1967,9 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
                 "nodes": self._refresh_nodes,
                 "expanded": self._refresh_expanded,
                 "selected": self._refresh_selected,
+                "done_text": functools.partial(self._refresh_mark_text, NodeMark.DONE),
+                "warning_text": functools.partial(self._refresh_mark_text, NodeMark.WARNING),
+                "error_text": functools.partial(self._refresh_mark_text, NodeMark.ERROR),
             }
         )
 
@@ -1960,6 +1977,12 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
         if self._rendered_object is None:
             self._rendered_object = QTreeWidget()
             self._rendered_object.setHeaderHidden(True)
+            self._rendered_object.setColumnCount(2)
+            header = self._rendered_object.header()
+            if header is not None:  # the marks as narrow as their icon, at the right
+                header.setStretchLastSection(False)
+                header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
             self._rendered_object.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
             self._rendered_object.itemSelectionChanged.connect(self._update_selected)
             self._rendered_object.itemExpanded.connect(
@@ -1982,9 +2005,19 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             for node in nodes:
                 item = QTreeWidgetItem(parent, [node.label])
                 item.setData(0, Qt.ItemDataRole.UserRole, [*path, node.key])
+                if node.icon is not None:
+                    item.setIcon(0, QIcon(node.icon))
+                font = item.font(0)
+                font.setBold(node.is_bold)
+                font.setUnderline(node.is_underlined)
+                item.setFont(0, font)
+                if node.mark is not None:
+                    item.setIcon(1, _mark_icon(node.mark))
+                    item.setToolTip(1, view.mark_text(node.mark))
                 add(item, node.children, (*path, node.key))
 
         add(rendered_object, value, ())
+        rendered_object.setColumnHidden(1, all(node.mark is None for _, node in walk_tree(value)))
         # the view's, already kept to those still in the nodes
         cls._refresh_expanded(view, rendered_object, view.expanded)
         cls._refresh_selected(view, rendered_object, view.selected)
@@ -2006,6 +2039,14 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             if path == value:
                 rendered_object.setCurrentItem(item)
                 item.setSelected(True)
+
+    @staticmethod
+    def _refresh_mark_text(
+        mark: NodeMark, view: TreeView, rendered_object: QTreeWidget, value: str
+    ) -> None:
+        for path, item in _tree_items(rendered_object):
+            if view.node(path).mark is mark:
+                item.setToolTip(1, value)
 
     @staticmethod
     def _update_state(view: TreeView, rendered_object: QTreeWidget) -> None:
@@ -2032,6 +2073,35 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
         with self.stop_refresh():
             self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
         self._view.toggled.emit(path, is_expanded)
+
+
+#: a `NodeMark`'s color, as a log's warning and error are colored
+_MARK_COLORS: Final = {NodeMark.DONE: "green", NodeMark.WARNING: "orange", NodeMark.ERROR: "red"}
+
+
+@functools.cache
+def _mark_icon(mark: NodeMark) -> QIcon:
+    """Draw `mark` in a circle, as the web's icons are: a check, a "!" or a cross."""
+    size = 32  # scaled down sharp, on a high-density screen too
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(_MARK_COLORS[mark]), 3)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.drawEllipse(3, 3, 26, 26)
+    if mark is NodeMark.DONE:
+        painter.drawPolyline([QPoint(10, 16), QPoint(14, 20), QPoint(22, 12)])
+    elif mark is NodeMark.WARNING:
+        painter.drawLine(16, 10, 16, 17)
+        painter.drawPoint(16, 22)
+    else:
+        painter.drawLine(11, 11, 21, 21)
+        painter.drawLine(21, 11, 11, 21)
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _tree_path(item: QTreeWidgetItem) -> TreePath:
