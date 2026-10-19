@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from composeui.core.application import LOGGER
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 

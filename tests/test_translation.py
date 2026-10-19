@@ -1,10 +1,11 @@
 """Tests for translating views from JSON catalogs."""
 
+from __future__ import annotations
+
 import copy
 import enum
 import json
-from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import pytest
 from attrs import Factory
@@ -24,6 +25,9 @@ from composeui.core.view import (
     define_view,
 )
 from tests.translated import Size, TranslatedMainView
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_a_regional_language_falls_back_on_its_base_language(tmp_path: Path) -> None:
@@ -148,6 +152,27 @@ class Color(enum.Enum):
     BLUE = "Blue"
 
 
+@define_view
+class ColorRowView(LabelRowComboboxView[Color]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.label = self.tr("Color")
+        self.values = {self.tr(color.value): color for color in Color}
+        self.value = Color.BLUE
+
+
+@define_view
+class PaletteView(GroupFormView):
+    color: ColorRowView = Factory(ColorRowView)
+    colors: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = self.tr("Palette")
+        self.colors.headers = [self.tr("Colors")]
+        self.colors.rows = [[self.tr(color.value)] for color in Color] + [["#00ff00"]]
+
+
 def _palette_main_view(directory: Path) -> Any:
     """Build a main view setting its text with `tr` where it's built: no `retranslate`."""
     (directory / "fr.json").write_text(
@@ -164,25 +189,6 @@ def _palette_main_view(directory: Path) -> Any:
         ),
         encoding="utf-8",
     )
-
-    @define_view
-    class ColorRowView(LabelRowComboboxView[Color]):
-        def __attrs_post_init__(self) -> None:
-            super().__attrs_post_init__()
-            self.label = self.tr("Color")
-            self.values = {self.tr(color.value): color for color in Color}
-            self.value = Color.BLUE
-
-    @define_view
-    class PaletteView(GroupFormView):
-        color: ColorRowView = Factory(ColorRowView)
-        colors: TableView = Factory(TableView)
-
-        def __attrs_post_init__(self) -> None:
-            super().__attrs_post_init__()
-            self.title = self.tr("Palette")
-            self.colors.headers = [self.tr("Colors")]
-            self.colors.rows = [[self.tr(color.value)] for color in Color] + [["#00ff00"]]
 
     @define_view
     class PaletteMainView(MainView):
@@ -270,21 +276,23 @@ def test_new_keeps_the_language_of_text_set_where_the_view_is_built(tmp_path: Pa
     assert main_view.palette.color.values == {"Rouge": Color.RED, "Bleu": Color.BLUE}
 
 
+@define_view
+class GalleryPage(PageView):
+    route = "gallery"
+    page_title = T("Gallery")
+
+    shapes: TableView = child(TableView, headers=[T("Shape"), "#"])
+    draw: ButtonView = child(ButtonView, text=T("Draw"))
+
+
+@define_view
+class GalleryRouter(Router):
+    gallery: GalleryPage = Factory(GalleryPage)
+
+
 def test_text_declared_in_the_class_bodies_follows_the_language(tmp_path: Path) -> None:
     catalog = {"Shapes": "Formes", "Shape": "Forme", "Draw": "Dessiner", "Gallery": "Galerie"}
     (tmp_path / "fr.json").write_text(json.dumps(catalog), encoding="utf-8")
-
-    @define_view
-    class GalleryPage(PageView):
-        route = "gallery"
-        page_title = T("Gallery")
-
-        shapes: TableView = child(TableView, headers=[T("Shape"), "#"])
-        draw: ButtonView = child(ButtonView, text=T("Draw"))
-
-    @define_view
-    class GalleryRouter(Router):
-        gallery: GalleryPage = Factory(GalleryPage)
 
     @define_view
     class GalleryMainView(MainView):

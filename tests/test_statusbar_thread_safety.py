@@ -12,6 +12,8 @@ This test currently FAILS: it asserts ``clear_message`` runs on the same thread
 that rendered the view (the GUI thread), which is not yet true.
 """
 
+from __future__ import annotations
+
 import threading
 import time
 

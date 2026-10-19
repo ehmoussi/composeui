@@ -1,5 +1,7 @@
 """Two pages under a router, shared by the core and backend tests of pages."""
 
+from __future__ import annotations
+
 from attrs import Factory
 
 from composeui.core.view import (

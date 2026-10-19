@@ -1,5 +1,7 @@
 """Tables whose cells the user edits, shared by the backend tests of editable cells."""
 
+from __future__ import annotations
+
 from typing import Optional
 
 import attrs

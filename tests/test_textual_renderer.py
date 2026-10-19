@@ -6,6 +6,8 @@ by the Qt backend render, accept input, and round-trip state through a second,
 unrelated GUI toolkit.
 """
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("textual")
@@ -13,17 +15,13 @@ pytest.importorskip("textual_fspicker")
 
 import datetime
 import math
-from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from attrs import Factory
 from rich.style import Style
 from rich.text import Text
-from textual.app import App
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
-from textual.pilot import Pilot
-from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar, TabPane
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
@@ -104,6 +102,13 @@ from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from textual.app import App
+    from textual.pilot import Pilot
+    from textual.widget import Widget
 
 
 def _field_widget(

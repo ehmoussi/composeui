@@ -1,6 +1,12 @@
-from textual.app import ComposeResult
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from textual.containers import Vertical
 from textual.widgets import Label
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class ComposeMetric(Vertical):

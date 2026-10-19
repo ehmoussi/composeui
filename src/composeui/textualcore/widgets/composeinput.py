@@ -1,9 +1,13 @@
-from typing import Any
+from __future__ import annotations
 
-from textual import events
+from typing import TYPE_CHECKING, Any
+
 from textual.widgets import Input
 
 from composeui.core.signal import Signal, SignalNoArgs
+
+if TYPE_CHECKING:
+    from textual import events
 
 
 class ComposeInput(Input):

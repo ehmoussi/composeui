@@ -1,8 +1,12 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Signal as QtSignal
-from qtpy.QtGui import QCloseEvent
 from qtpy.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout, QWidget
+
+if TYPE_CHECKING:
+    from qtpy.QtGui import QCloseEvent
 
 
 class QFormDialog(QDialog):

@@ -1,5 +1,7 @@
 """Views in a grid's cells, shared by the backend tests of `GridView`."""
 
+from __future__ import annotations
+
 import attrs
 
 from composeui.core.view import (

@@ -1,5 +1,7 @@
 """A `GridView`'s cells, checked as it's built, whatever renders it."""
 
+from __future__ import annotations
+
 from typing import Any
 
 import attrs

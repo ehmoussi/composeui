@@ -12,13 +12,13 @@ opens the views and the database together; a study saved before pipes had an ins
 date gets the column, empty, as it opens (`PipeCatalogueModel.migrations`).
 """
 
+from __future__ import annotations
+
 import datetime
 import enum
 import functools
-import sqlite3
-from collections.abc import Hashable
 from types import MappingProxyType
-from typing import ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 import attrs
 from attrs import Factory
@@ -51,6 +51,10 @@ from composeui.core.view import (
     define_view,
     format_date,
 )
+
+if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Hashable
 
 
 class Material(enum.Enum):
@@ -379,11 +383,11 @@ class PipeList(ListView[ListedPipe]):
         return True
 
     @staticmethod
-    def _edit(name: str, *, main_view: "PipeCatalogueMainView", model: PipeCatalogueModel) -> None:
+    def _edit(name: str, *, main_view: PipeCatalogueMainView, model: PipeCatalogueModel) -> None:
         main_view.edit_pipe(name, model=model)
 
     def _delete(
-        self, name: str, *, main_view: "PipeCatalogueMainView", model: PipeCatalogueModel
+        self, name: str, *, main_view: PipeCatalogueMainView, model: PipeCatalogueModel
     ) -> None:
         """Remove the pipe `name`: the model's `changed` takes its expander away."""
         model.pipes.delete(name)

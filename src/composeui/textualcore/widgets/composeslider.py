@@ -1,12 +1,16 @@
-from typing import ClassVar
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, ClassVar
 
 from rich.text import Text
-from textual import events
-from textual.app import RenderResult
 from textual.binding import Binding, BindingType
 from textual.widget import Widget
 
 from composeui.core.signal import Signal
+
+if TYPE_CHECKING:
+    from textual import events
+    from textual.app import RenderResult
 
 
 class ComposeSlider(Widget, can_focus=True):

@@ -7,9 +7,10 @@ Measurements plots, as dots over the curves, what a test rig measured on that pi
 lists them on the Measurements tab beside the chart's, each against the computed drop.
 """
 
+from __future__ import annotations
+
 import math
-from collections.abc import Callable
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from attrs import Factory
 
@@ -33,6 +34,9 @@ from composeui.core.view import (
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 #: water at 20 °C
 DENSITY = 998.0  # kg/m3

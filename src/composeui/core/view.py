@@ -1,4 +1,4 @@
-# from __future__ import annotations
+from __future__ import annotations
 
 import contextlib
 import contextvars
@@ -108,19 +108,19 @@ def _is_omitted_type(tp: Any) -> bool:
     return isinstance(cls, type) and issubclass(cls, (*_OMITTED_TYPES, DialogView, LanguageMenu))
 
 
-def _is_omitted_field(f: "attrs.Attribute[Any]") -> bool:
+def _is_omitted_field(f: attrs.Attribute[Any]) -> bool:
     """Check whether `f` should skip (de)serialization: by type, or by `OMIT` tag."""
     return _is_omitted_type(f.type) or bool(f.metadata.get(OMIT, False))
 
 
-def _is_state_field(f: "attrs.Attribute[Any]") -> bool:
+def _is_state_field(f: attrs.Attribute[Any]) -> bool:
     """Check whether `f` is study data, which state files save and load."""
     return not _is_omitted_field(f) and not f.metadata.get(UI_TEXT, False)
 
 
 @CONVERTER.register_unstructure_hook_factory(attrs.has)
 def _omit_renderer_and_signals(
-    cls: "type[AttrsInstance]",
+    cls: type[AttrsInstance],
 ) -> Callable[[Any], dict[str, Any]]:
     # a generic view's class, e.g. a field's `RecordTableView[Room]`
     view_cls = get_origin(cls) or cls
@@ -143,7 +143,7 @@ def _omit_renderer_and_signals(
     )
     if issubclass(view_cls, RecordTableView):
 
-        def unstructure_record_table(obj: "RecordTableView[Any]") -> dict[str, Any]:
+        def unstructure_record_table(obj: RecordTableView[Any]) -> dict[str, Any]:
             data = unstructure(cast("AttrsInstance", obj))
             # the records by their own type, which the field's `RecordT` doesn't name;
             # the rows only show them, and the columns, the app's, set what's editable
@@ -156,7 +156,7 @@ def _omit_renderer_and_signals(
     if not issubclass(view_cls, ValuesGroupMixin):
         return unstructure
 
-    def unstructure_radio_group(obj: "ValuesGroupMixin[Any]") -> dict[str, Any]:
+    def unstructure_radio_group(obj: ValuesGroupMixin[Any]) -> dict[str, Any]:
         data = unstructure(cast("AttrsInstance", obj))
         data["value"] = obj.serialize_value()
         return data
@@ -174,7 +174,7 @@ _RECORD_TABLE_SETUP = (
 )
 
 
-def _apply_state(view: "View", data: dict[str, Any]) -> None:
+def _apply_state(view: View, data: dict[str, Any]) -> None:
     """Update a live view tree in place from previously saved state.
 
     A fresh ``CONVERTER.structure(data, type(view))`` would build new nested
@@ -222,7 +222,7 @@ def _apply_state(view: "View", data: dict[str, Any]) -> None:
             setattr(current_view, f.name, value)
 
 
-def _reset_state(view: "View", initial: "View") -> None:
+def _reset_state(view: View, initial: View) -> None:
     """Set a live view tree back to `initial`'s state, in place.
 
     `initial` is a freshly built instance of the same class: copying from it, rather than
@@ -261,7 +261,7 @@ def _reset_state(view: "View", initial: "View") -> None:
             current_view.value = initial_view.value
 
 
-def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
+def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
     attribute_name = str(attribute.name)
     if not attribute_name.startswith("_") and hasattr(instance, attribute_name):
         old_value = getattr(instance, attribute_name)
@@ -274,7 +274,7 @@ def notify_renderer(instance: "View", attribute: Any, value: Any) -> Any:
     return value
 
 
-def set_references(root: "View", main_view: "MainView", model: "Optional[Model]") -> None:
+def set_references(root: View, main_view: MainView, model: Optional[Model]) -> None:
     """Give `root` and its children their main view, and their signals the main view and model.
 
     What the signals pass to a callback asking for ``main_view`` or ``model`` by name.
@@ -297,7 +297,7 @@ def set_references(root: "View", main_view: "MainView", model: "Optional[Model]"
                     signal.set_model(model)
 
 
-def _retranslate(view: "View", translate: Translate) -> None:
+def _retranslate(view: View, translate: Translate) -> None:
     """Show the text of `view` and its children translated with `translate`.
 
     The text `tr` translated, wherever a field keeps it; text set without `tr` is left as
@@ -392,7 +392,7 @@ class View:
         default=no_translation, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
     #: the main view holding this view, set by the application; weak, as a view's parent
-    _main_view: Optional[Callable[[], Optional["MainView"]]] = attrs.field(
+    _main_view: Optional[Callable[[], Optional[MainView]]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
@@ -412,7 +412,7 @@ class View:
         return TranslatedText(self._tr(text), text)
 
     @contextlib.contextmanager
-    def refusing(self, message: str) -> "Iterator[None]":
+    def refusing(self, message: str) -> Iterator[None]:
         """Show the model's refusal of the block's change in the main view's status bar.
 
         `message` shows the `RefusedError`'s message, translated (unless `tr` gave it), as
@@ -441,7 +441,7 @@ class View:
         """
 
     @property
-    def children_views(self) -> list["View"]:
+    def children_views(self) -> list[View]:
         """Get all the field rows of the form view."""
         children_views: list[View] = []
         for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -651,7 +651,7 @@ class NewAction(ActionView):
         self.data = None
         self.triggered.connect(self._new_study)
 
-    def _new_study(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
+    def _new_study(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
         study.new_study(main_view, model)
 
 
@@ -691,7 +691,7 @@ class PickFileAction(ActionView):
         super().__attrs_post_init__()
         self.triggered.connect(self._pick_file)
 
-    def _pick_file(self, *, main_view: "MainView") -> None:
+    def _pick_file(self, *, main_view: MainView) -> None:
         path = main_view.ask_open_filepath(extensions=self.extensions)
         if path is not None:
             self.file_picked.emit(path)
@@ -736,7 +736,7 @@ class ExitAppAction(ActionView):
         self.data = None
         self.triggered.connect(self._exit_app)
 
-    def _exit_app(self, *, main_view: "MainView") -> None:
+    def _exit_app(self, *, main_view: MainView) -> None:
         main_view.close()
 
 
@@ -757,7 +757,7 @@ class FileMenu(Menu):
         self.save_as.triggered.connect(self._save_state)
         self.open_file.triggered.connect(self._load_state)
 
-    def _load_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
+    def _load_state(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
         filepath = main_view.ask_open_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
@@ -769,7 +769,7 @@ class FileMenu(Menu):
             message = main_view.tr("Can't open {name}: {error}.")
             main_view.status_bar.show_message(message.format(name=repr(filepath.name), error=error))
 
-    def _save_state(self, *, main_view: "MainView", model: Optional["Model"] = None) -> None:
+    def _save_state(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
         filepath = main_view.ask_save_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
@@ -893,14 +893,14 @@ class MainView(View):
         return [view for view in views if view is not self.file_menu]
 
     @classmethod
-    def add_arguments(cls, parser: "argparse.ArgumentParser") -> None:
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Add the app's own command-line options to `parser`, e.g. a file to show.
 
         After the backend's (`-f`, `--language`, `--port`...); `apply_arguments` gets
         their values. None by default.
         """
 
-    def apply_arguments(self, args: "argparse.Namespace") -> None:
+    def apply_arguments(self, args: argparse.Namespace) -> None:
         """Apply the app's own command-line options (`add_arguments`), parsed in `args`.
 
         Once the main view is wired and `-f`'s study is open: once on Qt and Textual, for
@@ -1072,14 +1072,17 @@ _DATE_PART_PATTERN = re.compile("|".join(_DATE_PARTS))
 _DATE_PART_SPLIT = re.compile(f"({_DATE_PART_PATTERN.pattern})")
 
 
-@CONVERTER.register_unstructure_hook
 def _unstructure_date(value: datetime.date) -> str:
     return value.isoformat()
 
 
-@CONVERTER.register_structure_hook
 def _structure_date(value: Any, _type: type) -> datetime.date:
     return datetime.date.fromisoformat(str(value))
+
+
+# registered with their type: cattrs can't read a postponed annotation on 3.9
+CONVERTER.register_unstructure_hook(datetime.date, _unstructure_date)
+CONVERTER.register_structure_hook(datetime.date, _structure_date)
 
 
 def is_date_format(date_format: str) -> bool:
@@ -1195,7 +1198,7 @@ class DateInputView(DateInputMixin, View):
 
 @define_view
 class SliderMixin:
-    def _check_step(self, _attribute: "attrs.Attribute[Any]", step: int) -> None:
+    def _check_step(self, _attribute: attrs.Attribute[Any], step: int) -> None:
         if step <= 0:
             msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
             raise ValueError(msg)
@@ -1354,7 +1357,7 @@ class ProgressBarView(View):
 
     _renderer_key = "progress_bar"
 
-    def _check_maximum(self, _attribute: "attrs.Attribute[Any]", maximum: Optional[int]) -> None:
+    def _check_maximum(self, _attribute: attrs.Attribute[Any], maximum: Optional[int]) -> None:
         if maximum is not None and maximum <= 0:
             msg = f"Cannot set {type(self).__name__}.maximum to {maximum}: it must be positive."
             raise ValueError(msg)
@@ -1404,7 +1407,7 @@ class MetricView(View):
         return f"{text} {delta_text}" if delta_text != "" else text
 
 
-def _to_floats(values: "Iterable[float]") -> list[float]:
+def _to_floats(values: Iterable[float]) -> list[float]:
     """Get `values` as a new list of floats, e.g. from a tuple or a numpy array."""
     return [float(value) for value in values]
 
@@ -1435,17 +1438,17 @@ class Series:
     A point whose x or y is NaN is not drawn: the curve has a gap there.
     """
 
-    def _check_y(self, _attribute: "attrs.Attribute[Any]", y: list[float]) -> None:
+    def _check_y(self, _attribute: attrs.Attribute[Any], y: list[float]) -> None:
         if len(y) != len(self.x):
             msg = f"Cannot make the series {self.name!r}: {len(self.x)} x for {len(y)} y."
             raise ValueError(msg)
 
-    def _check_color(self, _attribute: "attrs.Attribute[Any]", color: Optional[str]) -> None:
+    def _check_color(self, _attribute: attrs.Attribute[Any], color: Optional[str]) -> None:
         if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
             msg = f"Cannot color the series {self.name!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
 
-    def _check_kind(self, _attribute: "attrs.Attribute[Any]", kind: Optional[ChartKind]) -> None:
+    def _check_kind(self, _attribute: attrs.Attribute[Any], kind: Optional[ChartKind]) -> None:
         if kind is ChartKind.BAR:
             msg = f"Cannot draw the series {self.name!r} as bars: a BAR chart draws its series so."
             raise ValueError(msg)
@@ -1484,7 +1487,7 @@ class ReferenceLine:
     takes it in, so it shows even away from the data.
     """
 
-    def _check_color(self, _attribute: "attrs.Attribute[Any]", color: Optional[str]) -> None:
+    def _check_color(self, _attribute: attrs.Attribute[Any], color: Optional[str]) -> None:
         if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
             msg = f"Cannot color the reference line {self.label!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
@@ -1522,7 +1525,7 @@ class ChartView(View):
 
     _renderer_key = "chart"
 
-    def _check_height(self, _attribute: "attrs.Attribute[Any]", height: Optional[int]) -> None:
+    def _check_height(self, _attribute: attrs.Attribute[Any], height: Optional[int]) -> None:
         if height is not None and height <= 0:
             msg = f"Cannot set {type(self).__name__}.height to {height}: it must be positive."
             raise ValueError(msg)
@@ -1971,7 +1974,7 @@ class TableMixin:
     filters.
     """
 
-    def _check_selected_rows(self, _attribute: "attrs.Attribute[Any]", rows: list[int]) -> None:
+    def _check_selected_rows(self, _attribute: attrs.Attribute[Any], rows: list[int]) -> None:
         name = type(self).__name__
         if any(not 0 <= row < len(self.rows) for row in rows):
             msg = f"Cannot set {name}.selected_rows to {rows}: the table has {len(self.rows)} rows."
@@ -1983,13 +1986,13 @@ class TableMixin:
             msg = f"Cannot set {name}.selected_rows to {rows}: the table selects a single row."
             raise ValueError(msg)
 
-    def _check_sort_column(self, _attribute: "attrs.Attribute[Any]", column: Optional[int]) -> None:
+    def _check_sort_column(self, _attribute: attrs.Attribute[Any], column: Optional[int]) -> None:
         if column is not None and not self._is_column(column, self.sortable_columns):
             name = type(self).__name__
             msg = f"Cannot sort {name} by column {column}: it isn't one of its sortable columns."
             raise ValueError(msg)
 
-    def _check_filters(self, _attribute: "attrs.Attribute[Any]", filters: dict[int, str]) -> None:
+    def _check_filters(self, _attribute: attrs.Attribute[Any], filters: dict[int, str]) -> None:
         name = type(self).__name__
         for column, text in filters.items():
             if not self._is_column(column, self.filterable_columns):
@@ -2001,7 +2004,7 @@ class TableMixin:
             parse_filter(text, self._column_type(column))
 
     def _reconcile_mode(
-        self, attribute: "attrs.Attribute[Any]", mode: SelectionMode
+        self, attribute: attrs.Attribute[Any], mode: SelectionMode
     ) -> SelectionMode:
         """Keep only the first selected row when the table comes to select a single one."""
         if mode is SelectionMode.SINGLE and len(self.selected_rows) > 1:
@@ -2009,7 +2012,7 @@ class TableMixin:
         return cast("SelectionMode", notify_renderer(cast("View", self), attribute, mode))
 
     def _reconcile_rows(
-        self, attribute: "attrs.Attribute[Any]", rows: list[list[str]]
+        self, attribute: attrs.Attribute[Any], rows: list[list[str]]
     ) -> list[list[str]]:
         """Move `selected_rows` to their rows in `rows` (or drop them), and notify the renderer."""
         renderer = cast("View", self).renderer
@@ -2033,9 +2036,7 @@ class TableMixin:
         self._show_rows(sorted(found), force=True)
         return rows
 
-    def _reconcile_sortable(
-        self, attribute: "attrs.Attribute[Any]", columns: list[int]
-    ) -> list[int]:
+    def _reconcile_sortable(self, attribute: attrs.Attribute[Any], columns: list[int]) -> list[int]:
         """Stop sorting by a column no longer sortable, and notify the renderer."""
         self._store(attribute, columns)
         if self.sort_column is not None and self.sort_column not in columns:
@@ -2043,7 +2044,7 @@ class TableMixin:
         return columns
 
     def _reconcile_filterable(
-        self, attribute: "attrs.Attribute[Any]", columns: list[int]
+        self, attribute: attrs.Attribute[Any], columns: list[int]
     ) -> list[int]:
         """Drop the filters of columns no longer filterable, and notify the renderer."""
         self._store(attribute, columns)
@@ -2055,7 +2056,7 @@ class TableMixin:
             self.search = ""  # nothing left to search
         return columns
 
-    def _store(self, attribute: "attrs.Attribute[Any]", value: Any) -> None:
+    def _store(self, attribute: attrs.Attribute[Any], value: Any) -> None:
         """Set an attribute, then notify the renderer: it shows the view as it now is."""
         old = getattr(self, attribute.name)
         object.__setattr__(self, attribute.name, value)
@@ -2067,7 +2068,7 @@ class TableMixin:
         ):
             renderer.refresh_attribute(attribute.name, value)
 
-    def _reshow(self, attribute: "attrs.Attribute[Any]", value: Any) -> Any:
+    def _reshow(self, attribute: attrs.Attribute[Any], value: Any) -> Any:
         """Show the rows as `value` sorts or filters them, and notify the renderer."""
         if getattr(self, attribute.name) == value:
             return value
@@ -2344,7 +2345,7 @@ class RecordTableView(TableView, Generic[RecordT]):
     """
 
     def _reconcile_columns(
-        self, _attribute: "attrs.Attribute[Any]", columns: list[Column]
+        self, _attribute: attrs.Attribute[Any], columns: list[Column]
     ) -> list[Column]:
         # first: the rows sort and filter by the columns' fields
         object.__setattr__(self, "columns", columns)
@@ -2358,7 +2359,7 @@ class RecordTableView(TableView, Generic[RecordT]):
         return columns
 
     def _reconcile_records(
-        self, _attribute: "attrs.Attribute[Any]", records: list[RecordT]
+        self, _attribute: attrs.Attribute[Any], records: list[RecordT]
     ) -> list[RecordT]:
         # first: the rows sort and filter by the records' values
         object.__setattr__(self, "records", records)
@@ -2465,7 +2466,7 @@ TValue = TypeVar("TValue")
 
 @define_view
 class ValuesGroupMixin(Generic[TValue]):
-    def _check_value(self, _attribute: "attrs.Attribute[Any]", value: Optional[TValue]) -> None:
+    def _check_value(self, _attribute: attrs.Attribute[Any], value: Optional[TValue]) -> None:
         """Reject a `value` that isn't `None` or one of the current `values`."""
         if value is not None and value not in self.values.values():
             if len(self.values) == 0:
@@ -2481,7 +2482,7 @@ class ValuesGroupMixin(Generic[TValue]):
             raise ValueError(msg)
 
     def _reconcile_values(
-        self, attribute: "attrs.Attribute[Any]", values: dict[str, TValue]
+        self, attribute: attrs.Attribute[Any], values: dict[str, TValue]
     ) -> dict[str, TValue]:
         """Clear `value` if it won't be a member of the new `values`, then notify the renderer."""
         if self.value is not None and self.value not in values.values():
@@ -2722,7 +2723,7 @@ class FormView(View):
         self.log_view.is_visible = False
 
     @property
-    def field_rows(self) -> list[Union[FormRowView, "FormView"]]:
+    def field_rows(self) -> list[Union[FormRowView, FormView]]:
         """Get all the field rows of the form view."""
         return [
             getattr(self, field_row_attr.name)
@@ -2945,7 +2946,7 @@ class TabView(View):
 
     _renderer_key = "tabs"
 
-    def _check_current_index(self, _attribute: "attrs.Attribute[Any]", index: int) -> None:
+    def _check_current_index(self, _attribute: attrs.Attribute[Any], index: int) -> None:
         count = len(self.tabs)
         if not 0 <= index < max(count, 1):
             msg = f"Cannot show tab {index} of {type(self).__name__}: it has {count} tabs."
@@ -2979,7 +2980,7 @@ class GridPosition(NamedTuple):
     column_span: int = 1
 
     @property
-    def cells(self) -> "list[tuple[int, int]]":
+    def cells(self) -> list[tuple[int, int]]:
         """Get the (row, column) cells the view covers."""
         return [
             (row, column)
@@ -3229,7 +3230,7 @@ class ListView(View, Generic[ItemT]):
     item_views: list[View] = attrs.field(factory=list, init=False, metadata={OMIT: True})
     _items: list[ItemT] = attrs.field(factory=list, init=False, repr=False, metadata={OMIT: True})
     #: the model the signals of the views built pass on (see `set_references`)
-    _model: Optional[Callable[[], Optional["Model"]]] = attrs.field(
+    _model: Optional[Callable[[], Optional[Model]]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
@@ -3243,7 +3244,7 @@ class ListView(View, Generic[ItemT]):
         return list(self._items)
 
     @items.setter
-    def items(self, items: "Iterable[ItemT]") -> None:
+    def items(self, items: Iterable[ItemT]) -> None:
         new_items = list(items)
         old = {
             self.item_key(item): (item, view) for item, view in zip(self._items, self.item_views)
@@ -3299,7 +3300,7 @@ class ListView(View, Generic[ItemT]):
 TreePath = tuple[str, ...]
 
 
-def _to_tree_nodes(nodes: "Iterable[TreeNode]") -> tuple["TreeNode", ...]:
+def _to_tree_nodes(nodes: Iterable[TreeNode]) -> tuple[TreeNode, ...]:
     return tuple(nodes)
 
 
@@ -3313,11 +3314,10 @@ class TreeNode:
     """
 
     label: str
-    children: tuple["TreeNode", ...] = attrs.field(default=(), converter=_to_tree_nodes)
+    children: tuple[TreeNode, ...] = attrs.field(default=(), converter=_to_tree_nodes)
     key: str = attrs.field(default=attrs.Factory(lambda node: node.label, takes_self=True))
 
 
-@CONVERTER.register_unstructure_hook
 def _unstructure_tree_node(node: TreeNode) -> dict[str, Any]:
     # by hand: Python 3.9 doesn't resolve the class naming itself in `children`
     return {
@@ -3327,15 +3327,18 @@ def _unstructure_tree_node(node: TreeNode) -> dict[str, Any]:
     }
 
 
-@CONVERTER.register_structure_hook
 def _structure_tree_node(data: Mapping[str, Any], _type: type) -> TreeNode:
     children = [_structure_tree_node(child, TreeNode) for child in data.get("children", [])]
     return TreeNode(str(data["label"]), children, str(data.get("key", data["label"])))
 
 
+CONVERTER.register_unstructure_hook(TreeNode, _unstructure_tree_node)
+CONVERTER.register_structure_hook(TreeNode, _structure_tree_node)
+
+
 def walk_tree(
-    nodes: "Iterable[TreeNode]", parent: TreePath = ()
-) -> "Iterator[tuple[TreePath, TreeNode]]":
+    nodes: Iterable[TreeNode], parent: TreePath = ()
+) -> Iterator[tuple[TreePath, TreeNode]]:
     """Get each node of `nodes` and under them with its path, depth first, in order."""
     for node in nodes:
         path = (*parent, node.key)
@@ -3357,7 +3360,7 @@ class TreeView(View):
 
     _renderer_key = "tree"
 
-    def _check_nodes(self, _attribute: "attrs.Attribute[Any]", nodes: list[TreeNode]) -> None:
+    def _check_nodes(self, _attribute: attrs.Attribute[Any], nodes: list[TreeNode]) -> None:
         paths: set[TreePath] = set()
         for path, _node in walk_tree(nodes):
             if path in paths:
@@ -3368,7 +3371,7 @@ class TreeView(View):
                 raise ValueError(msg)
             paths.add(path)
 
-    def _check_expanded(self, _attribute: "attrs.Attribute[Any]", expanded: list[TreePath]) -> None:
+    def _check_expanded(self, _attribute: attrs.Attribute[Any], expanded: list[TreePath]) -> None:
         paths = {path for path, _node in walk_tree(self.nodes)}
         for path in expanded:
             if path not in paths:
@@ -3378,7 +3381,7 @@ class TreeView(View):
                 raise ValueError(msg)
 
     def _check_selected(
-        self, _attribute: "attrs.Attribute[Any]", selected: Optional[TreePath]
+        self, _attribute: attrs.Attribute[Any], selected: Optional[TreePath]
     ) -> None:
         if selected is not None and selected not in {path for path, _node in walk_tree(self.nodes)}:
             msg = (
@@ -3387,7 +3390,7 @@ class TreeView(View):
             raise ValueError(msg)
 
     def _reconcile_nodes(
-        self, attribute: "attrs.Attribute[Any]", nodes: list[TreeNode]
+        self, attribute: attrs.Attribute[Any], nodes: list[TreeNode]
     ) -> list[TreeNode]:
         """Drop the paths of `expanded` and `selected` gone, then notify the renderer.
 

@@ -1,5 +1,7 @@
 """A main view translated by `tests/locales`, shared by the core and backend tests."""
 
+from __future__ import annotations
+
 import enum
 from pathlib import Path
 from typing import Optional

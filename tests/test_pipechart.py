@@ -1,5 +1,7 @@
 """Tests of the example pipechart: a pipe's pressure drop swept along its flow rate."""
 
+from __future__ import annotations
+
 import math
 
 import pytest

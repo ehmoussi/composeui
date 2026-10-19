@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from textual.widgets import TabbedContent, TabPane
 
 from composeui.core.signal import Signal

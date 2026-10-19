@@ -1,5 +1,7 @@
 """Rows of views side by side, shared by the backend tests of `HorizontalView` and of tables."""
 
+from __future__ import annotations
+
 import attrs
 from attrs import Factory
 

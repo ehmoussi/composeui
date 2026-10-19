@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from qtpy.QtCore import QEvent, QObject, QTimer
 from qtpy.QtWidgets import QWidget
 

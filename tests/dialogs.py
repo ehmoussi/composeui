@@ -1,5 +1,7 @@
 """A confirmation guarding an edit, shared by the core and backend tests of dialogs."""
 
+from __future__ import annotations
+
 from attrs import Factory
 
 from composeui.core.view import (

@@ -8,6 +8,8 @@ and ``composeui.core.registry.create_renderer`` resolves it against the backend'
 new backend only adds a `RendererType` member plus its own ``RENDERERS`` mapping.
 """
 
+from __future__ import annotations
+
 import subprocess
 import sys
 

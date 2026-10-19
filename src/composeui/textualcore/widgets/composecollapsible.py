@@ -1,7 +1,13 @@
-from textual.widget import Widget
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from textual.widgets import Collapsible
 
 from composeui.core.signal import Signal
+
+if TYPE_CHECKING:
+    from textual.widget import Widget
 
 
 class ComposeCollapsible(Collapsible):
