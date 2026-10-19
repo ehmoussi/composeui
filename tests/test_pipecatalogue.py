@@ -12,6 +12,7 @@ import pytest
 
 from composeui.core.application import ModelApplication
 from composeui.core.study import VIEWS_NAME
+from composeui.core.view import NodeMark
 from examples.pipecatalogue import (
     Material,
     PipeCatalogueMainView,
@@ -77,12 +78,19 @@ def test_the_tree_shows_the_pipes_listed_by_material_and_expands_the_one_selecte
     app: App,
 ) -> None:
     tree = app.main_view.catalogue.browser.tree
-    _add(app, "Main line")
+    _add(app, "Main line", installed=datetime.date(2024, 3, 12))
     _add(app, "Return", Material.COPPER, (20.0, 2.0, 3.0))
     _add(app, "Feed")
     assert [(node.label, [pipe.label for pipe in node.children]) for node in tree.nodes] == [
         ("Steel", ["Feed", "Main line"]),
         ("Copper", ["Return"]),
+    ]
+    # a material in bold, a pipe marked by whether its installation date is known
+    assert all(node.is_bold for node in tree.nodes)
+    assert [pipe.mark for node in tree.nodes for pipe in node.children] == [
+        NodeMark.WARNING,
+        NodeMark.DONE,
+        NodeMark.WARNING,
     ]
 
     tree.expanded = [("STEEL",)]
