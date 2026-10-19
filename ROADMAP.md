@@ -9,11 +9,11 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
 test requires all three backends to register the same keys). Already there: input, float
-input, integer input, date input, slider, label, log, button, progress bar, metric,
-expander, checkbox, radio group, combobox, table (editable cells, sorting and filtering
-included), tree (its nodes with an icon, a mark and a style), Markdown, forms, pages, tabs,
-resizable panes (a splitter), sidebar, a list of views from data, message, confirm and form
-dialogs.
+input, integer input, date input, file path input (a "…" button and a reload button),
+slider, label, log, button, progress bar, metric, expander, checkbox, radio group,
+combobox, table (editable cells, sorting and filtering included), tree (its nodes with an
+icon, a mark and a style), Markdown, forms, pages, tabs, resizable panes (a splitter),
+sidebar, a list of views from data, message, confirm and form dialogs.
 
 Charts (2) have a section of their own.
 
@@ -39,20 +39,18 @@ most needed first:
    calls | 2500").
 5. **A wizard**: a dialog of steps with Back, Continue/Finish, Cancel and Help, each
    step a form checked before the next, an image on its side.
-6. **A file path field**: a text field with a "…" button opening a file dialog, and
-   optionally a reload button (a data file, a template file).
-7. **Tabs the user adds and closes**: a × on each tab and a + tab after them ("Command 1",
+6. **Tabs the user adds and closes**: a × on each tab and a + tab after them ("Command 1",
    "Command 2").
-8. **A combobox of several values**: check boxes in its list, the picked values shown
+7. **A combobox of several values**: check boxes in its list, the picked values shown
    below it ("-- Select outputs --", then "L, b, h").
-9. **A button with a menu**: "Add ▾" adding one of several kinds.
-10. **An optional field**: a check box enabling the field beside it (each stopping
-    criterion of a Monte Carlo); and a **duration field** ("d h m s").
-11. **A code editor**: line numbers and Python syntax highlighting (a Python model's
+8. **A button with a menu**: "Add ▾" adding one of several kinds.
+9. **An optional field**: a check box enabling the field beside it (each stopping
+   criterion of a Monte Carlo); and a **duration field** ("d h m s").
+10. **A code editor**: line numbers and Python syntax highlighting (a Python model's
     function, a coupling's post-processing).
-12. **A workflow diagram**: boxes joined by arrows, a box enabled or not, clicking one
+11. **A workflow diagram**: boxes joined by arrows, a box enabled or not, clicking one
     starting its step (the "Study workflow" page).
-13. **A Python console** (Tools > Python Console), once an app wants to be scripted.
+12. **A Python console** (Tools > Python Console), once an app wants to be scripted.
 
 The web versions follow the same rules as the existing ones: the element that sent the
 request is never swapped back (the focus rule), changes elsewhere arrive as OOB updates,

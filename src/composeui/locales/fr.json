@@ -63,5 +63,7 @@
   "Resize the panes": "Redimensionner les volets",
   "Done": "Terminé",
   "Warning": "Avertissement",
-  "Error": "Erreur"
+  "Error": "Erreur",
+  "Choose a file": "Choisir un fichier",
+  "Reload": "Recharger"
 }

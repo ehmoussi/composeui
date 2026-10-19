@@ -23,6 +23,7 @@ import time
 import types
 from html.parser import HTMLParser
 from importlib.util import find_spec
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pytest
@@ -74,6 +75,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.webcore.page import JOBS_POLL_MS
+from composeui.webcore.session import WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     CHART_MAX_POINTS,
@@ -111,6 +113,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -131,7 +134,6 @@ from tests.workers import WorkersMainView
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Iterator
-    from pathlib import Path
 
     from starlette.applications import Starlette
 
@@ -708,6 +710,53 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
     handle_event(field, "change", {"value": ""})
     assert (arrival.value, changes[-1]) == (None, None)
     assert len(changes) == 3
+
+
+def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends() -> None:
+    main_view = DataFileMainView()
+    main_view.status_bar.timeout = 0
+    session = WebSession(main_view)
+    main_view.set_language("fr")
+    measurements = main_view.form.measurements
+    label, field = _part(measurements, "label"), _part(measurements, "field")
+    assert isinstance(label, WebFormLabelRenderer)
+    picked: list[tuple[Path, bytes]] = []
+    measurements.path_picked.connect(lambda path: picked.append((path, path.read_bytes())))
+    reloads: list[None] = []
+    measurements.reload_clicked.connect(lambda: reloads.append(None))
+    element = _element(field.to_html(), field.widget_id)
+    text, picker = (attributes for tag, attributes in element.descendants if tag == "input")
+    assert text["aria-labelledby"] == label.text_id
+    assert (picker["type"], picker["accept"]) == ("file", ".csv,.txt,.text")
+    assert picker["hx-post"] == f"/widget/{field.widget_id}/file"
+    buttons = [attributes for tag, attributes in element.descendants if tag == "button"]
+    assert [button["aria-label"] for button in buttons] == ["Choisir un fichier", "Recharger"]
+
+    handle_event(field, "change", {"value": "/data/flows.csv"})
+    assert measurements.path == Path("/data/flows.csv")
+    result = session.pick_file(field.widget_id, "flows.csv", b"1,2")
+    assert result is not None
+    ((first, content),) = picked
+    assert (first.name, content, measurements.path) == ("flows.csv", b"1,2", first)
+    swapped = _swapped(result[0], field.widget_id)  # the field shows the copy's path
+    assert next(a["value"] for tag, a in swapped.descendants if tag == "input") == str(first)
+    # the field keeps its last upload only; another type is refused
+    session.pick_file(field.widget_id, "levels.txt", b"3")
+    assert (picked[-1][0].name, first.exists()) == ("levels.txt", False)
+    result = session.pick_file(field.widget_id, "notes.md", b"#")
+    assert result is not None
+    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'notes.md': expected a .csv or .txt or .text file."
+    assert len(picked) == 2
+
+    handle_event(field, "reload", {})
+    assert len(reloads) == 1
+    measurements.has_reload = False  # no button: nothing to reload
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "reload", {})
+    assert len(reloads) == 1
+    session.close()
+    assert not picked[-1][0].exists()
 
 
 def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(

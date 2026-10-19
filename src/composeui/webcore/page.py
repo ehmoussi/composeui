@@ -663,6 +663,13 @@ document.addEventListener("change", function (event) {
   popover.hidePopover();
   document.getElementById(popover.dataset.dateButton).focus();
 }, true);
+/* a file path field's "…" button opens the browser's file picker, a hidden file input
+   beside it, which uploads the file picked (see `WebFilePathInputRenderer`) */
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-file-browse]");
+  if (button === null) return;
+  button.parentElement.querySelector('input[type="file"]').click();
+});
 /* the sidebar (see `WebSidebarRenderer`): on a wide screen, its button in the header
    retracts and expands the column, then posts its state; on a phone, it shows and hides
    the drawer, through the drawer's checkbox, which a click beside the drawer unchecks
