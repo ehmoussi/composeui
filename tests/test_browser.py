@@ -1136,6 +1136,31 @@ def test_a_date_input_s_calendar_names_its_days_in_the_page_s_language_and_picks
     context.close()
 
 
+def test_a_date_input_s_calendar_opened_before_cally_loads_ends_up_focused_in_its_language(
+    browser: Browser, bookings_base_url: str
+) -> None:
+    context = browser.new_context(base_url=bookings_base_url)
+    page = context.new_page()
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        held.append(route)  # answered only once the calendar is open
+
+    # Cally held back, as on a slow network
+    page.route("**/static/cally.js*", hold)
+    page.goto("/", wait_until="domcontentloaded")  # not the load, which waits for Cally
+    button = page.get_by_role("button", name="Choisir une date")
+    button.click()
+    calendar = page.locator("calendar-date")
+    expect(calendar).to_be_visible()
+    assert page.evaluate("customElements.get('calendar-date') === undefined")
+
+    held[0].continue_()
+    # once loaded, as a calendar opened then: on the date, focused, named in French
+    expect(calendar.get_by_role("button", name="18 octobre")).to_be_focused()
+    context.close()
+
+
 def test_a_tree_node_keeps_the_focus_through_the_swap_its_toggle_or_selection_brings(
     browser: Browser, site_base_url: str
 ) -> None:
