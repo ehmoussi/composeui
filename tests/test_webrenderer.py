@@ -119,7 +119,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
-from tests.splitter import SplitterMainView
+from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -784,21 +784,38 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_widths_posted() 
     assert {b["aria-orientation"] for b in borders} == {"vertical"}
     assert {b["tabindex"] for b in borders} == {"0"}
 
-    fragments = handle_event(renderer, "resize", {"widths": "300,100,400"})
+    fragments = handle_event(renderer, "resize", {"lengths": "300,100,400"})
     assert splitter.sizes == [38, 12, 50]
     assert renderer.widget_id not in fragments  # the browser shows it already
     for widths in ("300,100", "1,x,3", "1,-1,3", "1,nan,3"):  # nothing changes
-        handle_event(renderer, "resize", {"widths": widths})
+        handle_event(renderer, "resize", {"lengths": widths})
     assert splitter.sizes == [38, 12, 50]
 
     splitter.settings.is_visible = False  # its share kept, out of the others'
-    handle_event(renderer, "resize", {"widths": "300,0,100"})
+    handle_event(renderer, "resize", {"lengths": "300,0,100"})
     assert splitter.sizes == [75, 12, 25]
     splitter.is_enabled = False
     root = _element(renderer.to_html(), renderer.widget_id)
     borders = [a for _, a in root.descendants if a.get("role") == "separator"]
     assert [b["aria-valuenow"] for b in borders] == ["75", "75"]
     assert {(b["aria-disabled"], b["tabindex"]) for b in borders} == {("true", "-1")}
+
+
+def test_a_vertical_splitter_stacks_its_panes_with_a_horizontal_border_between() -> None:
+    view = VerticalSplitterMainView()
+    view.render(RendererType.WEB)
+    splitter = view.splitter
+    renderer = splitter.renderer
+    assert isinstance(renderer, WebRenderer)
+    root = _element(renderer.to_html(), renderer.widget_id)
+    panes = [a for _, a in root.descendants if "data-pane" in a]
+    (border,) = [a for _, a in root.descendants if a.get("role") == "separator"]
+    assert [pane["style"] for pane in panes] == ["--share: 2 1 0%", "--share: 1 1 0%"]
+    assert all("overflow-auto" in pane["class"] for pane in panes)  # each scrolls on its own
+    assert (border["aria-orientation"], border["aria-valuenow"]) == ("horizontal", "67")
+
+    handle_event(renderer, "resize", {"lengths": "100,300"})
+    assert splitter.sizes == [25, 75]
 
 
 def test_an_expander_is_a_details_posting_its_toggles_never_swapped_back() -> None:

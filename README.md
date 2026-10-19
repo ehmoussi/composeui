@@ -301,6 +301,27 @@ without borders, in a splitter narrower than 42rem, as it does a row's views.
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) shows its tree of pipes
 by material in one, beside the pipes' expanders.
 
+A subclass setting `orientation` to `Orientation.VERTICAL` lays its panes out one above
+the other instead, sharing its height, e.g. a chart above its table:
+
+```python
+from composeui.core.view import Orientation
+
+
+@define_view
+class ResultSplitter(SplitterView):
+    orientation = Orientation.VERTICAL
+
+    chart: CurveChart = attrs.field(factory=CurveChart, metadata={STRETCH: 2})  # a ChartView
+    measurements: Measurements = attrs.Factory(Measurements)  # a TableView
+```
+
+Its `sizes` are then shares of its height, and the user drags a horizontal border, or
+moves it with the up and down keys. Qt shares the window's spare height,
+Textual a height of 24 rows and the web of 32rem, each pane scrolling within its share.
+The web never stacks a vertical splitter's panes any other way: it keeps its borders on
+a narrow screen.
+
 ## Toolbars
 
 A `ToolBar` is a row of the actions the user runs most, docked at the top of the window.

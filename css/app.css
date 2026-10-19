@@ -265,29 +265,48 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
 }
 
 /* a splitter's borders (`WebSplitterRenderer`): a line the width of a row's gap, which
-   thickens under the pointer, while dragged or focused; only between panes shown side
-   by side: not before the first pane shown, nor before a hidden one, nor once the
-   splitter is narrow enough to stack its panes (42rem, a row's `@2xl`) */
+   thickens under the pointer, while dragged or focused; only between panes shown: not
+   before the first pane shown, nor before a hidden one, nor once a splitter of panes
+   side by side is narrow enough to stack them (42rem, a row's `@2xl`). A vertical
+   splitter's are horizontal lines, across it. */
 .cui-splitter-border {
   display: none;
   flex: none;
   justify-content: center;
+  align-items: center;
   width: 1.5rem;
   cursor: col-resize;
   touch-action: none;
   border-radius: var(--radius-field);
 }
+.cui-splitter-border[aria-orientation="horizontal"] {
+  width: auto;
+  height: 1.5rem;
+  cursor: row-resize;
+}
 .cui-splitter-border::before {
   content: "";
+  align-self: stretch;
   width: 1px;
   background: var(--color-base-300);
-  transition: width 0.1s, background-color 0.1s;
+  transition: width 0.1s, height 0.1s, background-color 0.1s;
 }
-.cui-splitter-border:hover::before,
+.cui-splitter-border[aria-orientation="horizontal"]::before {
+  align-self: center;
+  width: 100%;
+  height: 1px;
+}
+.cui-splitter-border:not([aria-disabled="true"]):hover::before,
 .cui-splitter-border:focus-visible::before,
 .cui-splitter-border[data-dragging]::before {
   width: 3px;
   background: var(--color-primary);
+}
+.cui-splitter-border[aria-orientation="horizontal"]:not([aria-disabled="true"]):hover::before,
+.cui-splitter-border[aria-orientation="horizontal"]:focus-visible::before,
+.cui-splitter-border[aria-orientation="horizontal"][data-dragging]::before {
+  width: 100%;
+  height: 3px;
 }
 .cui-splitter-border:focus-visible {
   outline: 2px solid var(--color-primary);
@@ -296,9 +315,9 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
 .cui-splitter-border[aria-disabled="true"] {
   cursor: default;
 }
-.cui-splitter-border[aria-disabled="true"]::before {
-  width: 1px;
-  background: var(--color-base-300);
+[data-pane]:not(:has(> [hidden]))
+  ~ .cui-splitter-border[aria-orientation="horizontal"]:not(:has(+ [data-pane] > [hidden])) {
+  display: flex;
 }
 @container (width >= 42rem) {
   [data-pane]:not(:has(> [hidden])) ~ .cui-splitter-border:not(:has(+ [data-pane] > [hidden])) {

@@ -102,7 +102,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
-from tests.splitter import SplitterMainView
+from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -1261,6 +1261,32 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
     assert splitter.sizes[1] == 1
     assert splitter.sizes[0] + splitter.sizes[2] == 100
     assert splitter.sizes[0] < splitter.sizes[2]  # dragged left
+
+
+def test_a_vertical_splitter_shares_the_windows_spare_height_as_its_sizes(
+    qtbot: QtBot,
+) -> None:
+    view = VerticalSplitterMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(600, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    splitter = view.splitter
+    widget = _widget(splitter)
+    assert isinstance(widget, QSplitter)
+    assert widget.orientation() == Qt.Orientation.Vertical
+    chart, table = widget.sizes()
+    assert chart == pytest.approx(2 * table, abs=4)
+    assert chart + table > 500  # the window's spare height, not its labels'
+
+    handle = widget.handle(1)
+    middle = handle.rect().center()
+    _drag(handle, middle, middle + QPoint(0, 60))
+    heights = widget.sizes()
+    assert heights[0] == pytest.approx(chart + 60, abs=2)
+    assert splitter.sizes == [round(100 * height / sum(heights)) for height in heights]
 
 
 def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(
