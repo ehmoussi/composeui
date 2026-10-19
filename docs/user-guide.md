@@ -263,9 +263,7 @@ TreeNode(
 Qt shows the marks in a second column of the `QTreeWidget`, Textual as a colored glyph
 (✓, !, ✗), and the web as an icon in the node's button.
 
-On the web, a tree is at least 12rem wide, so that its labels stay readable. In
-[resizable panes](#resizable-panes), the border stops there. A label that is too long for the
-tree ends in an ellipsis.
+On the web, a label that is too long for the tree ends in an ellipsis.
 
 [`src/examples/pipecatalogue.py`](../src/examples/pipecatalogue.py) shows its pipes in a
 tree, under their material. It builds the tree again from the database whenever the pipes
@@ -402,8 +400,9 @@ them once the user drops the border. It never reports them when code sets `sizes
 - The width of the panes is layout, not study data: it is never saved, loaded, or reset.
 
 Qt shows a `QSplitter`. Textual shows a row of panes with a `│` border between two panes.
-The web shows an ARIA window splitter. When a splitter is narrower than 42rem, the web
-stacks its panes without borders. It stacks the views of a row in the same way.
+The web shows an ARIA window splitter. Side by side, each pane is at least 12rem wide, so
+that its text stays readable: the border stops there. When a splitter is narrower than 42rem,
+the web stacks its panes without borders. It stacks the views of a row in the same way.
 [`src/examples/pipecatalogue.py`](../src/examples/pipecatalogue.py) shows its tree of pipes
 by material in a splitter, beside the expanders of the pipes.
 

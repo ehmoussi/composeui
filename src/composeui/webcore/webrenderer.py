@@ -2764,8 +2764,9 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
     with the arrow keys; the browser shares the width between the panes beside it at
     once (see `page.py`), then posts every pane's width (`resize`): like every control,
     the splitter is never swapped back after one. A splitter narrower than 42rem stacks
-    its panes, as a row does, without borders; a border shows only between panes shown
-    (see `app.css`), as a pane hides and swaps on its own. Vertical, the panes share its
+    its panes, as a row does, without borders; side by side, a pane is at least 12rem
+    wide, for its text to be read. A border shows only between panes shown (see
+    `app.css`), as a pane hides and swaps on its own. Vertical, the panes share its
     height, 32rem, one above the other, each scrolling within its share.
     """
 
@@ -2789,10 +2790,8 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         pane_class = (
             "min-h-0 overflow-auto has-[>[hidden]]:hidden flex-(--share)"
             if is_vertical
-            else (
-                "min-w-0 has-[>[data-min-width]]:min-w-auto has-[>[hidden]]:hidden"
-                " @2xl:flex-(--share)"
-            )
+            # side by side, each wide enough to read its text (`page.py` reads it too)
+            else "min-w-0 has-[>[hidden]]:hidden @2xl:min-w-48 @2xl:flex-(--share)"
         )
         cells: list[str] = []
         before = 0  # the length of the panes shown before the border, in percent
@@ -2927,13 +2926,10 @@ class WebTreeRenderer(WebRenderer[TreeView]):
         positions = {
             path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
         }
-        # wide enough to read a label, which a splitter's pane keeps (`data-min-width`),
-        # however long its labels (`contain-inline-size`); clipped to a narrower pane, the
-        # focus rings at its edges left whole
+        # clipped to a pane too narrow for it, the focus rings at its edges left whole
         return (
-            f"<ul {self._root_attributes(oob=oob)} data-min-width"
-            ' class="flex min-w-48 contain-inline-size flex-col gap-0.5 overflow-clip'
-            ' [overflow-clip-margin:4px]">'
+            f"<ul {self._root_attributes(oob=oob)}"
+            ' class="flex flex-col gap-0.5 overflow-clip [overflow-clip-margin:4px]">'
             f"{self._nodes_html(self._view.nodes, (), positions)}</ul>"
         )
 

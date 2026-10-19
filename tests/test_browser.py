@@ -1085,23 +1085,25 @@ def test_a_splitter_border_dragged_or_moved_by_keys_shares_the_width_beside_it(
     borders = page.get_by_role("separator", name="Resize the panes")
     expect(panes.nth(0)).to_contain_text("Study 1")
     study, settings, result = (_box(panes.nth(index)) for index in range(3))
-    assert study["width"] == pytest.approx(settings["width"], abs=1)
-    assert result["width"] == pytest.approx(2 * study["width"], abs=2)
+    # their shares, 1:1:2, of a page too narrow: the small two held at 12rem, to be read
+    assert study["width"] == pytest.approx(192, abs=1)
+    assert settings["width"] == pytest.approx(192, abs=1)
+    assert result["width"] > study["width"]
 
-    border = _box(borders.first)
+    border = _box(borders.last)
     middle = (border["x"] + border["width"] / 2, border["y"] + border["height"] / 2)
     page.mouse.move(*middle)
     page.mouse.down()
-    page.mouse.move(middle[0] + 100, middle[1], steps=5)
+    page.mouse.move(middle[0] + 40, middle[1], steps=5)
     with _posted(page):
         page.mouse.up()
-    dragged = _box(panes.first)
-    assert dragged["width"] == pytest.approx(study["width"] + 100, abs=1)
-    expect(borders.first).to_be_focused()
+    dragged = _box(panes.nth(1))
+    assert dragged["width"] == pytest.approx(settings["width"] + 40, abs=1)
+    expect(borders.last).to_be_focused()
     with _posted(page):
-        borders.first.press("ArrowLeft")
+        borders.last.press("ArrowLeft")
     page.reload()  # the server's page: shared as the server was told
-    reloaded = _box(panes.first)
+    reloaded = _box(panes.nth(1))
     assert reloaded["width"] == pytest.approx(dragged["width"] - 16, abs=2)
 
     page.set_viewport_size({"width": 500, "height": 700})  # stacked, without borders
@@ -1279,31 +1281,38 @@ def test_a_tree_node_keeps_the_focus_through_the_swap_its_toggle_or_selection_br
     context.close()
 
 
-def test_a_tree_keeps_its_pane_wide_enough_to_read_cutting_long_labels_short(
+def test_a_splitter_keeps_each_pane_wide_enough_to_read_a_tree_cutting_its_labels_short(
     browser: Browser, site_plan_base_url: str
 ) -> None:
     context = browser.new_context(base_url=site_plan_base_url)
     page = context.new_page()
     page.set_viewport_size({"width": 1200, "height": 700})
     page.goto("/")
-    pane = page.locator("[data-pane]").first
+    tree, plan = page.locator("[data-pane]").first, page.locator("[data-pane]").last
     border = page.get_by_role("separator", name="Resize the panes")
     park = page.get_by_role("button", name="Underground car park, level 2")
     expect(park).to_be_visible()
 
-    line = _box(border)
-    middle = (line["x"] + line["width"] / 2, line["y"] + line["height"] / 2)
-    page.mouse.move(*middle)
-    page.mouse.down()
-    page.mouse.move(0, middle[1], steps=5)  # as far as the tree lets it: 12rem
-    with _posted(page):
-        page.mouse.up()
-    assert _box(pane)["width"] == pytest.approx(192, abs=1)
+    def drag_border_to(x: float) -> None:
+        line = _box(border)
+        middle = (line["x"] + line["width"] / 2, line["y"] + line["height"] / 2)
+        page.mouse.move(*middle)
+        page.mouse.down()
+        page.mouse.move(x, middle[1], steps=5)
+        with _posted(page):
+            page.mouse.up()
+
+    drag_border_to(0)  # as far as the tree's pane lets it: 12rem
+    assert _box(tree)["width"] == pytest.approx(192, abs=1)
     # the label ends in an ellipsis, its mark whole inside the pane
     label = park.get_by_text("Underground car park, level 2")
     assert label.evaluate("label => label.scrollWidth > label.clientWidth")
     mark = _box(park.locator("svg"))
-    assert mark["x"] + mark["width"] <= _box(pane)["x"] + _box(pane)["width"]
+    assert mark["x"] + mark["width"] <= _box(tree)["x"] + _box(tree)["width"]
+
+    drag_border_to(1200)  # and the plan's, on the other side
+    assert _box(plan)["width"] == pytest.approx(192, abs=1)
+    assert not label.evaluate("label => label.scrollWidth > label.clientWidth")
     context.close()
 
 
