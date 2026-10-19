@@ -64,6 +64,7 @@ from composeui.core.view import (
     InputView,
     IntInputView,
     LabelView,
+    LineStyle,
     ReferenceLine,
     RendererType,
     SelectionMode,
@@ -1823,13 +1824,13 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
     assert oval.opts["pen"].color().name() == "#ffd700"  # the same in a dark theme
 
 
-def test_reference_lines_are_dashed_labeled_and_in_range(qtbot: QtBot) -> None:
+def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     plot = chart.getPlotItem()
     view.chart.series = [Series(name="Decay", x=[1, 10], y=[3, 2])]
 
     view.chart.reference_lines = [
-        ReferenceLine(40, "Max: {40}", color="#d03030"),  # braces are text
+        ReferenceLine(40, "Max: {40}", color="#d03030", style=LineStyle.DOTTED),  # braces are text
         ReferenceLine(100, "Now", vertical=True),
     ]
 
@@ -1838,7 +1839,8 @@ def test_reference_lines_are_dashed_labeled_and_in_range(qtbot: QtBot) -> None:
     assert (maximum.angle, maximum.value(), now.angle, now.value()) == (0, 40, 90, 100)
     assert maximum.label.toPlainText() == "Max: {40}"
     assert maximum.pen.color().name() == "#d03030"
-    assert maximum.pen.style() == now.pen.style() == Qt.PenStyle.DashLine
+    assert maximum.pen.style() == Qt.PenStyle.DotLine
+    assert now.pen.style() == Qt.PenStyle.DashLine  # by default
     assert now.pen.color() == chart.palette().color(QPalette.ColorRole.WindowText)
     # each shows, though past the data
     qtbot.waitUntil(lambda: plot.vb.viewRange()[0][1] >= 100 and plot.vb.viewRange()[1][1] >= 40)

@@ -3375,7 +3375,15 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
         "y": {"label": "Pressure Drop (kPa)", "unit": "kPa", "log": False},
         "series": [],
         # the pump's, in the theme's text color
-        "lines": [{"value": 20, "label": "Pump: 20 kPa", "vertical": False, "color": None}],
+        "lines": [
+            {
+                "value": 20,
+                "label": "Pump: 20 kPa",
+                "vertical": False,
+                "color": None,
+                "style": "dashed",
+            }
+        ],
         "pairs": [],
     }
 

@@ -1362,26 +1362,37 @@ def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
     assert scales == [3, 3, True]  # uPlot's log scales, from above 0
 
 
-def test_a_reference_line_is_drawn_dashed_in_the_chart_s_range(chart_pages_page: Page) -> None:
+def _is_near(pixel: str, color: tuple[int, int, int]) -> bool:
+    """Whether a canvas' pixel, as "r,g,b", is about `color`."""
+    return all(
+        abs(int(channel) - expected) <= 16 for channel, expected in zip(pixel.split(","), color)
+    )
+
+
+def test_reference_lines_are_drawn_in_their_styles_in_range(chart_pages_page: Page) -> None:
     chart_pages_page.goto("/chart")
     pressure = chart_pages_page.locator("figure").filter(has_text="Pressure")
     expect(pressure.locator("canvas")).to_have_count(1)
 
-    # the y range, past the data up to the line's 4.6; then the pixels along its row
-    y_max, row = pressure.locator("[data-chart]").evaluate(
-        "element => { const chart = charts.get(element);"
-        " const y = Math.round(chart.valToPos(4.6, 'y', true));"
-        " const box = chart.bbox;"
-        " const pixels = chart.ctx.getImageData(box.left, y, box.width, 1).data;"
-        " const row = [];"
-        " for (let i = 0; i < pixels.length; i += 4) row.push(pixels.slice(i, i + 3).join());"
-        " return [chart.scales.y.max, row]; }"
+    # the y range, past the data to the lines' 4.6 and 0.6; then the pixels along their rows
+    y_range, solid, dotted = pressure.locator("[data-chart]").evaluate(
+        "element => { const chart = charts.get(element); const box = chart.bbox;"
+        " const row = value => {"
+        "   const y = Math.round(chart.valToPos(value, 'y', true));"
+        "   const pixels = chart.ctx.getImageData(box.left, y, box.width, 1).data;"
+        "   const colors = [];"
+        "   for (let i = 0; i < pixels.length; i += 4) colors.push(pixels.slice(i, i + 3).join());"
+        "   return colors; };"
+        " return [[chart.scales.y.min, chart.scales.y.max], row(4.6), row(0.6)]; }"
     )
 
-    assert y_max >= 4.6
-    red = [pixel == "208,48,48" for pixel in row]
-    assert any(red)
-    assert not all(red)  # dashed
+    assert y_range[0] <= 0.6
+    assert y_range[1] >= 4.6
+    # its color, though blended where a line crosses it
+    assert all(_is_near(pixel, (208, 48, 48)) for pixel in solid)
+    green = [_is_near(pixel, (32, 128, 64)) for pixel in dotted]
+    assert any(green)
+    assert not all(green)  # dotted
 
 
 def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:

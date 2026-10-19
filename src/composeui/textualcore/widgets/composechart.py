@@ -159,7 +159,7 @@ class ComposeChart(PlotextPlot):
         return xs, ys
 
     def _plot_reference_lines(self) -> None:
-        """Draw the reference lines, each labeled at its end: a terminal draws no dashes."""
+        """Draw the reference lines, each labeled at its end, solid: a terminal has no dashes."""
         is_bar = self.kind is ChartKind.BAR
         lines = ChartView.drawn_lines(
             self.reference_lines, x_log=self.x_log and not is_bar, y_log=self.y_log

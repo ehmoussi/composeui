@@ -190,8 +190,10 @@ function rangeWith(range, values, log, padded) {
     );
   };
 }
-/* the reference lines (see `ReferenceLine`): dashed, over the series, each labeled at its
-   end in the ticks' font, which an image's options enlarge */
+/* a reference line's dash pattern, by its style, in CSS pixels */
+var LINE_DASHES = { solid: [], dashed: [6, 4], dotted: [2, 3], dash_dot: [6, 3, 2, 3] };
+/* the reference lines (see `ReferenceLine`): in their styles, over the series, each
+   labeled at its end in the ticks' font, which an image's options enlarge */
 function drawReferenceLines(spec, ink) {
   return function (chart) {
     var context = chart.ctx;
@@ -207,7 +209,9 @@ function drawReferenceLines(spec, ink) {
       var end = start + (line.vertical ? box.width : box.height);
       if (!(position >= start && position <= end)) return;  // zoomed past it
       context.strokeStyle = context.fillStyle = line.color || ink;
-      context.setLineDash([6 * uPlot.pxRatio, 4 * uPlot.pxRatio]);
+      context.setLineDash(LINE_DASHES[line.style].map(function (length) {
+        return length * uPlot.pxRatio;
+      }));
       context.beginPath();
       if (line.vertical) {
         context.moveTo(position, box.top);
