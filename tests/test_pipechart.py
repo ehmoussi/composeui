@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import pytest
 
+from composeui.core.view import ChartKind
 from examples.pipechart import MEASUREMENTS, SWEEP_POINTS, PipeChartMainView, friction_factor
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_the_friction_factor_has_no_value_between_laminar_and_turbulent_flow() -> None:
@@ -59,3 +64,38 @@ def test_the_measurements_tab_lists_each_measured_drop_against_the_computed_one(
 
     view.clear_curves()
     assert view.measurements.rows == []
+
+
+def test_the_curves_tab_shows_hides_and_draws_each_curve(tmp_path: Path) -> None:
+    view = PipeChartMainView()
+    view.add_curve()
+    view.add_measurements()
+    curves = view.curves
+    assert curves.rows == [["True", "D = 50 mm", "Line"], ["True", "Measured, D = 50 mm", "Dots"]]
+
+    # hidden, the curve leaves the chart; checked again, it comes back
+    curves.emit_cell_edited(0, 0, "False")
+    assert [series.name for series in view.chart.series] == ["Measured, D = 50 mm"]
+    curves.check_all(0, is_checked=True)
+    assert [series.name for series in view.chart.series] == ["D = 50 mm", "Measured, D = 50 mm"]
+    curves.emit_cell_edited(0, 2, "Steps")
+    curves.emit_cell_edited(1, 2, "Line")
+    computed, measured = view.chart.series
+    assert (computed.kind, computed.step) == (None, True)
+    assert (measured.kind, measured.step) == (None, False)
+
+    # a study keeps the curves hidden, to show them again once loaded
+    curves.check_all(0, is_checked=False)
+    assert view.chart.series == []
+    path = tmp_path / "study.pipechart"
+    view.save_state(path)
+    loaded = PipeChartMainView()
+    loaded.load_state(path)
+    loaded.curves.emit_cell_edited(1, 0, "True")
+    (shown,) = loaded.chart.series
+    assert (shown.name, shown.kind) == ("Measured, D = 50 mm", None)
+
+    view.clear_curves()
+    assert (view.curves.rows, view.chart.series) == ([], [])
+    view.add_measurements()
+    assert view.chart.series[0].kind is ChartKind.SCATTER
