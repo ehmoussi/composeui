@@ -67,6 +67,7 @@ from composeui.core.view import (
     StatusBar,
     TableView,
     TreeNode,
+    TreeView,
     View,
     child,
     define_view,
@@ -108,7 +109,7 @@ from examples.pipechart import PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView
+from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -927,6 +928,43 @@ def test_a_tree_posts_its_nodes_selections_and_toggles_swapping_itself_back() ->
     assert all("disabled" in b for b in _tree_buttons(tree.to_html(), tree.widget_id).values())
     with pytest.raises(UnsupportedEventError):  # the route answers 400
         handle_event(tree, "select", _tree_post(buttons["Building A"]))
+
+
+def test_a_tree_shows_its_nodes_icon_style_and_mark_described_to_screen_readers(
+    tmp_path: Path,
+) -> None:
+    icon = tmp_path / "building.png"
+    icon.write_bytes(b"\x89PNG\r\n\x1a\n")
+    view = SiteMainView()
+    view.render(RendererType.WEB)
+    site = view.site
+    tree = site.renderer
+    assert isinstance(tree, WebRenderer)
+    site.nodes = styled_site(str(icon))
+    markup = tree.to_html()
+    building, done, failed, parking = (
+        _element(markup, f"{tree.widget_id}-node-{position}") for position in range(4)
+    )
+    assert _icon_url(building).startswith("/icon/")
+    assert not any(tag == "img" or "style" in attributes for tag, attributes in parking.descendants)
+    classes = [
+        set(str(attributes.get("class")).split())
+        for element in (building, parking)
+        for tag, attributes in element.descendants
+        if tag == "span" and "class" in attributes
+    ]
+    assert classes == [{"font-bold"}, {"underline"}, {"text-warning"}]
+    assert "aria-describedby" not in building.attributes
+    # the mark's icon unread, its name read after the label naming the button
+    for button, name in ((done, "Done"), (failed, "Error"), (parking, "Warning")):
+        mark = _element(markup, str(button.attributes["aria-describedby"]))
+        assert "hidden" in mark.attributes
+        assert mark.text == name
+
+    site.done_text = "<Terminé>"  # as the main view's language changes, escaped
+    markup = tree.to_html()
+    done = _element(markup, f"{tree.widget_id}-node-1")
+    assert _element(markup, str(done.attributes["aria-describedby"])).text == "<Terminé>"
 
 
 def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps() -> None:
@@ -2228,6 +2266,10 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
         button.render(RendererType.WEB)
         assert isinstance(button.renderer, WebRenderer)
         markup.append(button.renderer.to_html())
+    tree = TreeView(nodes=styled_site("building.png"), expanded=[("Building A",)])
+    tree.render(RendererType.WEB)  # each mark's colour, each label's style
+    assert isinstance(tree.renderer, WebRenderer)
+    markup.append(tree.renderer.to_html())
     chart = ChartView(title="x")
     chart.render(RendererType.WEB)
     assert isinstance(chart.renderer, WebRenderer)

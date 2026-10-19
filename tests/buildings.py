@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from composeui.core.view import MainView, TreeNode, TreeView, child, define_view
+from composeui.core.view import MainView, NodeMark, TreeNode, TreeView, child, define_view
 
 SITE = [
     TreeNode(
@@ -16,6 +16,22 @@ SITE = [
     TreeNode("Building B", [TreeNode("Floor 1", [TreeNode("Lobby")])]),
     TreeNode("Parking"),
 ]
+
+
+def styled_site(icon: str) -> list[TreeNode]:
+    """Get a site whose nodes show an icon, a style and a mark, `icon` the building's."""
+    return [
+        TreeNode(
+            "Building A",
+            [
+                TreeNode("Room 101", mark=NodeMark.DONE),
+                TreeNode("Room 102", mark=NodeMark.ERROR),
+            ],
+            icon=icon,
+            is_bold=True,
+        ),
+        TreeNode("Parking", is_underlined=True, mark=NodeMark.WARNING),
+    ]
 
 
 @define_view

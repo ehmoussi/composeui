@@ -11,8 +11,9 @@ One widget at a time, each on Qt, Textual and the web with tests (the registry c
 test requires all three backends to register the same keys). Already there: input, float
 input, integer input, date input, slider, label, log, button, progress bar, metric,
 expander, checkbox, radio group, combobox, table (editable cells, sorting and filtering
-included), tree, Markdown, forms, pages, tabs, resizable panes (a splitter), sidebar, a
-list of views from data, message, confirm and form dialogs. Add one below once an app needs it.
+included), tree (its nodes with an icon, a mark and a style), Markdown, forms, pages, tabs,
+resizable panes (a splitter), sidebar, a list of views from data, message, confirm and form
+dialogs.
 
 Charts (2) have a section of their own.
 
@@ -22,38 +23,36 @@ A scientific app's GUI (a study tree beside a result's tabs of tables and charts
 to set up each analysis) is a good test of ComposeUI. What it uses that ComposeUI lacks,
 most needed first:
 
-1. **Tree nodes with an icon and a style**: a node's icon (a model's, a study's), a mark
-   of its state (a green check once an analysis ran) and a bold or underlined label.
-2. **A context menu** on a tree node or a table's rows: its actions with an icon, some
+1. **A context menu** on a tree node or a table's rows: its actions with an icon, some
    disabled, separators (Rename, Modify, Convert, Export, Remove; Export, Add row,
    Remove rows).
-3. **A plain list to pick from**: strings, one or several selected, e.g. the "Outputs"
+2. **A plain list to pick from**: strings, one or several selected, e.g. the "Outputs"
    or "Variables" list on the left of every result; a **checkable** variant with a
    check-all box in its header (the variables to keep).
-4. **Widgets in a table's cells**: a check box, a combobox (a variable's distribution,
+3. **Widgets in a table's cells**: a check box, a combobox (a variable's distribution,
    Input/Output), a "…" button, a link ("doc"); a header with a check-all box.
-5. **A table's looks**: a cell's background color (NaN in red, a warning in orange, a
+4. **A table's looks**: a cell's background color (NaN in red, a warning in orange, a
    correlation matrix's coefficients colored by range, with its legend), a disabled
    (grayed) cell, an icon in a cell (a warning); headers on two rows (a group over its
    columns, "Coordinates" over "Standard space" and "Physical space") and cells spanning
    rows; a vertical header, for the small key/value tables of results ("Number of
    calls | 2500").
-6. **A wizard**: a dialog of steps with Back, Continue/Finish, Cancel and Help, each
+5. **A wizard**: a dialog of steps with Back, Continue/Finish, Cancel and Help, each
    step a form checked before the next, an image on its side.
-7. **A file path field**: a text field with a "…" button opening a file dialog, and
+6. **A file path field**: a text field with a "…" button opening a file dialog, and
    optionally a reload button (a data file, a template file).
-8. **Tabs the user adds and closes**: a × on each tab and a + tab after them ("Command 1",
+7. **Tabs the user adds and closes**: a × on each tab and a + tab after them ("Command 1",
    "Command 2").
-9. **A combobox of several values**: check boxes in its list, the picked values shown
+8. **A combobox of several values**: check boxes in its list, the picked values shown
    below it ("-- Select outputs --", then "L, b, h").
-10. **A button with a menu**: "Add ▾" adding one of several kinds.
-11. **An optional field**: a check box enabling the field beside it (each stopping
+9. **A button with a menu**: "Add ▾" adding one of several kinds.
+10. **An optional field**: a check box enabling the field beside it (each stopping
     criterion of a Monte Carlo); and a **duration field** ("d h m s").
-12. **A code editor**: line numbers and Python syntax highlighting (a Python model's
+11. **A code editor**: line numbers and Python syntax highlighting (a Python model's
     function, a coupling's post-processing).
-13. **A workflow diagram**: boxes joined by arrows, a box enabled or not, clicking one
+12. **A workflow diagram**: boxes joined by arrows, a box enabled or not, clicking one
     starting its step (the "Study workflow" page).
-14. **A Python console** (Tools > Python Console), once an app wants to be scripted.
+13. **A Python console** (Tools > Python Console), once an app wants to be scripted.
 
 The web versions follow the same rules as the existing ones: the element that sent the
 request is never swapped back (the focus rule), changes elsewhere arrive as OOB updates,

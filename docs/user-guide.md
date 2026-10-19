@@ -237,6 +237,32 @@ The user expands and collapses the nodes (`expanded`, `toggled`), and selects on
 (`selected`, `selection_changed`). When code sets new `nodes`, the tree keeps the expanded
 and selected paths that are still in them.
 
+A node can also show the kind and the state of what it stands for, as a study tree does:
+
+```python
+from composeui.core.view import NodeMark, TreeNode
+
+TreeNode(
+    "Study 1",
+    [TreeNode("Monte Carlo", mark=NodeMark.DONE), TreeNode("Sobol", mark=NodeMark.ERROR)],
+    icon="icons/study.svg",
+    is_bold=True,
+)
+```
+
+- **`icon`** is the path of an image file before the label, as the `icon` of an action is
+  (see [Toolbars](#toolbars)). Qt and the web show it, a terminal does
+  not. The app's code sets it, so it is never saved or loaded: build the nodes again from
+  the model after a load.
+- **`mark`** is a `NodeMark` after the label: `DONE` (a green check), `WARNING` (an orange
+  "!") or `ERROR` (a red cross). The tree's `done_text`, `warning_text` and `error_text`
+  name the marks: Qt shows the name as the mark's tooltip, and the web gives it to screen
+  readers as the node's description.
+- **`is_bold`** and **`is_underlined`** style the label.
+
+Qt shows the marks in a second column of the `QTreeWidget`, Textual as a colored glyph
+(✓, !, ✗), and the web as an icon in the node's button.
+
 [`src/examples/pipecatalogue.py`](../src/examples/pipecatalogue.py) shows its pipes in a
 tree, under their material. It builds the tree again from the database whenever the pipes
 change.

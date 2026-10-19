@@ -1,23 +1,35 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
 
+from rich.style import Style
 from rich.text import Text
 from textual.widgets import Tree
 
 from composeui.core.signal import Signal
+from composeui.core.view import NodeMark
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from rich.style import Style
     from textual.widgets.tree import TreeNode as TextualTreeNode
 
     from composeui.core.view import TreeNode, TreePath
 
 
+#: a `NodeMark` after its node's label: its glyph and color, as a log's are colored
+_MARKS: Final = {
+    NodeMark.DONE: ("✓", Style(color="green")),
+    NodeMark.WARNING: ("!", Style(color="orange1", bold=True)),
+    NodeMark.ERROR: ("✗", Style(color="red")),
+}
+
+
 class ComposeTree(Tree["TreePath"]):
     """A `Tree` of a `TreeView`'s nodes, its root hidden, each node's data its path.
+
+    A node's label is bold or underlined as the node says, its mark after it; a terminal
+    shows no icon.
 
     Enter or a click selects the node under the cursor, its label marked
     (`tree--selected`), as the cursor moves on its own; Space or a click on its arrow
@@ -44,6 +56,7 @@ class ComposeTree(Tree["TreePath"]):
         self.show_root = False
         self.auto_expand = False
         self.selected_path: TreePath | None = None
+        self._marks: dict[TreePath, NodeMark] = {}
         self.selected: Signal[TreePath] = Signal()
         self.toggled: Signal[TreePath, bool] = Signal()
 
@@ -52,6 +65,7 @@ class ComposeTree(Tree["TreePath"]):
     ) -> None:
         self.clear()
         self.selected_path = selected
+        self._marks = {}
         is_expanded = set(expanded)
 
         def add(
@@ -59,11 +73,17 @@ class ComposeTree(Tree["TreePath"]):
         ) -> None:
             for node in nodes:
                 node_path = (*path, node.key)
+                if node.mark is not None:
+                    self._marks[node_path] = node.mark
                 # a `Text`, not markup: the label is the app's data
+                label = Text(
+                    node.label,
+                    Style(bold=node.is_bold or None, underline=node.is_underlined or None),
+                )
                 if len(node.children) == 0:
-                    parent.add_leaf(Text(node.label), node_path)
+                    parent.add_leaf(label, node_path)
                 else:
-                    item = parent.add(Text(node.label), node_path, expand=node_path in is_expanded)
+                    item = parent.add(label, node_path, expand=node_path in is_expanded)
                     add(item, node.children, node_path)
 
         add(self.root, nodes, ())
@@ -87,7 +107,12 @@ class ComposeTree(Tree["TreePath"]):
     ) -> Text:
         if node.data is not None and node.data == self.selected_path:
             style += self.get_component_rich_style("tree--selected", partial=True)
-        return super().render_label(node, base_style, style)
+        label = super().render_label(node, base_style, style)
+        mark = None if node.data is None else self._marks.get(node.data)
+        if mark is not None:  # in its own color, the selected label's left out
+            glyph, color = _MARKS[mark]
+            label.append(f" {glyph}", base_style + color)
+        return label
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[TreePath]) -> None:
         path = event.node.data

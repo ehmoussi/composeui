@@ -60,5 +60,8 @@
   "Pick a date": "Choisir une date",
   "Previous month": "Mois précédent",
   "Next month": "Mois suivant",
-  "Resize the panes": "Redimensionner les volets"
+  "Resize the panes": "Redimensionner les volets",
+  "Done": "Terminé",
+  "Warning": "Avertissement",
+  "Error": "Erreur"
 }

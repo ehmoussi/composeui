@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 import pytest
-from attrs import Factory
+from attrs import Factory, evolve
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
@@ -43,7 +43,7 @@ from composeui.core.view import (
 )
 from examples.pipechart import PipeChartMainView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView
+from tests.buildings import SiteMainView, styled_site
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -310,6 +310,22 @@ def test_a_study_saves_its_trees_nodes_expanded_and_selected(tmp_path: Path) -> 
     loaded.load_state(path)
     assert loaded.site.nodes == view.site.nodes
     assert (loaded.site.expanded, loaded.site.selected) == ([("Garden",)], ("Garden", "shed"))
+
+
+def test_a_study_saves_its_tree_nodes_marks_and_styles_but_not_their_icons(
+    tmp_path: Path,
+) -> None:
+    view = SiteMainView()
+    # the web serves a node's icon file: a study must not name one
+    view.site.nodes = styled_site(str(tmp_path / "secret.png"))
+    path = tmp_path / "study.site"
+    view.save_state(path)
+    assert "secret.png" not in path.read_text()
+
+    loaded = SiteMainView()
+    loaded.load_state(path)
+    (building, parking) = view.site.nodes
+    assert loaded.site.nodes == [evolve(building, icon=None), parking]
 
 
 def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:

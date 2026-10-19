@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QDate, QPoint, QPointF, Qt
-from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette
+from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -89,7 +89,7 @@ from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView
+from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -1024,6 +1024,41 @@ def test_a_tree_selects_and_expands_its_nodes_by_click_and_key(qtbot: QtBot) -> 
     site.nodes = [*site.nodes, TreeNode("Garden")]
     assert tree.topLevelItemCount() == 4
     assert tree.selectedItems() == [_tree_item(tree, "Building B", "Floor 1")]
+
+
+def test_a_tree_shows_its_nodes_icon_style_and_mark_named_by_a_tooltip(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    icon = tmp_path / "building.png"
+    pixmap = QPixmap(8, 8)
+    pixmap.fill(QColor("blue"))
+    assert pixmap.save(str(icon))
+    view = SiteMainView()
+    view.render(RendererType.QT)
+    site = view.site
+    assert isinstance(site.renderer, QtWidgetRenderer)
+    tree = site.renderer.qt_object
+    assert isinstance(tree, QTreeWidget)
+    qtbot.addWidget(tree)
+    assert tree.isColumnHidden(1)  # no node marked: no column for the marks
+
+    site.nodes = styled_site(str(icon))
+    assert not tree.isColumnHidden(1)
+    building, parking = _tree_item(tree, "Building A"), _tree_item(tree, "Parking")
+    assert not building.icon(0).isNull()
+    assert parking.icon(0).isNull()
+    assert (building.font(0).bold(), building.font(0).underline()) == (True, False)
+    assert (parking.font(0).bold(), parking.font(0).underline()) == (False, True)
+    done, failed = (
+        _tree_item(tree, "Building A", "Room 101"),
+        _tree_item(tree, "Building A", "Room 102"),
+    )
+    assert building.icon(1).isNull()
+    assert not done.icon(1).isNull()
+    assert done.icon(1).cacheKey() != failed.icon(1).cacheKey()
+    assert [item.toolTip(1) for item in (done, failed, parking)] == ["Done", "Error", "Warning"]
+    site.done_text = "Terminé"  # as the main view's language changes
+    assert [item.toolTip(1) for item in (done, failed)] == ["Terminé", "Error"]
 
 
 def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot) -> None:

@@ -3381,6 +3381,17 @@ def _to_tree_nodes(nodes: Iterable[TreeNode]) -> tuple[TreeNode, ...]:
     return tuple(nodes)
 
 
+class NodeMark(enum.Enum):
+    """A mark of a tree node's state, shown after its label."""
+
+    #: done, e.g. an analysis that ran: a green check
+    DONE = enum.auto()
+    #: to look at, e.g. an analysis whose results are out of date: an orange "!"
+    WARNING = enum.auto()
+    #: failed, e.g. an analysis that stopped on an error: a red cross
+    ERROR = enum.auto()
+
+
 @attrs.frozen
 class TreeNode:
     """A node of a `TreeView`: its text, and the nodes under it.
@@ -3393,6 +3404,12 @@ class TreeNode:
     label: str
     children: tuple[TreeNode, ...] = attrs.field(default=(), converter=_to_tree_nodes)
     key: str = attrs.field(default=attrs.Factory(lambda node: node.label, takes_self=True))
+    #: an image file's path, before the label (not on Textual); set by the app, not
+    #: study data: never saved or loaded, as `ActionView.icon`
+    icon: Optional[str] = None
+    mark: Optional[NodeMark] = None
+    is_bold: bool = False
+    is_underlined: bool = False
 
 
 def _unstructure_tree_node(node: TreeNode) -> dict[str, Any]:
@@ -3401,12 +3418,23 @@ def _unstructure_tree_node(node: TreeNode) -> dict[str, Any]:
         "label": node.label,
         "key": node.key,
         "children": [_unstructure_tree_node(child) for child in node.children],
+        "mark": None if node.mark is None else node.mark.name,
+        "is_bold": node.is_bold,
+        "is_underlined": node.is_underlined,
     }
 
 
 def _structure_tree_node(data: Mapping[str, Any], _type: type) -> TreeNode:
     children = [_structure_tree_node(child, TreeNode) for child in data.get("children", [])]
-    return TreeNode(str(data["label"]), children, str(data.get("key", data["label"])))
+    mark = data.get("mark")
+    return TreeNode(
+        str(data["label"]),
+        children,
+        str(data.get("key", data["label"])),
+        mark=None if mark is None else NodeMark[str(mark)],
+        is_bold=bool(data.get("is_bold", False)),
+        is_underlined=bool(data.get("is_underlined", False)),
+    )
 
 
 CONVERTER.register_unstructure_hook(TreeNode, _unstructure_tree_node)
@@ -3491,6 +3519,16 @@ class TreeView(View):
     toggled: Signal[TreePath, bool] = attrs.Factory(Signal[TreePath, bool])
     #: the user selected a node; not emitted when `selected` is set in code
     selection_changed: Signal[TreePath] = attrs.Factory(Signal[TreePath])
+    #: each `NodeMark`'s name, for screen readers (web) and as a tooltip (Qt)
+    done_text: str = attrs.field(default=T("Done"), metadata={UI_TEXT: True})
+    warning_text: str = attrs.field(default=T("Warning"), metadata={UI_TEXT: True})
+    error_text: str = attrs.field(default=T("Error"), metadata={UI_TEXT: True})
+
+    def mark_text(self, mark: NodeMark) -> str:
+        """Get the name of `mark` in the main view's language."""
+        if mark is NodeMark.DONE:
+            return self.done_text
+        return self.warning_text if mark is NodeMark.WARNING else self.error_text
 
     def node(self, path: TreePath) -> TreeNode:
         """Get the node at `path`, e.g. the selected one's label; KeyError if none is there."""
