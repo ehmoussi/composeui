@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 from typing_extensions import Self
 
@@ -187,12 +187,21 @@ class TranslatedText(str):  # noqa: SLOT000
 T = TranslatedText
 
 
+@runtime_checkable
+class Translatable(Protocol):
+    """A value holding `TranslatedText`, e.g. a table cell's button with its text."""
+
+    def translated(self, translate: Translate) -> Translatable:
+        """Get it with its text translated again; itself if it holds none."""
+
+
 def translate_again(value: Any, translate: Translate) -> Any:
     """Translate the `TranslatedText` in `value` again, itself or in a list, tuple or dict.
 
-    Return `value` itself when it holds none, so a caller can tell nothing changed.
+    A `Translatable` translates its own. Return `value` itself when it holds none, so a
+    caller can tell nothing changed.
     """
-    if isinstance(value, TranslatedText):
+    if isinstance(value, (TranslatedText, Translatable)):
         return value.translated(translate)
     if isinstance(value, (list, tuple)):
         items = [translate_again(item, translate) for item in value]

@@ -2005,6 +2005,11 @@ class CellWidget:
     #: whether a check box column's header has a box checking or unchecking every shown row
     check_all: bool = False
 
+    def translated(self, translate: Translate) -> CellWidget:
+        """Get it with a button's text translated again, if it's `TranslatedText`."""
+        text = translate_again(self.text, translate)
+        return self if text is self.text else attrs.evolve(self, text=text)
+
     @classmethod
     def check_box(cls, *, check_all: bool = False) -> CellWidget:
         return cls(CellKind.CHECK_BOX, check_all=check_all)
@@ -2505,7 +2510,11 @@ class RecordTableView(TableView, Generic[RecordT]):
         }
 
     def _cell_widget(self, column: int, widget: CellWidget) -> CellWidget:
-        """Give a combobox without options on an enum field the enum's members."""
+        """Get a column's widget, translated.
+
+        A combobox without options, on an enum field, offers the enum's members.
+        """
+        widget = widget.translated(self._tr)
         field_type = self._column_type(column)
         if (
             widget.kind is not CellKind.COMBOBOX
