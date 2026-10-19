@@ -98,6 +98,7 @@ from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
+from composeui.qtcore.widgets.qsplitter import QComposeSplitter
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
@@ -1742,7 +1743,7 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
         pass  # a column has no user-editable state of its own
 
 
-class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
+class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
     """A splitter: the panes in a row or a column, a handle between two the user drags."""
 
     def __init__(self, view: SplitterView) -> None:
@@ -1751,7 +1752,7 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QSplitter(
+            self._rendered_object = QComposeSplitter(
                 Qt.Orientation.Vertical
                 if self._view.orientation is Orientation.VERTICAL
                 else Qt.Orientation.Horizontal
@@ -1763,23 +1764,30 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
                     view.renderer.qt_object, QWidget
                 ):
                     self._rendered_object.addWidget(view.renderer.qt_object)
-            self._rendered_object.splitterMoved.connect(self._update_sizes)
+            self._rendered_object.moved_by_user.connect(self._update_sizes)
             self.refresh()
 
     @staticmethod
-    def _refresh_sizes(_view: SplitterView, rendered_object: QSplitter, value: list[int]) -> None:
+    def _refresh_sizes(
+        _view: SplitterView, rendered_object: QComposeSplitter, value: list[int]
+    ) -> None:
         # in pixels, but Qt shares any width more or less than theirs in their proportions:
         # well over any screen's, the panes' minimum widths don't skew those
         rendered_object.setSizes([size * 10_000 for size in value])
 
     @staticmethod
-    def _update_state(view: SplitterView, rendered_object: QSplitter) -> None:
+    def _update_state(view: SplitterView, rendered_object: QComposeSplitter) -> None:
         view.sizes = view.shares_of(rendered_object.sizes())
 
-    def _update_sizes(self, _position: int, _index: int) -> None:
-        if self._rendered_object is not None:
-            with self.stop_refresh():
-                self._update_state(self._view, self._rendered_object)
+    def _update_sizes(self) -> None:
+        if self._rendered_object is None:
+            return
+        sizes = self._view.shares_of(self._rendered_object.sizes())
+        if sizes == self._view.sizes:  # a click, or a move against a pane's minimum
+            return
+        with self.stop_refresh():
+            self._view.sizes = sizes
+        self._view.resized.emit(sizes)
 
 
 class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):

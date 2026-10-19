@@ -2823,8 +2823,12 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             math.isfinite(length) and length >= 0 for length in lengths
         ):
             return
+        sizes = self._view.shares_of(lengths)
+        if sizes == self._view.sizes:  # a click, or a move against a pane's minimum
+            return
         with self.stop_refresh():
-            self._view.sizes = self._view.shares_of(lengths)
+            self._view.sizes = sizes
+        self._view.resized.emit(sizes)
 
 
 class WebExpanderRenderer(WebRenderer[ExpanderView]):

@@ -1893,8 +1893,12 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
         view.sizes = view.shares_of(rendered_object.pane_lengths())
 
     def _update_sizes(self, lengths: list[int]) -> None:
+        sizes = self._view.shares_of(lengths)
+        if sizes == self._view.sizes:  # a click, or a move against a pane's minimum
+            return
         with self.stop_refresh():
-            self._view.sizes = self._view.shares_of(lengths)
+            self._view.sizes = sizes
+        self._view.resized.emit(sizes)
 
 
 class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollapsible]):

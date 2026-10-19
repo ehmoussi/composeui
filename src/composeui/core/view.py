@@ -2950,6 +2950,9 @@ class SplitterView(View):
     sizes: list[int] = attrs.field(factory=list, validator=[_check_sizes], metadata={OMIT: True})
     #: names a border between two panes for a screen reader, on the web
     border_text: str = attrs.field(default=T("Resize the panes"), metadata={UI_TEXT: True})
+    #: the user dragged a border (once dropped) or moved one with a key, giving the new
+    #: `sizes`; not emitted when `sizes` is set in code
+    resized: Signal[list[int]] = attrs.Factory(Signal[list[int]])
 
     def __attrs_post_init__(self) -> None:
         if len(self.sizes) == 0:

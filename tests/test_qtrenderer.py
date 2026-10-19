@@ -1238,6 +1238,8 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
     widget = _widget(splitter)
     assert isinstance(widget, QSplitter)
     assert splitter.sizes == [1, 1, 2]  # the panes' STRETCH, at least 1
+    resizes: list[list[int]] = []
+    splitter.resized.connect(resizes.append)
     study, settings, result = widget.sizes()
     assert study == pytest.approx(settings, abs=2)
     assert result == pytest.approx(2 * study, abs=4)
@@ -1248,19 +1250,33 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
     widths = widget.sizes()
     assert widths[0] > study
     assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
+    assert resizes == [splitter.sizes]  # once dropped
+    _drag(handle, middle, middle)  # a click: nothing moves, nothing reported
+    assert len(resizes) == 1
 
-    splitter.sizes = [1, 1, 1]  # set in code: shared alike
+    handle.setFocus()  # the arrow keys move a focused handle
+    qtbot.keyClick(handle, Qt.Key.Key_Left)
+    assert widget.sizes()[0] == widths[0] - 16
+    assert resizes[1:] == [splitter.sizes]
+
+    splitter.sizes = [1, 1, 1]  # set in code: shared alike, and not reported
     study, settings, result = widget.sizes()
     assert study == pytest.approx(result, abs=2)
+    assert len(resizes) == 2
     splitter.settings.is_visible = False  # its width to the others, its share kept
     qtbot.waitUntil(lambda: widget.sizes()[1] == 0)
     assert widget.handle(1).isHidden()
+    splitter.sizes = [1, 2, 1]  # set while hidden: it stays so, its share for later
+    assert (widget.sizes()[1], widget.widget(1).isHidden()) == (0, True)
+    assert widget.sizes()[0] == pytest.approx(widget.sizes()[2], abs=2)
     handle = widget.handle(2)
     middle = handle.rect().center()
     _drag(handle, middle, middle - QPoint(50, 0))
-    assert splitter.sizes[1] == 1
+    assert splitter.sizes[1] == 2
     assert splitter.sizes[0] + splitter.sizes[2] == 100
     assert splitter.sizes[0] < splitter.sizes[2]  # dragged left
+    splitter.settings.is_visible = True
+    qtbot.waitUntil(lambda: widget.sizes()[1] > 0)
 
 
 def test_a_vertical_splitter_shares_the_windows_spare_height_as_its_sizes(
