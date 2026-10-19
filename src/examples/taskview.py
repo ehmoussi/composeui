@@ -5,7 +5,8 @@ view. It returns the task's status, which its job emits on the main thread, wher
 views show it: in the table, and counted by metrics, which once a run is over show how
 each count changed since the last run; a step chart shows the tasks running over the
 run's time, each count held until a task ends. The table is a section that collapses,
-leaving only the metrics and the chart.
+leaving only the metrics and the chart. A task's Retry button runs it again, and a failed
+task's error is a link opening a dialog that says more.
 """
 
 from __future__ import annotations
@@ -28,7 +29,9 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ButtonView,
+    CellWidget,
     ChartView,
+    DialogView,
     ExpanderView,
     GroupFormView,
     HorizontalView,
@@ -163,7 +166,9 @@ class TaskDetails(ExpanderView):
     """Each task of the run, behind the metrics: collapsed, only they show."""
 
     tasks: TableView = child(
-        TableView, headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")]
+        TableView,
+        headers=[T("Task"), T("Duration (s)"), T("Status"), T("Error")],
+        cell_widgets={0: CellWidget.button(T("Retry")), 3: CellWidget.link()},
     )
 
 
@@ -183,6 +188,8 @@ class TaskMainView(MainView):
         ChartView, title=T("Tasks running"), x_title=T("Time"), x_unit="s", height=240
     )
     details: TaskDetails = child(TaskDetails, title=T("Tasks"), is_expanded=True)
+    #: a failed task's error, opened from its link
+    error_dialog: DialogView = child(DialogView, title=T("Task error"))
     #: the tasks of the last run
     _tasks: list[Task] = attrs.field(factory=list, init=False, metadata={OMIT: True})
     #: when the run started, by `time.monotonic`
@@ -201,6 +208,7 @@ class TaskMainView(MainView):
         self.buttons.run.clicked.connect(self.start)
         self.buttons.cancel.clicked.connect(self.jobs.cancel)
         self.jobs.running_changed.connect(self._show_running)
+        self.details.tasks.cell_clicked.connect(self._click_task)
 
     def start(self) -> None:
         """Start a run of `TASK_COUNT` tasks, each a job of its own."""
@@ -221,9 +229,40 @@ class TaskMainView(MainView):
         self._started = time.monotonic()
         self._running_counts = []
         for task in self._tasks:
-            job = self.jobs.start(run_task, task.duration, failure_rate)
-            job.finished.connect(functools.partial(self._report, task))
+            self._start_task(task, failure_rate)
         self._show()
+
+    def _start_task(self, task: Task, failure_rate: float) -> None:
+        task.status = TaskStatus.RUNNING
+        job = self.jobs.start(run_task, task.duration, failure_rate)
+        job.finished.connect(functools.partial(self._report, task))
+
+    def _click_task(self, row: int, column: int) -> None:
+        """Run a task again from its Retry button, or show its error from its link."""
+        if row >= len(self._tasks):
+            return  # a run loaded from a study: its tasks' jobs are gone
+        task = self._tasks[row]
+        if column == 0:
+            self.retry(task)
+        elif task.status is TaskStatus.FAILED:
+            self.error_dialog.text = self.tr(
+                "Task {number} worked {duration} s, then failed: {error}"
+            ).format(number=task.number, duration=task.duration, error=self._error(task))
+            self.error_dialog.open()
+
+    def retry(self, task: Task) -> None:
+        """Run a task again, unless it's still running."""
+        if task.status is TaskStatus.RUNNING:
+            message = self.tr("Task {number} is still running")
+            self.status_bar.show_message(message.format(number=task.number))
+            return
+        self._start_task(task, self.config.failure_percentage.value / 100)
+        self._show()
+
+    def _error(self, task: Task) -> str:
+        if task.status is not TaskStatus.FAILED:
+            return ""
+        return self.tr("Random error: task {number} failed").format(number=task.number)
 
     def _report(self, task: Task, status: TaskStatus) -> None:
         """Show a task's outcome, on the main thread."""
@@ -231,13 +270,12 @@ class TaskMainView(MainView):
         self._show()
 
     def _show(self) -> None:
-        error = self.tr("Random error: task {number} failed")
         self.details.tasks.rows = [
             [
                 str(task.number),
                 f"{task.duration:.1f}",
                 self.tr(task.status.value),
-                error.format(number=task.number) if task.status is TaskStatus.FAILED else "",
+                self._error(task),
             ]
             for task in self._tasks
         ]

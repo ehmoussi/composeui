@@ -39,7 +39,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells |
-| [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a French translation |
+| [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
@@ -146,6 +146,8 @@ It shows:
   time of the run;
 - an [expander](user-guide.md#expander) with the table of the tasks, which collapses to
   leave only the metrics and the chart;
+- [widgets in cells](user-guide.md#widgets-in-cells): the Retry button of a task runs it
+  again. The error of a failed task is a link that opens a dialog with its details.
 - a [French translation](user-guide.md#translating-the-app) and a Language menu.
 
 ## Batman

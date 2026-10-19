@@ -738,7 +738,8 @@ the shown rows are all checked (`True`), none (`False`), or some (`None`).
 The study does not save `cell_widgets`: they are the app's setup.
 
 [`pipechart.py`](../src/examples/pipechart.py) shows or hides each curve with a check box,
-and picks how to draw it with a combobox.
+and picks how to draw it with a combobox. [`taskview.py`](../src/examples/taskview.py) runs
+a task again from its Retry button, and opens the error of a failed task from a link.
 
 What each backend shows:
 
