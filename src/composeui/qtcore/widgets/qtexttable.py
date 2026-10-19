@@ -1,28 +1,43 @@
 from __future__ import annotations
 
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from qtpy.QtCore import (
     QAbstractTableModel,
+    QEvent,
     QItemSelection,
     QItemSelectionModel,
     QModelIndex,
     QObject,
     QPersistentModelIndex,
+    QRect,
     Qt,
+    QTimer,
     Signal,
 )
+from qtpy.QtGui import QIcon, QMouseEvent, QPainter, QPalette, QPixmap
 from qtpy.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
     QAbstractScrollArea,
+    QApplication,
+    QComboBox,
     QHeaderView,
     QSizePolicy,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionButton,
+    QStyleOptionComboBox,
+    QStyleOptionViewItem,
     QTableView,
     QWidget,
 )
 
-from composeui.core.view import replace_cell
+from composeui.core.view import CHECKED_TEXTS, CellKind, CellWidget, replace_cell
+
+if TYPE_CHECKING:
+    from qtpy.QtCore import QAbstractItemModel
+    from qtpy.QtGui import QKeyEvent
 
 _Index = Union[QModelIndex, QPersistentModelIndex]
 
@@ -33,6 +48,10 @@ class QTextTableModel(QAbstractTableModel):
     Qt asks only for the cells it draws, so a long table costs no more than a short one.
     The cells of `editable_columns` are editable: an edit changing a cell replaces its
     row (the view's lists aren't changed in place), then `cell_edited` emits it.
+
+    A check box column of `cell_widgets` holds checkable cells without text, toggled when
+    editable; a link column's text looks like a link. Neither is typed in, nor is a
+    button column; a combobox column is, through `QCellDelegate`'s editor.
     """
 
     cell_edited = Signal(int, int, str)
@@ -42,6 +61,18 @@ class QTextTableModel(QAbstractTableModel):
         self._headers: list[str] = []
         self._rows: list[list[str]] = []
         self.editable_columns: list[int] = []
+        self.cell_widgets: dict[int, CellWidget] = {}
+        #: a check box drawn before a header, by column
+        self.header_icons: dict[int, QIcon] = {}
+
+    def kind(self, column: int) -> CellKind | None:
+        widget = self.cell_widgets.get(column)
+        return None if widget is None else widget.kind
+
+    def set_header_icons(self, icons: dict[int, QIcon]) -> None:
+        self.header_icons = icons
+        if len(self._headers) > 0:
+            self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self._headers) - 1)
 
     def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
         self.beginResetModel()
@@ -55,27 +86,60 @@ class QTextTableModel(QAbstractTableModel):
     def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
         return 0 if parent.isValid() else len(self._headers)
 
-    def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
-        is_shown = role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole)
-        if not is_shown or not index.isValid():
-            return None
-        row = self._rows[index.row()]
+    def text(self, row: int, column: int) -> str:
+        cells = self._rows[row]
         # a row short of a cell shows it empty
-        return row[index.column()] if index.column() < len(row) else None
+        return cells[column] if column < len(cells) else ""
+
+    def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+        if not index.isValid():
+            return None
+        kind = self.kind(index.column())
+        text = self.text(index.row(), index.column())
+        if kind is CellKind.CHECK_BOX:
+            if role != Qt.ItemDataRole.CheckStateRole:
+                return None
+            is_checked = text.casefold() == "true"
+            return Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked
+        if kind is CellKind.LINK and role in (
+            Qt.ItemDataRole.FontRole,
+            Qt.ItemDataRole.ForegroundRole,
+        ):
+            return self._link_look(role)
+        if role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
+            return None
+        return text if index.column() < len(self._rows[index.row()]) else None
+
+    @staticmethod
+    def _link_look(role: int) -> Any:
+        """Get a link's font, underlined, or its color."""
+        if role == Qt.ItemDataRole.ForegroundRole:
+            return QApplication.palette().link()
+        font = QApplication.font()
+        font.setUnderline(True)
+        return font
 
     def flags(self, index: _Index) -> Qt.ItemFlag:
         flags = super().flags(index)
-        if index.isValid() and index.column() in self.editable_columns:
+        if not index.isValid() or index.column() not in self.editable_columns:
+            return flags
+        kind = self.kind(index.column())
+        if kind is CellKind.CHECK_BOX:
+            flags |= Qt.ItemFlag.ItemIsUserCheckable
+        elif kind in (None, CellKind.COMBOBOX):
             flags |= Qt.ItemFlag.ItemIsEditable
         return flags
 
     def setData(  # noqa: N802
         self, index: _Index, value: Any, role: int = Qt.ItemDataRole.EditRole
     ) -> bool:
+        if role == Qt.ItemDataRole.CheckStateRole and index.isValid():
+            is_checked = value in (Qt.CheckState.Checked, Qt.CheckState.Checked.value)
+            value, role = CHECKED_TEXTS[is_checked], Qt.ItemDataRole.EditRole
         if role != Qt.ItemDataRole.EditRole or not index.isValid():
             return False
         row, column, text = index.row(), index.column(), str(value)
-        if text == (self.data(index) or ""):
+        if text == self.text(row, column):
             return False
         self._rows = replace_cell(self._rows, row, column, text)
         self.dataChanged.emit(index, index)
@@ -88,9 +152,180 @@ class QTextTableModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+        if orientation != Qt.Orientation.Horizontal:
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
             return self._headers[section]
+        if role == Qt.ItemDataRole.DecorationRole:
+            return self.header_icons.get(section)
         return None
+
+
+class QCellDelegate(QStyledItemDelegate):
+    """Draws a button or a combobox cell, and reports a click on a button or a link.
+
+    A button cell shows its text, then the button, a square as tall as the cell unless
+    its text is wider; `cell_clicked` emits a click on it, or anywhere on a link cell.
+    A combobox cell is a combobox's frame around its text: editing it opens a combobox
+    of its options, the cell taking the one picked.
+    """
+
+    cell_clicked = Signal(int, int)
+
+    def __init__(self, model: QTextTableModel, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._model = model
+
+    def _widget(self, index: _Index) -> CellWidget | None:
+        return self._model.cell_widgets.get(index.column())
+
+    @staticmethod
+    def button_rect(rect: QRect, option: QStyleOptionViewItem, text: str) -> QRect:
+        width = max(rect.height(), option.fontMetrics.horizontalAdvance(text) + 12)
+        return QRect(rect.right() - width + 1, rect.top(), width, rect.height()).adjusted(
+            1, 1, -1, -1
+        )
+
+    def initStyleOption(self, option: QStyleOptionViewItem, index: _Index) -> None:  # noqa: N802
+        super().initStyleOption(option, index)
+        widget = self._widget(index)
+        if (
+            widget is not None
+            and widget.kind is CellKind.LINK
+            and option.state & QStyle.StateFlag.State_Selected
+        ):
+            # the link's color would be lost on the selection's
+            option.palette.setBrush(QPalette.ColorRole.Text, option.palette.highlightedText())
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: _Index) -> None:
+        widget = self._widget(index)
+        if widget is None or widget.kind not in (CellKind.BUTTON, CellKind.COMBOBOX):
+            super().paint(painter, option, index)
+            return
+        view = option.widget
+        style = view.style() if view is not None else QApplication.style()
+        item = QStyleOptionViewItem(option)
+        self.initStyleOption(item, index)
+        text, item.text = item.text, ""
+        # the row's background and selection, then the widget over it
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, item, painter, view)
+        is_enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        if widget.kind is CellKind.COMBOBOX:
+            combobox = QStyleOptionComboBox()
+            combobox.rect = option.rect.adjusted(2, 2, -2, -2)
+            combobox.currentText = text
+            combobox.palette = option.palette
+            combobox.fontMetrics = option.fontMetrics
+            is_editable = index.column() in self._model.editable_columns
+            if is_enabled and is_editable:
+                combobox.state = QStyle.StateFlag.State_Enabled
+            style.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, combobox, painter, view)
+            style.drawControl(QStyle.ControlElement.CE_ComboBoxLabel, combobox, painter, view)
+            return
+        button_rect = self.button_rect(option.rect, option, widget.text)
+        item.text = text
+        item.rect = option.rect.adjusted(0, 0, -button_rect.width() - 2, 0)
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, item, painter, view)
+        button = QStyleOptionButton()
+        button.rect = button_rect
+        button.text = widget.text
+        button.palette = option.palette
+        button.fontMetrics = option.fontMetrics
+        button.state = QStyle.StateFlag.State_Raised
+        if is_enabled:
+            button.state |= QStyle.StateFlag.State_Enabled
+        style.drawControl(QStyle.ControlElement.CE_PushButton, button, painter, view)
+
+    def editorEvent(  # noqa: N802
+        self,
+        event: QEvent,
+        model: QAbstractItemModel,
+        option: QStyleOptionViewItem,
+        index: _Index,
+    ) -> bool:
+        widget = self._widget(index)
+        if (
+            widget is not None
+            and isinstance(event, QMouseEvent)
+            and event.type() == QEvent.Type.MouseButtonRelease
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
+            position = event.position().toPoint()
+            if widget.kind is CellKind.LINK or (
+                widget.kind is CellKind.BUTTON
+                and self.button_rect(option.rect, option, widget.text).contains(position)
+            ):
+                self.cell_clicked.emit(index.row(), index.column())
+        return super().editorEvent(event, model, option, index)
+
+    def createEditor(  # noqa: N802
+        self, parent: QWidget, option: QStyleOptionViewItem, index: _Index
+    ) -> QWidget:
+        widget = self._widget(index)
+        if widget is None or widget.kind is not CellKind.COMBOBOX:
+            return super().createEditor(parent, option, index)
+        editor = QComboBox(parent)
+        text = self._model.text(index.row(), index.column())
+        # a text the options lack still shows, picked
+        editor.addItems([*widget.options, *([] if text in widget.options else [text])])
+        editor.setCurrentText(text)
+
+        def commit() -> None:
+            self.commitData.emit(editor)
+            self.closeEditor.emit(editor)
+
+        editor.activated.connect(commit)
+        QTimer.singleShot(0, editor.showPopup)
+        return editor
+
+    def setEditorData(self, editor: QWidget, index: _Index) -> None:  # noqa: N802
+        if not isinstance(editor, QComboBox):
+            super().setEditorData(editor, index)
+
+    def setModelData(  # noqa: N802
+        self, editor: QWidget, model: QAbstractItemModel, index: _Index
+    ) -> None:
+        if isinstance(editor, QComboBox):
+            model.setData(index, editor.currentText())
+        else:
+            super().setModelData(editor, model, index)
+
+
+class QCheckHeader(QHeaderView):
+    """A horizontal header whose check-all columns start with a check box.
+
+    A click on a column's box emits `check_clicked` instead of `sectionClicked`.
+    """
+
+    check_clicked = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.checkable_columns: list[int] = []
+
+    def box_width(self) -> int:
+        """Get the width at a section's start a click checks in: its margins and box."""
+        margin = self.style().pixelMetric(QStyle.PixelMetric.PM_HeaderMargin, None, self)
+        indicator = self.style().pixelMetric(QStyle.PixelMetric.PM_IndicatorWidth, None, self)
+        return 2 * margin + indicator
+
+    def _checked_column(self, event: QMouseEvent) -> int | None:
+        x = event.position().toPoint().x()
+        column = self.logicalIndexAt(x)
+        if column not in self.checkable_columns:
+            return None
+        return column if x - self.sectionViewportPosition(column) <= self.box_width() else None
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._checked_column(event) is None:
+            super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        column = self._checked_column(event)
+        if column is None:
+            super().mouseReleaseEvent(event)
+        elif event.button() == Qt.MouseButton.LeftButton:
+            self.check_clicked.emit(column)
 
 
 class QTextTableView(QTableView):
@@ -103,16 +338,30 @@ class QTextTableView(QTableView):
     or F2, and `cell_edited` emits its row, column and new text once the editor has closed.
     `header_clicked` emits the column whose header the user clicked; the header shows the
     order `set_sort_indicator` gives, the table never sorting its rows itself.
+
+    The columns of `set_cell_widgets` show widgets (see `QCellDelegate`): a click or
+    Space toggles an editable check box at once, `cell_edited` emitting it; a click on a
+    button or a link, or Space on its cell, emits `cell_clicked`. A check-all column's
+    header starts with the box `set_checked_columns` shows, whose click emits
+    `check_all_clicked`.
     """
 
     selected_rows_changed = Signal(list)
     cell_edited = Signal(int, int, str)
     header_clicked = Signal(int)
+    cell_clicked = Signal(int, int)
+    check_all_clicked = Signal(int)
 
     def __init__(self) -> None:
         super().__init__()
         self._model = QTextTableModel(self)
         self.setModel(self._model)
+        header = QCheckHeader(self)
+        self.setHorizontalHeader(header)
+        header.check_clicked.connect(self.check_all_clicked)
+        delegate = QCellDelegate(self._model, self)
+        self.setItemDelegate(delegate)
+        delegate.cell_clicked.connect(self.cell_clicked)
         self._is_setting = False
         self.verticalHeader().setVisible(False)
         # as tall as its rows, not Qt's default height, which leaves an empty block
@@ -138,7 +387,64 @@ class QTextTableView(QTableView):
         # Qt commits the editor's text before closing it: a callback answering the edit with
         # new rows would reset the model under the open editor, which Qt then commits again
         # ("commitData called with an editor that does not belong to this view")
-        self._edits.append((row, column, text))
+        if self.state() is QAbstractItemView.State.EditingState:
+            self._edits.append((row, column, text))
+        else:  # a check box toggled, no editor open
+            self.cell_edited.emit(row, column, text)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        index = self.currentIndex()
+        kind = self._model.kind(index.column()) if index.isValid() else None
+        if event.key() == Qt.Key.Key_Space and kind in (CellKind.BUTTON, CellKind.LINK):
+            self.cell_clicked.emit(index.row(), index.column())
+            return
+        super().keyPressEvent(event)
+
+    def set_cell_widgets(self, widgets: dict[int, CellWidget]) -> None:
+        self._model.cell_widgets = widgets
+        header = self.horizontalHeader()
+        assert isinstance(header, QCheckHeader)
+        header.checkable_columns = [
+            column
+            for column, widget in widgets.items()
+            if widget.kind is CellKind.CHECK_BOX and widget.check_all
+        ]
+        self.viewport().update()
+
+    def set_checked_columns(self, states: dict[int, tuple[Optional[bool], bool]]) -> None:
+        """Show each check-all column's box: checked, unchecked or partly (None), enabled."""
+        self._model.set_header_icons(
+            {
+                column: self._check_icon(is_checked, is_enabled=is_enabled)
+                for column, (is_checked, is_enabled) in states.items()
+            }
+        )
+
+    def _check_icon(self, is_checked: Optional[bool], *, is_enabled: bool) -> QIcon:
+        style = self.style()
+        width = style.pixelMetric(QStyle.PixelMetric.PM_IndicatorWidth, None, self)
+        height = style.pixelMetric(QStyle.PixelMetric.PM_IndicatorHeight, None, self)
+        ratio = self.devicePixelRatio()
+        pixmap = QPixmap(round(width * ratio), round(height * ratio))
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        option = QStyleOptionButton()
+        option.rect = QRect(0, 0, width, height)
+        option.palette = self.palette()
+        states = {
+            True: QStyle.StateFlag.State_On,
+            False: QStyle.StateFlag.State_Off,
+            None: QStyle.StateFlag.State_NoChange,
+        }
+        option.state = states[is_checked]
+        if is_enabled:
+            option.state |= QStyle.StateFlag.State_Enabled
+        painter = QPainter(pixmap)
+        try:
+            style.drawPrimitive(QStyle.PrimitiveElement.PE_IndicatorCheckBox, option, painter, self)
+        finally:
+            painter.end()
+        return QIcon(pixmap)
 
     def closeEditor(  # noqa: N802
         self, editor: QWidget, hint: QAbstractItemDelegate.EndEditHint

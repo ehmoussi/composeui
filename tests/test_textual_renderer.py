@@ -74,7 +74,11 @@ from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composesplitter import ComposeSplitter, SplitterHandle
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
-from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
+from composeui.textualcore.widgets.composetable import (
+    ComposeOptionPicker,
+    ComposeRowEditor,
+    ComposeTable,
+)
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from composeui.textualcore.widgets.composetree import ComposeTree
 from examples.batman import BatmanMainView
@@ -101,7 +105,7 @@ from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
+from tests.tables import CellWidgetsMainView, EditableTableMainView, Room, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -1869,6 +1873,74 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         assert cells() == [["Harbour", "Busy"], ["Lake", "Windy"]]
         assert view.places.selected_rows == [1]
         assert table.cursor_row == 1
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.variables.renderer, TextualWidgetRenderer)
+    box = view.variables.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+    events: list[tuple[int, ...] | tuple[int, int, str]] = []
+    view.variables.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
+    view.variables.cell_clicked.connect(lambda row, column: events.append((row, column)))
+
+    def x(column: int) -> int:
+        """Get the offset of a column's first character."""
+        return sum(each.get_render_width(table) for each in list(table.columns.values())[:column])
+
+    def cells(row: int) -> list[str]:
+        return [str(cell) for cell in table.get_row_at(row)]
+
+    def header() -> str:
+        return str(next(iter(table.columns.values())).label)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        assert cells(0) == ["\u2611", "Length", "Input \u25be", "Normal [\u2026]", "doc"]
+        assert header() == "\u25a3 Keep"  # some rows checked
+
+        # a click toggles a box: the header's follows
+        await pilot.click(table, offset=(x(0) + 1, 2))
+        await pilot.pause()
+        assert view.variables.rows[1][0] == "True"
+        assert (cells(1)[0], header()) == ("\u2611", "\u2611 Keep")
+        # the header's box unchecks every row, each an edit
+        await pilot.click(table, offset=(x(0) + 1, 0))
+        await pilot.pause()
+        assert [row[0] for row in view.variables.rows] == ["False", "False"]
+        assert header() == "\u2610 Keep"
+        # Space toggles the cursor row's box
+        await pilot.press("space")
+        await pilot.pause()
+        assert [row[0] for row in view.variables.rows] == ["False", "True"]
+
+        # a combobox's click picks among its options
+        await pilot.click(table, offset=(x(2) + 1, 1))
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeOptionPicker)
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        assert view.variables.rows[0][2] == "Output"
+
+        # a button and a link report their clicks, editing nothing
+        await pilot.click(table, offset=(x(3) + 1, 2))
+        await pilot.click(table, offset=(x(4) + 1, 1))
+        await pilot.pause()
+        assert events == [
+            (1, 0, "True"),
+            (0, 0, "False"),
+            (1, 0, "False"),
+            (1, 0, "True"),
+            (0, 2, "Output"),
+            (1, 3),
+            (0, 4),
+        ]
 
 
 @pytest.mark.asyncio

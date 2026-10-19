@@ -62,6 +62,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ButtonVariant,
+    CellKind,
     ChartKind,
     ChartView,
     DialogKind,
@@ -122,7 +123,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import ReferenceLine, Series, TreeNode, TreePath
+    from composeui.core.view import CellWidget, ReferenceLine, Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
@@ -1180,8 +1181,12 @@ class TableViewLike(ViewLike, Protocol):
     selection_changed: Signal[list[int]]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
+    cell_widgets: dict[int, CellWidget]
+    cell_clicked: Signal[int, int]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def column_checked(self, column: int) -> bool | None: ...
+    def check_all(self, column: int, *, is_checked: bool) -> None: ...
     def sort_by(self, column: int) -> None: ...
     def filter_error(self, column: int, text: str) -> str | None: ...
     def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str: ...
@@ -1214,6 +1219,7 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
                 "selected_rows": self._refresh_selected_rows,
                 "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
+                "cell_widgets": self._refresh_cell_widgets,
             }
         )
 
@@ -1223,6 +1229,8 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             table, bar = self._rendered_object.table, self._rendered_object.bar
             table.selected_rows_changed.connect(self._update_selected_rows)
             table.cell_edited.connect(self._update_cell)
+            table.cell_clicked.connect(self._click_cell)
+            table.check_all_clicked.connect(self._check_all)
             table.header_clicked.connect(self._sort_by)
             bar.check = self._view.filter_error
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
@@ -1305,12 +1313,31 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         cls._refresh_selected_rows(view, rendered_object, view.selected_rows)
         rendered_object.bar.set_count(_count_text(view, value))
         rendered_object.empty.setVisible(len(value) == 0 and len(view.rows) > 0)
+        cls._refresh_checked_columns(view, rendered_object)
 
     @staticmethod
+    def _refresh_checked_columns(view: TableViewLike, rendered_object: QFilterTable) -> None:
+        rendered_object.table.set_checked_columns(
+            {
+                column: (view.column_checked(column), column in view.editable_columns)
+                for column, widget in view.cell_widgets.items()
+                if widget.kind is CellKind.CHECK_BOX and widget.check_all
+            }
+        )
+
+    @classmethod
     def _refresh_editable_columns(
-        _view: TableViewLike, rendered_object: QFilterTable, value: list[int]
+        cls, view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
         rendered_object.table.set_editable_columns(value)
+        cls._refresh_checked_columns(view, rendered_object)
+
+    @classmethod
+    def _refresh_cell_widgets(
+        cls, view: TableViewLike, rendered_object: QFilterTable, value: dict[int, CellWidget]
+    ) -> None:
+        rendered_object.table.set_cell_widgets(value)
+        cls._refresh_checked_columns(view, rendered_object)
 
     @staticmethod
     def _update_state(view: TableViewLike, rendered_object: QFilterTable) -> None:
@@ -1330,6 +1357,15 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)
+        if self._rendered_object is not None:  # a check-all box follows its column's
+            self._refresh_checked_columns(self._view, self._rendered_object)
+
+    def _click_cell(self, position: int, column: int) -> None:
+        self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _check_all(self, column: int) -> None:
+        if column in self._view.editable_columns:
+            self._view.check_all(column, is_checked=self._view.column_checked(column) is not True)
 
     def _sort_by(self, column: int) -> None:
         if column in self._view.sortable_columns:

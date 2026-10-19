@@ -8,6 +8,7 @@ import attrs
 from attrs import Factory
 
 from composeui.core.view import (
+    CellWidget,
     Column,
     MainView,
     RecordTableView,
@@ -97,3 +98,28 @@ class SortedRoomsMainView(MainView):
         ]
         self.notes.headers = ["Note"]
         self.notes.rows = [["Calm"], ["Busy"]]
+
+
+@define_view
+class CellWidgetsMainView(MainView):
+    """A table of variables: kept or not, their role picked, a button and a link each."""
+
+    app_title = "Variables"
+    extension = ".variables"
+
+    variables: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.variables.headers = ["Keep", "Variable", "Role", "Distribution", "Help"]
+        self.variables.rows = [
+            ["True", "Length", "Input", "Normal", "doc"],
+            ["false", "Stress", "Output", "", "doc"],
+        ]
+        self.variables.editable_columns = [0, 2]
+        self.variables.cell_widgets = {
+            0: CellWidget.check_box(check_all=True),
+            2: CellWidget.combobox(["Input", "Output"]),
+            3: CellWidget.button(),
+            4: CellWidget.link(),
+        }

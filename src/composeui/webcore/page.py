@@ -608,6 +608,13 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
 });
+/* a table's check-all box while some of its rows are checked: only a script shows a
+   box partly checked */
+document.addEventListener("htmx:load", function (event) {
+  event.detail.elt.querySelectorAll("[data-indeterminate]").forEach(function (box) {
+    box.indeterminate = true;
+  });
+});
 /* a table's filter editor: its regular expression toggle shows only for a column a
    pattern filters, and the value's placeholder hints at what filters the column picked */
 document.addEventListener("change", function (event) {
