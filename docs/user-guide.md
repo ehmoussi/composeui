@@ -89,6 +89,9 @@ Larger views have sections of their own:
 | `textual` | `tui` | In a terminal |
 | `web` | `web` | In a web page |
 
+Without `--backend`, the `COMPOSEUI_BACKEND` environment variable picks the backend. An
+app can change its default with `run(MainViewClass, default_backend=RendererType.QT)`.
+
 `run` imports only the backend that you choose. It leaves the rest of the command line to
 the app (`--help` lists it). To always start one backend, build its application yourself,
 for example `QtApplication(build_main_view=HelloMainView).run()`.
@@ -303,7 +306,7 @@ The page shown is navigation, not study data: saving, opening, and New leave it 
 
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web
 puts the toolbar in the page header, with a web address per page.
-[`src/examples/pipeform.py`](../src/examples/pipeform.py) is an app with two pages.
+[`src/examples/pipeform.py`](../src/examples/pipeform.py) is an app with three pages: Inputs, Results, and Help.
 
 ## Tabs
 
