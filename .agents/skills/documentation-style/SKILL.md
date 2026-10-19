@@ -23,6 +23,7 @@ Each document has one audience:
 | --- | --- | --- |
 | `README.md` | First-time users of ComposeUI | What the library is, why to use it, installation, quickstart, and links to the guides |
 | `docs/user-guide.md` | App developers who use ComposeUI | One section per feature and widget, and the differences between the backends |
+| `docs/examples-guide.md` | App developers who learn from the example apps | One section per app in `src/examples/`: what it shows, with links to the user guide, and how to run it |
 | `docs/technical-guide.md` | Contributors to ComposeUI | The architecture, adding a widget or a backend, tests, checks, and code style |
 | `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
@@ -34,7 +35,8 @@ Each document has one audience:
 - Keep `README.md` concise and useful to a first-time user. Explain the
   project before setup details. Make the next useful action easy to find.
 - Put detailed usage and backend information in the user guide, and architecture and
-  development information in the technical guide. Add links from `README.md` where
+  development information in the technical guide. Put what an example app shows in the
+  examples guide, and link to the user guide for how each feature works. Add links from `README.md` where
   readers need them.
 - When you move a section from `README.md` to `docs/`, leave a link in `README.md`
   where readers expect it.
@@ -85,6 +87,20 @@ When the feature is a new widget, also update the list of widgets
 ("Already there: ...") at the top of `ROADMAP.md`, and delete its roadmap entry.
 `ROADMAP.md` keeps only the work that is left. Keep the contents list at the top of the
 guide in step with its `##` headings.
+
+## Document an example app
+
+An example section in `docs/examples-guide.md` usually has this content, in this order:
+
+1. One sentence: what the app is, with a link to its file in `src/examples/`.
+2. The command that runs it, with its default backend and the other `--backend` values.
+3. A list of what it shows, each feature linked to its section in the user guide.
+
+When you add an example, also add its row to the overview table, with its default backend
+(the `default_backend` of its `run` call, else web), and its entry in the contents list.
+When an example changes what it shows, update its section and its row. The module
+docstring of each example is the first source for what it shows: check it against the code.
+Do not document an example that is not committed.
 
 ## Write clear technical English
 

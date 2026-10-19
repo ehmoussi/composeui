@@ -97,6 +97,8 @@ and load. Run it with `uv run python -m examples.pipeform --backend qt`, or `tex
 - The [user guide](docs/user-guide.md) explains how to build an app: the views and widgets,
   pages, tabs, dialogs, tables, charts, threads, SQLite models, translations, and the
   differences between the backends.
+- The [examples guide](docs/examples-guide.md) says what each example app shows, and how
+  to run it.
 - The [technical guide](docs/technical-guide.md) explains how ComposeUI works inside, and
   how to develop it: the architecture, how to add a widget or a backend, the tests, and the
   checks.
