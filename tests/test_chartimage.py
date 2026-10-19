@@ -180,3 +180,16 @@ def test_reference_lines_are_styled_labeled_and_in_range() -> None:
     legend = axes.get_legend()
     assert legend is not None
     assert [text.get_text() for text in legend.get_texts()] == ["Inlet"]
+
+
+def test_a_step_series_is_drawn_in_steps_its_fill_a_step_area() -> None:
+    jobs = ChartPagesMainView().router.chart.jobs
+
+    (axes,) = chart_figure(jobs).axes
+
+    running, queued = axes.get_lines()
+    assert running.get_drawstyle() == queued.get_drawstyle() == "steps-post"
+    (area,) = axes.collections  # the running jobs', filled
+    # its outline's corners: each count held until the next change, e.g. 1 from 0 to 2
+    corners = {(float(x), float(y)) for x, y in area.get_paths()[0].vertices}
+    assert {(0, 1), (2, 1), (2, 3), (5, 3)} <= corners

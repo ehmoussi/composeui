@@ -1002,6 +1002,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     # None: the theme's
                     "color": series.color,
                     "fill": series.fill,
+                    "step": series.step,
                 }
                 for series in view.series
             ],

@@ -3452,16 +3452,16 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
 
     chart.series = [
         Series(name="Pressure", x=[0, 1, 2], y=[1, math.nan, math.inf]),
-        Series(name="Temperature", x=[0, 1, 2], y=[5, 6, 7]),
+        Series(name="Temperature", x=[0, 1, 2], y=[5, 6, 7], step=True),
     ]
     markup = chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text
     spec = _chart_spec(markup, chart)
     # uPlot's columns, the x shared; no NaN in JSON: a gap is null
     assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
     assert spec["series"] == [
-        # the theme's colors, no fill
-        {"name": "Pressure", "kind": "line", "color": None, "fill": False},
-        {"name": "Temperature", "kind": "line", "color": None, "fill": False},
+        # the theme's colors, no fill; the temperature in steps
+        {"name": "Pressure", "kind": "line", "color": None, "fill": False, "step": False},
+        {"name": "Temperature", "kind": "line", "color": None, "fill": False, "step": True},
     ]
     plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
     assert plot.attributes["role"] == "img"
@@ -3528,7 +3528,9 @@ def test_a_new_series_list_swaps_the_figure(
     figure = _swapped(response.text, _widget_id(main_view.chart.renderer))
     assert figure.tag == "figure"
     spec = _chart_spec(response.text, main_view.chart)
-    assert spec["series"] == [{"name": "D = 50 mm", "kind": "line", "color": None, "fill": False}]
+    assert spec["series"] == [
+        {"name": "D = 50 mm", "kind": "line", "color": None, "fill": False, "step": False}
+    ]
 
 
 def test_the_page_loads_the_chart_script_only_from_its_own_script(
@@ -3565,6 +3567,7 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
             "kind": "bar",
             "color": None,
             "fill": False,
+            "step": False,
             "offset": pytest.approx(-0.2),
             "width": 0.4,
         },
@@ -3573,6 +3576,7 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
             "kind": "bar",
             "color": None,
             "fill": False,
+            "step": False,
             "offset": pytest.approx(0.2),
             "width": 0.4,
         },

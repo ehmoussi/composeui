@@ -123,12 +123,11 @@ class ComposeChart(PlotextPlot):
         if self.y_log:
             plt.yscale("log")
         for index, curve in enumerate(self.series):
-            draw = (
-                plt.scatter
-                if ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
-                else plt.plot
-            )
+            is_dots = ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
+            draw = plt.scatter if is_dots else plt.plot
             x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
+            if curve.step and not is_dots:
+                x, y = ChartView.step_points(x, y)
             # plotext leaves a gap at a NaN itself
             draw(
                 x,

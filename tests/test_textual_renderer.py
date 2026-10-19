@@ -1921,6 +1921,28 @@ async def test_reference_lines_are_plotted_labeled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_step_series_is_plotted_in_steps() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    jobs = view.router.chart.jobs
+    assert isinstance(jobs.renderer, TextualWidgetRenderer)
+    chart = jobs.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        chart.render()
+        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        # each count held until the next change
+        assert list(plotted.x[0]) == [0, 2, 2, 5, 5, 6, 6]
+        assert list(plotted.y[0]) == [1, 1, 3, 3, 2, 2, 4]
+
+
+@pytest.mark.asyncio
 async def test_its_key_saves_the_chart_s_image(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     view = PipeChartMainView()
