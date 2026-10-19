@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import enum
 import json
 from typing import TYPE_CHECKING
 
+import attrs
 import pytest
 
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
-from composeui.core.view import Column, InvalidStateError, RecordTableView, T
+from composeui.core.view import CellWidget, Column, InvalidStateError, RecordTableView, T
 from tests.tables import COLUMNS, Room, RoomsMainView
 
 if TYPE_CHECKING:
@@ -118,6 +120,51 @@ def test_a_refusal_in_record_edited_refuses_the_edit(main_view: RoomsMainView) -
 
     assert table.records == records
     assert main_view.status_bar.message == "Can't edit the room: too cold"
+
+
+class Role(enum.Enum):
+    INPUT = "Input"
+    OUTPUT = "Output"
+
+
+@attrs.define
+class Variable:
+    name: str
+    role: Role
+    is_kept: bool = False
+
+
+def test_a_column_s_widgets_edit_its_records_and_check_every_shown_row() -> None:
+    table = RecordTableView[Variable](
+        columns=[
+            Column(
+                "is_kept", T("Keep"), editable=True, widget=CellWidget.check_box(check_all=True)
+            ),
+            Column("name", T("Variable"), filterable=True),
+            Column("role", T("Role"), editable=True, widget=CellWidget.combobox()),
+        ]
+    )
+    table.records = [
+        Variable("Length", Role.INPUT),
+        Variable("Stress", Role.OUTPUT, is_kept=True),
+        Variable("Width", Role.INPUT),
+    ]
+    # a combobox without options offers the enum's
+    assert table.cell_widgets[2].options == ("Input", "Output")
+    assert table.column_checked(0) is None
+    table.emit_cell_edited(0, 2, "Output")
+    assert table.records[0].role is Role.OUTPUT
+
+    # checking every shown row edits each record, the selection staying on its row
+    edited: list[Variable] = []
+    table.record_edited.connect(lambda _old, new: edited.append(new))
+    table.filters = {1: "!Width"}
+    table.selected_rows = [0]
+    table.check_all(0, is_checked=True)
+    assert edited == [Variable("Length", Role.OUTPUT, is_kept=True)]
+    assert [variable.is_kept for variable in table.records] == [True, True, False]
+    assert (table.column_checked(0), table.is_checked(2, 0)) == (True, False)
+    assert table.selected_rows == [0]
 
 
 def test_a_study_saves_and_loads_the_records_by_their_type(tmp_path: Path) -> None:

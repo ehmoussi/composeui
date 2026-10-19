@@ -1966,6 +1966,62 @@ def parse_filter(text: str, field_type: Any = str) -> Filter:
     return Filter(FilterOperator.EQUAL, _parse_value(text, field_type, kind))
 
 
+class CellKind(enum.Enum):
+    """What the cells of a column show (see `CellWidget`)."""
+
+    #: a check box, checked when the cell's text is "true", ignoring case
+    CHECK_BOX = enum.auto()
+    #: a combobox of `CellWidget.options`, showing the cell's text
+    COMBOBOX = enum.auto()
+    #: the cell's text, then a button
+    BUTTON = enum.auto()
+    #: the cell's text as a link
+    LINK = enum.auto()
+
+
+#: a check box cell's text, by whether it's checked, as `str` writes a boolean
+CHECKED_TEXTS: Mapping[bool, str] = {True: "True", False: "False"}
+
+
+def _to_texts(texts: Iterable[str]) -> tuple[str, ...]:
+    return tuple(texts)
+
+
+@attrs.frozen
+class CellWidget:
+    """A widget in each cell of a table's column, by `TableMixin.cell_widgets`.
+
+    A check box and a combobox edit their cell when the column is in `editable_columns`,
+    `cell_edited` emitting the new text as for a typed edit (a check box's from
+    `CHECKED_TEXTS`); else they only show it. A button and a link emit `cell_clicked`,
+    the user never typing in their cells.
+    """
+
+    kind: CellKind
+    #: a combobox's choices, the texts its cells take
+    options: tuple[str, ...] = attrs.field(default=(), converter=_to_texts)
+    #: a button's text
+    text: str = "\u2026"
+    #: whether a check box column's header has a box checking or unchecking every shown row
+    check_all: bool = False
+
+    @classmethod
+    def check_box(cls, *, check_all: bool = False) -> CellWidget:
+        return cls(CellKind.CHECK_BOX, check_all=check_all)
+
+    @classmethod
+    def combobox(cls, options: Iterable[str] = ()) -> CellWidget:
+        return cls(CellKind.COMBOBOX, _to_texts(options))
+
+    @classmethod
+    def button(cls, text: str = "\u2026") -> CellWidget:
+        return cls(CellKind.BUTTON, text=text)
+
+    @classmethod
+    def link(cls) -> CellWidget:
+        return cls(CellKind.LINK)
+
+
 #: the text of a table's filter bar, which the renderers show
 FILTER_TEXTS: Mapping[str, str] = {
     "search": T("Search"),
@@ -2003,6 +2059,11 @@ class TableMixin:
     as it was (the edit refused). Raising `EditRefusedError` refuses it too, the rows staying
     as they are, e.g. when the model refused the new text and changed nothing; so does a
     `RefusedError` caught by `View.refusing` in the callback.
+
+    A column of `cell_widgets` shows a widget in each cell (see `CellWidget`): a check box
+    or a combobox editing it, a button or a link emitting `cell_clicked` with its row and
+    column. A check box column's header can check or uncheck every shown row
+    (`check_all`), each change emitted as the user's edit.
 
     The user sorts the rows by a column of `sortable_columns` (`sort_column`, ascending
     unless `sort_descending`), searches the text of `filterable_columns` (`search`) and
@@ -2155,6 +2216,12 @@ class TableMixin:
     selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
     editable_columns: list[int] = attrs.Factory(list[int])
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
+    #: the widget in each cell of a column, by column: the app's setup, not study data
+    cell_widgets: dict[int, CellWidget] = attrs.field(
+        factory=dict[int, CellWidget], metadata={OMIT: True}
+    )
+    #: the user clicked a button or a link cell: its row and its column
+    cell_clicked: Signal[int, int] = attrs.Factory(Signal[int, int])
     #: `rows` as the edit being emitted leaves them, while its callbacks run
     _edited_rows: Optional[list[list[str]]] = attrs.field(
         default=None, init=False, repr=False, metadata={OMIT: True}
@@ -2219,6 +2286,35 @@ class TableMixin:
         else:
             chip, text = self.filter_texts.get("chip", "{header}: {filter}"), self.filters[column]
         return chip.format(header=header, filter=text)
+
+    def is_checked(self, row: int, column: int) -> bool:
+        """Tell whether a check box cell is checked: its text is "true", ignoring case."""
+        return self._cell_text(row, column).casefold() == "true"
+
+    def column_checked(self, column: int) -> Optional[bool]:
+        """Tell whether a check box column's shown cells are all checked, none, or some (None)."""
+        checked = {self.is_checked(row, column) for row in self.shown_rows}
+        return None if len(checked) > 1 else checked == {True}
+
+    def check_all(self, column: int, *, is_checked: bool) -> None:
+        """Check or uncheck a check box column's shown cells, as its header's box does.
+
+        Each cell changing is the user's edit: `cell_edited` emits it, and the edit applies
+        unless its callbacks assigned `rows` or refused it.
+        """
+        text = CHECKED_TEXTS[is_checked]
+        for row in list(self.shown_rows):
+            if row >= len(self.rows) or self.is_checked(row, column) == is_checked:
+                continue
+            rows = self.rows
+            self.emit_cell_edited(row, column, text)
+            if self.rows is rows:
+                # as edited, for the selection to stay on its row
+                self._edited_rows = replace_cell(rows, row, column, text)
+                try:
+                    self.rows = self._edited_rows
+                finally:
+                    self._edited_rows = None
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None:
         """Emit `cell_edited` for the user's edit, `rows` still holding the old text.
@@ -2360,6 +2456,9 @@ class Column:
     sortable: bool = False
     #: whether the user searches and filters the column
     filterable: bool = False
+    #: the widget in each of its cells (see `CellWidget`); a combobox without options, on
+    #: an enum field, offers the enum's members
+    widget: Optional[CellWidget] = None
 
 
 def _cell_text(value: Any) -> str:
@@ -2394,14 +2493,37 @@ class RecordTableView(TableView, Generic[RecordT]):
         self.filterable_columns = [
             index for index, column in enumerate(columns) if column.filterable
         ]
+        self.cell_widgets = self._cell_widgets()
         self.rows = [self._cells(record, columns) for record in self.records]
         return columns
+
+    def _cell_widgets(self) -> dict[int, CellWidget]:
+        return {
+            index: self._cell_widget(index, column.widget)
+            for index, column in enumerate(self.columns)
+            if column.widget is not None
+        }
+
+    def _cell_widget(self, column: int, widget: CellWidget) -> CellWidget:
+        """Give a combobox without options on an enum field the enum's members."""
+        field_type = self._column_type(column)
+        if (
+            widget.kind is not CellKind.COMBOBOX
+            or len(widget.options) > 0
+            or not isinstance(field_type, type)
+            or not issubclass(field_type, enum.Enum)
+        ):
+            return widget
+        return attrs.evolve(widget, options=_to_texts(_cell_text(member) for member in field_type))
 
     def _reconcile_records(
         self, _attribute: attrs.Attribute[Any], records: list[RecordT]
     ) -> list[RecordT]:
         # first: the rows sort and filter by the records' values
         object.__setattr__(self, "records", records)
+        # the records' type may be known only since: ``RecordTableView[Room](...)`` sets it
+        # once built
+        self.cell_widgets = self._cell_widgets()
         self.rows = [self._cells(record, self.columns) for record in records]
         return records
 

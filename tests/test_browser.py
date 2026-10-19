@@ -47,7 +47,7 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import EditableTableMainView, SortedRoomsMainView
+from tests.tables import CellWidgetsMainView, EditableTableMainView, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
@@ -174,6 +174,14 @@ def grid_base_url() -> Iterator[str]:
 def places_base_url() -> Iterator[str]:
     """Serve an app with a table whose notes are editable, for the whole module."""
     app = WebApplication(build_main_view=EditableTableMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def variables_base_url() -> Iterator[str]:
+    """Serve an app with a table of cell widgets, for the whole module."""
+    app = WebApplication(build_main_view=CellWidgetsMainView).create_starlette_app()
     with _serve(app) as url:
         yield url
 
@@ -391,6 +399,15 @@ def rooms_page(browser: Browser, rooms_base_url: str) -> Iterator[Page]:
 def places_page(browser: Browser, places_base_url: str) -> Iterator[Page]:
     """Open the app with an editable table like `page`, in a session of its own."""
     context = browser.new_context(base_url=places_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def variables_page(browser: Browser, variables_base_url: str) -> Iterator[Page]:
+    """Open the app with a table of cell widgets like `page`, in a session of its own."""
+    context = browser.new_context(base_url=variables_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -1338,6 +1355,41 @@ def test_a_splitter_keeps_each_pane_wide_enough_to_read_a_tree_cutting_its_label
     assert _box(plan)["width"] == pytest.approx(192, abs=1)
     assert not label.evaluate("label => label.scrollWidth > label.clientWidth")
     context.close()
+
+
+def test_a_table_s_cell_widgets_change_their_cells_without_selecting_their_row(
+    variables_page: Page,
+) -> None:
+    page = variables_page
+    page.goto("/")
+    keep_all = page.get_by_role("columnheader").get_by_label("Keep")
+    stress = page.get_by_role("row").filter(has_text="Stress")
+    length = page.get_by_role("row").filter(has_text="Length")
+    # some rows checked: the header's box is partly checked
+    expect(keep_all).to_have_js_property("indeterminate", value=True)
+
+    with _posted(page):
+        stress.get_by_label("Keep").check()
+    expect(keep_all).to_be_checked()
+    expect(keep_all).to_have_js_property("indeterminate", value=False)
+    with _posted(page):
+        length.get_by_label("Role").select_option("Output")
+    with _posted(page):
+        stress.get_by_role("button", name="Distribution: \u2026").click()
+    with _posted(page):
+        length.get_by_role("button", name="doc").click()
+    # the widgets took their clicks: no row is selected
+    expect(page.locator("tr[aria-current]")).to_have_count(0)
+    expect(length.get_by_label("Role")).to_have_value("Output")
+
+    # the header's box unchecks every row, keeping the focus
+    with _posted(page):
+        keep_all.uncheck()
+    boxes = page.get_by_role("cell").get_by_label("Keep")
+    expect(boxes).to_have_count(2)
+    for box in boxes.all():
+        expect(box).not_to_be_checked()
+    expect(keep_all).to_be_focused()
 
 
 def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(

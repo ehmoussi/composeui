@@ -36,9 +36,11 @@ from composeui.core.renderer import (
     ViewLike,
 )
 from composeui.core.view import (
+    CHECKED_TEXTS,
     ActionView,
     Align,
     ButtonVariant,
+    CellKind,
     ChartKind,
     ChartView,
     DialogKind,
@@ -94,7 +96,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import ReferenceLine, Series, TreeNode, TreePath
+    from composeui.core.view import CellWidget, ReferenceLine, Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 
@@ -1311,8 +1313,13 @@ class TableViewLike(ViewLike, Protocol):
     selection_changed: Signal[list[int]]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
+    cell_widgets: dict[int, CellWidget]
+    cell_clicked: Signal[int, int]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def is_checked(self, row: int, column: int) -> bool: ...
+    def column_checked(self, column: int) -> bool | None: ...
+    def check_all(self, column: int, *, is_checked: bool) -> None: ...
     def sort_by(self, column: int) -> None: ...
     def filter_error(self, column: int, text: str) -> str | None: ...
     def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str: ...
@@ -1322,6 +1329,10 @@ class TableViewLike(ViewLike, Protocol):
 
 #: the order a sortable column's header shows, as `aria-sort` says it
 _ARIA_SORT: Final[dict[bool | None, str]] = {None: "none", False: "ascending", True: "descending"}
+
+
+#: an htmx trigger's filter: the event isn't from a field or a button
+_NOT_FROM_A_CONTROL: Final = "!target.closest(&apos;input,select,button&apos;)"
 
 
 class WebTableRenderer(WebRenderer[TableViewLike]):
@@ -1338,6 +1349,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     header, its text selected. Enter or leaving the field posts the text, Escape puts the
     old text back first; either way the cell is text again. The page keeps the text the
     user is typing through a swap of the table, e.g. answering the double click's clicks.
+
+    A column of `cell_widgets` holds a widget in each cell: a check box or a select,
+    posting its change and never swapped back for it (only a check-all box in the header
+    follows); a button after the cell's text, or the text as a link-like button, posting
+    a click. A check-all column's header starts with its box, partly checked (see
+    `page.py`) while some rows are; its click swaps back the rows, not itself.
 
     The table shows `shown_rows`, each row keeping the id of its index in `rows`. A
     sortable column's header is a button sorting by it. While a column filters, the bar
@@ -1380,6 +1397,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
                 "selected_rows": self._mark_dirty,
                 "shown_rows": self._part_marker("body", "count"),
                 "editable_columns": self._mark_dirty,
+                "cell_widgets": self._mark_dirty,
             }
         )
 
@@ -1446,17 +1464,25 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     def _head_html(self, *, oob: bool = False) -> str:
         cells = []
         for column, header in enumerate(self._view.headers):
+            box = self._check_all_html(column)
             if column not in self._view.sortable_columns:
-                cells.append(f"<th>{html.escape(header)}</th>")
+                if box == "":
+                    cells.append(f"<th>{html.escape(header)}</th>")
+                else:
+                    cells.append(
+                        f'<th><span class="flex items-center gap-2">{box}'
+                        f"{html.escape(header)}</span></th>"
+                    )
                 continue
             order = self._view.sort_descending if self._view.sort_column == column else None
             arrow = {None: "", False: " ▲", True: " ▼"}[order]
             disabled = "" if self.is_enabled else " disabled"
             cells.append(
                 f'<th aria-sort="{_ARIA_SORT[order]}" class="p-0">'
-                f'<button type="button" class="btn btn-ghost btn-sm w-full justify-start'
+                f'<span class="flex items-center{" ps-3" if box else ""}">{box}'
+                f'<button type="button" class="btn btn-ghost btn-sm flex-1 justify-start'
                 f' font-semibold"{self._post({"event": "sort", "column": column})}{disabled}>'
-                f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></th>'
+                f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></span></th>'
             )
         return self._table_part(
             f'<tr id="{self.widget_id}-head"{self._oob(oob=oob)}>{"".join(cells)}</tr>', oob=oob
@@ -1474,6 +1500,30 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         return self._table_part(
             f'<tbody id="{self.widget_id}-body"{self._oob(oob=oob)}>{rows}</tbody>', oob=oob
         )
+
+    def _check_all_html(self, column: int) -> str:
+        """Render a check-all column's box, or "" for another column."""
+        if column not in self._check_all_columns():
+            return ""
+        is_checked = self._view.column_checked(column)
+        state = {True: " checked", False: "", None: " data-indeterminate"}[is_checked]
+        disabled = "" if self.is_enabled and column in self._view.editable_columns else " disabled"
+        # its own id, so htmx gives it the focus back when the head is swapped
+        return (
+            f'<input id="{self.widget_id}-check-all-{column}" type="checkbox"'
+            f' class="checkbox checkbox-sm" aria-label="{html.escape(self._view.headers[column])}"'
+            f"{state}{self._post({'event': 'check_all', 'column': column})}"
+            f' hx-trigger="change" autocomplete="off"{disabled}>'
+        )
+
+    def _check_all_columns(self) -> list[int]:
+        return [
+            column
+            for column, widget in self._view.cell_widgets.items()
+            if widget.kind is CellKind.CHECK_BOX
+            and widget.check_all
+            and column < len(self._view.headers)
+        ]
 
     @staticmethod
     def _table_part(markup: str, *, oob: bool) -> str:
@@ -1622,8 +1672,9 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def _row_html(self, index: int, row: list[str]) -> str:
-        # a row short of an editable cell still gets the cell, empty
-        width = max(len(row), *(column + 1 for column in self._editable_columns()), 0)
+        # a row short of an editable cell or a widget's still gets the cell, empty
+        widths = [*self._editable_columns(), *self._view.cell_widgets]
+        width = max(len(row), *(column + 1 for column in widths), 0)
         cells = "".join(
             self._cell_html(index, column, row[column] if column < len(row) else "")
             for column in range(width)
@@ -1638,14 +1689,17 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         return (
             f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
             f'{selected} hx-post="/widget/{self.widget_id}"'
-            # not from a cell's field, which takes its own clicks and Enter
-            ' hx-trigger="click[target.tagName!=&apos;INPUT&apos;],'
-            ' keydown[key==&apos;Enter&apos;&amp;&amp;target.tagName!=&apos;INPUT&apos;]"'
+            # not from a cell's field or widget, which takes its own clicks and Enter
+            f' hx-trigger="click[{_NOT_FROM_A_CONTROL}],'
+            f' keydown[key==&apos;Enter&apos;&amp;&amp;{_NOT_FROM_A_CONTROL}]"'
             f""" hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
             f"{cells}</tr>"
         )
 
     def _cell_html(self, row: int, column: int, text: str) -> str:
+        widget = self._view.cell_widgets.get(column)
+        if widget is not None and column < len(self._view.headers):
+            return f"<td>{self._widget_html(row, column, text, widget)}</td>"
         if column not in self._editable_columns() or not self.is_enabled:
             return f"<td>{html.escape(text)}</td>"
 
@@ -1670,6 +1724,49 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f"{post('edit')}></td>"
         )
 
+    def _widget_html(self, row: int, column: int, text: str, widget: CellWidget) -> str:
+        """Render a cell's widget, named by its column's header."""
+        header = html.escape(self._view.headers[column])
+        is_editable = self.is_enabled and column in self._view.editable_columns
+        values = {"row": row, "column": column}
+        # its own id, so htmx gives it the focus back when the table is swapped
+        widget_id = f"{self.widget_id}-cell-{row}-{column}"
+        if widget.kind is CellKind.CHECK_BOX:
+            checked = " checked" if self._view.is_checked(row, column) else ""
+            return (
+                f'<input id="{widget_id}" type="checkbox" class="checkbox checkbox-sm"'
+                f' name="checked" value="on" aria-label="{header}"{checked}'
+                f'{self._post({"event": "check", **values})} hx-trigger="change"'
+                f' autocomplete="off"{"" if is_editable else " disabled"}>'
+            )
+        if widget.kind is CellKind.COMBOBOX:
+            options = [*widget.options, *([] if text in widget.options else [text])]
+            choices = "".join(
+                f'<option value="{html.escape(option)}"{" selected" if option == text else ""}>'
+                f"{html.escape(option)}</option>"
+                for option in options
+            )
+            return (
+                f'<select id="{widget_id}" class="select select-sm w-full min-w-24" name="text"'
+                f' aria-label="{header}"{self._post({"event": "pick", **values})}'
+                f' hx-trigger="change" autocomplete="off"{"" if is_editable else " disabled"}>'
+                f"{choices}</select>"
+            )
+        disabled = "" if self.is_enabled else " disabled"
+        click = self._post({"event": "click_cell", **values})
+        if widget.kind is CellKind.LINK:
+            return (
+                f'<button id="{widget_id}" type="button" class="link link-primary"'
+                f"{click}{disabled}>{html.escape(text)}</button>"
+            )
+        label = html.escape(f"{self._view.headers[column]}: {widget.text}")
+        return (
+            f'<span class="flex items-center gap-2"><span class="flex-1">{html.escape(text)}'
+            f'</span><button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
+            f' aria-label="{label}" title="{label}"{click}{disabled}>'
+            f"{html.escape(widget.text)}</button></span>"
+        )
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled table can't be clicked: a post saying otherwise is refused
         if not self.is_enabled:
@@ -1678,6 +1775,10 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             self._edit(event, form)
             return
         handlers = {
+            "check": self._check,
+            "pick": self._pick,
+            "check_all": self._check_all,
+            "click_cell": self._click_cell,
             "sort": self._sort,
             "search": self._search,
             "open_editor": self._open_editor,
@@ -1794,12 +1895,73 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, *cell, text)
 
+    def _widget_cell(
+        self, form: Mapping[str, str], kinds: tuple[CellKind, ...]
+    ) -> tuple[int, int] | None:
+        """Get the cell posted, if a shown one of a widget of `kinds` the user can use.
+
+        A stale page may post another.
+        """
+        row, column = form.get("row", ""), form.get("column", "")
+        if not row.isdigit() or int(row) not in self._view.shown_rows or not column.isdigit():
+            return None
+        widget = self._view.cell_widgets.get(int(column))
+        if widget is None or widget.kind not in kinds or int(column) >= len(self._view.headers):
+            return None
+        is_edit = widget.kind in (CellKind.CHECK_BOX, CellKind.COMBOBOX)
+        if is_edit and int(column) not in self._view.editable_columns:
+            return None
+        return int(row), int(column)
+
+    def _check(self, form: Mapping[str, str]) -> None:
+        self._set_widget_cell(
+            self._widget_cell(form, (CellKind.CHECK_BOX,)), CHECKED_TEXTS["checked" in form]
+        )
+
+    def _pick(self, form: Mapping[str, str]) -> None:
+        self._set_widget_cell(self._widget_cell(form, (CellKind.COMBOBOX,)), form.get("text", ""))
+
+    def _set_widget_cell(self, cell: tuple[int, int] | None, text: str) -> None:
+        """Apply a check box's or a select's change, which the widget already shows."""
+        if cell is None:
+            self._mark_dirty(self._view, self.widget_id, self._view.rows)  # as it now is
+            return
+        cells = self._view.rows[cell[0]]
+        if text == (cells[cell[1]] if cell[1] < len(cells) else ""):
+            return
+        rows = self._view.rows
+        self._view.emit_cell_edited(*cell, text)
+        # unless the app answered with its own rows, which it has marked to show
+        if self._view.rows is rows:
+            with self.stop_refresh():
+                self._view.rows = replace_cell(rows, *cell, text)
+            if len(self._check_all_columns()) > 0:
+                self._mark_parts("head")  # a check-all box follows its column's
+
+    def _check_all(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._check_all_columns())
+        if column is None or column not in self._view.editable_columns:
+            self._mark_parts("head")  # a stale page: the head as it now is
+            return
+        # the rows swapped back, not the box, which sent the request and shows the click
+        with self.stop_refresh():
+            self._view.check_all(column, is_checked=self._view.column_checked(column) is not True)
+        self._editing = None
+        self._mark_parts("body", "count")
+
+    def _click_cell(self, form: Mapping[str, str]) -> None:
+        cell = self._widget_cell(form, (CellKind.BUTTON, CellKind.LINK))
+        if cell is None:
+            self._mark_dirty(self._view, self.widget_id, self._view.rows)  # as it now is
+            return
+        self._view.cell_clicked.emit(*cell)
+
     def _editable_columns(self) -> list[int]:
-        """`editable_columns` the table has a header for."""
+        """`editable_columns` the table has a header for, and the user types in."""
         return [
             column
             for column in self._view.editable_columns
-            if 0 <= column < len(self._view.headers)
+            if 0 <= column < len(self._view.headers) and column not in self._view.cell_widgets
         ]
 
     def _is_multiple(self) -> bool:

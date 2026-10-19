@@ -124,7 +124,13 @@ from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import EditableTableMainView, Room, RoomsMainView, SortedRoomsMainView
+from tests.tables import (
+    CellWidgetsMainView,
+    EditableTableMainView,
+    Room,
+    RoomsMainView,
+    SortedRoomsMainView,
+)
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -3395,6 +3401,73 @@ def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
         body = rooms.edit("1", "1", "warm")
         assert rooms.texts(body) == ["Hall18False", "Kitchen21.02True"]
         assert html.escape('Temperature: "warm" isn\'t a valid value') in body
+
+
+def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
+    views: list[CellWidgetsMainView] = []
+
+    class VariablesApp(WebApplication[CellWidgetsMainView]):
+        def setup_session(self, main_view: CellWidgetsMainView) -> None:
+            views.append(main_view)
+
+    app = VariablesApp(build_main_view=CellWidgetsMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        table = view.variables
+        table_id = _widget_id(table.renderer)
+        events: list[tuple[int, ...] | tuple[int, int, str]] = []
+        table.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
+        table.cell_clicked.connect(lambda row, column: events.append((row, column)))
+
+        def post(event: str, **values: str) -> str:
+            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+
+        keep, role = _element(page, f"{table_id}-cell-1-0"), _element(page, f"{table_id}-cell-0-2")
+        assert (keep.attributes["aria-label"], "checked" in keep.attributes) == ("Keep", False)
+        assert role.tag == "select"
+        assert [attributes.get("value") for _, attributes in role.descendants] == [
+            "Input",
+            "Output",
+        ]
+        assert "data-indeterminate" in _element(page, f"{table_id}-check-all-0").attributes
+
+        # a check box's change: only the check-all box follows, the box itself not swapped
+        body = post("check", row="1", column="0", checked="on")
+        assert table.rows[1][0] == "True"
+        _swapped(body, f"{table_id}-head")
+        assert "checked" in _element(body, f"{table_id}-check-all-0").attributes
+        assert _find(body, f"{table_id}-cell-1-0") is None
+        # the header's box unchecks every row: the rows come back, not the box
+        post("select", row="1")
+        body = post("check_all", column="0")
+        assert [row[0] for row in table.rows] == ["False", "False"]
+        assert "checked" not in _element(body, f"{table_id}-cell-0-0").attributes
+        assert _find(body, f"{table_id}-check-all-0") is None
+        assert table.selected_rows == [1]
+        post("pick", row="0", column="2", text="Output")
+        assert table.rows[0][2] == "Output"
+
+        # a button and a link post their clicks, the button named by its column
+        button = _element(page, f"{table_id}-cell-1-3")
+        assert button.attributes["aria-label"] == "Distribution: \u2026"
+        assert _element(page, f"{table_id}-cell-0-4").text == "doc"
+        post("click_cell", row="1", column="3")
+        post("click_cell", row="0", column="4")
+        # a stale page's posts: a role no longer editable, a click on a text cell
+        table.editable_columns = [0]
+        post("pick", row="1", column="2", text="Input")
+        post("click_cell", row="0", column="1")
+        assert table.rows[1][2] == "Output"
+        assert "disabled" in _element(client.get("/").text, f"{table_id}-cell-1-2").attributes
+        assert events == [
+            (1, 0, "True"),
+            (0, 0, "False"),
+            (1, 0, "False"),
+            (0, 2, "Output"),
+            (1, 3),
+            (0, 4),
+        ]
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

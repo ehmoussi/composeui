@@ -105,7 +105,12 @@ from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
+from tests.tables import (
+    CellWidgetsMainView,
+    EditableTableMainView,
+    Room,
+    SortedRoomsMainView,
+)
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -1661,6 +1666,79 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
     assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
+
+
+def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: QtBot) -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.variables)
+    model, header = table.model(), table.horizontalHeader()
+    events: list[tuple[int, ...] | tuple[int, int, str]] = []
+    view.variables.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
+    view.variables.cell_clicked.connect(lambda row, column: events.append((row, column)))
+
+    def checks() -> list[Any]:
+        return [model.index(row, 0).data(Qt.ItemDataRole.CheckStateRole) for row in range(2)]
+
+    # a check box shows no text; the header's box shows the column's
+    assert checks() == [Qt.CheckState.Checked, Qt.CheckState.Unchecked]
+    assert model.index(0, 0).data() is None
+    icon = model.headerData(0, Qt.Orientation.Horizontal, Qt.ItemDataRole.DecorationRole)
+    assert icon is not None
+    # Space toggles the current row's box, the header's box following
+    table.setCurrentIndex(model.index(1, 0))
+    qtbot.keyClick(table, Qt.Key.Key_Space)
+    assert view.variables.rows[1][0] == "True"
+    assert checks() == [Qt.CheckState.Checked, Qt.CheckState.Checked]
+    assert (
+        model.headerData(0, Qt.Orientation.Horizontal, Qt.ItemDataRole.DecorationRole) is not icon
+    )
+    # the header's box unchecks every row, sorting nothing
+    box = QPoint(header.sectionViewportPosition(0) + header.box_width() // 2, header.height() // 2)
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=box)
+    assert [row[0] for row in view.variables.rows] == ["False", "False"]
+    assert checks() == [Qt.CheckState.Unchecked, Qt.CheckState.Unchecked]
+
+    # editing a role opens a combobox of the roles
+    center = table.visualRect(model.index(0, 2)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    editor = table.viewport().findChild(QComboBox)
+    assert isinstance(editor, QComboBox)
+    assert [editor.itemText(item) for item in range(editor.count())] == ["Input", "Output"]
+    editor.hidePopup()
+    editor.setCurrentIndex(1)
+    editor.activated.emit(1)
+    qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+    assert view.variables.rows[0][2] == "Output"
+
+    # a click on a button reports it, not one on its cell's text; a click on a link too
+    button = table.visualRect(model.index(1, 3))
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=button.center())
+    qtbot.mouseClick(
+        table.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(button.right() - 4, button.center().y()),
+    )
+    link = table.visualRect(model.index(0, 4)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=link)
+    assert events == [
+        (1, 0, "True"),
+        (0, 0, "False"),
+        (1, 0, "False"),
+        (0, 2, "Output"),
+        (1, 3),
+        (0, 4),
+    ]
+    # not editable, a role is shown only: no combobox opens
+    view.variables.editable_columns = [0]
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    assert table.state() is not QAbstractItemView.State.EditingState
 
 
 # Qt warned "commitData called with an editor that does not belong to this view"
