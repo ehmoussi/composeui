@@ -21,8 +21,9 @@ Each document has one audience:
 
 | Document | Audience | Owns |
 | --- | --- | --- |
-| `README.md` | First-time users of ComposeUI | What the library is, why to use it, installation, quickstart, and links to the guide |
-| `docs/` | App developers who use ComposeUI | The technical guide: one focused document or section per feature, backend, and development topic |
+| `README.md` | First-time users of ComposeUI | What the library is, why to use it, installation, quickstart, and links to the guides |
+| `docs/user-guide.md` | App developers who use ComposeUI | One section per feature and widget, and the differences between the backends |
+| `docs/technical-guide.md` | Contributors to ComposeUI | The architecture, adding a widget or a backend, tests, checks, and code style |
 | `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
@@ -32,8 +33,9 @@ Each document has one audience:
 
 - Keep `README.md` concise and useful to a first-time user. Explain the
   project before setup details. Make the next useful action easy to find.
-- Put detailed usage, backend, integration, and development information in
-  the technical guide under `docs/`. Add links from `README.md` where readers need them.
+- Put detailed usage and backend information in the user guide, and architecture and
+  development information in the technical guide. Add links from `README.md` where
+  readers need them.
 - When you move a section from `README.md` to `docs/`, leave a link in `README.md`
   where readers expect it.
 - Give each user-facing feature its own section or document, such as "Tabs" or
@@ -51,8 +53,8 @@ Each document has one audience:
   Avoid explanations that only repeat obvious interface actions or nearby text.
 - Prefer one authoritative copy of each procedure. Link to it rather than
   maintaining duplicate instructions. Keep distinct procedures for different audiences.
-  The `make` commands appear in the development guide under `docs/` and in
-  `AGENTS.md` ("Commands"). When a target changes, update both.
+  Setup, commands, tests, and code style appear in the technical guide ("Development")
+  and in `AGENTS.md`. When one of them changes, update both.
 - Group related topics under meaningful headings. Give independent topics their
   own sections instead of placing them under an unrelated heading.
 - Keep contents lists, navigation, and in-page links such as `[Pages](#pages)`
@@ -63,7 +65,7 @@ The split above is a useful starting point, not a permanent requirement.
 
 ## Document a feature
 
-A feature section in `docs/` usually has this content, in this order:
+A feature section in the user guide usually has this content, in this order:
 
 1. One or two sentences: what the view or feature does, and a typical use.
 2. A short Python example with the imports from `composeui.core`. Use
@@ -81,7 +83,8 @@ stand for an application view that the example does not define.
 
 When the feature is a new widget, also update the list of widgets
 ("Already there: ...") at the top of `ROADMAP.md`, and delete its roadmap entry.
-`ROADMAP.md` keeps only the work that is left.
+`ROADMAP.md` keeps only the work that is left. Keep the contents list at the top of the
+guide in step with its `##` headings.
 
 ## Write clear technical English
 
