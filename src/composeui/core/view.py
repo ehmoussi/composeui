@@ -1197,6 +1197,45 @@ class DateInputView(DateInputMixin, View):
 
 
 @define_view
+class FilePathInputMixin(InputMixin):
+    """A file's path, typed in the field or picked with the "…" button beside it.
+
+    `text` holds the path as typed, `path` reads it as one. The button opens the
+    toolkit's file dialog on Qt and Textual; on the web, the browser's picker uploads the
+    file, and the field then holds the path of the session's copy, kept until the
+    session ends. With `has_reload`, a reload button beside them emits
+    `reload_clicked`, e.g. to read the file again once changed.
+    """
+
+    #: the file types the dialog offers, by name: ``{"CSV": (".csv",)}``; on the web, a
+    #: file of another type is refused
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
+    )
+    has_reload: bool = attrs.field(default=False)
+    #: the names of the "…" and reload buttons, as a tooltip and a screen reader show them
+    browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
+    reload_text: str = attrs.field(default=T("Reload"), metadata={UI_TEXT: True})
+    #: the user picked a file with the "…" button, its path now in the field; a typed
+    #: path is reported as any text is (`text_edited`, `editing_finished`)
+    path_picked: Signal[Path] = attrs.Factory(Signal[Path])
+    reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+    @property
+    def path(self) -> Optional[Path]:
+        """Get the path the field holds, None while it's empty."""
+        text = self.text.strip()
+        return None if text == "" else Path(text)
+
+
+@define_view
+class FilePathInputView(FilePathInputMixin, View):
+    """A file's path, e.g. a data file to read: typed, or picked from a file dialog."""
+
+    _renderer_key = "file_path_input"
+
+
+@define_view
 class SliderMixin:
     def _check_step(self, _attribute: attrs.Attribute[Any], step: int) -> None:
         if step <= 0:
@@ -2664,6 +2703,16 @@ class RowDateInputView(FormRowView, DateInputMixin):
 @define_view
 class LabelRowDateInputView(FormLabelRowView, DateInputMixin):
     _field_renderer_key = "date_input"
+
+
+@define_view
+class RowFilePathInputView(FormRowView, FilePathInputMixin):
+    _field_renderer_key = "file_path_input"
+
+
+@define_view
+class LabelRowFilePathInputView(FormLabelRowView, FilePathInputMixin):
+    _field_renderer_key = "file_path_input"
 
 
 @define_view

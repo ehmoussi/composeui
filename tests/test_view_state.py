@@ -44,6 +44,7 @@ from composeui.core.view import (
 from examples.pipechart import PipeChartMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
+from tests.datafiles import DataFileMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -358,6 +359,25 @@ def test_a_date_input_follows_the_language_and_its_study_keeps_its_dates(tmp_pat
     assert arrival.shown_text(arrival.value) == "18/10/2026"
     view.load_state(path)
     assert arrival.value == datetime.date(2027, 3, 4)
+
+
+def test_a_study_keeps_a_file_path_but_not_the_file_types_the_app_offers(tmp_path: Path) -> None:
+    view = DataFileMainView()
+    measurements = view.form.measurements
+    assert measurements.path is None
+    measurements.text = " /data/flows.csv "
+    measurements.extensions = {"Any": ("",)}
+    path = tmp_path / "study.measurements"
+    view.save_state(path)
+    saved = json.loads(path.read_text())["form"]["measurements"]
+    assert (saved["text"], saved["has_reload"]) == (" /data/flows.csv ", True)
+    assert "extensions" not in saved  # the app's, not the study's
+
+    view.reset_state()
+    assert measurements.text == ""
+    view.load_state(path)
+    assert measurements.path == Path("/data/flows.csv")
+    assert measurements.extensions == {"Any": ("",)}
 
 
 def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None:

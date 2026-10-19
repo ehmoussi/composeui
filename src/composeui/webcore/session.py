@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools
 import re
 import secrets
+import shutil
 import tempfile
 import threading
 import time
@@ -26,6 +27,7 @@ from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
     WebChartRenderer,
+    WebFilePathInputRenderer,
     WebMainRenderer,
     collect_dirty,
     handle_event,
@@ -45,7 +47,7 @@ if TYPE_CHECKING:
 MAX_STATE_SIZE = 5 * 1024 * 1024
 #: largest a study's archive may unpack to, in bytes (its database compresses well)
 MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
-#: largest file a `PickFileAction` accepts from an upload, in bytes
+#: largest file a `PickFileAction` or a file path field accepts from an upload, in bytes
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
@@ -62,14 +64,19 @@ class WebSession(RenderTarget):
         self.main_view = main_view
         # held here: the signals giving it to callbacks only keep a weak reference
         self.model = model
+        #: where the file path fields' uploads are kept, made by the first one
+        self._uploads: Path | None = None
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
 
     def close(self) -> None:
-        """Release the session's model (e.g. its database file); the session is dropped."""
+        """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
         with self.lock:
             if self.model is not None:
                 self.model.close()
+            if self._uploads is not None:
+                shutil.rmtree(self._uploads, ignore_errors=True)
+                self._uploads = None
 
     @property
     def closed(self) -> bool:
@@ -131,17 +138,18 @@ class WebSession(RenderTarget):
     def pick_file(
         self, widget_id: str, filename: str, content: bytes
     ) -> tuple[str, str | None] | None:
-        """Hand an uploaded file to one of this session's `PickFileAction`s.
+        """Hand an uploaded file to one of this session's `PickFileAction`s or path fields.
 
-        None if `widget_id` isn't one of its actions. The file is a copy under its own
-        name, gone once the action's callbacks have run; one of a type the action
-        doesn't offer, or too large, is refused in the status bar. Returns what
+        None if `widget_id` is neither. The file is a copy under its own name: for an
+        action, gone once its callbacks have run; for a file path field, whose text keeps
+        its path, kept until the session ends or the field's next upload. One of a type
+        they don't offer, or too large, is refused in the status bar. Returns what
         `handle_event` does.
         """
         name = safe_filename(Path(filename).name)
         with self.lock:
             renderer = self.renderers.get(widget_id)
-            if not isinstance(renderer, WebActionRenderer):
+            if not isinstance(renderer, (WebActionRenderer, WebFilePathInputRenderer)):
                 return None
             types = renderer.file_types
             error = None
@@ -154,10 +162,23 @@ class WebSession(RenderTarget):
                 return self._respond(
                     functools.partial(self.main_view.status_bar.show_message, message)
                 )
+            if isinstance(renderer, WebFilePathInputRenderer):
+                path = self._upload_directory(widget_id) / name
+                path.write_bytes(content)
+                return self._respond(functools.partial(renderer.pick_file, path))
             with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
                 path = Path(directory, name)
                 path.write_bytes(content)
                 return self._respond(functools.partial(renderer.pick_file, path))
+
+    def _upload_directory(self, widget_id: str) -> Path:
+        """Get an empty directory for a field's upload: the field's last one is removed."""
+        if self._uploads is None:
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+        directory = self._uploads / widget_id
+        shutil.rmtree(directory, ignore_errors=True)
+        directory.mkdir()
+        return directory
 
     def _respond(self, apply: Callable[[], None]) -> tuple[str, str | None]:
         """Run `apply` against the tree and return what changed, as `handle_event` does."""

@@ -223,6 +223,8 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
 .input:has(+ [data-form-error]),
 .select:has(+ [data-log="error"]:not([hidden])),
 .select:has(+ [data-form-error]),
+[data-file-path]:has(+ [data-log="error"]:not([hidden])) .input,
+[data-file-path]:has(+ [data-form-error]) .input,
 .input:user-invalid {
   --input-color: var(--color-error);
   border-color: var(--color-error);

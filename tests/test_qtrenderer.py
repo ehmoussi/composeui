@@ -79,6 +79,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
+from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
@@ -91,6 +92,7 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -435,6 +437,48 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     assert field.line_edit.text() == ""
     assert field.line_edit.placeholderText() == "dd/mm/yyyy"
     assert len(changes) == 2
+
+
+def test_a_file_path_is_typed_or_picked_in_qt_s_dialog_and_reloaded(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = DataFileMainView()
+    view.render(RendererType.QT)
+    view.set_language("fr")
+    measurements = view.form.measurements
+    field = _field_widget(measurements)
+    assert isinstance(field, QFilePathField)
+    qtbot.addWidget(field)
+    field.show()
+    picked: list[Path] = []
+    measurements.path_picked.connect(picked.append)
+    reloads: list[None] = []
+    measurements.reload_clicked.connect(lambda: reloads.append(None))
+    asked: list[tuple[str, str, str]] = []
+    answer = ("", "")
+
+    def ask(*args: object) -> tuple[str, str]:
+        asked.append((str(args[1]), str(args[2]), str(args[3])))
+        return answer
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
+    assert field.browse_button.accessibleName() == "Choisir un fichier"
+    assert field.reload_button.isVisible()
+    qtbot.keyClicks(field.line_edit, str(tmp_path / "old.csv"))
+    assert measurements.path == tmp_path / "old.csv"
+
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)  # cancelled
+    assert asked == [("Choisir un fichier", str(tmp_path), "CSV (*.csv);;Text (*.txt *.text)")]
+    assert (measurements.text, picked) == (str(tmp_path / "old.csv"), [])
+    answer = (str(tmp_path / "new.txt"), "Text (*.txt *.text)")
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert (measurements.path, field.line_edit.text()) == (tmp_path / "new.txt", answer[0])
+    assert picked == [tmp_path / "new.txt"]
+
+    qtbot.mouseClick(field.reload_button, Qt.MouseButton.LeftButton)
+    assert len(reloads) == 1
+    measurements.has_reload = False
+    assert not field.reload_button.isVisible()
 
 
 def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:

@@ -77,6 +77,7 @@ from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
+from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
@@ -868,6 +869,100 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
     def _update_text(self, text: str) -> None:
         self._view.text_changed.emit(text)
         self._view.text_edited.emit(text)
+
+
+class FilePathInputViewLike(InputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    has_reload: bool
+    browse_text: str
+    reload_text: str
+    path_picked: Signal[Path]
+    reload_clicked: SignalNoArgs
+
+
+class TextualFilePathInputRenderer(
+    TextualWidgetRenderer[FilePathInputViewLike, ComposeFilePathInput]
+):
+    """A field typing a file's path, then a "…" button opening textual-fspicker's picker."""
+
+    _marks_invalid = True
+
+    def __init__(self, view: FilePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "placeholder": self._refresh_placeholder,
+                "extensions": self._refresh_extensions,
+                "has_reload": self._refresh_has_reload,
+                "browse_text": self._refresh_browse_text,
+                "reload_text": self._refresh_reload_text,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeFilePathInput()
+            self._rendered_object.input.value_changed.connect(self._update_text)
+            self._rendered_object.input.value_submitted.connect(self._view.editing_finished.emit)
+            self._rendered_object.path_picked.connect(self._pick)
+            self._rendered_object.reload_pressed.connect(self._view.reload_clicked.emit)
+
+    @staticmethod
+    def _refresh_text(
+        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
+    ) -> None:
+        rendered_object.input.value = value
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
+    ) -> None:
+        rendered_object.input.placeholder = value
+
+    @staticmethod
+    def _refresh_extensions(
+        _view: FilePathInputViewLike,
+        rendered_object: ComposeFilePathInput,
+        value: dict[str, tuple[str, ...]],
+    ) -> None:
+        rendered_object.extensions = dict(value)
+
+    @staticmethod
+    def _refresh_has_reload(
+        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: bool
+    ) -> None:
+        rendered_object.reload_button.display = value
+
+    @staticmethod
+    def _refresh_browse_text(
+        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
+    ) -> None:
+        rendered_object.browse_button.tooltip = value
+        rendered_object.picker_title = value
+
+    @staticmethod
+    def _refresh_reload_text(
+        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
+    ) -> None:
+        rendered_object.reload_button.tooltip = value
+
+    @staticmethod
+    def _update_state(view: FilePathInputViewLike, rendered_object: ComposeFilePathInput) -> None:
+        view.text = rendered_object.input.value
+        view.placeholder = rendered_object.input.placeholder
+
+    def _update_text(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.text = text
+        self._view.text_changed.emit(text)
+        self._view.text_edited.emit(text)
+
+    def _pick(self, path: Path) -> None:
+        # the field's change arrives later, as a message: the view has the path first
+        with self.stop_refresh():
+            self._view.text = str(path)
+        self._view.path_picked.emit(path)
 
 
 class SliderViewLike(ViewLike, Protocol):
@@ -2616,6 +2711,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
     "date_input": TextualDateInputRenderer,
+    "file_path_input": TextualFilePathInputRenderer,
     "dialog": TextualDialogRenderer,
     "expander": TextualExpanderRenderer,
     "float_input": TextualFloatInputRenderer,

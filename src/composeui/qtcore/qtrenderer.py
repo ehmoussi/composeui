@@ -4,7 +4,7 @@ import functools
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Generic, TypeVar
 
-from qtpy.QtCore import QObject, QPoint, Qt
+from qtpy.QtCore import QObject, QPoint, QSignalBlocker, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import (
     QAction,
@@ -104,6 +104,7 @@ from composeui.core.view import (
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
+from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
@@ -570,6 +571,124 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+
+
+def _file_filters(extensions: dict[str, tuple[str, ...]]) -> str:
+    """Get a file dialog's filters, e.g. "CSV (*.csv);;Text (*.txt *.text)"."""
+    return ";;".join(
+        f"{name} ({' '.join(f'*{e}' for e in name_extensions)})"
+        for name, name_extensions in extensions.items()
+    )
+
+
+class FilePathInputViewLike(InputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    has_reload: bool
+    browse_text: str
+    reload_text: str
+    path_picked: Signal[Path]
+    reload_clicked: SignalNoArgs
+
+    @property
+    def path(self) -> Path | None: ...
+
+
+class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathField]):
+    """A field typing a file's path, then a "…" button opening Qt's file dialog.
+
+    The dialog opens in the directory of the field's path, if any.
+    """
+
+    _invalid_style = "QLineEdit { border: 1px solid red; }"
+
+    def __init__(self, view: FilePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "placeholder": self._refresh_placeholder,
+                "has_reload": self._refresh_has_reload,
+                "browse_text": self._refresh_browse_text,
+                "reload_text": self._refresh_reload_text,
+                # read by the dialog each time it opens
+                "extensions": lambda _view, _rendered_object, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QFilePathField()
+            line_edit = self._rendered_object.line_edit
+            line_edit.textChanged.connect(self._update_text)
+            # Qt reports an edit before the change: the view has the text first
+            line_edit.textEdited.connect(self._update_text)
+            self._view.editing_finished.add_qt_signal(line_edit.editingFinished)
+            self._view.text_changed.add_qt_signal(line_edit.textChanged)
+            self._view.text_edited.add_qt_signal(line_edit.textEdited)
+            self._rendered_object.browse_button.clicked.connect(self.browse)
+            self._view.reload_clicked.add_qt_signal(self._rendered_object.reload_button.clicked)
+            self.refresh()
+
+    def browse(self) -> None:
+        """Pick a file in Qt's dialog, its path then the field's; nothing if cancelled."""
+        if self._rendered_object is None:
+            raise NoQtRendererObjectError
+        path = self._view.path
+        directory = "" if path is None else str(path.parent)
+        picked, _selected_filter = QFileDialog.getOpenFileName(
+            self._rendered_object,
+            self._view.browse_text,
+            directory,
+            _file_filters(self._view.extensions),
+        )
+        if picked == "":
+            return
+        # its `textChanged` gives the view the text, and reports it
+        self._rendered_object.line_edit.setText(picked)
+        self._view.path_picked.emit(Path(picked))
+
+    @staticmethod
+    def _refresh_text(
+        _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
+    ) -> None:
+        # the field's own signals: set in code, the text isn't reported, as a QLineEdit's
+        with QSignalBlocker(rendered_object.line_edit):
+            rendered_object.line_edit.setText(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
+    ) -> None:
+        rendered_object.line_edit.setPlaceholderText(value)
+
+    @staticmethod
+    def _refresh_has_reload(
+        _view: FilePathInputViewLike, rendered_object: QFilePathField, value: bool
+    ) -> None:
+        rendered_object.reload_button.setVisible(value)
+
+    @staticmethod
+    def _refresh_browse_text(
+        _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
+    ) -> None:
+        rendered_object.browse_button.setToolTip(value)
+        rendered_object.browse_button.setAccessibleName(value)
+
+    @staticmethod
+    def _refresh_reload_text(
+        _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
+    ) -> None:
+        rendered_object.reload_button.setToolTip(value)
+        rendered_object.reload_button.setAccessibleName(value)
+
+    @staticmethod
+    def _update_state(view: FilePathInputViewLike, rendered_object: QFilePathField) -> None:
+        view.text = rendered_object.line_edit.text()
+        view.placeholder = rendered_object.line_edit.placeholderText()
+
+    def _update_text(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.text = text
 
 
 class SliderViewLike(ViewLike, Protocol):
@@ -2370,10 +2489,7 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         return False
 
     def _build_extensions(self) -> str:
-        extensions: list[str] = []
-        for name, name_extensions in self._view.file_view.extensions.items():
-            extensions.append(f"{name} ({' '.join(f'*{n}' for n in name_extensions)})")
-        return ";;".join(extensions)
+        return _file_filters(self._view.file_view.extensions)
 
     @staticmethod
     def _add_child_widgets(view: MainView, rendered_object: QMainWindow) -> None:
@@ -2643,6 +2759,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "date_input": QtDateInputRenderer,
+    "file_path_input": QtFilePathInputRenderer,
     "dialog": QtDialogRenderer,
     "expander": QtExpanderRenderer,
     "float_input": QtFloatInputRenderer,

@@ -60,6 +60,7 @@ from composeui.textualcore.widgets.composedateinput import (
     ComposeMonth,
 )
 from composeui.textualcore.widgets.composedialog import ComposeDialog
+from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
 from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterBar,
     ComposeFilterChip,
@@ -87,6 +88,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -277,6 +279,48 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         await pilot.pause()
         assert not isinstance(app.screen, ComposeCalendar)
         assert changes == [datetime.date(2026, 11, 25), datetime.date(2026, 12, 1)]
+
+
+@pytest.mark.asyncio
+async def test_a_file_path_is_typed_or_picked_in_the_picker_and_reloaded(tmp_path: Path) -> None:
+    (tmp_path / "flows.csv").write_text("1,2", encoding="utf-8")
+    view = DataFileMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    measurements = view.form.measurements
+    picked: list[Path] = []
+    measurements.path_picked.connect(picked.append)
+    reloads: list[None] = []
+    measurements.reload_clicked.connect(lambda: reloads.append(None))
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(measurements.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+        field.input.focus()
+        await pilot.press(*str(tmp_path / "x"))
+        await pilot.pause()
+        assert measurements.path == tmp_path / "x"
+
+        await pilot.click(field.browse_button)
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(tmp_path / "flows.csv")
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(4):
+            await pilot.pause()
+        assert len(app.screen_stack) == 1
+        assert (measurements.path, picked) == (tmp_path / "flows.csv", [tmp_path / "flows.csv"])
+        assert field.input.value == str(tmp_path / "flows.csv")
+
+        await pilot.click(field.reload_button)
+        await pilot.pause()
+        assert len(reloads) == 1
 
 
 @pytest.mark.asyncio

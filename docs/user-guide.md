@@ -66,8 +66,8 @@ values in `apply_arguments`, once it is wired. On the web, this happens for ever
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
 available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
-`DateInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`,
+`TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
 
 Larger views have sections of their own:
 
@@ -193,6 +193,47 @@ The user can also pick the date from a calendar beside the field:
 The calendar offers only the dates from `minimum` to `maximum`. But not every backend
 refuses a typed date out of range, so validate the date. `value_changed` reports the dates
 that the user enters.
+
+### File path input
+
+A `FilePathInputView` takes the path of a file, for example a data file or a template file
+for the app to read. The user types the path, or picks the file with the "…" button beside
+the field.
+
+```python
+from composeui.core.view import FormView, LabelRowFilePathInputView, child, define_view
+
+
+@define_view
+class DataForm(FormView):
+    measurements: LabelRowFilePathInputView = child(
+        LabelRowFilePathInputView,
+        label="Measurements",
+        extensions={"CSV": (".csv",)},
+        has_reload=True,
+    )
+```
+
+- `text` holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
+  the field is empty.
+- `extensions` names the file types that the "…" button offers. On the web, the backend
+  refuses a file of another type.
+- `path_picked` emits the path of a file that the user picks with the "…" button. A typed
+  path comes through the signals of any text field: `text_edited` and `editing_finished`.
+- With `has_reload`, a reload button shows beside the "…" button. It emits
+  `reload_clicked`, for example to read the file again after it changed.
+- `browse_text` and `reload_text` name the two buttons in a tooltip and for a screen
+  reader. The catalogs translate them.
+
+The state saves `text` and `has_reload`, but not `extensions`, which the app sets.
+
+What the "…" button opens:
+
+- Qt shows its file dialog, in the directory of the field's path.
+- Textual shows the file picker of textual-fspicker, in the directory of the field's path.
+- The web shows the browser's file picker. The browser cannot give the page a path, so it
+  uploads the file. The session keeps a copy, and the field shows the path of that copy. The
+  session deletes the copy when the field gets its next upload, or when the session ends.
 
 ### Slider
 

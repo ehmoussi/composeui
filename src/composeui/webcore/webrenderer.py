@@ -678,6 +678,112 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
         self._mark_dirty(view, rendered_object, value)
 
 
+def _file_types(extensions: dict[str, tuple[str, ...]]) -> list[str]:
+    """Get the file types a picker offers, e.g. [".md", ".markdown"]; empty for any."""
+    return list(dict.fromkeys(t.lower() for ts in extensions.values() for t in ts))
+
+
+class FilePathInputViewLike(InputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    has_reload: bool
+    browse_text: str
+    reload_text: str
+    path_picked: Signal[Path]
+    reload_clicked: SignalNoArgs
+
+
+class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
+    """A text field typing a file's path, then a "…" button uploading one, and a reload button.
+
+    The field posts as a text input's (see `_WebTextFieldRenderer`). The browser can't
+    hand a page its files' paths: the button opens the browser's picker, a hidden file
+    input beside it (see `page.py`) uploading the file picked (`/widget/{id}/file`), and
+    the session keeps a copy (see `WebSession.pick_file`), whose path the field then
+    shows. The root is a `<div>` holding them, so a row's label names the field with
+    `aria-labelledby`.
+    """
+
+    _role = "file_path_input"
+    is_labelable = False
+
+    def __init__(self, view: FilePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("text", "placeholder", "extensions", "has_reload", "browse_text", "reload_text"),
+                self._mark_dirty,
+            )
+        )
+
+    def to_html(self, *, oob: bool = False) -> str:
+        view = self._view
+        disabled = "" if self.is_enabled else " disabled"
+        browse, reload = html.escape(view.browse_text), html.escape(view.reload_text)
+        types = ",".join(self.file_types)
+        accept = f' accept="{html.escape(types)}"' if types else ""
+        reload_button = (
+            f'<button id="{self.widget_id}-reload" type="button" class="btn btn-square"'
+            f' aria-label="{reload}" title="{reload}" hx-post="/widget/{self.widget_id}"'
+            f""" hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
+            f"{_icon('reload')}</button>"
+            if view.has_reload
+            else ""
+        )
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="flex gap-1" data-file-path>'
+            f'<input id="{self.widget_id}-field"{self._row_attributes()}'
+            ' class="input w-full" type="text" name="value"'
+            f' value="{html.escape(view.text)}" placeholder="{html.escape(view.placeholder)}"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
+            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            f' autocomplete="off"{disabled}>'
+            f'<button id="{self.widget_id}-browse" type="button" class="btn btn-square"'
+            f' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
+            # emptied once sent: picking the same file again is a change too
+            f'<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            f' aria-hidden="true" hx-post="/widget/{self.widget_id}/file"'
+            ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
+            ' hx-on::after-request="this.value = \'\'" autocomplete="off"'
+            f"{disabled}>{reload_button}</div>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "reload":
+            super().dispatch(event, form)
+        elif not self.is_enabled or not self._view.has_reload:
+            raise UnsupportedEventError(self, event)
+        else:
+            self._view.reload_clicked.emit()
+
+    @property
+    def file_types(self) -> list[str]:
+        """Get the file types the picker offers, e.g. [".csv"]; empty for any."""
+        return _file_types(self._view.extensions)
+
+    def pick_file(self, path: Path) -> None:
+        """Show the path of the file the picker uploaded, and hand it to `path_picked`.
+
+        Raises `UnsupportedEventError` while the field is disabled.
+        """
+        if not self.is_enabled:
+            raise UnsupportedEventError(self, "file")
+        text = str(path)
+        # swapped back: the field shows the path, though its picker sent the request
+        self._view.text = text
+        self._view.text_changed.emit(text)
+        self._view.path_picked.emit(path)
+
+    def _text(self) -> str:
+        return self._view.text
+
+    def _posted_text(self) -> str:
+        return self._view.text
+
+    def _apply_text(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.text = text
+
+
 class CheckBoxViewLike(ViewLike, Protocol):
     text: str
     is_checked: bool
@@ -2115,6 +2221,7 @@ _ICONS: Final[dict[str, str]] = {
         '<rect x="3" y="4" width="18" height="18" rx="2"/>'
         '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
     ),
+    "reload": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
     "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
     "circle-alert": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
     "circle-x": '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
@@ -2447,7 +2554,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
         view = self._view
         if not isinstance(view, PickFileAction):
             return []
-        return list(dict.fromkeys(t.lower() for ts in view.extensions.values() for t in ts))
+        return _file_types(view.extensions)
 
     def pick_file(self, path: Path) -> None:
         """Hand the file a `PickFileAction`'s picker uploaded to its `file_picked`.
@@ -3628,6 +3735,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "date_input": WebDateInputRenderer,
+    "file_path_input": WebFilePathInputRenderer,
     "dialog": WebDialogRenderer,
     "expander": WebExpanderRenderer,
     "float_input": WebFloatInputRenderer,

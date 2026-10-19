@@ -36,6 +36,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView
 from tests.charts import ChartPagesMainView
+from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -236,6 +237,13 @@ def _french_booking() -> BookingMainView:
 def bookings_base_url() -> Iterator[str]:
     """Serve an app with a date input, in French, for the whole module."""
     with _serve(WebApplication(build_main_view=_french_booking).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def data_files_base_url() -> Iterator[str]:
+    """Serve an app with a file path field, for the whole module."""
+    with _serve(WebApplication(build_main_view=DataFileMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1250,6 +1258,22 @@ def test_a_date_input_s_calendar_opened_before_cally_loads_ends_up_focused_in_it
     held[0].continue_()
     # once loaded, as a calendar opened then: on the date, focused, named in French
     expect(calendar.get_by_role("button", name="18 octobre")).to_be_focused()
+    context.close()
+
+
+def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown(
+    browser: Browser, data_files_base_url: str
+) -> None:
+    context = browser.new_context(base_url=data_files_base_url)
+    page = context.new_page()
+    page.goto("/")
+    field = page.get_by_label("Measurements")
+    with page.expect_file_chooser() as chooser, _posted(page):
+        page.get_by_role("button", name="Choose a file").click()
+        chooser.value.set_files(
+            files=[{"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}]
+        )
+    expect(field).to_have_value(re.compile(r"flows\.csv$"))
     context.close()
 
 
