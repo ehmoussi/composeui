@@ -235,6 +235,9 @@ What the "…" button opens:
   uploads the file. The session keeps a copy, and the field shows the path of that copy. The
   session deletes the copy when the field gets its next upload, or when the session ends.
 
+[`src/examples/markdownviewer.py`](../src/examples/markdownviewer.py) opens a Markdown file
+with a file path input, and reads the file again when the user presses reload.
+
 ### Slider
 
 A `SliderView` picks a whole number when the user drags a handle, for example a number of
@@ -330,8 +333,9 @@ study). `extensions` names the types that it offers, for example
 `{"Markdown": (".md",)}`. `file_picked` emits the path of the file. On the web, the browser
 uploads the file. The path is then a copy, which is deleted once the callbacks have run.
 
-[`src/examples/markdownviewer.py`](../src/examples/markdownviewer.py) has no File menu, and
-opens Markdown files with a `PickFileAction`.
+[`src/examples/markdownviewer.py`](../src/examples/markdownviewer.py) has no File menu. It
+opens Markdown files with a [file path input](#file-path-input) instead of a
+`PickFileAction`.
 
 ## Pages
 
