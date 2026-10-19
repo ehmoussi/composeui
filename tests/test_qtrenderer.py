@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QDate, QPoint, QPointF, Qt
+from qtpy.QtCore import QDate, QPoint, QPointF, QSize, Qt
 from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap
 from qtpy.QtWidgets import (
     QAbstractButton,
@@ -464,6 +464,9 @@ def test_a_file_path_is_typed_or_picked_in_qt_s_dialog_and_reloaded(
     monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
     assert field.browse_button.accessibleName() == "Choisir un fichier"
     assert field.reload_button.isVisible()
+    # squares as tall as the field, whatever their text or icon
+    side = field.line_edit.height()
+    assert field.browse_button.size() == field.reload_button.size() == QSize(side, side)
     qtbot.keyClicks(field.line_edit, str(tmp_path / "old.csv"))
     assert measurements.path == tmp_path / "old.csv"
 
