@@ -257,7 +257,6 @@ def test_an_axis_label_shows_its_unit() -> None:
 def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     view = PipeChartMainView()
     view.add_curve()
-    view.chart.series = [*view.chart.series, Series(name="Gap", x=[0, 1], y=[math.nan, 1])]
     path = tmp_path / "study.pipechart"
     view.save_state(path)
 
@@ -266,12 +265,12 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
 
     loaded.add_measurements()  # one series of its own kind
     names = [series.name for series in loaded.chart.series]
-    assert names == ["D = 50 mm", "Gap", "Measured, D = 50 mm"]
+    assert names == ["D = 50 mm", "Measured, D = 50 mm"]
     saved, back = view.chart.series[0], loaded.chart.series[0]
     assert back.x == saved.x
     # the transitional flow's gap too: NaN is no number equal to itself
+    assert any(math.isnan(drop) for drop in back.y)
     assert str(back.y) == str(saved.y)
-    assert math.isnan(loaded.chart.series[1].y[0])
     # the app's text, not the study's
     assert "title" not in json.loads(path.read_text())["results"]["chart_tab"]["chart"]
 

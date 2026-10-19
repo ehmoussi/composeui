@@ -5,6 +5,8 @@ plots the pressure drop it causes, one curve per diameter, each with its own flo
 Between laminar and turbulent flow neither law holds: the curve leaves a gap there. Add
 Measurements plots, as dots over the curves, what a test rig measured on that pipe, and
 lists them on the Measurements tab beside the chart's, each against the computed drop.
+The Curves tab lists every curve: a check box shows or hides it (its header's, all of
+them), and a combobox draws it as a line, in steps or as dots.
 """
 
 from __future__ import annotations
@@ -12,14 +14,16 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Optional
 
-from attrs import Factory
+from attrs import Factory, evolve
 
 from composeui.core import application
 from composeui.core.registry import RendererType
 from composeui.core.view import (
+    CHECKED_TEXTS,
     Align,
     ButtonVariant,
     ButtonView,
+    CellWidget,
     ChartKind,
     ChartView,
     GroupFormView,
@@ -33,6 +37,7 @@ from composeui.core.view import (
     TabView,
     child,
     define_view,
+    replace_cell,
 )
 
 if TYPE_CHECKING:
@@ -53,6 +58,12 @@ SWEEP_POINTS = 200
 MEASUREMENTS = ((0.2, 1.06), (0.35, 0.95), (0.5, 1.03), (0.65, 0.98), (0.8, 1.04), (0.95, 0.97))
 #: the pressure the pump gives (kPa): a pipe whose drop is over it can't pass that flow
 PUMP_PRESSURE = 20.0
+#: how a curve is drawn, by the text its "Drawn as" cell shows: its kind and whether in steps
+DRAWINGS: dict[str, tuple[Optional[ChartKind], bool]] = {
+    "Line": (None, False),
+    "Steps": (None, True),
+    "Dots": (ChartKind.SCATTER, False),
+}
 
 
 def friction_factor(reynolds: float, diameter: float) -> float:
@@ -165,9 +176,25 @@ class MeasurementsTab(TabPage):
 
 
 @define_view
+class CurvesTab(TabPage):
+    """Each curve plotted, a row each: shown or not, and how it's drawn."""
+
+    table: TableView = child(
+        TableView,
+        headers=["Shown", "Curve", "Drawn as"],
+        editable_columns=[0, 2],
+        cell_widgets={
+            0: CellWidget.check_box(check_all=True),
+            2: CellWidget.combobox(DRAWINGS),
+        },
+    )
+
+
+@define_view
 class ResultTabs(TabView):
     chart_tab: ChartTab = child(ChartTab, title="Chart")
     measurements_tab: MeasurementsTab = child(MeasurementsTab, title="Measurements")
+    curves_tab: CurvesTab = child(CurvesTab, title="Curves")
 
 
 @define_view
@@ -178,6 +205,8 @@ class PipeChartMainView(MainView):
     pipe: PipeForm = Factory(PipeForm)
     buttons: CurveButtons = Factory(CurveButtons)
     results: ResultTabs = Factory(ResultTabs)
+    #: every curve plotted, as computed, the hidden ones too: the chart draws the others
+    _curves: list[Series] = Factory(list)
 
     @property
     def chart(self) -> ChartView:
@@ -189,11 +218,17 @@ class PipeChartMainView(MainView):
         """The measurements' table, on its tab."""
         return self.results.measurements_tab.table
 
+    @property
+    def curves(self) -> TableView:
+        """The curves' table, on its tab."""
+        return self.results.curves_tab.table
+
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.add.clicked.connect(self.add_curve)
         self.buttons.measure.clicked.connect(self.add_measurements)
         self.buttons.clear.clicked.connect(self.clear_curves)
+        self.curves.cell_edited.connect(self._edit_curve)
 
     def add_curve(self) -> None:
         """Plot the form's pipe, replacing the curve of a pipe of the same diameter."""
@@ -234,11 +269,31 @@ class PipeChartMainView(MainView):
         if min(diameter, length, max_flow) <= 0:
             return None
         curve = compute(diameter, length, max_flow)
-        others = [series for series in self.chart.series if series.name != curve.name]
-        self.chart.series = [*others, curve]
+        self._curves = [*(other for other in self._curves if other.name != curve.name), curve]
+        drawing = "Dots" if curve.kind is ChartKind.SCATTER else "Line"
+        others = [row for row in self.curves.rows if row[1] != curve.name]
+        self.curves.rows = [*others, [CHECKED_TEXTS[True], curve.name, drawing]]
+        self._draw()
         return diameter, length, max_flow
 
+    def _edit_curve(self, row: int, column: int, text: str) -> None:
+        """Show, hide or draw a curve as the user's edit says."""
+        self.curves.rows = replace_cell(self.curves.rows, row, column, text)
+        self._draw()
+
+    def _draw(self) -> None:
+        """Draw the curves shown, each as its row says, in the rows' order."""
+        curves = {curve.name: curve for curve in self._curves}
+        series = []
+        for shown, name, drawing in self.curves.rows:
+            if shown == CHECKED_TEXTS[True] and name in curves:
+                kind, step = DRAWINGS.get(drawing, (curves[name].kind, curves[name].step))
+                series.append(evolve(curves[name], kind=kind, step=step))
+        self.chart.series = series
+
     def clear_curves(self) -> None:
+        self._curves = []
+        self.curves.rows = []
         self.chart.series = []
         self.measurements.rows = []
 

@@ -38,7 +38,7 @@ options, such as `--language` and `-f FILE`.
 | --- | --- | --- |
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
-| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table |
+| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a French translation |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
@@ -119,7 +119,10 @@ It shows:
   curves, what a test rig measured on that pipe;
 - a [reference line](user-guide.md#reference-lines) at the pressure of the pump;
 - [tabs](user-guide.md#tabs): the chart on one tab, and the measurements in a table on the
-  Measurements tab, each against the computed drop.
+  Measurements tab, each against the computed drop;
+- [widgets in cells](user-guide.md#widgets-in-cells): the Curves tab lists every curve.
+  A check box shows or hides the curve, and the box in the header shows or hides them all.
+  A combobox draws the curve as a line, in steps, or as dots.
 
 ## Task view
 

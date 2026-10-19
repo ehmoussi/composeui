@@ -737,6 +737,9 @@ the shown rows are all checked (`True`), none (`False`), or some (`None`).
 
 The study does not save `cell_widgets`: they are the app's setup.
 
+[`pipechart.py`](../src/examples/pipechart.py) shows or hides each curve with a check box,
+and picks how to draw it with a combobox.
+
 What each backend shows:
 
 - **Qt** draws a checkable cell, a combobox frame, a push button, or underlined link text.
