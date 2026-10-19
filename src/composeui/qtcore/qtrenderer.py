@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QSplitter,
     QStackedWidget,
     QStatusBar,
     QStyle,
@@ -75,6 +76,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SplitterView,
     StatusBar,
     TabPage,
     TabView,
@@ -1460,8 +1462,9 @@ class QtGroupFormRenderer(QtFormRenderer):
 
 
 #: widgets scrolling within themselves: as tall as the room they're given, rather than
-#: their content, so they take a column's spare height, and a row's whole height
-_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget)
+#: their content, so they take a column's spare height, and a row's whole height; a
+#: splitter too, its panes as tall as it
+_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget, QSplitter)
 
 
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
@@ -1736,6 +1739,42 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
     @staticmethod
     def _update_state(view: VerticalView, rendered_object: QWidget) -> None:
         pass  # a column has no user-editable state of its own
+
+
+class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
+    """A splitter: the panes side by side, a handle between two that the user drags."""
+
+    def __init__(self, view: SplitterView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["sizes"] = self._refresh_sizes
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QSplitter(Qt.Orientation.Horizontal)
+            # a pane dragged to nothing would be lost to the user
+            self._rendered_object.setChildrenCollapsible(False)
+            for view in self._view.panes:
+                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
+                    view.renderer.qt_object, QWidget
+                ):
+                    self._rendered_object.addWidget(view.renderer.qt_object)
+            self._rendered_object.splitterMoved.connect(self._update_sizes)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_sizes(_view: SplitterView, rendered_object: QSplitter, value: list[int]) -> None:
+        # in pixels, but Qt shares any width more or less than theirs in their proportions:
+        # well over any screen's, the panes' minimum widths don't skew those
+        rendered_object.setSizes([size * 10_000 for size in value])
+
+    @staticmethod
+    def _update_state(view: SplitterView, rendered_object: QSplitter) -> None:
+        view.sizes = view.shares_of(rendered_object.sizes())
+
+    def _update_sizes(self, _position: int, _index: int) -> None:
+        if self._rendered_object is not None:
+            with self.stop_refresh():
+                self._update_state(self._view, self._rendered_object)
 
 
 class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
@@ -2546,6 +2585,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,
     "sidebar": QtSidebarRenderer,
+    "splitter": QtSplitterRenderer,
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
     "tab_page": QtTabPageRenderer,

@@ -70,6 +70,7 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composesplitter import ComposeSplitter, SplitterHandle
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetable import ComposeRowEditor, ComposeTable
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
@@ -96,6 +97,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
+from tests.splitter import SplitterMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -1327,6 +1329,61 @@ async def test_an_expander_shows_its_views_while_expanded_by_its_title() -> None
         await pilot.pause()
         assert edit.region.area == 0
         assert toggles == [True]
+
+
+@pytest.mark.asyncio
+async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags() -> None:
+    view = SplitterMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    splitter = view.splitter
+    assert isinstance(splitter.renderer, TextualWidgetRenderer)
+    widget = splitter.renderer.widget
+    assert isinstance(widget, ComposeSplitter)
+
+    async with app.run_test(size=(84, 20)) as pilot:
+        await pilot.pause()
+        study, settings, result = widget.pane_widths()
+        assert study == pytest.approx(settings, abs=1)  # rounded to cells
+        assert result == pytest.approx(2 * study, abs=2)
+        first, second = widget.query(SplitterHandle)
+        # the borders as tall as the panes, not the screen
+        assert first.region.height == widget.region.height == 1
+
+        # on the screen: the handle follows the mouse
+        dragged_to = (first.region.x + 6, first.region.y)
+        await pilot.mouse_down(first)
+        await pilot.hover(None, offset=dragged_to)
+        await pilot.mouse_up(None, offset=dragged_to)
+        await pilot.pause()
+        widths = widget.pane_widths()
+        assert widths == [study + 6, settings - 6, result]
+        assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
+        second.focus()  # the arrow keys move a focused border
+        await pilot.press("left", "left")
+        await pilot.pause()
+        assert widget.pane_widths()[2] == result + 2
+
+        splitter.sizes = [1, 1, 1]  # set in code: shared alike
+        await pilot.pause()
+        study, settings, result = widget.pane_widths()
+        assert study == pytest.approx(settings, abs=1)
+        assert study == pytest.approx(result, abs=1)
+        splitter.settings.is_visible = False  # its width to the others, its share kept
+        await pilot.pause()
+        assert widget.pane_widths()[1] == 0
+        assert (first.display, second.display) == (False, True)
+        study, _, result = widget.pane_widths()
+        await pilot.press("right")  # the study's border, now
+        await pilot.pause()
+        assert widget.pane_widths() == [study + 1, 0, result - 1]
+        assert splitter.sizes == [
+            round(100 * (study + 1) / (study + result)),
+            1,
+            round(100 * (result - 1) / (study + result)),
+        ]
 
 
 @pytest.mark.asyncio

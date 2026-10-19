@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QDate, QPoint, QPointF, Qt
-from qtpy.QtGui import QAction, QColor, QFont, QPalette
+from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -40,6 +40,7 @@ from qtpy.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QSplitter,
     QStatusBar,
     QTableView,
     QTabWidget,
@@ -101,6 +102,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
+from tests.splitter import SplitterMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -1200,6 +1202,65 @@ def test_an_expander_shows_its_views_while_expanded_by_a_click_on_its_header(
     assert (expander.header.isChecked(), toggles) == (False, [True])
     record.title = "Pipe B"
     assert expander.header.text() == "Pipe B"
+
+
+def _drag(widget: QWidget, start: QPoint, end: QPoint) -> None:
+    """Drag the mouse from `start` to `end` in `widget`, its left button held throughout."""
+    left, no_button = Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton
+    for kind, position, button, buttons in (
+        (QMouseEvent.Type.MouseButtonPress, start, left, left),
+        (QMouseEvent.Type.MouseMove, end, no_button, left),
+        (QMouseEvent.Type.MouseButtonRelease, end, left, no_button),
+    ):
+        local = QPointF(position)
+        event = QMouseEvent(
+            kind,
+            local,
+            QPointF(widget.mapToGlobal(position)),
+            button,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QApplication.sendEvent(widget, event)
+
+
+def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
+    qtbot: QtBot,
+) -> None:
+    view = SplitterMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(830, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    splitter = view.splitter
+    widget = _widget(splitter)
+    assert isinstance(widget, QSplitter)
+    assert splitter.sizes == [1, 1, 2]  # the panes' STRETCH, at least 1
+    study, settings, result = widget.sizes()
+    assert study == pytest.approx(settings, abs=2)
+    assert result == pytest.approx(2 * study, abs=4)
+
+    handle = widget.handle(1)  # between the study and the settings
+    middle = handle.rect().center()
+    _drag(handle, middle, middle + QPoint(study // 2, 0))
+    widths = widget.sizes()
+    assert widths[0] > study
+    assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
+
+    splitter.sizes = [1, 1, 1]  # set in code: shared alike
+    study, settings, result = widget.sizes()
+    assert study == pytest.approx(result, abs=2)
+    splitter.settings.is_visible = False  # its width to the others, its share kept
+    qtbot.waitUntil(lambda: widget.sizes()[1] == 0)
+    assert widget.handle(1).isHidden()
+    handle = widget.handle(2)
+    middle = handle.rect().center()
+    _drag(handle, middle, middle - QPoint(50, 0))
+    assert splitter.sizes[1] == 1
+    assert splitter.sizes[0] + splitter.sizes[2] == 100
+    assert splitter.sizes[0] < splitter.sizes[2]  # dragged left
 
 
 def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(

@@ -153,7 +153,8 @@ See the mixins in `composeui/core/view.py` (`InputMixin`, `FloatInputMixin`,
 `IntInputMixin`, `DateInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `TableMixin`,
 `LogMixin`, `LabelMixin`, `MarkdownMixin`) for the available building blocks,
 `PageView`/`Router` for an app split into [pages](#pages), `TabView` for [tabs](#tabs),
-`ToolBar` for a [toolbar](#toolbars), `DialogView` for [dialogs](#dialogs), `SidebarView`
+`SplitterView` for [resizable panes](#resizable-panes), `ToolBar` for a
+[toolbar](#toolbars), `DialogView` for [dialogs](#dialogs), `SidebarView`
 for a [sidebar](#sidebar), and `ButtonView` for a button the user clicks (`clicked`),
 e.g. under a form to submit it; its `variant` (`ButtonVariant`: primary, secondary,
 danger) tells the main action from the others and from one destroying something.
@@ -270,6 +271,33 @@ tab page hides its tab, and a disabled one can't be picked. Distinct from
 Qt shows a `QTabWidget`, Textual a `TabbedContent`, and the web a row of tabs the arrow
 keys move between. [`src/examples/pipechart.py`](src/examples/pipechart.py) shows its
 chart on one tab and the measurements plotted on it, as a table, on another.
+
+## Resizable panes
+
+A `SplitterView` lays its view fields side by side, as panes, with a border between two
+that the user drags to resize them, e.g. a study tree beside its result. Each pane starts
+with its share of the width, set by its field's `STRETCH` metadata as in a
+`HorizontalView`:
+
+```python
+import attrs
+
+from composeui.core.view import STRETCH, SplitterView, define_view
+
+
+@define_view
+class StudySplitter(SplitterView):
+    study: StudyTree = attrs.Factory(StudyTree)  # a TreeView
+    result: ResultTabs = attrs.field(factory=ResultTabs, metadata={STRETCH: 3})
+```
+
+`sizes` holds the panes' shares (here `[1, 3]`); code shares the width otherwise by
+setting it. Once the user drags a border, or moves it with the arrow keys, `sizes` holds
+the panes shown in percent of their width. A pane never shrinks to nothing, and a hidden
+one leaves its width to the others. How wide the panes are is layout, not study data:
+never saved, loaded or reset. Qt shows a `QSplitter`, Textual a row of panes with a `│`
+border between two, and the web an ARIA window splitter; the web stacks the panes,
+without borders, in a splitter narrower than 42rem, as it does a row's views.
 
 ## Toolbars
 

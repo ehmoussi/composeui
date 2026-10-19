@@ -45,6 +45,7 @@ from tests.listview import PIPES, PipesMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
+from tests.splitter import SplitterMainView
 from tests.tables import EditableTableMainView, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
@@ -249,6 +250,13 @@ def site_base_url() -> Iterator[str]:
 def records_base_url() -> Iterator[str]:
     """Serve an app with a record's details in an expander, for the whole module."""
     with _serve(WebApplication(build_main_view=RecordMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def splitter_base_url() -> Iterator[str]:
+    """Serve an app with a study beside its result in a splitter, for the whole module."""
+    with _serve(WebApplication(build_main_view=SplitterMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1048,6 +1056,43 @@ def test_an_expander_tells_the_server_it_was_opened_or_closed(
     expect(edit).to_be_hidden()
     page.reload()
     expect(edit).to_be_hidden()
+    context.close()
+
+
+def test_a_splitter_border_dragged_or_moved_by_keys_shares_the_width_beside_it(
+    browser: Browser, splitter_base_url: str
+) -> None:
+    context = browser.new_context(base_url=splitter_base_url)
+    page = context.new_page()
+    page.set_viewport_size({"width": 1200, "height": 700})
+    page.goto("/")
+    panes = page.locator("[data-pane]")
+    borders = page.get_by_role("separator", name="Resize the panes")
+    expect(panes.nth(0)).to_contain_text("Study 1")
+    study, settings, result = (_box(panes.nth(index)) for index in range(3))
+    assert study["width"] == pytest.approx(settings["width"], abs=1)
+    assert result["width"] == pytest.approx(2 * study["width"], abs=2)
+
+    border = _box(borders.first)
+    middle = (border["x"] + border["width"] / 2, border["y"] + border["height"] / 2)
+    page.mouse.move(*middle)
+    page.mouse.down()
+    page.mouse.move(middle[0] + 100, middle[1], steps=5)
+    with _posted(page):
+        page.mouse.up()
+    dragged = _box(panes.first)
+    assert dragged["width"] == pytest.approx(study["width"] + 100, abs=1)
+    expect(borders.first).to_be_focused()
+    with _posted(page):
+        borders.first.press("ArrowLeft")
+    page.reload()  # the server's page: shared as the server was told
+    reloaded = _box(panes.first)
+    assert reloaded["width"] == pytest.approx(dragged["width"] - 16, abs=2)
+
+    page.set_viewport_size({"width": 500, "height": 700})  # stacked, without borders
+    expect(borders).to_have_count(0)
+    expect(panes.nth(1)).to_be_visible()
+    assert _box(panes.nth(1))["y"] > _box(panes.first)["y"]
     context.close()
 
 

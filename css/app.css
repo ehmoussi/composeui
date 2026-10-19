@@ -264,6 +264,48 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   font-variant-numeric: tabular-nums;
 }
 
+/* a splitter's borders (`WebSplitterRenderer`): a line the width of a row's gap, which
+   thickens under the pointer, while dragged or focused; only between panes shown side
+   by side: not before the first pane shown, nor before a hidden one, nor once the
+   splitter is narrow enough to stack its panes (42rem, a row's `@2xl`) */
+.cui-splitter-border {
+  display: none;
+  flex: none;
+  justify-content: center;
+  width: 1.5rem;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: var(--radius-field);
+}
+.cui-splitter-border::before {
+  content: "";
+  width: 1px;
+  background: var(--color-base-300);
+  transition: width 0.1s, background-color 0.1s;
+}
+.cui-splitter-border:hover::before,
+.cui-splitter-border:focus-visible::before,
+.cui-splitter-border[data-dragging]::before {
+  width: 3px;
+  background: var(--color-primary);
+}
+.cui-splitter-border:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+.cui-splitter-border[aria-disabled="true"] {
+  cursor: default;
+}
+.cui-splitter-border[aria-disabled="true"]::before {
+  width: 1px;
+  background: var(--color-base-300);
+}
+@container (width >= 42rem) {
+  [data-pane]:not(:has(> [hidden])) ~ .cui-splitter-border:not(:has(+ [data-pane] > [hidden])) {
+    display: flex;
+  }
+}
+
 /* a list's expanders (`WebListRenderer`) join in one box, as an accordion: they share
    their borders, only the box's corners rounded, and their titles are shorter than a
    lone expander's, so many records stay at hand */

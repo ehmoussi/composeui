@@ -2908,6 +2908,62 @@ class VerticalView(View):
 
 
 @define_view
+class SplitterView(View):
+    """Its view fields side by side in panes, the user dragging the border between two.
+
+    E.g. a study tree beside its result. Each pane starts with its share of the width,
+    set by its field's `STRETCH` metadata as in a `HorizontalView`, but at least 1: every
+    pane takes some width. `sizes` holds the shares; the user changes them by dragging a
+    border, or with the arrow keys on it, never shrinking a pane to nothing. A hidden
+    pane leaves its width to the others. On the web, a splitter narrower than 42rem stacks
+    its panes, as a row does.
+    """
+
+    _renderer_key = "splitter"
+
+    def _check_sizes(self, _attribute: attrs.Attribute[Any], sizes: list[int]) -> None:
+        count = len(self.children_views)
+        if len(sizes) not in (0, count) or any(size <= 0 for size in sizes):
+            msg = f"Cannot share {type(self).__name__}'s {count} panes as {sizes}."
+            raise ValueError(msg)
+
+    #: each pane's share of the width, in order; once the user drags a border, the panes
+    #: shown in percent of their width. Layout, not study data: never saved, loaded or reset
+    sizes: list[int] = attrs.field(factory=list, validator=[_check_sizes], metadata={OMIT: True})
+    #: names a border between two panes for a screen reader, on the web
+    border_text: str = attrs.field(default=T("Resize the panes"), metadata={UI_TEXT: True})
+
+    def __attrs_post_init__(self) -> None:
+        if len(self.sizes) == 0:
+            self.sizes = [
+                max(f.metadata.get(STRETCH, view.default_stretch), 1)
+                for f in attrs.fields(cast("type[AttrsInstance]", type(self)))
+                if isinstance(view := getattr(self, f.name), View)
+            ]
+        super().__attrs_post_init__()
+
+    @property
+    def panes(self) -> list[View]:
+        """Get the panes' views, in order."""
+        return self.children_views
+
+    def shares_of(self, widths: Sequence[float]) -> list[int]:
+        """Get the `sizes` of panes `widths` wide, in any unit, as the user dragged them.
+
+        A pane shown gets its percent of the shown panes' width, at least 1; a hidden one
+        keeps its share.
+        """
+        shown = [view.is_visible for view in self.panes]
+        total = sum(width for width, is_shown in zip(widths, shown) if is_shown)
+        if total <= 0:  # not laid out yet
+            return list(self.sizes)
+        return [
+            max(round(100 * width / total), 1) if is_shown else size
+            for width, is_shown, size in zip(widths, shown, self.sizes)
+        ]
+
+
+@define_view
 class ExpanderView(View):
     """A collapsible section: its title always shown, its view fields only while expanded.
 
