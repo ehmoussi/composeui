@@ -91,8 +91,9 @@ It shows:
   per pipe, with its Edit and Delete buttons. A query filters the list by material, radius,
   and installation date.
 - a [tree](user-guide.md#tree) of the pipes by material, beside the list, in
-  [resizable panes](user-guide.md#resizable-panes). When the user selects a pipe in the
-  tree, its expander expands.
+  [resizable panes](user-guide.md#resizable-panes). The materials are bold. A pipe has a
+  done mark when its installation date is known, and a warning mark until then. When the
+  user selects a pipe in the tree, its expander expands.
 - a [form dialog](user-guide.md#form-dialogs) that edits a pipe;
 - a [date input](user-guide.md#date-input) for the installation date of a pipe;
 - studies saved as a `.pipes` file with the views and the database. A study saved before

@@ -4,8 +4,9 @@
 rows of the model's database, not view state: the catalogue lists them, an expander each,
 through a query filtered by material, radius and installation date, with their mass
 computed by a SQL view joining each pipe to its material, and beside them in a tree, under
-their material, a border the user drags between the two: selecting a pipe there expands
-its expander. A form in the sidebar adds a
+their material (in bold), a border the user drags between the two: each pipe there is
+marked done once its installation date is known, with a warning until then, and selecting
+it expands its expander. A form in the sidebar adds a
 pipe, which the catalogue beside it lists at once; each pipe's Edit button changes it in a
 form dialog, and its Delete button removes it. The database checks every pipe added or
 changed (a name, positive dimensions, a wall thinner than the radius) and File saves and
@@ -43,6 +44,7 @@ from composeui.core.view import (
     LabelView,
     ListView,
     MainView,
+    NodeMark,
     PageView,
     SidebarView,
     SplitterView,
@@ -398,15 +400,27 @@ class PipeList(ListView[ListedPipe]):
 
 @define_view
 class PipeTree(TreeView):
-    """The pipes shown under their material, a material by its enum's name."""
+    """The pipes shown under their material, a material by its enum's name.
+
+    A material's label is bold; a pipe is marked done once installed on a known date, and
+    with a warning until then.
+    """
 
     def show(self, pipes: list[ListedPipe]) -> None:
         """Show `pipes`: what was expanded or selected and still is there stays so."""
         self.nodes = [
             TreeNode(
                 material.value,
-                [TreeNode(pipe.name) for pipe in pipes if pipe.material is material],
+                [
+                    TreeNode(
+                        pipe.name,
+                        mark=NodeMark.WARNING if pipe.installed is None else NodeMark.DONE,
+                    )
+                    for pipe in pipes
+                    if pipe.material is material
+                ],
                 key=material.name,
+                is_bold=True,
             )
             for material in Material
             if any(pipe.material is material for pipe in pipes)
