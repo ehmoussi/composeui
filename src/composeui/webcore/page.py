@@ -555,13 +555,20 @@ function loadCalendars() {
 }
 /* a date field's calendar (see `WebDateInputRenderer`), a popover its button opens: it
    names the months and days in the page's language, and starts on the date, focused,
-   so the arrows move from it. The date picked closes it, the button taking the focus
+   so the arrows move from it. Opened before Cally has loaded, it waits for it to draw
+   the days: the language as an attribute, which the element keeps once Cally defines
+   it, unlike a property set before then. The date picked closes it, the button taking the focus
    back, once its `change` has posted it: the server swaps the field back showing it. */
 document.addEventListener("toggle", function (event) {
   var calendar = event.target.querySelector && event.target.querySelector("[data-date-calendar]");
   if (calendar === null || calendar === undefined || event.newState !== "open") return;
-  calendar.locale = document.documentElement.lang || undefined;
-  calendar.focus();
+  var language = document.documentElement.lang;
+  if (language) calendar.setAttribute("locale", language);
+  customElements.whenDefined("calendar-date").then(function () {
+    return calendar.updated;  // its days drawn, which it focuses
+  }).then(function () {
+    if (event.target.matches(":popover-open")) calendar.focus();
+  });
 }, true);
 document.addEventListener("change", function (event) {
   if (!("dateCalendar" in event.target.dataset)) return;
