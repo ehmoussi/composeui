@@ -706,6 +706,103 @@ document.addEventListener("keydown", function (event) {
     }
   });
 });
+/* splitters (see `WebSplitterRenderer`): dragging a border, or the arrow keys on it,
+   shares the width of the shown panes beside it between them at once; each pane's
+   share becomes its width in pixels, so they keep it as the window resizes. The panes'
+   widths are posted once the drag ends, or on each key. */
+var PANE_MIN_WIDTH = 48;
+var BORDER_KEY_STEP = 16;
+function splitterPanes(border) {
+  return Array.prototype.filter.call(border.parentElement.children, function (child) {
+    return child.hasAttribute("data-pane");
+  });
+}
+function paneBeside(border, step) {
+  var element = step < 0 ? border.previousElementSibling : border.nextElementSibling;
+  while (element !== null && !(element.hasAttribute("data-pane") && element.offsetWidth > 0)) {
+    element = step < 0 ? element.previousElementSibling : element.nextElementSibling;
+  }
+  return element;
+}
+function moveBorder(border, start, pixels) {
+  var left = paneBeside(border, -1);
+  var right = paneBeside(border, 1);
+  if (left === null || right === null) return;
+  var total = start.left + start.right;
+  var minimum = Math.min(PANE_MIN_WIDTH, total / 2);
+  var leftWidth = Math.min(Math.max(start.left + pixels, minimum), total - minimum);
+  var panes = splitterPanes(border);
+  // every width read before any is written: each write lays the panes out again
+  var widths = panes.map(function (pane) { return pane.offsetWidth; });
+  panes.forEach(function (pane, index) {
+    if (widths[index] > 0) pane.style.setProperty("--share", widths[index] + " 1 0%");
+  });
+  left.style.setProperty("--share", leftWidth + " 1 0%");
+  right.style.setProperty("--share", total - leftWidth + " 1 0%");
+  var shown = 0;
+  var before = 0;
+  panes.forEach(function (pane) {
+    shown += pane.offsetWidth;
+    if (pane.compareDocumentPosition(border) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      before += pane.offsetWidth;
+    }
+  });
+  border.setAttribute("aria-valuenow", String(Math.round((100 * before) / (shown || 1))));
+}
+function postPaneWidths(border) {
+  var splitter = border.closest("[data-splitter]");
+  htmx.ajax("POST", "/widget/" + splitter.id, {
+    source: splitter,
+    swap: "none",
+    values: {
+      event: "resize",
+      widths: splitterPanes(border).map(function (pane) { return pane.offsetWidth; }).join(","),
+    },
+  });
+}
+function borderStart(border) {
+  var left = paneBeside(border, -1);
+  var right = paneBeside(border, 1);
+  return {
+    left: left === null ? 0 : left.offsetWidth,
+    right: right === null ? 0 : right.offsetWidth,
+  };
+}
+document.addEventListener("pointerdown", function (event) {
+  var border = event.target.closest(".cui-splitter-border");
+  if (border === null || border.getAttribute("aria-disabled") === "true") return;
+  if (event.button !== 0) return;
+  event.preventDefault();  // no text selected while dragging
+  border.focus();
+  border.setPointerCapture(event.pointerId);
+  border.setAttribute("data-dragging", "");
+  var x = event.clientX;
+  var start = borderStart(border);
+  function move(moveEvent) {
+    moveBorder(border, start, moveEvent.clientX - x);
+  }
+  function end() {
+    border.removeEventListener("pointermove", move);
+    border.removeEventListener("pointerup", end);
+    border.removeEventListener("pointercancel", end);
+    border.removeAttribute("data-dragging");
+    postPaneWidths(border);
+  }
+  border.addEventListener("pointermove", move);
+  border.addEventListener("pointerup", end);
+  border.addEventListener("pointercancel", end);
+});
+document.addEventListener("keydown", function (event) {
+  var border = event.target;
+  if (!(border instanceof HTMLElement) || !border.classList.contains("cui-splitter-border")) {
+    return;
+  }
+  var step = { ArrowLeft: -BORDER_KEY_STEP, ArrowRight: BORDER_KEY_STEP }[event.key];
+  if (step === undefined || border.getAttribute("aria-disabled") === "true") return;
+  event.preventDefault();
+  moveBorder(border, borderStart(border), step);
+  postPaneWidths(border);
+});
 /* tabs (see `WebTabsRenderer`): a click on a tab shows its panel at once, then htmx
    posts the pick; the arrow keys, Home and End move to a tab that can be picked, and
    pick it, as an ARIA tab list does. Only the tab shown is in the tab order. */

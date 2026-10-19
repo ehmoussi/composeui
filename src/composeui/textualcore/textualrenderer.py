@@ -58,6 +58,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SplitterView,
     StatusBar,
     TabPage,
     TabView,
@@ -84,6 +85,7 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composesplitter import ComposeSplitter
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
@@ -1859,6 +1861,39 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
         pass  # a column has no user-editable state of its own
 
 
+class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitter]):
+    """The panes side by side, a handle between two that the user drags or moves by keys."""
+
+    def __init__(self, view: SplitterView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["sizes"] = self._refresh_sizes
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            panes = [
+                view.renderer.widget
+                for view in self._view.panes
+                if isinstance(view.renderer, TextualWidgetRenderer)
+                and view.renderer.widget is not None
+            ]
+            self._rendered_object = ComposeSplitter(*panes)
+            self._rendered_object.resized.connect(self._update_sizes)
+
+    @staticmethod
+    def _refresh_sizes(
+        _view: SplitterView, rendered_object: ComposeSplitter, value: list[int]
+    ) -> None:
+        rendered_object.set_sizes(value)
+
+    @staticmethod
+    def _update_state(view: SplitterView, rendered_object: ComposeSplitter) -> None:
+        view.sizes = view.shares_of(rendered_object.pane_widths())
+
+    def _update_sizes(self, widths: list[int]) -> None:
+        with self.stop_refresh():
+            self._view.sizes = self._view.shares_of(widths)
+
+
 class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollapsible]):
     """Textual's collapsible: its title, then the views one above the other while expanded."""
 
@@ -2595,6 +2630,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
     "sidebar": TextualSidebarRenderer,
+    "splitter": TextualSplitterRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
     "tab_page": TextualTabPageRenderer,

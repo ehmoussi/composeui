@@ -69,6 +69,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SplitterView,
     StatusBar,
     TabPage,
     TabView,
@@ -2744,6 +2745,74 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
         return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
 
 
+class WebSplitterRenderer(WebRenderer[SplitterView]):
+    """Panes side by side, each in a cell as wide as its share, a border between two.
+
+    A border is an ARIA window splitter (a focusable separator) the user drags, or moves
+    with the arrow keys; the browser shares the width between the panes beside it at
+    once (see `page.py`), then posts every pane's width (`resize`): like every control,
+    the splitter is never swapped back after one. A splitter narrower than 42rem stacks
+    its panes, as a row does, without borders; a border shows only between panes shown
+    (see `app.css`), as a pane hides and swaps on its own.
+    """
+
+    _role = "splitter"
+
+    def __init__(self, view: SplitterView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher["sizes"] = self._mark_dirty
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.panes)
+
+    def to_html(self, *, oob: bool = False) -> str:
+        view = self._view
+        shown = sum(size for pane, size in zip(view.panes, view.sizes) if pane.is_visible) or 1
+        disabled = "" if self.is_enabled else ' aria-disabled="true"'
+        cells: list[str] = []
+        before = 0  # the width of the panes shown before the border, in percent
+        for index, (pane, size) in enumerate(zip(view.panes, view.sizes)):
+            if not isinstance(pane.renderer, WebRenderer):
+                continue
+            pane_id = f"{self.widget_id}-pane-{index}"
+            if index > 0:
+                cells.append(
+                    f'<div class="cui-splitter-border" role="separator"'
+                    f' aria-orientation="vertical" aria-controls="{pane_id}"'
+                    f' aria-label="{html.escape(view.border_text)}" aria-valuemin="0"'
+                    f' aria-valuemax="100" aria-valuenow="{round(100 * before / shown)}"'
+                    f' tabindex="{0 if self.is_enabled else -1}"{disabled}></div>'
+                )
+            if pane.is_visible:
+                before += size
+            cells.append(
+                f'<div id="{pane_id}" data-pane'
+                ' class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
+                f' style="--share: {size} 1 0%">{pane.renderer.to_html()}</div>'
+            )
+        # the splitter's own width is queried from its root, the panes laid out inside it
+        return (
+            f'<div {self._root_attributes(oob=oob)} class="@container" data-splitter>'
+            '<div class="flex flex-col gap-6 @2xl:flex-row @2xl:gap-0">'
+            f"{''.join(cells)}</div></div>"
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "resize":
+            super().dispatch(event, form)
+        try:
+            widths = [float(width) for width in form.get("widths", "").split(",")]
+        except ValueError:
+            return
+        if len(widths) != len(self._view.panes) or not all(
+            math.isfinite(width) and width >= 0 for width in widths
+        ):
+            return
+        with self.stop_refresh():
+            self._view.sizes = self._view.shares_of(widths)
+
+
 class WebExpanderRenderer(WebRenderer[ExpanderView]):
     """A `<details>` (daisyUI's collapse): its title, then the views one above the other.
 
@@ -3518,6 +3587,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,
     "sidebar": WebSidebarRenderer,
+    "splitter": WebSplitterRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
     "tab_page": WebTabPageRenderer,
