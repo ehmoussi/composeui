@@ -292,10 +292,12 @@ class StudySplitter(SplitterView):
 ```
 
 `sizes` holds the panes' shares (here `[1, 3]`); code shares the width otherwise by
-setting it. Once the user drags a border, or moves it with the arrow keys, `sizes` holds
-the panes shown in percent of their width. A pane never shrinks to nothing, and a hidden
-one leaves its width to the others. How wide the panes are is layout, not study data:
-never saved, loaded or reset. Qt shows a `QSplitter`, Textual a row of panes with a `│`
+setting it. Once the user drags a border, or moves it with the arrow keys once it has
+the focus, `sizes` holds the panes shown in percent of their width, and `resized`
+reports them: once the border is dropped, and never when code sets `sizes`. A pane never
+shrinks to nothing, and a hidden one leaves its width to the others. How wide the panes
+are is layout, not study data: never saved, loaded or reset. Qt shows a `QSplitter`,
+Textual a row of panes with a `│`
 border between two, and the web an ARIA window splitter; the web stacks the panes,
 without borders, in a splitter narrower than 42rem, as it does a row's views.
 [`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) shows its tree of pipes

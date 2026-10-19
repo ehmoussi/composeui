@@ -784,12 +784,15 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_widths_posted() 
     assert {b["aria-orientation"] for b in borders} == {"vertical"}
     assert {b["tabindex"] for b in borders} == {"0"}
 
+    resizes: list[list[int]] = []
+    splitter.resized.connect(resizes.append)
     fragments = handle_event(renderer, "resize", {"lengths": "300,100,400"})
-    assert splitter.sizes == [38, 12, 50]
+    assert (splitter.sizes, resizes) == ([38, 12, 50], [[38, 12, 50]])
     assert renderer.widget_id not in fragments  # the browser shows it already
-    for widths in ("300,100", "1,x,3", "1,-1,3", "1,nan,3"):  # nothing changes
+    # the sizes it has (a click), or none: nothing changes, nothing reported
+    for widths in ("300,100,400", "300,100", "1,x,3", "1,-1,3", "1,nan,3"):
         handle_event(renderer, "resize", {"lengths": widths})
-    assert splitter.sizes == [38, 12, 50]
+    assert (splitter.sizes, len(resizes)) == ([38, 12, 50], 1)
 
     splitter.settings.is_visible = False  # its share kept, out of the others'
     handle_event(renderer, "resize", {"lengths": "300,0,100"})

@@ -1348,6 +1348,8 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
         study, settings, result = widget.pane_lengths()
         assert study == pytest.approx(settings, abs=1)  # rounded to cells
         assert result == pytest.approx(2 * study, abs=2)
+        resizes: list[list[int]] = []
+        splitter.resized.connect(resizes.append)
         first, second = widget.query(SplitterHandle)
         # the borders as tall as the panes, not the screen
         assert first.region.height == widget.region.height == 1
@@ -1361,13 +1363,19 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
         widths = widget.pane_lengths()
         assert widths == [study + 6, settings - 6, result]
         assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
+        assert resizes == [splitter.sizes]  # once dropped
+        await pilot.click(second)  # a click: nothing moves, nothing reported
+        await pilot.pause()
+        assert len(resizes) == 1
         second.focus()  # the arrow keys move a focused border
         await pilot.press("left", "left")
         await pilot.pause()
         assert widget.pane_lengths()[2] == result + 2
+        assert len(resizes) == 3
 
-        splitter.sizes = [1, 1, 1]  # set in code: shared alike
+        splitter.sizes = [1, 1, 1]  # set in code: shared alike, and not reported
         await pilot.pause()
+        assert len(resizes) == 3
         study, settings, result = widget.pane_lengths()
         assert study == pytest.approx(settings, abs=1)
         assert study == pytest.approx(result, abs=1)
