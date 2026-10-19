@@ -59,6 +59,7 @@ from composeui.core.view import (
     MetricView,
     NewAction,
     OpenFileAction,
+    Orientation,
     PageView,
     PickFileAction,
     ProgressBarView,
@@ -2753,7 +2754,8 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
     once (see `page.py`), then posts every pane's width (`resize`): like every control,
     the splitter is never swapped back after one. A splitter narrower than 42rem stacks
     its panes, as a row does, without borders; a border shows only between panes shown
-    (see `app.css`), as a pane hides and swaps on its own.
+    (see `app.css`), as a pane hides and swaps on its own. Vertical, the panes share its
+    height, 32rem, one above the other, each scrolling within its share.
     """
 
     _role = "splitter"
@@ -2768,10 +2770,18 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
 
     def to_html(self, *, oob: bool = False) -> str:
         view = self._view
+        is_vertical = view.orientation is Orientation.VERTICAL
         shown = sum(size for pane, size in zip(view.panes, view.sizes) if pane.is_visible) or 1
         disabled = "" if self.is_enabled else ' aria-disabled="true"'
+        # a separator's orientation is its line's: across the splitter
+        border_orientation = "horizontal" if is_vertical else "vertical"
+        pane_class = (
+            "min-h-0 overflow-auto has-[>[hidden]]:hidden flex-(--share)"
+            if is_vertical
+            else "min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"
+        )
         cells: list[str] = []
-        before = 0  # the width of the panes shown before the border, in percent
+        before = 0  # the length of the panes shown before the border, in percent
         for index, (pane, size) in enumerate(zip(view.panes, view.sizes)):
             if not isinstance(pane.renderer, WebRenderer):
                 continue
@@ -2779,7 +2789,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             if index > 0:
                 cells.append(
                     f'<div class="cui-splitter-border" role="separator"'
-                    f' aria-orientation="vertical" aria-controls="{pane_id}"'
+                    f' aria-orientation="{border_orientation}" aria-controls="{pane_id}"'
                     f' aria-label="{html.escape(view.border_text)}" aria-valuemin="0"'
                     f' aria-valuemax="100" aria-valuenow="{round(100 * before / shown)}"'
                     f' tabindex="{0 if self.is_enabled else -1}"{disabled}></div>'
@@ -2787,9 +2797,13 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             if pane.is_visible:
                 before += size
             cells.append(
-                f'<div id="{pane_id}" data-pane'
-                ' class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
+                f'<div id="{pane_id}" data-pane class="{pane_class}"'
                 f' style="--share: {size} 1 0%">{pane.renderer.to_html()}</div>'
+            )
+        if is_vertical:
+            return (
+                f"<div {self._root_attributes(oob=oob)} data-splitter>"
+                f'<div class="flex h-128 flex-col">{"".join(cells)}</div></div>'
             )
         # the splitter's own width is queried from its root, the panes laid out inside it
         return (
@@ -2802,15 +2816,15 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         if event != "resize":
             super().dispatch(event, form)
         try:
-            widths = [float(width) for width in form.get("widths", "").split(",")]
+            lengths = [float(length) for length in form.get("lengths", "").split(",")]
         except ValueError:
             return
-        if len(widths) != len(self._view.panes) or not all(
-            math.isfinite(width) and width >= 0 for width in widths
+        if len(lengths) != len(self._view.panes) or not all(
+            math.isfinite(length) and length >= 0 for length in lengths
         ):
             return
         with self.stop_refresh():
-            self._view.sizes = self._view.shares_of(widths)
+            self._view.sizes = self._view.shares_of(lengths)
 
 
 class WebExpanderRenderer(WebRenderer[ExpanderView]):

@@ -45,7 +45,7 @@ from tests.listview import PIPES, PipesMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
-from tests.splitter import SplitterMainView
+from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import EditableTableMainView, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
@@ -257,6 +257,14 @@ def records_base_url() -> Iterator[str]:
 def splitter_base_url() -> Iterator[str]:
     """Serve an app with a study beside its result in a splitter, for the whole module."""
     with _serve(WebApplication(build_main_view=SplitterMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def vertical_splitter_base_url() -> Iterator[str]:
+    """Serve an app with a chart above its table in a splitter, for the whole module."""
+    app = WebApplication(build_main_view=VerticalSplitterMainView).create_starlette_app()
+    with _serve(app) as url:
         yield url
 
 
@@ -1093,6 +1101,36 @@ def test_a_splitter_border_dragged_or_moved_by_keys_shares_the_width_beside_it(
     expect(borders).to_have_count(0)
     expect(panes.nth(1)).to_be_visible()
     assert _box(panes.nth(1))["y"] > _box(panes.first)["y"]
+    context.close()
+
+
+def test_a_vertical_splitter_border_dragged_or_moved_by_keys_shares_the_height(
+    browser: Browser, vertical_splitter_base_url: str
+) -> None:
+    context = browser.new_context(base_url=vertical_splitter_base_url)
+    page = context.new_page()
+    page.set_viewport_size({"width": 500, "height": 900})  # narrow: still one above the other
+    page.goto("/")
+    panes = page.locator("[data-pane]")
+    border = page.get_by_role("separator", name="Resize the panes")
+    chart, table = _box(panes.first), _box(panes.last)
+    assert chart["height"] == pytest.approx(2 * table["height"], abs=2)
+    assert table["y"] > chart["y"]
+
+    line = _box(border)
+    middle = (line["x"] + line["width"] / 2, line["y"] + line["height"] / 2)
+    page.mouse.move(*middle)
+    page.mouse.down()
+    page.mouse.move(middle[0], middle[1] - 80, steps=5)
+    with _posted(page):
+        page.mouse.up()
+    dragged = _box(panes.first)
+    assert dragged["height"] == pytest.approx(chart["height"] - 80, abs=1)
+    with _posted(page):
+        border.press("ArrowDown")
+    page.reload()  # the server's page: shared as the server was told
+    # the server keeps whole percents: within half of one, of 488px
+    assert _box(panes.first)["height"] == pytest.approx(dragged["height"] + 16, abs=3)
     context.close()
 
 

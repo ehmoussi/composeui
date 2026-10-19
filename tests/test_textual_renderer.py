@@ -97,7 +97,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
-from tests.splitter import SplitterMainView
+from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import EditableTableMainView, Room, SortedRoomsMainView
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -1345,7 +1345,7 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
 
     async with app.run_test(size=(84, 20)) as pilot:
         await pilot.pause()
-        study, settings, result = widget.pane_widths()
+        study, settings, result = widget.pane_lengths()
         assert study == pytest.approx(settings, abs=1)  # rounded to cells
         assert result == pytest.approx(2 * study, abs=2)
         first, second = widget.query(SplitterHandle)
@@ -1358,31 +1358,68 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
         await pilot.hover(None, offset=dragged_to)
         await pilot.mouse_up(None, offset=dragged_to)
         await pilot.pause()
-        widths = widget.pane_widths()
+        widths = widget.pane_lengths()
         assert widths == [study + 6, settings - 6, result]
         assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
         second.focus()  # the arrow keys move a focused border
         await pilot.press("left", "left")
         await pilot.pause()
-        assert widget.pane_widths()[2] == result + 2
+        assert widget.pane_lengths()[2] == result + 2
 
         splitter.sizes = [1, 1, 1]  # set in code: shared alike
         await pilot.pause()
-        study, settings, result = widget.pane_widths()
+        study, settings, result = widget.pane_lengths()
         assert study == pytest.approx(settings, abs=1)
         assert study == pytest.approx(result, abs=1)
         splitter.settings.is_visible = False  # its width to the others, its share kept
         await pilot.pause()
-        assert widget.pane_widths()[1] == 0
+        assert widget.pane_lengths()[1] == 0
         assert (first.display, second.display) == (False, True)
-        study, _, result = widget.pane_widths()
+        study, _, result = widget.pane_lengths()
         await pilot.press("right")  # the study's border, now
         await pilot.pause()
-        assert widget.pane_widths() == [study + 1, 0, result - 1]
+        assert widget.pane_lengths() == [study + 1, 0, result - 1]
         assert splitter.sizes == [
             round(100 * (study + 1) / (study + result)),
             1,
             round(100 * (result - 1) / (study + result)),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_a_vertical_splitter_shares_its_rows_and_moves_its_border_up_and_down() -> None:
+    view = VerticalSplitterMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    splitter = view.splitter
+    assert isinstance(splitter.renderer, TextualWidgetRenderer)
+    widget = splitter.renderer.widget
+    assert isinstance(widget, ComposeSplitter)
+
+    async with app.run_test(size=(60, 40)) as pilot:
+        await pilot.pause()
+        chart, table = widget.pane_lengths()
+        assert chart + table + 1 == widget.region.height == 24  # and the border's row
+        assert chart == pytest.approx(2 * table, abs=1)
+        handle = widget.query_one(SplitterHandle)
+        assert (handle.region.width, handle.region.height) == (widget.region.width, 1)
+
+        dragged_to = (handle.region.x + 5, handle.region.y + 4)
+        await pilot.mouse_down(handle, offset=(5, 0))
+        await pilot.hover(None, offset=dragged_to)
+        await pilot.mouse_up(None, offset=dragged_to)
+        await pilot.pause()
+        assert widget.pane_lengths() == [chart + 4, table - 4]
+        handle.focus()
+        await pilot.press("left", "right")  # across the border: nothing moves
+        await pilot.press("up")
+        await pilot.pause()
+        assert widget.pane_lengths() == [chart + 3, table - 3]
+        assert splitter.sizes == [
+            round(100 * (chart + 3) / (chart + table)),
+            round(100 * (table - 3) / (chart + table)),
         ]
 
 

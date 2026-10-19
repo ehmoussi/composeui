@@ -2907,9 +2907,18 @@ class VerticalView(View):
     _renderer_key = "vertical"
 
 
+class Orientation(enum.Enum):
+    """How a splitter lays out its panes."""
+
+    #: side by side, sharing its width
+    HORIZONTAL = enum.auto()
+    #: one above the other, sharing its height
+    VERTICAL = enum.auto()
+
+
 @define_view
 class SplitterView(View):
-    """Its view fields side by side in panes, the user dragging the border between two.
+    """Its view fields in panes, side by side, the user dragging the border between two.
 
     E.g. a study tree beside its result. Each pane starts with its share of the width,
     set by its field's `STRETCH` metadata as in a `HorizontalView`, but at least 1: every
@@ -2917,9 +2926,17 @@ class SplitterView(View):
     border, or with the arrow keys on it, never shrinking a pane to nothing. A hidden
     pane leaves its width to the others. On the web, a splitter narrower than 42rem stacks
     its panes, as a row does.
+
+    A subclass setting ``orientation = Orientation.VERTICAL`` lays them out one above the
+    other instead, sharing its height, e.g. a chart above its table: the window's spare
+    height on Qt, a set height elsewhere (24 rows on Textual, 32rem on the web), each
+    pane scrolling within its share.
     """
 
     _renderer_key = "splitter"
+
+    #: how the panes are laid out: side by side, or one above the other
+    orientation: ClassVar[Orientation] = Orientation.HORIZONTAL
 
     def _check_sizes(self, _attribute: attrs.Attribute[Any], sizes: list[int]) -> None:
         count = len(self.children_views)
@@ -2927,8 +2944,9 @@ class SplitterView(View):
             msg = f"Cannot share {type(self).__name__}'s {count} panes as {sizes}."
             raise ValueError(msg)
 
-    #: each pane's share of the width, in order; once the user drags a border, the panes
-    #: shown in percent of their width. Layout, not study data: never saved, loaded or reset
+    #: each pane's share of the width (the height, vertical), in order; once the user drags
+    #: a border, the panes shown in percent of theirs. Layout, not study data: never saved,
+    #: loaded or reset
     sizes: list[int] = attrs.field(factory=list, validator=[_check_sizes], metadata={OMIT: True})
     #: names a border between two panes for a screen reader, on the web
     border_text: str = attrs.field(default=T("Resize the panes"), metadata={UI_TEXT: True})
@@ -2947,19 +2965,19 @@ class SplitterView(View):
         """Get the panes' views, in order."""
         return self.children_views
 
-    def shares_of(self, widths: Sequence[float]) -> list[int]:
-        """Get the `sizes` of panes `widths` wide, in any unit, as the user dragged them.
+    def shares_of(self, lengths: Sequence[float]) -> list[int]:
+        """Get the `sizes` of panes `lengths` wide (tall, vertical), as the user dragged them.
 
-        A pane shown gets its percent of the shown panes' width, at least 1; a hidden one
-        keeps its share.
+        In any unit: a pane shown gets its percent of the shown panes' length, at least 1;
+        a hidden one keeps its share.
         """
         shown = [view.is_visible for view in self.panes]
-        total = sum(width for width, is_shown in zip(widths, shown) if is_shown)
+        total = sum(length for length, is_shown in zip(lengths, shown) if is_shown)
         if total <= 0:  # not laid out yet
             return list(self.sizes)
         return [
-            max(round(100 * width / total), 1) if is_shown else size
-            for width, is_shown, size in zip(widths, shown, self.sizes)
+            max(round(100 * length / total), 1) if is_shown else size
+            for length, is_shown, size in zip(lengths, shown, self.sizes)
         ]
 
 

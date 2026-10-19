@@ -68,6 +68,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     MetricView,
+    Orientation,
     PageView,
     PickFileAction,
     ProgressBarView,
@@ -1742,7 +1743,7 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
 
 
 class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
-    """A splitter: the panes side by side, a handle between two that the user drags."""
+    """A splitter: the panes in a row or a column, a handle between two the user drags."""
 
     def __init__(self, view: SplitterView) -> None:
         super().__init__(view)
@@ -1750,7 +1751,11 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QSplitter]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QSplitter(Qt.Orientation.Horizontal)
+            self._rendered_object = QSplitter(
+                Qt.Orientation.Vertical
+                if self._view.orientation is Orientation.VERTICAL
+                else Qt.Orientation.Horizontal
+            )
             # a pane dragged to nothing would be lost to the user
             self._rendered_object.setChildrenCollapsible(False)
             for view in self._view.panes:

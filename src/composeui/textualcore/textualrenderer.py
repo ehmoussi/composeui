@@ -48,6 +48,7 @@ from composeui.core.view import (
     Menu,
     MetricView,
     OpenFileAction,
+    Orientation,
     PageView,
     PickFileAction,
     ProgressBarView,
@@ -1862,7 +1863,7 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
 
 
 class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitter]):
-    """The panes side by side, a handle between two that the user drags or moves by keys."""
+    """The panes in a row or a column, a handle between two the user drags or moves by keys."""
 
     def __init__(self, view: SplitterView) -> None:
         super().__init__(view)
@@ -1876,7 +1877,9 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
                 if isinstance(view.renderer, TextualWidgetRenderer)
                 and view.renderer.widget is not None
             ]
-            self._rendered_object = ComposeSplitter(*panes)
+            self._rendered_object = ComposeSplitter(
+                *panes, is_vertical=self._view.orientation is Orientation.VERTICAL
+            )
             self._rendered_object.resized.connect(self._update_sizes)
 
     @staticmethod
@@ -1887,11 +1890,11 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
 
     @staticmethod
     def _update_state(view: SplitterView, rendered_object: ComposeSplitter) -> None:
-        view.sizes = view.shares_of(rendered_object.pane_widths())
+        view.sizes = view.shares_of(rendered_object.pane_lengths())
 
-    def _update_sizes(self, widths: list[int]) -> None:
+    def _update_sizes(self, lengths: list[int]) -> None:
         with self.stop_refresh():
-            self._view.sizes = self._view.shares_of(widths)
+            self._view.sizes = self._view.shares_of(lengths)
 
 
 class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollapsible]):
