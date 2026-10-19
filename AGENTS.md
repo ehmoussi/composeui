@@ -3,8 +3,8 @@
 ComposeUI is a small, framework-agnostic MVVM layer for building UIs in Python. Views are
 typed `attrs` classes; a `Renderer` binds each view to a toolkit widget; `Signal` objects
 carry events between view, model and application code. See `README.md` for the overview and
-quickstart, `docs/user-guide.md` for each feature, and `docs/technical-guide.md` for the
-architecture and development.
+quickstart, `docs/user-guide.md` for each feature, `docs/examples-guide.md` for the example apps, and
+`docs/technical-guide.md` for the architecture and development.
 
 ## Setup
 
@@ -51,7 +51,7 @@ src/composeui/
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
-docs/            # user guide and technical guide
+docs/            # user guide, examples guide, technical guide
 ```
 
 ## Architecture rules

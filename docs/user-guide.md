@@ -2,7 +2,8 @@
 
 This guide shows how to build an app with ComposeUI. It explains each view and feature,
 and what each backend shows. To install ComposeUI and write a first window, read the
-[README](../README.md) first. To change ComposeUI itself, read the
+[README](../README.md) first. To see the features in complete apps, read the
+[examples guide](examples-guide.md). To change ComposeUI itself, read the
 [technical guide](technical-guide.md).
 
 ## Contents

@@ -23,7 +23,7 @@ src/composeui/
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
-docs/            # this guide and the user guide
+docs/            # the user guide, the examples guide, and this guide
 ```
 
 ## Architecture
@@ -149,7 +149,8 @@ them before you change `composeui.webcore`.
 3. Add tests for each backend that exercise the real rendered widgets. See
    [Tests](#tests).
 4. Document the widget in the [user guide](user-guide.md), and update the list of widgets
-   at the top of [`ROADMAP.md`](../ROADMAP.md).
+   at the top of [`ROADMAP.md`](../ROADMAP.md). When an example app uses the widget,
+   update the [examples guide](examples-guide.md) too.
 
 ## Add a backend
 
