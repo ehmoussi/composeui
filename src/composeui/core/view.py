@@ -1333,6 +1333,29 @@ class Series:
     fill: bool = False
 
 
+@attrs.frozen
+class ReferenceLine:
+    """A dashed line across a `ChartView` at a value, e.g. a capacity ("Max: 40") or now.
+
+    It is no series: not in the legend, but labeled beside itself. The chart's range
+    takes it in, so it shows even away from the data.
+    """
+
+    def _check_color(self, _attribute: "attrs.Attribute[Any]", color: Optional[str]) -> None:
+        if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
+            msg = f"Cannot color the reference line {self.label!r} {color!r}: give it as #rrggbb."
+            raise ValueError(msg)
+
+    #: where it crosses its axis: a y, or an x if `vertical` (a bar chart's category index)
+    value: float = attrs.field(converter=float)
+    #: shown beside it, e.g. "Max: 40"; empty: none
+    label: str = ""
+    #: whether it stands at an x, across the y axis, rather than lying at a y
+    vertical: bool = False
+    #: its color, as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_color])
+
+
 @define_view
 class ChartView(View):
     """A chart of results, e.g. a quantity against time or a swept dimension.
@@ -1346,9 +1369,10 @@ class ChartView(View):
     series' x is the index of a category, and its y the bar's height.
 
     A log axis (`x_log`, `y_log`) leaves out the values it can't show, those <= 0: a
-    point at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`), rather
-    than a job's points making the chart fail. A bar chart's x, its categories, is never
-    a log axis.
+    point at such an x isn't drawn, such a y leaves a gap (see `drawn_points`), and a
+    reference line at such a value isn't drawn either (see `drawn_lines`), rather than a
+    job's points making the chart fail. A bar chart's x, its categories, is never a log
+    axis.
     """
 
     _renderer_key = "chart"
@@ -1367,6 +1391,8 @@ class ChartView(View):
     x_unit: str = attrs.field(default="")
     y_unit: str = attrs.field(default="")
     series: list[Series] = attrs.field(factory=list[Series])
+    #: dashed lines at values, e.g. a limit, drawn over the series
+    reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
     #: a `BAR` chart's categories, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
     x_log: bool = attrs.field(default=False)
@@ -1412,6 +1438,16 @@ class ChartView(View):
             xs.append(x)
             ys.append(math.nan if y_log and not y > 0 else y)
         return xs, ys
+
+    @staticmethod
+    def drawn_lines(lines: list[ReferenceLine], *, x_log: bool, y_log: bool) -> list[ReferenceLine]:
+        """Get the reference lines their axes can show: a log axis can't show 0 or less."""
+        return [
+            line
+            for line in lines
+            if math.isfinite(line.value)
+            and (line.value > 0 or not (x_log if line.vertical else y_log))
+        ]
 
     @staticmethod
     def bar_heights(series: Series, category_count: int, *, y_log: bool = False) -> list[float]:

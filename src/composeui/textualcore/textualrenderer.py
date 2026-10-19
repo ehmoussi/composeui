@@ -99,7 +99,7 @@ if TYPE_CHECKING:
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series, TreeNode, TreePath
+    from composeui.core.view import ReferenceLine, Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="Widget")
@@ -1029,6 +1029,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_unit: str
     y_unit: str
     series: list[Series]
+    reference_lines: list[ReferenceLine]
     categories: list[str]
     x_log: bool
     y_log: bool
@@ -1054,6 +1055,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "y_title": self._refresh_y_title,
                 "y_unit": self._refresh_y_unit,
                 "series": self._refresh_series,
+                "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
@@ -1106,6 +1108,13 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[Series]
     ) -> None:
         rendered_object.series = value
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_reference_lines(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: list[ReferenceLine]
+    ) -> None:
+        rendered_object.reference_lines = value
         rendered_object.refresh()
 
     @staticmethod

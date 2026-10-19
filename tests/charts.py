@@ -8,6 +8,7 @@ from composeui.core.view import (
     LabelView,
     MainView,
     PageView,
+    ReferenceLine,
     Router,
     Series,
     child,
@@ -35,6 +36,11 @@ class ChartPage(PageView):
         x_unit="s",
         y_unit="kPa",
         series=[Series(name="Inlet", x=[0, 1, 2, 3], y=[1, 3, 2, 4])],
+        # off the grid's lines, the maximum past the data
+        reference_lines=[
+            ReferenceLine(4.6, "Max: 4.6", color="#d03030"),
+            ReferenceLine(2.3, "Now", vertical=True),
+        ],
     )
     energy: ChartView = child(
         ChartView,

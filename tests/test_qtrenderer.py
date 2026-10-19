@@ -64,6 +64,7 @@ from composeui.core.view import (
     InputView,
     IntInputView,
     LabelView,
+    ReferenceLine,
     RendererType,
     SelectionMode,
     Series,
@@ -1820,6 +1821,41 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
     palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
     chart.setPalette(palette)
     assert oval.opts["pen"].color().name() == "#ffd700"  # the same in a dark theme
+
+
+def test_reference_lines_are_dashed_labeled_and_in_range(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    plot = chart.getPlotItem()
+    view.chart.series = [Series(name="Decay", x=[1, 10], y=[3, 2])]
+
+    view.chart.reference_lines = [
+        ReferenceLine(40, "Max: {40}", color="#d03030"),  # braces are text
+        ReferenceLine(100, "Now", vertical=True),
+    ]
+
+    # labeled lines, unlike the hover's crosshair
+    maximum, now = (item for item in plot.items if hasattr(item, "label"))
+    assert (maximum.angle, maximum.value(), now.angle, now.value()) == (0, 40, 90, 100)
+    assert maximum.label.toPlainText() == "Max: {40}"
+    assert maximum.pen.color().name() == "#d03030"
+    assert maximum.pen.style() == now.pen.style() == Qt.PenStyle.DashLine
+    assert now.pen.color() == chart.palette().color(QPalette.ColorRole.WindowText)
+    # each shows, though past the data
+    qtbot.waitUntil(lambda: plot.vb.viewRange()[0][1] >= 100 and plot.vb.viewRange()[1][1] >= 40)
+    palette = chart.palette()
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#f0f0f0"))
+    chart.setPalette(palette)
+    assert now.pen.color().name() == "#f0f0f0"
+    assert now.label.color.name() == "#f0f0f0"
+
+    view.chart.x_log = True  # at its log, as pyqtgraph draws the series
+    view.chart.reference_lines = [
+        *view.chart.reference_lines,
+        ReferenceLine(0, "Start", vertical=True),
+    ]
+
+    lines = [item for item in plot.items if hasattr(item, "label")]
+    assert [line.value() for line in lines] == [40, 2]  # no x of 0 on a log axis
 
 
 def test_the_chart_is_as_tall_as_its_view_says(qtbot: QtBot) -> None:

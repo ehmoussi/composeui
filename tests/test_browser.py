@@ -1237,7 +1237,7 @@ def test_a_chart_draws_its_series_with_their_legend(chart_page: Page) -> None:
     expect(figure.locator(".u-legend")).to_contain_text("D = 50 mm")
     expect(figure.locator(".u-legend")).to_contain_text("Flow Rate (L/s)")
     expect(figure.get_by_role("img")).to_have_attribute(
-        "aria-label", "Pressure Drop: D = 50 mm against Flow Rate (L/s)"
+        "aria-label", "Pressure Drop: D = 50 mm against Flow Rate (L/s); Pump: 20 kPa"
     )
 
 
@@ -1360,6 +1360,28 @@ def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
     )
 
     assert scales == [3, 3, True]  # uPlot's log scales, from above 0
+
+
+def test_a_reference_line_is_drawn_dashed_in_the_chart_s_range(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    pressure = chart_pages_page.locator("figure").filter(has_text="Pressure")
+    expect(pressure.locator("canvas")).to_have_count(1)
+
+    # the y range, past the data up to the line's 4.6; then the pixels along its row
+    y_max, row = pressure.locator("[data-chart]").evaluate(
+        "element => { const chart = charts.get(element);"
+        " const y = Math.round(chart.valToPos(4.6, 'y', true));"
+        " const box = chart.bbox;"
+        " const pixels = chart.ctx.getImageData(box.left, y, box.width, 1).data;"
+        " const row = [];"
+        " for (let i = 0; i < pixels.length; i += 4) row.push(pixels.slice(i, i + 3).join());"
+        " return [chart.scales.y.max, row]; }"
+    )
+
+    assert y_max >= 4.6
+    red = [pixel == "208,48,48" for pixel in row]
+    assert any(red)
+    assert not all(red)  # dashed
 
 
 def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:
