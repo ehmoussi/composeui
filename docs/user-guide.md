@@ -718,6 +718,7 @@ On a `TableView`, `cell_widgets` maps each column's index to its `CellWidget`.
 - **`CellWidget.combobox(options)`** shows the cell's text in a combobox of `options`.
   Without options, on an enum field of a `RecordTableView`, it offers the enum's members.
 - **`CellWidget.button(text)`** shows the cell's text, then a button ("…" by default).
+  A text such as `T("Retry")` follows the app's language.
 - **`CellWidget.link()`** shows the cell's text as a link.
 
 A check box or a combobox changes its cell only when the column is editable. Otherwise it

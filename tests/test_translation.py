@@ -7,6 +7,7 @@ import enum
 import json
 from typing import TYPE_CHECKING, Any, Optional
 
+import attrs
 import pytest
 from attrs import Factory
 
@@ -14,11 +15,14 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.translation import T, TranslatedText, load_catalog, no_translation, translator
 from composeui.core.view import (
     ButtonView,
+    CellWidget,
+    Column,
     GroupFormView,
     LabelRowComboboxView,
     LanguageMenu,
     MainView,
     PageView,
+    RecordTableView,
     Router,
     TableView,
     child,
@@ -315,6 +319,41 @@ def test_text_declared_in_the_class_bodies_follows_the_language(tmp_path: Path) 
     assert (page.shapes.headers, page.draw.text) == (["Forme", "#"], "Dessiner")
     main_view.set_language("en")
     assert (main_view.title, page.title, page.draw.text) == ("Shapes", "Gallery", "Draw")
+
+
+@attrs.define
+class Run:
+    name: str
+
+
+@define_view
+class RetryMainView(MainView):
+    extension = ".retry"
+
+    tasks: TableView = child(
+        TableView, headers=[T("Task")], cell_widgets={0: CellWidget.button(T("Retry"))}
+    )
+    runs: RecordTableView[Run] = child(
+        RecordTableView[Run],
+        columns=[Column("name", T("Run"), widget=CellWidget.button(T("Retry")))],
+    )
+
+
+def test_a_cell_button_s_text_follows_the_language(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "fr.json").write_text(json.dumps({"Retry": "Relancer"}), encoding="utf-8")
+    monkeypatch.setattr(RetryMainView, "translations_dir", tmp_path)
+    main_view = RetryMainView()
+
+    main_view.set_language("fr")
+
+    assert main_view.tasks.cell_widgets[0].text == "Relancer"
+    assert main_view.runs.cell_widgets[0].text == "Relancer"
+    main_view.runs.columns = list(main_view.runs.columns)  # built again from the columns
+    assert main_view.runs.cell_widgets[0].text == "Relancer"
+    main_view.set_language("en")
+    assert main_view.tasks.cell_widgets[0].text == "Retry"
 
 
 def test_the_language_menu_offers_the_catalogs_languages(tmp_path: Path) -> None:
