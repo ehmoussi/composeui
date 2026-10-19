@@ -723,9 +723,10 @@ The view holds data and labels: each backend draws it in its theme's colors, unl
 series has a `color` of its own (`"#rrggbb"`, the same in every theme, e.g. a logo's), and
 `fill=True` fills between its line and 0 in it. A series with `step=True` holds each
 value until its next point, e.g. the jobs running over time (with `fill`, a step area),
-and hovering it shows the value held at the cursor. `height` sets its height on screen, in
-pixels (a terminal's rows of about 16), e.g. to keep a shape's proportions; `None`, the
-default, leaves it to the backend. Like a
+and hovering it shows the value held at the cursor;
+[`src/examples/taskview.py`](src/examples/taskview.py) charts its tasks running so.
+`height` sets its height on screen, in pixels (a terminal's rows of about 16), e.g. to
+keep a shape's proportions; `None`, the default, leaves it to the backend. Like a
 table's rows, assign a new `series` list to redraw it (a job adding points too), and the
 series are saved with the study. Qt draws it with [pyqtgraph](https://www.pyqtgraph.org/)
 (in the `pyside6` extra): the mouse zooms and pans, and hovering shows each series' value

@@ -3,13 +3,15 @@
 Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
 view. It returns the task's status, which its job emits on the main thread, where the
 views show it: in the table, and counted by metrics, which once a run is over show how
-each count changed since the last run. The table is a section that collapses, leaving
-only the metrics.
+each count changed since the last run; a step chart shows the tasks running over the
+run's time, each count held until a task ends. The table is a section that collapses,
+leaving only the metrics and the chart.
 """
 
 import enum
 import functools
 import random
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Optional
@@ -25,6 +27,7 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ButtonView,
+    ChartView,
     ExpanderView,
     GroupFormView,
     HorizontalView,
@@ -34,6 +37,7 @@ from composeui.core.view import (
     MainView,
     MetricView,
     ProgressBarView,
+    Series,
     T,
     TableView,
     child,
@@ -171,9 +175,18 @@ class TaskMainView(MainView):
     buttons: RunButtons = Factory(RunButtons)
     progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT)
     metrics: TaskMetrics = Factory(TaskMetrics)
+    running: ChartView = child(
+        ChartView, title=T("Tasks running"), x_title=T("Time"), x_unit="s", height=240
+    )
     details: TaskDetails = child(TaskDetails, title=T("Tasks"), is_expanded=True)
     #: the tasks of the last run
     _tasks: list[Task] = attrs.field(factory=list, init=False, metadata={OMIT: True})
+    #: when the run started, by `time.monotonic`
+    _started: float = attrs.field(default=0.0, init=False, metadata={OMIT: True})
+    #: the run's tasks running, as (seconds since it started, count) at each change
+    _running_counts: list[tuple[float, int]] = attrs.field(
+        factory=list, init=False, metadata={OMIT: True}
+    )
     #: how many tasks of the run before had each status, once it was over
     _last_counts: Optional["Counter[TaskStatus]"] = attrs.field(
         default=None, init=False, metadata={OMIT: True}
@@ -201,6 +214,8 @@ class TaskMainView(MainView):
             Task(number, round(random.uniform(minimum, maximum), 1))  # noqa: S311
             for number in range(1, TASK_COUNT + 1)
         ]
+        self._started = time.monotonic()
+        self._running_counts = []
         for task in self._tasks:
             job = self.jobs.start(run_task, task.duration, failure_rate)
             job.finished.connect(functools.partial(self._report, task))
@@ -227,6 +242,20 @@ class TaskMainView(MainView):
         self.progress.value = done + counts[TaskStatus.CANCELED]
         for status in TaskStatus:
             self.metrics.metric(status).value = str(counts[status])
+        self._show_running_counts(counts[TaskStatus.RUNNING])
+
+    def _show_running_counts(self, running: int) -> None:
+        """Add the count of tasks running now to the chart, held until it changes."""
+        self._running_counts.append((time.monotonic() - self._started, running))
+        self.running.series = [
+            Series(
+                name=self.tr(TaskStatus.RUNNING.value),
+                x=[seconds for seconds, _ in self._running_counts],
+                y=[count for _, count in self._running_counts],
+                step=True,
+                fill=True,
+            )
+        ]
 
     def _show_running(self, is_running: bool) -> None:
         self.config.is_enabled = not is_running
