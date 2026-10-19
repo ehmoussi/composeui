@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
-from composeui.core.view import MainView, NodeMark, TreeNode, TreeView, child, define_view
+from typing import Optional
+
+import attrs
+
+from composeui.core.view import (
+    STRETCH,
+    LabelView,
+    MainView,
+    NodeMark,
+    SplitterView,
+    TreeNode,
+    TreeView,
+    VerticalView,
+    child,
+    define_view,
+)
 
 SITE = [
     TreeNode(
@@ -18,7 +33,7 @@ SITE = [
 ]
 
 
-def styled_site(icon: str) -> list[TreeNode]:
+def styled_site(icon: Optional[str] = None) -> list[TreeNode]:
     """Get a site whose nodes show an icon, a style and a mark, `icon` the building's."""
     return [
         TreeNode(
@@ -40,3 +55,29 @@ class SiteMainView(MainView):
     extension = ".site"
 
     site: TreeView = child(TreeView, nodes=SITE, expanded=[("Building A",)])
+
+
+@define_view
+class PlanPane(VerticalView):
+    plan: LabelView = child(LabelView, text="Plan")
+
+
+@define_view
+class SiteSplitter(SplitterView):
+    site: TreeView = child(
+        TreeView,
+        # a label longer than the narrowest tree has room for
+        nodes=[*styled_site(), TreeNode("Underground car park, level 2", mark=NodeMark.DONE)],
+        expanded=[("Building A",)],
+    )
+    plan: PlanPane = attrs.field(factory=PlanPane, metadata={STRETCH: 2})
+
+
+@define_view
+class SitePlanMainView(MainView):
+    """The site's styled and marked tree beside its plan, in a splitter."""
+
+    app_title = "Site plan"
+    extension = ".site"
+
+    splitter: SiteSplitter = attrs.Factory(SiteSplitter)

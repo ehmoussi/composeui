@@ -34,7 +34,7 @@ from examples.pipeform import PipeMainView
 from examples.taskview import TASK_COUNT, TaskMainView
 from examples.webhello import HelloApp, HelloMainView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView
+from tests.buildings import SiteMainView, SitePlanMainView
 from tests.charts import ChartPagesMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -243,6 +243,13 @@ def bookings_base_url() -> Iterator[str]:
 def site_base_url() -> Iterator[str]:
     """Serve an app with a tree, for the whole module."""
     with _serve(WebApplication(build_main_view=SiteMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def site_plan_base_url() -> Iterator[str]:
+    """Serve an app with a tree beside a plan in a splitter, for the whole module."""
+    with _serve(WebApplication(build_main_view=SitePlanMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1269,6 +1276,34 @@ def test_a_tree_node_keeps_the_focus_through_the_swap_its_toggle_or_selection_br
     selected = page.locator("[aria-current=true]")
     expect(selected).to_have_text("Floor 1")
     expect(selected).to_be_focused()
+    context.close()
+
+
+def test_a_tree_keeps_its_pane_wide_enough_to_read_cutting_long_labels_short(
+    browser: Browser, site_plan_base_url: str
+) -> None:
+    context = browser.new_context(base_url=site_plan_base_url)
+    page = context.new_page()
+    page.set_viewport_size({"width": 1200, "height": 700})
+    page.goto("/")
+    pane = page.locator("[data-pane]").first
+    border = page.get_by_role("separator", name="Resize the panes")
+    park = page.get_by_role("button", name="Underground car park, level 2")
+    expect(park).to_be_visible()
+
+    line = _box(border)
+    middle = (line["x"] + line["width"] / 2, line["y"] + line["height"] / 2)
+    page.mouse.move(*middle)
+    page.mouse.down()
+    page.mouse.move(0, middle[1], steps=5)  # as far as the tree lets it: 12rem
+    with _posted(page):
+        page.mouse.up()
+    assert _box(pane)["width"] == pytest.approx(192, abs=1)
+    # the label ends in an ellipsis, its mark whole inside the pane
+    label = park.get_by_text("Underground car park, level 2")
+    assert label.evaluate("label => label.scrollWidth > label.clientWidth")
+    mark = _box(park.locator("svg"))
+    assert mark["x"] + mark["width"] <= _box(pane)["x"] + _box(pane)["width"]
     context.close()
 
 
