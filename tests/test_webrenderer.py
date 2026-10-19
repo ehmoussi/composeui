@@ -953,7 +953,11 @@ def test_a_tree_shows_its_nodes_icon_style_and_mark_described_to_screen_readers(
         for tag, attributes in element.descendants
         if tag == "span" and "class" in attributes
     ]
-    assert classes == [{"font-bold"}, {"underline"}, {"text-warning"}]
+    assert classes == [
+        {"truncate", "font-bold"},
+        {"truncate", "underline"},
+        {"shrink-0", "text-warning"},
+    ]
     assert "aria-describedby" not in building.attributes
     # the mark's icon unread, its name read after the label naming the button
     for button, name in ((done, "Done"), (failed, "Error"), (parking, "Warning")):

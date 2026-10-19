@@ -734,13 +734,25 @@ function paneBeside(border, step) {
   }
   return element;
 }
+function paneMinimum(border, pane, total) {
+  // a view needing the room to be read (`data-min-width`, e.g. a tree) keeps its own
+  var minimum = PANE_MIN_LENGTH;
+  pane.querySelectorAll("[data-min-width]").forEach(function (view) {
+    var style = getComputedStyle(view);
+    var length = parseFloat(isAcross(border) ? style.minHeight : style.minWidth);
+    if (length > minimum) minimum = length;
+  });
+  return Math.min(minimum, total / 2);
+}
 function moveBorder(border, start, pixels) {
   var before = paneBeside(border, -1);
   var after = paneBeside(border, 1);
   if (before === null || after === null) return;
   var total = start.before + start.after;
-  var minimum = Math.min(PANE_MIN_LENGTH, total / 2);
-  var beforeLength = Math.min(Math.max(start.before + pixels, minimum), total - minimum);
+  var beforeLength = Math.min(
+    Math.max(start.before + pixels, paneMinimum(border, before, total)),
+    total - paneMinimum(border, after, total)
+  );
   var panes = splitterPanes(border);
   // every length read before any is written: each write lays the panes out again
   var lengths = panes.map(function (pane) { return paneLength(border, pane); });

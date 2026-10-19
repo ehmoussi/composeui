@@ -2789,7 +2789,10 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         pane_class = (
             "min-h-0 overflow-auto has-[>[hidden]]:hidden flex-(--share)"
             if is_vertical
-            else "min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"
+            else (
+                "min-w-0 has-[>[data-min-width]]:min-w-auto has-[>[hidden]]:hidden"
+                " @2xl:flex-(--share)"
+            )
         )
         cells: list[str] = []
         before = 0  # the length of the panes shown before the border, in percent
@@ -2924,8 +2927,13 @@ class WebTreeRenderer(WebRenderer[TreeView]):
         positions = {
             path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
         }
+        # wide enough to read a label, which a splitter's pane keeps (`data-min-width`),
+        # however long its labels (`contain-inline-size`); clipped to a narrower pane, the
+        # focus rings at its edges left whole
         return (
-            f'<ul {self._root_attributes(oob=oob)} class="flex flex-col gap-0.5">'
+            f"<ul {self._root_attributes(oob=oob)} data-min-width"
+            ' class="flex min-w-48 contain-inline-size flex-col gap-0.5 overflow-clip'
+            ' [overflow-clip-margin:4px]">'
             f"{self._nodes_html(self._view.nodes, (), positions)}</ul>"
         )
 
@@ -2964,7 +2972,8 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             items.append(
                 f'<li><div class="flex items-center gap-1">{toggle}'
                 f'<button id="{self.widget_id}-node-{position}" type="button"'
-                f' class="btn btn-sm {variant} justify-start font-normal"{selected}{described}'
+                f' class="btn btn-sm {variant} min-w-0 shrink justify-start font-normal"'
+                f"{selected}{described}"
                 f"{self._post('select', path)}{disabled}>{self._node_content(node, mark_id)}"
                 f"</button></div>{children}</li>"
             )
@@ -2976,20 +2985,19 @@ class WebTreeRenderer(WebRenderer[TreeView]):
         The mark's icon is hidden from screen readers, which read its name (at `mark_id`)
         as the button's description, after the label naming it.
         """
+        # a label too long for the pane cut short, the icon and the mark kept whole
         styles = [
             style
             for style, is_on in (("font-bold", node.is_bold), ("underline", node.is_underlined))
             if is_on
         ]
-        label = html.escape(node.label)
-        if len(styles) > 0:
-            label = f'<span class="{" ".join(styles)}">{label}</span>'
+        label = f'<span class="{" ".join(["truncate", *styles])}">{html.escape(node.label)}</span>'
         mark = ""
         if node.mark is not None:
             icon, color = _MARK_ICONS[node.mark]
             text = html.escape(self._view.mark_text(node.mark))
             mark = (
-                f'<span class="{color}">{_icon(icon)}</span>'
+                f'<span class="shrink-0 {color}">{_icon(icon)}</span>'
                 f'<span id="{mark_id}" hidden>{text}</span>'
             )
         return f"{_file_icon(node.icon)}{label}{mark}"

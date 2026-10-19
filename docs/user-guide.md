@@ -263,6 +263,10 @@ TreeNode(
 Qt shows the marks in a second column of the `QTreeWidget`, Textual as a colored glyph
 (✓, !, ✗), and the web as an icon in the node's button.
 
+On the web, a tree is at least 12rem wide, so that its labels stay readable. In
+[resizable panes](#resizable-panes), the border stops there. A label that is too long for the
+tree ends in an ellipsis.
+
 [`src/examples/pipecatalogue.py`](../src/examples/pipecatalogue.py) shows its pipes in a
 tree, under their material. It builds the tree again from the database whenever the pipes
 change.
