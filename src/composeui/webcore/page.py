@@ -735,14 +735,10 @@ function paneBeside(border, step) {
   return element;
 }
 function paneMinimum(border, pane, total) {
-  // a view needing the room to be read (`data-min-width`, e.g. a tree) keeps its own
-  var minimum = PANE_MIN_LENGTH;
-  pane.querySelectorAll("[data-min-width]").forEach(function (view) {
-    var style = getComputedStyle(view);
-    var length = parseFloat(isAcross(border) ? style.minHeight : style.minWidth);
-    if (length > minimum) minimum = length;
-  });
-  return Math.min(minimum, total / 2);
+  // the pane's own, if larger: side by side, as wide as its text needs to be read
+  var style = getComputedStyle(pane);
+  var length = parseFloat(isAcross(border) ? style.minHeight : style.minWidth) || 0;
+  return Math.min(Math.max(PANE_MIN_LENGTH, length), total / 2);
 }
 function moveBorder(border, start, pixels) {
   var before = paneBeside(border, -1);
