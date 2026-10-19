@@ -2,7 +2,7 @@
 
 What's left to do on ComposeUI. It merges the earlier plans and the library review
 (`NEXT_PLAN.md`, `PAGES_PLAN.md`, `WEB_BACKEND_PLAN.md`, `REVIEW.md`); everything they
-listed as done is gone from here, and lives in the code, the README and `git log`. Build
+listed as done is gone from here, and lives in the code, the docs and `git log`. Build
 and test each step before moving on, and delete a step's entry once it lands.
 
 ## 1 — Widgets
@@ -62,7 +62,7 @@ classes appear (a test fails otherwise).
 
 ## 2 — Charts
 
-`ChartView` is in (README, "Charts"): line, step, scatter and bar charts, log axes,
+`ChartView` is in (user guide, "Charts"): line, step, scatter and bar charts, log axes,
 reference lines, and report images drawn by matplotlib, on Qt (pyqtgraph), Textual
 (textual-plotext) and the web (uPlot); `examples/pipechart.py` shows it. Left:
 
@@ -101,7 +101,7 @@ What a scientific app's charts need beyond these (see "Missing for a scientific 
 
 ## 3 — A SQLite model
 
-`SqliteModel` is in (README, "A SQLite model"): the app's tables and SQL, transactions,
+`SqliteModel` is in (user guide, "A SQLite model"): the app's tables and SQL, transactions,
 typed rows, a `changed` signal per table, and studies saved as a zip of the views' state
 and the database, checked before opening and brought up to date by migrations; on the
 web, per session; `examples/pipecatalogue.py` shows it. Left:
@@ -128,7 +128,7 @@ web, per session; `examples/pipecatalogue.py` shows it. Left:
 ## Design notes for the web backend
 
 Not tasks: the non-obvious decisions to keep in mind when changing `composeui.webcore`.
-The README's "Web backend" section covers what users see.
+The user guide's "Web backend" section covers what users see.
 
 - **htmx request/response**, no websockets or JS framework; Starlette, not FastAPI;
   hand-written HTML per renderer (no Jinja2), all view text through `html.escape`.
