@@ -1461,6 +1461,9 @@ class Series:
     color: Optional[str] = attrs.field(default=None, validator=[_check_color])
     #: whether the area between its line and 0 is filled with its color, e.g. a shape
     fill: bool = False
+    #: whether its line holds each value until the next point, in steps, e.g. the jobs
+    #: running over time; with `fill`, a step area. Dots are drawn as they are
+    step: bool = False
 
 
 class LineStyle(enum.Enum):
@@ -1580,6 +1583,35 @@ class ChartView(View):
             xs.append(x)
             ys.append(math.nan if y_log and not y > 0 else y)
         return xs, ys
+
+    @staticmethod
+    def step_points(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:
+        """Get the corners of a step line through the points: each y held until the next x.
+
+        A NaN y stays a gap, up to the next point.
+        """
+        step_xs: list[float] = []
+        step_ys: list[float] = []
+        for index, (x, y) in enumerate(zip(xs, ys)):
+            step_xs.append(x)
+            step_ys.append(y)
+            if index + 1 < len(xs):
+                step_xs.append(xs[index + 1])
+                step_ys.append(y)
+        return step_xs, step_ys
+
+    @staticmethod
+    def held_value(xs: list[float], ys: list[float], x: float) -> Optional[float]:
+        """Get the y a step line holds at `x`: the last point's at or before it, x in order.
+
+        None before the first point; NaN in a gap.
+        """
+        held: Optional[float] = None
+        for point_x, point_y in zip(xs, ys):
+            if point_x > x:
+                break
+            held = point_y
+        return held
 
     @staticmethod
     def drawn_lines(lines: list[ReferenceLine], *, x_log: bool, y_log: bool) -> list[ReferenceLine]:

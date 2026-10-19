@@ -23,18 +23,16 @@ classes appear (a test fails otherwise).
 
 ## 2 — Charts
 
-`ChartView` is in (README, "Charts"): line, scatter and bar charts, log axes, reference
-lines, and report images drawn by matplotlib, on Qt (pyqtgraph), Textual
+`ChartView` is in (README, "Charts"): line, step, scatter and bar charts, log axes,
+reference lines, and report images drawn by matplotlib, on Qt (pyqtgraph), Textual
 (textual-plotext) and the web (uPlot); `examples/pipechart.py` shows it. Left:
 
 1. **A date and time x axis**: x values as timestamps, ticks and hovered values as
    dates ("Jun 14 2026", "Oct 18 08:00") in the main view's language.
-2. **Step lines**: a `Series.step` drawing a value held until the next point, e.g. the
-   jobs running over time; with `fill`, a step area.
-3. **Timeline (Gantt) chart**: a `ChartKind.TIMELINE` of intervals, a row per category,
+2. **Timeline (Gantt) chart**: a `ChartKind.TIMELINE` of intervals, a row per category,
    a bar from start to end colored by its series, with a hover text per bar (the
    interval's details); on a date axis.
-4. **Web: full resolution on zoom**, once a real app needs it. A thinned curve hides
+3. **Web: full resolution on zoom**, once a real app needs it. A thinned curve hides
    detail once zoomed in: on uPlot's `setScale` hook (debounced), the page asks
    `GET /widget/{id}?x_min=…&x_max=…` and the renderer answers that range's points,
    thinned to the same cap (`CHART_MAX_POINTS`), as JSON that the script `setData`s

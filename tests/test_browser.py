@@ -1472,6 +1472,30 @@ def test_reference_lines_are_drawn_in_their_styles_in_range(chart_pages_page: Pa
     assert not all(green)  # dotted
 
 
+def test_a_step_series_holds_each_value_until_the_next_point(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    jobs = chart_pages_page.locator("figure").filter(has_text="Jobs")
+    expect(jobs.locator("canvas")).to_have_count(1)
+    plot = jobs.locator("[data-chart]")
+    # the fill at 3.5 h: under 3 running, held from 2 h to 5 h; a line would be at 2.5
+    held, under = plot.evaluate(
+        "element => { const chart = charts.get(element);"
+        " const pixel = (x, y) => chart.ctx.getImageData("
+        "   Math.round(chart.valToPos(x, 'x', true)), Math.round(chart.valToPos(y, 'y', true)),"
+        "   1, 1).data.join();"
+        " return [pixel(3.5, 2.8), pixel(3.5, 1.8)]; }"
+    )
+    assert held == under
+
+    x = plot.evaluate("element => charts.get(element).valToPos(4.8, 'x')")
+    jobs.locator(".u-over").hover(position={"x": x, "y": 10})
+
+    # the values held at 4.8 h, rather than those of the points nearest it, at 5 h
+    legend = jobs.locator(".u-legend")
+    expect(legend.locator(".u-series").filter(has_text="Running")).to_contain_text("3.000")
+    expect(legend.locator(".u-series").filter(has_text="Queued")).to_contain_text("1.000")
+
+
 def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:
     pytest.importorskip("matplotlib")
     chart_page.goto("/")

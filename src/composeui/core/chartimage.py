@@ -210,9 +210,13 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
                 linewidth=1.2,
                 color=color,
                 label=series.name,
+                # each value held until the next point
+                drawstyle="steps-post" if series.step else "default",
             )
             if series.fill:  # down to 0, e.g. a shape
-                axes.fill_between(x, y, 0, color=color, linewidth=0)
+                axes.fill_between(
+                    x, y, 0, color=color, linewidth=0, step="post" if series.step else None
+                )
 
 
 def _draw_bars(axes: Axes, chart: ChartView) -> None:

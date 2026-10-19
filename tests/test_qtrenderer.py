@@ -1657,6 +1657,24 @@ def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None
     qtbot.waitUntil(lambda: chart.hover_text() == "")
 
 
+def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Running", x=[0, 2, 5], y=[1, 3, 2], step=True)]
+    (running,) = chart.getPlotItem().listDataItems()
+
+    x, y = running.getData()
+    assert (list(x), list(y)) == ([0, 2, 2, 5, 5], [1, 1, 3, 3, 2])
+    view_box = chart.getPlotItem().vb
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 5)
+    # nearer 5 than 2, but still holding 2's value
+    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(4, 2)))
+    qtbot.waitUntil(lambda: chart.hover_text() != "")
+    assert chart.hover_text().splitlines()[1] == "Running: 3.000 kPa"
+
+    view.chart.kind = ChartKind.SCATTER  # dots: as they are
+    assert len(running.getData()[0]) == 3
+
+
 def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Pressure", x=[0, 1], y=[0, 1])]

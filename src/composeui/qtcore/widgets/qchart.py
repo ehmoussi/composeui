@@ -156,6 +156,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         x_log = self._x_log and not is_bar
         for item, curve in zip(self._items, self._series):
             x, y = ChartView.drawn_points(curve, x_log=x_log, y_log=self._y_log)
+            if self._is_step(curve):
+                x, y = ChartView.step_points(x, y)
             item.setData(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
             item.opts["name"] = curve.name
         # the curves draw their log themselves; the bars are given theirs (see `_bar_opts`)
@@ -362,12 +364,21 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             return lines
         lines = [_format(x, x_unit)]
         for curve in self._series:
-            point = _nearest(
-                *ChartView.drawn_points(curve, x_log=self._x_log, y_log=self._y_log), x
-            )
-            if point is not None:
-                lines.append(f"{curve.name}: {_format(point[1], y_unit)}")
+            points = ChartView.drawn_points(curve, x_log=self._x_log, y_log=self._y_log)
+            if self._is_step(curve):
+                # the value held there, rather than the next point's
+                held = ChartView.held_value(*points, x)
+                y = None if held is None or math.isnan(held) else held
+            else:
+                point = _nearest(*points, x)
+                y = None if point is None else point[1]
+            if y is not None:
+                lines.append(f"{curve.name}: {_format(y, y_unit)}")
         return lines
+
+    def _is_step(self, curve: Series) -> bool:
+        """Whether `curve` is drawn in steps: a line's points only, not dots."""
+        return curve.step and ChartView.kind_of(curve, self._kind) is ChartKind.LINE
 
 
 def _nearest(x_values: list[float], y_values: list[float], x: float) -> tuple[float, float] | None:

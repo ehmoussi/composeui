@@ -115,6 +115,8 @@ function chartOptions(element, spec, width) {
       options.dash = index < SERIES_COLORS.length ? undefined : [6, 4];
       options.spanGaps = false;
       options.points = { show: false };
+      // each value held until the next point; its fill, a step area
+      if (series.step) options.paths = uPlot.paths.stepped({ align: 1 });
     }
     return options;
   });
@@ -159,6 +161,7 @@ function chartOptions(element, spec, width) {
   return {
     width: width,
     height: element.clientHeight,
+    cursor: { dataIdx: heldIndex(spec) },
     scales: scales,
     axes: axes,
     series: [x].concat(series),
@@ -232,6 +235,22 @@ function drawReferenceLines(spec, ink) {
       }
     });
     context.restore();
+  };
+}
+/* the point whose value the legend shows at the cursor: uPlot's nearest, but a step
+   line's the last at or before the cursor, whose value it holds there */
+function heldIndex(spec) {
+  return function (chart, seriesIndex, nearest, x) {
+    var series = spec.series[seriesIndex - 1];  // none for the x, at 0
+    if (series === undefined || !series.step || series.kind !== "line" || nearest === null) {
+      return nearest;
+    }
+    var xs = chart.data[0];
+    var ys = chart.data[seriesIndex];
+    var index = nearest;
+    // back over a later point, and over the other series' x, where it has no point
+    while (index >= 0 && (xs[index] > x || ys[index] === undefined)) index--;
+    return index < 0 ? null : index;
   };
 }
 function chartData(spec) {
