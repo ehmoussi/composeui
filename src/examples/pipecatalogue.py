@@ -4,7 +4,8 @@
 rows of the model's database, not view state: the catalogue lists them, an expander each,
 through a query filtered by material, radius and installation date, with their mass
 computed by a SQL view joining each pipe to its material, and beside them in a tree, under
-their material: selecting a pipe there expands its expander. A form in the sidebar adds a
+their material, a border the user drags between the two: selecting a pipe there expands
+its expander. A form in the sidebar adds a
 pipe, which the catalogue beside it lists at once; each pipe's Edit button changes it in a
 form dialog, and its Delete button removes it. The database checks every pipe added or
 changed (a name, positive dimensions, a wall thinner than the radius) and File saves and
@@ -44,6 +45,7 @@ from composeui.core.view import (
     MainView,
     PageView,
     SidebarView,
+    SplitterView,
     TreeNode,
     TreeView,
     View,
@@ -412,8 +414,11 @@ class PipeTree(TreeView):
 
 
 @define_view
-class PipeBrowser(HorizontalView):
-    """The pipes shown twice: in a narrow tree by material, beside their expanders."""
+class PipeBrowser(SplitterView):
+    """The pipes shown twice: in a narrow tree by material, beside their expanders.
+
+    The user drags the border between them to widen the tree.
+    """
 
     tree: PipeTree = attrs.field(factory=PipeTree, metadata={STRETCH: 1})
     pipes: PipeList = attrs.field(factory=PipeList, metadata={STRETCH: 3})
