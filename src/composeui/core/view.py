@@ -1127,8 +1127,11 @@ def parse_date(text: str, date_format: str) -> datetime.date:
             else:
                 pattern += rf"\s*{re.escape(piece.strip())}\s*"
         matched = re.fullmatch(pattern, text)
-        if matched is not None:
+        if matched is None:
+            continue
+        with contextlib.suppress(ValueError):  # a day the month doesn't have
             return datetime.date(*(int(matched[part]) for part in ("year", "month", "day")))
+    # the same message for a day the month doesn't have, whatever Python's own says
     msg = f"{text!r} isn't a date as {date_format}"
     raise ValueError(msg)
 

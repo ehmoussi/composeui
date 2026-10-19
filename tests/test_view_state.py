@@ -297,7 +297,7 @@ def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:
     assert parse_date(" 02.01.2026 ", "dd.MM.yyyy.") == day  # the ending dot left out
     assert parse_date("2026-01-02", "MM/dd/yyyy") == day  # ISO 8601, whatever the format
     for text in ("31/02/2026", "2/1/26", "2026/01/02", "02/01/2026 x", ""):
-        with pytest.raises(ValueError, match=r"isn't a date|day is out of range"):
+        with pytest.raises(ValueError, match="isn't a date as dd/MM/yyyy"):
             parse_date(text, "dd/MM/yyyy")
 
 
