@@ -298,6 +298,8 @@ one leaves its width to the others. How wide the panes are is layout, not study 
 never saved, loaded or reset. Qt shows a `QSplitter`, Textual a row of panes with a `│`
 border between two, and the web an ARIA window splitter; the web stacks the panes,
 without borders, in a splitter narrower than 42rem, as it does a row's views.
+[`src/examples/pipecatalogue.py`](src/examples/pipecatalogue.py) shows its tree of pipes
+by material in one, beside the pipes' expanders.
 
 ## Toolbars
 
