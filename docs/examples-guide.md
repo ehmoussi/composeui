@@ -41,7 +41,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a French translation |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
-| [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file picker, an option of the app's own, no File menu |
+| [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
 | [`textual_demo.py`](../src/examples/textual_demo.py) | textual | A small form in a terminal |
 
@@ -174,8 +174,9 @@ It shows:
 - a [Markdown view](user-guide.md#markdown);
 - an [option of the app's own](user-guide.md#command-line-options-of-your-own):
   `--markdown`, beside the options of the backend;
-- a [file picker](user-guide.md#the-file-menu-and-picking-a-file): Markdown > Open Markdown
-  (Ctrl+M) picks a file. On the web, the browser uploads it.
+- a [file path input](user-guide.md#file-path-input) at the top: the user types the path of
+  a file, or picks the file with the "…" button. On the web, the browser uploads it. The
+  reload button reads the file again, for example after the user edits it.
 - an app without studies: `has_file_menu = False` leaves out the File menu.
 
 ## Web hello
