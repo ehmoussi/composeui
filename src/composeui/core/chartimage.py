@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import attrs
 
-from composeui.core.view import ChartKind, ChartView
+from composeui.core.view import ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -64,6 +64,13 @@ MARKERS = ("o", "s", "^", "D", "v", "P", "X", "*")
 HATCHES = ("", "//", "..", "xx", "\\\\", "oo", "--", "++")
 #: a reference line's color, unless it has its own: the axes'
 REFERENCE_LINE_COLOR = "#333333"
+#: a reference line's dash pattern, by its style
+REFERENCE_LINE_STYLES: dict[LineStyle, Any] = {
+    LineStyle.SOLID: "-",
+    LineStyle.DASHED: (0, (5, 3)),
+    LineStyle.DOTTED: (0, (1, 2)),
+    LineStyle.DASH_DOT: (0, (5, 2, 1, 2)),
+}
 #: the series a legend lists inside the axes; more, and it goes beside them
 _INSIDE_LEGEND_MAX = 3
 _MM_PER_INCH = 25.4
@@ -235,9 +242,10 @@ def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
     x_log = chart.x_log and chart.kind is not ChartKind.BAR
     for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y_log):
         color = line.color or REFERENCE_LINE_COLOR
+        style = REFERENCE_LINE_STYLES[line.style]
         # not in the legend, which names the series: its label is beside it
         if line.vertical:
-            axes.axvline(line.value, color=color, linestyle=(0, (5, 3)), linewidth=1)
+            axes.axvline(line.value, color=color, linestyle=style, linewidth=1)
             # at its top, left of it (now, after the data): the x in data, the y in the
             # axes' share
             axes.annotate(
@@ -251,7 +259,7 @@ def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
                 color=color,
             )
         else:
-            axes.axhline(line.value, color=color, linestyle=(0, (5, 3)), linewidth=1)
+            axes.axhline(line.value, color=color, linestyle=style, linewidth=1)
             # at its right end, over it
             axes.annotate(
                 line.label,

@@ -13,7 +13,7 @@ from qtpy.QtGui import QAction, QColor, QFont, QPalette
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
-from composeui.core.view import ChartKind, ChartView
+from composeui.core.view import ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
@@ -28,6 +28,15 @@ _DARK_LIGHTNESS = 128
 _SIZE_HINT = (600, 480)
 #: a scatter's dots, in pixels
 _DOT_SIZE = 8
+
+
+#: a reference line's pen style, by its style
+_LINE_STYLES = {
+    LineStyle.SOLID: Qt.PenStyle.SolidLine,
+    LineStyle.DASHED: Qt.PenStyle.DashLine,
+    LineStyle.DOTTED: Qt.PenStyle.DotLine,
+    LineStyle.DASH_DOT: Qt.PenStyle.DashDotLine,
+}
 
 
 def _format(value: float, unit: str) -> str:
@@ -127,7 +136,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._crosshair.setVisible(False)
 
     def set_reference_lines(self, lines: list[ReferenceLine]) -> None:
-        """Draw dashed lines at values, each labeled beside itself."""
+        """Draw lines at values, each in its style, labeled beside itself."""
         self._reference_lines = lines
         self._draw()
 
@@ -287,7 +296,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         )
         for item, line in zip(self._line_items, lines):
             ink = QColor(line.color) if line.color is not None else text
-            item.setPen(pg.mkPen(ink, width=1.5, style=Qt.PenStyle.DashLine))
+            item.setPen(pg.mkPen(ink, width=1.5, style=_LINE_STYLES[line.style]))
             item.label.setColor(ink)
         # the legend's samples draw the styles their items had when added
         self._legend.clear()

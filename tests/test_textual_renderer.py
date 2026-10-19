@@ -1913,8 +1913,8 @@ async def test_reference_lines_are_plotted_labeled() -> None:
         assert "Max: 4.6" in text
         assert "Now" in text
         plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
-        assert (plotted.hcoord[0], plotted.vcoord[0]) == ([4.6], [2.3])
-        assert plotted.hcolors[0] == [(208, 48, 48)]  # its own color
+        assert (plotted.hcoord[0], plotted.vcoord[0]) == ([4.6, 0.6], [2.3])
+        assert plotted.hcolors[0] == [(208, 48, 48), (32, 128, 64)]  # their own colors
         assert "Mine" in energy.render().plain  # type: ignore[union-attr]
         # on the bedroom's bars: plotext draws the categories from 1
         assert energy.plt._active.monitor.vcoord[0] == [2]  # noqa: SLF001

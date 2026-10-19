@@ -684,15 +684,19 @@ category by its index and its y the bar's height.
 `x_log` and `y_log` make an axis a log axis, which leaves out what it can't show: a point
 at an x of 0 or less isn't drawn, and a y of 0 or less leaves a gap.
 
-`reference_lines` draws dashed lines across the chart at values, each a `ReferenceLine`:
+`reference_lines` draws lines across the chart at values, each a `ReferenceLine`:
 a horizontal one at a y, e.g. a capacity, or with `vertical=True` at an x, e.g. now (a
 bar chart's x being a category's index). Its `label` ("Max: 40") is shown beside it
-rather than in the legend, and its `color` (`"#rrggbb"`) defaults to the theme's text.
+rather than in the legend, its `color` (`"#rrggbb"`) defaults to the theme's text, and
+its `style` (`LineStyle`) to `DASHED`, or `SOLID`, `DOTTED` and `DASH_DOT`.
 The chart's range takes the lines in, so one past the data still shows; on a log axis, a
-line at 0 or less isn't drawn. Textual draws them solid: a terminal has no dashes.
+line at 0 or less isn't drawn. Textual draws each solid: a terminal has no dashes.
 
 ```python
-chart.reference_lines = [ReferenceLine(40, "Max: 40"), ReferenceLine(now, "Now", vertical=True)]
+chart.reference_lines = [
+    ReferenceLine(40, "Max: 40", style=LineStyle.SOLID),
+    ReferenceLine(now, "Now", vertical=True),
+]
 ```
 
 ```python
@@ -706,7 +710,7 @@ energy: ChartView = child(
 ```
 
 ```python
-from composeui.core.view import ChartView, ReferenceLine, Series, child
+from composeui.core.view import ChartView, LineStyle, ReferenceLine, Series, child
 
 chart: ChartView = child(
     ChartView, title="Pressure Drop", x_title="Flow Rate", x_unit="L/s", y_unit="kPa"

@@ -161,21 +161,22 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
     assert mpl.colors.to_hex(filled.get_facecolor()[0]) == "#ffd700"
 
 
-def test_reference_lines_are_dashed_labeled_and_in_range() -> None:
+def test_reference_lines_are_styled_labeled_and_in_range() -> None:
     chart = ChartPagesMainView().router.chart.chart  # its lines past its data
     chart.y_log = True
     chart.reference_lines = [*chart.reference_lines, ReferenceLine(-1, "Never")]
 
     (axes,) = chart_figure(chart).axes
 
-    _inlet, maximum, now = axes.get_lines()
+    _inlet, maximum, minimum, now = axes.get_lines()
     assert (list(maximum.get_ydata()), list(now.get_xdata())) == ([4.6, 4.6], [2.3, 2.3])
     assert maximum.get_color() == "#d03030"
     assert now.get_color() == REFERENCE_LINE_COLOR
-    assert maximum.get_linestyle() == now.get_linestyle() == "--"
+    assert maximum.get_linestyle() == "-"  # solid, as asked
+    assert minimum.get_linestyle() == now.get_linestyle() == "--"  # dotted, then dashed
     # shown, though past the data; -1, on a log axis, isn't drawn
     assert axes.get_ylim()[1] > 4.6
-    assert [text.get_text() for text in axes.texts] == ["Max: 4.6", "Now"]
+    assert [text.get_text() for text in axes.texts] == ["Max: 4.6", "Min: 0.6", "Now"]
     legend = axes.get_legend()
     assert legend is not None
     assert [text.get_text() for text in legend.get_texts()] == ["Inlet"]

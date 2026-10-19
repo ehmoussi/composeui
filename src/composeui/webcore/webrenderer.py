@@ -1012,6 +1012,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "label": line.label,
                     "vertical": line.vertical,
                     "color": line.color,
+                    "style": line.style.name.lower(),
                 }
                 for line in ChartView.drawn_lines(
                     view.reference_lines,

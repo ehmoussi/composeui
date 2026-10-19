@@ -1463,9 +1463,19 @@ class Series:
     fill: bool = False
 
 
+class LineStyle(enum.Enum):
+    """How a reference line is drawn; a terminal draws each solid."""
+
+    SOLID = enum.auto()
+    DASHED = enum.auto()
+    DOTTED = enum.auto()
+    #: dashes and dots in turn
+    DASH_DOT = enum.auto()
+
+
 @attrs.frozen
 class ReferenceLine:
-    """A dashed line across a `ChartView` at a value, e.g. a capacity ("Max: 40") or now.
+    """A line across a `ChartView` at a value, e.g. a capacity ("Max: 40") or now.
 
     It is no series: not in the legend, but labeled beside itself. The chart's range
     takes it in, so it shows even away from the data.
@@ -1484,6 +1494,8 @@ class ReferenceLine:
     vertical: bool = False
     #: its color, as #rrggbb, the same in every theme; None: the theme's text color
     color: Optional[str] = attrs.field(default=None, validator=[_check_color])
+    #: dashed by default: told apart from the series, which are solid
+    style: LineStyle = LineStyle.DASHED
 
 
 @define_view
@@ -1521,7 +1533,7 @@ class ChartView(View):
     x_unit: str = attrs.field(default="")
     y_unit: str = attrs.field(default="")
     series: list[Series] = attrs.field(factory=list[Series])
-    #: dashed lines at values, e.g. a limit, drawn over the series
+    #: lines at values, e.g. a limit, drawn over the series
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
     #: a `BAR` chart's categories, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
