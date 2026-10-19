@@ -91,7 +91,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series, TreeNode, TreePath
+    from composeui.core.view import ReferenceLine, Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 
@@ -874,6 +874,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_unit: str
     y_unit: str
     series: list[Series]
+    reference_lines: list[ReferenceLine]
     categories: list[str]
     x_log: bool
     y_log: bool
@@ -966,6 +967,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "x_unit",
                     "y_unit",
                     "series",
+                    "reference_lines",
                     "categories",
                     "x_log",
                     "y_log",
@@ -1002,6 +1004,20 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "fill": series.fill,
                 }
                 for series in view.series
+            ],
+            "lines": [
+                # a color of None: the theme's text
+                {
+                    "value": line.value,
+                    "label": line.label,
+                    "vertical": line.vertical,
+                    "color": line.color,
+                }
+                for line in ChartView.drawn_lines(
+                    view.reference_lines,
+                    x_log=view.x_log and view.kind is not ChartKind.BAR,
+                    y_log=view.y_log,
+                )
             ],
         }
         if view.kind is ChartKind.BAR:
@@ -1047,6 +1063,10 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         else:
             x_label, link = ChartView.axis_label(view.x_title, view.x_unit), "against"
         description = f"{names} {link} {x_label}" if names and x_label else names or x_label
+        labels = ", ".join(line.label for line in view.reference_lines if line.label)
+        description = (
+            f"{description}; {labels}" if description and labels else description or labels
+        )
         return f"{view.title}: {description}" if view.title and description else view.title
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:

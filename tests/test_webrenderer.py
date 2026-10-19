@@ -3437,6 +3437,8 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
         "x": {"label": "Flow Rate (L/s)", "unit": "L/s", "log": False},
         "y": {"label": "Pressure Drop (kPa)", "unit": "kPa", "log": False},
         "series": [],
+        # the pump's, in the theme's text color
+        "lines": [{"value": 20, "label": "Pump: 20 kPa", "vertical": False, "color": None}],
         "pairs": [],
     }
 
@@ -3456,7 +3458,7 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
     assert plot.attributes["role"] == "img"
     assert plot.attributes["aria-label"] == (
-        "Pressure Drop: Pressure, Temperature against Flow Rate (L/s)"
+        "Pressure Drop: Pressure, Temperature against Flow Rate (L/s); Pump: 20 kPa"
     )
 
     chart.series = [

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from textual.app import RenderResult
 
-    from composeui.core.view import Series
+    from composeui.core.view import ReferenceLine, Series
 
 
 #: the key saving the chart's image
@@ -54,6 +54,7 @@ class ComposeChart(PlotextPlot):
         self.x_label = ""
         self.y_label = ""
         self.series: list[Series] = []
+        self.reference_lines: list[ReferenceLine] = []
         self.kind = ChartKind.LINE
         self.categories: list[str] = []
         self.x_log = False
@@ -111,7 +112,12 @@ class ComposeChart(PlotextPlot):
         ]
         if self.kind is ChartKind.BAR:
             self._plot_bars(colors)
-            return
+        else:
+            self._plot_curves(colors)
+        self._plot_reference_lines()
+
+    def _plot_curves(self, colors: list[tuple[int, int, int]]) -> None:
+        plt = self.plt
         if self.x_log:
             plt.xscale("log")
         if self.y_log:
@@ -133,6 +139,53 @@ class ComposeChart(PlotextPlot):
                 # down to y = 0, e.g. a shape
                 fillx=curve.fill,
             )
+
+    def _extent(self) -> tuple[list[float], list[float]]:
+        """Get the x and y the series reach, in plotext's values: a bar chart's x from 1."""
+        if self.kind is ChartKind.BAR:
+            heights = [
+                height
+                for curve in self.series
+                for height in ChartView.bar_heights(curve, len(self.categories), y_log=self.y_log)
+                if math.isfinite(height)
+            ]
+            return [0.5, len(self.categories) + 0.5], heights
+        xs: list[float] = []
+        ys: list[float] = []
+        for curve in self.series:
+            x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
+            xs.extend(value for value in x if math.isfinite(value))
+            ys.extend(value for value in y if math.isfinite(value))
+        return xs, ys
+
+    def _plot_reference_lines(self) -> None:
+        """Draw the reference lines, each labeled at its end: a terminal draws no dashes."""
+        is_bar = self.kind is ChartKind.BAR
+        lines = ChartView.drawn_lines(
+            self.reference_lines, x_log=self.x_log and not is_bar, y_log=self.y_log
+        )
+        if len(lines) == 0:
+            return
+        # plotext draws a bar chart's categories from 1
+        offset = 1 if is_bar else 0
+        xs, ys = self._extent()
+        xs += [line.value + offset for line in lines if line.vertical]
+        ys += [line.value for line in lines if not line.vertical]
+        # the theme's text, the axes' own
+        ink = Color.parse(self.app.theme_variables["foreground"]).rgb if self.is_mounted else None
+        for line in lines:
+            color = Color.parse(line.color).rgb if line.color is not None else ink
+            if line.vertical:
+                x = line.value + offset
+                self.plt.vline(x, color)
+                if line.label != "" and len(ys) > 0:
+                    # at its top, left of it (now, after the data)
+                    self.plt.text(line.label, x, max(ys), color, alignment="right")
+            else:
+                self.plt.hline(line.value, color)
+                if line.label != "" and len(xs) > 0:
+                    # over it, at its right end
+                    self.plt.text(line.label, max(xs), line.value, color, alignment="right")
 
     def _plot_bars(self, colors: list[tuple[int, int, int]]) -> None:
         if len(self.series) == 0 or len(self.categories) == 0:

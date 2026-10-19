@@ -18,7 +18,7 @@ from composeui.core.view import ChartKind, ChartView
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
 
-    from composeui.core.view import Series
+    from composeui.core.view import ReferenceLine, Series
 
 #: the hover values' rate, per second: a mouse sends far more moves than that
 _HOVER_RATE = 30
@@ -66,6 +66,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._bars: list[pg.BarGraphItem] = []
         self._units = ("", "")
         self._items: list[pg.PlotDataItem] = []
+        self._reference_lines: list[ReferenceLine] = []
+        self._line_items: list[pg.InfiniteLine] = []
         plot = self.getPlotItem()
         self._legend = plot.addLegend()
         # pyqtgraph thins and clips what it draws itself: a million points stay fluid
@@ -124,6 +126,11 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._hover.setVisible(False)
         self._crosshair.setVisible(False)
 
+    def set_reference_lines(self, lines: list[ReferenceLine]) -> None:
+        """Draw dashed lines at values, each labeled beside itself."""
+        self._reference_lines = lines
+        self._draw()
+
     def _draw(self) -> None:
         """Draw the series as curves, or as a bar chart's bars, and their legend."""
         plot = self.getPlotItem()
@@ -146,7 +153,34 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         plot.setLogMode(x=x_log, y=self._y_log)
         ticks = [list(enumerate(self._categories))] if is_bar else None
         plot.getAxis("bottom").setTicks(ticks)
+        self._draw_reference_lines(x_log=x_log)
         self._apply_styles()
+
+    def _draw_reference_lines(self, *, x_log: bool) -> None:
+        """Draw the reference lines afresh: a log axis takes their logs, as pyqtgraph doesn't."""
+        plot = self.getPlotItem()
+        for item in self._line_items:
+            plot.removeItem(item)
+        self._line_items = []
+        lines = ChartView.drawn_lines(self._reference_lines, x_log=x_log, y_log=self._y_log)
+        for line in lines:
+            is_log = x_log if line.vertical else self._y_log
+            item = pg.InfiniteLine(
+                pos=math.log10(line.value) if is_log else line.value,
+                angle=90 if line.vertical else 0,
+                movable=False,
+                # the label is a format of the line's value: braces of its own are text
+                label=line.label.replace("{", "{{").replace("}", "}}"),
+                # a horizontal one's at its right end, over it; a vertical one's at its
+                # top, left of it (now, after the data)
+                labelOpts={
+                    "position": 0.98,
+                    "anchors": [(1, 0), (1, 0)] if line.vertical else [(1, 1), (1, 1)],
+                },
+            )
+            item.setZValue(1)  # over the series
+            plot.addItem(item)
+            self._line_items.append(item)
 
     def _make_bars(self) -> pg.BarGraphItem:
         bars = pg.BarGraphItem(x0=[], height=[], width=1)
@@ -245,6 +279,16 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 pen=pg.mkPen(background, width=1),
                 name=curve.name,
             )
+        text = self.palette().color(QPalette.ColorRole.WindowText)
+        lines = ChartView.drawn_lines(
+            self._reference_lines,
+            x_log=self._x_log and self._kind is not ChartKind.BAR,
+            y_log=self._y_log,
+        )
+        for item, line in zip(self._line_items, lines):
+            ink = QColor(line.color) if line.color is not None else text
+            item.setPen(pg.mkPen(ink, width=1.5, style=Qt.PenStyle.DashLine))
+            item.label.setColor(ink)
         # the legend's samples draw the styles their items had when added
         self._legend.clear()
         for item, curve in zip(self._items or self._bars, self._series):

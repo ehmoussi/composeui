@@ -38,6 +38,7 @@ from composeui.core.view import (
     DialogKind,
     EditRefusedError,
     MainView,
+    ReferenceLine,
     RendererType,
     SelectionMode,
     Series,
@@ -1887,6 +1888,36 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
         text = energy.render().plain  # type: ignore[union-attr]
         assert "1000" in text  # its axis, log from 10
         assert energy.plt._active.monitor.yscale[0] == "log"  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_reference_lines_are_plotted_labeled() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    page = view.router.chart
+    assert isinstance(page.chart.renderer, TextualWidgetRenderer)
+    chart = page.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+    assert isinstance(page.energy.renderer, TextualWidgetRenderer)
+    energy = page.energy.renderer.widget
+    assert isinstance(energy, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        view.router.current_route = "chart"
+        page.energy.reference_lines = [ReferenceLine(1, "Mine", vertical=True)]
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        assert "Max: 4.6" in text
+        assert "Now" in text
+        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        assert (plotted.hcoord[0], plotted.vcoord[0]) == ([4.6], [2.3])
+        assert plotted.hcolors[0] == [(208, 48, 48)]  # its own color
+        assert "Mine" in energy.render().plain  # type: ignore[union-attr]
+        # on the bedroom's bars: plotext draws the categories from 1
+        assert energy.plt._active.monitor.vcoord[0] == [2]  # noqa: SLF001
 
 
 @pytest.mark.asyncio

@@ -13,13 +13,14 @@ import matplotlib as mpl
 from matplotlib.lines import Line2D
 
 from composeui.core.chartimage import (
+    REFERENCE_LINE_COLOR,
     ImageOptions,
     chart_figure,
     chart_image_bytes,
     image_name,
     save_chart_image,
 )
-from composeui.core.view import ChartKind, ChartView, Series
+from composeui.core.view import ChartKind, ChartView, ReferenceLine, Series
 from examples.pipechart import PipeChartMainView
 from tests.charts import ChartPagesMainView
 
@@ -47,7 +48,9 @@ def test_the_figure_draws_the_chart_s_series_and_labels() -> None:
     assert axes.get_title() == ""  # a report captions its figure itself
     assert axes.get_xlim() == (0.5, 1.5)
     assert (axes.get_xscale(), axes.get_yscale()) == ("linear", "linear")
-    lines = [line for line in axes.get_lines() if isinstance(line, Line2D)]
+    # the series', not the pump's reference line, which the legend leaves out
+    lines = [line for line in axes.get_lines() if not line.get_label().startswith("_")]
+    assert all(isinstance(line, Line2D) for line in lines)
     assert [line.get_label() for line in lines] == [series.name for series in chart.series]
     model, other, measured = lines
     assert model.get_linestyle() != other.get_linestyle()  # told apart in black and white
@@ -156,3 +159,23 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
     assert theme.get_color() == "#D55E00"  # Okabe and Ito's second
     (filled,) = axes.collections  # the oval's alone
     assert mpl.colors.to_hex(filled.get_facecolor()[0]) == "#ffd700"
+
+
+def test_reference_lines_are_dashed_labeled_and_in_range() -> None:
+    chart = ChartPagesMainView().router.chart.chart  # its lines past its data
+    chart.y_log = True
+    chart.reference_lines = [*chart.reference_lines, ReferenceLine(-1, "Never")]
+
+    (axes,) = chart_figure(chart).axes
+
+    _inlet, maximum, now = axes.get_lines()
+    assert (list(maximum.get_ydata()), list(now.get_xdata())) == ([4.6, 4.6], [2.3, 2.3])
+    assert maximum.get_color() == "#d03030"
+    assert now.get_color() == REFERENCE_LINE_COLOR
+    assert maximum.get_linestyle() == now.get_linestyle() == "--"
+    # shown, though past the data; -1, on a log axis, isn't drawn
+    assert axes.get_ylim()[1] > 4.6
+    assert [text.get_text() for text in axes.texts] == ["Max: 4.6", "Now"]
+    legend = axes.get_legend()
+    assert legend is not None
+    assert [text.get_text() for text in legend.get_texts()] == ["Inlet"]

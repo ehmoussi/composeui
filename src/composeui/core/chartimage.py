@@ -62,6 +62,8 @@ LINE_STYLES: tuple[Any, ...] = (
 )
 MARKERS = ("o", "s", "^", "D", "v", "P", "X", "*")
 HATCHES = ("", "//", "..", "xx", "\\\\", "oo", "--", "++")
+#: a reference line's color, unless it has its own: the axes'
+REFERENCE_LINE_COLOR = "#333333"
 #: the series a legend lists inside the axes; more, and it goes beside them
 _INSIDE_LEGEND_MAX = 3
 _MM_PER_INCH = 25.4
@@ -158,6 +160,7 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             _draw_bars(axes, chart)
         else:
             _draw_curves(axes, chart)
+        _draw_reference_lines(axes, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
         axes.set_xlabel(ChartView.axis_label(chart.x_title, chart.x_unit))
@@ -225,6 +228,41 @@ def _draw_bars(axes: Axes, chart: ChartView) -> None:
         )
     axes.set_xticks(range(count), chart.categories)
     axes.grid(visible=False, axis="x")
+
+
+def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
+    """Draw the chart's reference lines, labeled inside the axes, at their ends."""
+    x_log = chart.x_log and chart.kind is not ChartKind.BAR
+    for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y_log):
+        color = line.color or REFERENCE_LINE_COLOR
+        # not in the legend, which names the series: its label is beside it
+        if line.vertical:
+            axes.axvline(line.value, color=color, linestyle=(0, (5, 3)), linewidth=1)
+            # at its top, left of it (now, after the data): the x in data, the y in the
+            # axes' share
+            axes.annotate(
+                line.label,
+                (line.value, 1),
+                xycoords=axes.get_xaxis_transform(),
+                xytext=(-3, -3),
+                textcoords="offset points",
+                ha="right",
+                va="top",
+                color=color,
+            )
+        else:
+            axes.axhline(line.value, color=color, linestyle=(0, (5, 3)), linewidth=1)
+            # at its right end, over it
+            axes.annotate(
+                line.label,
+                (1, line.value),
+                xycoords=axes.get_yaxis_transform(),
+                xytext=(-3, 2),
+                textcoords="offset points",
+                ha="right",
+                va="bottom",
+                color=color,
+            )
 
 
 def _add_legend(figure: Figure, axes: Axes, chart: ChartView) -> None:

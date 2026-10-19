@@ -27,6 +27,7 @@ from composeui.core.view import (
     MetricView,
     ProgressBarView,
     RadioGroupView,
+    ReferenceLine,
     SelectionMode,
     Series,
     SliderView,
@@ -207,6 +208,10 @@ def test_a_log_axis_leaves_out_what_it_cannot_show() -> None:
     assert ChartView.drawn_points(series, x_log=True, y_log=False) == ([1, 10], [0, 10])
     # the bars of 5 and 0 high: on a log axis, no bar of 0
     assert str(ChartView.bar_heights(series, 2, y_log=True)) == str([5.0, math.nan])
+    # nor a reference line at 0, on its own axis only
+    lines = [ReferenceLine(0, "Zero"), ReferenceLine(0, "Start", vertical=True)]
+    assert ChartView.drawn_lines(lines, x_log=True, y_log=False) == lines[:1]
+    assert ChartView.drawn_lines(lines, x_log=False, y_log=True) == lines[1:]
 
 
 def test_a_series_color_is_given_as_rrggbb() -> None:
@@ -214,6 +219,12 @@ def test_a_series_color_is_given_as_rrggbb() -> None:
     for color in ("yellow", "#ffd70", "ffd700"):
         with pytest.raises(ValueError, match="#rrggbb"):
             Series(name="Oval", x=[0], y=[0], color=color)
+
+
+def test_a_reference_line_s_color_is_given_as_rrggbb() -> None:
+    assert ReferenceLine(40, "Max: 40", color="#d03030").value == 40.0
+    with pytest.raises(ValueError, match="#rrggbb"):
+        ReferenceLine(40, "Max: 40", color="red")
 
 
 def test_a_chart_s_height_is_positive_and_not_a_study_s() -> None:

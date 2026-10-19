@@ -25,6 +25,7 @@ from composeui.core.view import (
     HorizontalView,
     LabelRowFloatInputView,
     MainView,
+    ReferenceLine,
     Series,
     TableView,
     TabPage,
@@ -46,6 +47,8 @@ SWEEP_POINTS = 200
 #: the test rig's measurements of a pipe, as the shares of its maximum flow rate measured
 #: and the ratio of each measured drop to the computed one
 MEASUREMENTS = ((0.2, 1.06), (0.35, 0.95), (0.5, 1.03), (0.65, 0.98), (0.8, 1.04), (0.95, 0.97))
+#: the pressure the pump gives (kPa): a pipe whose drop is over it can't pass that flow
+PUMP_PRESSURE = 20.0
 
 
 def friction_factor(reynolds: float, diameter: float) -> float:
@@ -143,6 +146,7 @@ class ChartTab(TabPage):
         x_unit="L/s",
         y_title="Pressure Drop",
         y_unit="kPa",
+        reference_lines=[ReferenceLine(PUMP_PRESSURE, f"Pump: {PUMP_PRESSURE:g} kPa")],
     )
 
 

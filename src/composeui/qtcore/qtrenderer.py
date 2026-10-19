@@ -104,7 +104,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import Series, TreeNode, TreePath
+    from composeui.core.view import ReferenceLine, Series, TreeNode, TreePath
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
@@ -846,6 +846,7 @@ class ChartViewLike(ViewLike, Protocol):
     x_unit: str
     y_unit: str
     series: list[Series]
+    reference_lines: list[ReferenceLine]
     categories: list[str]
     x_log: bool
     y_log: bool
@@ -872,6 +873,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "y_title": self._refresh_y_title,
                 "y_unit": self._refresh_y_unit,
                 "series": self._refresh_series,
+                "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
                 "x_log": self._refresh_x_log,
                 "y_log": self._refresh_y_log,
@@ -915,6 +917,12 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _refresh_series(_view: ChartViewLike, rendered_object: QChart, value: list[Series]) -> None:
         rendered_object.set_series(value)
+
+    @staticmethod
+    def _refresh_reference_lines(
+        _view: ChartViewLike, rendered_object: QChart, value: list[ReferenceLine]
+    ) -> None:
+        rendered_object.set_reference_lines(value)
 
     @staticmethod
     def _refresh_categories(

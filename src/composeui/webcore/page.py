@@ -148,6 +148,14 @@ function chartOptions(element, spec, width) {
     };
     axes[0].grid = { show: false };
   }
+  // the ranges take the reference lines in, as they would points
+  var lineXs = [];
+  var lineYs = [];
+  spec.lines.forEach(function (line) { (line.vertical ? lineXs : lineYs).push(line.value); });
+  if (!("categories" in spec)) {
+    scales.x.range = rangeWith(scales.x.range, lineXs, spec.x.log, false);
+  }
+  scales.y.range = rangeWith(scales.y.range, lineYs, spec.y.log, true);
   return {
     width: width,
     height: element.clientHeight,
@@ -161,6 +169,65 @@ function chartOptions(element, spec, width) {
         element.after(legend);
       },
     },
+    hooks: { draw: [drawReferenceLines(spec, ink)] },
+  };
+}
+/* a scale's range, uPlot's own unless given, widened to `values`; as given without any */
+function rangeWith(range, values, log, padded) {
+  if (values.length === 0) return range;
+  if (range === undefined) {
+    range = function (chart, min, max) {
+      if (log) return uPlot.rangeLog(min, max, 10, padded);
+      return padded || min === max ? uPlot.rangeNum(min, max, 0.1, true) : [min, max];
+    };
+  }
+  var low = Math.min.apply(null, values);
+  var high = Math.max.apply(null, values);
+  return function (chart, min, max, key) {
+    // no data: the lines alone
+    return range(
+      chart, min === null ? low : Math.min(min, low), max === null ? high : Math.max(max, high), key
+    );
+  };
+}
+/* the reference lines (see `ReferenceLine`): dashed, over the series, each labeled at its
+   end in the ticks' font, which an image's options enlarge */
+function drawReferenceLines(spec, ink) {
+  return function (chart) {
+    var context = chart.ctx;
+    var box = chart.bbox;  // the plot, in the canvas' pixels
+    var gap = 4 * uPlot.pxRatio;
+    context.save();
+    context.font = chart.axes[1].font[0];
+    context.lineWidth = 1.5 * uPlot.pxRatio;
+    context.textAlign = "right";
+    spec.lines.forEach(function (line) {
+      var position = chart.valToPos(line.value, line.vertical ? "x" : "y", true);
+      var start = line.vertical ? box.left : box.top;
+      var end = start + (line.vertical ? box.width : box.height);
+      if (!(position >= start && position <= end)) return;  // zoomed past it
+      context.strokeStyle = context.fillStyle = line.color || ink;
+      context.setLineDash([6 * uPlot.pxRatio, 4 * uPlot.pxRatio]);
+      context.beginPath();
+      if (line.vertical) {
+        context.moveTo(position, box.top);
+        context.lineTo(position, box.top + box.height);
+      } else {
+        context.moveTo(box.left, position);
+        context.lineTo(box.left + box.width, position);
+      }
+      context.stroke();
+      // a horizontal one's over it at its right end; a vertical one's at its top, left
+      // of it (now, after the data)
+      if (line.vertical) {
+        context.textBaseline = "top";
+        context.fillText(line.label, position - gap, box.top + gap);
+      } else {
+        context.textBaseline = "bottom";
+        context.fillText(line.label, box.left + box.width - gap, position - gap / 2);
+      }
+    });
+    context.restore();
   };
 }
 function chartData(spec) {
@@ -172,11 +239,9 @@ function chartData(spec) {
 function drawChart(element, zoom) {
   var spec = JSON.parse(element.dataset.chart);
   var options = chartOptions(element, spec, element.clientWidth);
-  options.hooks = {
-    // the image's download follows the zoom
-    setScale: [function (chart) { updateImageLink(element, chart); }],
-    setLegend: [function () { keepLegendWidths(element.chartLegend); }],
-  };
+  // the image's download follows the zoom
+  options.hooks.setScale = [function (chart) { updateImageLink(element, chart); }];
+  options.hooks.setLegend = [function () { keepLegendWidths(element.chartLegend); }];
   var chart = new uPlot(options, chartData(spec), element);
   if (zoom !== undefined) chart.setScale("x", zoom);
   charts.set(element, chart);
@@ -288,18 +353,15 @@ function savePng(figure, name) {
   });
   var ink = resolveColor(plot, "var(--color-base-content)");
   var isSaved = false;
-  options.hooks = {
-    draw: [
-      function (chart) {
-        if (isSaved) return;
-        isSaved = true;
-        var canvas = composePng(chart.ctx.canvas, spec.title, entries, ink, titleHeight);
-        chart.destroy();
-        stage.remove();
-        canvas.toBlob(function (blob) { download(blob, name); });
-      },
-    ],
-  };
+  // once its reference lines are drawn
+  options.hooks.draw.push(function (chart) {
+    if (isSaved) return;
+    isSaved = true;
+    var canvas = composePng(chart.ctx.canvas, spec.title, entries, ink, titleHeight);
+    chart.destroy();
+    stage.remove();
+    canvas.toBlob(function (blob) { download(blob, name); });
+  });
   new uPlot(options, chartData(spec), plot);
 }
 function composePng(plotCanvas, title, entries, ink, titleHeight) {
