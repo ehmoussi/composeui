@@ -14,6 +14,7 @@ from composeui.core.application import Application
 from composeui.core.registry import RendererType
 from composeui.core.renderer import RendererContainer
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.taskview import TASK_COUNT, TaskMainView, TaskStatus
 
@@ -68,6 +69,14 @@ def test_a_run_shows_every_task_s_outcome_then_can_run_again(
     errors = {error != "" for _, _, _, error in main_view.details.tasks.rows}
     assert errors == {status is TaskStatus.FAILED}
     assert bar.value() == bar.maximum() == TASK_COUNT
+    chart = _widget(main_view.running)
+    assert isinstance(chart, QChart)
+    (curve,) = chart.getPlotItem().listDataItems()
+    seconds, running = curve.getData()
+    # every task running from the start, held until one ends; none at the end
+    assert (running[0], running[-1]) == (TASK_COUNT, 0)
+    assert list(seconds) == sorted(seconds)
+    assert running[1] == running[0]  # a step: held, not sloping to the next count
     assert main_view.config.is_enabled
     assert not main_view.buttons.cancel.is_enabled
 

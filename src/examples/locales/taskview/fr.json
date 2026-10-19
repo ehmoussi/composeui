@@ -22,5 +22,6 @@
   "Tasks running": "Tâches en cours",
   "Tasks succeeded": "Tâches réussies",
   "The minimum duration can't be greater than the maximum duration": "La durée minimale ne peut pas dépasser la durée maximale",
+  "Time": "Temps",
   "since the last run": "depuis la dernière exécution"
 }
