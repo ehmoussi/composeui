@@ -7,8 +7,10 @@ point, which the view checks against the bat's edges. Textual draws the logo too
 terminal has no pointer to click it with.
 """
 
+from __future__ import annotations
+
 import math
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from composeui.core import application
 from composeui.core.registry import RendererType
@@ -20,6 +22,9 @@ from composeui.core.view import (
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _wing(x: float) -> float:

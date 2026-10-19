@@ -84,9 +84,16 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
 - `ruff` with `select = ["ALL"]` and line length 100; see `pyproject.toml` for the ignore list.
   Fix lint properly rather than adding `noqa`, unless it is clearly justified.
 - `mypy` must pass. Fully type-annotate new code; the package ships `py.typed`.
-- Stay compatible with Python 3.9: use `from __future__ import annotations`, but use
-  `Optional[...]`/`Union[...]` in annotations that `attrs`/`cattrs` evaluate at runtime
-  (view fields), since `X | Y` fails there on 3.9.
+- Every Python module starts with `from __future__ import annotations` (after its docstring).
+  Ruff enforces it (`required-imports`, rule I002) and `make lint` adds it to a new file.
+  Annotations are then strings, so: don't quote them; define views that `attrs`/`cattrs`
+  resolve (`attrs.resolve_types`) at module level, not inside a function, so their field
+  types resolve from the module globals; and give `cattrs` hooks their type explicitly
+  (`CONVERTER.register_structure_hook(cls, func)`) rather than as a bare decorator, which
+  reads the annotation.
+- Stay compatible with Python 3.9: use `Optional[...]`/`Union[...]`, not `X | Y`, in
+  annotations that `attrs`/`cattrs` evaluate at runtime (view fields), since `X | Y` fails
+  there on 3.9 (ruff's `keep-runtime-typing` stops pyupgrade from rewriting them).
 - Use `qtpy` imports, never `PySide6`/`PyQt*` directly, in `qtcore`.
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
 - Match the existing comment density: brief docstrings, comments explain *why*.

@@ -1,5 +1,7 @@
 """A toolbar above a router's pages, shared by the backend tests of toolbars."""
 
+from __future__ import annotations
+
 from attrs import Factory
 
 from composeui.core.view import (

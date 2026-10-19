@@ -8,19 +8,20 @@ run's time, each count held until a task ends. The table is a section that colla
 leaving only the metrics and the chart.
 """
 
+from __future__ import annotations
+
 import enum
 import functools
 import random
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
 
 from composeui.core import application
-from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     OMIT,
@@ -43,6 +44,9 @@ from composeui.core.view import (
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    from composeui.core.jobs import Job
 
 #: the tasks a run starts, all at once
 TASK_COUNT = 25
@@ -188,7 +192,7 @@ class TaskMainView(MainView):
         factory=list, init=False, metadata={OMIT: True}
     )
     #: how many tasks of the run before had each status, once it was over
-    _last_counts: Optional["Counter[TaskStatus]"] = attrs.field(
+    _last_counts: Optional[Counter[TaskStatus]] = attrs.field(
         default=None, init=False, metadata={OMIT: True}
     )
 

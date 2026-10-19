@@ -1,5 +1,7 @@
 """Charts on the second of two pages, shared by the backend tests of `ChartView`."""
 
+from __future__ import annotations
+
 from attrs import Factory
 
 from composeui.core.view import (

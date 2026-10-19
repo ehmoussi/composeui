@@ -1,5 +1,7 @@
 """A table above its button, shared by the backend tests of `VerticalView`."""
 
+from __future__ import annotations
+
 import attrs
 from attrs import Factory
 

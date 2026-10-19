@@ -8,6 +8,8 @@ cover a form combining several independent cross-field checks into its shared
 `log_view` - `PipeFormView` in `examples/pipeform.py` now uses both.
 """
 
+from __future__ import annotations
+
 from composeui.core.view import CONVERTER, FormView, LogType, RowInputView
 
 

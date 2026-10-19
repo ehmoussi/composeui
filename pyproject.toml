@@ -120,6 +120,14 @@ ignore = [
     "S101",
 ]
 
+[tool.ruff.lint.isort]
+# Every module postpones annotation evaluation (enforced by I002, added by `make lint`).
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pyupgrade]
+# attrs/cattrs evaluate view field annotations at runtime, where `X | Y` fails on 3.9.
+keep-runtime-typing = true
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004"]
 # `qtbot` is requested but unused in tests that only need it for QApplication

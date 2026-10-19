@@ -1,12 +1,17 @@
 """Tests for pages and their router, in core: navigation and saved state."""
 
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pytest
 from attrs import Factory
 
 from composeui.core.view import CONVERTER, PageView, Router, define_view
 from tests.pages import InputsPage, PagesMainView, PagesRouter
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _checked_routes(router: Router) -> list[str]:

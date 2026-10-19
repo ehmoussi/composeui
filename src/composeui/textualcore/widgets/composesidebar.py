@@ -1,12 +1,16 @@
-from typing import ClassVar
+from __future__ import annotations
 
-from textual import events
+from typing import TYPE_CHECKING, ClassVar
+
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widget import Widget
 from textual.widgets import Label, Static
 
 from composeui.core.signal import Signal
+
+if TYPE_CHECKING:
+    from textual import events
+    from textual.widget import Widget
 
 
 class ComposeSidebarToggle(Static, can_focus=True):
@@ -16,7 +20,7 @@ class ComposeSidebarToggle(Static, can_focus=True):
         Binding("enter,space", "press", "Retract or expand", show=False),
     ]
 
-    def __init__(self, sidebar: "ComposeSidebar") -> None:
+    def __init__(self, sidebar: ComposeSidebar) -> None:
         super().__init__(classes="sidebar--toggle")
         self._sidebar = sidebar
 

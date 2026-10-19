@@ -1,5 +1,7 @@
 """Tests of the example batman: a click on the chart says whether it was on the bat."""
 
+from __future__ import annotations
+
 from examples.batman import BLACK, YELLOW, BatmanMainView, is_in_bat
 
 

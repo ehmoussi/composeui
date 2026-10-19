@@ -1,12 +1,17 @@
 """Test of the example pipeform."""
 
+from __future__ import annotations
+
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from composeui.qtcore.qtapplication import QtApplication
 from examples.pipeform import EdgeType, Material, PipeMainView
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture

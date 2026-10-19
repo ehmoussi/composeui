@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from qtpy.QtGui import QIcon
 
 

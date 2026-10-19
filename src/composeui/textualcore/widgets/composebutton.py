@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from textual.widgets import Button
 
 from composeui.core.signal import SignalNoArgs
