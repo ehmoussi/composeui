@@ -23,7 +23,7 @@ src/composeui/
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
-docs/            # the user guide, the examples guide, and this guide
+docs/            # the user guide, the examples guide, this guide, and the Sphinx site
 ```
 
 ## Architecture
@@ -187,6 +187,7 @@ make translations  # each app's catalogs against the text it translates
 make check         # lint + mypy + translations
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
+make docs          # build the documentation site into docs/_build/html
 ```
 
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
@@ -236,8 +237,32 @@ committed. It needs no Node or npm.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
 
+### Documentation site
+
+`make docs` builds the documentation site with Sphinx and MyST into `docs/_build/html`.
+The site holds the guides, a widget catalog, and an API reference. Install the `docs` group
+and every extra first, because the API reference imports the application module of each
+backend:
+
+```bash
+uv sync --group dev --group docs --all-extras
+```
+
+- **The guides stay Markdown.** MyST reads `docs/*.md` as they are. A link from a guide to
+  a file outside `docs/`, such as `../src/examples/pipeform.py`, goes to that file on
+  GitHub (`docs/conf.py`).
+- **The API reference is built from the docstrings.** Each page in `docs/api/` runs
+  `automodule` in an `{eval-rst}` block, because autodoc writes reStructuredText. In a
+  docstring, single backticks link to the name they hold. When you add a module to
+  `composeui.core`, add its page and its entry in `docs/api/index.md`.
+- **The widget catalog is built from the views.** The `widget-catalog` directive
+  (`docs/_ext/widgetcatalog.py`) lists each view of `composeui.core.view` that has a
+  `_renderer_key`, with the first paragraph of its docstring. A new widget is in the
+  catalog without a change to `docs/widgets.md`.
+- **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`. It runs
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
-`make browser-test` on Python 3.13. Run `make check test` before you commit.
+`make browser-test` and `make docs` on Python 3.13. Run `make check test` before you commit.
