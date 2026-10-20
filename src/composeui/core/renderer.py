@@ -1,3 +1,5 @@
+"""The base classes of the renderers, which show a view with a widget of a toolkit."""
+
 from __future__ import annotations
 
 import contextlib
@@ -12,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class ViewLike(Protocol):
+    """What a renderer needs of every view: whether it is visible and enabled."""
+
     is_visible: bool
     is_enabled: bool
 
@@ -21,6 +25,8 @@ TObject = TypeVar("TObject")
 
 
 class NoRenderedObjectError(Exception):
+    """A renderer used before `Renderer.render` built its widget."""
+
     def __init__(self) -> None:
         super().__init__(
             "Cannot access rendered object because nothing has been rendered yet. "
@@ -29,6 +35,8 @@ class NoRenderedObjectError(Exception):
 
 
 class MissingRefreshAttributeFunctionError(Exception):
+    """A changed field of a view that its renderer has no handler for."""
+
     def __init__(self, renderer: Renderer[Any, Any], attr_name: str) -> None:
         super().__init__(
             f"The attribute {attr_name} don't have a corresponding "
@@ -37,6 +45,13 @@ class MissingRefreshAttributeFunctionError(Exception):
 
 
 class Renderer(ABC, Generic[TView, TObject]):
+    """The base of a backend's renderers: one shows a view with a widget of its toolkit.
+
+    `render` builds the widget. `refresh_attribute` shows a new value of a field of the view,
+    with the handler of `_refresh_dispatcher` for that field. `update_state` copies the state
+    of the widget into the view.
+    """
+
     def __init__(self, view: TView) -> None:
         self._view = view
         self._rendered_object: TObject | None = None
@@ -62,10 +77,10 @@ class Renderer(ABC, Generic[TView, TObject]):
 
     @abstractmethod
     def render(self) -> None:
-        """Render the view in the appropriate framework."""
+        """Build the widget that shows the view."""
 
     def refresh(self) -> None:
-        """Refresh the framework view object using the view state."""
+        """Show every field of the view that has a handler in `_refresh_dispatcher`."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
         for attr_name in self._refresh_dispatcher:
@@ -77,7 +92,10 @@ class Renderer(ABC, Generic[TView, TObject]):
             refresh(self._view, self._rendered_object, value)
 
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
-        """Refresh the framework view object using the view state."""
+        """Show `value`, the new value of the view's field `attr_name`.
+
+        Raises `MissingRefreshAttributeFunctionError` when no handler shows the field.
+        """
         if self._rendered_object is None:
             raise NoRenderedObjectError
         if hasattr(self._view, attr_name):
@@ -91,7 +109,7 @@ class Renderer(ABC, Generic[TView, TObject]):
             raise AttributeError(msg)
 
     def update_state(self) -> None:
-        """Update the state of the view using framework view object."""
+        """Copy the state of the widget into the view."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
         with self.stop_refresh():
@@ -131,6 +149,8 @@ class MainRenderer(Renderer[TView, TObject]):
 
 
 class RendererContainer(Generic[TView]):
+    """The renderers of a view shown by several widgets, e.g. a form row's label and field."""
+
     def __init__(self, view: TView, renderers: Mapping[str, Renderer[TView, Any]]) -> None:
         self._view = view
         self._renderers = dict(renderers)
@@ -159,19 +179,19 @@ class RendererContainer(Generic[TView]):
         return list(self._renderers.values())
 
     def render(self) -> None:
-        """Render the view in the appropriate framework."""
+        """Build the widgets of every renderer."""
         for renderer in self._renderers.values():
             renderer.render()
 
     def refresh(self) -> None:
-        """Refresh the framework view object using the view state."""
+        """Show every field of the view that a renderer has a handler for."""
         if len(self._renderers) == 0:
             raise NoRenderedObjectError
         for renderer in self._renderers.values():
             renderer.refresh()
 
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
-        """Refresh the framework view object using the view state."""
+        """Show `value` with each renderer that has a handler for the field `attr_name`."""
         if len(self._renderers) == 0:
             raise NoRenderedObjectError
         for renderer in self._renderers.values():
@@ -179,7 +199,7 @@ class RendererContainer(Generic[TView]):
                 renderer.refresh_attribute(attr_name, value)
 
     def update_state(self) -> None:
-        """Update the state of the view using framework view object."""
+        """Copy the state of every widget into the view."""
         if len(self._renderers) == 0:
             raise NoRenderedObjectError
         for renderer in self._renderers.values():

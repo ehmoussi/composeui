@@ -1,4 +1,4 @@
-"""Model."""
+"""The model: the app's data beside its views, saved and opened with them in a study."""
 
 from __future__ import annotations
 

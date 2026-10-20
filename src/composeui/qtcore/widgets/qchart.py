@@ -377,7 +377,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         return lines
 
     def _is_step(self, curve: Series) -> bool:
-        """Whether `curve` is drawn in steps: a line's points only, not dots."""
+        """Tell whether `curve` is drawn in steps: a line's points only, not dots."""
         return curve.step and ChartView.kind_of(curve, self._kind) is ChartKind.LINE
 
 

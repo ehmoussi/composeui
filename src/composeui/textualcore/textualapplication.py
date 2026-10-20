@@ -1,3 +1,5 @@
+"""The application classes of the Textual backend."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
@@ -16,6 +18,8 @@ ModelT = TypeVar("ModelT", bound="Model")
 
 
 class TextualApplication(Application[MainViewT]):
+    """The Textual app: it shows the main view in the terminal."""
+
     def run(self) -> None:
         super().run()
         self.render(RendererType.TEXTUAL)
@@ -26,6 +30,8 @@ class TextualApplication(Application[MainViewT]):
 
 
 class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
+    """The Textual app with a model, which it closes once the app exits."""
+
     def run(self) -> None:
         super().run()
         self.render(RendererType.TEXTUAL)

@@ -116,7 +116,7 @@ def _require() -> None:
 def image_style(options: ImageOptions = DEFAULT_OPTIONS) -> Iterator[None]:
     """Draw and save figures with the options' fonts while the block runs.
 
-    Text stays text in a vector image (TrueType fonts in a PDF or EPS, `<text>` in an
+    Text stays text in a vector image (TrueType fonts in a PDF or EPS, ``<text>`` in an
     SVG), so its labels can still be edited or searched. Matplotlib's global settings
     are left as they were: wrap a `chart_figure` saved with `Figure.savefig` in it too.
     """

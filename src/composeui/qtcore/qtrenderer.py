@@ -199,7 +199,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         self._rendered_object.blockSignals(False)  # noqa: FBT003
 
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
-        """Refresh the framework view object using the view state."""
+        """Show `value`, the new value of `attr_name`, without the widget emitting signals."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
         self._rendered_object.blockSignals(True)  # noqa: FBT003
@@ -207,7 +207,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         self._rendered_object.blockSignals(False)  # noqa: FBT003
 
     def update_state(self) -> None:
-        """Update the state of the view using framework view object."""
+        """Copy the state of the widget into the view, its visibility and enabled state too."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
         self._update_state(self._view, self._rendered_object)

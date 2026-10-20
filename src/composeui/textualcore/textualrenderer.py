@@ -210,7 +210,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
         )
 
     def _is_waiting_to_mount(self) -> bool:
-        """Whether the app runs but hasn't mounted the widget yet, e.g. on a screen not shown.
+        """Tell whether the app runs but hasn't mounted the widget yet, e.g. on a screen not shown.
 
         Some widgets refuse their state until mounted (a `Select` its options); whatever
         mounts them later gives them their state then: the app's own mount, a list's new
@@ -2522,7 +2522,7 @@ class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
 
 
 def _slot_id(route: str) -> str:
-    """Id of a page's slot in its router's switcher (routes are valid ids)."""
+    """Get the id of a page's slot in its router's switcher (routes are valid ids)."""
     return f"page-{route}"
 
 

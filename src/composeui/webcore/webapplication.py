@@ -1,3 +1,5 @@
+"""The application classes of the web backend."""
+
 from __future__ import annotations
 
 import functools
@@ -144,11 +146,11 @@ def _entry_point() -> str:
 
 
 def create_reloaded_starlette_app() -> Starlette:
-    """Build the app of the program named by `_RELOAD_ENTRY_VARIABLE`: `--reload`'s factory.
+    """Build the app of the program named by `_RELOAD_ENTRY_VARIABLE`: ``--reload``'s factory.
 
     uvicorn's reloader serves from a new process, started again after every change,
     which doesn't run the program that started the server. So this runs it again, with
-    the command line the process inherited (`-f`, `--debug`, ...), and keeps the app
+    the command line the process inherited (``-f``, ``--debug``, ...), and keeps the app
     whose `run` it reaches instead of serving it: an app built inline, connected or
     configured by the program's `main()` comes back just as it was.
     """
@@ -189,9 +191,9 @@ def create_reloaded_starlette_app() -> Starlette:
 class WebApplication(Application[MainViewT]):
     """Serve the app over HTTP, building one `MainView` per browser session.
 
-    `main_view` is only a template (for the command line, e.g. `-f`'s extension
+    `main_view` is only a template (for the command line, e.g. ``-f``'s extension
     check): every session gets its own instance from `build_main_view`. So
-    `connect(view=app.main_view..., ...)` doesn't wire the template: it records where the
+    ``connect(view=app.main_view..., ...)`` doesn't wire the template: it records where the
     view and signals sit in it, and every new session connects the callback to its own
     ones, with its own `view` and `main_view`. Connect before serving: a session already
     open keeps the connections it was built with.
@@ -356,7 +358,7 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
 
     @override
     def _study_model(self) -> ModelT:
-        """Get a model for the template main view alone, which `-f` is opened into first.
+        """Get a model for the template main view alone, which ``-f`` is opened into first.
 
         Not a session's: only so a study that doesn't fit stops the app as it starts,
         rather than failing every session, each opening it into its own model. A study

@@ -1,6 +1,6 @@
 """Translate the text views show, from JSON catalogs.
 
-A catalog is a `<language>.json` file mapping the text as written in the code to its
+A catalog is a ``<language>.json`` file mapping the text as written in the code to its
 translation: ``{"Radius": "Rayon"}``. Text missing from every catalog is shown as written,
 like text translated as "": a translation still to fill.
 """

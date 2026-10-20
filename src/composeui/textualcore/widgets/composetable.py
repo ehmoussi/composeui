@@ -376,7 +376,7 @@ class ComposeTable(DataTable[Text]):
             self._toggle_check(self.cursor_row, checked[0])
 
     def _editable_columns(self, kind: CellKind | None = None, row: int | None = None) -> list[int]:
-        """`editable_columns` the table has whose cells show `kind`, in order: typed in if None.
+        """Get the `editable_columns` whose cells show `kind`, in order: typed in if None.
 
         Those whose cell in `row`, if given, isn't disabled.
         """

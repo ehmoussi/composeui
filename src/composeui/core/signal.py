@@ -1,3 +1,5 @@
+"""The signals, which carry events between the views, the model and the app's code."""
+
 from __future__ import annotations
 
 import functools
@@ -84,6 +86,12 @@ def _positional_count(callback: Callable[..., None]) -> int | None:
 
 
 class Signal(Generic[Unpack[Ts]]):
+    """An event that a view, a model or the app emits, with the callbacks connected to it.
+
+    `connect` adds a callback, and `emit` calls each callback with the signal's arguments. A
+    callback with a ``main_view`` or ``model`` parameter gets it by name (see `connect`).
+    """
+
     def __init__(self) -> None:
         self._name = ""
         self._qt_signal = _QtSignal()
@@ -108,7 +116,7 @@ class Signal(Generic[Unpack[Ts]]):
                 callback.set_model(self._model)
 
     def add_qt_signal(self, signal: SignalInstance) -> None:
-        """Add the qt signal."""
+        """Call this signal's callbacks when the Qt signal `signal` emits too."""
         self._qt_signal.add_signal(signal, self._callbacks)
 
     @overload
@@ -252,7 +260,7 @@ class _QtSignal:
         self._qt_signals: list[SignalInstance] = []
 
     def add_signal(self, signal: SignalInstance, callbacks: Sequence[Callable[..., None]]) -> None:
-        """Add the qt signal."""
+        """Add the Qt signal `signal`, and connect `callbacks` to it."""
         self._qt_signals.append(signal)
         for callback in callbacks:
             signal.connect(callback)
@@ -282,6 +290,8 @@ class _FirstArgumentsCallback(Generic[Unpack[Ts]]):
 
 
 class InjectedCallback(Generic[Unpack[Ts]]):
+    """A callback that gets the ``main_view`` and ``model`` it asks for by name."""
+
     def __init__(
         self,
         *,

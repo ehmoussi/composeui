@@ -11,11 +11,11 @@ SERIES_COLORS = {
 
 
 def series_color(index: int, *, is_dark: bool) -> str:
-    """Get the color of the chart's series at `index`, as `#rrggbb`."""
+    """Get the color of the chart's series at `index`, as ``#rrggbb``."""
     colors = SERIES_COLORS[is_dark]
     return colors[index % len(colors)]
 
 
 def is_dashed(index: int) -> bool:
-    """Whether the series at `index` is dashed: the colors went around once already."""
+    """Tell whether the series at `index` is dashed: the colors went around once already."""
     return index >= len(SERIES_COLORS[False])
