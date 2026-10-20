@@ -2732,6 +2732,17 @@ class RecordTableView(TableView, Generic[RecordT]):
         )
         raise TypeError(msg)
 
+    def column_index(self, field: str) -> int:
+        """Get the index of the column showing `field`, e.g. to style its cells.
+
+        Raise `ValueError` when no column shows it.
+        """
+        for index, column in enumerate(self.columns):
+            if column.field == field:
+                return index
+        msg = f"{type(self).__name__} has no column showing {field!r}."
+        raise ValueError(msg)
+
     @property
     def selected_record(self) -> Optional[RecordT]:
         """Get the first selected record, or None if no row is selected."""

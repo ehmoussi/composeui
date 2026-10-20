@@ -225,21 +225,6 @@ class Measurement:
     kept: bool = True
 
 
-MEASUREMENT_COLUMNS = [
-    Column("pipe", "Pipe"),
-    Column("flow", "Flow Rate (L/s)"),
-    Column("measured", "Measured"),
-    Column("computed", "Computed"),
-    Column("deviation", "Deviation (%)"),
-    Column("kept", "Kept", editable=True, widget=CellWidget.check_box(check_all=True)),
-]
-
-
-def column_index(field: str) -> int:
-    """Get the index of the measurements' column showing `field`."""
-    return next(index for index, column in enumerate(MEASUREMENT_COLUMNS) if column.field == field)
-
-
 @define_view
 class MeasurementsTab(TabPage):
     """The rig's measurements, a row each, against the drop the curve computes there.
@@ -249,14 +234,25 @@ class MeasurementsTab(TabPage):
 
     table: RecordTableView[Measurement] = child(
         RecordTableView[Measurement],
-        columns=MEASUREMENT_COLUMNS,
-        header_groups=[HeaderGroup("Pressure Drop (kPa)", column_index("measured"), 2)],
+        columns=[
+            Column("pipe", "Pipe"),
+            Column("flow", "Flow Rate (L/s)"),
+            Column("measured", "Measured"),
+            Column("computed", "Computed"),
+            Column("deviation", "Deviation (%)"),
+            Column("kept", "Kept", editable=True, widget=CellWidget.check_box(check_all=True)),
+        ],
     )
     summary: TableView = child(
         TableView,
         headers=["Value"],
         row_headers=["Measurements Kept", "Mean Deviation (%)", "Largest Deviation (%)"],
     )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        measured = self.table.column_index("measured")
+        self.table.header_groups = [HeaderGroup("Pressure Drop (kPa)", measured, 2)]
 
 
 @define_view
@@ -364,9 +360,10 @@ class PipeChartMainView(MainView):
 
     def _show_measurements(self) -> None:
         """Color, mark and group the measurements, and sum those kept up."""
-        records = self.measurements.records
+        table = self.measurements
+        records = table.records
         pipe, computed, deviation, kept = map(
-            column_index, ("pipe", "computed", "deviation", "kept")
+            table.column_index, ("pipe", "computed", "deviation", "kept")
         )
         styles: dict[tuple[int, int], CellStyle] = {}
         for index, record in enumerate(records):
