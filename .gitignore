@@ -15,3 +15,6 @@ wheels/
 *.pipe
 # downloaded by `make css`, not committed
 css/vendor/
+
+# built by `make docs`
+docs/_build/

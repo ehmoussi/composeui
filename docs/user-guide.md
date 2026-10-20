@@ -823,7 +823,6 @@ The Measurements tab of [`pipechart.py`](../src/examples/pipechart.py) uses each
 looks.
 
 ## A list of views
-## A list of views
 
 A `ListView` shows a view per record, one above the other. For example, it shows an
 expander per record, with the details of the record and its Delete button. A subclass

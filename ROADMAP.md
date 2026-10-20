@@ -101,8 +101,8 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 4 — Adoption
 
-1. **API reference docs** (mkdocs + mkdocstrings; the code is fully typed), with a widget
-   catalog and a short architecture page (views, signals, renderers, the registry).
+1. **Publish the documentation site** (`make docs`, Sphinx + MyST) on GitHub Pages or Read
+   the Docs, and link to it from `README.md`.
 2. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt, a
    plain `uvicorn` deployment note for the web.
 3. **`CHANGELOG.md`, semantic versions and a PyPI release.**

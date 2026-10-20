@@ -78,6 +78,11 @@ dev = [
     "ruff>=0.15.17",
     "textual-dev>=1.8.0",
 ]
+docs = [
+    "furo>=2024.8.6",
+    "myst-parser>=3.0.1",
+    "sphinx>=7.4.7",
+]
 
 [[tool.mypy.overrides]]
 # pyqtgraph ships no type hints: the chart widget is typed at its edges
@@ -130,6 +135,8 @@ keep-runtime-typing = true
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004"]
+# Sphinx loads the configuration and its extensions as scripts, not from a package
+"docs/**" = ["INP001"]
 # `qtbot` is requested but unused in tests that only need it for QApplication
 # lifecycle/cleanup (see pytest-qt), not for driving an interaction.
 "tests/test_qtrenderer.py" = ["ARG001"]

@@ -51,6 +51,13 @@ test:
 browser-test:
 	uv run --group browser pytest tests/test_browser.py -m browser -p no:pytest-qt
 
+# the documentation site (Sphinx + MyST): the guides, the widget catalog and the API
+# reference, in docs/_build/html; any warning fails it. The API reference imports every
+# backend's application module: run `uv sync --group docs --all-extras` first.
+.PHONY: docs
+docs:
+	uv run --group docs sphinx-build -W --keep-going -b html docs docs/_build/html
+
 # Tailwind's standalone CLI and daisyUI's plugin files: no Node/npm needed. Downloaded
 # once into css/vendor/ (not committed); the built static/app.css is committed.
 TAILWIND_VERSION := 4.3.3
@@ -107,6 +114,7 @@ clean:
 	rm -rf build
 	rm -rf dist
 	rm -rf site
+	rm -rf docs/_build
 	rm -rf coverage.xml
 
 .PHONY: all

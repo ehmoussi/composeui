@@ -28,6 +28,7 @@ make translations  # each app's catalogs against the text it translates (TRANSLA
 make check   # lint + mypy + translations
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
+make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs `--group docs`)
 ```
 
 Run a single test file or test:
@@ -51,7 +52,7 @@ src/composeui/
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
-docs/            # user guide, examples guide, technical guide
+docs/            # user guide, examples guide, technical guide; Sphinx site (conf.py, api/, _ext/)
 ```
 
 ## Architecture rules
