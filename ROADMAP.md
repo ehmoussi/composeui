@@ -96,11 +96,8 @@ What a scientific app's charts need beyond these (see "Missing for a scientific 
 `SqliteModel` is in (user guide, "A SQLite model"): the app's tables and SQL, transactions,
 typed rows, a `changed` signal per table, and studies saved as a zip of the views' state
 and the database, checked before opening and brought up to date by migrations; on the
-web, per session; `examples/pipecatalogue.py` shows it. Left:
-
-1. **A worker thread writing results** (once there is a progress bar): the model's lock
-   already lets one share the connection; an example should show the views updated
-   through `call_on_main_thread`, not from the worker.
+web, per session; `examples/pipecatalogue.py` shows it. A job writes to it, its `changed`
+signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 4 — Adoption
 

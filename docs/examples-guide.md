@@ -12,6 +12,7 @@ run them from a clone of the repository.
 - [Pipe form](#pipe-form)
 - [Pipe catalogue](#pipe-catalogue)
 - [Pipe chart](#pipe-chart)
+- [Pipe sweep](#pipe-sweep)
 - [Task view](#task-view)
 - [Batman](#batman)
 - [Markdown viewer](#markdown-viewer)
@@ -39,6 +40,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
+| [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart, a table |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
@@ -133,6 +135,28 @@ It shows:
 - [widgets in cells](user-guide.md#widgets-in-cells): the Curves tab lists every curve.
   A check box shows or hides the curve, and the box in the header shows or hides them all.
   A combobox draws the curve as a line, in steps, or as dots.
+
+## Pipe sweep
+
+[`pipesweep.py`](../src/examples/pipesweep.py) sweeps the outer radius of a pipe under
+pressure, and finds the hoop stress in its wall at each radius.
+
+```bash
+uv run python -m examples.pipesweep   # web; or --backend qt, or textual
+```
+
+It shows:
+
+- a [job](user-guide.md#running-work-in-threads) that works in a thread, one radius at a
+  time, and [writes each run](user-guide.md#a-sqlite-model) to the model's database when
+  the run is done. The job never touches a view. The `changed` signal of each write is
+  emitted on the main thread, where the views show the runs written so far. Cancel stops
+  the sweep after the current run.
+- a form that checks the sweep before it starts, such as a wall thinner than the minimum
+  radius;
+- a [progress bar](user-guide.md#progress-bar), a [line chart](user-guide.md#charts), and a
+  table of the runs written;
+- the File menu, which saves and opens the runs with the views as a `.sweep` file.
 
 ## Task view
 

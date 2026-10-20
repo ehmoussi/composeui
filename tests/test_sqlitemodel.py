@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import zipfile
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterator
     from pathlib import Path
+
+    from composeui.core.jobs import Job
 
 
 @attrs.define
@@ -271,6 +274,43 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
     assert app.model.runs.radii() == [80.0]
     assert app.main_view.form.name.text == "Bob"
     assert app.main_view.state_filepath is None
+
+
+def test_a_job_s_writes_are_told_on_the_main_thread(app: App) -> None:
+    threads: list[threading.Thread] = []
+    app.model.runs.changed.connect(lambda: threads.append(threading.current_thread()))
+
+    def write(_job: Job[None], model: RunsModel) -> None:
+        model.runs.add(80.0)
+        model.runs.add(50.0)
+
+    app.main_view.jobs.start(write, app.model)
+    app.main_view.jobs.wait()
+
+    assert app.model.runs.radii() == [80.0, 50.0]
+    assert threads == [threading.current_thread()] * 2
+
+
+def test_opening_a_study_drops_the_jobs_before_it_replaces_the_rows(
+    app: App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "study.hello"
+    _save(app, path)
+    jobs = app.main_view.jobs
+    # a job writing to the model, as long as it isn't canceled
+    jobs.start(lambda job: job.sleep(60))
+    running_as_replaced: list[bool] = []
+    open_data = RunsModel.open_data
+
+    def replace_rows(model: RunsModel, data_path: Path) -> None:
+        running_as_replaced.append(jobs.is_running)
+        open_data(model, data_path)
+
+    monkeypatch.setattr(RunsModel, "open_data", replace_rows)
+
+    _open(app, path)
+
+    assert running_as_replaced == [False]
 
 
 def test_a_failed_save_leaves_the_previous_study_whole(

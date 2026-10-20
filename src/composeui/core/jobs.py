@@ -31,9 +31,15 @@ class CalledInJobError(RuntimeError):
     """`Jobs.start`, `cancel` or `drop` called by a job's function, not on the main thread."""
 
 
+def current_job() -> Job[Any] | None:
+    """Get the job whose function runs on this thread; None on any other thread."""
+    job: Job[Any] | None = getattr(_CURRENT, "job", None)
+    return job
+
+
 def _check_main_thread(method: str) -> None:
     """Raise `CalledInJobError` in a job's thread: `Jobs` is only changed on the main one."""
-    if getattr(_CURRENT, "job", None) is not None:
+    if current_job() is not None:
         msg = (
             f"Jobs.{method} is called on the main thread, not by a job's function: call it"
             " from a callback of the job's finished signal instead"
@@ -48,7 +54,9 @@ class Job(Generic[R]):
     early once canceled. Its result, or what it raised, is emitted on the main thread.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, hand_over: Callable[[Job[Any], Callable[[], None]], None]) -> None:
+        # `Jobs._hand_over`, giving a callback to the main thread
+        self._hand_over = hand_over
         #: the function's return value, on the main thread
         self.finished = Signal[R]()
         #: what the function raised, on the main thread (logged too)
@@ -67,6 +75,14 @@ class Job(Generic[R]):
         """Wait `seconds`, in the job's thread; False if it was canceled meanwhile."""
         return not self._canceled.wait(seconds)
 
+    def call_on_main_thread(self, callback: Callable[[], None]) -> None:
+        """Call `callback` on the main thread, e.g. to show how far the function has gone.
+
+        Called in order, before the job's outcome is emitted; not at all once the job is
+        dropped (New, Open, closing the app). Without a toolkit, `Jobs.wait` calls it.
+        """
+        self._hand_over(self, callback)
+
 
 class Jobs:
     """The jobs of a main view (`MainView.jobs`): functions run in threads.
@@ -75,7 +91,8 @@ class Jobs:
     touch a view: a toolkit's widgets belong to the main thread. It returns its result
     instead, which its job's `finished` emits on the main thread, where callbacks update
     the views. Connected like any signal's, they get the `main_view` and `model` they ask
-    for.
+    for. Meanwhile, `Job.call_on_main_thread` hands it a callback, e.g. to move a progress
+    bar; a `SqliteModel` hands it the `changed` signals of the job's writes.
 
     Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback, never
     from a job's function: the jobs aren't locked, the main thread alone changing them.
@@ -117,7 +134,7 @@ class Jobs:
         `CalledInJobError` in a job's thread.
         """
         _check_main_thread("start")
-        job: Job[R] = Job()
+        job: Job[R] = Job(self._hand_over)
         name = getattr(work, "__name__", "job")
         main_view = self._main_view()
         model = None if self._model is None else self._model()
@@ -202,6 +219,14 @@ class Jobs:
             self._results.put(callback)
         else:
             main_view.renderer.call_on_main_thread(callback)
+
+    def _hand_over(self, job: Job[Any], callback: Callable[[], None]) -> None:
+        self._on_main_thread(functools.partial(self._call, job, callback))
+
+    def _call(self, job: Job[Any], callback: Callable[[], None]) -> None:
+        """Call a job's `callback`, on the main thread; unless the job was dropped."""
+        if job in self._running:
+            callback()
 
     def _end(self, job: Job[Any], signal: Signal[Any], outcome: object) -> None:
         """Emit the outcome of a job, on the main thread; unless it was dropped."""

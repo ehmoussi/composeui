@@ -87,6 +87,9 @@ def open_study(
             except ValueError as error:  # also covers bytes that aren't text
                 raise InvalidStateError(invalid) from error
             main_view.check_state_data(data)
+            # before the model's data is replaced: a job writing to it would write into the
+            # study opened (see `Jobs`), so it stops once its open fails too
+            main_view.jobs.drop()
             with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
                 # the member is named after the model's file, never a path of the archive's
                 archive.extract(model.data_name, directory)

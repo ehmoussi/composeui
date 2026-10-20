@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import threading
 from typing import TYPE_CHECKING
 
@@ -148,3 +149,59 @@ def test_a_job_s_result_is_emitted_on_the_gui_thread(qtbot: QtBot) -> None:
     assert threads == [threading.main_thread()]
     with pytest.raises(RuntimeError):  # the event loop emits them
         main_view.jobs.wait()
+
+
+def test_a_job_s_callbacks_are_called_on_the_main_thread_before_its_result(
+    app: ModelApplication[MainView, _Model],
+) -> None:
+    jobs = app.main_view.jobs
+    calls: list[tuple[str, threading.Thread]] = []
+
+    def record(name: str) -> None:
+        calls.append((name, threading.current_thread()))
+
+    def count(job: Job[int], value: int) -> int:
+        for step in range(value):
+            job.call_on_main_thread(functools.partial(record, f"step {step}"))
+        return value
+
+    jobs.start(count, 2).finished.connect(lambda _: record("finished"))
+    jobs.wait()
+
+    main = threading.current_thread()
+    assert calls == [("step 0", main), ("step 1", main), ("finished", main)]
+
+
+def test_a_dropped_job_s_callbacks_are_not_called(
+    app: ModelApplication[MainView, _Model],
+) -> None:
+    jobs = app.main_view.jobs
+    handed_over = threading.Event()
+    calls: list[str] = []
+
+    def hand_over(job: Job[None]) -> None:
+        job.call_on_main_thread(lambda: calls.append("called"))
+        handed_over.set()
+
+    jobs.start(hand_over)
+    assert handed_over.wait(5)
+    jobs.drop()
+    jobs.start(_double, 1)  # waiting for it calls what the dropped one handed over
+    jobs.wait()
+
+    assert calls == []
+
+
+def test_a_job_s_callbacks_are_called_on_the_gui_thread(qtbot: QtBot) -> None:
+    pytest.importorskip("qtpy")
+    main_view = MainView()
+    main_view.render(RendererType.QT)
+    threads: list[threading.Thread] = []
+
+    def hand_over(job: Job[None]) -> None:
+        job.call_on_main_thread(lambda: threads.append(threading.current_thread()))
+
+    main_view.jobs.start(hand_over)
+    qtbot.waitUntil(lambda: len(threads) == 1)
+
+    assert threads == [threading.main_thread()]

@@ -19,6 +19,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, Union, cast
 
+from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.view import CONVERTER
@@ -206,7 +207,8 @@ class SqliteModel(Model):
         The transaction commits once the block ends, or rolls back if the block raises, so
         its writes land together or not at all. A block inside another (one table's method
         calling another's) joins the outer transaction. `changing`'s `changed` is emitted
-        after the commit if the block changed rows.
+        after the commit if the block changed rows: on the main thread, for a block in a
+        job's thread (see `Job.call_on_main_thread`), as the views it refreshes are there.
         """
         changed: list[SqliteTable] = []
         with self._lock:
@@ -233,8 +235,12 @@ class SqliteModel(Model):
             finally:
                 self._depth -= 1
         # outside the lock: a view refreshing may query another thread's way
+        job = current_job()
         for table in changed:
-            table.changed.emit()
+            if job is None:
+                table.changed.emit()
+            else:
+                job.call_on_main_thread(table.changed.emit)
 
     def new(self) -> None:
         self._replace_database(self._new_database())
