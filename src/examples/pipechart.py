@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any, Optional
 
+import attrs
 from attrs import Factory, evolve
 
 from composeui.core import application
@@ -29,12 +30,14 @@ from composeui.core.view import (
     CellWidget,
     ChartKind,
     ChartView,
+    Column,
     GroupFormView,
     HeaderGroup,
     HorizontalView,
     LabelRowFloatInputView,
     MainView,
     NodeMark,
+    RecordTableView,
     ReferenceLine,
     Series,
     TableView,
@@ -203,8 +206,38 @@ class ChartTab(TabPage):
     )
 
 
-#: the measurements' columns
-PIPE, FLOW, MEASURED, COMPUTED, DEVIATION, KEPT = range(6)
+@attrs.frozen
+class Measurement:
+    """A drop the rig measured on a pipe, against the one the model computes there.
+
+    Its numbers are rounded as the table shows them.
+    """
+
+    pipe: str
+    #: the flow rate (L/s)
+    flow: float
+    #: the pressure drops (kPa); the computed one is NaN where the model holds no law
+    measured: float
+    computed: float
+    #: how far (%) the measured drop is from the computed one
+    deviation: float
+    #: whether the summary counts it
+    kept: bool = True
+
+
+MEASUREMENT_COLUMNS = [
+    Column("pipe", "Pipe"),
+    Column("flow", "Flow Rate (L/s)"),
+    Column("measured", "Measured"),
+    Column("computed", "Computed"),
+    Column("deviation", "Deviation (%)"),
+    Column("kept", "Kept", editable=True, widget=CellWidget.check_box(check_all=True)),
+]
+
+
+def column_index(field: str) -> int:
+    """Get the index of the measurements' column showing `field`."""
+    return next(index for index, column in enumerate(MEASUREMENT_COLUMNS) if column.field == field)
 
 
 @define_view
@@ -214,12 +247,10 @@ class MeasurementsTab(TabPage):
     Under them, a summary of those kept, a row each: its header, then its value.
     """
 
-    table: TableView = child(
-        TableView,
-        headers=["Pipe", "Flow Rate (L/s)", "Measured", "Computed", "Deviation (%)", "Kept"],
-        header_groups=[HeaderGroup("Pressure Drop (kPa)", MEASURED, 2)],
-        editable_columns=[KEPT],
-        cell_widgets={KEPT: CellWidget.check_box(check_all=True)},
+    table: RecordTableView[Measurement] = child(
+        RecordTableView[Measurement],
+        columns=MEASUREMENT_COLUMNS,
+        header_groups=[HeaderGroup("Pressure Drop (kPa)", column_index("measured"), 2)],
     )
     summary: TableView = child(
         TableView,
@@ -267,7 +298,7 @@ class PipeChartMainView(MainView):
         return self.results.chart_tab.chart
 
     @property
-    def measurements(self) -> TableView:
+    def measurements(self) -> RecordTableView[Measurement]:
         """The measurements' table, on its tab."""
         return self.results.measurements_tab.table
 
@@ -282,7 +313,7 @@ class PipeChartMainView(MainView):
         self.buttons.measure.clicked.connect(self.add_measurements)
         self.buttons.clear.clicked.connect(self.clear_curves)
         self.curves.cell_edited.connect(self._edit_curve)
-        self.measurements.cell_edited.connect(self._keep_measurement)
+        self.measurements.record_edited.connect(self._keep_measurement)
         self._show_measurements()
 
     @property
@@ -309,56 +340,57 @@ class PipeChartMainView(MainView):
             return
         diameter, length, max_flow = pipe
         name = f"D = {diameter:g} mm"
-        rows = [
-            [
+        added = [
+            Measurement(
                 name,
-                f"{flow:.3g}",
-                f"{measured:.3g}",
-                _number(computed, ".3g"),
-                _number((measured - computed) / computed * 100, "+.1f"),
+                _rounded(flow),
+                _rounded(measured),
+                _rounded(computed),
+                round((measured - computed) / computed * 100, 1),
                 # one the model can't compute can't be compared with it
-                CHECKED_TEXTS[not math.isnan(computed)],
-            ]
+                kept=not math.isnan(computed),
+            )
             for flow, measured, computed in measurements(diameter, length, max_flow)
         ]
-        others = [row for row in self.measurements.rows if row[PIPE] != name]
-        self.measurements.rows = [*others, *rows]
+        others = [record for record in self.measurements.records if record.pipe != name]
+        self.measurements.records = [*others, *added]
         self._show_measurements()
 
-    def _keep_measurement(self, row: int, column: int, text: str) -> None:
+    def _keep_measurement(self, old: Measurement, new: Measurement) -> None:
         """Keep a measurement in the summary or not, as its Kept box says."""
-        self.measurements.rows = replace_cell(self.measurements.rows, row, column, text)
+        records = self.measurements.records
+        self.measurements.records = [new if record is old else record for record in records]
         self._show_measurements()
 
     def _show_measurements(self) -> None:
         """Color, mark and group the measurements, and sum those kept up."""
-        rows = self.measurements.rows
+        records = self.measurements.records
+        pipe, computed, deviation, kept = map(
+            column_index, ("pipe", "computed", "deviation", "kept")
+        )
         styles: dict[tuple[int, int], CellStyle] = {}
-        deviations = []
-        for index, row in enumerate(rows):
-            if index == 0 or rows[index - 1][PIPE] != row[PIPE]:
+        for index, record in enumerate(records):
+            if index == 0 or records[index - 1].pipe != record.pipe:
                 # the pipe's cell over its measurements, which follow each other
-                count = next(
-                    (end for end in range(index, len(rows)) if rows[end][PIPE] != row[PIPE]),
-                    len(rows),
+                end = next(
+                    (end for end in range(index, len(records)) if records[end].pipe != record.pipe),
+                    len(records),
                 )
-                styles[index, PIPE] = CellStyle(row_span=count - index)
-            deviation = float(row[DEVIATION])
-            if math.isnan(deviation):
-                styles[index, COMPUTED] = CellStyle(background=NAN_COLOR)
-                styles[index, DEVIATION] = CellStyle(background=NAN_COLOR)
-                styles[index, KEPT] = CellStyle(is_disabled=True)
-            elif abs(deviation) > DEVIATION_WARNING:
-                styles[index, DEVIATION] = CellStyle(
+                styles[index, pipe] = CellStyle(row_span=end - index)
+            if math.isnan(record.computed):
+                styles[index, computed] = CellStyle(background=NAN_COLOR)
+                styles[index, deviation] = CellStyle(background=NAN_COLOR)
+                styles[index, kept] = CellStyle(is_disabled=True)
+            elif abs(record.deviation) > DEVIATION_WARNING:
+                styles[index, deviation] = CellStyle(
                     background=WARNING_COLOR, mark=NodeMark.WARNING
                 )
-            if row[KEPT] == CHECKED_TEXTS[True]:
-                deviations.append(deviation)
+        deviations = [record.deviation for record in records if record.kept]
         self.measurements.cell_styles = styles
         largest = max(deviations, key=abs, default=math.nan)
         mean = sum(deviations) / len(deviations) if deviations else math.nan
         self.summary.rows = [
-            [f"{len(deviations)} of {len(rows)}"],
+            [f"{len(deviations)} of {len(records)}"],
             [_number(mean, "+.1f")],
             [_number(largest, "+.1f")],
         ]
@@ -404,8 +436,13 @@ class PipeChartMainView(MainView):
         self._curves = []
         self.curves.rows = []
         self.chart.series = []
-        self.measurements.rows = []
+        self.measurements.records = []
         self._show_measurements()
+
+
+def _rounded(value: float) -> float:
+    """Round a number to the 3 significant digits the table shows."""
+    return float(f"{value:.3g}")
 
 
 def _number(value: float, spec: str) -> str:

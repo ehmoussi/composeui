@@ -14,6 +14,7 @@ from examples.pipechart import (
     SWEEP_POINTS,
     WARNING_COLOR,
     PipeChartMainView,
+    column_index,
     friction_factor,
 )
 
@@ -62,20 +63,21 @@ def test_the_measurements_tab_lists_each_measured_drop_against_the_computed_one(
     view.pipe.diameter.value = 50
     view.add_measurements()  # the same pipe again: its rows are replaced
 
-    rows = view.measurements.rows
+    records = view.measurements.records
     count = len(MEASUREMENTS)
-    assert [row[0] for row in rows] == ["D = 80 mm"] * count + ["D = 50 mm"] * count
+    assert [record.pipe for record in records] == ["D = 80 mm"] * count + ["D = 50 mm"] * count
     # each point as plotted, its deviation the rig's ratio to the computed drop; the first
     # is in transitional flow, where the model computes none
     measured = next(s for s in view.chart.series if s.name == "Measured, D = 50 mm")
-    assert [float(row[2]) for row in rows[count:]] == pytest.approx(measured.y, rel=1e-2)
-    assert [row[4] for row in rows[count:]] == [
-        "NaN",
-        *(f"{(r - 1) * 100:+.1f}" for _, r in MEASUREMENTS[1:]),
-    ]
+    pipe = records[count:]
+    assert [record.measured for record in pipe] == pytest.approx(measured.y, rel=1e-2)
+    assert math.isnan(pipe[0].deviation)
+    assert [record.deviation for record in pipe[1:]] == pytest.approx(
+        [(ratio - 1) * 100 for _, ratio in MEASUREMENTS[1:]]
+    )
 
     view.clear_curves()
-    assert view.measurements.rows == []
+    assert view.measurements.records == []
 
 
 def test_the_curves_tab_shows_hides_and_draws_each_curve(tmp_path: Path) -> None:
@@ -119,20 +121,21 @@ def test_the_measurements_show_what_the_model_can_t_compute_and_sum_those_kept_u
     view = PipeChartMainView()
     view.add_measurements()
     table, count = view.measurements, len(MEASUREMENTS)
+    pipe, computed, deviation, kept = map(column_index, ("pipe", "computed", "deviation", "kept"))
     styles = table.cell_styles
     # the pipe's cell over its measurements
-    assert styles[0, 0] == CellStyle(row_span=count)
+    assert styles[0, pipe] == CellStyle(row_span=count)
     # no computed drop: in red, and not kept, nor can it be
-    assert (styles[0, 3].background, styles[0, 4].background) == (NAN_COLOR, NAN_COLOR)
-    assert (table.rows[0][5], table.is_cell_editable(0, 5)) == ("False", False)
+    assert styles[0, computed].background == styles[0, deviation].background == NAN_COLOR
+    assert (table.records[0].kept, table.is_cell_editable(0, kept)) == (False, False)
     # a deviation over 10 % marked
-    assert styles[5, 4] == CellStyle(background=WARNING_COLOR, mark=NodeMark.WARNING)
+    assert styles[5, deviation] == CellStyle(background=WARNING_COLOR, mark=NodeMark.WARNING)
     assert view.summary.rows == [["6 of 7"], ["+1.8"], ["+12.0"]]
 
     # unchecking the measurement off the model leaves it out of the summary
-    table.emit_cell_edited(5, 5, "False")
+    table.emit_cell_edited(5, kept, "False")
     assert view.summary.rows == [["5 of 7"], ["-0.2"], ["+6.0"]]
-    table.check_all(5, is_checked=False)
+    table.check_all(kept, is_checked=False)
     assert view.summary.rows == [["0 of 7"], ["NaN"], ["NaN"]]
 
     # an opened study shows its measurements as they look
