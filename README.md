@@ -94,6 +94,9 @@ and load. Run it with `uv run python -m examples.pipeform --backend qt`, or `tex
 
 ## Documentation
 
+The documentation site, at https://ehmoussi.github.io/composeui3/, has the guides below, a
+widget catalog, and the API reference.
+
 - The [user guide](docs/user-guide.md) explains how to build an app: the views and widgets,
   pages, tabs, dialogs, tables, charts, threads, SQLite models, translations, and the
   differences between the backends.
