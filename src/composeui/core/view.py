@@ -2263,6 +2263,11 @@ class TableMixin:
         ):
             renderer.refresh_attribute(attribute.name, value)
 
+    def _restyle(self, attribute: attrs.Attribute[Any], value: Any) -> Any:
+        """Set how the table looks, and notify the renderer, which shows it with the rows."""
+        self._store(attribute, value)
+        return value
+
     def _reshow(self, attribute: attrs.Attribute[Any], value: Any) -> Any:
         """Show the rows as `value` sorts or filters them, and notify the renderer."""
         if getattr(self, attribute.name) == value:
@@ -2320,14 +2325,19 @@ class TableMixin:
     #: how each cell looks, by its index in `rows` and its column (see `CellStyle`): the
     #: app's to set with the rows, not study data
     cell_styles: dict[tuple[int, int], CellStyle] = attrs.field(
-        factory=dict[tuple[int, int], CellStyle], metadata={OMIT: True}
+        factory=dict[tuple[int, int], CellStyle], on_setattr=_restyle, metadata={OMIT: True}
     )
     #: headers over several columns, on a row above `headers`
     header_groups: list[HeaderGroup] = attrs.field(
-        factory=list[HeaderGroup], validator=[_check_header_groups], metadata={UI_TEXT: True}
+        factory=list[HeaderGroup],
+        validator=[_check_header_groups],
+        on_setattr=[attrs.setters.validate, _restyle],
+        metadata={UI_TEXT: True},
     )
     #: a header before each row, by its index in `rows`; none shown while empty
-    row_headers: list[str] = attrs.field(factory=list[str], metadata={UI_TEXT: True})
+    row_headers: list[str] = attrs.field(
+        factory=list[str], on_setattr=_restyle, metadata={UI_TEXT: True}
+    )
     #: each `NodeMark`'s name, for screen readers (web) and as a tooltip (Qt)
     done_text: str = attrs.field(default=T("Done"), metadata={UI_TEXT: True})
     warning_text: str = attrs.field(default=T("Warning"), metadata={UI_TEXT: True})
