@@ -788,6 +788,9 @@ table.cell_styles = {
 Assign `cell_styles` together with the rows that they describe. The styles go by index, so
 new rows take the styles of the rows that were at their indexes.
 
+On a `RecordTableView`, `column_index(field)` gives the index of the column that shows a
+field, for example `table.column_index("deviation")`.
+
 `header_groups` puts a header over several columns, on a row above their headers. A
 `HeaderGroup` has its text, its first column, and its number of columns. A column is in one
 group at most.

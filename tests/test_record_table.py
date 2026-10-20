@@ -45,6 +45,13 @@ def test_records_show_as_cells_under_their_columns(
     assert table.editable_columns == []
 
 
+def test_a_field_s_column_index_styles_its_cells(main_view: RoomsMainView) -> None:
+    table = main_view.rooms
+    assert table.column_index("occupants") == table.headers.index("Occupants")
+    with pytest.raises(ValueError, match="has no column showing 'area'"):
+        table.column_index("area")
+
+
 @pytest.mark.parametrize(
     ("column", "text", "edited", "cells"),
     [

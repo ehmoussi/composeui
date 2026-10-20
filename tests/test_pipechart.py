@@ -14,7 +14,6 @@ from examples.pipechart import (
     SWEEP_POINTS,
     WARNING_COLOR,
     PipeChartMainView,
-    column_index,
     friction_factor,
 )
 
@@ -121,7 +120,9 @@ def test_the_measurements_show_what_the_model_can_t_compute_and_sum_those_kept_u
     view = PipeChartMainView()
     view.add_measurements()
     table, count = view.measurements, len(MEASUREMENTS)
-    pipe, computed, deviation, kept = map(column_index, ("pipe", "computed", "deviation", "kept"))
+    pipe, computed, deviation, kept = map(
+        table.column_index, ("pipe", "computed", "deviation", "kept")
+    )
     styles = table.cell_styles
     # the pipe's cell over its measurements
     assert styles[0, pipe] == CellStyle(row_span=count)
