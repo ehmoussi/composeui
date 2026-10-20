@@ -6,11 +6,13 @@ hoop stress at each radius, one radius at a time, and writes each run to the mod
 database as it is done. The views never hear from the worker: each write's `changed` is
 emitted on the main thread (see `Job.call_on_main_thread`), where the table, the chart
 and the progress bar show the runs written so far. Cancel stops the sweep after the run
-it's working on; File saves and opens the runs with the views.
+it's working on; File saves and opens the runs with the views. The app is translated
+into French (`--language fr`, or its Language menu).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import attrs
@@ -27,9 +29,11 @@ from composeui.core.view import (
     HorizontalView,
     LabelRowFloatInputView,
     LabelRowIntInputView,
+    LanguageMenu,
     MainView,
     ProgressBarView,
     Series,
+    T,
     TableView,
     child,
     define_view,
@@ -115,21 +119,21 @@ class PositiveInputView(LabelRowFloatInputView):
 
 @define_view
 class SweepForm(GroupFormView):
-    pressure: PositiveInputView = child(PositiveInputView, label="Pressure (MPa)", value=2)
-    thickness: PositiveInputView = child(PositiveInputView, label="Wall Thickness (mm)", value=5)
+    pressure: PositiveInputView = child(PositiveInputView, label=T("Pressure (MPa)"), value=2)
+    thickness: PositiveInputView = child(PositiveInputView, label=T("Wall Thickness (mm)"), value=5)
     min_radius: PositiveInputView = child(
-        PositiveInputView, label="Minimum Outer Radius (mm)", value=20
+        PositiveInputView, label=T("Minimum Outer Radius (mm)"), value=20
     )
     max_radius: PositiveInputView = child(
-        PositiveInputView, label="Maximum Outer Radius (mm)", value=100
+        PositiveInputView, label=T("Maximum Outer Radius (mm)"), value=100
     )
     steps: LabelRowIntInputView = child(
-        LabelRowIntInputView, label="Radii", value=17, minimum=2, maximum=100
+        LabelRowIntInputView, label=T("Radii"), value=17, minimum=2, maximum=100
     )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.title = "Sweep"
+        self.title = self.tr("Sweep")
         sizes = (self.pressure, self.thickness, self.min_radius, self.max_radius)
         self.add_validator(
             self._check_positive, *(row.editing_finished for row in sizes), rows=sizes
@@ -145,7 +149,7 @@ class SweepForm(GroupFormView):
             self.max_radius.value,
         )
         if any(value is None or value <= 0 for value in values):
-            return "Every value must be greater than 0"
+            return self.tr("Every value must be greater than 0")
         return None
 
     def _check_radii(self) -> Optional[str]:
@@ -154,9 +158,9 @@ class SweepForm(GroupFormView):
         if steps is None or steps < 2:  # noqa: PLR2004 (a sweep's two ends)
             return "A sweep takes at least 2 radii"
         if minimum is not None and maximum is not None and minimum >= maximum:
-            return "The minimum radius must be smaller than the maximum radius"
+            return self.tr("The minimum radius must be smaller than the maximum radius")
         if thickness is not None and minimum is not None and minimum <= thickness:
-            return "The wall must be thinner than the minimum radius"
+            return self.tr("The wall must be thinner than the minimum radius")
         return None
 
     def radii(self) -> list[float]:
@@ -169,16 +173,19 @@ class SweepForm(GroupFormView):
 @define_view
 class SweepButtons(HorizontalView):
     align = Align.END
-    run: ButtonView = child(ButtonView, text="Run")
+    run: ButtonView = child(ButtonView, text=T("Run"))
     cancel: ButtonView = child(
-        ButtonView, text="Cancel", variant=ButtonVariant.DANGER, is_enabled=False
+        ButtonView, text=T("Cancel"), variant=ButtonVariant.DANGER, is_enabled=False
     )
 
 
 @define_view
 class PipeSweepMainView(MainView):
-    app_title = "Pipe Sweep"
+    app_title = T("Pipe Sweep")
     extension = ".sweep"
+    translations_dir = Path(__file__).parent / "locales" / "pipesweep"
+
+    language_menu: LanguageMenu = Factory(LanguageMenu)
 
     form: SweepForm = Factory(SweepForm)
     buttons: SweepButtons = Factory(SweepButtons)
@@ -186,14 +193,14 @@ class PipeSweepMainView(MainView):
     progress: ProgressBarView = child(ProgressBarView, maximum=17)
     chart: ChartView = child(
         ChartView,
-        title="Hoop Stress",
-        x_title="Outer Radius",
+        title=T("Hoop Stress"),
+        x_title=T("Outer Radius"),
         x_unit="mm",
-        y_title="Stress",
+        y_title=T("Stress"),
         y_unit="MPa",
         height=280,
     )
-    runs: TableView = child(TableView, headers=["Outer Radius (mm)", "Hoop Stress (MPa)"])
+    runs: TableView = child(TableView, headers=[T("Outer Radius (mm)"), T("Hoop Stress (MPa)")])
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -208,7 +215,7 @@ class PipeSweepMainView(MainView):
             return
         self.form.validate()
         if self.form.log_view.log_message != "":
-            self.status_bar.show_message("Fix the sweep first")
+            self.status_bar.show_message(self.tr("Fix the sweep first"))
             return
         radii = self.form.radii()
         model.runs.clear()
@@ -224,7 +231,7 @@ class PipeSweepMainView(MainView):
         self.runs.rows = [[f"{found.radius:g}", f"{found.stress:g}"] for found in runs]
         self.chart.series = [
             Series(
-                name="Hoop Stress",
+                name=self.tr("Hoop Stress"),
                 x=[found.radius for found in runs],
                 y=[found.stress for found in runs],
             )
@@ -233,7 +240,8 @@ class PipeSweepMainView(MainView):
 
     def _report(self, count: int) -> None:
         total = self.progress.maximum
-        self.status_bar.show_message(f"Swept {count} of {total} radii")
+        message = self.tr("Swept {count} of {total} radii")
+        self.status_bar.show_message(message.format(count=count, total=total))
 
     def _show_running(self, is_running: bool) -> None:
         self.form.is_enabled = not is_running

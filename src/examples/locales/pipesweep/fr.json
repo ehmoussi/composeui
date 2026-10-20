@@ -1,0 +1,20 @@
+{
+  "Every value must be greater than 0": "Toutes les valeurs doivent être supérieures à 0",
+  "Fix the sweep first": "Corrigez d'abord le balayage",
+  "Hoop Stress": "Contrainte circonférentielle",
+  "Hoop Stress (MPa)": "Contrainte circonférentielle (MPa)",
+  "Maximum Outer Radius (mm)": "Rayon extérieur maximal (mm)",
+  "Minimum Outer Radius (mm)": "Rayon extérieur minimal (mm)",
+  "Outer Radius": "Rayon extérieur",
+  "Outer Radius (mm)": "Rayon extérieur (mm)",
+  "Pipe Sweep": "Balayage de conduite",
+  "Pressure (MPa)": "Pression (MPa)",
+  "Radii": "Rayons",
+  "Run": "Lancer",
+  "Stress": "Contrainte",
+  "Sweep": "Balayage",
+  "Swept {count} of {total} radii": "{count} rayons balayés sur {total}",
+  "The minimum radius must be smaller than the maximum radius": "Le rayon minimal doit être inférieur au rayon maximal",
+  "The wall must be thinner than the minimum radius": "La paroi doit être plus fine que le rayon minimal",
+  "Wall Thickness (mm)": "Épaisseur de paroi (mm)"
+}

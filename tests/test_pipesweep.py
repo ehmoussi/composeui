@@ -124,3 +124,17 @@ def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> Non
     progress_bar = main_view.progress.renderer.qt_object  # type: ignore[union-attr]
     assert progress_bar.value() == 3
     assert set(threads) == {threading.main_thread()}
+
+
+def test_a_sweep_shows_in_french(app: App) -> None:
+    main_view = app.main_view
+    main_view.set_language("fr")
+
+    main_view.buttons.run.clicked.emit()
+    main_view.jobs.wait()
+
+    assert main_view.title == "Balayage de conduite"
+    assert main_view.runs.headers == ["Rayon extérieur (mm)", "Contrainte circonférentielle (MPa)"]
+    assert main_view.buttons.cancel.text == "Annuler"
+    assert [series.name for series in main_view.chart.series] == ["Contrainte circonférentielle"]
+    assert main_view.status_bar.message == "3 rayons balayés sur 3"
