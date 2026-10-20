@@ -1,6 +1,6 @@
 ---
 name: documentation-style
-description: "Use before creating, editing, moving, or reviewing ComposeUI documentation: README.md, files under docs/, ROADMAP.md, AGENTS.md, and skills under .agents/skills/, including documentation updates within coding tasks such as a new view, backend, or behavior change. Applies ASD-STE100 writing principles, the repo's document split, and technical accuracy against the code while allowing structure and content to evolve with the task."
+description: "Use before creating, editing, moving, or reviewing ComposeUI documentation: README.md, docstrings, files under docs/ (the guides and the Sphinx site: index.md, widgets.md, api/, conf.py, _ext/), ROADMAP.md, AGENTS.md, and skills under .agents/skills/, including documentation updates within coding tasks such as a new view, backend, or behavior change. Applies ASD-STE100 writing principles, the repo's document split, and technical accuracy against the code while allowing structure and content to evolve with the task."
 ---
 
 # Documentation Style
@@ -12,8 +12,22 @@ These are writing guidelines, not a fixed document template.
 Do not claim formal STE compliance or certification
 without a separate check against the applicable standard and dictionary.
 
-Docstrings and code comments are out of scope. Follow the code style in `AGENTS.md`
-for them: brief docstrings, comments that explain *why*.
+Docstrings are documentation too: the site's API reference and widget catalog show them.
+Write them with the rules of "Write clear technical English" and
+"Preserve the technical contract", and keep them brief, as `AGENTS.md` asks.
+
+- **Keep the repo's form.** A class docstring starts with what the view or object is,
+  such as "A button the user clicks to act on what the page shows". A function docstring
+  starts with an imperative verb (ruff's `D401`). A `#:` comment on a field says what the
+  field holds, in a few words.
+- **Make the first paragraph stand alone.** The widget catalog shows the first paragraph
+  of a view's docstring. Write it as one sentence that a reader understands without the
+  code.
+- **Keep the markup of the site.** "Keep the documentation site building" says what a
+  docstring must keep for Sphinx.
+
+Code comments are out of scope. Follow the code style in `AGENTS.md` for them: comments
+explain *why*.
 
 ## Choose the right location
 
@@ -25,6 +39,9 @@ Each document has one audience:
 | `docs/user-guide.md` | App developers who use ComposeUI | One section per feature and widget, and the differences between the backends |
 | `docs/examples-guide.md` | App developers who learn from the example apps | One section per app in `src/examples/`: what it shows, with links to the user guide, and how to run it |
 | `docs/technical-guide.md` | Contributors to ComposeUI | The architecture, adding a widget or a backend, tests, checks, and code style |
+| `docs/index.md` | Readers of the documentation site | The home page: one line per page of the site, and the `toctree` that orders them |
+| `docs/widgets.md` | App developers who look for a widget | The widget catalog, which the `widget-catalog` directive builds from `composeui.core.view` |
+| `docs/api/*.md` | App developers who need the exact API | One page per module, built from its docstrings by `automodule` |
 | `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
@@ -65,6 +82,36 @@ Each document has one audience:
 Use a different structure when it fits a document's purpose better.
 The split above is a useful starting point, not a permanent requirement.
 
+## Keep the documentation site building
+
+`make docs` builds the site with Sphinx and MyST into `docs/_build/html` (not committed).
+Install it once with `uv sync --group docs --all-extras`. Any warning fails the build,
+in CI too. The technical guide ("Documentation site") explains it for contributors.
+
+- **Every page is in a `toctree`.** Add a new page of `docs/` to the `toctree` of
+  `docs/index.md`, or of `docs/api/index.md` for an API page, and a line for it on that page.
+  A page outside every `toctree` fails the build.
+- **Links stay relative Markdown links**, as GitHub reads them. A link between pages of
+  `docs/` resolves in the site. A link to a file outside `docs/`, such as
+  `../src/examples/pipeform.py` or `../README.md`, goes to that file on GitHub
+  (`docs/conf.py`). Do not write GitHub URLs by hand.
+- **Anchors go to level 3.** `#core-concepts` links work for `#`, `##`, and `###`
+  headings only (`myst_heading_anchors = 3`). Do not link to a `####` heading. Keep each
+  heading unique in its page, so that a link to it has one target.
+- **The API reference follows the modules.** When a module is added to `composeui.core`,
+  or a backend's application module, add its page in `docs/api/` with an `{eval-rst}`
+  block that runs `automodule`, as the other pages do. Autodoc writes reStructuredText,
+  which a plain MyST directive would read as Markdown. When a module is removed or renamed,
+  change its page.
+- **Docstrings are reStructuredText.** In a docstring, single backticks link to the
+  Python name they hold (`default_role = "py:obj"`), and `#:` comments document fields.
+  Do not put Markdown or MyST syntax in a docstring.
+- **The widget catalog builds itself.** It lists each public view of
+  `composeui.core.view` with a `_renderer_key`, or a `_field_renderer_key` for a form row,
+  and the first paragraph of the view's own docstring. A new view needs no change to
+  `docs/widgets.md`. Give it a class docstring whose first paragraph says what it shows,
+  in one sentence, else its row is empty.
+
 ## Document a feature
 
 A feature section in the user guide usually has this content, in this order:
@@ -83,7 +130,8 @@ A feature section in the user guide usually has this content, in this order:
 Use only names that exist in `composeui.core`. A comment such as `# a TreeView` can
 stand for an application view that the example does not define.
 
-When the feature is a new widget, also update the list of widgets
+When the feature is a new widget, the widget catalog lists it from its class docstring.
+Also update the list of widgets
 ("Already there: ...") at the top of `ROADMAP.md`, and delete its roadmap entry.
 `ROADMAP.md` keeps only the work that is left. Keep the contents list at the top of the
 guide in step with its `##` headings.
@@ -186,10 +234,12 @@ presenting them as wording-only edits.
    requires a change. Keep headings stable where practical: other sections link to them.
 7. When a Python example changes, check each name against `composeui.core`. If
    practical, run the example with `uv run python` in the scratchpad directory.
-8. Run `git diff --check`. Run focused checks for changed commands or behavior if needed.
+8. Run `git diff --check`. When you change a file of `docs/` or a docstring, run
+   `make docs`. Run focused checks for changed commands or behavior if needed.
 9. Report the changes and checks briefly. Do not claim checks that were not run.
 
-Documentation-only changes do not require `make test` or `make check`.
+Documentation-only changes do not require `make test` or `make check`, but they require
+`make docs`.
 Do not run installation or `make css` merely to check their wording.
 Do not commit changes unless the user requests a commit. When documentation
 belongs to a feature, commit it with that feature, as `AGENTS.md` describes under "Commits".
