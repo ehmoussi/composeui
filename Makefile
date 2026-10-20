@@ -27,6 +27,7 @@ mypy:
 
 # the main views of the apps with catalogs, as module:Class
 TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView \
+	examples.pipesweep:PipeSweepMainView \
 	examples.taskview:TaskMainView
 
 # every catalog against the text its app translates; each app reported before failing
