@@ -38,7 +38,7 @@ options, such as `--language` and `-f FILE`.
 | --- | --- | --- |
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
-| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells |
+| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
@@ -120,6 +120,15 @@ It shows:
 - a [reference line](user-guide.md#reference-lines) at the pressure of the pump;
 - [tabs](user-guide.md#tabs): the chart on one tab, and the measurements in a table on the
   Measurements tab, each against the computed drop;
+- [how cells and headers look](user-guide.md#how-cells-and-headers-look) on the
+  Measurements tab:
+  - the pipe's cell spans the rows of its measurements;
+  - "Pressure Drop (kPa)" is a header over "Measured" and "Computed";
+  - a computed drop that the model can't give (NaN, in transitional flow) is red;
+  - a deviation over 10 % is orange, with a warning mark;
+  - the Kept check box of a NaN row is disabled: that measurement can't be compared with
+    the model;
+  - a summary under the table shows the measurements kept, with a header before each row;
 - [widgets in cells](user-guide.md#widgets-in-cells): the Curves tab lists every curve.
   A check box shows or hides the curve, and the box in the header shows or hides them all.
   A combobox draws the curve as a line, in steps, or as dots.

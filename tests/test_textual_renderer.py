@@ -33,6 +33,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
+    CellStyle,
     ChartKind,
     DialogKind,
     EditRefusedError,
@@ -86,7 +87,7 @@ from examples.pipecatalogue import Material as CatalogueMaterial
 from examples.pipecatalogue import Pipe as CataloguePipe
 from examples.pipecatalogue import PipeCatalogueMainView, PipeCatalogueModel
 from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
-from examples.pipechart import PipeChartMainView
+from examples.pipechart import MEASUREMENTS, PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
@@ -1923,6 +1924,14 @@ async def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
         # the key/value table's keys head its rows
         assert [str(row.label) for row in numbers.rows.values()] == ["Number of calls", "Time (s)"]
 
+        # new looks show at once, in place of the old ones
+        view.points.cell_styles = {(0, 2): CellStyle(background="#dc2626")}
+        view.numbers.row_headers = ["Calls", "Time (s)"]
+        await pilot.pause()
+        assert [str(span.style) for span in table.get_row_at(0)[2].spans] == ["#ffffff on #dc2626"]
+        assert table.get_row_at(1)[2].spans == []
+        assert [str(row.label) for row in numbers.rows.values()] == ["Calls", "Time (s)"]
+
 
 @pytest.mark.asyncio
 async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() -> None:
@@ -2150,7 +2159,7 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
         plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
         assert plotted.label == ["D = 50 mm", "Measured, D = 50 mm"]
         assert plotted.lines == [True, False]  # a line, then dots
-        assert len(plotted.x[1]) == 6
+        assert len(plotted.x[1]) == len(MEASUREMENTS)
         view.chart.kind = ChartKind.SCATTER
         await pilot.pause()
         assert chart.plt._active.monitor.lines == [False, False]  # noqa: SLF001

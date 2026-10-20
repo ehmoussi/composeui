@@ -59,6 +59,7 @@ from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     ActionView,
     ButtonVariant,
+    CellStyle,
     ChartKind,
     ChartView,
     DialogKind,
@@ -1793,6 +1794,13 @@ def test_a_table_s_cells_and_headers_look_as_the_view_says(qtbot: QtBot) -> None
     assert numbers.verticalHeader().isVisible()
     assert numbers.model().headerData(0, Qt.Orientation.Vertical) == "Number of calls"
     assert not table.verticalHeader().isVisible()
+
+    # new looks show at once, in place of the old ones
+    view.points.cell_styles = {(0, 2): CellStyle(background="#dc2626")}
+    assert data(0, 2, Qt.ItemDataRole.BackgroundRole) == QColor("#dc2626")
+    assert data(1, 2, Qt.ItemDataRole.BackgroundRole) is None
+    view.numbers.row_headers = ["Calls", "Time (s)"]
+    assert numbers.model().headerData(0, Qt.Orientation.Vertical) == "Calls"
 
 
 # Qt warned "commitData called with an editor that does not belong to this view"

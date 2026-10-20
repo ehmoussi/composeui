@@ -7,8 +7,15 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from composeui.core.view import ChartKind
-from examples.pipechart import MEASUREMENTS, SWEEP_POINTS, PipeChartMainView, friction_factor
+from composeui.core.view import CellStyle, ChartKind, NodeMark
+from examples.pipechart import (
+    MEASUREMENTS,
+    NAN_COLOR,
+    SWEEP_POINTS,
+    WARNING_COLOR,
+    PipeChartMainView,
+    friction_factor,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,11 +63,16 @@ def test_the_measurements_tab_lists_each_measured_drop_against_the_computed_one(
     view.add_measurements()  # the same pipe again: its rows are replaced
 
     rows = view.measurements.rows
-    assert [row[0] for row in rows] == ["D = 80 mm"] * 6 + ["D = 50 mm"] * 6
-    # each point as plotted, its deviation the rig's ratio to the computed drop
+    count = len(MEASUREMENTS)
+    assert [row[0] for row in rows] == ["D = 80 mm"] * count + ["D = 50 mm"] * count
+    # each point as plotted, its deviation the rig's ratio to the computed drop; the first
+    # is in transitional flow, where the model computes none
     measured = next(s for s in view.chart.series if s.name == "Measured, D = 50 mm")
-    assert [float(row[2]) for row in rows[6:]] == pytest.approx(measured.y, rel=1e-2)
-    assert [row[4] for row in rows[6:]] == [f"{(r - 1) * 100:+.1f}" for _, r in MEASUREMENTS]
+    assert [float(row[2]) for row in rows[count:]] == pytest.approx(measured.y, rel=1e-2)
+    assert [row[4] for row in rows[count:]] == [
+        "NaN",
+        *(f"{(r - 1) * 100:+.1f}" for _, r in MEASUREMENTS[1:]),
+    ]
 
     view.clear_curves()
     assert view.measurements.rows == []
@@ -99,3 +111,35 @@ def test_the_curves_tab_shows_hides_and_draws_each_curve(tmp_path: Path) -> None
     assert (view.curves.rows, view.chart.series) == ([], [])
     view.add_measurements()
     assert view.chart.series[0].kind is ChartKind.SCATTER
+
+
+def test_the_measurements_show_what_the_model_can_t_compute_and_sum_those_kept_up(
+    tmp_path: Path,
+) -> None:
+    view = PipeChartMainView()
+    view.add_measurements()
+    table, count = view.measurements, len(MEASUREMENTS)
+    styles = table.cell_styles
+    # the pipe's cell over its measurements
+    assert styles[0, 0] == CellStyle(row_span=count)
+    # no computed drop: in red, and not kept, nor can it be
+    assert (styles[0, 3].background, styles[0, 4].background) == (NAN_COLOR, NAN_COLOR)
+    assert (table.rows[0][5], table.is_cell_editable(0, 5)) == ("False", False)
+    # a deviation over 10 % marked
+    assert styles[5, 4] == CellStyle(background=WARNING_COLOR, mark=NodeMark.WARNING)
+    assert view.summary.rows == [["6 of 7"], ["+1.8"], ["+12.0"]]
+
+    # unchecking the measurement off the model leaves it out of the summary
+    table.emit_cell_edited(5, 5, "False")
+    assert view.summary.rows == [["5 of 7"], ["-0.2"], ["+6.0"]]
+    table.check_all(5, is_checked=False)
+    assert view.summary.rows == [["0 of 7"], ["NaN"], ["NaN"]]
+
+    # an opened study shows its measurements as they look
+    view.save_state(tmp_path / "study.pipechart")
+    loaded = PipeChartMainView()
+    loaded.load_state(tmp_path / "study.pipechart")
+    assert loaded.measurements.cell_styles == styles
+    assert loaded.summary.rows == [["0 of 7"], ["NaN"], ["NaN"]]
+    loaded.reset_state()
+    assert (loaded.measurements.cell_styles, loaded.summary.rows[0]) == ({}, ["0 of 0"])

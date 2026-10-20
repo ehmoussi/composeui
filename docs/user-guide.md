@@ -816,6 +816,9 @@ What each backend shows:
   for screen readers. A cell spans its rows (`rowspan`), and a group its columns
   (`colspan`). Each row starts with its header (`<th scope="row">`).
 
+The Measurements tab of [`pipechart.py`](../src/examples/pipechart.py) uses each of these
+looks.
+
 ## A list of views
 ## A list of views
 

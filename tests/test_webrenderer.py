@@ -107,7 +107,7 @@ from examples.pipecatalogue import (
     PipeCatalogueModel,
 )
 from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
-from examples.pipechart import PipeChartMainView
+from examples.pipechart import MEASUREMENTS, PipeChartMainView
 from examples.pipeform import PipeMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.bookings import BookingMainView
@@ -3774,7 +3774,7 @@ def test_each_series_is_sent_with_how_it_is_drawn(
 
     spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
     assert [series["kind"] for series in spec["series"]] == ["line", "scatter"]
-    assert len(spec["pairs"][1][0]) == 6  # the measured flow rates, their own x
+    assert len(spec["pairs"][1][0]) == len(MEASUREMENTS)  # the measured flow rates, their own x
 
     with collect_dirty() as dirty:
         chart.kind = ChartKind.SCATTER

@@ -4,15 +4,17 @@ Each click on Add Curve sweeps the flow rate through the pipe of the form's diam
 plots the pressure drop it causes, one curve per diameter, each with its own flow rates.
 Between laminar and turbulent flow neither law holds: the curve leaves a gap there. Add
 Measurements plots, as dots over the curves, what a test rig measured on that pipe, and
-lists them on the Measurements tab beside the chart's, each against the computed drop.
-The Curves tab lists every curve: a check box shows or hides it (its header's, all of
-them), and a combobox draws it as a line, in steps or as dots.
+lists them on the Measurements tab beside the chart's, each against the computed drop: a
+drop the model can't compute in red, a deviation over 10 % marked in orange. The rows kept
+make the summary below them; one without a computed drop can't be kept. The Curves tab
+lists every curve: a check box shows or hides it (its header's, all of them), and a
+combobox draws it as a line, in steps or as dots.
 """
 
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from attrs import Factory, evolve
 
@@ -23,13 +25,16 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     ButtonView,
+    CellStyle,
     CellWidget,
     ChartKind,
     ChartView,
     GroupFormView,
+    HeaderGroup,
     HorizontalView,
     LabelRowFloatInputView,
     MainView,
+    NodeMark,
     ReferenceLine,
     Series,
     TableView,
@@ -54,8 +59,22 @@ TURBULENT_LIMIT = 4000.0
 #: the flow rates a sweep computes
 SWEEP_POINTS = 200
 #: the test rig's measurements of a pipe, as the shares of its maximum flow rate measured
-#: and the ratio of each measured drop to the computed one
-MEASUREMENTS = ((0.2, 1.06), (0.35, 0.95), (0.5, 1.03), (0.65, 0.98), (0.8, 1.04), (0.95, 0.97))
+#: and the ratio of each measured drop to the one the flow's law gives; the first is in
+#: transitional flow for the default pipe, where the model computes no drop
+MEASUREMENTS = (
+    (0.06, 1.0),
+    (0.2, 1.06),
+    (0.35, 0.95),
+    (0.5, 1.03),
+    (0.65, 0.98),
+    (0.8, 1.12),
+    (0.95, 0.97),
+)
+#: the deviation (%) from the computed drop over which a measurement is marked
+DEVIATION_WARNING = 10.0
+#: a cell's background: a drop the model can't compute, a deviation over the warning's
+NAN_COLOR = "#dc2626"
+WARNING_COLOR = "#fed7aa"
 #: the pressure the pump gives (kPa): a pipe whose drop is over it can't pass that flow
 PUMP_PRESSURE = 20.0
 #: how a curve is drawn, by the text its "Drawn as" cell shows: its kind and whether in steps
@@ -72,36 +91,55 @@ def friction_factor(reynolds: float, diameter: float) -> float:
         return 64.0 / reynolds
     if reynolds < TURBULENT_LIMIT:
         return math.nan
+    return turbulent_friction_factor(reynolds, diameter)
+
+
+def turbulent_friction_factor(reynolds: float, diameter: float) -> float:
+    """Get Darcy's friction factor in turbulent flow."""
     # Haaland's explicit approximation of Colebrook's equation
     term = (ROUGHNESS / diameter / 3.7) ** 1.11 + 6.9 / reynolds
     return float((-1.8 * math.log10(term)) ** -2)
 
 
+def rig_friction_factor(reynolds: float, diameter: float) -> float:
+    """Get the friction factor the rig's flow has: as turbulent, once no longer laminar."""
+    if reynolds < LAMINAR_LIMIT:
+        return 64.0 / reynolds
+    return turbulent_friction_factor(reynolds, diameter)
+
+
+def pressure_drop(
+    flow: float,
+    diameter_mm: float,
+    length: float,
+    factor: Callable[[float, float], float] = friction_factor,
+) -> float:
+    """Get the pressure drop (kPa) of a flow rate (L/s) through a pipe."""
+    diameter = diameter_mm / 1000
+    velocity = flow / 1000 / (math.pi * diameter**2 / 4)
+    reynolds = DENSITY * velocity * diameter / VISCOSITY
+    return factor(reynolds, diameter) * length / diameter * DENSITY * velocity**2 / 2 / 1000
+
+
 def pressure_drop_curve(diameter_mm: float, length: float, max_flow: float) -> Series:
     """Sweep the flow rate (L/s) up to `max_flow` through a pipe; the drop is in kPa."""
-    diameter = diameter_mm / 1000
-    area = math.pi * diameter**2 / 4
-    flows: list[float] = []
-    drops: list[float] = []
-    for index in range(1, SWEEP_POINTS + 1):
-        flow = max_flow * index / SWEEP_POINTS
-        velocity = flow / 1000 / area
-        reynolds = DENSITY * velocity * diameter / VISCOSITY
-        factor = friction_factor(reynolds, diameter)
-        flows.append(flow)
-        drops.append(factor * length / diameter * DENSITY * velocity**2 / 2 / 1000)
+    flows = [max_flow * index / SWEEP_POINTS for index in range(1, SWEEP_POINTS + 1)]
+    drops = [pressure_drop(flow, diameter_mm, length) for flow in flows]
     return Series(name=f"D = {diameter_mm:g} mm", x=flows, y=drops)
 
 
 def measurements(
     diameter_mm: float, length: float, max_flow: float
 ) -> list[tuple[float, float, float]]:
-    """Get what the test rig measured on a pipe: each flow rate, measured and computed drop."""
-    model = pressure_drop_curve(diameter_mm, length, max_flow)
+    """Get what the test rig measured on a pipe: each flow rate, measured and computed drop.
+
+    The computed drop is NaN in transitional flow, where the model holds no law.
+    """
     points: list[tuple[float, float, float]] = []
     for share, ratio in MEASUREMENTS:
-        index = round(share * SWEEP_POINTS) - 1
-        points.append((model.x[index], model.y[index] * ratio, model.y[index]))
+        flow = max_flow * round(share * SWEEP_POINTS) / SWEEP_POINTS
+        measured = pressure_drop(flow, diameter_mm, length, rig_friction_factor) * ratio
+        points.append((flow, measured, pressure_drop(flow, diameter_mm, length)))
     return points
 
 
@@ -165,13 +203,28 @@ class ChartTab(TabPage):
     )
 
 
+#: the measurements' columns
+PIPE, FLOW, MEASURED, COMPUTED, DEVIATION, KEPT = range(6)
+
+
 @define_view
 class MeasurementsTab(TabPage):
-    """The rig's measurements, a row each, against the drop the curve computes there."""
+    """The rig's measurements, a row each, against the drop the curve computes there.
+
+    Under them, a summary of those kept, a row each: its header, then its value.
+    """
 
     table: TableView = child(
         TableView,
-        headers=["Pipe", "Flow Rate (L/s)", "Measured (kPa)", "Computed (kPa)", "Deviation (%)"],
+        headers=["Pipe", "Flow Rate (L/s)", "Measured", "Computed", "Deviation (%)", "Kept"],
+        header_groups=[HeaderGroup("Pressure Drop (kPa)", MEASURED, 2)],
+        editable_columns=[KEPT],
+        cell_widgets={KEPT: CellWidget.check_box(check_all=True)},
+    )
+    summary: TableView = child(
+        TableView,
+        headers=["Value"],
+        row_headers=["Measurements Kept", "Mean Deviation (%)", "Largest Deviation (%)"],
     )
 
 
@@ -229,6 +282,21 @@ class PipeChartMainView(MainView):
         self.buttons.measure.clicked.connect(self.add_measurements)
         self.buttons.clear.clicked.connect(self.clear_curves)
         self.curves.cell_edited.connect(self._edit_curve)
+        self.measurements.cell_edited.connect(self._keep_measurement)
+        self._show_measurements()
+
+    @property
+    def summary(self) -> TableView:
+        """The summary of the measurements kept, under them."""
+        return self.results.measurements_tab.summary
+
+    def load_state_data(self, data: Any) -> None:
+        super().load_state_data(data)
+        self._show_measurements()  # their looks follow from them, never saved
+
+    def reset_state(self) -> None:
+        super().reset_state()
+        self._show_measurements()
 
     def add_curve(self) -> None:
         """Plot the form's pipe, replacing the curve of a pipe of the same diameter."""
@@ -246,13 +314,54 @@ class PipeChartMainView(MainView):
                 name,
                 f"{flow:.3g}",
                 f"{measured:.3g}",
-                f"{computed:.3g}",
-                f"{(measured - computed) / computed * 100:+.1f}",
+                _number(computed, ".3g"),
+                _number((measured - computed) / computed * 100, "+.1f"),
+                # one the model can't compute can't be compared with it
+                CHECKED_TEXTS[not math.isnan(computed)],
             ]
             for flow, measured, computed in measurements(diameter, length, max_flow)
         ]
-        others = [row for row in self.measurements.rows if row[0] != name]
+        others = [row for row in self.measurements.rows if row[PIPE] != name]
         self.measurements.rows = [*others, *rows]
+        self._show_measurements()
+
+    def _keep_measurement(self, row: int, column: int, text: str) -> None:
+        """Keep a measurement in the summary or not, as its Kept box says."""
+        self.measurements.rows = replace_cell(self.measurements.rows, row, column, text)
+        self._show_measurements()
+
+    def _show_measurements(self) -> None:
+        """Color, mark and group the measurements, and sum those kept up."""
+        rows = self.measurements.rows
+        styles: dict[tuple[int, int], CellStyle] = {}
+        deviations = []
+        for index, row in enumerate(rows):
+            if index == 0 or rows[index - 1][PIPE] != row[PIPE]:
+                # the pipe's cell over its measurements, which follow each other
+                count = next(
+                    (end for end in range(index, len(rows)) if rows[end][PIPE] != row[PIPE]),
+                    len(rows),
+                )
+                styles[index, PIPE] = CellStyle(row_span=count - index)
+            deviation = float(row[DEVIATION])
+            if math.isnan(deviation):
+                styles[index, COMPUTED] = CellStyle(background=NAN_COLOR)
+                styles[index, DEVIATION] = CellStyle(background=NAN_COLOR)
+                styles[index, KEPT] = CellStyle(is_disabled=True)
+            elif abs(deviation) > DEVIATION_WARNING:
+                styles[index, DEVIATION] = CellStyle(
+                    background=WARNING_COLOR, mark=NodeMark.WARNING
+                )
+            if row[KEPT] == CHECKED_TEXTS[True]:
+                deviations.append(deviation)
+        self.measurements.cell_styles = styles
+        largest = max(deviations, key=abs, default=math.nan)
+        mean = sum(deviations) / len(deviations) if deviations else math.nan
+        self.summary.rows = [
+            [f"{len(deviations)} of {len(rows)}"],
+            [_number(mean, "+.1f")],
+            [_number(largest, "+.1f")],
+        ]
 
     def _plot(
         self, compute: Callable[[float, float, float], Series]
@@ -296,6 +405,12 @@ class PipeChartMainView(MainView):
         self.curves.rows = []
         self.chart.series = []
         self.measurements.rows = []
+        self._show_measurements()
+
+
+def _number(value: float, spec: str) -> str:
+    """Show a number as `spec` formats it, NaN as "NaN" rather than "nan" or "+nan"."""
+    return "NaN" if math.isnan(value) else format(value, spec)
 
 
 def main() -> None:
