@@ -754,6 +754,68 @@ What each backend shows:
 - **The web** shows a check box, a `<select>`, a button, or a link-like button. A click on
   a widget does not select its row.
 
+### How cells and headers look
+
+A cell can have a background color, such as red for NaN or orange for a warning. It can be
+disabled, show a mark, or span the rows under it. Set `cell_styles`, a `CellStyle` per cell
+by its index in `rows` and its column:
+
+```python
+from composeui.core.view import CellStyle, HeaderGroup, NodeMark, T
+
+table.headers = ["Group", "Point", "Standard space", "Physical space"]
+table.header_groups = [HeaderGroup(T("Coordinates"), column=2, column_count=2)]
+table.rows = [["A", "P1", "0.5", "12.0"], ["", "P2", "nan", "nan"]]
+table.cell_styles = {
+    (0, 0): CellStyle(row_span=2),
+    (1, 2): CellStyle(background="#dc2626"),
+    (1, 3): CellStyle(background="#fde68a", mark=NodeMark.WARNING),
+    (1, 1): CellStyle(is_disabled=True),
+}
+```
+
+- **`background`** is a color as `#rrggbb`, the same in every theme. The text on it is black
+  or white, whichever reads better (`text_color`).
+- **`is_disabled`** grays the cell. The user never edits it, even in an editable column, and
+  its widget is disabled. `check_all` leaves it as it is, and `column_checked` ignores it.
+- **`mark`** shows a `NodeMark` before the text: done, warning, or error. `done_text`,
+  `warning_text`, and `error_text` name it, as a tooltip (Qt, the web) and for screen
+  readers (the web).
+- **`row_span`** makes the cell cover the cells under it in its column, for example a group
+  over its rows. The span holds only while the table shows those rows right under the cell,
+  in their order. A sort or a filter that moves or hides them shortens it.
+
+Assign `cell_styles` together with the rows that they describe. The styles go by index, so
+new rows take the styles of the rows that were at their indexes.
+
+`header_groups` puts a header over several columns, on a row above their headers. A
+`HeaderGroup` has its text, its first column, and its number of columns. A column is in one
+group at most.
+
+`row_headers` puts a header before each row, by its index in `rows`. Use it for a small
+key/value table of results:
+
+```python
+table.headers = [T("Value")]
+table.row_headers = [T("Number of calls"), T("Time (s)")]
+table.rows = [["2500"], ["3.2"]]
+```
+
+The study does not save `cell_styles`, `header_groups`, or `row_headers`: the app sets them.
+
+What each backend shows:
+
+- **Qt** colors the cell, grays a disabled cell, and draws the mark as an icon. A cell
+  spans its rows (`QTableView.setSpan`). The header is twice as tall with groups. A click on
+  a group sorts nothing. The rows' headers show in the vertical header.
+- **Textual** colors the cell's text, dims a disabled cell, and shows the mark as a glyph
+  (✓, !, ✗). A terminal has no cell across rows: the covered cells are empty. With groups,
+  the header has two lines, each group's text over its first column. The rows' headers are
+  the `DataTable`'s row labels.
+- **The web** colors the cell, grays a disabled cell, and shows the mark as an icon named
+  for screen readers. A cell spans its rows (`rowspan`), and a group its columns
+  (`colspan`). Each row starts with its header (`<th scope="row">`).
+
 ## A list of views
 ## A list of views
 

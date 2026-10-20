@@ -10,7 +10,16 @@ from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, OptionList
 
 from composeui.core.signal import Signal
-from composeui.core.view import CHECKED_TEXTS, CellKind, CellWidget, replace_cell
+from composeui.core.view import (
+    CHECKED_TEXTS,
+    PLAIN_CELL,
+    CellKind,
+    CellStyle,
+    CellWidget,
+    HeaderGroup,
+    replace_cell,
+)
+from composeui.textualcore.widgets.composetree import MARKS
 
 if TYPE_CHECKING:
     from textual import events
@@ -134,6 +143,12 @@ class ComposeTable(DataTable[Text]):
 
     `header_clicked` emits the column whose header the user clicked; the header shows
     the order `set_sort` gives (▲/▼), the table never sorting its rows itself.
+
+    `fill` gives how the cells look: a background, the text black or white on it; dim
+    and never edited when disabled; a mark before the text. A cell spanning rows shows
+    its text in its own, those it covers empty: a terminal has no cells across rows. The
+    rows' headers show on the left, unless there are none. With `set_header_groups`,
+    the header has two lines: a group's text over its first column, then each column's.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -156,26 +171,56 @@ class ComposeTable(DataTable[Text]):
         self._is_multiple = False
         self._headers: list[str] = []
         self._rows: list[list[str]] = []
+        self._styles: dict[tuple[int, int], CellStyle] = {}
+        self._row_headers: list[str] = []
+        self._groups: list[HeaderGroup] = []
 
     def fill(
-        self, headers: list[str], rows: list[list[str]], selected: list[int] | None = None
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        selected: list[int] | None = None,
+        styles: dict[tuple[int, int], CellStyle] | None = None,
+        row_headers: list[str] | None = None,
     ) -> None:
         """Rebuild the whole table, as plain text: a string cell would be read as markup.
 
-        `selected` replaces the selected rows, which the rows replaced may no longer hold.
+        `selected` replaces the selected rows, which the rows replaced may no longer hold;
+        `styles` how the cells look, by row and column, and `row_headers` the rows'
+        headers, likewise.
         """
         self._headers, self._rows = headers, rows
         if selected is not None:
             self._selected_rows = selected
+        if styles is not None:
+            self._styles = styles
+        if row_headers is not None:
+            self._row_headers = row_headers
         self.clear(columns=True)
+        self.header_height = 2 if len(self._groups) > 0 else 1
         check = [Text("")] if self._is_multiple else []
         self.add_columns(*check, *(Text(label) for label in self._labels(headers)))
-        self.add_rows(
-            [*check, *(self._cell(column, cells) for column in range(len(headers)))]
-            for cells in rows
-        )
+        covered = {
+            (row + offset, column)
+            for (row, column), style in self._styles.items()
+            for offset in range(1, style.row_span)
+        }
+        for row, cells in enumerate(rows):
+            label = Text(self._row_headers[row]) if row < len(self._row_headers) else None
+            self.add_row(
+                *check,
+                *(
+                    Text("") if (row, column) in covered else self._cell(row, column, cells)
+                    for column in range(len(headers))
+                ),
+                label=label,
+            )
         # clearing moved the cursor back to the first row
         self.set_selected_rows(self._selected_rows)
+
+    def set_header_groups(self, groups: list[HeaderGroup]) -> None:
+        self._groups = groups
+        self.fill(self._headers, self._rows)
 
     def set_cell_widgets(self, widgets: dict[int, CellWidget]) -> None:
         self.cell_widgets = widgets
@@ -202,8 +247,24 @@ class ComposeTable(DataTable[Text]):
         widget = self.cell_widgets.get(column)
         return None if widget is None else widget.kind
 
-    def _cell(self, column: int, cells: list[str]) -> Text:
-        """Show a cell: its text, or its widget's."""
+    def _style(self, row: int, column: int) -> CellStyle:
+        return self._styles.get((row, column), PLAIN_CELL)
+
+    def _cell(self, row: int, column: int, cells: list[str]) -> Text:
+        """Show a cell: its mark, then its text or its widget's, as its style says."""
+        content = self._content(column, cells)
+        style = self._style(row, column)
+        if style.mark is not None:
+            glyph, mark_style = MARKS[style.mark]
+            content = Text.assemble((glyph, mark_style), " ", content)
+        if style.is_disabled:
+            content.stylize("dim")
+        if style.background is not None:
+            content.stylize(f"{style.text_color} on {style.background}")
+        return content
+
+    def _content(self, column: int, cells: list[str]) -> Text:
+        """Show a cell's text, or its widget's."""
         text = cells[column] if column < len(cells) else ""
         widget = self.cell_widgets.get(column)
         if widget is None:
@@ -230,10 +291,17 @@ class ComposeTable(DataTable[Text]):
             for column, header in enumerate(headers)
         ]
         if self._sort is None or self._sort[0] >= len(headers):
-            return labels
+            return self._grouped(labels)
         column, is_descending = self._sort
         labels[column] = f"{labels[column]} {'▼' if is_descending else '▲'}"
-        return labels
+        return self._grouped(labels)
+
+    def _grouped(self, labels: list[str]) -> list[str]:
+        """Put each group's text over its first column's label, on a line of its own."""
+        if len(self._groups) == 0:
+            return labels
+        starts = {group.column: group.text for group in self._groups}
+        return [f"{starts.get(column, '')}\n{label}" for column, label in enumerate(labels)]
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         column = event.column_index - (1 if self._is_multiple else 0)
@@ -270,6 +338,8 @@ class ComposeTable(DataTable[Text]):
             self._toggle(row)
         column = event.style.meta.get("column", -1) - (1 if self._is_multiple else 0)
         kind = self._kind(column)
+        if self._style(row, column).is_disabled:
+            return
         if kind in (CellKind.BUTTON, CellKind.LINK) and event.chain == 1:
             self.cell_clicked.emit(row, column)
         elif column in self._editable_columns(kind=kind):
@@ -291,21 +361,31 @@ class ComposeTable(DataTable[Text]):
         return super().check_action(action, parameters)
 
     def action_edit_row(self) -> None:
-        typed = self._editable_columns()
+        row = self.cursor_row
+        typed = self._editable_columns(row=row)
         if len(typed) > 0:
-            self._edit(self.cursor_row, typed[0])
+            self._edit(row, typed[0])
         else:
-            self._pick(self.cursor_row, self._editable_columns(kind=CellKind.COMBOBOX)[0])
+            picked = self._editable_columns(kind=CellKind.COMBOBOX, row=row)
+            if len(picked) > 0:
+                self._pick(row, picked[0])
 
     def action_toggle_check(self) -> None:
-        self._toggle_check(self.cursor_row, self._editable_columns(kind=CellKind.CHECK_BOX)[0])
+        checked = self._editable_columns(kind=CellKind.CHECK_BOX, row=self.cursor_row)
+        if len(checked) > 0:
+            self._toggle_check(self.cursor_row, checked[0])
 
-    def _editable_columns(self, kind: CellKind | None = None) -> list[int]:
-        """`editable_columns` the table has whose cells show `kind`, in order: typed in if None."""
+    def _editable_columns(self, kind: CellKind | None = None, row: int | None = None) -> list[int]:
+        """`editable_columns` the table has whose cells show `kind`, in order: typed in if None.
+
+        Those whose cell in `row`, if given, isn't disabled.
+        """
         return sorted(
             column
             for column in set(self.editable_columns)
-            if 0 <= column < len(self._headers) and self._kind(column) is kind
+            if 0 <= column < len(self._headers)
+            and self._kind(column) is kind
+            and (row is None or not self._style(row, column).is_disabled)
         )
 
     def _set_cell(self, row: int, column: int, text: str) -> None:
@@ -315,7 +395,9 @@ class ComposeTable(DataTable[Text]):
         self._rows = replace_cell(self._rows, row, column, text)
         check = 1 if self._is_multiple else 0
         self.update_cell_at(
-            Coordinate(row, column + check), self._cell(column, self._rows[row]), update_width=True
+            Coordinate(row, column + check),
+            self._cell(row, column, self._rows[row]),
+            update_width=True,
         )
         self.cell_edited.emit(row, column, text)
 
@@ -348,7 +430,7 @@ class ComposeTable(DataTable[Text]):
         editor = ComposeRowEditor(
             {
                 column: (self._headers[column], cells[column] if column < len(cells) else "")
-                for column in self._editable_columns()
+                for column in self._editable_columns(row=row)
             },
             focused,
         )

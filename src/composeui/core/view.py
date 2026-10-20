@@ -2027,6 +2027,71 @@ class CellWidget:
         return cls(CellKind.LINK)
 
 
+#: the brightness above which a background takes black text, else white
+_LIGHT_BACKGROUND = 0.5
+
+
+@attrs.frozen
+class CellStyle:
+    """How a table's cell looks, by `TableMixin.cell_styles`: plain by default."""
+
+    def _check_background(self, _attribute: attrs.Attribute[Any], color: Optional[str]) -> None:
+        if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
+            msg = f"Cannot color a cell's background {color!r}: give it as #rrggbb."
+            raise ValueError(msg)
+
+    def _check_row_span(self, _attribute: attrs.Attribute[Any], row_span: int) -> None:
+        if row_span < 1:
+            msg = f"Cannot make a cell span {row_span} rows: it spans 1 at least."
+            raise ValueError(msg)
+
+    #: its color, as #rrggbb, the same in every theme, e.g. red for NaN; its text is
+    #: black or white, whichever reads on it (`text_color`)
+    background: Optional[str] = attrs.field(default=None, validator=[_check_background])
+    #: grayed, and never edited, even in an editable column: its widget is disabled
+    is_disabled: bool = False
+    #: a mark before its text, e.g. a warning, named by the table's `mark_text`
+    mark: Optional[NodeMark] = None
+    #: how many rows it covers, its own and those under it, which show nothing in its
+    #: column; only while the table shows them right under it, unsorted and unfiltered
+    row_span: int = attrs.field(default=1, validator=[_check_row_span])
+
+    @property
+    def text_color(self) -> Optional[str]:
+        """Get the color of the text on `background`, black or white; None without one."""
+        if self.background is None:
+            return None
+        red, green, blue = (int(self.background[i : i + 2], 16) / 255 for i in (1, 3, 5))
+        brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+        return "#000000" if brightness > _LIGHT_BACKGROUND else "#ffffff"
+
+
+#: a cell without a style of its own
+PLAIN_CELL = CellStyle()
+
+
+@attrs.frozen
+class HeaderGroup:
+    """A header over several columns, on a row above theirs, by `TableMixin.header_groups`.
+
+    E.g. "Coordinates" over "Standard space" and "Physical space".
+    """
+
+    text: str
+    #: its first column
+    column: int
+    #: how many columns it covers, from `column` on
+    column_count: int
+
+    def translated(self, translate: Translate) -> HeaderGroup:
+        """Get it with its text translated again, if it's `TranslatedText`."""
+        text = translate_again(self.text, translate)
+        return self if text is self.text else attrs.evolve(self, text=text)
+
+    def covers(self, column: int) -> bool:
+        return self.column <= column < self.column + self.column_count
+
+
 #: the text of a table's filter bar, which the renderers show
 FILTER_TEXTS: Mapping[str, str] = {
     "search": T("Search"),
@@ -2077,6 +2142,13 @@ class TableMixin:
     `rows` whatever the order, and a search or a filter hiding a selected row deselects
     it, `selection_changed` emitting. New `rows` keep the order, the search and the
     filters.
+
+    Each cell of `cell_styles` looks as its `CellStyle` says: a background color, grayed
+    and never edited, a mark, spanning the rows under it. Assign them with the rows they
+    describe: they're by index in `rows`, so new rows keep the styles of the rows that
+    were at their indexes. `header_groups` put a header over several columns, on a row
+    above theirs, and `row_headers` a header before each row, e.g. the keys of a small
+    key/value table of results.
     """
 
     def _check_selected_rows(self, _attribute: attrs.Attribute[Any], rows: list[int]) -> None:
@@ -2090,6 +2162,24 @@ class TableMixin:
         if self.selection_mode is SelectionMode.SINGLE and len(rows) > 1:
             msg = f"Cannot set {name}.selected_rows to {rows}: the table selects a single row."
             raise ValueError(msg)
+
+    def _check_header_groups(
+        self, _attribute: attrs.Attribute[Any], groups: list[HeaderGroup]
+    ) -> None:
+        name = type(self).__name__
+        covered: set[int] = set()
+        for group in groups:
+            columns = set(range(group.column, group.column + group.column_count))
+            if group.column < 0 or group.column_count < 1:
+                msg = f"Cannot group {name}'s headers under {group.text!r}: it covers no column."
+                raise ValueError(msg)
+            if len(columns & covered) > 0:
+                msg = (
+                    f"Cannot group {name}'s headers under {group.text!r}: a column is in two"
+                    " groups."
+                )
+                raise ValueError(msg)
+            covered |= columns
 
     def _check_sort_column(self, _attribute: attrs.Attribute[Any], column: Optional[int]) -> None:
         if column is not None and not self._is_column(column, self.sortable_columns):
@@ -2227,6 +2317,21 @@ class TableMixin:
     )
     #: the user clicked a button or a link cell: its row and its column
     cell_clicked: Signal[int, int] = attrs.Factory(Signal[int, int])
+    #: how each cell looks, by its index in `rows` and its column (see `CellStyle`): the
+    #: app's to set with the rows, not study data
+    cell_styles: dict[tuple[int, int], CellStyle] = attrs.field(
+        factory=dict[tuple[int, int], CellStyle], metadata={OMIT: True}
+    )
+    #: headers over several columns, on a row above `headers`
+    header_groups: list[HeaderGroup] = attrs.field(
+        factory=list[HeaderGroup], validator=[_check_header_groups], metadata={UI_TEXT: True}
+    )
+    #: a header before each row, by its index in `rows`; none shown while empty
+    row_headers: list[str] = attrs.field(factory=list[str], metadata={UI_TEXT: True})
+    #: each `NodeMark`'s name, for screen readers (web) and as a tooltip (Qt)
+    done_text: str = attrs.field(default=T("Done"), metadata={UI_TEXT: True})
+    warning_text: str = attrs.field(default=T("Warning"), metadata={UI_TEXT: True})
+    error_text: str = attrs.field(default=T("Error"), metadata={UI_TEXT: True})
     #: `rows` as the edit being emitted leaves them, while its callbacks run
     _edited_rows: Optional[list[list[str]]] = attrs.field(
         default=None, init=False, repr=False, metadata={OMIT: True}
@@ -2292,24 +2397,75 @@ class TableMixin:
             chip, text = self.filter_texts.get("chip", "{header}: {filter}"), self.filters[column]
         return chip.format(header=header, filter=text)
 
+    def mark_text(self, mark: NodeMark) -> str:
+        """Get the name of `mark` in the main view's language."""
+        if mark is NodeMark.DONE:
+            return self.done_text
+        return self.warning_text if mark is NodeMark.WARNING else self.error_text
+
+    def cell_style(self, row: int, column: int) -> CellStyle:
+        """Get how a cell looks, by its index in `rows`: plain unless `cell_styles` say."""
+        return self.cell_styles.get((row, column), PLAIN_CELL)
+
+    def is_cell_editable(self, row: int, column: int) -> bool:
+        """Tell whether the user edits a cell: in `editable_columns`, and not disabled."""
+        return column in self.editable_columns and not self.cell_style(row, column).is_disabled
+
+    def header_group(self, column: int) -> Optional[HeaderGroup]:
+        """Get the group of `header_groups` over `column`, if any."""
+        return next((group for group in self.header_groups if group.covers(column)), None)
+
+    def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]:
+        """Get how the shown cells look, by position in `shown_rows` and column.
+
+        A cell spans the rows shown right under it that follow it in `rows`, up to its
+        `row_span`: its style here says how many it spans as shown.
+        """
+        positions = {row: position for position, row in enumerate(self.shown_rows)}
+        styles: dict[tuple[int, int], CellStyle] = {}
+        for (row, column), style in self.cell_styles.items():
+            position = positions.get(row)
+            if position is None or column >= len(self.headers):
+                continue
+            span = 1
+            while (
+                span < style.row_span
+                and position + span < len(self.shown_rows)
+                and self.shown_rows[position + span] == row + span
+            ):
+                span += 1
+            styles[position, column] = attrs.evolve(style, row_span=span)
+        return styles
+
     def is_checked(self, row: int, column: int) -> bool:
         """Tell whether a check box cell is checked: its text is "true", ignoring case."""
         return self._cell_text(row, column).casefold() == "true"
 
     def column_checked(self, column: int) -> Optional[bool]:
-        """Tell whether a check box column's shown cells are all checked, none, or some (None)."""
-        checked = {self.is_checked(row, column) for row in self.shown_rows}
+        """Tell whether a check box column's shown cells are all checked, none, or some (None).
+
+        Its disabled cells don't count: the check-all box doesn't change them.
+        """
+        checked = {
+            self.is_checked(row, column)
+            for row in self.shown_rows
+            if not self.cell_style(row, column).is_disabled
+        }
         return None if len(checked) > 1 else checked == {True}
 
     def check_all(self, column: int, *, is_checked: bool) -> None:
         """Check or uncheck a check box column's shown cells, as its header's box does.
 
         Each cell changing is the user's edit: `cell_edited` emits it, and the edit applies
-        unless its callbacks assigned `rows` or refused it.
+        unless its callbacks assigned `rows` or refused it. A disabled cell stays as it is.
         """
         text = CHECKED_TEXTS[is_checked]
         for row in list(self.shown_rows):
-            if row >= len(self.rows) or self.is_checked(row, column) == is_checked:
+            if (
+                row >= len(self.rows)
+                or self.is_checked(row, column) == is_checked
+                or self.cell_style(row, column).is_disabled
+            ):
                 continue
             rows = self.rows
             self.emit_cell_edited(row, column, text)

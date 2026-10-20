@@ -11,7 +11,8 @@ One widget at a time, each on Qt, Textual and the web with tests (the registry c
 test requires all three backends to register the same keys). Already there: input, float
 input, integer input, date input, file path input (a "…" button and a reload button),
 slider, label, log, button, progress bar, metric, expander, checkbox, radio group,
-combobox, table (editable cells, sorting and filtering, and widgets in cells included),
+combobox, table (editable cells, sorting and filtering, widgets in cells, cell colors,
+marks, disabled cells, row spans, header groups and row headers included),
 tree (its nodes with an icon, a mark and a style), Markdown, forms, pages, tabs, resizable
 panes (a splitter), sidebar, a list of views from data, message, confirm and form dialogs.
 
@@ -29,12 +30,8 @@ most needed first:
 2. **A plain list to pick from**: strings, one or several selected, e.g. the "Outputs"
    or "Variables" list on the left of every result; a **checkable** variant with a
    check-all box in its header (the variables to keep).
-3. **A table's looks**: a cell's background color (NaN in red, a warning in orange, a
-   correlation matrix's coefficients colored by range, with its legend), a disabled
-   (grayed) cell, an icon in a cell (a warning); headers on two rows (a group over its
-   columns, "Coordinates" over "Standard space" and "Physical space") and cells spanning
-   rows; a vertical header, for the small key/value tables of results ("Number of
-   calls | 2500").
+3. **A color legend** beside a table whose cells are colored by range (`CellStyle`), such
+   as a correlation matrix's coefficients: each range's color and its bounds.
 4. **A wizard**: a dialog of steps with Back, Continue/Finish, Cancel and Help, each
    step a form checked before the next, an image on its side.
 5. **Tabs the user adds and closes**: a × on each tab and a + tab after them ("Command 1",

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 #: a `NodeMark` after its node's label: its glyph and color, as a log's are colored
-_MARKS: Final = {
+MARKS: Final = {
     NodeMark.DONE: ("✓", Style(color="green")),
     NodeMark.WARNING: ("!", Style(color="orange1", bold=True)),
     NodeMark.ERROR: ("✗", Style(color="red")),
@@ -110,7 +110,7 @@ class ComposeTree(Tree["TreePath"]):
         label = super().render_label(node, base_style, style)
         mark = None if node.data is None else self._marks.get(node.data)
         if mark is not None:  # in its own color, the selected label's left out
-            glyph, color = _MARKS[mark]
+            glyph, color = MARKS[mark]
             label.append(f" {glyph}", base_style + color)
         return label
 

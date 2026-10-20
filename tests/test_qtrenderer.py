@@ -110,6 +110,7 @@ from tests.tables import (
     EditableTableMainView,
     Room,
     SortedRoomsMainView,
+    StyledTablesMainView,
 )
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -1739,6 +1740,59 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     view.variables.editable_columns = [0]
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
+
+
+def test_a_table_s_cells_and_headers_look_as_the_view_says(qtbot: QtBot) -> None:
+    view = StyledTablesMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.points)
+    model = table.model()
+
+    def data(row: int, column: int, role: Qt.ItemDataRole) -> Any:
+        return model.index(row, column).data(role)
+
+    # NaN on red, its text white; a warning on light yellow, its text black, marked
+    assert data(1, 2, Qt.ItemDataRole.BackgroundRole) == QColor("#dc2626")
+    assert data(1, 2, Qt.ItemDataRole.ForegroundRole) == QColor("#ffffff")
+    assert data(2, 3, Qt.ItemDataRole.ForegroundRole) == QColor("#000000")
+    assert data(2, 3, Qt.ItemDataRole.DecorationRole) is not None
+    assert data(2, 3, Qt.ItemDataRole.ToolTipRole) == "Warning"
+    view.points.warning_text = "Attention"
+    assert data(2, 3, Qt.ItemDataRole.ToolTipRole) == "Attention"
+    # the group covers its two points
+    assert (table.rowSpan(0, 0), table.rowSpan(2, 0)) == (2, 1)
+
+    # a disabled cell of an editable column is neither typed in nor checked
+    point = table.visualRect(model.index(1, 1)).center()
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    assert table.state() is not QAbstractItemView.State.EditingState
+    box = table.visualRect(model.index(1, 4)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=box)
+    assert view.points.rows[1][4] == "False"
+
+    # the group's row doubles the header, a click on it sorting nothing
+    header = table.horizontalHeader()
+    view.points.sortable_columns = [2]
+    group = QPoint(header.sectionViewportPosition(2) + 4, header.height() // 4)
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=group)
+    assert view.points.sort_column is None
+    column = QPoint(group.x(), 3 * header.height() // 4)
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=column)
+    assert view.points.sort_column == 2
+    height = header.sizeHint().height()
+    view.points.header_groups = []
+    assert 2 * header.sizeHint().height() == height
+
+    # the key/value table's keys head its rows; the points have no row headers
+    numbers = _table(view.numbers)
+    assert numbers.verticalHeader().isVisible()
+    assert numbers.model().headerData(0, Qt.Orientation.Vertical) == "Number of calls"
+    assert not table.verticalHeader().isVisible()
 
 
 # Qt warned "commitData called with an editor that does not belong to this view"
