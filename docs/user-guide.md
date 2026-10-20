@@ -1059,10 +1059,16 @@ class PipeMainView(MainView):
   thread changes them (`job.cancel()` works from any thread). Called from the function of a
   job, they raise `CalledInJobError`. To start another job, return what it needs, and start
   it from the callback that gets it.
+- **Progress.** The function gives the main thread a callback with
+  `job.call_on_main_thread(callback)`, for example to move a progress bar while it works.
+  The callbacks are called in order, before the job emits its outcome. When the job is
+  dropped, the callbacks that are still waiting are not called.
 - **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
   emits it when it changes, for example to disable a Run button.
 - **New, Open, and closing the app** cancel the running jobs and drop their results,
   because the results belong to the study replaced. Closing doesn't wait for the jobs either.
+  Open drops the jobs once the views' state in the file is checked, before the model's
+  data changes. So an Open that fails still stops the jobs.
 - **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
   ask for, as for any signal.
 - **On the web,** while any job runs, the page asks the server every second for the changes
@@ -1170,6 +1176,23 @@ tables (`model.runs.add(...)`).
   the previous version to `migrations` (`{1: add_stress_column}`). When the user opens a
   study saved by an older version, the model brings it up to date. A study saved by a newer
   version is refused.
+- **Writing from a job.** The function of a [job](#running-work-in-threads) can write to
+  the tables: the model's lock lets one thread at a time use the connection. The `changed`
+  signal of a write in a job is emitted on the main thread, through
+  `job.call_on_main_thread`, so the views refresh there. New and Open drop the jobs before
+  they replace the database. Check `job.is_canceled` in the transaction that writes, so a
+  canceled job never writes into the next study:
+
+  ```python
+  def sweep(job: Job[int], model: PipeModel, radii: list[float]) -> int:  # in its thread
+      for count, radius in enumerate(radii):
+          with model.runs.connection():
+              if job.is_canceled:
+                  return count
+              model.runs.add(radius)  # joins the transaction
+      return len(radii)
+  ```
+
 - **On the web,** the database of each session is deleted with the session.
 
 [`src/examples/pipecatalogue.py`](../src/examples/pipecatalogue.py) puts it together, on
@@ -1183,6 +1206,9 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`):
 - Each pipe has an installation date, picked with a `DateInputView`, which the list can
   filter by. Studies saved before the date column existed get the column when they open,
   through a migration.
+
+[`src/examples/pipesweep.py`](../src/examples/pipesweep.py) writes to its model from a job
+(`uv run python -m examples.pipesweep --backend qt`).
 
 ## Translating the app
 
