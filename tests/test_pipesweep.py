@@ -134,6 +134,7 @@ def test_a_sweep_shows_in_french(app: App) -> None:
     main_view.jobs.wait()
 
     assert main_view.title == "Balayage de conduite"
+    assert [tab.title for tab in main_view.results.tabs] == ["Graphique", "Calculs"]
     assert main_view.runs.headers == ["Rayon extérieur (mm)", "Contrainte circonférentielle (MPa)"]
     assert main_view.buttons.cancel.text == "Annuler"
     assert [series.name for series in main_view.chart.series] == ["Contrainte circonférentielle"]

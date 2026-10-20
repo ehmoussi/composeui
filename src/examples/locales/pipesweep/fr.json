@@ -1,4 +1,5 @@
 {
+  "Chart": "Graphique",
   "Every value must be greater than 0": "Toutes les valeurs doivent être supérieures à 0",
   "Fix the sweep first": "Corrigez d'abord le balayage",
   "Hoop Stress": "Contrainte circonférentielle",
@@ -11,6 +12,7 @@
   "Pressure (MPa)": "Pression (MPa)",
   "Radii": "Rayons",
   "Run": "Lancer",
+  "Runs": "Calculs",
   "Stress": "Contrainte",
   "Sweep": "Balayage",
   "Swept {count} of {total} radii": "{count} rayons balayés sur {total}",

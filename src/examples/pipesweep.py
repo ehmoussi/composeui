@@ -4,10 +4,10 @@
 outer radius of a pipe under pressure: a job, in a thread of its own, works out the wall's
 hoop stress at each radius, one radius at a time, and writes each run to the model's
 database as it is done. The views never hear from the worker: each write's `changed` is
-emitted on the main thread (see `Job.call_on_main_thread`), where the table, the chart
-and the progress bar show the runs written so far. Cancel stops the sweep after the run
-it's working on; File saves and opens the runs with the views. The app is translated
-into French (`--language fr`, or its Language menu).
+emitted on the main thread (see `Job.call_on_main_thread`), where the progress bar, and
+the chart and the table, each on a tab, show the runs written so far. Cancel stops the
+sweep after the run it's working on; File saves and opens the runs with the views. The
+app is translated into French (`--language fr`, or its Language menu).
 """
 
 from __future__ import annotations
@@ -35,6 +35,8 @@ from composeui.core.view import (
     Series,
     T,
     TableView,
+    TabPage,
+    TabView,
     child,
     define_view,
 )
@@ -180,6 +182,30 @@ class SweepButtons(HorizontalView):
 
 
 @define_view
+class ChartTab(TabPage):
+    chart: ChartView = child(
+        ChartView,
+        title=T("Hoop Stress"),
+        x_title=T("Outer Radius"),
+        x_unit="mm",
+        y_title=T("Stress"),
+        y_unit="MPa",
+        height=280,
+    )
+
+
+@define_view
+class RunsTab(TabPage):
+    table: TableView = child(TableView, headers=[T("Outer Radius (mm)"), T("Hoop Stress (MPa)")])
+
+
+@define_view
+class ResultTabs(TabView):
+    chart_tab: ChartTab = child(ChartTab, title=T("Chart"))
+    runs_tab: RunsTab = child(RunsTab, title=T("Runs"))
+
+
+@define_view
 class PipeSweepMainView(MainView):
     app_title = T("Pipe Sweep")
     extension = ".sweep"
@@ -191,16 +217,17 @@ class PipeSweepMainView(MainView):
     buttons: SweepButtons = Factory(SweepButtons)
     #: the runs written, out of the radii swept
     progress: ProgressBarView = child(ProgressBarView, maximum=17)
-    chart: ChartView = child(
-        ChartView,
-        title=T("Hoop Stress"),
-        x_title=T("Outer Radius"),
-        x_unit="mm",
-        y_title=T("Stress"),
-        y_unit="MPa",
-        height=280,
-    )
-    runs: TableView = child(TableView, headers=[T("Outer Radius (mm)"), T("Hoop Stress (MPa)")])
+    results: ResultTabs = Factory(ResultTabs)
+
+    @property
+    def chart(self) -> ChartView:
+        """The chart, on its tab."""
+        return self.results.chart_tab.chart
+
+    @property
+    def runs(self) -> TableView:
+        """The runs' table, on its tab."""
+        return self.results.runs_tab.table
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
