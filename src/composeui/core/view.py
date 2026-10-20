@@ -428,8 +428,8 @@ class View:
     def tr(self, text: str) -> TranslatedText:
         """Translate `text`, as written in the code, into the main view's language.
 
-        A view keeping the translation, in a field or in a list or dict of one, shows it in
-        the next language `MainView.set_language` sets; formatted too.
+        A view that keeps the translation, in a field or in a list or dict of one, shows it in
+        the next language that `MainView.set_language` sets. Formatted text follows too.
         """
         return TranslatedText(self._tr(text), text)
 
@@ -457,9 +457,9 @@ class View:
     def retranslate(self) -> None:
         """Update text that `tr` alone doesn't follow, e.g. built from other text.
 
-        Called once while the view is built, before the rest of `__attrs_post_init__`,
-        then by `MainView.set_language` on every view, children before their parent, once
-        their text is translated.
+        Called once while the view is built, before the rest of `__attrs_post_init__`. Then
+        `MainView.set_language` calls it on every view once their text is translated,
+        children before their parent.
         """
 
     @property
@@ -840,9 +840,10 @@ class FileMenu(Menu):
 class LanguageMenu(Menu):
     """A menu of the app's languages, the one shown checked; triggering one shows it.
 
-    Make it a field of the main view, which gives it the languages it has catalogs for
-    (`MainView.languages`), each named in itself whatever the language shown, and keeps
-    the shown one checked. The language isn't study data: never saved, loaded or reset.
+    Make it a field of the main view. The main view gives it the languages it has catalogs
+    for (`MainView.languages`), and keeps the shown one checked. The menu names each
+    language in itself, whatever the language shown. The language isn't study data:
+    never saved, loaded or reset.
     """
 
     title: str = attrs.field(default=T("Language"), metadata={UI_TEXT: True})
@@ -1028,8 +1029,8 @@ class MainView(View):
     def check_state_data(self, data: Any) -> None:
         """Raise `InvalidStateError` if `load_state_data` can't load `data`.
 
-        The data is applied to a newly built main view: applying sets fields one by one,
-        so data failing halfway would otherwise leave this view half loaded.
+        The data is applied to a newly built main view. Applying sets the fields one by one,
+        so data that fails halfway would otherwise leave this view half loaded.
         """
         if not isinstance(data, dict):
             msg = f"it isn't a valid {self.extension} file"
@@ -1222,8 +1223,8 @@ def parse_date(text: str, date_format: str) -> datetime.date:
 class DateInputMixin(_InputView):
     """A date, typed as `date_format` says or picked from a calendar.
 
-    A date typed out of `minimum`/`maximum` isn't refused everywhere (Textual and the web
-    mark or keep it), so validate it; the calendar offers only the dates in range.
+    Not every backend refuses a date typed out of `minimum`/`maximum`: Textual and the web
+    mark it or keep it. So validate the date. The calendar offers only the dates in range.
     """
 
     value: Optional[datetime.date] = attrs.field(default=None)
@@ -1279,11 +1280,11 @@ class DateInputView(DateInputMixin, View):
 class FilePathInputMixin(InputMixin):
     """A file's path, typed in the field or picked with the "…" button beside it.
 
-    `text` holds the path as typed, `path` reads it as one. The button opens the
-    toolkit's file dialog on Qt and Textual; on the web, the browser's picker uploads the
-    file, and the field then holds the path of the session's copy, kept until the
-    session ends. With `has_reload`, a reload button beside them emits
-    `reload_clicked`, e.g. to read the file again once changed.
+    `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
+    button opens the toolkit's file dialog. On the web, the browser's picker uploads the
+    file. The field then holds the path of the session's copy, kept until the session
+    ends. With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to
+    read the file again once it changed.
     """
 
     #: the file types the dialog offers, by name: ``{"CSV": (".csv",)}``; on the web, a
@@ -1386,10 +1387,10 @@ class LogMixin:
     ) -> None:
         """Wire `validator` to run against this row whenever any of `signals` fires.
 
-        A failing (non-None) result is pushed into this row's own `log_message`/
-        `log_type`; a passing (None) one clears them. It doesn't run `validator`
-        immediately: call `run_validator` afterward for an initial check (e.g. an
-        empty required field should already show its error before the first edit).
+        A failing (non-None) result is pushed into this row's own `log_message`/`log_type`,
+        and a passing (None) result clears them. It doesn't run `validator` immediately: call
+        `run_validator` afterward for an initial check. E.g. an empty required field should
+        already show its error before the first edit.
         """
         self.validator = validator
         for signal in signals:
@@ -1398,9 +1399,9 @@ class LogMixin:
     def run_validator(self, *_args: Any) -> None:
         """Re-run `validator`, if set, and push its result into the row's own log.
 
-        Takes (and ignores) any positional args so it can be connected directly to
-        signals of any arity: a per-keystroke ``text_edited: Signal[str]`` or a
-        no-argument ``editing_finished: SignalNoArgs`` alike.
+        Takes (and ignores) any positional arguments, so it can be connected directly to
+        signals of any arity. E.g. a per-keystroke ``text_edited: Signal[str]``, or a
+        no-argument ``editing_finished: SignalNoArgs``.
         """
         if self.validator is None:
             return
@@ -1649,19 +1650,18 @@ class ReferenceLine:
 class ChartView(View):
     """A chart of results, e.g. a quantity against time or a swept dimension.
 
-    Data and labels: each backend draws it in its own theme's colors and fonts, unless a
-    series has a color of its own (`Series.color`).
-    Assign a new `series` list to redraw it, e.g. a job adding points; the user's zoom
-    stays where the backend has one.
+    The view holds data and labels. Each backend draws it in its own theme's colors and
+    fonts, unless a series has a color of its own (`Series.color`). Assign a new `series`
+    list to redraw it, e.g. when a job adds points. The user's zoom stays, where the
+    backend has one.
 
-    A `BAR` chart draws a group of bars for each of its `categories`, a bar per series: a
-    series' x is the index of a category, and its y the bar's height.
+    A `BAR` chart draws a group of bars for each of its `categories`, a bar per series. A
+    series' x is the index of a category, and its y is the bar's height.
 
-    A log axis (`x_log`, `y_log`) leaves out the values it can't show, those <= 0: a
-    point at such an x isn't drawn, such a y leaves a gap (see `drawn_points`), and a
-    reference line at such a value isn't drawn either (see `drawn_lines`), rather than a
-    job's points making the chart fail. A bar chart's x, its categories, is never a log
-    axis.
+    A log axis (`x_log`, `y_log`) leaves out the values it can't show, those <= 0. A point
+    at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`). A reference
+    line at such a value isn't drawn either (see `drawn_lines`). So a job's points never
+    make the chart fail. A bar chart's x, its categories, is never a log axis.
     """
 
     _renderer_key = "chart"
@@ -2034,12 +2034,12 @@ def _parse_text(text: str) -> Filter:
 def parse_filter(text: str, field_type: Any = str) -> Filter:
     """Parse a filter's text for a column showing a field of `field_type`.
 
-    In a text column, ignoring case: the cells containing the text, or as `_parse_text`
-    says (``=exact``, ``!=exact``, ``!not``, ``start*``, ``*end``, ``/regex/``). In a number
-    or a date column, a comparison (``>20``, ``>=20``, ``<20``, ``<=20``, ``!=20``), a range
-    (``18..24``, both ends included) or a bare value, meaning ``=``. In a boolean column,
-    ``true`` or ``false``. In any column, ``=`` alone: the empty cells. Raise
-    `FilterError` when the text doesn't parse.
+    In a text column, ignoring case: the cells that contain the text, or as `_parse_text`
+    says (``=exact``, ``!=exact``, ``!not``, ``start*``, ``*end``, ``/regex/``). In a
+    number or a date column: a comparison (``>20``, ``>=20``, ``<20``, ``<=20``,
+    ``!=20``). Or a range (``18..24``, both ends included), or a bare value, which means
+    ``=``. In a boolean column: ``true`` or ``false``. In any column: ``=`` alone, for the
+    empty cells. Raise `FilterError` when the text doesn't parse.
     """
     text = text.strip()
     if text == "":
@@ -2093,10 +2093,10 @@ def _to_texts(texts: Iterable[str]) -> tuple[str, ...]:
 class CellWidget:
     """A widget in each cell of a table's column, by `TableMixin.cell_widgets`.
 
-    A check box and a combobox edit their cell when the column is in `editable_columns`,
-    `cell_edited` emitting the new text as for a typed edit (a check box's from
-    `CHECKED_TEXTS`); else they only show it. A button and a link emit `cell_clicked`,
-    the user never typing in their cells.
+    A check box and a combobox edit their cell when the column is in `editable_columns`.
+    Then `cell_edited` emits the new text, as for a typed edit; a check box's text comes
+    from `CHECKED_TEXTS`. Else they only show the cell's text. A button and a link emit
+    `cell_clicked`, and the user never types in their cells.
     """
 
     kind: CellKind
@@ -2218,38 +2218,38 @@ class TableMixin:
 
     Each row has one cell per header. Assign new lists to update the table: changing a
     list in place doesn't reach the renderer. The user selects rows as `selection_mode`
-    allows: `selected_rows` holds their indexes, and `selection_changed` emits them when
+    allows. `selected_rows` holds their indexes, and `selection_changed` emits them when
     the user changes them. New `rows` keep each selected row selected when they hold it
     exactly once, wherever it moved, and drop it otherwise.
 
-    The user edits the cells of the columns in `editable_columns` (none by default):
+    The user edits the cells of the columns in `editable_columns` (none by default).
     `cell_edited` emits the row, the column and the new text while `rows` still holds the
-    old one, then the edit replaces its row in `rows`, keeping the selection. To refuse or
-    reformat it, or to show what the edit changed elsewhere, assign `rows` from the
-    callback instead: the table shows them, and the edit isn't applied on top. The edited
-    row stays selected when they hold it as edited (e.g. renamed, then sorted), or else
-    as it was (the edit refused). Raising `EditRefusedError` refuses it too, the rows staying
-    as they are, e.g. when the model refused the new text and changed nothing; so does a
-    `RefusedError` caught by `View.refusing` in the callback.
+    old text. Then the edit replaces its row in `rows`, and keeps the selection. To refuse
+    or reformat the edit, or to show what it changed elsewhere, assign `rows` from the
+    callback instead. The table shows these rows, and doesn't apply the edit on top. The
+    edited row stays selected when they hold it as edited (e.g. renamed, then sorted), or
+    else as it was (the edit refused). Raising `EditRefusedError` refuses the edit too,
+    and the rows stay as they are, e.g. when the model refused the new text and changed
+    nothing. A `RefusedError` caught by `View.refusing` in the callback does the same.
 
-    A column of `cell_widgets` shows a widget in each cell (see `CellWidget`): a check box
-    or a combobox editing it, a button or a link emitting `cell_clicked` with its row and
+    A column of `cell_widgets` shows a widget in each cell (see `CellWidget`). A check box
+    or a combobox edits the cell. A button or a link emits `cell_clicked` with its row and
     column. A check box column's header can check or uncheck every shown row
-    (`check_all`), each change emitted as the user's edit.
+    (`check_all`), and each change is emitted as the user's edit.
 
     The user sorts the rows by a column of `sortable_columns` (`sort_column`, ascending
-    unless `sort_descending`), searches the text of `filterable_columns` (`search`) and
-    filters each of them (`filters`, the text typed, see `parse_filter`). The table shows
-    `shown_rows`, which these compute; the indexes the table emits or takes stay those of
-    `rows` whatever the order, and a search or a filter hiding a selected row deselects
-    it, `selection_changed` emitting. New `rows` keep the order, the search and the
-    filters.
+    unless `sort_descending`). The user also searches the text of `filterable_columns`
+    (`search`), and filters each of them (`filters`, the text typed, see `parse_filter`).
+    The table shows `shown_rows`, which these compute. The indexes that the table emits or
+    takes stay those of `rows`, whatever the order. A search or a filter that hides a
+    selected row deselects it, and `selection_changed` emits. New `rows` keep the order,
+    the search and the filters.
 
     Each cell of `cell_styles` looks as its `CellStyle` says: a background color, grayed
-    and never edited, a mark, spanning the rows under it. Assign them with the rows they
-    describe: they're by index in `rows`, so new rows keep the styles of the rows that
-    were at their indexes. `header_groups` put a header over several columns, on a row
-    above theirs, and `row_headers` a header before each row, e.g. the keys of a small
+    and never edited, a mark, spanning the rows under it. Assign the styles with the rows
+    they describe. They are by index in `rows`, so new rows keep the styles of the rows
+    that were at their indexes. `header_groups` put a header over several columns, on a
+    row above theirs. `row_headers` put a header before each row, e.g. the keys of a small
     key/value table of results.
     """
 
@@ -2530,8 +2530,8 @@ class TableMixin:
     def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]:
         """Get how the shown cells look, by position in `shown_rows` and column.
 
-        A cell spans the rows shown right under it that follow it in `rows`, up to its
-        `row_span`: its style here says how many it spans as shown.
+        A cell spans the shown rows right under it that follow it in `rows`, up to its
+        `row_span`. Its style here says how many rows it spans as shown.
         """
         positions = {row: position for position, row in enumerate(self.shown_rows)}
         styles: dict[tuple[int, int], CellStyle] = {}
@@ -2747,14 +2747,14 @@ class RecordTableView(TableView, Generic[RecordT]):
 
     Build it with its records' type, so a study can save and load them:
     ``child(RecordTableView[Room], columns=[Column("name", T("Room"), editable=True)])``.
-    `columns` set the headers and the editable columns, and the table formats each field
-    in its cell (`str`, None as an empty cell): assign new `records`, not `rows`.
+    `columns` set the headers and the editable columns. The table formats each field in
+    its cell (`str`, None as an empty cell): assign new `records`, not `rows`.
 
-    The user's edit is parsed into the field's type with `CONVERTER`: a cell that doesn't
-    parse refuses the edit, saying why in the status bar. Else `record_edited` emits the
-    old and the new record while `records` still holds the old one, then the new one
-    replaces it, unless the callbacks assigned `records` themselves; refusing the edit
-    works as with `cell_edited` (`View.refusing`).
+    The user's edit is parsed into the field's type with `CONVERTER`. A cell that doesn't
+    parse refuses the edit, and the status bar says why. Else `record_edited` emits the
+    old and the new record while `records` still holds the old one. Then the new record
+    replaces the old one, unless the callbacks assigned `records` themselves. Refusing the
+    edit works as with `cell_edited` (`View.refusing`).
     """
 
     def _reconcile_columns(
@@ -3254,17 +3254,17 @@ class FormView(View):
     ) -> None:
         """Register a cross-field `validator`, re-run whenever any of `signals` fires.
 
-        Unlike `LogMixin.set_validator` (one validator per row, using that row's own
-        log), a form can have several independent cross-field checks: each failing
-        (non-None) result is combined into this form's shared `log_view` instead of
-        the last one winning (see ``PipeFormView`` in ``examples/pipeform.py``, which has
-        two independent checks spanning ``main_pipe`` and ``incident_pipe``). It doesn't
-        run immediately: call `validate` afterward for an initial check.
+        Unlike `LogMixin.set_validator` (one validator per row, in that row's own log), a form
+        can have several independent cross-field checks. The form combines each failing
+        (non-None) result into its shared `log_view`, instead of the last one winning. See
+        ``PipeFormView`` in ``examples/pipeform.py``: it has two independent checks spanning
+        ``main_pipe`` and ``incident_pipe``. It doesn't run immediately: call `validate`
+        afterward for an initial check.
 
-        `rows` are the rows the check is about: while it fails, each shows its field as
-        invalid (`FormRowView.has_form_error`), so the user sees which values to fix
-        even though the message is in the form's log. A row is flagged by the form that
-        last validated it, so name a row in one form's checks only.
+        `rows` are the rows that the check is about. While the check fails, each of them shows
+        its field as invalid (`FormRowView.has_form_error`). So the user sees which values to
+        fix, even though the message is in the form's log. The form that last validated a row
+        flags it, so name a row in the checks of one form only.
         """
         self._validators.append((validator, tuple(rows)))
         for signal in signals:
@@ -3332,11 +3332,11 @@ class GroupFormView(FormView):
 class FormDialogView(DialogView):
     """A modal holding a form, e.g. editing a record from its Edit button, with OK and Cancel.
 
-    A subclass gives its form as its `form` field, and its `text` shows above it. OK
-    can't be pressed while a check of the form fails (`is_accept_enabled`), and
-    accepting runs every check first, staying open while one fails, even one the user
-    hasn't triggered yet. The answer comes through `accepted` or `rejected`; the form
-    keeps its values, for the app to read, or to fill before opening it again.
+    A subclass gives its form as its `form` field, and its `text` shows above it. OK can't
+    be pressed while a check of the form fails (`is_accept_enabled`). Accepting runs every
+    check first, even one the user hasn't triggered yet, and the dialog stays open while
+    one fails. The answer comes through `accepted` or `rejected`. The form keeps its
+    values, for the app to read, or to fill before opening the dialog again.
     """
 
     _renderer_key = "form_dialog"
@@ -3391,11 +3391,11 @@ class HorizontalView(View):
     """Its view fields laid out side by side, in a row.
 
     Each field takes a share of the row's width, set by its `STRETCH` metadata:
-    ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``, or its
-    `default_stretch` when unset (1). A view with a share of 0 keeps its content's width,
-    as a button does by default; when they all do, `align` packs them at the row's start
-    or end: a subclass sets ``align = Align.END``. On the web, a row narrower than 42rem
-    stacks its views, unless none takes a share.
+    ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``. When the
+    metadata is unset, the share is the view's `default_stretch` (1). A view with a share
+    of 0 keeps its content's width, as a button does by default. When all views do,
+    `align` packs them at the row's start or end: a subclass sets ``align = Align.END``.
+    On the web, a row narrower than 42rem stacks its views, unless none takes a share.
     """
 
     _renderer_key = "horizontal"
@@ -3437,17 +3437,17 @@ class Orientation(enum.Enum):
 class SplitterView(View):
     """Its view fields in panes, side by side, the user dragging the border between two.
 
-    E.g. a study tree beside its result. Each pane starts with its share of the width,
-    set by its field's `STRETCH` metadata as in a `HorizontalView`, but at least 1: every
-    pane takes some width. `sizes` holds the shares; the user changes them by dragging a
-    border, or with the arrow keys on it, never shrinking a pane to nothing. A hidden
-    pane leaves its width to the others. On the web, a splitter narrower than 42rem stacks
-    its panes, as a row does.
+    E.g. a study tree beside its result. Each pane starts with its share of the width, set
+    by its field's `STRETCH` metadata as in a `HorizontalView`. The share is at least 1:
+    every pane takes some width. `sizes` holds the shares. The user changes them by
+    dragging a border, or with the arrow keys on it, and never shrinks a pane to nothing.
+    A hidden pane leaves its width to the others. On the web, a splitter narrower than
+    42rem stacks its panes, as a row does.
 
-    A subclass setting ``orientation = Orientation.VERTICAL`` lays them out one above the
-    other instead, sharing its height, e.g. a chart above its table: the window's spare
-    height on Qt, a set height elsewhere (24 rows on Textual, 32rem on the web), each
-    pane scrolling within its share.
+    A subclass that sets ``orientation = Orientation.VERTICAL`` lays out the panes one
+    above the other instead, e.g. a chart above its table. The panes then share its
+    height: the window's spare height on Qt, a set height elsewhere (24 rows on Textual,
+    32rem on the web). Each pane scrolls within its share.
     """
 
     _renderer_key = "splitter"
@@ -3595,7 +3595,7 @@ class GridView(View):
     ``chart: ChartView = attrs.field(factory=ChartView, metadata={GRID_POSITION: (1, 0)})``,
     or ``GridPosition(1, 0, column_span=2)`` to span two columns. Cells no view takes are
     left empty, as are those of a hidden view. A view shorter than its row stays at its
-    top; one with no share of a row (`default_stretch` 0, e.g. a button) keeps its
+    top. A view with no share of a row (`default_stretch` 0, e.g. a button) keeps its
     content's width, at its cell's start. On the web, a grid narrower than 42rem stacks
     its views in one column, row by row.
     """
@@ -3666,8 +3666,8 @@ class PageView(View):
     """A page of the app, shown while its `Router` is on the page's `route`.
 
     Its view fields are its content, laid out in a column. `action` is its entry in the
-    router's toolbar, showing the page's `title` and `icon`; it isn't content, and is
-    navigation, not study data: never saved, loaded or reset.
+    router's toolbar, which shows the page's `title` and `icon`. The action isn't content.
+    It is navigation, not study data: never saved, loaded or reset.
     """
 
     _renderer_key = "page"
@@ -3781,11 +3781,11 @@ class Router(View):
 class SidebarView(View):
     """A column of views beside the pages, shown whatever the page, e.g. a form creating a record.
 
-    A field of the main view, not of its router, rather than a view repeated on each page.
-    Its view fields are its content, laid out in a column on the window's left: Qt docks
-    it, Textual shows it left of the scrolling content, and the web a column left of the
-    pages, a drawer opened from a button in the header on a phone. The user retracts it
-    to a narrow strip, and back, with a button (`is_expanded`).
+    Make it a field of the main view, not of its router, rather than repeat a view on each
+    page. Its view fields are its content, laid out in a column on the window's left. Qt
+    docks it, and Textual shows it left of the scrolling content. The web shows a column
+    left of the pages, and on a phone a drawer that a button in the header opens. The user
+    retracts it to a narrow strip, and back, with a button (`is_expanded`).
     """
 
     _renderer_key = "sidebar"
@@ -3809,13 +3809,13 @@ ItemT = TypeVar("ItemT")
 class ListView(View, Generic[ItemT]):
     """A view per record, laid out in a column, e.g. an expander per record.
 
-    A subclass builds a record's view (`build_item`). Setting `items` to the records,
-    e.g. the model's, shows them: a new record gets a view of its own, a record gone
-    takes its view along, and a record still there keeps its view, told by its key
-    (`item_key`). A record changed keeps its view if `update_item` shows the change in
-    it, so the view keeps what the user did to it (an expander stays expanded); else it
-    gets a new view. The records and their views are the model's, not study data: never
-    saved, loaded or reset.
+    A subclass builds a record's view (`build_item`). Set `items` to the records, e.g. the
+    model's, to show them. A new record gets a view of its own, and a record gone takes
+    its view along. A record still there keeps its view, told by its key (`item_key`). A
+    changed record keeps its view if `update_item` shows the change in it. The view then
+    keeps what the user did to it, e.g. an expander stays expanded. Else the record gets a
+    new view. The records and their views are the model's, not study data: never saved,
+    loaded or reset.
     """
 
     _renderer_key = "list"
@@ -3913,8 +3913,8 @@ class NodeMark(enum.Enum):
 class TreeNode:
     """A node of a `TreeView`: its text, and the nodes under it.
 
-    Its `key`, its label unless given, tells it apart from its siblings: the tree knows a
-    node by its path (see `TreeView`), so nodes under different parents may share one,
+    Its `key`, its label unless given, tells it apart from its siblings. The tree knows a
+    node by its path (see `TreeView`). So nodes under different parents may share a key,
     e.g. a "Pipes" folder under each building.
     """
 
@@ -3973,9 +3973,9 @@ class TreeView(View):
     """Nodes in a tree, e.g. a site's buildings, their floors and their rooms.
 
     A node is known by its path, the keys from its top-level node down to it (see
-    `TreeNode`). The user expands and collapses the nodes with children: `expanded` holds
-    the paths of those expanded, and `toggled` emits a node's path and whether it is now
-    expanded. The user selects one node: `selected` holds its path, and
+    `TreeNode`). The user expands and collapses the nodes that have children. `expanded`
+    holds the paths of the expanded nodes, and `toggled` emits a node's path and whether
+    it is now expanded. The user selects one node: `selected` holds its path, and
     `selection_changed` emits it. Assign new `nodes` to update the tree: they keep the
     paths of `expanded` and `selected` still in them, and drop the others.
     """

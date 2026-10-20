@@ -161,9 +161,8 @@ class RendererContainer(Generic[TView]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         """Invoke `callback` on the thread that owns the GUI event loop.
 
-        Delegates to a bound renderer, since every renderer in the container shares
-        the same underlying toolkit/thread; falls back to a direct call if none is
-        bound yet.
+        Delegates to a bound renderer: every renderer in the container shares the same
+        toolkit and thread. Falls back to a direct call if no renderer is bound yet.
         """
         renderer = next(iter(self._renderers.values()), None)
         if renderer is not None:

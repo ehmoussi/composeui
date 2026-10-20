@@ -148,11 +148,12 @@ def _entry_point() -> str:
 def create_reloaded_starlette_app() -> Starlette:
     """Build the app of the program named by `_RELOAD_ENTRY_VARIABLE`: ``--reload``'s factory.
 
-    uvicorn's reloader serves from a new process, started again after every change,
-    which doesn't run the program that started the server. So this runs it again, with
-    the command line the process inherited (``-f``, ``--debug``, ...), and keeps the app
-    whose `run` it reaches instead of serving it: an app built inline, connected or
-    configured by the program's `main()` comes back just as it was.
+    uvicorn's reloader serves from a new process, started again after every change. That
+    process doesn't run the program that started the server. So this function runs the
+    program again, with the command line the process inherited (``-f``, ``--debug``,
+    ...). It keeps the app whose `run` the program reaches, instead of serving it. So an
+    app built inline, connected or configured by the program's `main()` comes back just
+    as it was.
     """
     kind, _, name = os.environ[_RELOAD_ENTRY_VARIABLE].partition(":")
     spec = (
@@ -189,14 +190,14 @@ def create_reloaded_starlette_app() -> Starlette:
 
 
 class WebApplication(Application[MainViewT]):
-    """Serve the app over HTTP, building one `MainView` per browser session.
+    """The web app: it serves the main view over HTTP, one `MainView` per browser session.
 
-    `main_view` is only a template (for the command line, e.g. ``-f``'s extension
-    check): every session gets its own instance from `build_main_view`. So
-    ``connect(view=app.main_view..., ...)`` doesn't wire the template: it records where the
-    view and signals sit in it, and every new session connects the callback to its own
-    ones, with its own `view` and `main_view`. Connect before serving: a session already
-    open keeps the connections it was built with.
+    `main_view` is only a template, for the command line (e.g. ``-f``'s extension check).
+    Every session gets its own instance from `build_main_view`. So
+    ``connect(view=app.main_view..., ...)`` doesn't wire the template. It records where
+    the view and the signals sit in the template. Every new session then connects the
+    callback to its own view and signals, with its own `view` and `main_view`. Connect
+    before serving: a session already open keeps the connections it was built with.
     """
 
     #: seconds a session may stay idle before it is dropped
@@ -319,11 +320,12 @@ class WebApplication(Application[MainViewT]):
 class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT]):
     """A `WebApplication` whose every session also gets its own model from `build_model`.
 
-    Per session rather than shared, like the main views: a browser only ever sees the
-    fragments its own requests return, so a model shared between sessions would leave
-    every other browser showing stale views (and would need its own locking). Callbacks
-    asking for `model`, whether a view's own or connected through `connect`, get their
-    session's, and `setup_model` wires each session's model to its main view.
+    Each session has its own model, as it has its own main view. A browser only ever sees
+    the fragments its own requests return. So a model shared between sessions would leave
+    every other browser showing stale views, and would need its own locking. Callbacks
+    asking for `model` get their session's model, whether a view's own callbacks or those
+    connected through `connect`. `setup_model` wires each session's model to its main
+    view.
     """
 
     def __init__(

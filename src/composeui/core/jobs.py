@@ -87,21 +87,22 @@ class Job(Generic[R]):
 class Jobs:
     """The jobs of a main view (`MainView.jobs`): functions run in threads.
 
-    A job's function runs in a thread, so that the app stays responsive, and must not
-    touch a view: a toolkit's widgets belong to the main thread. It returns its result
-    instead, which its job's `finished` emits on the main thread, where callbacks update
-    the views. Connected like any signal's, they get the `main_view` and `model` they ask
-    for. Meanwhile, `Job.call_on_main_thread` hands it a callback, e.g. to move a progress
-    bar; a `SqliteModel` hands it the `changed` signals of the job's writes.
+    A job's function runs in a thread, so that the app stays responsive. It must not touch
+    a view, because a toolkit's widgets belong to the main thread. It returns its result
+    instead, and its job's `finished` emits the result on the main thread. There,
+    callbacks update the views. Like the callbacks of any signal, they get the `main_view`
+    and `model` they ask for. Meanwhile, `Job.call_on_main_thread` hands the main thread a
+    callback, e.g. to move a progress bar. A `SqliteModel` hands it the `changed` signals
+    of the job's writes.
 
-    Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback, never
-    from a job's function: the jobs aren't locked, the main thread alone changing them.
-    `Job.cancel` is the exception, called from any thread. Called from a job's function,
-    they raise `CalledInJobError`: to start another job, return what it needs instead,
-    and start it from the callback getting it.
+    Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback. Never call
+    them from a job's function: the jobs aren't locked, as the main thread alone changes
+    them. `Job.cancel` is the exception: any thread can call it. Called from a job's
+    function, they raise `CalledInJobError`. To start another job, return what it needs
+    instead, and start it from the callback that gets it.
 
-    New, Open and closing the app cancel the jobs running, and drop their results: they
-    belong to the study replaced.
+    New, Open and closing the app cancel the jobs running, and drop their results: the
+    results belong to the study replaced.
     """
 
     def __init__(self, main_view: MainView) -> None:
@@ -174,10 +175,10 @@ class Jobs:
             self.running_changed.emit(False)  # noqa: FBT003
 
     def wait(self, timeout: float = 10.0) -> None:
-        """Wait for every job to be over, emitting the results here; not rendered only.
+        """Wait for every job to be over, and emit the results here: for a main view not rendered.
 
-        For a main view no toolkit shows, e.g. in a test: its jobs' results wait for
-        this call, which emits them on its thread, as a toolkit would on its main one.
+        Use it for a main view that no toolkit shows, e.g. in a test. Its jobs' results wait
+        for this call, which emits them on its own thread, as a toolkit would on its main one.
         Raises `TimeoutError` if jobs are still running after `timeout` seconds.
         """
         main_view = self._main_view()

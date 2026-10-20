@@ -27,10 +27,10 @@ class RefusedError(Exception):
 class Model:
     """The app's data beside its views, given to the callbacks asking for `model`.
 
-    A model with data of its own names its file in `data_name`: the study is then saved as
-    an archive of the views' state and that file (see `composeui.core.study`), and New,
-    Open and Save reach the model through the methods below. Without one, they do nothing
-    and the study stays the views' JSON.
+    A model with data of its own names its file in `data_name`. The study is then saved as
+    an archive of the views' state and that file (see `composeui.core.study`). New, Open
+    and Save reach the model through the methods below. Without a `data_name`, Save and
+    Open don't call `save_data` and `open_data`, and the study stays the views' JSON.
     """
 
     #: the model's file inside a saved study; None for a model with nothing to save
@@ -40,8 +40,8 @@ class Model:
     def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
         """Get the model's signals: its attributes that are one, unless a subclass adds some.
 
-        The app gives them the main view and the model, as the views' own signals: a
-        callback asking for `main_view` or `model` by name gets it.
+        The app gives them the main view and the model, as it does the views' own signals. A
+        callback that asks for `main_view` or `model` by name gets it.
         """
         return [value for value in vars(self).values() if isinstance(value, Signal)]
 
