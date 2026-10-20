@@ -65,13 +65,14 @@ def unique_name(db: sqlite3.Connection, table: str, column: str, base: str) -> s
 class SqliteTable:
     """A table of a `SqliteModel` (or a few related ones), with the queries the app needs.
 
-    `create` is the SQL script creating it, run in every new study. Its methods read and
-    write through `connection()`; `changed` is emitted once a transaction that changed
-    rows through it has committed, so the views showing them can refresh.
+    `create` is the SQL script that creates it, run in every new study. Its methods read
+    and write through `connection()`. `changed` is emitted once a transaction that changed
+    rows through the table has committed, so the views that show them can refresh.
 
-    A constraint failing in a transaction refuses it: `connection()` raises a
-    `RefusedError` with the message of the first key of `refusals` found in SQLite's
-    (a constraint's name, or e.g. "UNIQUE constraint failed: room.name"), else SQLite's.
+    A constraint that fails in a transaction refuses it: `connection()` raises a
+    `RefusedError`. Its message is the one of the first key of `refusals` found in
+    SQLite's message: a constraint's name, or e.g. "UNIQUE constraint failed: room.name".
+    Else it is SQLite's message.
     """
 
     create: ClassVar[str] = ""
@@ -125,9 +126,9 @@ class _DeclaredTable(Generic[SqliteTableT]):
 def table(table_type: type[SqliteTableT]) -> SqliteTableT:
     """Declare a table of a `SqliteModel`, in the model's class.
 
-    E.g. ``runs = table(Runs)``: each model builds its own, as an attribute of the same
-    name, before creating its database; in the order the classes declare them, a base
-    class's first.
+    E.g. ``runs = table(Runs)``. Each model builds its own table, as an attribute of the
+    same name, before it creates its database. The tables are built in the order the
+    classes declare them, a base class's first.
     """
     # the model's attribute is the table: typed as one, as `attrs.Factory` is
     return cast("SqliteTableT", _DeclaredTable(table_type))
@@ -138,8 +139,8 @@ class SqliteModel(Model):
 
     Declare the tables in the class, ``runs = table(Runs)``, for the callbacks to reach
     (``model.runs.add(...)``), or add them in `__init__` with `add_table`. A study's
-    database is created from the tables' `create` scripts at `schema_version`; a study
-    saved at an older version is brought up to date by `migrations` when opened.
+    database is created from the tables' `create` scripts at `schema_version`. When a
+    study saved at an older version is opened, `migrations` bring it up to date.
     """
 
     data_name: ClassVar[str | None] = "data.sqlite"
@@ -206,9 +207,10 @@ class SqliteModel(Model):
 
         The transaction commits once the block ends, or rolls back if the block raises, so
         its writes land together or not at all. A block inside another (one table's method
-        calling another's) joins the outer transaction. `changing`'s `changed` is emitted
-        after the commit if the block changed rows: on the main thread, for a block in a
-        job's thread (see `Job.call_on_main_thread`), as the views it refreshes are there.
+        calling another's) joins the outer transaction. If the block changed rows,
+        `changing`'s `changed` is emitted after the commit. For a block in a job's thread, it
+        is emitted on the main thread (see `Job.call_on_main_thread`), where the views it
+        refreshes are.
         """
         changed: list[SqliteTable] = []
         with self._lock:

@@ -143,8 +143,8 @@ class Signal(Generic[Unpack[Ts]]):
     def connect(self, callback: Callable[..., None], *, now: bool = False) -> None:
         """Call `callback` on each emit, and once right away too if `now`.
 
-        It's given the `main_view` and the `model` it asks for by name, and only as many of
-        the signal's arguments as it takes, the first ones: none when called `now`.
+        The callback gets the `main_view` and the `model` it asks for by name. It gets only as
+        many of the signal's arguments as it takes, the first ones, and none when called `now`.
         """
         injected_callback = self._inject_callback(callback)
         self._callbacks.append(injected_callback)

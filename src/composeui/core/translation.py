@@ -140,12 +140,12 @@ class TranslatedText(str):  # noqa: SLOT000
 
     `MainView.set_language` translates it again wherever a view keeps it: in a field, a
     list (a table's headers) or a dict's keys (a choice's labels). Formatting it keeps the
-    arguments, to format the next translation with them; other str methods return a plain
+    arguments, to format the next translation with them. Other str methods return a plain
     str, which stays in its language.
 
-    Built from `text` alone (as `T`), it's the text as written, translated once a view
-    keeps it and the main view sets a language: text declared where no view can `tr` it,
-    e.g. a field's default or a class variable.
+    Built from `text` alone (as `T`), it is the text as written. It is translated once a
+    view keeps it and the main view sets a language. Use it for text declared where no
+    view can `tr` it, e.g. a field's default or a class variable.
     """
 
     source: str
