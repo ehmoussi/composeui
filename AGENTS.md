@@ -29,6 +29,7 @@ make check   # lint + mypy + translations
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
 make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs `--group docs`)
+make screenshots   # docs/images/<example>-<backend>.png for the examples guide (Chromium)
 ```
 
 Run a single test file or test:

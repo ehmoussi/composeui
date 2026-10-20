@@ -58,6 +58,13 @@ browser-test:
 docs:
 	uv run --group docs sphinx-build -W --keep-going -b html docs docs/_build/html
 
+# the screenshots of the examples guide, on every backend, into docs/images/; needs the
+# browser group's Chromium (see browser-test). Pass names to take only some of them:
+# make screenshots EXAMPLES="pipeform batman"
+.PHONY: screenshots
+screenshots:
+	QT_QPA_PLATFORM=offscreen uv run --group browser python docs/screenshots.py $(EXAMPLES)
+
 # Tailwind's standalone CLI and daisyUI's plugin files: no Node/npm needed. Downloaded
 # once into css/vendor/ (not committed); the built static/app.css is committed.
 TAILWIND_VERSION := 4.3.3

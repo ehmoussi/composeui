@@ -1,7 +1,8 @@
 # Examples guide
 
 The example apps in [`src/examples/`](../src/examples/) show ComposeUI's features in
-complete apps. This guide says what each example shows, and how to run it. The
+complete apps. This guide says what each example shows, and how to run it. Each section
+has a screenshot of the example on Qt, Textual, and the web. The
 [user guide](user-guide.md) explains each feature. The examples are not in the wheel:
 run them from a clone of the repository.
 
@@ -59,6 +60,18 @@ and an incident pipe.
 uv run python -m examples.pipeform --backend qt   # or textual, or web
 ```
 
+On Qt:
+
+![The pipe form on Qt](images/pipeform-qt.png)
+
+On Textual:
+
+![The pipe form on Textual](images/pipeform-textual.png)
+
+On the web:
+
+![The pipe form on the web](images/pipeform-web.png)
+
 It shows:
 
 - [forms](user-guide.md#compose-views-from-mixins) with labelled rows: text, float inputs, a
@@ -81,6 +94,18 @@ SQLite database.
 ```bash
 uv run python -m examples.pipecatalogue --backend qt   # or textual, or web
 ```
+
+On Qt:
+
+![The pipe catalogue on Qt](images/pipecatalogue-qt.png)
+
+On Textual:
+
+![The pipe catalogue on Textual](images/pipecatalogue-textual.png)
+
+On the web:
+
+![The pipe catalogue on the web](images/pipecatalogue-web.png)
 
 It shows:
 
@@ -110,6 +135,18 @@ flow rate.
 ```bash
 uv run python -m examples.pipechart   # qt; or --backend textual, or web
 ```
+
+On Qt:
+
+![The pipe chart on Qt](images/pipechart-qt.png)
+
+On Textual:
+
+![The pipe chart on Textual](images/pipechart-textual.png)
+
+On the web:
+
+![The pipe chart on the web](images/pipechart-web.png)
 
 It shows:
 
@@ -145,6 +182,18 @@ pressure, and finds the hoop stress in its wall at each radius.
 uv run python -m examples.pipesweep   # web; or --backend qt, or textual
 ```
 
+On Qt:
+
+![The pipe sweep on Qt](images/pipesweep-qt.png)
+
+On Textual:
+
+![The pipe sweep on Textual](images/pipesweep-textual.png)
+
+On the web:
+
+![The pipe sweep on the web](images/pipesweep-web.png)
+
 It shows:
 
 - a [job](user-guide.md#running-work-in-threads) that works in a thread, one radius at a
@@ -168,6 +217,18 @@ It shows:
 ```bash
 uv run python -m examples.taskview   # web; or --backend qt, or textual
 ```
+
+On Qt:
+
+![The task view on Qt](images/taskview-qt.png)
+
+On Textual:
+
+![The task view on Textual](images/taskview-textual.png)
+
+On the web:
+
+![The task view on the web](images/taskview-web.png)
 
 It shows:
 
@@ -195,6 +256,18 @@ It shows:
 uv run python -m examples.batman   # qt; or --backend web, or textual
 ```
 
+On Qt:
+
+![The Batman logo on Qt](images/batman-qt.png)
+
+On Textual:
+
+![The Batman logo on Textual](images/batman-textual.png)
+
+On the web:
+
+![The Batman logo on the web](images/batman-web.png)
+
 It shows:
 
 - [series colors and fills](user-guide.md#colors-fill-steps-and-height): a yellow oval and
@@ -210,6 +283,18 @@ It shows:
 ```bash
 uv run python -m examples.markdownviewer --markdown README.md --backend qt
 ```
+
+On Qt:
+
+![The Markdown viewer on Qt](images/markdownviewer-qt.png)
+
+On Textual:
+
+![The Markdown viewer on Textual](images/markdownviewer-textual.png)
+
+On the web:
+
+![The Markdown viewer on the web](images/markdownviewer-web.png)
 
 It shows:
 
@@ -230,6 +315,8 @@ It shows:
 uv run python -m examples.webhello
 ```
 
+![The web hello form on the web](images/webhello-web.png)
+
 It serves http://127.0.0.1:8000. It shows:
 
 - an application built as a `WebApplication` subclass, without `run`;
@@ -245,6 +332,18 @@ It serves http://127.0.0.1:8000. It shows:
 ```bash
 uv run python -m examples.textual_demo
 ```
+
+On Qt:
+
+![The Textual demo on Qt](images/textual_demo-qt.png)
+
+On Textual:
+
+![The Textual demo on Textual](images/textual_demo-textual.png)
+
+On the web:
+
+![The Textual demo on the web](images/textual_demo-web.png)
 
 It shows a form with a text input, a float input, and a radio group. A change of shape
 shows a message in the status bar. It starts on Textual: `run(...,

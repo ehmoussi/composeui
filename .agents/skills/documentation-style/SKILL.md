@@ -142,11 +142,14 @@ An example section in `docs/examples-guide.md` usually has this content, in this
 
 1. One sentence: what the app is, with a link to its file in `src/examples/`.
 2. The command that runs it, with its default backend and the other `--backend` values.
-3. A list of what it shows, each feature linked to its section in the user guide.
+3. A table of its screenshots on Qt, Textual, and the web, from `docs/images/`.
+4. A list of what it shows, each feature linked to its section in the user guide.
 
 When you add an example, also add its row to the overview table, with its default backend
 (the `default_backend` of its `run` call, else web), and its entry in the contents list.
-When an example changes what it shows, update its section and its row. The module
+When you add an example, also add its set-up to `docs/screenshots.py` and run
+`make screenshots EXAMPLES=<example>`. When an example changes what it shows, update its
+section, its row, and its screenshots. The module
 docstring of each example is the first source for what it shows: check it against the code.
 Do not document an example that is not committed.
 
