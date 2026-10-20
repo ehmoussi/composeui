@@ -130,6 +130,7 @@ from tests.tables import (
     Room,
     RoomsMainView,
     SortedRoomsMainView,
+    StyledTablesMainView,
 )
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
@@ -3401,6 +3402,68 @@ def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
         body = rooms.edit("1", "1", "warm")
         assert rooms.texts(body) == ["Hall18False", "Kitchen21.02True"]
         assert html.escape('Temperature: "warm" isn\'t a valid value') in body
+
+
+def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
+    views: list[StyledTablesMainView] = []
+
+    class ResultsApp(WebApplication[StyledTablesMainView]):
+        def setup_session(self, main_view: StyledTablesMainView) -> None:
+            views.append(main_view)
+
+    app = ResultsApp(build_main_view=StyledTablesMainView)
+    with TestClient(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        table_id = _widget_id(view.points.renderer)
+
+        def cells(row: int) -> list[dict[str, str | None]]:
+            element = _element(page, f"{table_id}-row-{row}")
+            return [attributes for tag, attributes in element.descendants if tag == "td"]
+
+        # "Coordinates" over its two columns, the others' headers across both rows
+        head = _element(page, f"{table_id}-head")
+        spans = [
+            (attributes.get("colspan"), attributes.get("rowspan"))
+            for tag, attributes in head.descendants
+            if tag == "th"
+        ]
+        assert spans == [
+            (None, "2"),
+            (None, "2"),
+            ("2", None),
+            (None, "2"),
+            (None, None),
+            (None, None),
+        ]
+        assert "Coordinates" in head.text
+        # the group's cell covers its two points: the second row has no cell of its own
+        assert cells(0)[0].get("rowspan") == "2"
+        assert len(cells(1)) == len(cells(0)) - 1
+        # NaN on red, its text white; a warning marked, named for screen readers
+        assert cells(1)[1]["style"] == "background-color: #dc2626; color: #ffffff"
+        assert any(
+            attributes.get("role") == "img" and attributes.get("aria-label") == "Warning"
+            for _, attributes in _element(page, f"{table_id}-row-2").descendants
+        )
+        # a disabled cell is grayed and never edited: no field, its box disabled
+        assert cells(1)[0].get("class") == "opacity-50"
+        assert "data-edit" not in cells(1)[0]
+        assert "disabled" in _element(page, f"{table_id}-cell-1-4").attributes
+
+        def post(event: str, **values: str) -> str:
+            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+
+        assert _find(post("start_edit", row="1", column="1"), f"{table_id}-cell-1-1") is None
+        post("check", row="1", column="4", checked="on")
+        assert view.points.rows[1][4] == "False"
+
+        # the key/value table's keys head its rows
+        numbers = _element(page, _widget_id(view.numbers.renderer))
+        assert [
+            attributes.get("scope") for tag, attributes in numbers.descendants if tag == "th"
+        ] == [None, "row", "row"]
+        assert "Number of calls" in numbers.text
 
 
 def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:

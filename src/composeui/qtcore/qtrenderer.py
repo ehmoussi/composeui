@@ -2,19 +2,15 @@ from __future__ import annotations
 
 import functools
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
-from qtpy.QtCore import QObject, QPoint, QSignalBlocker, Qt
+from qtpy.QtCore import QObject, QSignalBlocker, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import (
     QAction,
-    QColor,
     QDoubleValidator,
     QIcon,
     QKeySequence,
-    QPainter,
-    QPen,
-    QPixmap,
 )
 from qtpy.QtWidgets import (
     QAbstractButton,
@@ -110,6 +106,7 @@ from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
+from composeui.qtcore.widgets.qmarkicon import mark_icon
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
@@ -123,7 +120,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import CellWidget, ReferenceLine, Series, TreeNode, TreePath
+    from composeui.core.view import (
+        CellStyle,
+        CellWidget,
+        HeaderGroup,
+        ReferenceLine,
+        Series,
+        TreeNode,
+        TreePath,
+    )
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
@@ -1183,8 +1188,13 @@ class TableViewLike(ViewLike, Protocol):
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
     cell_clicked: Signal[int, int]
+    cell_styles: dict[tuple[int, int], CellStyle]
+    header_groups: list[HeaderGroup]
+    row_headers: list[str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def mark_text(self, mark: NodeMark) -> str: ...
+    def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
     def column_checked(self, column: int) -> bool | None: ...
     def check_all(self, column: int, *, is_checked: bool) -> None: ...
     def sort_by(self, column: int) -> None: ...
@@ -1220,6 +1230,12 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
                 "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
                 "cell_widgets": self._refresh_cell_widgets,
+                "cell_styles": self._refresh_looks,
+                "header_groups": self._refresh_header_groups,
+                "row_headers": self._refresh_looks,
+                "done_text": functools.partial(self._refresh_mark_text, NodeMark.DONE),
+                "warning_text": functools.partial(self._refresh_mark_text, NodeMark.WARNING),
+                "error_text": functools.partial(self._refresh_mark_text, NodeMark.ERROR),
             }
         )
 
@@ -1308,7 +1324,15 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     def _refresh_shown_rows(
         cls, view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
-        rendered_object.table.set_table(view.headers, [view.rows[row] for row in value])
+        row_headers = [
+            view.row_headers[row] if row < len(view.row_headers) else "" for row in value
+        ]
+        rendered_object.table.set_table(
+            view.headers,
+            [view.rows[row] for row in value],
+            view.shown_cell_styles(),
+            row_headers if len(view.row_headers) > 0 else [],
+        )
         # resetting the table drops its selection: reapply it
         cls._refresh_selected_rows(view, rendered_object, view.selected_rows)
         rendered_object.bar.set_count(_count_text(view, value))
@@ -1338,6 +1362,24 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     ) -> None:
         rendered_object.table.set_cell_widgets(value)
         cls._refresh_checked_columns(view, rendered_object)
+
+    @classmethod
+    def _refresh_looks(
+        cls, view: TableViewLike, rendered_object: QFilterTable, _value: Any
+    ) -> None:
+        cls._refresh_shown_rows(view, rendered_object, view.shown_rows)
+
+    @staticmethod
+    def _refresh_header_groups(
+        _view: TableViewLike, rendered_object: QFilterTable, value: list[HeaderGroup]
+    ) -> None:
+        rendered_object.table.set_header_groups(value)
+
+    @staticmethod
+    def _refresh_mark_text(
+        mark: NodeMark, _view: TableViewLike, rendered_object: QFilterTable, value: str
+    ) -> None:
+        rendered_object.table.set_mark_text(mark, value)
 
     @staticmethod
     def _update_state(view: TableViewLike, rendered_object: QFilterTable) -> None:
@@ -2167,7 +2209,7 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
                 font.setUnderline(node.is_underlined)
                 item.setFont(0, font)
                 if node.mark is not None:
-                    item.setIcon(1, _mark_icon(node.mark))
+                    item.setIcon(1, mark_icon(node.mark))
                     item.setToolTip(1, view.mark_text(node.mark))
                 add(item, node.children, (*path, node.key))
 
@@ -2228,35 +2270,6 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
         with self.stop_refresh():
             self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
         self._view.toggled.emit(path, is_expanded)
-
-
-#: a `NodeMark`'s color, as a log's warning and error are colored
-_MARK_COLORS: Final = {NodeMark.DONE: "green", NodeMark.WARNING: "orange", NodeMark.ERROR: "red"}
-
-
-@functools.cache
-def _mark_icon(mark: NodeMark) -> QIcon:
-    """Draw `mark` in a circle, as the web's icons are: a check, a "!" or a cross."""
-    size = 32  # scaled down sharp, on a high-density screen too
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(_MARK_COLORS[mark]), 3)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    painter.setPen(pen)
-    painter.drawEllipse(3, 3, 26, 26)
-    if mark is NodeMark.DONE:
-        painter.drawPolyline([QPoint(10, 16), QPoint(14, 20), QPoint(22, 12)])
-    elif mark is NodeMark.WARNING:
-        painter.drawLine(16, 10, 16, 17)
-        painter.drawPoint(16, 22)
-    else:
-        painter.drawLine(11, 11, 21, 21)
-        painter.drawLine(21, 11, 11, 21)
-    painter.end()
-    return QIcon(pixmap)
 
 
 def _tree_path(item: QTreeWidgetItem) -> TreePath:

@@ -105,7 +105,13 @@ from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import CellWidgetsMainView, EditableTableMainView, Room, SortedRoomsMainView
+from tests.tables import (
+    CellWidgetsMainView,
+    EditableTableMainView,
+    Room,
+    SortedRoomsMainView,
+    StyledTablesMainView,
+)
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
@@ -118,6 +124,8 @@ if TYPE_CHECKING:
     from textual.app import App
     from textual.pilot import Pilot
     from textual.widget import Widget
+
+    from composeui.core.view import TableView
 
 
 def _field_widget(
@@ -1873,6 +1881,47 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         assert cells() == [["Harbour", "Busy"], ["Lake", "Windy"]]
         assert view.places.selected_rows == [1]
         assert table.cursor_row == 1
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
+    view = StyledTablesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def table_of(table_view: TableView) -> ComposeTable:
+        assert isinstance(table_view.renderer, TextualWidgetRenderer)
+        box = table_view.renderer.widget
+        assert isinstance(box, ComposeFilterTable)
+        return box.table
+
+    table, numbers = table_of(view.points), table_of(view.numbers)
+
+    def x(column: int) -> int:
+        return sum(each.get_render_width(table) for each in list(table.columns.values())[:column])
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        # the group's text over its first column's header
+        labels = [str(column.label) for column in table.columns.values()]
+        assert labels[1:4] == ["\nPoint", "Coordinates\nStandard space", "\nPhysical space"]
+        assert table.header_height == 2
+        # the group's cell shows its text once, in its first row
+        rows = [table.get_row_at(row) for row in range(3)]
+        assert [str(cells[0]) for cells in rows] == ["A", "", "B"]
+        # NaN on red, its text white; a warning marked before its text; a disabled cell dim
+        assert [str(span.style) for span in rows[1][2].spans] == ["#ffffff on #dc2626"]
+        assert str(rows[2][3]) == "! 40.0"
+        assert any("dim" in str(span.style) for span in rows[1][1].spans)
+        # a click on a box toggles it, unless disabled
+        await pilot.click(table, offset=(x(4) + 1, 2))
+        await pilot.click(table, offset=(x(4) + 1, 3))
+        await pilot.pause()
+        assert [row[4] for row in view.points.rows] == ["False", "False", "True"]
+        # the key/value table's keys head its rows
+        assert [str(row.label) for row in numbers.rows.values()] == ["Number of calls", "Time (s)"]
 
 
 @pytest.mark.asyncio

@@ -11,11 +11,12 @@ from qtpy.QtCore import (
     QObject,
     QPersistentModelIndex,
     QRect,
+    QSize,
     Qt,
     QTimer,
     Signal,
 )
-from qtpy.QtGui import QIcon, QMouseEvent, QPainter, QPalette, QPixmap
+from qtpy.QtGui import QColor, QIcon, QMouseEvent, QPainter, QPalette, QPixmap
 from qtpy.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -28,18 +29,36 @@ from qtpy.QtWidgets import (
     QStyledItemDelegate,
     QStyleOptionButton,
     QStyleOptionComboBox,
+    QStyleOptionHeader,
     QStyleOptionViewItem,
     QTableView,
     QWidget,
 )
 
-from composeui.core.view import CHECKED_TEXTS, CellKind, CellWidget, replace_cell
+from composeui.core.view import (
+    CHECKED_TEXTS,
+    PLAIN_CELL,
+    CellKind,
+    CellStyle,
+    CellWidget,
+    HeaderGroup,
+    NodeMark,
+    replace_cell,
+)
+from composeui.qtcore.widgets.qmarkicon import mark_icon
 
 if TYPE_CHECKING:
     from qtpy.QtCore import QAbstractItemModel
     from qtpy.QtGui import QKeyEvent
 
 _Index = Union[QModelIndex, QPersistentModelIndex]
+#: the roles a cell's `CellStyle` answers
+_STYLE_ROLES = (
+    Qt.ItemDataRole.BackgroundRole,
+    Qt.ItemDataRole.ForegroundRole,
+    Qt.ItemDataRole.DecorationRole,
+    Qt.ItemDataRole.ToolTipRole,
+)
 
 
 class QTextTableModel(QAbstractTableModel):
@@ -52,6 +71,10 @@ class QTextTableModel(QAbstractTableModel):
     A check box column of `cell_widgets` holds checkable cells without text, toggled when
     editable; a link column's text looks like a link. Neither is typed in, nor is a
     button column; a combobox column is, through `QCellDelegate`'s editor.
+
+    A cell of `styles` has its background, its text black or white on it, and its mark
+    before its text, named by its tooltip; a disabled one is never edited. The rows have
+    `row_headers`, if any.
     """
 
     cell_edited = Signal(int, int, str)
@@ -64,6 +87,11 @@ class QTextTableModel(QAbstractTableModel):
         self.cell_widgets: dict[int, CellWidget] = {}
         #: a check box drawn before a header, by column
         self.header_icons: dict[int, QIcon] = {}
+        #: how the cells look, by row and column
+        self.styles: dict[tuple[int, int], CellStyle] = {}
+        self._row_headers: list[str] = []
+        #: each mark's name, its tooltip
+        self.mark_texts: dict[NodeMark, str] = {}
 
     def kind(self, column: int) -> CellKind | None:
         widget = self.cell_widgets.get(column)
@@ -74,11 +102,22 @@ class QTextTableModel(QAbstractTableModel):
         if len(self._headers) > 0:
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self._headers) - 1)
 
-    def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
+    def set_table(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        styles: dict[tuple[int, int], CellStyle],
+        row_headers: list[str],
+    ) -> None:
         self.beginResetModel()
         self._headers = headers
         self._rows = rows
+        self.styles = styles
+        self._row_headers = row_headers
         self.endResetModel()
+
+    def style(self, row: int, column: int) -> CellStyle:
+        return self.styles.get((row, column), PLAIN_CELL)
 
     def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
         return 0 if parent.isValid() else len(self._rows)
@@ -95,20 +134,34 @@ class QTextTableModel(QAbstractTableModel):
         if not index.isValid():
             return None
         kind = self.kind(index.column())
-        text = self.text(index.row(), index.column())
-        if kind is CellKind.CHECK_BOX:
-            if role != Qt.ItemDataRole.CheckStateRole:
-                return None
-            is_checked = text.casefold() == "true"
-            return Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked
         if kind is CellKind.LINK and role in (
             Qt.ItemDataRole.FontRole,
             Qt.ItemDataRole.ForegroundRole,
         ):
             return self._link_look(role)
+        if role in _STYLE_ROLES:
+            return self._style_data(self.style(index.row(), index.column()), role)
+        text = self.text(index.row(), index.column())
+        if kind is CellKind.CHECK_BOX:
+            is_checked = text.casefold() == "true"
+            state = Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked
+            return state if role == Qt.ItemDataRole.CheckStateRole else None
         if role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return None
         return text if index.column() < len(self._rows[index.row()]) else None
+
+    def _style_data(self, style: CellStyle, role: int) -> Any:
+        """Get a role of the cell's look: its background, text color, mark or tooltip."""
+        if role == Qt.ItemDataRole.BackgroundRole:
+            return None if style.background is None else QColor(style.background)
+        if role == Qt.ItemDataRole.ForegroundRole:
+            # grayed by `QCellDelegate` when disabled, unless on a background
+            return None if style.text_color is None else QColor(style.text_color)
+        if style.mark is None:
+            return None
+        if role == Qt.ItemDataRole.DecorationRole:
+            return mark_icon(style.mark)
+        return self.mark_texts.get(style.mark)
 
     @staticmethod
     def _link_look(role: int) -> Any:
@@ -121,7 +174,11 @@ class QTextTableModel(QAbstractTableModel):
 
     def flags(self, index: _Index) -> Qt.ItemFlag:
         flags = super().flags(index)
-        if not index.isValid() or index.column() not in self.editable_columns:
+        if (
+            not index.isValid()
+            or index.column() not in self.editable_columns
+            or self.style(index.row(), index.column()).is_disabled
+        ):
             return flags
         kind = self.kind(index.column())
         if kind is CellKind.CHECK_BOX:
@@ -153,7 +210,8 @@ class QTextTableModel(QAbstractTableModel):
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
         if orientation != Qt.Orientation.Horizontal:
-            return None
+            is_shown = role == Qt.ItemDataRole.DisplayRole and section < len(self._row_headers)
+            return self._row_headers[section] if is_shown else None
         if role == Qt.ItemDataRole.DisplayRole:
             return self._headers[section]
         if role == Qt.ItemDataRole.DecorationRole:
@@ -167,7 +225,8 @@ class QCellDelegate(QStyledItemDelegate):
     A button cell shows its text, then the button, a square as tall as the cell unless
     its text is wider; `cell_clicked` emits a click on it, or anywhere on a link cell.
     A combobox cell is a combobox's frame around its text: editing it opens a combobox
-    of its options, the cell taking the one picked.
+    of its options, the cell taking the one picked. A disabled cell is drawn grayed, its
+    button or link not clicked.
     """
 
     cell_clicked = Signal(int, int)
@@ -186,8 +245,13 @@ class QCellDelegate(QStyledItemDelegate):
             1, 1, -1, -1
         )
 
+    def _is_disabled(self, index: _Index) -> bool:
+        return self._model.style(index.row(), index.column()).is_disabled
+
     def initStyleOption(self, option: QStyleOptionViewItem, index: _Index) -> None:  # noqa: N802
         super().initStyleOption(option, index)
+        if self._is_disabled(index):
+            option.state &= ~QStyle.StateFlag.State_Enabled
         widget = self._widget(index)
         if (
             widget is not None
@@ -209,7 +273,7 @@ class QCellDelegate(QStyledItemDelegate):
         text, item.text = item.text, ""
         # the row's background and selection, then the widget over it
         style.drawControl(QStyle.ControlElement.CE_ItemViewItem, item, painter, view)
-        is_enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        is_enabled = bool(item.state & QStyle.StateFlag.State_Enabled)
         if widget.kind is CellKind.COMBOBOX:
             combobox = QStyleOptionComboBox()
             combobox.rect = option.rect.adjusted(2, 2, -2, -2)
@@ -217,7 +281,7 @@ class QCellDelegate(QStyledItemDelegate):
             combobox.palette = option.palette
             combobox.fontMetrics = option.fontMetrics
             is_editable = index.column() in self._model.editable_columns
-            if is_enabled and is_editable:
+            if is_enabled and is_editable:  # a disabled cell isn't
                 combobox.state = QStyle.StateFlag.State_Enabled
             style.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, combobox, painter, view)
             style.drawControl(QStyle.ControlElement.CE_ComboBoxLabel, combobox, painter, view)
@@ -246,6 +310,7 @@ class QCellDelegate(QStyledItemDelegate):
         widget = self._widget(index)
         if (
             widget is not None
+            and not self._is_disabled(index)
             and isinstance(event, QMouseEvent)
             and event.type() == QEvent.Type.MouseButtonRelease
             and event.button() == Qt.MouseButton.LeftButton
@@ -295,6 +360,10 @@ class QCheckHeader(QHeaderView):
     """A horizontal header whose check-all columns start with a check box.
 
     A click on a column's box emits `check_clicked` instead of `sectionClicked`.
+
+    With `groups`, it is twice as tall: a group's text over its columns' headers, and
+    the header of a column without a group the whole height. A click on a group does
+    nothing.
     """
 
     check_clicked = Signal(int)
@@ -302,6 +371,50 @@ class QCheckHeader(QHeaderView):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.checkable_columns: list[int] = []
+        self._groups: list[HeaderGroup] = []
+
+    def set_groups(self, groups: list[HeaderGroup]) -> None:
+        self._groups = groups
+        self.updateGeometry()
+        self.viewport().update()
+
+    def _group(self, column: int) -> HeaderGroup | None:
+        return next((group for group in self._groups if group.covers(column)), None)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        size = super().sizeHint()
+        if len(self._groups) > 0:
+            size.setHeight(2 * size.height())
+        return size
+
+    def paintSection(self, painter: QPainter, rect: QRect, logicalIndex: int) -> None:  # noqa: N802, N803
+        group = self._group(logicalIndex)
+        if group is None:
+            super().paintSection(painter, rect, logicalIndex)
+            return
+        half = rect.height() // 2
+        # the group over its columns, drawn again with each, then the column's own header
+        last = min(group.column + group.column_count, self.count()) - 1
+        left = self.sectionViewportPosition(group.column)
+        right = self.sectionViewportPosition(last) + self.sectionSize(last)
+        option = QStyleOptionHeader()
+        self.initStyleOption(option)
+        option.rect = QRect(left, rect.top(), right - left, half)
+        option.text = group.text
+        option.textAlignment = Qt.AlignmentFlag.AlignCenter
+        option.position = QStyleOptionHeader.SectionPosition.OnlyOneSection
+        painter.save()
+        painter.setClipRect(option.rect)
+        self.style().drawControl(QStyle.ControlElement.CE_Header, option, painter, self)
+        painter.restore()
+        super().paintSection(painter, rect.adjusted(0, half, 0, 0), logicalIndex)
+
+    def _is_on_group(self, event: QMouseEvent) -> bool:
+        point = event.position().toPoint()
+        return (
+            self._group(self.logicalIndexAt(point.x())) is not None
+            and point.y() < self.height() // 2
+        )
 
     def box_width(self) -> int:
         """Get the width at a section's start a click checks in: its margins and box."""
@@ -312,16 +425,18 @@ class QCheckHeader(QHeaderView):
     def _checked_column(self, event: QMouseEvent) -> int | None:
         x = event.position().toPoint().x()
         column = self.logicalIndexAt(x)
-        if column not in self.checkable_columns:
+        if column not in self.checkable_columns or self._is_on_group(event):
             return None
         return column if x - self.sectionViewportPosition(column) <= self.box_width() else None
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if self._checked_column(event) is None:
+        if self._checked_column(event) is None and not self._is_on_group(event):
             super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         column = self._checked_column(event)
+        if self._is_on_group(event):
+            return
         if column is None:
             super().mouseReleaseEvent(event)
         elif event.button() == Qt.MouseButton.LeftButton:
@@ -330,6 +445,10 @@ class QCheckHeader(QHeaderView):
 
 class QTextTableView(QTableView):
     """A table of text, with no row numbers, where the user selects rows.
+
+    `set_table` gives the rows how their cells look (see `QTextTableModel`), a cell
+    spanning the rows under it by its `row_span`, and the rows' headers, shown on the
+    left unless there are none. `set_header_groups` puts headers over the columns'.
 
     One row at most by default; with `set_multiple_selection`, each click adds or removes
     a row, as Qt's `MultiSelection`. `selected_rows_changed` emits the selected rows'
@@ -395,7 +514,11 @@ class QTextTableView(QTableView):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         index = self.currentIndex()
         kind = self._model.kind(index.column()) if index.isValid() else None
-        if event.key() == Qt.Key.Key_Space and kind in (CellKind.BUTTON, CellKind.LINK):
+        if (
+            event.key() == Qt.Key.Key_Space
+            and kind in (CellKind.BUTTON, CellKind.LINK)
+            and not self._model.style(index.row(), index.column()).is_disabled
+        ):
             self.cell_clicked.emit(index.row(), index.column())
             return
         super().keyPressEvent(event)
@@ -473,12 +596,33 @@ class QTextTableView(QTableView):
         self.set_sort_indicator(self._sort, is_shown=self.horizontalHeader().sectionsClickable())
         self.header_clicked.emit(column)
 
-    def set_table(self, headers: list[str], rows: list[list[str]]) -> None:
+    def set_table(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        styles: dict[tuple[int, int], CellStyle] | None = None,
+        row_headers: list[str] | None = None,
+    ) -> None:
+        styles, row_headers = styles or {}, row_headers or []
         self._is_setting = True
         try:
-            self._model.set_table(headers, rows)
+            self._model.set_table(headers, rows, styles, row_headers)
+            self.clearSpans()
+            for (row, column), style in styles.items():
+                if style.row_span > 1:
+                    self.setSpan(row, column, style.row_span, 1)
         finally:
             self._is_setting = False
+        self.verticalHeader().setVisible(len(row_headers) > 0)
+
+    def set_header_groups(self, groups: list[HeaderGroup]) -> None:
+        header = self.horizontalHeader()
+        assert isinstance(header, QCheckHeader)
+        header.set_groups(groups)
+
+    def set_mark_text(self, mark: NodeMark, text: str) -> None:
+        """Name `mark` in its cells' tooltips."""
+        self._model.mark_texts[mark] = text
 
     def set_editable_columns(self, columns: list[int]) -> None:
         self._model.editable_columns = columns

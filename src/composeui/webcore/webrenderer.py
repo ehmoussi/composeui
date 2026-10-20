@@ -23,6 +23,7 @@ from collections import deque
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
 
+import attrs
 from markdown_it import MarkdownIt
 from typing_extensions import Protocol
 
@@ -37,6 +38,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     CHECKED_TEXTS,
+    PLAIN_CELL,
     ActionView,
     Align,
     ButtonVariant,
@@ -96,7 +98,15 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import CellWidget, ReferenceLine, Series, TreeNode, TreePath
+    from composeui.core.view import (
+        CellStyle,
+        CellWidget,
+        HeaderGroup,
+        ReferenceLine,
+        Series,
+        TreeNode,
+        TreePath,
+    )
 
 TView = TypeVar("TView", bound=ViewLike)
 
@@ -1315,9 +1325,16 @@ class TableViewLike(ViewLike, Protocol):
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
     cell_clicked: Signal[int, int]
+    cell_styles: dict[tuple[int, int], CellStyle]
+    header_groups: list[HeaderGroup]
+    row_headers: list[str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def mark_text(self, mark: NodeMark) -> str: ...
+    def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
     def is_checked(self, row: int, column: int) -> bool: ...
+    def cell_style(self, row: int, column: int) -> CellStyle: ...
+    def header_group(self, column: int) -> HeaderGroup | None: ...
     def column_checked(self, column: int) -> bool | None: ...
     def check_all(self, column: int, *, is_checked: bool) -> None: ...
     def sort_by(self, column: int) -> None: ...
@@ -1355,6 +1372,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     follows); a button after the cell's text, or the text as a link-like button, posting
     a click. A check-all column's header starts with its box, partly checked (see
     `page.py`) while some rows are; its click swaps back the rows, not itself.
+
+    A cell of `cell_styles` has its background color, its text black or white on it, and
+    its mark before its text, named for screen readers; a disabled one is grayed, its
+    widget disabled and its text never edited. A cell spanning rows covers those under
+    it (`rowspan`). The rows' headers start each row (`<th scope="row">`), and
+    `header_groups` add a row of headers above the columns', each over its columns.
 
     The table shows `shown_rows`, each row keeping the id of its index in `rows`. A
     sortable column's header is a button sorting by it. While a column filters, the bar
@@ -1398,6 +1421,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
                 "shown_rows": self._part_marker("body", "count"),
                 "editable_columns": self._mark_dirty,
                 "cell_widgets": self._mark_dirty,
+                "cell_styles": self._part_marker("body"),
+                "header_groups": self._mark_dirty,
+                "row_headers": self._mark_dirty,
+                "done_text": self._part_marker("body"),
+                "warning_text": self._part_marker("body"),
+                "error_text": self._part_marker("body"),
             }
         )
 
@@ -1446,7 +1475,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f"{self._bar_html()}"
             '<div class="overflow-x-auto rounded-box border border-base-300">'
             f'<table class="table table-zebra table-sm"{grid}>'
-            f"<thead>{self._head_html()}</thead>{self._body_html()}</table></div></div>"
+            f"{self._head_html()}{self._body_html()}</table></div></div>"
         )
         self._focus_add_filter, self._focused_chip = False, None
         return html_
@@ -1462,38 +1491,70 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
 
     def _head_html(self, *, oob: bool = False) -> str:
-        cells = []
-        for column, header in enumerate(self._view.headers):
-            box = self._check_all_html(column)
-            if column not in self._view.sortable_columns:
-                if box == "":
-                    cells.append(f"<th>{html.escape(header)}</th>")
-                else:
-                    cells.append(
-                        f'<th><span class="flex items-center gap-2">{box}'
-                        f"{html.escape(header)}</span></th>"
-                    )
+        """Render the headers: a row of them, under a row of `header_groups` if any.
+
+        A column without a group has its header across both rows.
+        """
+        headers = self._view.headers
+        groups = [group for group in self._view.header_groups if group.column < len(headers)]
+        span = ' rowspan="2"' if len(groups) > 0 else ""
+        # the corner over the rows' headers
+        top = [f"<td{span}></td>"] if len(self._view.row_headers) > 0 else []
+        bottom = []
+        for column in range(len(headers)):
+            group = self._view.header_group(column)
+            if group is None:
+                top.append(self._header_html(column, span))
                 continue
-            order = self._view.sort_descending if self._view.sort_column == column else None
-            arrow = {None: "", False: " ▲", True: " ▼"}[order]
-            disabled = "" if self.is_enabled else " disabled"
-            cells.append(
-                f'<th aria-sort="{_ARIA_SORT[order]}" class="p-0">'
-                f'<span class="flex items-center{" ps-3" if box else ""}">{box}'
-                f'<button type="button" class="btn btn-ghost btn-sm flex-1 justify-start'
-                f' font-semibold"{self._post({"event": "sort", "column": column})}{disabled}>'
-                f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></span></th>'
-            )
+            if group.column == column:
+                columns = min(group.column_count, len(headers) - column)
+                top.append(
+                    f'<th colspan="{columns}" scope="colgroup" class="text-center">'
+                    f"{html.escape(group.text)}</th>"
+                )
+            bottom.append(self._header_html(column, ""))
+        rows = f"<tr>{''.join(top)}</tr>" + (f"<tr>{''.join(bottom)}</tr>" if groups else "")
         return self._table_part(
-            f'<tr id="{self.widget_id}-head"{self._oob(oob=oob)}>{"".join(cells)}</tr>', oob=oob
+            f'<thead id="{self.widget_id}-head"{self._oob(oob=oob)}>{rows}</thead>', oob=oob
+        )
+
+    def _header_html(self, column: int, span: str) -> str:
+        """Render a column's header, with its check-all box, a button if sortable."""
+        header = self._view.headers[column]
+        box = self._check_all_html(column)
+        if column not in self._view.sortable_columns:
+            if box == "":
+                return f"<th{span}>{html.escape(header)}</th>"
+            return (
+                f'<th{span}><span class="flex items-center gap-2">{box}'
+                f"{html.escape(header)}</span></th>"
+            )
+        order = self._view.sort_descending if self._view.sort_column == column else None
+        arrow = {None: "", False: " ▲", True: " ▼"}[order]
+        disabled = "" if self.is_enabled else " disabled"
+        return (
+            f'<th{span} aria-sort="{_ARIA_SORT[order]}" class="p-0">'
+            f'<span class="flex items-center{" ps-3" if box else ""}">{box}'
+            f'<button type="button" class="btn btn-ghost btn-sm flex-1 justify-start'
+            f' font-semibold"{self._post({"event": "sort", "column": column})}{disabled}>'
+            f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></span></th>'
         )
 
     def _body_html(self, *, oob: bool = False) -> str:
         shown = self._view.shown_rows
-        rows = "".join(self._row_html(index, self._view.rows[index]) for index in shown)
+        styles = self._view.shown_cell_styles()
+        covered = {
+            (position + offset, column)
+            for (position, column), style in styles.items()
+            for offset in range(1, style.row_span)
+        }
+        rows = "".join(
+            self._row_html(index, self._view.rows[index], position, styles, covered)
+            for position, index in enumerate(shown)
+        )
         if len(shown) == 0 and len(self._view.rows) > 0:
             no_match = html.escape(self._view.filter_texts.get("no_match", ""))
-            columns = max(len(self._view.headers), 1)
+            columns = max(len(self._view.headers), 1) + (1 if self._view.row_headers else 0)
             rows = (
                 f'<tr><td colspan="{columns}" class="text-center opacity-70">{no_match}</td></tr>'
             )
@@ -1671,14 +1732,40 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             "</span>"
         )
 
-    def _row_html(self, index: int, row: list[str]) -> str:
-        # a row short of an editable cell or a widget's still gets the cell, empty
-        widths = [*self._editable_columns(), *self._view.cell_widgets]
+    def _row_html(
+        self,
+        index: int,
+        row: list[str],
+        position: int,
+        styles: dict[tuple[int, int], CellStyle],
+        covered: set[tuple[int, int]],
+    ) -> str:
+        """Render a row, at `position` among those shown, as `styles` say its cells look.
+
+        The cells `covered` by a cell spanning rows above aren't rendered.
+        """
+        # a row short of an editable cell, a widget's or a styled one's still gets the
+        # cell, empty
+        widths = [
+            *self._editable_columns(),
+            *self._view.cell_widgets,
+            *(column for shown, column in styles if shown == position),
+        ]
         width = max(len(row), *(column + 1 for column in widths), 0)
         cells = "".join(
-            self._cell_html(index, column, row[column] if column < len(row) else "")
+            self._cell_html(
+                index,
+                column,
+                row[column] if column < len(row) else "",
+                styles.get((position, column), PLAIN_CELL),
+            )
             for column in range(width)
+            if (position, column) not in covered
         )
+        if len(self._view.row_headers) > 0:
+            header = self._view.row_headers[index] if index < len(self._view.row_headers) else ""
+            cells = f'<th scope="row">{html.escape(header)}</th>{cells}'
+
         is_selected = index in self._view.selected_rows
         if self._is_multiple():
             selected = f' aria-selected="{"true" if is_selected else "false"}"'
@@ -1696,12 +1783,16 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f"{cells}</tr>"
         )
 
-    def _cell_html(self, row: int, column: int, text: str) -> str:
+    def _cell_html(self, row: int, column: int, text: str, style: CellStyle) -> str:
+        """Render a cell: its mark, then its text, widget or field, as `style` says."""
         widget = self._view.cell_widgets.get(column)
         if widget is not None and column < len(self._view.headers):
-            return f"<td>{self._widget_html(row, column, text, widget)}</td>"
-        if column not in self._editable_columns() or not self.is_enabled:
-            return f"<td>{html.escape(text)}</td>"
+            content = self._widget_html(row, column, text, widget, is_disabled=style.is_disabled)
+            # a disabled widget is grayed already
+            look = self._look(attrs.evolve(style, is_disabled=False))
+            return f"<td{look}>{self._marked(style, content)}</td>"
+        if column not in self._editable_columns() or not self.is_enabled or style.is_disabled:
+            return f"<td{self._look(style)}>{self._marked(style, html.escape(text))}</td>"
 
         def post(event: str) -> str:
             return (
@@ -1711,12 +1802,14 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
 
         if self._editing != (row, column):
             return (
-                f'<td data-edit hx-trigger="dblclick"{post("start_edit")}>{html.escape(text)}</td>'
+                f'<td{self._look(style)} data-edit hx-trigger="dblclick"{post("start_edit")}>'
+                f"{self._marked(style, html.escape(text))}</td>"
             )
         header = html.escape(self._view.headers[column])
         # its own id, so htmx gives it the focus back when the table is swapped
         return (
-            f'<td class="p-0"><input id="{self.widget_id}-cell-{row}-{column}" type="text"'
+            f'<td{self._look(style, "p-0")}><input id="{self.widget_id}-cell-{row}-{column}"'
+            ' type="text"'
             ' class="input input-ghost input-sm w-full min-w-0" name="text" data-cell'
             f' value="{html.escape(text)}" data-original="{html.escape(text)}"'
             f' aria-label="{header}" autocomplete="off" autofocus'
@@ -1724,10 +1817,37 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f"{post('edit')}></td>"
         )
 
-    def _widget_html(self, row: int, column: int, text: str, widget: CellWidget) -> str:
-        """Render a cell's widget, named by its column's header."""
+    @staticmethod
+    def _look(style: CellStyle, classes: str = "") -> str:
+        """Attributes giving a cell its colors, grayed if disabled, and its rows' span."""
+        if style.is_disabled:
+            classes = f"{classes} opacity-50".strip()
+        attributes = f' class="{classes}"' if classes else ""
+        if style.background is not None:
+            attributes += (
+                f' style="background-color: {style.background}; color: {style.text_color}"'
+            )
+        if style.row_span > 1:
+            attributes += f' rowspan="{style.row_span}"'
+        return attributes
+
+    def _marked(self, style: CellStyle, content: str) -> str:
+        """Put the cell's mark, if any, before its content, named for screen readers."""
+        if style.mark is None:
+            return content
+        icon, color = _MARK_ICONS[style.mark]
+        text = html.escape(self._view.mark_text(style.mark))
+        return (
+            f'<span class="flex items-center gap-1"><span class="shrink-0 {color}" role="img"'
+            f' aria-label="{text}" title="{text}">{_icon(icon)}</span>{content}</span>'
+        )
+
+    def _widget_html(
+        self, row: int, column: int, text: str, widget: CellWidget, *, is_disabled: bool
+    ) -> str:
+        """Render a cell's widget, named by its column's header; disabled with its cell."""
         header = html.escape(self._view.headers[column])
-        is_editable = self.is_enabled and column in self._view.editable_columns
+        is_editable = self.is_enabled and column in self._view.editable_columns and not is_disabled
         values = {"row": row, "column": column}
         # its own id, so htmx gives it the focus back when the table is swapped
         widget_id = f"{self.widget_id}-cell-{row}-{column}"
@@ -1752,7 +1872,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
                 f' hx-trigger="change" autocomplete="off"{"" if is_editable else " disabled"}>'
                 f"{choices}</select>"
             )
-        disabled = "" if self.is_enabled else " disabled"
+        disabled = "" if self.is_enabled and not is_disabled else " disabled"
         click = self._post({"event": "click_cell", **values})
         if widget.kind is CellKind.LINK:
             return (
@@ -1876,6 +1996,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             or int(row) not in self._view.shown_rows
             or not column.isdigit()
             or int(column) not in self._editable_columns()
+            or self._view.cell_style(int(row), int(column)).is_disabled
         ):
             return  # a cell a stale page still shows
         cell = (int(row), int(column))
@@ -1910,6 +2031,8 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             return None
         is_edit = widget.kind in (CellKind.CHECK_BOX, CellKind.COMBOBOX)
         if is_edit and int(column) not in self._view.editable_columns:
+            return None
+        if self._view.cell_style(int(row), int(column)).is_disabled:
             return None
         return int(row), int(column)
 

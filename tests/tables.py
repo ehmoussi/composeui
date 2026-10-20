@@ -8,9 +8,12 @@ import attrs
 from attrs import Factory
 
 from composeui.core.view import (
+    CellStyle,
     CellWidget,
     Column,
+    HeaderGroup,
     MainView,
+    NodeMark,
     RecordTableView,
     T,
     TableView,
@@ -123,3 +126,38 @@ class CellWidgetsMainView(MainView):
             3: CellWidget.button(),
             4: CellWidget.link(),
         }
+
+
+@define_view
+class StyledTablesMainView(MainView):
+    """A result's points, colored, marked and grouped, and a key/value table of its numbers."""
+
+    app_title = "Results"
+    extension = ".results"
+
+    points: TableView = Factory(TableView)
+    numbers: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.points.headers = ["Group", "Point", "Standard space", "Physical space", "Kept"]
+        self.points.header_groups = [HeaderGroup("Coordinates", 2, 2)]
+        self.points.rows = [
+            ["A", "P1", "0.5", "12.0", "True"],
+            ["", "P2", "nan", "nan", "False"],
+            ["B", "P3", "1.5", "40.0", "True"],
+        ]
+        self.points.editable_columns = [1, 4]
+        self.points.cell_widgets = {4: CellWidget.check_box(check_all=True)}
+        self.points.cell_styles = {
+            # group A over its two points
+            (0, 0): CellStyle(row_span=2),
+            (1, 2): CellStyle(background="#dc2626"),
+            (1, 3): CellStyle(background="#dc2626"),
+            (2, 3): CellStyle(background="#fde68a", mark=NodeMark.WARNING),
+            (1, 1): CellStyle(is_disabled=True),
+            (1, 4): CellStyle(is_disabled=True),
+        }
+        self.numbers.headers = ["Value"]
+        self.numbers.row_headers = ["Number of calls", "Time (s)"]
+        self.numbers.rows = [["2500"], ["3.2"]]

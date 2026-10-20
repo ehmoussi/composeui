@@ -107,7 +107,16 @@ if TYPE_CHECKING:
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
     from composeui.core.signal import Signal, SignalNoArgs
-    from composeui.core.view import CellWidget, ReferenceLine, Series, TreeNode, TreePath
+    from composeui.core.view import (
+        CellStyle,
+        CellWidget,
+        HeaderGroup,
+        NodeMark,
+        ReferenceLine,
+        Series,
+        TreeNode,
+        TreePath,
+    )
 
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="Widget")
@@ -1449,8 +1458,13 @@ class TableViewLike(ViewLike, Protocol):
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
     cell_clicked: Signal[int, int]
+    cell_styles: dict[tuple[int, int], CellStyle]
+    header_groups: list[HeaderGroup]
+    row_headers: list[str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def mark_text(self, mark: NodeMark) -> str: ...
+    def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
     def column_checked(self, column: int) -> bool | None: ...
     def check_all(self, column: int, *, is_checked: bool) -> None: ...
     def sort_by(self, column: int) -> None: ...
@@ -1486,6 +1500,13 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
                 "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
                 "cell_widgets": self._refresh_cell_widgets,
+                "cell_styles": self._refresh_looks,
+                "header_groups": self._refresh_header_groups,
+                "row_headers": self._refresh_looks,
+                # a terminal's cell has no tooltip: the mark's glyph says it
+                "done_text": lambda _view, _table, _value: None,
+                "warning_text": lambda _view, _table, _value: None,
+                "error_text": lambda _view, _table, _value: None,
             }
         )
 
@@ -1584,6 +1605,10 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
             view.headers,
             [view.rows[row] for row in value],
             cls._positions(view, view.selected_rows),
+            view.shown_cell_styles(),
+            [view.row_headers[row] if row < len(view.row_headers) else "" for row in value]
+            if len(view.row_headers) > 0
+            else [],
         )
         rendered_object.bar.set_count(_count_text(view, value))
         rendered_object.empty.display = len(value) == 0 and len(view.rows) > 0
@@ -1611,6 +1636,18 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
     ) -> None:
         rendered_object.table.set_cell_widgets(value)
         cls._refresh_checked_columns(view, rendered_object)
+
+    @classmethod
+    def _refresh_looks(
+        cls, view: TableViewLike, rendered_object: ComposeFilterTable, _value: Any
+    ) -> None:
+        cls._refresh_shown_rows(view, rendered_object, view.shown_rows)
+
+    @staticmethod
+    def _refresh_header_groups(
+        _view: TableViewLike, rendered_object: ComposeFilterTable, value: list[HeaderGroup]
+    ) -> None:
+        rendered_object.table.set_header_groups(value)
 
     @staticmethod
     def _update_state(view: TableViewLike, rendered_object: ComposeFilterTable) -> None:
