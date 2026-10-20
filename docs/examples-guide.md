@@ -118,8 +118,9 @@ It shows:
 - [scatter series](user-guide.md#kinds-of-chart): Add Measurements plots, as dots over the
   curves, what a test rig measured on that pipe;
 - a [reference line](user-guide.md#reference-lines) at the pressure of the pump;
-- [tabs](user-guide.md#tabs): the chart on one tab, and the measurements in a table on the
-  Measurements tab, each against the computed drop;
+- [tabs](user-guide.md#tabs): the chart on one tab, and the measurements in a
+  [table of records](user-guide.md#a-table-of-records) on the Measurements tab, each
+  against the computed drop;
 - [how cells and headers look](user-guide.md#how-cells-and-headers-look) on the
   Measurements tab:
   - the pipe's cell spans the rows of its measurements;
