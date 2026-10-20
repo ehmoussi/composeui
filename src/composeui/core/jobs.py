@@ -127,7 +127,7 @@ class Jobs:
     def start(
         self, work: Callable[Concatenate[Job[R], P], R], *args: P.args, **kwargs: P.kwargs
     ) -> Job[R]:
-        """Run `work(job, *args, **kwargs)` in a thread; call it on the main thread.
+        """Run ``work(job, *args, **kwargs)`` in a thread; call it on the main thread.
 
         Connect to the job's signals right away: its outcome is emitted on the main
         thread, so no sooner than the code calling `start` is done. Raises

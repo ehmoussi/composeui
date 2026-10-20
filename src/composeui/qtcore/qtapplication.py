@@ -1,3 +1,5 @@
+"""The application classes of the Qt backend."""
+
 from __future__ import annotations
 
 import signal
@@ -19,6 +21,8 @@ ModelT = TypeVar("ModelT", bound="Model")
 
 
 class QtApplication(Application[MainViewT]):
+    """The Qt app: it shows the main view in a window."""
+
     def run(self) -> None:
         super().run()
         app = QApplication(sys.argv)
@@ -28,6 +32,8 @@ class QtApplication(Application[MainViewT]):
 
 
 class QtModelApplication(ModelApplication[MainViewT, ModelT]):
+    """The Qt app with a model, which it closes once the window is closed."""
+
     def run(self) -> None:
         super().run()
         app = QApplication(sys.argv)

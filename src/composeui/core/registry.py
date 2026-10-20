@@ -38,8 +38,7 @@ def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Rendere
     """Create the renderer registered under `key` by `renderer_type`'s backend.
 
     Returns None when the backend doesn't register `key`, meaning it doesn't
-    support that widget: the view is then simply not rendered, matching how
-    partial backends behaved before the registry existed.
+    support that widget: the view is then not rendered.
     """
     module = importlib.import_module(renderer_type.value.renderers)
     factory = module.RENDERERS.get(key)

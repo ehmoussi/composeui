@@ -1,3 +1,9 @@
+"""The views: typed `attrs` classes that describe the UI, without a backend.
+
+A renderer shows each view on a backend (see `composeui.core.registry`). Setting a field
+of a view pushes the change to its renderer. The widget catalog lists the views.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -87,7 +93,7 @@ GRID_POSITION = "grid_position"
 #: belongs to the app's code and language, not to a study, so it's never saved or loaded
 UI_TEXT = "ui_text"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
-#: conversion, e.g. `float("abc")`)
+#: conversion, e.g. ``float("abc")``)
 _BAD_STATE_ERRORS = (
     ValueError,
     TypeError,
@@ -262,6 +268,10 @@ def _reset_state(view: View, initial: View) -> None:
 
 
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
+    """Push the new `value` of a view's field to its renderer, if the value changed.
+
+    The ``on_setattr`` hook of every view field (see `define_view`). Return `value`.
+    """
     attribute_name = str(attribute.name)
     if not attribute_name.startswith("_") and hasattr(instance, attribute_name):
         old_value = getattr(instance, attribute_name)
@@ -336,6 +346,12 @@ def define_view(cls: None = None, **kwargs: Any) -> Callable[[_ClassT], _ClassT]
 def define_view(
     cls: Union[_ClassT, None] = None, **kwargs: Any
 ) -> Union[_ClassT, Callable[[_ClassT], _ClassT]]:
+    """Define a view class: an `attrs` class whose field changes reach its renderer.
+
+    Use it as ``@define_view``, or as ``@define_view(...)`` with keyword arguments for
+    `attrs.define`. The fields are keyword-only.
+    """
+
     def wrap(cls: _ClassT) -> _ClassT:
         if "on_setattr" in kwargs:
             if isinstance(kwargs["on_setattr"], Sequence):
@@ -374,6 +390,12 @@ def child(cls: Callable[_P, _ViewT], /, *args: _P.args, **kwargs: _P.kwargs) -> 
 
 @define_view
 class View:
+    """The base of every view: a part of the UI that a renderer shows on a backend.
+
+    Setting a field of a view pushes the change to its renderer. `is_visible` shows or hides
+    the view, and `is_enabled` enables or disables it.
+    """
+
     #: key of this view's renderer in the backend's ``RENDERERS`` mapping
     #: (see `composeui.core.registry`); concrete views set it
     _renderer_key: ClassVar[Optional[str]] = None
@@ -442,7 +464,7 @@ class View:
 
     @property
     def children_views(self) -> list[View]:
-        """Get all the field rows of the form view."""
+        """Get the views in the fields of this view, in order."""
         children_views: list[View] = []
         for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self))):
             view = getattr(self, field_row_attr.name)
@@ -470,6 +492,11 @@ class View:
 
 @define_view
 class StatusBar(View):
+    """A line at the bottom of the window that shows a short message to the user.
+
+    `show_message` shows a message for `timeout` seconds.
+    """
+
     _renderer_key = "status_bar"
 
     message: str = attrs.field(default="")
@@ -478,10 +505,9 @@ class StatusBar(View):
     _timer: Optional[threading.Timer] = attrs.field(default=None)
 
     def show_message(self, message: str) -> None:
-        """Show a message.
+        """Show `message` for `timeout` seconds.
 
-        The message is dismissed after timeout seconds. A timeout of 0 means
-        the message is never automatically dismissed.
+        With a `timeout` of 0, the message is not dismissed automatically.
         """
         self.message = message
         if self._timer is not None:
@@ -504,6 +530,7 @@ class StatusBar(View):
             self.clear_message()
 
     def clear_message(self) -> None:
+        """Remove the message from the status bar."""
         self.message = ""
         self._timer = None
 
@@ -515,6 +542,8 @@ class StatusBar(View):
 
 @define_view
 class FileView(View):
+    """The file path that the last file dialog of the main view gave."""
+
     filepath: Optional[Path] = attrs.field(default=None)
     extensions: dict[str, tuple[str, ...]] = attrs.Factory(dict[str, tuple[str, ...]])
     # file_type: FileType = attrs.field(default=FileType.OpenFile)
@@ -525,6 +554,12 @@ class FileView(View):
 
 @define_view
 class ActionView(View):
+    """An entry of a menu or a toolbar that the user triggers, for example Save.
+
+    `triggered` emits when the user triggers it. A checkable action (`is_checkable`) changes
+    `is_checked` first, so the callbacks see the new state.
+    """
+
     _renderer_key = "action"
 
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -550,6 +585,8 @@ class ActionView(View):
 
 
 class DialogKind(enum.Enum):
+    """The kind of a `DialogView`: a message or a confirmation."""
+
     #: tells the user something: one button, accepting
     MESSAGE = enum.auto()
     #: asks the user to confirm: an accepting and a rejecting button
@@ -611,11 +648,18 @@ class DialogView(View):
 
 @define_view
 class SeparatorAction(View):
+    """A line between two groups of entries in a menu or a toolbar."""
+
     _renderer_key = "separator"
 
 
 @define_view
 class Menu(View):
+    """A menu of the window, with an entry for each of its action fields.
+
+    Its `ActionView` and `SeparatorAction` fields are its entries, in order. `title` names it.
+    """
+
     _renderer_key = "menu"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -641,6 +685,8 @@ class ToolBar(View):
 
 @define_view
 class NewAction(ActionView):
+    """The New action of the File menu, which starts a new study."""
+
     text: str = attrs.field(default=T("New"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
@@ -657,6 +703,8 @@ class NewAction(ActionView):
 
 @define_view
 class OpenFileAction(ActionView):
+    """The Open action of the File menu, which opens a study from a file."""
+
     text: str = attrs.field(default=T("Open"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
@@ -699,6 +747,8 @@ class PickFileAction(ActionView):
 
 @define_view
 class SaveAction(ActionView):
+    """The Save action of the File menu, which saves the study to a file."""
+
     text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
@@ -714,6 +764,8 @@ class SaveAction(ActionView):
 
 @define_view
 class SaveAsAction(ActionView):
+    """The Save As action of the File menu, which saves the study to a file."""
+
     text: str = attrs.field(default=T("Save As"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
@@ -726,6 +778,8 @@ class SaveAsAction(ActionView):
 
 @define_view
 class ExitAppAction(ActionView):
+    """The Exit action of the File menu, which closes the app."""
+
     text: str = attrs.field(default=T("Exit"), metadata={UI_TEXT: True})
 
     def __attrs_post_init__(self) -> None:
@@ -742,6 +796,11 @@ class ExitAppAction(ActionView):
 
 @define_view
 class FileMenu(Menu):
+    """The File menu of the main view, with New, Open, Save, Save As and Exit.
+
+    An app without studies sets `MainView.has_file_menu` to False to leave it out.
+    """
+
     new: NewAction = attrs.Factory(NewAction)
     open_file: OpenFileAction = attrs.Factory(OpenFileAction)
     save: SaveAction = attrs.Factory(SaveAction)
@@ -832,6 +891,13 @@ class LanguageMenu(Menu):
 
 @define_view
 class MainView(View):
+    """The root view of an app: its window, with the menus, the status bar and the content.
+
+    A subclass sets `app_title`, `extension` and `translations_dir`, and adds its views as
+    fields. The main view saves and loads the state of its views (`save_state`,
+    `load_state`), and runs work in threads with `jobs`.
+    """
+
     _renderer_key = "main"
 
     #: the app's name, in the window's title; a subclass sets it: ``app_title = T("Pipes")``
@@ -867,7 +933,7 @@ class MainView(View):
         metadata={OMIT: True},
     )
 
-    #: the directory of the app's catalogs, `<language>.json` files (see
+    #: the directory of the app's catalogs, ``<language>.json`` files (see
     #: `composeui.core.translation`); a subclass sets it, e.g. to
     #: ``Path(__file__).parent / "locales"``
     translations_dir: ClassVar[Optional[Path]] = None
@@ -896,14 +962,14 @@ class MainView(View):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Add the app's own command-line options to `parser`, e.g. a file to show.
 
-        After the backend's (`-f`, `--language`, `--port`...); `apply_arguments` gets
+        After the backend's (``-f``, ``--language``, ``--port``...); `apply_arguments` gets
         their values. None by default.
         """
 
     def apply_arguments(self, args: argparse.Namespace) -> None:
         """Apply the app's own command-line options (`add_arguments`), parsed in `args`.
 
-        Once the main view is wired and `-f`'s study is open: once on Qt and Textual, for
+        Once the main view is wired and ``-f``'s study is open: once on Qt and Textual, for
         every session on the web.
         """
 
@@ -1025,17 +1091,23 @@ class _InputView:
 
 @define_view
 class InputMixin(_InputView):
+    """The fields of a field for one line of text: its `text` and its signals."""
+
     # properties
     text: str = attrs.field(default="")
 
 
 @define_view
 class InputView(InputMixin, View):
+    """A field where the user types one line of text, for example a name."""
+
     _renderer_key = "input"
 
 
 @define_view
 class FloatInputMixin(_InputView):
+    """The fields of a field for a decimal number: its `value`, range and decimals."""
+
     # properties
     value: Optional[float] = attrs.field(default=None)
     minimum: Optional[float] = attrs.field(default=None)
@@ -1045,11 +1117,18 @@ class FloatInputMixin(_InputView):
 
 @define_view
 class FloatInputView(FloatInputMixin, View):
+    """A field where the user types a decimal number, for example a length.
+
+    `value` is None while the field is empty.
+    """
+
     _renderer_key = "float_input"
 
 
 @define_view
 class IntInputMixin(_InputView):
+    """The fields of a field for a whole number: its `value` and its range."""
+
     # properties
     value: Optional[int] = attrs.field(default=None)
     minimum: Optional[int] = attrs.field(default=None)
@@ -1150,7 +1229,7 @@ class DateInputMixin(_InputView):
     value: Optional[datetime.date] = attrs.field(default=None)
     minimum: Optional[datetime.date] = attrs.field(default=None)
     maximum: Optional[datetime.date] = attrs.field(default=None)
-    #: how the date is typed and shown: its day `dd`, month `MM` and year `yyyy` between
+    #: how the date is typed and shown: its day ``dd``, month ``MM`` and year ``yyyy`` between
     #: separators; a text the catalogs translate, so the main view's language's
     date_format: str = attrs.field(default=T("MM/dd/yyyy"), metadata={UI_TEXT: True})
     #: the calendar's month names, January first, and its days' short names, Monday first
@@ -1237,6 +1316,8 @@ class FilePathInputView(FilePathInputMixin, View):
 
 @define_view
 class SliderMixin:
+    """The fields of a slider: its `value`, its range and its `step`."""
+
     def _check_step(self, _attribute: attrs.Attribute[Any], step: int) -> None:
         if step <= 0:
             msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
@@ -1245,7 +1326,7 @@ class SliderMixin:
     #: from `minimum` to `maximum` by `step`; shown at its nearest step (see `position`)
     value: int = attrs.field(default=0)
     minimum: int = attrs.field(default=0)
-    #: the last step, if `maximum - minimum` is not a whole number of steps, falls short of it
+    #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
     maximum: int = attrs.field(default=100)
     step: int = attrs.field(default=1, validator=[_check_step])
     #: the user moved the handle; not emitted when `value` is set in code
@@ -1278,6 +1359,8 @@ class SliderView(SliderMixin, View):
 
 
 class LogType(enum.Enum):
+    """How a log message reads: an error, a warning or information."""
+
     ERROR = enum.auto()
     WARNING = enum.auto()
     INFO = enum.auto()
@@ -1290,6 +1373,8 @@ Validator = Callable[[], Optional[str]]
 
 @define_view
 class LogMixin:
+    """The fields of a message that a check (`validator`) writes, e.g. an error."""
+
     log_message: str = attrs.field(default="")
     log_type: LogType = attrs.field(default=LogType.ERROR)
     validator: Optional[Validator] = attrs.field(default=None, repr=False, metadata={OMIT: True})
@@ -1302,8 +1387,8 @@ class LogMixin:
         """Wire `validator` to run against this row whenever any of `signals` fires.
 
         A failing (non-None) result is pushed into this row's own `log_message`/
-        `log_type`; a passing (None) one clears them. Doesn't run `validator`
-        immediately - call `run_validator()` afterward for an initial check (e.g. an
+        `log_type`; a passing (None) one clears them. It doesn't run `validator`
+        immediately: call `run_validator` afterward for an initial check (e.g. an
         empty required field should already show its error before the first edit).
         """
         self.validator = validator
@@ -1314,8 +1399,8 @@ class LogMixin:
         """Re-run `validator`, if set, and push its result into the row's own log.
 
         Takes (and ignores) any positional args so it can be connected directly to
-        signals of any arity - a per-keystroke `text_edited: Signal[str]` or a
-        no-argument `editing_finished: SignalNoArgs` alike.
+        signals of any arity: a per-keystroke ``text_edited: Signal[str]`` or a
+        no-argument ``editing_finished: SignalNoArgs`` alike.
         """
         if self.validator is None:
             return
@@ -1327,32 +1412,47 @@ class LogMixin:
 
 @define_view
 class LogView(LogMixin, View):
+    """A message to the user, for example an error, styled by its `log_type`."""
+
     _renderer_key = "log"
 
 
 @define_view
 class LabelMixin:
+    """The fields of a label: its `text`."""
+
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
 @define_view
 class LabelView(LabelMixin, View):
+    """A line of read-only text, for example a caption."""
+
     _renderer_key = "label"
 
 
 @define_view
 class MarkdownMixin:
+    """The fields of a Markdown view: its `text`."""
+
     #: read-only Markdown, e.g. a help page; its links open in the browser
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
 @define_view
 class MarkdownView(MarkdownMixin, View):
+    """Read-only Markdown text, for example a help page.
+
+    Its links open in the browser. On the web, the view leaves out raw HTML.
+    """
+
     _renderer_key = "markdown"
 
 
 @define_view
 class CheckBoxMixin:
+    """The fields of a check box: its `text`, its state and `toggled`."""
+
     #: shown next to the box
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
     is_checked: bool = attrs.field(default=False)
@@ -1362,6 +1462,8 @@ class CheckBoxMixin:
 
 @define_view
 class CheckBoxView(CheckBoxMixin, View):
+    """A check box with a text, for an option that is on or off."""
+
     _renderer_key = "checkbox"
 
 
@@ -1408,7 +1510,7 @@ class ProgressBarView(View):
 
     @staticmethod
     def clamp(value: int, maximum: Optional[int]) -> int:
-        """`value` within a bar's range of `maximum` steps, as it shows: a count may overshoot.
+        """Get `value` within the bar's range of `maximum` steps: a count may overshoot.
 
         Takes both, as a renderer refreshes one before the view holds the new value.
         """
@@ -1727,7 +1829,7 @@ def _parse_bool(text: Any, _type: type) -> bool:
 
 
 #: parses a cell's text into a record's field; strict about booleans, which
-#: `bool("False")` would make true
+#: ``bool("False")`` would make true
 _CELL_CONVERTER = CONVERTER.copy()
 _CELL_CONVERTER.register_structure_hook(bool, _parse_bool)
 
@@ -2604,6 +2706,8 @@ class TableMixin:
 
 @define_view
 class TableView(TableMixin, View):
+    """A table of text that the app formats cell by cell (see `TableMixin`)."""
+
     _renderer_key = "table"
 
     def __attrs_post_init__(self) -> None:
@@ -2813,6 +2917,11 @@ TValue = TypeVar("TValue")
 
 @define_view
 class ValuesGroupMixin(Generic[TValue]):
+    """The fields of one choice among `values`: the choices by label, and the `value` selected.
+
+    `value` is None, or one of `values`; new `values` without it clear it.
+    """
+
     def _check_value(self, _attribute: attrs.Attribute[Any], value: Optional[TValue]) -> None:
         """Reject a `value` that isn't `None` or one of the current `values`."""
         if value is not None and value not in self.values.values():
@@ -2901,16 +3010,22 @@ class ValuesGroupMixin(Generic[TValue]):
 
 @define_view
 class RadioGroupView(ValuesGroupMixin[TValue], View):
+    """A group of radio buttons, for one choice among a few `values`."""
+
     _renderer_key = "radio_group"
 
 
 @define_view
 class ComboboxView(ValuesGroupMixin[TValue], View):
+    """A drop-down list, for one choice among `values`."""
+
     _renderer_key = "combobox"
 
 
 @define_view
 class FormRowView(LogMixin, View):
+    """A row of a form: a field, and the message of its check under it."""
+
     #: registry key of the row's field renderer; concrete rows set it
     _field_renderer_key: ClassVar[Optional[str]] = None
 
@@ -2957,6 +3072,8 @@ class FormRowView(LogMixin, View):
 
 @define_view
 class FormLabelRowView(FormRowView):
+    """A row of a form with a label before its field, and a help button if it has `help`."""
+
     label: str = attrs.field(default="", metadata={UI_TEXT: True})
     #: what to enter in the field, shown by a "?" button beside the label (a hint on Textual)
     help: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -2975,96 +3092,137 @@ class FormLabelRowView(FormRowView):
 
 @define_view
 class RowInputView(FormRowView, InputMixin):
+    """A row of a form with a field for one line of text, without a label."""
+
     _field_renderer_key = "input"
 
 
 @define_view
 class LabelRowInputView(FormLabelRowView, InputMixin):
+    """A row of a form with a label and a field for one line of text."""
+
     _field_renderer_key = "input"
 
 
 @define_view
 class RowFloatInputView(FormRowView, FloatInputMixin):
+    """A row of a form with a field for a decimal number, without a label."""
+
     _field_renderer_key = "float_input"
 
 
 @define_view
 class LabelRowFloatInputView(FormLabelRowView, FloatInputMixin):
+    """A row of a form with a label and a field for a decimal number."""
+
     _field_renderer_key = "float_input"
 
 
 @define_view
 class RowIntInputView(FormRowView, IntInputMixin):
+    """A row of a form with a field for a whole number, without a label."""
+
     _field_renderer_key = "int_input"
 
 
 @define_view
 class LabelRowIntInputView(FormLabelRowView, IntInputMixin):
+    """A row of a form with a label and a field for a whole number."""
+
     _field_renderer_key = "int_input"
 
 
 @define_view
 class RowDateInputView(FormRowView, DateInputMixin):
+    """A row of a form with a date field, without a label."""
+
     _field_renderer_key = "date_input"
 
 
 @define_view
 class LabelRowDateInputView(FormLabelRowView, DateInputMixin):
+    """A row of a form with a label and a date field."""
+
     _field_renderer_key = "date_input"
 
 
 @define_view
 class RowFilePathInputView(FormRowView, FilePathInputMixin):
+    """A row of a form with a file path field, without a label."""
+
     _field_renderer_key = "file_path_input"
 
 
 @define_view
 class LabelRowFilePathInputView(FormLabelRowView, FilePathInputMixin):
+    """A row of a form with a label and a file path field."""
+
     _field_renderer_key = "file_path_input"
 
 
 @define_view
 class RowSliderView(FormRowView, SliderMixin):
+    """A row of a form with a slider, without a label."""
+
     _field_renderer_key = "slider"
 
 
 @define_view
 class LabelRowSliderView(FormLabelRowView, SliderMixin):
+    """A row of a form with a label and a slider."""
+
     _field_renderer_key = "slider"
 
 
 @define_view
 class RowCheckBoxView(FormRowView, CheckBoxMixin):
+    """A row of a form with a check box, without a label."""
+
     _field_renderer_key = "checkbox"
 
 
 @define_view
 class LabelRowCheckBoxView(FormLabelRowView, CheckBoxMixin):
+    """A row of a form with a label and a check box."""
+
     _field_renderer_key = "checkbox"
 
 
 @define_view
 class RowRadioGroupView(FormRowView, ValuesGroupMixin[TValue]):
+    """A row of a form with a group of radio buttons, without a label."""
+
     _field_renderer_key = "radio_group"
 
 
 @define_view
 class LabelRowRadioGroupView(FormLabelRowView, ValuesGroupMixin[TValue]):
+    """A row of a form with a label and a group of radio buttons."""
+
     _field_renderer_key = "radio_group"
 
 
 @define_view
 class RowComboboxView(FormRowView, ValuesGroupMixin[TValue]):
+    """A row of a form with a drop-down list, without a label."""
+
     _field_renderer_key = "combobox"
 
 
 @define_view
 class LabelRowComboboxView(FormLabelRowView, ValuesGroupMixin[TValue]):
+    """A row of a form with a label and a drop-down list."""
+
     _field_renderer_key = "combobox"
 
 
 @define_view
 class FormView(View):
+    """A form: its rows, one above the other, and the message of its cross-field checks.
+
+    Its `FormRowView` and `FormView` fields are its rows, in order (`field_rows`).
+    """
+
     _renderer_key = "form"
 
     log_view: LogView = attrs.field(factory=LogView)
@@ -3081,7 +3239,7 @@ class FormView(View):
 
     @property
     def field_rows(self) -> list[Union[FormRowView, FormView]]:
-        """Get all the field rows of the form view."""
+        """Get the rows of the form and its nested forms, in order."""
         return [
             getattr(self, field_row_attr.name)
             for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self)))
@@ -3097,11 +3255,11 @@ class FormView(View):
         """Register a cross-field `validator`, re-run whenever any of `signals` fires.
 
         Unlike `LogMixin.set_validator` (one validator per row, using that row's own
-        log), a form can have several independent cross-field checks - each failing
+        log), a form can have several independent cross-field checks: each failing
         (non-None) result is combined into this form's shared `log_view` instead of
-        the last one winning (see `PipeFormView` in `examples/pipeform.py`, which has
-        two independent checks spanning `main_pipe`/`incident_pipe`). Doesn't run
-        immediately - call `validate()` afterward for an initial check.
+        the last one winning (see ``PipeFormView`` in ``examples/pipeform.py``, which has
+        two independent checks spanning ``main_pipe`` and ``incident_pipe``). It doesn't
+        run immediately: call `validate` afterward for an initial check.
 
         `rows` are the rows the check is about: while it fails, each shows its field as
         invalid (`FormRowView.has_form_error`), so the user sees which values to fix
@@ -3163,6 +3321,8 @@ class FormView(View):
 
 @define_view
 class GroupFormView(FormView):
+    """A form in a box with a `title`, for example a group of related fields."""
+
     _renderer_key = "group_form"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
@@ -3486,7 +3646,7 @@ class GridView(View):
         return positions
 
 
-#: what a page's route can be: it also names the page in a web address (`/<route>`)
+#: what a page's route can be: it also names the page in a web address (``/<route>``)
 _ROUTE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 

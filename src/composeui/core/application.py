@@ -1,3 +1,5 @@
+"""The app: it builds the main view, wires its signals and runs it on a backend (`run`)."""
+
 from __future__ import annotations
 
 import argparse
@@ -48,11 +50,15 @@ _TsD = TypeVarTuple("_TsD")
 
 
 class AvailableBounds(TypedDict, Generic[_ViewT_contra, _MainViewT_contra]):
+    """The arguments `Application.connect` can give a callback by name."""
+
     view: _ViewT_contra
     main_view: _MainViewT_contra
 
 
 class AvailableModelBounds(TypedDict, Generic[_ViewT_contra, _MainViewT_contra, _ModelT_contra]):
+    """The arguments `ModelApplication.connect` can give a callback by name."""
+
     view: _ViewT_contra
     main_view: _MainViewT_contra
     model: _ModelT_contra
@@ -291,7 +297,7 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
 
 
 #: environment variable naming the backend `run` started: a process the app starts again,
-#: e.g. the web's `--reload` server, gets the command line without `--backend`
+#: e.g. the web's ``--reload`` server, gets the command line without ``--backend``
 BACKEND_VARIABLE = "COMPOSEUI_BACKEND"
 
 

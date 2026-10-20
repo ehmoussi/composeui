@@ -52,7 +52,7 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
 def safe_filename(name: str) -> str:
-    """`name` reduced to letters, digits, `.`, `_` and `-`, safe in a response header."""
+    """Reduce `name` to letters, digits, `.`, `_` and `-`, safe in a response header."""
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.") or "state"
 
 

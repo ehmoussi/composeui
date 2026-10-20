@@ -50,7 +50,7 @@ def _identifier(name: str) -> str:
 def unique_name(db: sqlite3.Connection, table: str, column: str, base: str) -> str:
     """Get `base`, or else "`base` 2", "`base` 3"..., the first no row of `table` has.
 
-    Names differing only by case are the same name (a `COLLATE NOCASE` column's), e.g. to
+    Names differing only by case are the same name (a ``COLLATE NOCASE`` column's), e.g. to
     add a "Room" whatever rooms there are already.
     """
     sql = f"SELECT {_identifier(column)} FROM {_identifier(table)}"  # noqa: S608 (quoted)
@@ -137,13 +137,13 @@ class SqliteModel(Model):
     """A model whose data is a SQLite database, saved and opened with the study.
 
     Declare the tables in the class, ``runs = table(Runs)``, for the callbacks to reach
-    (`model.runs.add(...)`), or add them in `__init__` with `add_table`. A study's
+    (``model.runs.add(...)``), or add them in `__init__` with `add_table`. A study's
     database is created from the tables' `create` scripts at `schema_version`; a study
     saved at an older version is brought up to date by `migrations` when opened.
     """
 
     data_name: ClassVar[str | None] = "data.sqlite"
-    #: the tables' version, kept in the database (`PRAGMA user_version`); raise it with
+    #: the tables' version, kept in the database (``PRAGMA user_version``); raise it with
     #: every change to the tables, adding the migration from the previous one
     schema_version: ClassVar[int] = 1
     #: by version: the function bringing a database at that version to the next one

@@ -27,7 +27,7 @@ _BAD_ARCHIVE_ERRORS = (zipfile.BadZipFile, zlib.error, EOFError)
 
 
 def has_data(model: Model | None) -> bool:
-    """Whether a study with this model is an archive, rather than the views' JSON."""
+    """Tell whether a study with this model is an archive, rather than the views' JSON."""
     return model is not None and model.data_name is not None
 
 

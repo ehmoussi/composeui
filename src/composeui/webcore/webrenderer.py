@@ -277,7 +277,7 @@ class WebRenderer(Renderer[TView, str]):
         raise UnsupportedEventError(self, event)
 
     def _root_attributes(self, *, oob: bool) -> str:
-        """Attributes of the fragment's root tag, kept even when hidden for later swaps."""
+        """Get the attributes of the fragment's root tag, kept even when hidden for later swaps."""
         attributes = [f'id="{self.widget_id}"']
         if not self._view.is_visible:
             attributes.append("hidden")
@@ -389,11 +389,11 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
 
     @abstractmethod
     def _text(self) -> str:
-        """Text to show in the field, from the view's state."""
+        """Get the text to show in the field, from the view's state."""
 
     @abstractmethod
     def _posted_text(self) -> str:
-        """Text the browser last posted (or was last shown)."""
+        """Get the text the browser last posted (or was last shown)."""
 
     @abstractmethod
     def _apply_text(self, text: str) -> None:
@@ -468,7 +468,7 @@ class _WebNumberFieldRenderer(_WebTextFieldRenderer[TNumberField]):
         """Parse a non-empty text into a value, raising `ValueError` if it can't."""
 
     def _is_acceptable(self, text: str) -> bool:
-        """Whether `text` is an acceptable field value ("" meaning no value)."""
+        """Tell whether `text` is an acceptable field value ("" meaning no value)."""
         if text == "":
             return True
         try:
@@ -1484,7 +1484,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         return ' hx-swap-oob="true"' if oob else ""
 
     def _post(self, values: Mapping[str, str | int]) -> str:
-        """Attributes posting an event of the table, without swapping its element back."""
+        """Get the attributes posting an event of the table, without swapping its element back."""
         return (
             f" hx-post=\"/widget/{self.widget_id}\" hx-vals='{html.escape(json.dumps(values))}'"
             ' hx-swap="none"'
@@ -1819,7 +1819,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
 
     @staticmethod
     def _look(style: CellStyle, classes: str = "") -> str:
-        """Attributes giving a cell its colors, grayed if disabled, and its rows' span."""
+        """Get the attributes giving a cell its colors, grayed if disabled, and its rows' span."""
         if style.is_disabled:
             classes = f"{classes} opacity-50".strip()
         attributes = f' class="{classes}"' if classes else ""
@@ -2080,7 +2080,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._view.cell_clicked.emit(*cell)
 
     def _editable_columns(self) -> list[int]:
-        """`editable_columns` the table has a header for, and the user types in."""
+        """Get the `editable_columns` the table has a header for, and the user types in."""
         return [
             column
             for column in self._view.editable_columns
@@ -2246,12 +2246,12 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
 
     @property
     def text_id(self) -> str:
-        """Id of the `<label>` itself, which names a field `<label for>` can't."""
+        """The id of the ``<label>`` itself, which names a field ``<label for>`` can't."""
         return f"{self.widget_id}-text"
 
     @property
     def help_id(self) -> str:
-        """Id of the row's help, which describes the field while there is help."""
+        """The id of the row's help, which describes the field while there is help."""
         return f"{self.widget_id}-help"
 
     def has_help(self) -> bool:
@@ -3391,7 +3391,7 @@ class WebTreeRenderer(WebRenderer[TreeView]):
         return f"{_file_icon(node.icon)}{label}{mark}"
 
     def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> str:
-        """Attributes posting an event of the node at `path`, without swapping it back."""
+        """Get the attributes posting an event of the node at `path`, without swapping it back."""
         values = {"event": event, "path": json.dumps(list(path))}
         if event == "toggle":
             values["expanded"] = str(expanded).lower()
@@ -3456,7 +3456,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
 
     @property
     def drawer_id(self) -> str:
-        """The drawer's checkbox, checked while the drawer shows on a phone."""
+        """The id of the drawer's checkbox, checked while the drawer shows on a phone."""
         return f"{self.widget_id}-drawer"
 
     def to_html(self, *, oob: bool = False) -> str:
