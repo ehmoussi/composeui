@@ -188,6 +188,7 @@ make check         # lint + mypy + translations
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
 make docs          # build the documentation site into docs/_build/html
+make screenshots   # the screenshots of the examples guide, on every backend
 ```
 
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
@@ -260,6 +261,13 @@ uv sync --group dev --group docs --all-extras
   `_renderer_key`, with the first paragraph of its docstring. A new widget is in the
   catalog without a change to `docs/widgets.md`.
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
+- **The screenshots of the examples are taken by a script.** `make screenshots` runs
+  `docs/screenshots.py`, which writes `docs/images/<example>-<backend>.png` for Qt,
+  Textual, and the web, in the light theme. The script sets each example up first, for
+  example by filling in its form or running its job, so every backend shows the same
+  state. It needs the `browser` group and Chromium, as `make browser-test` does. When an
+  example changes what it shows, update its set-up in the script, run
+  `make screenshots EXAMPLES=<example>`, and commit the images.
 
 ### Continuous integration
 
