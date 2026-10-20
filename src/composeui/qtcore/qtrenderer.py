@@ -291,6 +291,8 @@ class FloatInputViewLike(_InputViewLike, Protocol):
     maximum: float | None
     decimals: int | None
 
+    def shown_text(self, value: float | None, decimals: int | None) -> str: ...
+
 
 class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
     _invalid_style = "QLineEdit { border: 1px solid red; }"
@@ -322,9 +324,9 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
 
     @staticmethod
     def _refresh_value(
-        _view: FloatInputViewLike, rendered_object: QLineEdit, value: float | None
+        view: FloatInputViewLike, rendered_object: QLineEdit, value: float | None
     ) -> None:
-        rendered_object.setText(str(value) if value is not None else "")
+        rendered_object.setText(view.shown_text(value, view.decimals))
 
     @staticmethod
     def _refresh_placeholder(
@@ -350,19 +352,19 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
 
     @staticmethod
     def _refresh_decimals(
-        _view: FloatInputViewLike, rendered_object: QLineEdit, value: int | None
+        view: FloatInputViewLike, rendered_object: QLineEdit, value: int | None
     ) -> None:
         validator = rendered_object.validator()
         assert isinstance(validator, QDoubleValidator)
         validator.setDecimals(-1 if value is None else value)
+        rendered_object.setText(view.shown_text(view.value, value))
 
     @staticmethod
     def _update_state(view: FloatInputViewLike, rendered_object: QLineEdit) -> None:
         text = rendered_object.text()
-        if text != "":
-            view.value = float(text)
-        else:
-            view.value = None
+        # the text shown for the view's value may be rounded: it doesn't change the value
+        if text != view.shown_text(view.value, view.decimals):
+            view.value = float(text) if text != "" else None
         view.placeholder = rendered_object.placeholderText()
         validator = rendered_object.validator()
         assert isinstance(validator, QDoubleValidator)

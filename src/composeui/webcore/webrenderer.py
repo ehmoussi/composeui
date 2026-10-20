@@ -509,6 +509,8 @@ class FloatInputViewLike(_NumberFieldViewLike, Protocol):
     maximum: float | None
     decimals: int | None
 
+    def shown_text(self, value: float | None, decimals: int | None) -> str: ...
+
 
 #: an optionally signed decimal number, partial input ("-", "1.") included
 _DECIMAL_PATTERN = r"[+\-]?[0-9]*([.][0-9]*)?([eE][+\-]?[0-9]*)?"
@@ -526,6 +528,9 @@ class WebFloatInputRenderer(_WebNumberFieldRenderer[FloatInputViewLike]):
     @staticmethod
     def _parse(text: str) -> float:
         return float(text)
+
+    def _text(self) -> str:
+        return self._view.shown_text(self._view.value, self._view.decimals)
 
     def _extra_attributes(self) -> str:
         return f' inputmode="decimal" pattern="{_DECIMAL_PATTERN}"'

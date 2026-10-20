@@ -22,6 +22,7 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     ComboboxView,
+    FloatInputMixin,
     InputView,
     InvalidStateError,
     LabelView,
@@ -326,6 +327,24 @@ def test_a_study_saves_its_tree_nodes_marks_and_styles_but_not_their_icons(
     loaded.load_state(path)
     (building, parking) = view.site.nodes
     assert loaded.site.nodes == [evolve(building, icon=None), parking]
+
+
+@pytest.mark.parametrize(
+    ("value", "decimals", "shown"),
+    [
+        (36.0, 0, "36"),
+        (3.14159, 2, "3.14"),
+        (2.5, 2, "2.5"),  # no trailing zeros
+        (-0.001, 2, "0"),  # not "-0"
+        (36.0, None, "36.0"),  # as `str` writes it
+        (math.inf, 2, "inf"),
+        (None, 2, ""),
+    ],
+)
+def test_a_decimal_number_shows_at_most_its_decimals(
+    value: Optional[float], decimals: Optional[int], shown: str
+) -> None:
+    assert FloatInputMixin.shown_text(value, decimals) == shown
 
 
 def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:

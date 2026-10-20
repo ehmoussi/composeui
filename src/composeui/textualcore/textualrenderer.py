@@ -623,6 +623,8 @@ class FloatInputViewLike(ViewLike, Protocol):
     text_edited: Signal[str]
     editing_finished: SignalNoArgs
 
+    def shown_text(self, value: float | None, decimals: int | None) -> str: ...
+
 
 class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, ComposeInput]):
     _marks_invalid = True
@@ -635,9 +637,9 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
                 "placeholder": self._refresh_placeholder,
                 "minimum": self._refresh_minimum,
                 "maximum": self._refresh_maximum,
-                # No widget-level equivalent of Qt's `QDoubleValidator.setDecimals`:
-                # Textual's `Number` validator only bounds min/max, so `decimals` is
-                # tracked on the view but not enforced by the rendered widget.
+                # shown, not enforced: Textual's `Number` validator only bounds min/max,
+                # with no equivalent of Qt's `QDoubleValidator.setDecimals`
+                "decimals": self._refresh_decimals,
             }
         )
 
@@ -649,9 +651,15 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
 
     @staticmethod
     def _refresh_value(
-        _view: FloatInputViewLike, rendered_object: ComposeInput, value: float | None
+        view: FloatInputViewLike, rendered_object: ComposeInput, value: float | None
     ) -> None:
-        rendered_object.value = str(value) if value is not None else ""
+        rendered_object.value = view.shown_text(value, view.decimals)
+
+    @staticmethod
+    def _refresh_decimals(
+        view: FloatInputViewLike, rendered_object: ComposeInput, value: int | None
+    ) -> None:
+        rendered_object.value = view.shown_text(view.value, value)
 
     @staticmethod
     def _refresh_placeholder(
@@ -680,13 +688,18 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
     @staticmethod
     def _update_state(view: FloatInputViewLike, rendered_object: ComposeInput) -> None:
         text = rendered_object.value
-        view.value = float(text) if text != "" else None
+        # the text shown for the view's value may be rounded: it doesn't change the value
+        if text != view.shown_text(view.value, view.decimals):
+            view.value = float(text) if text != "" else None
         view.placeholder = rendered_object.placeholder
 
     def _update_text(self, text: str) -> None:
-        # transient invalid text while typing (e.g. "-", "1."); ignore it
-        with self.stop_refresh(), contextlib.suppress(ValueError):
-            self._view.value = float(text) if text != "" else None
+        # Textual reports the text the renderer set too: as shown for the view's value,
+        # maybe rounded, it isn't the user's and leaves the value as it is.
+        # Transient invalid text while typing (e.g. "-", "1.") is ignored.
+        if text != self._view.shown_text(self._view.value, self._view.decimals):
+            with self.stop_refresh(), contextlib.suppress(ValueError):
+                self._view.value = float(text) if text != "" else None
         self._view.text_changed.emit(text)
         self._view.text_edited.emit(text)
 
