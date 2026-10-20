@@ -167,6 +167,34 @@ async def test_textual_app_renders_and_round_trips_input_and_radio_selection() -
 
 
 @pytest.mark.asyncio
+async def test_a_float_input_shows_its_value_with_at_most_its_decimals() -> None:
+    view = TextualDemoMainView()
+    size = view.form.size
+    size.decimals = 2
+    size.value = 2.71828
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        widget = _field_widget(size.renderer)
+        assert isinstance(widget, Input)
+        await pilot.pause()
+        # Textual reports the text set too: the rounded text doesn't replace the value
+        assert (widget.value, size.value) == ("2.72", 2.71828)
+
+        size.decimals = 0
+        await pilot.pause()
+        assert (widget.value, size.value) == ("3", 2.71828)
+
+        widget.focus()
+        await pilot.press("end", "backspace", *"1.5")
+        await pilot.pause()
+        assert size.value == 1.5  # what the user types is the value
+
+
+@pytest.mark.asyncio
 async def test_an_int_input_takes_only_whole_numbers_marking_those_out_of_range() -> None:
     view = HoursMainView()
     view.render(RendererType.TEXTUAL)

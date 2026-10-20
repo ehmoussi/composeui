@@ -372,6 +372,21 @@ def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbo
     assert radius_widget.text() != "abc"  # rejected by the QDoubleValidator
 
 
+def test_a_float_input_shows_its_value_with_at_most_its_decimals(qtbot: QtBot) -> None:
+    view = FloatInputView(value=3.14159)
+    view.render(RendererType.QT)
+    field = _widget(view)
+    assert isinstance(field, QLineEdit)
+    qtbot.addWidget(field)
+    assert field.text() == "3.14159"
+
+    view.decimals = 2
+    assert field.text() == "3.14"
+    assert view.value == 3.14159  # shown rounded, kept as it was
+    view.value = 36.0
+    assert field.text() == "36"
+
+
 def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot) -> None:
     view = HoursMainView()
     view.render(RendererType.QT)

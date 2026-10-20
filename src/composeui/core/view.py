@@ -1113,7 +1113,27 @@ class FloatInputMixin(_InputView):
     value: Optional[float] = attrs.field(default=None)
     minimum: Optional[float] = attrs.field(default=None)
     maximum: Optional[float] = attrs.field(default=None)
+    #: the most decimals the field shows (and, on Qt, takes); None: as many as `str` writes
     decimals: Optional[int] = attrs.field(default=None)
+
+    @staticmethod
+    def shown_text(value: Optional[float], decimals: Optional[int]) -> str:
+        """Show `value` with at most `decimals` decimals, "" for no value.
+
+        The value is rounded, and trailing zeros are left out: with 0 decimals, 36.0 is
+        "36", and with 2, 3.14159 is "3.14" and 2.5 is "2.5". Without `decimals`, the
+        value shows as `str` writes it, e.g. "36.0". Takes `decimals`, as a renderer
+        refreshes it before the view holds it.
+        """
+        if value is None:
+            return ""
+        if decimals is None or not math.isfinite(value):
+            return str(value)
+        text = f"{value:.{decimals}f}"
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        # a negative value rounded to 0 isn't "-0"
+        return "0" if text == "-0" else text
 
 
 @define_view

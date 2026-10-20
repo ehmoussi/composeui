@@ -370,7 +370,7 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
 
     # the field, otherwise never swapped back, now shows the age its messages describe
     assert main_view.form.age.value == 4.0
-    assert _swapped(body, age_id).attributes["value"] == "4.0"
+    assert _swapped(body, age_id).attributes["value"] == "4"  # its 0 decimals
     assert finished == []
 
 
@@ -656,6 +656,9 @@ def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
     assert attributes["inputmode"] == "decimal"
     assert attributes["pattern"]
     assert attributes["value"] == "20.0"
+
+    rows.length.decimals = 0
+    assert _element(field.to_html(), field.widget_id).attributes["value"] == "20"
 
 
 def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser() -> None:
@@ -2282,7 +2285,7 @@ def _assert_shows_the_tee_study(page: str, form: Any) -> None:
     assert _selected(_element(page, _field_id(form.material))) == ["Copper"]
     assert _selected(_element(page, _field_id(form.edge_type))) == ["Fillet"]
     assert "hidden" not in _element(page, _widget_id(form.fillet.renderer)).attributes
-    assert _element(page, _field_id(form.main_pipe.radius)).attributes["value"] == "60.0"
+    assert _element(page, _field_id(form.main_pipe.radius)).attributes["value"] == "60"
     assert "hidden" in _element(page, _widget_id(form.log_view.renderer)).attributes
     assert form.name.text == "Tee"
     assert form.main_pipe.radius.value == 60.0
