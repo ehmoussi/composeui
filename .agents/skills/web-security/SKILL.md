@@ -135,8 +135,10 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
   `null` `Origin`, foreign `Referer`, no header).
 - A new kind of response goes in `test_every_response_carries_the_security_headers`.
 - `test_every_view_text_is_escaped` puts hostile text in every text field of each main
-  view it lists, then parses the page. A new view type is covered once a listed main view
-  shows it.
+  view in `_MAIN_VIEW_TYPES`, then parses the page in each state of `_states` (dialogs
+  open, a cell edited, a table searched and filtered). The text must show exactly as set:
+  not as markup, and not escaped twice. A new view type is covered once a listed main view
+  shows it; text it shows only on demand needs a state in `_states`.
 
 `tests/test_browser.py` (Chromium, `make browser-test`), for what only a browser shows:
 
