@@ -50,17 +50,29 @@ def _session(request: Request) -> WebSession | None:
     return _store(request).get(request.session.get(SESSION_KEY))
 
 
-def _session_or_new(request: Request) -> WebSession:
+def _session_or_new(request: Request) -> WebSession | None:
+    """Get the request's session, or a new one; None while the server has too many."""
     session = _session(request)
     if session is None:
-        session_id, session = _store(request).create()
+        created = _store(request).create()
+        if created is None:
+            return None
+        session_id, session = created
         request.session[SESSION_KEY] = session_id
     return session
+
+
+def _too_many_sessions() -> Response:
+    return PlainTextResponse(
+        "Too many sessions are open: try again later.", status_code=503, headers=_NO_STORE
+    )
 
 
 def homepage(request: Request) -> Response:
     """Show the app; one with pages is sent to its first page's address."""
     session = _session_or_new(request)
+    if session is None:
+        return _too_many_sessions()
     path = session.home_path()
     if path is not None:
         return RedirectResponse(path, status_code=303, headers=_NO_STORE)
@@ -74,6 +86,8 @@ def page(request: Request) -> Response:
     for addresses of its own (e.g. `/favicon.ico`), which must not navigate.
     """
     session = _session_or_new(request)
+    if session is None:
+        return _too_many_sessions()
     if not session.open_route(request.path_params["route"]):
         return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
     return HTMLResponse(session.page_html(), headers=_NO_STORE)

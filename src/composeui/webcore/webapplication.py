@@ -212,6 +212,9 @@ class WebApplication(Application[MainViewT]):
 
     #: seconds a session may stay idle before it is dropped
     session_ttl: ClassVar[float] = 3600.0
+    #: most sessions live at once: past it, a new browser gets 503 until one is dropped
+    #: (each holds a main view, and maybe a model, in memory)
+    max_sessions: ClassVar[int] = 1000
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         self._build_main_view = build_main_view
@@ -262,7 +265,9 @@ class WebApplication(Application[MainViewT]):
         serving, rather than failing every request.
         """
         check_routes(self.main_view)
-        return create_starlette_app(SessionStore(self._new_session, ttl=self.session_ttl))
+        return create_starlette_app(
+            SessionStore(self._new_session, ttl=self.session_ttl, max_sessions=self.max_sessions)
+        )
 
     def run(self) -> None:
         """Build and serve the app."""
