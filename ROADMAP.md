@@ -113,6 +113,11 @@ signals emitted on the main thread (`examples/pipesweep.py`).
   directory, or Redis) and reload it when a cookie for an unknown session arrives; needs a
   fixed signing key from the environment. Only worth it for a deployed app, which also
   raises multi-process serving (sessions live in one process's memory today).
+- **Web: type-check `static/page.js`.** Add `// @ts-check` and JSDoc types, checked by
+  `tsc --noEmit --allowJs` as a CI-only step; start with uPlot's chart options. Only worth
+  it once the script passes about 2000 lines (958 today) or several people edit it: it
+  brings Node into CI, and it can't check the `data-*` attributes and custom events it
+  shares with `webrenderer.py`, which the browser tests cover.
 
 ## Design notes for the web backend
 
