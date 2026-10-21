@@ -994,6 +994,20 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_widths_posted() 
     assert {(b["aria-disabled"], b["tabindex"]) for b in borders} == {("true", "-1")}
 
 
+def test_a_splitter_s_borders_follow_the_language() -> None:
+    view = SplitterMainView()
+    view.render(RendererType.WEB)
+    renderer = view.splitter.renderer
+    assert isinstance(renderer, WebRenderer)
+
+    with collect_dirty() as dirty:
+        view.set_language("fr")
+        root = _swapped(render_dirty(dirty), renderer.widget_id)
+
+    borders = [a for _, a in root.descendants if a.get("role") == "separator"]
+    assert [b["aria-label"] for b in borders] == ["Redimensionner les volets"] * 2
+
+
 def test_a_vertical_splitter_stacks_its_panes_with_a_horizontal_border_between() -> None:
     view = VerticalSplitterMainView()
     view.render(RendererType.WEB)

@@ -1527,6 +1527,26 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
 
 
 @pytest.mark.asyncio
+async def test_a_splitter_keeps_its_panes_through_a_language_switch() -> None:
+    view = SplitterMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(84, 20)) as pilot:
+        await pilot.pause()
+        view.set_language("fr")  # its borders' name is the web's only
+        await pilot.pause()
+
+        assert view.splitter.border_text == "Redimensionner les volets"
+        assert isinstance(view.splitter.renderer, TextualWidgetRenderer)
+        widget = view.splitter.renderer.widget
+        assert isinstance(widget, ComposeSplitter)
+        assert len(widget.pane_lengths()) == 3
+
+
+@pytest.mark.asyncio
 async def test_a_vertical_splitter_shares_its_rows_and_moves_its_border_up_and_down() -> None:
     view = VerticalSplitterMainView()
     view.render(RendererType.TEXTUAL)
