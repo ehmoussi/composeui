@@ -8,8 +8,8 @@
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#composeui-bg)"/>
-  <path d="M36.5 20.5 A15 15 0 1 0 36.5 43.5" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
-  <circle cx="46.4" cy="18.9" r="4" fill="#2fd4c4"/>
-  <circle cx="50.4" cy="32.0" r="4" fill="#ffc857"/>
-  <circle cx="46.4" cy="45.1" r="4" fill="#ff8fc7"/>
+  <path d="M33.5 19.9 A14 14 0 1 0 33.5 44.1" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="44.2" cy="14.3" r="4.6" fill="#2fd4c4"/>
+  <circle cx="51.5" cy="32.0" r="4.6" fill="#ffc857"/>
+  <circle cx="44.2" cy="49.7" r="4.6" fill="#ff8fc7"/>
 </svg>
