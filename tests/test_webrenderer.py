@@ -4086,6 +4086,32 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
     assert _find(response.text, "cui-brand") is None
 
 
+def test_the_tab_and_the_header_show_the_app_s_icon_composeui_s_by_default(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = client.get("/").text
+
+    match = re.search(r'<link rel="icon" href="([^"]+)" />', page)
+    assert match is not None
+    icon = client.get(match[1])
+    assert icon.status_code == 200
+    assert icon.content == HelloMainView.app_icon.read_bytes()  # type: ignore[union-attr]
+    assert ("img", match[1]) in [
+        (tag, attributes.get("src")) for tag, attributes in _element(page, "cui-brand").descendants
+    ]
+
+    # without one, no icon in the tab, and a badge of the title's initial in the header
+    monkeypatch.setattr(HelloMainView, "app_icon", None)
+    main_view = HelloMainView()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+    page = main_view.renderer.page_html()
+    assert 'rel="icon"' not in page
+    brand = _element(page, "cui-brand")
+    assert all(tag != "img" for tag, _attributes in brand.descendants)
+    assert brand.text.startswith(main_view.title[0].upper())
+
+
 @define_view
 class _LonePageMainView(MainView):
     app_title = "Lone page"

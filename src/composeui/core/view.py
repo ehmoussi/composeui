@@ -905,6 +905,9 @@ class MainView(View):
     app_title: ClassVar[str] = ""
     #: the extension of the app's study files; a subclass sets it: ``extension = ".pipe"``
     extension: ClassVar[str] = ""
+    #: the app's icon, an image file: the window's on Qt, the browser tab's and the header's
+    #: on the web. ComposeUI's by default; a subclass sets its own, or None for none
+    app_icon: ClassVar[Optional[Path]] = Path(__file__).parent.parent / "images" / "composeui.svg"
     #: whether the window has `file_menu`, the studies' New, Open, Save, Save As and Exit;
     #: an app without studies, e.g. a viewer, sets it to False and leaves it out
     has_file_menu: ClassVar[bool] = True
