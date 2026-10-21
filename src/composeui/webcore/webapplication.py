@@ -28,6 +28,7 @@ from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import View
+from composeui.webcore.origin import SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
     homepage,
@@ -35,6 +36,7 @@ from composeui.webcore.routes import (
     jobs_poll,
     page,
     state_download,
+    state_save,
     state_upload,
     widget_event,
     widget_file,
@@ -108,6 +110,7 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
+            Route("/state/download", state_save, methods=["POST"]),
             Route("/icon/{name}", icon),
             Route("/jobs", jobs_poll),
             Mount(
@@ -119,10 +122,12 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/{route}", page),
         ],
         middleware=[
+            # first: a request another origin sent is refused before it reaches a session
+            Middleware(SameOriginMiddleware),
             # A per-process signing key is enough: sessions live in this process only,
             # so a cookie from before a restart has no session left to point at anyway.
-            # `same_site="lax"`: cross-site POSTs carry no session cookie, so another
-            # site can't drive a user's session (the CSRF story for now).
+            # `same_site="lax"`: cross-site POSTs carry no session cookie, a layer under
+            # `SameOriginMiddleware`, which also refuses other ports and subdomains.
             Middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), same_site="lax"),
             # the stylesheet, the scripts and a chart's points shrink several times
             Middleware(GZipMiddleware, minimum_size=1024),

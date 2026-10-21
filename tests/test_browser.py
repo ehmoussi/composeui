@@ -510,6 +510,44 @@ def test_alt_shift_runs_a_menu_shortcut(page: Page) -> None:
     expect(name).to_have_value("")
 
 
+def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:
+    page.goto("/")
+    name = page.get_by_label("Name")
+    with _posted(page):
+        name.press_sequentially("Alice")
+
+    # Save posts the page's form: the answer is a download, so the page stays
+    with page.expect_download() as download_info:
+        page.keyboard.press("Alt+Shift+KeyS")
+
+    download = download_info.value
+    assert download.suggested_filename.endswith(".hello")
+    assert "Alice" in Path(download.path()).read_text()
+    expect(name).to_have_value("Alice")
+
+
+def test_a_form_posted_from_another_port_is_refused(page: Page, base_url: str) -> None:
+    """Same site (the cookie goes along), not same origin: the server refuses it."""
+    page.goto("/")
+    post_url = f"{base_url}{page.get_by_label('Name').get_attribute('hx-post')}"
+    parts = urlsplit(base_url)
+    other = f"http://{parts.hostname}:{(parts.port or 80) + 1}/"
+    # a page that only exists in the browser, on another port of the same host
+    attack = (
+        f'<form method="post" action="{post_url}">'
+        '<input name="event" value="input"><input name="value" value="Mallory"></form>'
+        "<script>document.forms[0].submit()</script>"
+    )
+    page.route(other, lambda route: route.fulfill(content_type="text/html", body=attack))
+
+    with page.expect_response(post_url) as response_info:
+        page.goto(other)
+
+    assert response_info.value.status == 403
+    page.goto(base_url)
+    expect(page.get_by_label("Name")).to_have_value("")
+
+
 def test_a_field_is_invalid_exactly_while_its_log_shows_an_error(page: Page) -> None:
     page.goto("/")
     name = page.get_by_label("Name")
@@ -838,7 +876,8 @@ def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(buttons_page: Pa
     page.goto("/")
     boxes = {}
     for name in ("Add", "Remove", "Cancel", "Save"):
-        box = page.get_by_role("button", name=name).bounding_box()
+        # the view's own: the header has a Save button too
+        box = page.locator("main").get_by_role("button", name=name).bounding_box()
         assert box is not None
         boxes[name] = box
     add, remove, cancel, save = boxes.values()

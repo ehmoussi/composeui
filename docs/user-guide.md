@@ -121,6 +121,11 @@ How it differs from a desktop window:
   view. The tabs of one browser share it. Sessions live in the server's memory: a restart
   starts them all over. The server drops a session after an hour without use
   (`session_ttl`).
+- **Only the app's own pages change a session.** The server refuses a POST from another
+  origin (403), as protection against cross-site request forgery. Another origin includes
+  another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
+  `Origin`, or `Referer` header. A request without any of them is refused. Behind a reverse
+  proxy, keep these headers and the `Host` header as the browser sent them.
 - **Wire behavior inside the views,** as in the quickstart, with `app.connect`, or in
   `WebApplication.setup_session`. `setup_session` runs for the main view of each new session.
   The app replays `app.connect(view=app.main_view...)` on every new session. The callback
