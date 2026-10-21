@@ -91,7 +91,7 @@ from composeui.core.view import (
     walk_tree,
 )
 from composeui.webcore.icons import icon_url
-from composeui.webcore.page import get_page
+from composeui.webcore.page import SAVE_FORM_ID, get_page
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping
@@ -2658,9 +2658,10 @@ class WebMenuRenderer(WebRenderer[Menu]):
 class WebActionRenderer(WebRenderer[ActionView]):
     """A menu or toolbar action posting `triggered`; Save/Open are a download and an upload.
 
-    Those two can't go through the generic widget event: a download has to be a plain
-    link, and a file has to be uploaded. Both name the action (`trigger`), so its
-    `triggered` still fires first, for whatever user code is connected to it.
+    Those two can't go through the generic widget event: a download has to be a form's
+    post (htmx can't start one), and a file has to be uploaded. Both name the action
+    (`trigger`), so its `triggered` still fires first, for whatever user code is
+    connected to it.
     """
 
     _role = "action"
@@ -2803,9 +2804,10 @@ class WebActionRenderer(WebRenderer[ActionView]):
         """Render the element a click (or the page's key handler, through `key`) activates."""
         view = self._view
         if isinstance(view, (SaveAction, SaveAsAction)):
+            # it fires the action, so it posts the page's form, a download as answer
             return (
-                f'<a {attributes} href="/state?trigger={self.widget_id}" download'
-                f" {_CLOSE_DROPDOWN}{key}>{label}</a>"
+                f'<button {attributes} type="submit" form="{SAVE_FORM_ID}" name="trigger"'
+                f' value="{self.widget_id}" {_CLOSE_DROPDOWN}{key}>{label}</button>'
             )
         if isinstance(view, OpenFileAction):
             accept = "" if self.accept is None else f' accept="{html.escape(self.accept)}"'

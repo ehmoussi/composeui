@@ -938,6 +938,7 @@ $content
 </div>
 $page_marker
 $jobs_poller
+<form id="$save_form" method="post" action="/state/download" hidden></form>
 </body>
 
 </html>
@@ -962,6 +963,10 @@ def page_marker(language: str, title: str, *, oob: bool = False) -> str:
         f'<div id="cui-page" data-language="{html.escape(language)}"'
         f' data-title="{html.escape(title)}"{swap} hidden></div>'
     )
+
+
+#: id of the form Save and Save As post, their button naming the action (`trigger`)
+SAVE_FORM_ID = "cui-save"
 
 
 #: milliseconds the page waits, while jobs run, before asking for what they changed
@@ -992,6 +997,7 @@ def get_page(title: str, content: str, language: str, *, jobs_running: bool) -> 
             "language": html.escape(language),
             "page_marker": page_marker(language, title),
             "jobs_poller": jobs_poller(is_running=jobs_running),
+            "save_form": SAVE_FORM_ID,
             **_STATIC_URLS,
         }
     )

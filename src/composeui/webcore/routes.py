@@ -191,9 +191,25 @@ def state_download(request: Request) -> Response:
     session = _session(request)
     if session is None:
         return RedirectResponse("/", status_code=303)
-    trigger = request.query_params.get("trigger")
-    if trigger is not None:
-        session.trigger_action(trigger)  # e.g. Save's own `triggered`, before the download
+    return _state_file(session)
+
+
+async def state_save(request: Request) -> Response:
+    """Fire Save's own `triggered`, then download the state as `state_download` does.
+
+    A form's post rather than a link: the action changes the session, which a GET must
+    not (a link from another site would fire it).
+    """
+    session = _session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=303)
+    trigger = (await request.form()).get("trigger")
+    if isinstance(trigger, str):
+        await run_in_threadpool(session.trigger_action, trigger)
+    return _state_file(session)
+
+
+def _state_file(session: WebSession) -> Response:
     filename, body, media_type = session.save_state()
     headers = {**_NO_STORE, "Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(body, media_type=media_type, headers=headers)

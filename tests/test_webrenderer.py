@@ -143,8 +143,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from starlette.applications import Starlette
+    from starlette.types import ASGIApp
 
     from composeui.core.jobs import Job
+
+
+class _Browser(TestClient):
+    """A client sending what a browser does from the app's own page: where it comes from.
+
+    Without `Sec-Fetch-Site` (or `Origin`), every POST would be refused as cross-origin.
+    """
+
+    def __init__(self, app: ASGIApp, headers: dict[str, str] | None = None) -> None:
+        super().__init__(app, headers={"Sec-Fetch-Site": "same-origin", **(headers or {})})
 
 
 class _HelloApp(HelloApp):
@@ -167,7 +178,7 @@ def app() -> _HelloApp:
 
 @pytest.fixture
 def client(app: _HelloApp) -> Iterator[TestClient]:
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")  # starts the session
         yield client
 
@@ -473,7 +484,7 @@ def help_client(help_views: list[HelpMainView]) -> Iterator[TestClient]:
             main_view.status_bar.timeout = 0
             help_views.append(main_view)
 
-    with TestClient(HelpApp().create_starlette_app()) as client:
+    with _Browser(HelpApp().create_starlette_app()) as client:
         yield client
 
 
@@ -1310,7 +1321,7 @@ def pipe_web(pipe_views: list[PipeMainView]) -> Starlette:
 
 @pytest.fixture
 def pipe_client(pipe_web: Starlette) -> Iterator[TestClient]:
-    with TestClient(pipe_web) as client:
+    with _Browser(pipe_web) as client:
         client.get("/")  # starts the session
         yield client
 
@@ -1426,7 +1437,7 @@ def _type_name(client: TestClient, main_view: HelloMainView, name: str) -> None:
 
 def test_each_browser_gets_its_own_main_view(app: _HelloApp) -> None:
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as bob:
+    with _Browser(web) as alice, _Browser(web) as bob:
         alice.get("/")
         bob.get("/")
         alice_view, bob_view = app.session_views
@@ -1448,7 +1459,7 @@ def test_app_connect_reacts_in_each_browser_on_its_own_views(app: _HelloApp) -> 
         main_view.summary.text = f"Echo: {view.text}"
 
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as bob:
+    with _Browser(web) as alice, _Browser(web) as bob:
         alice.get("/")
         bob.get("/")
         alice_view, bob_view = app.session_views
@@ -1500,7 +1511,7 @@ def test_each_browser_gets_its_own_model() -> None:
         return _element(client.get("/").text, _widget_id(view.summary.renderer)).text
 
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as bob:
+    with _Browser(web) as alice, _Browser(web) as bob:
         alice.get("/")
         bob.get("/")
         alice_view, bob_view = views
@@ -1560,7 +1571,7 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
         assert response.status_code == 200
 
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as bob:
+    with _Browser(web) as alice, _Browser(web) as bob:
         alice.get("/")
         bob.get("/")
         alice_view, bob_view = views
@@ -1586,7 +1597,7 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
 
 def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None:
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as mallory:
+    with _Browser(web) as alice, _Browser(web) as mallory:
         alice.get("/")
         mallory.get("/")
         alice_view = app.session_views[0]
@@ -1602,12 +1613,71 @@ def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None
         assert alice_view.form.name.text == "Alice"
 
 
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Sec-Fetch-Site": "cross-site"},
+        # same site, not same origin: another port on localhost, a sibling subdomain
+        {"Sec-Fetch-Site": "same-site"},
+        {"Sec-Fetch-Site": "none"},
+        {"Origin": "http://evil.example"},
+        {"Origin": "http://testserver:9000"},
+        {"Origin": "null"},  # e.g. a sandboxed frame
+        {"Referer": "http://evil.example/page"},
+        {},  # nothing proves where it comes from
+    ],
+)
+def test_a_post_from_another_origin_is_refused(app: _HelloApp, headers: dict[str, str]) -> None:
+    with TestClient(app.create_starlette_app()) as browser:
+        browser.get("/")  # the session's cookie, which the browser sends along anyway
+        (main_view,) = app.session_views
+        save = main_view.file_menu.save
+        saved = _count(save.triggered)
+        field_id = _field_id(main_view.form.name)
+
+        responses = [
+            browser.post(
+                f"/widget/{field_id}", data={"value": "x", "event": "input"}, headers=headers
+            ),
+            browser.post("/state/download", data={"trigger": _action_id(save)}, headers=headers),
+            browser.post("/state", files={"file": ("s.hello", b"{}")}, headers=headers),
+        ]
+
+    assert [response.status_code for response in responses] == [403, 403, 403]
+    assert main_view.form.name.text == ""
+    assert saved == []
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Sec-Fetch-Site": "same-origin"},
+        # older browsers: no Fetch Metadata, but the request's origin
+        {"Origin": "http://testserver"},
+        {"Referer": "http://testserver/"},
+    ],
+)
+def test_a_post_from_the_app_s_own_page_is_served(app: _HelloApp, headers: dict[str, str]) -> None:
+    with TestClient(app.create_starlette_app()) as browser:
+        browser.get("/")
+        (session_view,) = app.session_views
+
+        response = browser.post(
+            f"/widget/{_field_id(session_view.form.name)}",
+            data={"value": "Ada", "event": "input"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert session_view.form.name.text == "Ada"
+
+
 def test_a_request_without_a_live_session_reloads_the_page(
     main_view: HelloMainView, app: _HelloApp
 ) -> None:
     field_id = _field_id(main_view.form.name)
     # e.g. after a server restart: the browser's cookie points at no session any more
-    with TestClient(app.create_starlette_app()) as stale:
+    with _Browser(app.create_starlette_app()) as stale:
         posted = stale.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
         fetched = stale.get(f"/widget/{field_id}")
         uploaded = stale.post("/state", files={"file": ("s.hello", b"{}")})
@@ -1623,7 +1693,7 @@ def test_a_request_without_a_live_session_reloads_the_page(
 
 
 def test_a_session_is_built_once_and_kept_across_reloads(app: _HelloApp) -> None:
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         _type_name(client, app.session_views[0], "Bob")
 
@@ -1639,7 +1709,7 @@ class _ShortLivedHelloApp(_HelloApp):
 
 def test_an_idle_session_expires() -> None:
     app = _ShortLivedHelloApp()
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         expired_view = app.session_views[0]
 
@@ -1672,7 +1742,7 @@ def test_a_state_file_opens_in_every_new_session(
 
     app.run()
 
-    with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
+    with _Browser(served[0]) as alice, _Browser(served[0]) as bob:
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in app.session_views] == ["Bob", "Bob"]
     assert all('value="Bob"' in page for page in pages)
@@ -1690,7 +1760,7 @@ def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
         build_model=PipeCatalogueModel,
         setup_model=PipeCatalogueMainView.connect_model,
     )
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         add_id = _widget_id(view.add.add_pipe.renderer)
@@ -1742,7 +1812,7 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
 
     app.run()
 
-    with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
+    with _Browser(served[0]) as alice, _Browser(served[0]) as bob:
         pages = [alice.get("/").text, bob.get("/").text]
     assert [[pipe.name for pipe in view.catalogue.browser.pipes.items] for view in views] == [
         ["Main line"],
@@ -1781,7 +1851,7 @@ def test_an_app_s_own_options_apply_to_every_new_session(
 
     GreetedApp(build_main_view=_GreetedMainView).run()
 
-    with TestClient(served[0]) as alice, TestClient(served[0]) as bob:
+    with _Browser(served[0]) as alice, _Browser(served[0]) as bob:
         pages = [alice.get("/").text, bob.get("/").text]
     assert [view.form.name.text for view in views] == ["Ada", "Ada"]
     assert all('value="Ada"' in page for page in pages)
@@ -1816,7 +1886,7 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     assert options["factory"] is True
     # what uvicorn's reloaded process does with it, without spawning one
     factory = import_from_string(import_string)
-    with TestClient(factory()) as client:
+    with _Browser(factory()) as client:
         page = client.get("/").text
     assert "<title>Pipe Form</title>" in page
     assert 'value="Main line"' in page
@@ -1843,7 +1913,7 @@ class _SlowGreetingApp(_HelloApp):
 
 def test_a_message_timer_waits_for_the_request_holding_the_session() -> None:
     app = _SlowGreetingApp()
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         main_view = app.session_views[0]
 
@@ -1872,7 +1942,7 @@ def test_saving_downloads_the_session_state(main_view: HelloMainView, client: Te
 
 def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
     web = app.create_starlette_app()
-    with TestClient(web) as alice, TestClient(web) as bob:
+    with _Browser(web) as alice, _Browser(web) as bob:
         alice.get("/")
         bob.get("/")
         alice_view, bob_view = app.session_views
@@ -1971,8 +2041,12 @@ def test_the_file_menu_is_buttons_in_the_header(
     open_file = _element(header, _action_id(menu.open_file))
     assert ("input", "file") in [(tag, attrs.get("type")) for tag, attrs in open_file.descendants]
     save = _element(header, _action_id(menu.save))
-    assert (save.tag, save.attributes["href"]) == ("a", f"/state?trigger={_action_id(menu.save)}")
-    assert "download" in save.attributes
+    assert save.tag == "button"
+    assert (save.attributes["form"], save.attributes["value"]) == (
+        "cui-save",
+        _action_id(menu.save),
+    )
+    assert '<form id="cui-save" method="post" action="/state/download" hidden>' in page
     # nothing left for a dropdown: the separator only set Exit apart
     menu_html = header[header.index(f'id="{_widget_id(menu.renderer)}"') :]
     assert "<ul" not in menu_html[: menu_html.index(f'id="{_action_id(menu.save)}"')]
@@ -1987,7 +2061,7 @@ def test_an_app_without_studies_has_no_file_buttons() -> None:
             views.append(main_view)
 
     app = ViewerApp(build_main_view=HelpViewerMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         page = client.get("/").text
     header = page[page.index("<header") : page.index("</header>")]
     assert "Open Help" in header
@@ -2056,8 +2130,8 @@ def test_save_as_alone_in_its_menu_is_its_download_button() -> None:
 
     button = _element(export.renderer.to_html(), _action_id(export.save_as))
 
-    assert button.tag == "a"
-    assert "download" in button.attributes
+    assert (button.tag, button.attributes["type"]) == ("button", "submit")
+    assert button.attributes["form"] == "cui-save"
     # no Alt+Shift+S: Save's, wherever Save is
     assert "data-shortcut" not in button.attributes
 
@@ -2098,18 +2172,31 @@ def test_exit_ends_the_session(
 
 
 @pytest.mark.parametrize("action", ["save", "save_as"])
-def test_a_save_link_fires_its_action_then_downloads(
+def test_a_save_post_fires_its_action_then_downloads(
     main_view: HelloMainView, client: TestClient, action: str
 ) -> None:
     save = getattr(main_view.file_menu, action)
     triggered = _count(save.triggered)
     _type_name(client, main_view, "Bob")
 
-    response = client.get(f"/state?trigger={_action_id(save)}")
+    response = client.post("/state/download", data={"trigger": _action_id(save)})
 
     assert len(triggered) == 1
     assert "attachment" in response.headers["content-disposition"]
     assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+
+
+def test_a_state_link_downloads_without_firing_save(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    """A GET changes nothing: a browser follows another site's link with the cookie."""
+    save = main_view.file_menu.save
+    triggered = _count(save.triggered)
+
+    response = client.get(f"/state?trigger={_action_id(save)}")
+
+    assert "attachment" in response.headers["content-disposition"]
+    assert triggered == []
 
 
 def test_the_open_upload_fires_its_action_then_loads(
@@ -2196,7 +2283,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
     never the field being edited) and the views behind it.
     """
     htmx = {"HX-Request": "true"}
-    with TestClient(pipe_web, headers=htmx) as alice, TestClient(pipe_web, headers=htmx) as bob:
+    with _Browser(pipe_web, headers=htmx) as alice, _Browser(pipe_web, headers=htmx) as bob:
         page = alice.get("/").text
         (view,) = pipe_views
         form = view.pages.inputs.pipe_form
@@ -2392,7 +2479,7 @@ def pages_client(pages_views: list[PagesMainView]) -> Iterator[TestClient]:
         def setup_session(self, main_view: PagesMainView) -> None:
             pages_views.append(main_view)
 
-    with TestClient(PagesApp().create_starlette_app()) as client:
+    with _Browser(PagesApp().create_starlette_app()) as client:
         yield client
 
 
@@ -2490,7 +2577,7 @@ def toolbar_client(toolbar_views: list[ToolBarMainView]) -> Iterator[TestClient]
         def setup_session(self, main_view: ToolBarMainView) -> None:
             toolbar_views.append(main_view)
 
-    with TestClient(ToolBarApp().create_starlette_app()) as client:
+    with _Browser(ToolBarApp().create_starlette_app()) as client:
         yield client
 
 
@@ -2602,7 +2689,7 @@ def sidebar() -> Iterator[tuple[TestClient, SidebarMainView]]:
             views.append(main_view)
 
     app = SidebarApp(build_main_view=SidebarMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield client, view
@@ -2677,7 +2764,7 @@ def pipes() -> Iterator[tuple[TestClient, PipesMainView]]:
             views.append(main_view)
 
     app = PipesApp(build_main_view=PipesMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield client, view
@@ -2731,7 +2818,7 @@ def edited_pipe() -> Iterator[tuple[TestClient, EditedPipeMainView]]:
             views.append(main_view)
 
     app = EditApp(build_main_view=EditedPipeMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield client, view
@@ -2777,7 +2864,7 @@ def jobs() -> Iterator[tuple[TestClient, JobsMainView]]:
             views.append(main_view)
 
     app = JobsApp(build_main_view=JobsMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield client, view
@@ -2997,7 +3084,7 @@ def dialog_client(dialog_views: list[DialogsMainView]) -> Iterator[TestClient]:
         def setup_session(self, main_view: DialogsMainView) -> None:
             dialog_views.append(main_view)
 
-    with TestClient(DialogsApp().create_starlette_app()) as client:
+    with _Browser(DialogsApp().create_starlette_app()) as client:
         client.get("/")  # starts the session
         yield client
 
@@ -3108,7 +3195,7 @@ def notes() -> Iterator[tuple[TestClient, _NoteMainView]]:
         def setup_session(self, main_view: _NoteMainView) -> None:
             views.append(main_view)
 
-    with TestClient(NotesApp().create_starlette_app()) as client:
+    with _Browser(NotesApp().create_starlette_app()) as client:
         client.get("/")
         (main_view,) = views
         yield client, main_view
@@ -3190,7 +3277,7 @@ def tables() -> Iterator[tuple[TestClient, HorizontalMainView]]:
             views.append(main_view)
 
     app = TablesApp(build_main_view=HorizontalMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield client, view
@@ -3302,7 +3389,7 @@ def places() -> Iterator[_Places]:
             views.append(main_view)
 
     app = PlacesApp(build_main_view=EditableTableMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         table = view.places
@@ -3394,7 +3481,7 @@ def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
         def setup_session(self, main_view: RoomsMainView) -> None:
             views.append(main_view)
 
-    with TestClient(RoomsApp(build_main_view=RoomsMainView).create_starlette_app()) as client:
+    with _Browser(RoomsApp(build_main_view=RoomsMainView).create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         rooms = _Places(client, view.rooms, _widget_id(view.rooms.renderer), [])
@@ -3415,7 +3502,7 @@ def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
             views.append(main_view)
 
     app = ResultsApp(build_main_view=StyledTablesMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         page = client.get("/").text
         (view,) = views
         table_id = _widget_id(view.points.renderer)
@@ -3477,7 +3564,7 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
             views.append(main_view)
 
     app = VariablesApp(build_main_view=CellWidgetsMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         page = client.get("/").text
         (view,) = views
         table = view.variables
@@ -3544,7 +3631,7 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
             views.append(main_view)
 
     app = ColumnApp(build_main_view=VerticalMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         row, column = view.tables, view.tables.column
@@ -3597,7 +3684,7 @@ def test_every_session_shows_the_language_asked_on_the_command_line(
 
     app.run()
 
-    with TestClient(served[0]) as client:
+    with _Browser(served[0]) as client:
         page = client.get("/").text
     view = app.session_views[0]
     assert '<html lang="fr">' in page
@@ -3702,7 +3789,7 @@ def chart_client(chart_views: list[PipeChartMainView]) -> Iterator[TestClient]:
         def setup_session(self, main_view: PipeChartMainView) -> None:
             chart_views.append(main_view)
 
-    with TestClient(ChartApp().create_starlette_app()) as client:
+    with _Browser(ChartApp().create_starlette_app()) as client:
         yield client
 
 
@@ -4052,7 +4139,7 @@ def sorted_rooms() -> Iterator[_SortedRooms]:
             views.append(main_view)
 
     app = SortedRoomsApp(build_main_view=SortedRoomsMainView)
-    with TestClient(app.create_starlette_app()) as client:
+    with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         (view,) = views
         yield _SortedRooms(client, view, _widget_id(view.rooms.renderer))
