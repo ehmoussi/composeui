@@ -9,11 +9,11 @@ directly through `handle_event`, the function the route calls.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import datetime
 import enum
 import hashlib
-import html
 import json
 import math
 import os
@@ -34,6 +34,7 @@ pytest.importorskip("httpx")
 
 import attrs
 from attrs import Factory
+from markupsafe import escape
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
@@ -366,7 +367,7 @@ def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestC
     body = client.post(f"/widget/{age_id}", data={"value": "-3", "event": "input"}).text
 
     assert main_view.form.age.value == -3.0
-    assert "An age can&#x27;t be negative" in body
+    assert "An age can&#39;t be negative" in body
 
     # another error of the same type: only the message changes, and it must still show
     body = client.post(f"/widget/{age_id}", data={"value": "4.5", "event": "input"}).text
@@ -630,7 +631,7 @@ def _states(main_view: MainView) -> Iterator[str]:
 
 @pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
 def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
-    """Catches a renderer that forgets `html.escape`, or escapes twice, in any view text.
+    """Catches a renderer that leaves a view text unescaped, or escapes it twice.
 
     Every text field of every view, in each state that shows other text (`_states`).
     """
@@ -644,6 +645,23 @@ def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
         finder.feed(main_view.renderer.page_html())
         assert finder.found == [], state
         assert finder.shown > 0, state  # escaped, not dropped
+
+
+def test_the_web_backend_builds_its_html_with_markup() -> None:
+    """A text put in HTML by an f-string would go unescaped: `Markup.format` escapes it."""
+    webcore = Path(__file__).parent.parent / "src/composeui/webcore"
+    found: list[str] = []
+    for path in (webcore / "webrenderer.py", webcore / "page.py"):  # the modules writing HTML
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.JoinedStr):
+                text = "".join(
+                    value.value for value in node.values if isinstance(value, ast.Constant)
+                )
+                if any(mark in text for mark in ("<", '="', "='")):
+                    found.append(f"{path.name}:{node.lineno} f-string")
+            elif isinstance(node, ast.Attribute) and ast.unparse(node) == "html.escape":
+                found.append(f"{path.name}:{node.lineno} html.escape")
+    assert found == []
 
 
 class _ScriptFinder(HTMLParser):
@@ -1836,7 +1854,7 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
         # the views' state alone isn't a study of this app: it would lose the signatures
         views_only = json.dumps(HelloMainView().state_data()).encode()
         response = bob.post("/state", files={"file": ("study.hello", views_only)})
-        assert "isn&#x27;t a valid .hello file" in response.text
+        assert "isn&#39;t a valid .hello file" in response.text
         sign_as(bob, bob_view, "Eve")
         assert bob_view.summary.text == "Alice, Ada, Bob, Eve"
 
@@ -2261,14 +2279,14 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
     ("filename", "content", "reason"),
     [
         ("study.pipe", b"{}", "expected a .hello file"),
-        ("study.hello", b"{not json", "isn&#x27;t a valid .hello file"),
-        ("study.hello", b"[1, 2]", "isn&#x27;t a valid .hello file"),
+        ("study.hello", b"{not json", "isn&#39;t a valid .hello file"),
+        ("study.hello", b"[1, 2]", "isn&#39;t a valid .hello file"),
         ("study.hello", b" " * (5 * 1024 * 1024 + 1), "the file is too large"),
         # fails halfway: the valid name must not be applied before the bad age fails
         (
             "study.hello",
             b'{"form": {"name": {"text": "Eve"}, "age": {"value": "abc"}}}',
-            "doesn&#x27;t match this application",
+            "doesn&#39;t match this application",
         ),
     ],
 )
@@ -2581,7 +2599,7 @@ def test_new_clears_the_form_in_place(
         _widget_id(main_view.summary.renderer),
     ):
         assert f'id="{widget_id}" hx-swap-oob="true"' in response.text
-    assert "Nobody hasn&#x27;t said how old they are." in response.text
+    assert "Nobody hasn&#39;t said how old they are." in response.text
     assert len(app.session_views) == 1
 
 
@@ -3792,7 +3810,7 @@ def test_a_refusal_in_an_edit_refuses_it_and_says_why(places: _Places) -> None:
 
     assert table.rows == rows
     assert "Foggy" not in "".join(places.texts(body))
-    assert html.escape("Can't note it: too foggy") in body
+    assert escape("Can't note it: too foggy") in body
 
 
 def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
@@ -3812,7 +3830,7 @@ def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
         assert view.rooms.records[1] == Room("Kitchen", 21.0, 2, is_heated=True)
         body = rooms.edit("1", "1", "warm")
         assert rooms.texts(body) == ["Hall18False", "Kitchen21.02True"]
-        assert html.escape('Temperature: "warm" isn\'t a valid value') in body
+        assert escape('Temperature: "warm" isn\'t a valid value') in body
 
 
 def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:

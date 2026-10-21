@@ -125,7 +125,8 @@ Not tasks: the non-obvious decisions to keep in mind when changing `composeui.we
 The user guide's "Web backend" section covers what users see.
 
 - **htmx request/response**, no websockets or JS framework; Starlette, not FastAPI;
-  hand-written HTML per renderer (no Jinja2), all view text through `html.escape`.
+  hand-written HTML per renderer (no Jinja2), built with `markupsafe.Markup`, which escapes
+  every value put in it.
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs
   script files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:`
   value or trigger filter. A renderer marks its element (`data-post-event`,

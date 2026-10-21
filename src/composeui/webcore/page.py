@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import html
 from pathlib import Path
 from string import Template
+
+from markupsafe import Markup, escape
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -62,12 +63,11 @@ _STATIC_URLS = {
 }
 
 
-def page_marker(language: str, title: str, *, oob: bool = False) -> str:
+def page_marker(language: str, title: str, *, oob: bool = False) -> Markup:
     """Get the element telling the page's script its `<html lang>` and `<title>`."""
-    swap = ' hx-swap-oob="true"' if oob else ""
-    return (
-        f'<div id="cui-page" data-language="{html.escape(language)}"'
-        f' data-title="{html.escape(title)}"{swap} hidden></div>'
+    swap = Markup(' hx-swap-oob="true"') if oob else Markup()
+    return Markup('<div id="cui-page" data-language="{}" data-title="{}"{} hidden></div>').format(
+        language, title, swap
     )
 
 
@@ -79,28 +79,30 @@ SAVE_FORM_ID = "cui-save"
 JOBS_POLL_MS = 1000
 
 
-def jobs_poller(*, is_running: bool, oob: bool = False) -> str:
+def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
     """Get the element asking the server for what the jobs changed, while they run.
 
     No response carries what a job's result changes (see `RenderTarget.pending`): while
     the main view's jobs run, this element fetches itself every `JOBS_POLL_MS`, which
     brings the changes along, until it comes back without a fetch once they are over.
     """
-    swap = ' hx-swap-oob="true"' if oob else ""
+    swap = Markup(' hx-swap-oob="true"') if oob else Markup()
     poll = (
-        f' hx-get="/jobs" hx-trigger="load delay:{JOBS_POLL_MS}ms" hx-swap="outerHTML"'
+        Markup(' hx-get="/jobs" hx-trigger="load delay:{}ms" hx-swap="outerHTML"').format(
+            JOBS_POLL_MS
+        )
         if is_running
-        else ""
+        else Markup()
     )
-    return f'<div id="cui-jobs"{poll}{swap} hidden></div>'
+    return Markup('<div id="cui-jobs"{}{} hidden></div>').format(poll, swap)
 
 
-def get_page(title: str, content: str, language: str, *, jobs_running: bool) -> str:
+def get_page(title: str, content: Markup, language: str, *, jobs_running: bool) -> str:
     return _PAGE.substitute(
         {
-            "title": html.escape(title),
+            "title": escape(title),
             "content": content,
-            "language": html.escape(language),
+            "language": escape(language),
             "page_marker": page_marker(language, title),
             "jobs_poller": jobs_poller(is_running=jobs_running),
             "save_form": SAVE_FORM_ID,

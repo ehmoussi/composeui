@@ -236,6 +236,8 @@ committed. It needs no Node or npm.
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
+- In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
+  an f-string. `format` escapes every value that isn't `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
 
 ### Documentation site

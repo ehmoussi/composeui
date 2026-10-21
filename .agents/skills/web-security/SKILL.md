@@ -91,7 +91,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 | `SameOriginMiddleware` | `origin.py` | Answers 403 to any method outside `SAFE_METHODS` (GET, HEAD, OPTIONS) unless `is_same_origin`: `Sec-Fetch-Site` must be `same-origin`; without it, `Origin`, then `Referer`, must equal the request's own origin (`URL(scope=scope)`: scheme plus `Host`); with none, refused. |
 | `SameSite=Lax` cookie | `webapplication.py` (`SessionMiddleware`) | Defense in depth: no session cookie on cross-site POSTs. |
 | No state change on GET | `routes.py` | Save and Save As post the page's hidden `cui-save` form to `POST /state/download`, which fires the action, then answers the file. `GET /state` only downloads. |
-| Escaped output | `webrenderer.py`, `page.py` | Every view text goes through `html.escape`; `hx-vals` JSON is escaped too; Markdown renders with `{"html": False}`. |
+| Escaped output | `webrenderer.py`, `page.py` | HTML is built with `markupsafe.Markup`: `Markup(template).format(...)` escapes every argument that isn't `Markup` itself, `hx-vals` JSON included. Markdown renders with `{"html": False}`, its output marked safe. `test_the_web_backend_builds_its_html_with_markup` refuses an HTML f-string or `html.escape` there. |
 | Unguessable cookie | `webapplication.py` | Signed with a per-process `secrets.token_urlsafe(32)` key. Widget ids are `id()`-based and guessable, so they only resolve inside their own session (`SessionStore`). |
 | Icon files | `routes.py` (`_ICON_HEADERS`) | `default-src 'none'` and `nosniff`: an SVG opened on its own runs no script. |
 
@@ -110,8 +110,11 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
    decision. Never a wildcard origin with credentials.
 5. **Keep the middleware order** in `create_starlette_app`: `SecurityHeadersMiddleware`, then
    `BodySizeLimitMiddleware`, then `SameOriginMiddleware`, then `SessionMiddleware`.
-6. **Escape everything a view or user supplies** with `html.escape`, attributes included.
-   Keep Markdown's raw HTML off. Don't build a request's URL or method in the page's script
+6. **Build HTML with `Markup`, never an f-string.** Write the template in `Markup(...)` and
+   pass every value to `.format(...)`, which escapes it, attributes included. Return
+   `Markup` from a function returning HTML, `Markup()` for nothing, and join parts with
+   `Markup("").join`. Never wrap a text in `Markup(...)` yourself: only markup that is
+   already safe, such as Markdown's. Keep Markdown's raw HTML off. Don't build a request's URL or method in the page's script
    from attacker-controllable input (`location`, `window.name`, `document.referrer`,
    `postMessage`): that is client-side CSRF, which no server check stops.
 7. **Don't weaken the cookie.** Keep `same_site="lax"` (or stricter), signed, and with no

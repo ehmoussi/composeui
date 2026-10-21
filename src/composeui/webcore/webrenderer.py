@@ -13,7 +13,6 @@ from __future__ import annotations
 import contextlib
 import datetime
 import enum
-import html
 import json
 import math
 import re
@@ -25,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeV
 
 import attrs
 from markdown_it import MarkdownIt
+from markupsafe import Markup, escape
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
@@ -141,7 +141,7 @@ def collect_dirty() -> Generator[dict[str, WebRenderer[Any]]]:
         _DIRTY.reset(token)
 
 
-def render_dirty(dirty: Mapping[str, WebRenderer[Any]]) -> str:
+def render_dirty(dirty: Mapping[str, WebRenderer[Any]]) -> Markup:
     """Render every dirty fragment as an out-of-band swap.
 
     A fragment already contained in another dirty fragment (e.g. a row inside a group
@@ -154,10 +154,12 @@ def render_dirty(dirty: Mapping[str, WebRenderer[Any]]) -> str:
         for nested_id in _ID_PATTERN.findall(fragment)
         if nested_id != widget_id
     }
-    return "".join(fragment for widget_id, fragment in fragments.items() if widget_id not in nested)
+    return Markup("").join(
+        fragment for widget_id, fragment in fragments.items() if widget_id not in nested
+    )
 
 
-def handle_event(renderer: WebRenderer[Any], event: str, form: Mapping[str, str]) -> str:
+def handle_event(renderer: WebRenderer[Any], event: str, form: Mapping[str, str]) -> Markup:
     """Apply a browser event to `renderer`'s view and return the resulting OOB fragments."""
     with collect_dirty() as dirty:
         renderer.dispatch(event, form)
@@ -269,23 +271,23 @@ class WebRenderer(Renderer[TView, str]):
         call_in_session(self._target, callback)
 
     @abstractmethod
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         """Render the view's fragment; `oob` marks it as an htmx out-of-band swap."""
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         """Apply a browser `event` (with its submitted `form` fields) to the view."""
         raise UnsupportedEventError(self, event)
 
-    def _root_attributes(self, *, oob: bool) -> str:
+    def _root_attributes(self, *, oob: bool) -> Markup:
         """Get the attributes of the fragment's root tag, kept even when hidden for later swaps."""
-        attributes = [f'id="{self.widget_id}"']
+        attributes = [Markup('id="{}"').format(self.widget_id)]
         if not self._view.is_visible:
-            attributes.append("hidden")
+            attributes.append(Markup("hidden"))
         if oob:
-            attributes.append('hx-swap-oob="true"')
-        return " ".join(attributes)
+            attributes.append(Markup('hx-swap-oob="true"'))
+        return Markup(" ").join(attributes)
 
-    def _row_attributes(self) -> str:
+    def _row_attributes(self) -> Markup:
         """ARIA links from a form row's field to the row's log and label.
 
         The field is described by the row's help, if any, and its log, read out with the
@@ -294,7 +296,7 @@ class WebRenderer(Renderer[TView, str]):
         can't name, a radio group or a checkbox, is labelled by the row's label instead.
         Nothing outside a row.
         """
-        attributes: list[str] = []
+        attributes: list[Markup] = []
         log, label = self._row_renderer("log"), self._row_renderer("label")
         if log is not None:
             described_by = (
@@ -302,12 +304,12 @@ class WebRenderer(Renderer[TView, str]):
                 if isinstance(label, WebFormLabelRenderer) and label.has_help()
                 else log.widget_id
             )
-            attributes.append(f'aria-describedby="{described_by}"')
+            attributes.append(Markup('aria-describedby="{}"').format(described_by))
             if isinstance(self._view, FormRowView) and self._view.is_invalid:
-                attributes.append('aria-invalid="true"')
+                attributes.append(Markup('aria-invalid="true"'))
         if not self.is_labelable and isinstance(label, WebFormLabelRenderer):
-            attributes.append(f'aria-labelledby="{label.text_id}"')
-        return "".join(f" {attribute}" for attribute in attributes)
+            attributes.append(Markup('aria-labelledby="{}"').format(label.text_id))
+        return Markup("").join(Markup(" {}").format(attribute) for attribute in attributes)
 
     def _row_renderer(self, part: str) -> WebRenderer[Any] | None:
         """Get another renderer of the view's row, e.g. its "log", if it has one."""
@@ -356,22 +358,30 @@ TTextField = TypeVar("TTextField", bound=TextFieldViewLike)
 class _WebTextFieldRenderer(WebRenderer[TTextField]):
     """A text field posting debounced edits (`input`) and committed edits (`change`)."""
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         # `hx-swap="none"`: the field being typed in is never swapped back (it would
         # reset the caret); everything else arrives out of band. `queue all` keeps a
         # `change` from being dropped behind an in-flight debounced edit.
         disabled = "" if self.is_enabled else " disabled"
-        return (
-            f"<input {self._root_attributes(oob=oob)}{self._row_attributes()}"
+        return Markup(
+            "<input {root_attributes}{row_attributes}"
             ' class="input w-full" type="text"'
-            f' name="value" value="{html.escape(self._text())}"'
-            f' placeholder="{html.escape(self._view.placeholder)}"{self._extra_attributes()}'
-            f' hx-post="/widget/{self.widget_id}"'
+            ' name="value" value="{text}"'
+            ' placeholder="{placeholder}"{extra_attributes}'
+            ' hx-post="/widget/{widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             # the browser must not refill the field on reload: the server's value wins
             ' autocomplete="off"'
-            f"{disabled}>"
+            "{disabled}>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            text=self._text(),
+            placeholder=self._view.placeholder,
+            extra_attributes=self._extra_attributes(),
+            widget_id=self.widget_id,
+            disabled=disabled,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -399,8 +409,8 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
     def _apply_text(self, text: str) -> None:
         """Store the browser's `text` into the view, without refreshing the field."""
 
-    def _extra_attributes(self) -> str:
-        return ""
+    def _extra_attributes(self) -> Markup:
+        return Markup()
 
 
 class InputViewLike(TextFieldViewLike, Protocol):
@@ -532,8 +542,8 @@ class WebFloatInputRenderer(_WebNumberFieldRenderer[FloatInputViewLike]):
     def _text(self) -> str:
         return self._view.shown_text(self._view.value, self._view.decimals)
 
-    def _extra_attributes(self) -> str:
-        return f' inputmode="decimal" pattern="{_DECIMAL_PATTERN}"'
+    def _extra_attributes(self) -> Markup:
+        return Markup(' inputmode="decimal" pattern="{}"').format(_DECIMAL_PATTERN)
 
 
 class IntInputViewLike(_NumberFieldViewLike, Protocol):
@@ -555,8 +565,8 @@ class WebIntInputRenderer(_WebNumberFieldRenderer[IntInputViewLike]):
     def _parse(text: str) -> int:
         return int(text)
 
-    def _extra_attributes(self) -> str:
-        return f' inputmode="numeric" pattern="{_INTEGER_PATTERN}"'
+    def _extra_attributes(self) -> Markup:
+        return Markup(' inputmode="numeric" pattern="{}"').format(_INTEGER_PATTERN)
 
 
 class DateInputViewLike(TextFieldViewLike, Protocol):
@@ -612,12 +622,12 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         disabled = "" if self.is_enabled else " disabled"
-        pick = html.escape(view.pick_text)
-        limits = "".join(
-            f' {name}="{limit.isoformat()}"'
+        pick = view.pick_text
+        limits = Markup("").join(
+            Markup(' {}="{}"').format(name, limit.isoformat())
             for name, limit in (("min", view.minimum), ("max", view.maximum))
             if limit is not None
         )
@@ -625,31 +635,49 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
         calendar_id = f"{self.widget_id}-calendar"
         return (
             # daisyUI's field around both, its colors, focus ring and invalid border theirs
-            f'<div {self._root_attributes(oob=oob)} class="input relative w-full pe-1">'
-            f'<input id="{self.widget_id}-field"{self._row_attributes()}'
-            ' class="min-w-0 grow" type="text" name="value"'
-            f' value="{html.escape(view.shown_text(view.value))}"'
-            f' placeholder="{html.escape(date_hint(view.placeholder, view.date_format))}"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
-            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
-            f' autocomplete="off"{disabled}>'
-            f'<button id="{self.widget_id}-pick" type="button"'
-            ' class="btn btn-ghost btn-sm btn-square"'
-            f' aria-label="{pick}" title="{pick}" popovertarget="{calendar_id}"'
-            f' style="anchor-name: --{self.widget_id}"{disabled}>'
-            f"{_icon('calendar')}</button>"
-            # in the top layer, under the button: Escape or a click beside it closes it
-            f'<div id="{calendar_id}" popover data-date-button="{self.widget_id}-pick"'
-            ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
-            f' style="position-anchor: --{self.widget_id}">'
-            f'<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
-            """ hx-vals='{"event": "pick"}' data-post-picked hx-swap="none">"""
-            f'<span slot="previous" aria-label="{html.escape(view.previous_month_text)}">'
-            f"{_icon('chevron', 'size-4 rotate-90')}</span>"
-            f'<span slot="next" aria-label="{html.escape(view.next_month_text)}">'
-            f"{_icon('chevron', 'size-4 -rotate-90')}</span>"
-            "<calendar-month></calendar-month></calendar-date></div></div>"
+            Markup(
+                '<div {root_attributes} class="input relative w-full pe-1">'
+                '<input id="{widget_id}-field"{row_attributes}'
+                ' class="min-w-0 grow" type="text" name="value"'
+                ' value="{shown_text}"'
+                ' placeholder="{date_hint}"'
+                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
+                ' data-post-event hx-swap="none" hx-sync="this:queue all"'
+                ' autocomplete="off"{disabled}>'
+                '<button id="{widget_id}-pick" type="button"'
+                ' class="btn btn-ghost btn-sm btn-square"'
+                ' aria-label="{pick}" title="{pick}" popovertarget="{calendar_id}"'
+                ' style="anchor-name: --{widget_id}"{disabled}>'
+                "{calendar_icon}</button>"
+                # in the top layer, under the button: Escape or a click beside it closes it
+                '<div id="{calendar_id}" popover data-date-button="{widget_id}-pick"'
+                ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
+                ' style="position-anchor: --{widget_id}">'
+                '<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
+                ' hx-post="/widget/{widget_id}" hx-trigger="change"'
+                """ hx-vals='{{"event": "pick"}}' data-post-picked hx-swap="none">"""
+                '<span slot="previous" aria-label="{previous_month_text}">'
+                "{chevron_icon}</span>"
+                '<span slot="next" aria-label="{next_month_text}">'
+                "{chevron_icon2}</span>"
+                "<calendar-month></calendar-month></calendar-date></div></div>"
+            ).format(
+                root_attributes=self._root_attributes(oob=oob),
+                widget_id=self.widget_id,
+                row_attributes=self._row_attributes(),
+                shown_text=view.shown_text(view.value),
+                date_hint=date_hint(view.placeholder, view.date_format),
+                disabled=disabled,
+                pick=pick,
+                calendar_id=calendar_id,
+                calendar_icon=_icon("calendar"),
+                picked=picked,
+                limits=limits,
+                previous_month_text=view.previous_month_text,
+                chevron_icon=_icon("chevron", "size-4 rotate-90"),
+                next_month_text=view.next_month_text,
+                chevron_icon2=_icon("chevron", "size-4 -rotate-90"),
+            )
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -732,36 +760,53 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             )
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         disabled = "" if self.is_enabled else " disabled"
-        browse, reload = html.escape(view.browse_text), html.escape(view.reload_text)
+        browse, reload = view.browse_text, view.reload_text
         types = ",".join(self.file_types)
-        accept = f' accept="{html.escape(types)}"' if types else ""
+        accept = Markup(' accept="{}"').format(types) if types else ""
         reload_button = (
-            f'<button id="{self.widget_id}-reload" type="button" class="btn btn-square"'
-            f' aria-label="{reload}" title="{reload}" hx-post="/widget/{self.widget_id}"'
-            f""" hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
-            f"{_icon('reload')}</button>"
+            Markup(
+                '<button id="{widget_id}-reload" type="button" class="btn btn-square"'
+                ' aria-label="{reload}" title="{reload}" hx-post="/widget/{widget_id}"'
+                """ hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
+                "{reload_icon}</button>"
+            ).format(
+                widget_id=self.widget_id,
+                reload=reload,
+                disabled=disabled,
+                reload_icon=_icon("reload"),
+            )
             if view.has_reload
             else ""
         )
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="flex gap-1" data-file-path>'
-            f'<input id="{self.widget_id}-field"{self._row_attributes()}'
+        return Markup(
+            '<div {root_attributes} class="flex gap-1" data-file-path>'
+            '<input id="{widget_id}-field"{row_attributes}'
             ' class="input w-full" type="text" name="value"'
-            f' value="{html.escape(view.text)}" placeholder="{html.escape(view.placeholder)}"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
+            ' value="{text}" placeholder="{placeholder}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
-            f' autocomplete="off"{disabled}>'
-            f'<button id="{self.widget_id}-browse" type="button" class="btn btn-square"'
-            f' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
+            ' autocomplete="off"{disabled}>'
+            '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
+            ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
             # emptied once sent: picking the same file again is a change too
-            f'<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
-            f' aria-hidden="true" hx-post="/widget/{self.widget_id}/file"'
+            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
             ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
             ' data-clear-after-post autocomplete="off"'
-            f"{disabled}>{reload_button}</div>"
+            "{disabled}>{reload_button}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            widget_id=self.widget_id,
+            row_attributes=self._row_attributes(),
+            text=view.text,
+            placeholder=view.placeholder,
+            disabled=disabled,
+            browse=browse,
+            accept=accept,
+            reload_button=reload_button,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -827,19 +872,26 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         checked = " checked" if self._view.is_checked else ""
         disabled = "" if self.is_enabled else " disabled"
         # an unchecked box posts no value at all: `checked` is told apart by its presence
-        return (
-            f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="group"'
+        return Markup(
+            '<div {root_attributes}{row_attributes} role="group"'
             ' class="flex">'
             '<label class="label cursor-pointer gap-2 text-base-content">'
             '<input type="checkbox" class="checkbox checkbox-sm checkbox-primary"'
-            f' name="checked" value="on"{checked} hx-post="/widget/{self.widget_id}"'
-            ' hx-trigger="change" hx-vals=\'{"event": "change"}\' hx-swap="none"'
-            f' autocomplete="off"{disabled}>'
-            f"{html.escape(self._view.text)}</label></div>"
+            ' name="checked" value="on"{checked} hx-post="/widget/{widget_id}"'
+            ' hx-trigger="change" hx-vals=\'{{"event": "change"}}\' hx-swap="none"'
+            ' autocomplete="off"{disabled}>'
+            "{text}</label></div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            checked=checked,
+            widget_id=self.widget_id,
+            disabled=disabled,
+            text=self._view.text,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -876,15 +928,21 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty, "variant": self._mark_dirty})
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
         variant = _BUTTON_CLASSES[self._view.variant]
         # `self-start`: as wide as its text, not the page's whole column
-        return (
-            f'<button {self._root_attributes(oob=oob)} type="button"'
-            f' class="btn {variant} self-start"'
-            f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "click"}}\''
-            f' hx-swap="none"{disabled}>{html.escape(self._view.text)}</button>'
+        return Markup(
+            '<button {root_attributes} type="button"'
+            ' class="btn {variant} self-start"'
+            """ hx-post="/widget/{widget_id}" hx-vals='{{"event": "click"}}'"""
+            ' hx-swap="none"{disabled}>{text}</button>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            variant=variant,
+            widget_id=self.widget_id,
+            disabled=disabled,
+            text=self._view.text,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -908,13 +966,14 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"value": self._mark_dirty, "maximum": self._mark_dirty})
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         value, maximum = self._view.value, self._view.maximum
         clamped = ProgressBarView.clamp(value, maximum)
-        progress = "" if maximum is None else f' value="{clamped}" max="{maximum}"'
-        return (
-            f'<progress {self._root_attributes(oob=oob)} class="progress progress-primary w-full"'
-            f"{progress}></progress>"
+        progress = (
+            "" if maximum is None else Markup(' value="{}" max="{}"').format(clamped, maximum)
+        )
+        return Markup('<progress {} class="progress progress-primary w-full"{}></progress>').format(
+            self._root_attributes(oob=oob), progress
         )
 
 
@@ -952,7 +1011,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         minimum, step = self._view.minimum, self._view.step
         last = SliderMixin.last_position(minimum, self._view.maximum, step)
         position = SliderMixin.position(self._view.value, minimum, self._view.maximum, step)
@@ -961,18 +1020,29 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
         digits = max(len(str(minimum)), len(str(top)))
         disabled = "" if self.is_enabled else " disabled"
         input_id = f"{self.widget_id}-input"
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="cui-slider"'
-            f' style="--slider-digits: {digits}">'
-            f'<input id="{input_id}"{self._row_attributes()} type="range" data-slider'
+        return Markup(
+            '<div {root_attributes} class="cui-slider"'
+            ' style="--slider-digits: {digits}">'
+            '<input id="{input_id}"{row_attributes} type="range" data-slider'
             ' class="range range-primary" name="value"'
-            f' min="{minimum}" max="{top}" step="{step}" value="{value}"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:150ms, change"'
+            ' min="{minimum}" max="{top}" step="{step}" value="{value}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
-            f' autocomplete="off"{disabled}>'
+            ' autocomplete="off"{disabled}>'
             # read out by the input itself, as its value
-            f'<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
+            '<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
             "</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            digits=digits,
+            input_id=input_id,
+            row_attributes=self._row_attributes(),
+            minimum=minimum,
+            top=top,
+            step=step,
+            value=value,
+            widget_id=self.widget_id,
+            disabled=disabled,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -1224,53 +1294,64 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         content = chartimage.chart_image_bytes(view, image_format, options)
         return chartimage.image_name(view.title, image_format.lower()), content
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         title = self._view.title
         # the corner's controls at the end of the row, the title in the middle of the rest
         caption = (
-            '<figcaption class="min-w-0 flex-1 text-center font-semibold">'
-            f"{html.escape(title)}</figcaption>"
+            Markup(
+                '<figcaption class="min-w-0 flex-1 text-center font-semibold">{}</figcaption>'
+            ).format(title)
             if title
-            else '<span class="flex-1"></span>'
+            else Markup('<span class="flex-1"></span>')
         )
         return (
             # a column: a card's figures are rows of images otherwise (daisyUI's `card`)
-            f'<figure {self._root_attributes(oob=oob)} class="flex w-full flex-col gap-2">'
-            f'<div class="flex w-full items-center gap-2">{caption}{self._save_image_html()}</div>'
-            f'<div id="{self.widget_id}-plot" data-chart="{html.escape(self.chart_json())}"'
-            f' role="img" aria-label="{html.escape(self._description())}"'
-            f"{self._height_attributes()}></div></figure>"
+            Markup(
+                '<figure {root_attributes} class="flex w-full flex-col gap-2">'
+                '<div class="flex w-full items-center gap-2">{caption}{save_image_html}</div>'
+                '<div id="{widget_id}-plot" data-chart="{chart_json}"'
+                ' role="img" aria-label="{description}"'
+                "{height_attributes}></div></figure>"
+            ).format(
+                root_attributes=self._root_attributes(oob=oob),
+                caption=caption,
+                save_image_html=self._save_image_html(),
+                widget_id=self.widget_id,
+                chart_json=self.chart_json(),
+                description=self._description(),
+                height_attributes=self._height_attributes(),
+            )
         )
 
-    def _height_attributes(self) -> str:
+    def _height_attributes(self) -> Markup:
         """Get the plot's height: the view's, or the page's own (the script fits it to it)."""
         height = self._view.height
         if height is None:
-            return ' class="h-72 w-full"'
-        return f' class="w-full" style="height: {int(height)}px"'
+            return Markup(' class="h-72 w-full"')
+        return Markup(' class="w-full" style="height: {}px"').format(int(height))
 
-    def _save_image_html(self) -> str:
+    def _save_image_html(self) -> Markup:
         """Get the figure's corner: its image's download, in a format picked beside it."""
-        text = html.escape(self._view.save_image_text)
+        text = self._view.save_image_text
         if not chartimage.is_available():
             # no matplotlib: the page draws what it shows, as a PNG
-            name = html.escape(chartimage.image_name(self._view.title, "png"))
-            return (
-                f'<button type="button" class="btn btn-ghost btn-xs" data-chart-png="{name}">'
-                f"{text} (PNG)</button>"
-            )
-        options = "".join(
-            f'<option value="{image_format}">{image_format.upper()}</option>'
+            name = chartimage.image_name(self._view.title, "png")
+            return Markup(
+                '<button type="button" class="btn btn-ghost btn-xs" data-chart-png="{}">'
+                "{} (PNG)</button>"
+            ).format(name, text)
+        options = Markup("").join(
+            Markup('<option value="{}">{}</option>').format(image_format, image_format.upper())
             for image_format in ("pdf", "svg", "png")
         )
         # a plain link: htmx can't start a download. The page's script adds the zoom
-        return (
+        return Markup(
             '<div class="join">'
             '<select class="select select-xs join-item w-auto" aria-label="Image format"'
-            f" data-chart-format>{options}</select>"
-            f'<a class="btn btn-ghost btn-xs join-item" data-chart-image download'
-            f' href="/widget/{self.widget_id}/image?format=pdf">{text}</a></div>'
-        )
+            " data-chart-format>{options}</select>"
+            '<a class="btn btn-ghost btn-xs join-item" data-chart-image download'
+            ' href="/widget/{widget_id}/image?format=pdf">{text}</a></div>'
+        ).format(options=options, widget_id=self.widget_id, text=text)
 
 
 class MetricViewLike(ViewLike, Protocol):
@@ -1296,19 +1377,24 @@ class WebMetricRenderer(WebRenderer[MetricViewLike]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         delta = self._view.delta
         badge = ""
         if delta is not None:
             color = "badge-success" if delta > 0 else "badge-error" if delta < 0 else "badge-ghost"
-            text = html.escape(MetricView.badge(delta, self._view.delta_text))
-            badge = (
-                f'<div class="stat-desc"><span class="badge badge-soft {color}">{text}</span></div>'
-            )
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="stat px-0">'
-            f'<div class="stat-title">{html.escape(self._view.label)}</div>'
-            f'<div class="stat-value">{html.escape(self._view.value)}</div>{badge}</div>'
+            text = MetricView.badge(delta, self._view.delta_text)
+            badge = Markup(
+                '<div class="stat-desc"><span class="badge badge-soft {}">{}</span></div>'
+            ).format(color, text)
+        return Markup(
+            '<div {root_attributes} class="stat px-0">'
+            '<div class="stat-title">{label}</div>'
+            '<div class="stat-value">{value}</div>{badge}</div>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            label=self._view.label,
+            value=self._view.value,
+            badge=badge,
         )
 
 
@@ -1451,7 +1537,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             self._dirty_parts.update(parts)
             dirty[self.widget_id] = self
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         parts, self._dirty_parts = self._dirty_parts, set()
         is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
         if not is_whole:
@@ -1467,40 +1553,46 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             # the bar last: it may hold the element that sent the request, which htmx
             # swaps nothing more from once it's gone
             order = ("head", "body", "count", "error", "bar")
-            fragments = "".join(renders[part](oob=True) for part in order if part in parts)
+            fragments = Markup("").join(renders[part](oob=True) for part in order if part in parts)
             self._focus_add_filter, self._focused_chip = False, None
             return fragments
-        grid = ' role="grid" aria-multiselectable="true"' if self._is_multiple() else ""
-        html_ = (
-            f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-2">'
-            f"{self._bar_html()}"
+        grid = Markup(' role="grid" aria-multiselectable="true"') if self._is_multiple() else ""
+        html_ = Markup(
+            '<div {root_attributes} class="flex flex-col gap-2">'
+            "{bar_html}"
             '<div class="overflow-x-auto rounded-box border border-base-300">'
-            f'<table class="table table-zebra table-sm"{grid}>'
-            f"{self._head_html()}{self._body_html()}</table></div></div>"
+            '<table class="table table-zebra table-sm"{grid}>'
+            "{head_html}{body_html}</table></div></div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            bar_html=self._bar_html(),
+            grid=grid,
+            head_html=self._head_html(),
+            body_html=self._body_html(),
         )
         self._focus_add_filter, self._focused_chip = False, None
         return html_
 
-    def _oob(self, *, oob: bool) -> str:
-        return ' hx-swap-oob="true"' if oob else ""
+    def _oob(self, *, oob: bool) -> Markup:
+        return Markup(' hx-swap-oob="true"') if oob else Markup()
 
-    def _post(self, values: Mapping[str, str | int]) -> str:
+    def _post(self, values: Mapping[str, str | int]) -> Markup:
         """Get the attributes posting an event of the table, without swapping its element back."""
-        return (
-            f" hx-post=\"/widget/{self.widget_id}\" hx-vals='{html.escape(json.dumps(values))}'"
+        return Markup(
+            """ hx-post="/widget/{}" hx-vals='{}'"""
             ' hx-swap="none"'
-        )
+        ).format(self.widget_id, json.dumps(values))
 
-    def _head_html(self, *, oob: bool = False) -> str:
+    def _head_html(self, *, oob: bool = False) -> Markup:
         """Render the headers: a row of them, under a row of `header_groups` if any.
 
         A column without a group has its header across both rows.
         """
         headers = self._view.headers
         groups = [group for group in self._view.header_groups if group.column < len(headers)]
-        span = ' rowspan="2"' if len(groups) > 0 else ""
+        span = Markup(' rowspan="2"') if len(groups) > 0 else ""
         # the corner over the rows' headers
-        top = [f"<td{span}></td>"] if len(self._view.row_headers) > 0 else []
+        top = [Markup("<td{}></td>").format(span)] if len(self._view.row_headers) > 0 else []
         bottom = []
         for column in range(len(headers)):
             group = self._view.header_group(column)
@@ -1510,38 +1602,52 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             if group.column == column:
                 columns = min(group.column_count, len(headers) - column)
                 top.append(
-                    f'<th colspan="{columns}" scope="colgroup" class="text-center">'
-                    f"{html.escape(group.text)}</th>"
+                    Markup('<th colspan="{}" scope="colgroup" class="text-center">{}</th>').format(
+                        columns, group.text
+                    )
                 )
             bottom.append(self._header_html(column, ""))
-        rows = f"<tr>{''.join(top)}</tr>" + (f"<tr>{''.join(bottom)}</tr>" if groups else "")
+        rows = Markup("<tr>{}</tr>").format(Markup("").join(top)) + (
+            Markup("<tr>{}</tr>").format(Markup("").join(bottom)) if groups else ""
+        )
         return self._table_part(
-            f'<thead id="{self.widget_id}-head"{self._oob(oob=oob)}>{rows}</thead>', oob=oob
+            Markup('<thead id="{widget_id}-head"{oob}>{rows}</thead>').format(
+                widget_id=self.widget_id, oob=self._oob(oob=oob), rows=rows
+            ),
+            oob=oob,
         )
 
-    def _header_html(self, column: int, span: str) -> str:
+    def _header_html(self, column: int, span: str) -> Markup:
         """Render a column's header, with its check-all box, a button if sortable."""
         header = self._view.headers[column]
         box = self._check_all_html(column)
         if column not in self._view.sortable_columns:
             if box == "":
-                return f"<th{span}>{html.escape(header)}</th>"
-            return (
-                f'<th{span}><span class="flex items-center gap-2">{box}'
-                f"{html.escape(header)}</span></th>"
-            )
+                return Markup("<th{}>{}</th>").format(span, header)
+            return Markup(
+                '<th{span}><span class="flex items-center gap-2">{box}{header}</span></th>'
+            ).format(span=span, box=box, header=header)
         order = self._view.sort_descending if self._view.sort_column == column else None
         arrow = {None: "", False: " ▲", True: " ▼"}[order]
         disabled = "" if self.is_enabled else " disabled"
-        return (
-            f'<th{span} aria-sort="{_ARIA_SORT[order]}" class="p-0">'
-            f'<span class="flex items-center{" ps-3" if box else ""}">{box}'
-            f'<button type="button" class="btn btn-ghost btn-sm flex-1 justify-start'
-            f' font-semibold"{self._post({"event": "sort", "column": column})}{disabled}>'
-            f'{html.escape(header)}<span aria-hidden="true">{arrow}</span></button></span></th>'
+        return Markup(
+            '<th{span} aria-sort="{ARIA_SORT}" class="p-0">'
+            '<span class="flex items-center{value}">{box}'
+            '<button type="button" class="btn btn-ghost btn-sm flex-1 justify-start'
+            ' font-semibold"{post}{disabled}>'
+            '{header}<span aria-hidden="true">{arrow}</span></button></span></th>'
+        ).format(
+            span=span,
+            ARIA_SORT=_ARIA_SORT[order],
+            value=" ps-3" if box else "",
+            box=box,
+            post=self._post({"event": "sort", "column": column}),
+            disabled=disabled,
+            header=header,
+            arrow=arrow,
         )
 
-    def _body_html(self, *, oob: bool = False) -> str:
+    def _body_html(self, *, oob: bool = False) -> Markup:
         shown = self._view.shown_rows
         styles = self._view.shown_cell_styles()
         covered = {
@@ -1549,33 +1655,43 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             for (position, column), style in styles.items()
             for offset in range(1, style.row_span)
         }
-        rows = "".join(
+        rows = Markup("").join(
             self._row_html(index, self._view.rows[index], position, styles, covered)
             for position, index in enumerate(shown)
         )
         if len(shown) == 0 and len(self._view.rows) > 0:
-            no_match = html.escape(self._view.filter_texts.get("no_match", ""))
+            no_match = self._view.filter_texts.get("no_match", "")
             columns = max(len(self._view.headers), 1) + (1 if self._view.row_headers else 0)
-            rows = (
-                f'<tr><td colspan="{columns}" class="text-center opacity-70">{no_match}</td></tr>'
-            )
+            rows = Markup(
+                '<tr><td colspan="{}" class="text-center opacity-70">{}</td></tr>'
+            ).format(columns, no_match)
         return self._table_part(
-            f'<tbody id="{self.widget_id}-body"{self._oob(oob=oob)}>{rows}</tbody>', oob=oob
+            Markup('<tbody id="{widget_id}-body"{oob}>{rows}</tbody>').format(
+                widget_id=self.widget_id, oob=self._oob(oob=oob), rows=rows
+            ),
+            oob=oob,
         )
 
-    def _check_all_html(self, column: int) -> str:
+    def _check_all_html(self, column: int) -> Markup:
         """Render a check-all column's box, or "" for another column."""
         if column not in self._check_all_columns():
-            return ""
+            return Markup()
         is_checked = self._view.column_checked(column)
         state = {True: " checked", False: "", None: " data-indeterminate"}[is_checked]
         disabled = "" if self.is_enabled and column in self._view.editable_columns else " disabled"
         # its own id, so htmx gives it the focus back when the head is swapped
-        return (
-            f'<input id="{self.widget_id}-check-all-{column}" type="checkbox"'
-            f' class="checkbox checkbox-sm" aria-label="{html.escape(self._view.headers[column])}"'
-            f"{state}{self._post({'event': 'check_all', 'column': column})}"
-            f' hx-trigger="change" autocomplete="off"{disabled}>'
+        return Markup(
+            '<input id="{widget_id}-check-all-{column}" type="checkbox"'
+            ' class="checkbox checkbox-sm" aria-label="{headers}"'
+            "{state}{post}"
+            ' hx-trigger="change" autocomplete="off"{disabled}>'
+        ).format(
+            widget_id=self.widget_id,
+            column=column,
+            headers=self._view.headers[column],
+            state=state,
+            post=self._post({"event": "check_all", "column": column}),
+            disabled=disabled,
         )
 
     def _check_all_columns(self) -> list[int]:
@@ -1588,69 +1704,91 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         ]
 
     @staticmethod
-    def _table_part(markup: str, *, oob: bool) -> str:
+    def _table_part(markup: Markup, *, oob: bool) -> Markup:
         """Wrap a part of the `<table>` swapped out of band in a `<template>` of its own.
 
         htmx parses an answer as a template's content: a `<tr>` or a `<tbody>` among the
         rest would switch the parser to a table's rules for what follows, mangling the
         next fragments, e.g. another table swapped whole.
         """
-        return f"<template>{markup}</template>" if oob else markup
+        return Markup("<template>{}</template>").format(markup) if oob else markup
 
-    def _count_html(self, *, oob: bool = False) -> str:
+    def _count_html(self, *, oob: bool = False) -> Markup:
         shown, total = len(self._view.shown_rows), len(self._view.rows)
         text = ""
         if shown != total:
             text = self._view.filter_texts.get("count", "").format(shown=shown, total=total)
-        return (
-            f'<span id="{self.widget_id}-count" class="ms-auto text-sm opacity-70"'
-            f' aria-live="polite"{self._oob(oob=oob)}>{html.escape(text)}</span>'
-        )
+        return Markup(
+            '<span id="{widget_id}-count" class="ms-auto text-sm opacity-70"'
+            ' aria-live="polite"{oob}>{text}</span>'
+        ).format(widget_id=self.widget_id, oob=self._oob(oob=oob), text=text)
 
     def _filterable_columns(self) -> list[int]:
         return [
             column for column in self._view.filterable_columns if column < len(self._view.headers)
         ]
 
-    def _bar_html(self, *, oob: bool = False) -> str:
+    def _bar_html(self, *, oob: bool = False) -> Markup:
         bar_id = f"{self.widget_id}-bar"
         if len(self._filterable_columns()) == 0:
-            return f'<div id="{bar_id}" hidden{self._oob(oob=oob)}></div>'
+            return Markup('<div id="{}" hidden{}></div>').format(bar_id, self._oob(oob=oob))
         texts = self._view.filter_texts
         disabled = "" if self.is_enabled else " disabled"
-        search_label = html.escape(texts.get("search", ""))
-        search = (
+        search_label = texts.get("search", "")
+        search = Markup(
             '<label class="input input-sm w-56">'
-            f'{_icon("search")}<input id="{self.widget_id}-search" type="search"'
-            f' name="search" value="{html.escape(self._view.search)}"'
-            f' placeholder="{search_label}" aria-label="{search_label}"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, search"'
-            """ hx-vals='{"event": "search"}' hx-swap="none" hx-sync="this:queue last\""""
-            f' autocomplete="off"{disabled}></label>'
+            '{search_icon}<input id="{widget_id}-search" type="search"'
+            ' name="search" value="{search}"'
+            ' placeholder="{search_label}" aria-label="{search_label}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, search"'
+            ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
+            ' autocomplete="off"{disabled}></label>'
+        ).format(
+            search_icon=_icon("search"),
+            widget_id=self.widget_id,
+            search=self._view.search,
+            search_label=search_label,
+            disabled=disabled,
         )
         if self._editor is None:
             focus = " autofocus" if self._focus_add_filter else ""
-            editor = (
-                f'<button id="{self.widget_id}-add-filter" type="button"'
-                f' class="btn btn-sm btn-soft"{self._post({"event": "open_editor"})}'
-                f"{focus}{disabled}>{html.escape(texts.get('add_filter', ''))}</button>"
+            editor = Markup(
+                '<button id="{widget_id}-add-filter" type="button"'
+                ' class="btn btn-sm btn-soft"{post}'
+                "{focus}{disabled}>{get}</button>"
+            ).format(
+                widget_id=self.widget_id,
+                post=self._post({"event": "open_editor"}),
+                focus=focus,
+                disabled=disabled,
+                get=texts.get("add_filter", ""),
             )
         else:
             editor = self._editor_html()
-        chips = "".join(self._chip_html(column) for column in sorted(self._view.filters))
+        chips = Markup("").join(self._chip_html(column) for column in sorted(self._view.filters))
         clear = ""
         if len(self._view.filters) >= 2:  # noqa: PLR2004
-            clear = (
-                f'<button type="button" class="btn btn-sm btn-ghost"'
-                f"{self._post({'event': 'clear_filters'})}{disabled}>"
-                f"{html.escape(texts.get('clear', ''))}</button>"
+            clear = Markup(
+                '<button type="button" class="btn btn-sm btn-ghost"{post}{disabled}>{get}</button>'
+            ).format(
+                post=self._post({"event": "clear_filters"}),
+                disabled=disabled,
+                get=texts.get("clear", ""),
             )
-        return (
-            f'<div id="{bar_id}" role="search" class="flex flex-wrap items-center gap-2"'
-            f"{self._oob(oob=oob)}>{search}{editor}{chips}{clear}{self._count_html()}</div>"
+        return Markup(
+            '<div id="{bar_id}" role="search" class="flex flex-wrap items-center gap-2"'
+            "{oob}>{search}{editor}{chips}{clear}{count_html}</div>"
+        ).format(
+            bar_id=bar_id,
+            oob=self._oob(oob=oob),
+            search=search,
+            editor=editor,
+            chips=chips,
+            clear=clear,
+            count_html=self._count_html(),
         )
 
-    def _editor_html(self) -> str:
+    def _editor_html(self) -> Markup:
         assert self._editor is not None
         texts = self._view.filter_texts
         columns = self._filterable_columns()
@@ -1659,41 +1797,65 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         text, is_pattern = split_pattern(typed)
         takes_pattern = self._view.filter_takes_pattern(chosen)
         is_pattern = is_pattern and takes_pattern
-        options = "".join(
-            f'<option value="{option}"'
-            f' data-placeholder="{html.escape(self._view.filter_placeholder(option))}"'
-            f' data-pattern-placeholder="{html.escape(self._pattern_placeholder(option))}"'
-            f"{' selected' if option == chosen else ''}>"
-            f"{html.escape(self._view.headers[option])}</option>"
+        options = Markup("").join(
+            Markup(
+                '<option value="{option}"'
+                ' data-placeholder="{filter_placeholder}"'
+                ' data-pattern-placeholder="{pattern_placeholder}"'
+                "{value}>"
+                "{headers}</option>"
+            ).format(
+                option=option,
+                filter_placeholder=self._view.filter_placeholder(option),
+                pattern_placeholder=self._pattern_placeholder(option),
+                value=" selected" if option == chosen else "",
+                headers=self._view.headers[option],
+            )
             for option in columns
         )
         value_id = f"{self.widget_id}-value"
-        value_label = html.escape(texts.get("value", ""))
-        pattern_label = html.escape(texts.get("pattern", ""))
+        value_label = texts.get("value", "")
+        pattern_label = texts.get("pattern", "")
         placeholder = self._view.filter_placeholder(chosen, is_pattern=is_pattern)
         # a checkbox drawn as a button: on, the value is a regular expression; the page
         # shows it only for a column a pattern filters, and hints at what to type
-        pattern = (
+        pattern = Markup(
             '<label class="btn btn-sm btn-soft font-mono has-checked:btn-primary"'
-            f' title="{pattern_label}" data-filter-pattern{"" if takes_pattern else " hidden"}>'
-            f'<input type="checkbox" name="pattern" value="1" class="sr-only"'
-            f' aria-label="{pattern_label}"{" checked" if is_pattern else ""}>.*</label>'
+            ' title="{pattern_label}" data-filter-pattern{value}>'
+            '<input type="checkbox" name="pattern" value="1" class="sr-only"'
+            ' aria-label="{pattern_label}"{value2}>.*</label>'
+        ).format(
+            pattern_label=pattern_label,
+            value="" if takes_pattern else " hidden",
+            value2=" checked" if is_pattern else "",
         )
-        return (
-            f'<form id="{self.widget_id}-editor" class="flex flex-wrap items-center gap-2"'
-            f"{self._post({'event': 'add_filter'})}>"
-            f'<select name="column" class="select select-sm w-auto" data-filter-column'
-            f' aria-label="{html.escape(texts.get("column", ""))}">{options}</select>'
-            f"{pattern}"
-            f'<input id="{value_id}" name="value" class="input input-sm w-60" type="text"'
-            f' value="{html.escape(text)}" aria-label="{value_label}"'
-            f' placeholder="{html.escape(placeholder)}"'
-            f' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="escape-key"'
-            """ hx-vals='{"event": "close_editor"}' hx-swap="none">"""
-            f"{self._error_html()}"
-            f'<button type="submit" class="btn btn-sm btn-primary">'
-            f"{html.escape(texts.get('add', ''))}</button></form>"
+        return Markup(
+            '<form id="{widget_id}-editor" class="flex flex-wrap items-center gap-2"'
+            "{post}>"
+            '<select name="column" class="select select-sm w-auto" data-filter-column'
+            ' aria-label="{get}">{options}</select>'
+            "{pattern}"
+            '<input id="{value_id}" name="value" class="input input-sm w-60" type="text"'
+            ' value="{text}" aria-label="{value_label}"'
+            ' placeholder="{placeholder}"'
+            ' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
+            ' hx-post="/widget/{widget_id}" hx-trigger="escape-key"'
+            """ hx-vals='{{"event": "close_editor"}}' hx-swap="none">"""
+            "{error_html}"
+            '<button type="submit" class="btn btn-sm btn-primary">'
+            "{get2}</button></form>"
+        ).format(
+            widget_id=self.widget_id,
+            post=self._post({"event": "add_filter"}),
+            get=texts.get("column", ""),
+            options=options,
+            pattern=pattern,
+            value_id=value_id,
+            text=text,
+            value_label=value_label,
+            placeholder=placeholder,
+            error_html=self._error_html(),
+            get2=texts.get("add", ""),
         )
 
     def _pattern_placeholder(self, column: int) -> str:
@@ -1702,35 +1864,46 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             return ""
         return self._view.filter_placeholder(column, is_pattern=True)
 
-    def _error_html(self, *, oob: bool = False) -> str:
+    def _error_html(self, *, oob: bool = False) -> Markup:
         """Render the editor's message, why its text can't filter; the page marks the field."""
         error = self._editor_error
         hidden = "" if error else " hidden"
-        return (
-            f'<span id="{self.widget_id}-value-error" class="text-sm text-error" data-log="error"'
-            f"{hidden}{self._oob(oob=oob)}>{html.escape(error or '')}</span>"
-        )
+        return Markup(
+            '<span id="{widget_id}-value-error" class="text-sm text-error"'
+            ' data-log="error"{hidden}{oob}>{value}</span>'
+        ).format(widget_id=self.widget_id, hidden=hidden, oob=self._oob(oob=oob), value=error or "")
 
-    def _chip_html(self, column: int) -> str:
+    def _chip_html(self, column: int) -> Markup:
         if column >= len(self._view.headers):
-            return ""
+            return Markup()
         texts, header = self._view.filter_texts, self._view.headers[column]
         remove = texts.get("remove", "{header}").format(header=header)
         edit = texts.get("edit", "{header}").format(header=header)
         disabled = "" if self.is_enabled else " disabled"
         focus = " autofocus" if self._focused_chip == column else ""
         # named by its text, the filter; the pencil and the tooltip say it edits it
-        return (
+        return Markup(
             '<span class="badge badge-soft badge-primary gap-1 pe-0">'
-            f'<button id="{self.widget_id}-chip-{column}" type="button"'
+            '<button id="{widget_id}-chip-{column}" type="button"'
             ' class="inline-flex cursor-pointer items-center gap-1 hover:underline"'
-            f' title="{html.escape(edit)}"'
-            f"{self._post({'event': 'open_editor', 'column': column})}{focus}{disabled}>"
-            f"{html.escape(self._view.filter_chip(column))}{_icon('pencil', 'size-3')}</button>"
-            f'<button type="button" class="btn btn-ghost btn-xs btn-circle"'
-            f' aria-label="{html.escape(remove)}" title="{html.escape(remove)}"'
-            f"{self._post({'event': 'remove_filter', 'column': column})}{disabled}>\u00d7</button>"
+            ' title="{edit}"'
+            "{post}{focus}{disabled}>"
+            "{filter_chip}{pencil_icon}</button>"
+            '<button type="button" class="btn btn-ghost btn-xs btn-circle"'
+            ' aria-label="{remove}" title="{remove}"'
+            "{post2}{disabled}>\u00d7</button>"
             "</span>"
+        ).format(
+            widget_id=self.widget_id,
+            column=column,
+            edit=edit,
+            post=self._post({"event": "open_editor", "column": column}),
+            focus=focus,
+            disabled=disabled,
+            filter_chip=self._view.filter_chip(column),
+            pencil_icon=_icon("pencil", "size-3"),
+            remove=remove,
+            post2=self._post({"event": "remove_filter", "column": column}),
         )
 
     def _row_html(
@@ -1740,7 +1913,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         position: int,
         styles: dict[tuple[int, int], CellStyle],
         covered: set[tuple[int, int]],
-    ) -> str:
+    ) -> Markup:
         """Render a row, at `position` among those shown, as `styles` say its cells look.
 
         The cells `covered` by a cell spanning rows above aren't rendered.
@@ -1753,7 +1926,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             *(column for shown, column in styles if shown == position),
         ]
         width = max(len(row), *(column + 1 for column in widths), 0)
-        cells = "".join(
+        cells = Markup("").join(
             self._cell_html(
                 index,
                 column,
@@ -1765,126 +1938,153 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
         if len(self._view.row_headers) > 0:
             header = self._view.row_headers[index] if index < len(self._view.row_headers) else ""
-            cells = f'<th scope="row">{html.escape(header)}</th>{cells}'
+            cells = Markup('<th scope="row">{}</th>{}').format(header, cells)
 
         is_selected = index in self._view.selected_rows
         if self._is_multiple():
-            selected = f' aria-selected="{"true" if is_selected else "false"}"'
+            selected = Markup(' aria-selected="{}"').format("true" if is_selected else "false")
         else:
-            selected = ' aria-current="true"' if is_selected else ""
+            selected = Markup(' aria-current="true"') if is_selected else Markup()
         if not self.is_enabled:
-            return f"<tr{selected}>{cells}</tr>"
-        return (
-            f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
-            f'{selected} hx-post="/widget/{self.widget_id}"'
+            return Markup("<tr{}>{}</tr>").format(selected, cells)
+        return Markup(
+            '<tr id="{widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
+            '{selected} hx-post="/widget/{widget_id}"'
             # a click or Enter, not from a cell's field or widget, which takes its own
             ' hx-trigger="activate"'
-            f""" hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
-            f"{cells}</tr>"
-        )
+            """ hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
+            "{cells}</tr>"
+        ).format(widget_id=self.widget_id, index=index, selected=selected, cells=cells)
 
-    def _cell_html(self, row: int, column: int, text: str, style: CellStyle) -> str:
+    def _cell_html(self, row: int, column: int, text: str, style: CellStyle) -> Markup:
         """Render a cell: its mark, then its text, widget or field, as `style` says."""
         widget = self._view.cell_widgets.get(column)
         if widget is not None and column < len(self._view.headers):
             content = self._widget_html(row, column, text, widget, is_disabled=style.is_disabled)
             # a disabled widget is grayed already
             look = self._look(attrs.evolve(style, is_disabled=False))
-            return f"<td{look}>{self._marked(style, content)}</td>"
+            return Markup("<td{}>{}</td>").format(look, self._marked(style, content))
         if column not in self._editable_columns() or not self.is_enabled or style.is_disabled:
-            return f"<td{self._look(style)}>{self._marked(style, html.escape(text))}</td>"
+            return Markup("<td{}>{}</td>").format(self._look(style), self._marked(style, text))
 
-        def post(event: str) -> str:
-            return (
-                f' hx-post="/widget/{self.widget_id}" hx-swap="none"'
-                f""" hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
-            )
+        def post(event: str) -> Markup:
+            return Markup(
+                ' hx-post="/widget/{widget_id}" hx-swap="none"'
+                """ hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
+            ).format(widget_id=self.widget_id, event=event, row=row, column=column)
 
         if self._editing != (row, column):
-            return (
-                f'<td{self._look(style)} data-edit hx-trigger="dblclick"{post("start_edit")}>'
-                f"{self._marked(style, html.escape(text))}</td>"
+            return Markup('<td{look} data-edit hx-trigger="dblclick"{post}>{marked}</td>').format(
+                look=self._look(style), post=post("start_edit"), marked=self._marked(style, text)
             )
-        header = html.escape(self._view.headers[column])
+        header = self._view.headers[column]
         # its own id, so htmx gives it the focus back when the table is swapped
-        return (
-            f'<td{self._look(style, "p-0")}><input id="{self.widget_id}-cell-{row}-{column}"'
+        return Markup(
+            '<td{look}><input id="{widget_id}-cell-{row}-{column}"'
             ' type="text"'
             ' class="input input-ghost input-sm w-full min-w-0" name="text" data-cell'
-            f' value="{html.escape(text)}" data-original="{html.escape(text)}"'
-            f' aria-label="{header}" autocomplete="off" autofocus'
+            ' value="{text}" data-original="{text}"'
+            ' aria-label="{header}" autocomplete="off" autofocus'
             ' hx-trigger="enter-key, blur"'
-            f"{post('edit')}></td>"
+            "{post}></td>"
+        ).format(
+            look=self._look(style, "p-0"),
+            widget_id=self.widget_id,
+            row=row,
+            column=column,
+            text=text,
+            header=header,
+            post=post("edit"),
         )
 
     @staticmethod
-    def _look(style: CellStyle, classes: str = "") -> str:
+    def _look(style: CellStyle, classes: str = "") -> Markup:
         """Get the attributes giving a cell its colors, grayed if disabled, and its rows' span."""
         if style.is_disabled:
             classes = f"{classes} opacity-50".strip()
-        attributes = f' class="{classes}"' if classes else ""
+        attributes = Markup(' class="{}"').format(classes) if classes else Markup()
         if style.background is not None:
-            attributes += (
-                f' style="background-color: {style.background}; color: {style.text_color}"'
+            attributes += Markup(' style="background-color: {}; color: {}"').format(
+                style.background, style.text_color
             )
         if style.row_span > 1:
-            attributes += f' rowspan="{style.row_span}"'
+            attributes += Markup(' rowspan="{}"').format(style.row_span)
         return attributes
 
-    def _marked(self, style: CellStyle, content: str) -> str:
+    def _marked(self, style: CellStyle, content: str) -> Markup:
         """Put the cell's mark, if any, before its content, named for screen readers."""
         if style.mark is None:
-            return content
+            return escape(content)
         icon, color = _MARK_ICONS[style.mark]
-        text = html.escape(self._view.mark_text(style.mark))
-        return (
-            f'<span class="flex items-center gap-1"><span class="shrink-0 {color}" role="img"'
-            f' aria-label="{text}" title="{text}">{_icon(icon)}</span>{content}</span>'
-        )
+        text = self._view.mark_text(style.mark)
+        return Markup(
+            '<span class="flex items-center gap-1"><span class="shrink-0 {color}" role="img"'
+            ' aria-label="{text}" title="{text}">{icon}</span>{content}</span>'
+        ).format(color=color, text=text, icon=_icon(icon), content=content)
 
     def _widget_html(
         self, row: int, column: int, text: str, widget: CellWidget, *, is_disabled: bool
-    ) -> str:
+    ) -> Markup:
         """Render a cell's widget, named by its column's header; disabled with its cell."""
-        header = html.escape(self._view.headers[column])
+        header = self._view.headers[column]
         is_editable = self.is_enabled and column in self._view.editable_columns and not is_disabled
         values = {"row": row, "column": column}
         # its own id, so htmx gives it the focus back when the table is swapped
         widget_id = f"{self.widget_id}-cell-{row}-{column}"
         if widget.kind is CellKind.CHECK_BOX:
             checked = " checked" if self._view.is_checked(row, column) else ""
-            return (
-                f'<input id="{widget_id}" type="checkbox" class="checkbox checkbox-sm"'
-                f' name="checked" value="on" aria-label="{header}"{checked}'
-                f'{self._post({"event": "check", **values})} hx-trigger="change"'
-                f' autocomplete="off"{"" if is_editable else " disabled"}>'
+            return Markup(
+                '<input id="{widget_id}" type="checkbox" class="checkbox checkbox-sm"'
+                ' name="checked" value="on" aria-label="{header}"{checked}'
+                '{post} hx-trigger="change"'
+                ' autocomplete="off"{value}>'
+            ).format(
+                widget_id=widget_id,
+                header=header,
+                checked=checked,
+                post=self._post({"event": "check", **values}),
+                value="" if is_editable else " disabled",
             )
         if widget.kind is CellKind.COMBOBOX:
             options = [*widget.options, *([] if text in widget.options else [text])]
-            choices = "".join(
-                f'<option value="{html.escape(option)}"{" selected" if option == text else ""}>'
-                f"{html.escape(option)}</option>"
+            choices = Markup("").join(
+                Markup('<option value="{option}"{value}>{option}</option>').format(
+                    option=option, value=" selected" if option == text else ""
+                )
                 for option in options
             )
-            return (
-                f'<select id="{widget_id}" class="select select-sm w-full min-w-24" name="text"'
-                f' aria-label="{header}"{self._post({"event": "pick", **values})}'
-                f' hx-trigger="change" autocomplete="off"{"" if is_editable else " disabled"}>'
-                f"{choices}</select>"
+            return Markup(
+                '<select id="{widget_id}" class="select select-sm w-full min-w-24" name="text"'
+                ' aria-label="{header}"{post}'
+                ' hx-trigger="change" autocomplete="off"{value}>'
+                "{choices}</select>"
+            ).format(
+                widget_id=widget_id,
+                header=header,
+                post=self._post({"event": "pick", **values}),
+                value="" if is_editable else " disabled",
+                choices=choices,
             )
         disabled = "" if self.is_enabled and not is_disabled else " disabled"
         click = self._post({"event": "click_cell", **values})
         if widget.kind is CellKind.LINK:
-            return (
-                f'<button id="{widget_id}" type="button" class="link link-primary"'
-                f"{click}{disabled}>{html.escape(text)}</button>"
-            )
-        label = html.escape(f"{self._view.headers[column]}: {widget.text}")
-        return (
-            f'<span class="flex items-center gap-2"><span class="flex-1">{html.escape(text)}'
-            f'</span><button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
-            f' aria-label="{label}" title="{label}"{click}{disabled}>'
-            f"{html.escape(widget.text)}</button></span>"
+            return Markup(
+                '<button id="{widget_id}" type="button" class="link'
+                ' link-primary"{click}{disabled}>{text}</button>'
+            ).format(widget_id=widget_id, click=click, disabled=disabled, text=text)
+        label = f"{self._view.headers[column]}: {widget.text}"
+        return Markup(
+            '<span class="flex items-center gap-2"><span class="flex-1">{text}'
+            '</span><button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
+            ' aria-label="{label}" title="{label}"{click}{disabled}>'
+            "{text2}</button></span>"
+        ).format(
+            text=text,
+            widget_id=widget_id,
+            label=label,
+            click=click,
+            disabled=disabled,
+            text2=widget.text,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -2136,51 +2336,70 @@ class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
             self._view.value = value
         self._view.value_changed.emit(value)
 
-    def _htmx_attributes(self) -> str:
-        return (
-            f' name="{self.widget_id}" hx-post="/widget/{self.widget_id}" hx-trigger="change"'
-            ' hx-vals=\'{"event": "change"}\' hx-swap="none"'
-        )
+    def _htmx_attributes(self) -> Markup:
+        return Markup(
+            ' name="{}" hx-post="/widget/{}" hx-trigger="change"'
+            ' hx-vals=\'{{"event": "change"}}\' hx-swap="none"'
+        ).format(self.widget_id, self.widget_id)
 
 
 class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
     _role = "radio_group"
     is_labelable = False
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         selected = self._view.serialize_value()
         disabled = "" if self.is_enabled else " disabled"
-        options = "".join(
-            '<label class="label cursor-pointer gap-2 text-base-content">'
-            f'<input type="radio" class="radio radio-sm radio-primary" value="{html.escape(key)}"'
-            f"{' checked' if key == selected else ''}{self._htmx_attributes()}"
-            f' autocomplete="off"{disabled}>'
-            f"{html.escape(label)}</label>"
+        options = Markup("").join(
+            Markup(
+                '<label class="label cursor-pointer gap-2 text-base-content">'
+                '<input type="radio" class="radio radio-sm radio-primary" value="{key}"'
+                "{value}{htmx_attributes}"
+                ' autocomplete="off"{disabled}>'
+                "{label}</label>"
+            ).format(
+                key=key,
+                value=" checked" if key == selected else "",
+                htmx_attributes=self._htmx_attributes(),
+                disabled=disabled,
+                label=label,
+            )
             for key, label in self._view.options
         )
-        return (
-            f'<div {self._root_attributes(oob=oob)}{self._row_attributes()} role="radiogroup"'
-            f' class="flex flex-wrap gap-x-6 gap-y-2">{options}</div>'
+        return Markup(
+            '<div {root_attributes}{row_attributes} role="radiogroup" class="flex flex-wrap gap-x-6'
+            ' gap-y-2">{options}</div>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            options=options,
         )
 
 
 class WebComboboxRenderer(_WebValuesRenderer[TValue]):
     _role = "combobox"
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         selected = self._view.serialize_value()
         disabled = "" if self.is_enabled else " disabled"
         # an empty choice only while nothing is selected, as Qt's combobox shows nothing
-        empty = '<option value="" selected></option>' if selected is None else ""
-        options = "".join(
-            f'<option value="{html.escape(key)}"'
-            f"{' selected' if key == selected else ''}>{html.escape(label)}</option>"
+        empty = Markup('<option value="" selected></option>') if selected is None else ""
+        options = Markup("").join(
+            Markup('<option value="{key}"{value}>{label}</option>').format(
+                key=key, value=" selected" if key == selected else "", label=label
+            )
             for key, label in self._view.options
         )
-        return (
-            f"<select {self._root_attributes(oob=oob)}{self._row_attributes()}"
-            ' class="select w-full"'
-            f'{self._htmx_attributes()} autocomplete="off"{disabled}>{empty}{options}</select>'
+        return Markup(
+            '<select {root_attributes}{row_attributes} class="select w-full"{htmx_attributes}'
+            ' autocomplete="off"{disabled}>{empty}{options}</select>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            htmx_attributes=self._htmx_attributes(),
+            disabled=disabled,
+            empty=empty,
+            options=options,
         )
 
 
@@ -2195,8 +2414,8 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty})
 
-    def to_html(self, *, oob: bool = False) -> str:
-        return f"<span {self._root_attributes(oob=oob)}>{html.escape(self._view.text)}</span>"
+    def to_html(self, *, oob: bool = False) -> Markup:
+        return Markup("<span {}>{}</span>").format(self._root_attributes(oob=oob), self._view.text)
 
 
 class MarkdownViewLike(ViewLike, Protocol):
@@ -2216,11 +2435,12 @@ class WebMarkdownRenderer(WebRenderer[MarkdownViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty})
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         parser = MarkdownIt("commonmark", {"html": False}).enable("table")
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="cui-markdown">'
-            f"{parser.render(self._view.text)}</div>"
+        # markup the parser escaped itself: the text's own HTML is off
+        content = Markup(parser.render(self._view.text))  # noqa: S704
+        return Markup('<div {} class="cui-markdown">{}</div>').format(
+            self._root_attributes(oob=oob), content
         )
 
 
@@ -2257,37 +2477,48 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
     def has_help(self) -> bool:
         return self._view.help != ""
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         field = self._field_renderer()
         # a radio group or a checkbox is a `<div>`, which isn't labelable: its
         # `aria-labelledby` names it instead
-        target = f' for="{field.widget_id}"' if field.is_labelable else ""
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="flex items-center gap-1">'
-            f'<label id="{self.text_id}"{target}'
+        target = Markup(' for="{}"').format(field.widget_id) if field.is_labelable else ""
+        return Markup(
+            '<div {root_attributes} class="flex items-center gap-1">'
+            '<label id="{text_id}"{target}'
             ' class="label text-sm font-medium text-base-content"'
-            f">{html.escape(self._view.label)}</label>{self._help_html()}</div>"
+            ">{label}</label>{help_html}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            text_id=self.text_id,
+            target=target,
+            label=self._view.label,
+            help_html=self._help_html(),
         )
 
-    def _help_html(self) -> str:
+    def _help_html(self) -> Markup:
         """Render the "?" button and the help it opens, which also describes the field.
 
         Closed, the popover is hidden, which `aria-describedby` still reads. The page's
         script places it beside the button (see `page.js`).
         """
         if not self.has_help():
-            return ""
-        return (
-            f'<button type="button" popovertarget="{self.help_id}"'
+            return Markup()
+        return Markup(
+            '<button type="button" popovertarget="{help_id}"'
             ' class="inline-flex cursor-pointer rounded-full text-base-content/40'
             " transition-colors hover:text-primary focus-visible:text-primary"
             ' focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"'
-            f' aria-label="{html.escape(self._view.help_button_text)}">{_icon("help")}</button>'
+            ' aria-label="{help_button_text}">{help_icon}</button>'
             # `cui-help`: the arrow pointing at the button, see `css/app.css`
-            f'<div id="{self.help_id}" popover data-help class="cui-help m-0 w-max max-w-80'
+            '<div id="{help_id}" popover data-help class="cui-help m-0 w-max max-w-80'
             " rounded-field border border-base-300 bg-base-100 px-3 py-2 text-xs"
             ' leading-relaxed text-base-content shadow-lg">'
-            f"{html.escape(self._view.help)}</div>"
+            "{help}</div>"
+        ).format(
+            help_id=self.help_id,
+            help_button_text=self._view.help_button_text,
+            help_icon=_icon("help"),
+            help=self._view.help,
         )
 
     def _refresh_help(self, view: FormLabelRowView, rendered_object: str, value: str) -> None:
@@ -2335,7 +2566,7 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
             # reset its caret
             self._refresh_dispatcher["has_form_error"] = self._mark_dirty
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         attributes = self._root_attributes(oob=oob)
         if self._view.is_visible and self._view.log_message == "":
             attributes += " hidden"  # same as Qt/Textual: an empty log takes no room
@@ -2344,10 +2575,14 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
         # `pre-line`: `FormView.validate` joins its messages with newlines.
         # `data-log`, `data-form-error`: the page's stylesheet and script mark the field
         # just before the log as invalid
-        return (
-            f'<p {attributes} aria-live="polite" data-log="{self._view.log_type.name.lower()}"'
-            f' class="text-sm whitespace-pre-line {_LOG_CLASSES[self._view.log_type]}">'
-            f"{html.escape(self._view.log_message)}</p>"
+        return Markup(
+            '<p {attributes} aria-live="polite" data-log="{lower}" class="text-sm'
+            ' whitespace-pre-line {LOG_CLASSES}">{log_message}</p>'
+        ).format(
+            attributes=attributes,
+            lower=self._view.log_type.name.lower(),
+            LOG_CLASSES=_LOG_CLASSES[self._view.log_type],
+            log_message=self._view.log_message,
         )
 
 
@@ -2365,30 +2600,36 @@ class WebFormRenderer(WebRenderer[FormView]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-5", legend="")
 
-    def _fieldset(self, *, oob: bool, classes: str, legend: str) -> str:
+    def _fieldset(self, *, oob: bool, classes: str, legend: str) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
-        rows = "".join(self._row_html(row) for row in self._view.field_rows)
-        return (
-            f'<fieldset {self._root_attributes(oob=oob)} class="{classes}"{disabled}>'
-            f"{legend}{rows}{self._fragment(self._view.log_view.renderer)}</fieldset>"
+        rows = Markup("").join(self._row_html(row) for row in self._view.field_rows)
+        return Markup(
+            "<fieldset {root_attributes}"
+            ' class="{classes}"{disabled}>{legend}{rows}{fragment}</fieldset>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            classes=classes,
+            disabled=disabled,
+            legend=legend,
+            rows=rows,
+            fragment=self._fragment(self._view.log_view.renderer),
         )
 
-    def _row_html(self, row: FormRowView | FormView) -> str:
+    def _row_html(self, row: FormRowView | FormView) -> Markup:
         if isinstance(row, FormView):
             return self._fragment(row.renderer)
         if not isinstance(row.renderer, RendererContainer):
-            return ""  # this backend doesn't support the row's field
+            return Markup()  # this backend doesn't support the row's field
         parts = ["label", "field", "log"] if isinstance(row, FormLabelRowView) else ["field", "log"]
         # field right before log: the page's stylesheet marks a field followed by an error
-        return (
-            '<div class="flex flex-col gap-1">'
-            f"{''.join(self._row_part(row.renderer, part) for part in parts)}</div>"
+        return Markup('<div class="flex flex-col gap-1">{}</div>').format(
+            Markup("").join(self._row_part(row.renderer, part) for part in parts)
         )
 
-    def _row_part(self, row_renderer: RendererContainer[Any], part: str) -> str:
+    def _row_part(self, row_renderer: RendererContainer[Any], part: str) -> Markup:
         try:
             renderer = row_renderer.get_renderer(part)
         except KeyError as e:
@@ -2397,8 +2638,8 @@ class WebFormRenderer(WebRenderer[FormView]):
         return self._fragment(renderer)
 
     @staticmethod
-    def _fragment(renderer: Any) -> str:
-        return renderer.to_html() if isinstance(renderer, WebRenderer) else ""
+    def _fragment(renderer: Any) -> Markup:
+        return renderer.to_html() if isinstance(renderer, WebRenderer) else Markup()
 
 
 class WebGroupFormRenderer(WebFormRenderer):
@@ -2410,15 +2651,17 @@ class WebGroupFormRenderer(WebFormRenderer):
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._mark_dirty})
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         title = self._view.title if isinstance(self._view, GroupFormView) else ""
         return self._fieldset(
             oob=oob,
             classes="fieldset form-grid min-w-0 gap-4 rounded-box border border-base-300"
             " bg-base-200 p-4",
             legend=(
-                '<legend class="fieldset-legend px-1 text-sm font-semibold text-primary">'
-                f"{html.escape(title)}</legend>"
+                Markup(
+                    '<legend class="fieldset-legend px-1 text-sm font-semibold text-primary">'
+                    "{}</legend>"
+                ).format(title)
             ),
         )
 
@@ -2435,18 +2678,22 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         # docked like Qt/Textual's status bar; an empty message leaves a quiet empty line
-        return (
-            f"<footer {self._root_attributes(oob=oob)}{self._auto_clear_attributes()}"
+        return Markup(
+            "<footer {root_attributes}{auto_clear_attributes}"
             ' role="status" aria-live="polite"'
             ' class="status-bar fixed inset-x-0 bottom-0 z-20 flex min-h-9 items-center gap-2'
             ' border-t border-base-300 px-4 text-sm">'
-            f"{html.escape(self._view.message)}"
+            "{message}"
             "</footer>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            auto_clear_attributes=self._auto_clear_attributes(),
+            message=self._view.message,
         )
 
-    def _auto_clear_attributes(self) -> str:
+    def _auto_clear_attributes(self) -> Markup:
         """Fetch the bar again once its message has timed out.
 
         `show_message`'s timer clears the message on the server outside any request,
@@ -2456,13 +2703,12 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
         its own fresh delay, so a stale fetch is harmless.
         """
         if self._view.message == "" or self._view.timeout <= 0:
-            return ""
+            return Markup()
         # margin: the browser's delay starts after the server's timer did, but not by much
         delay_ms = round((self._view.timeout + _AUTO_CLEAR_MARGIN) * 1000)
-        return (
-            f' hx-get="/widget/{self.widget_id}" hx-trigger="load delay:{delay_ms}ms"'
-            ' hx-swap="outerHTML"'
-        )
+        return Markup(
+            ' hx-get="/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
+        ).format(self.widget_id, delay_ms)
 
 
 #: closes an open daisyUI dropdown (it stays open while something in it has focus)
@@ -2489,27 +2735,42 @@ def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
 
 #: a header button's icon, by the kind of action it runs (Lucide's, inlined: no CDN)
 _ICONS: Final[dict[str, str]] = {
-    "new": '<path d="M12 5v14M5 12h14"/>',
-    "open": '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
-    "save": '<path d="M12 3v12M7 10l5 5 5-5"/>'
-    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
-    "more": '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/>'
-    '<circle cx="19" cy="12" r="1"/>',
-    "chevron": '<path d="m6 9 6 6 6-6"/>',
-    "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-    "help": '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>'
-    '<path d="M12 17h.01"/>',
-    "pencil": '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
-    ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
-    "sidebar": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
-    "calendar": (
-        '<rect x="3" y="4" width="18" height="18" rx="2"/>'
-        '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
+    "new": Markup('<path d="M12 5v14M5 12h14"/>'),
+    "open": Markup(
+        '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
     ),
-    "reload": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
-    "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
-    "circle-alert": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
-    "circle-x": '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+    "save": Markup(
+        '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+    ),
+    "more": Markup(
+        '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/>'
+        '<circle cx="19" cy="12" r="1"/>'
+    ),
+    "chevron": Markup('<path d="m6 9 6 6 6-6"/>'),
+    "search": Markup('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+    "help": Markup(
+        '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>'
+        '<path d="M12 17h.01"/>'
+    ),
+    "pencil": Markup(
+        '<path d="M21.17 6.81a1 1 0 0 0-3.98-3.98L3.84 16.17a2 2 0 0 0-.5.83l-1.32'
+        ' 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>'
+    ),
+    "sidebar": Markup('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>'),
+    "calendar": (
+        Markup(
+            '<rect x="3" y="4" width="18" height="18" rx="2"/>'
+            '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
+        )
+    ),
+    "reload": Markup(
+        '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'
+    ),
+    "circle-check": Markup('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
+    "circle-alert": Markup(
+        '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>'
+    ),
+    "circle-x": Markup('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
 }
 
 #: a tree node's mark: its icon and its color, as a log's are colored
@@ -2520,15 +2781,15 @@ _MARK_ICONS: Final = {
 }
 
 
-def _icon(name: str, size: str = "size-4") -> str:
-    return (
-        f'<svg class="{size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+def _icon(name: str, size: str = "size-4") -> Markup:
+    return Markup(
+        '<svg class="{}" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
         ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-        f"{_ICONS[name]}</svg>"
-    )
+        "{}</svg>"
+    ).format(size, _ICONS[name])
 
 
-def _file_icon(icon: str | None) -> str:
+def _file_icon(icon: str | None) -> Markup:
     """Show an action's icon file, or nothing without one (see `icons.py`).
 
     An SVG is drawn in the text's color, as the built-in icons are, so it follows the
@@ -2536,14 +2797,16 @@ def _file_icon(icon: str | None) -> str:
     """
     url = None if icon is None else icon_url(icon)
     if url is None:
-        return ""
+        return Markup()
     if url.endswith(".svg"):
         mask = f"url('{url}') center / contain no-repeat"
-        return (
+        return Markup(
             '<span aria-hidden="true" class="size-4 shrink-0 bg-current"'
-            f' style="mask: {mask}; -webkit-mask: {mask}"></span>'
-        )
-    return f'<img src="{url}" alt="" aria-hidden="true" class="size-4 shrink-0 object-contain">'
+            ' style="mask: {}; -webkit-mask: {}"></span>'
+        ).format(mask, mask)
+    return Markup(
+        '<img src="{}" alt="" aria-hidden="true" class="size-4 shrink-0 object-contain">'
+    ).format(url)
 
 
 class Placement(enum.Enum):
@@ -2592,8 +2855,8 @@ class WebMenuRenderer(WebRenderer[Menu]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
-        oob_attribute = ' hx-swap-oob="true"' if oob else ""
+    def to_html(self, *, oob: bool = False) -> Markup:
+        oob_attribute = Markup(' hx-swap-oob="true"') if oob else ""
         has_save = any(isinstance(child, SaveAction) for child in self._view.children_views)
         buttons: list[str] = []
         items: list[tuple[bool, str]] = []  # (is a separator, its html)
@@ -2608,32 +2871,39 @@ class WebMenuRenderer(WebRenderer[Menu]):
                     continue
             items.append((isinstance(child, SeparatorAction), renderer.to_html()))
         items = _between_items(items)
-        title = html.escape(self._view.title)
+        title = self._view.title
         if len(buttons) == 0:
             # a chevron: it opens a menu, unlike the header buttons next to it
-            trigger = (
+            trigger = Markup(
                 '<div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1 pr-2"'
                 ' aria-haspopup="menu">'
-                f'{title}<span class="opacity-60">{_icon("chevron")}</span></div>'
-            )
+                '{}<span class="opacity-60">{}</span></div>'
+            ).format(title, _icon("chevron"))
         else:
-            trigger = (
+            trigger = Markup(
                 '<div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square"'
-                f' aria-label="{title}" title="{title}">{_icon("more")}</div>'
-            )
+                ' aria-label="{title}" title="{title}">{more_icon}</div>'
+            ).format(title=title, more_icon=_icon("more"))
         dropdown = (
-            '<div class="dropdown dropdown-end">'
-            f"{trigger}"
-            # as wide as its longest item, its text and shortcut on one line
-            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-max min-w-56'
-            ' rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">'
-            f"{''.join(item for _, item in items)}</ul></div>"
+            Markup(
+                '<div class="dropdown dropdown-end">'
+                "{}"
+                # as wide as its longest item, its text and shortcut on one line
+                '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-max min-w-56'
+                ' rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">'
+                "{}</ul></div>"
+            ).format(trigger, Markup("").join(item for (_, item) in items))
             if len(items) > 0
             else ""
         )
-        return (
-            f'<div id="{self.widget_id}"{oob_attribute} class="flex items-center gap-1">'
-            f"{''.join(buttons)}{dropdown}</div>"
+        return Markup(
+            '<div id="{widget_id}"{oob_attribute} class="flex items-center'
+            ' gap-1">{join}{dropdown}</div>'
+        ).format(
+            widget_id=self.widget_id,
+            oob_attribute=oob_attribute,
+            join=Markup("").join(buttons),
+            dropdown=dropdown,
         )
 
     @staticmethod
@@ -2686,10 +2956,10 @@ class WebActionRenderer(WebRenderer[ActionView]):
         if self._is_shown:
             super()._mark_dirty(view, rendered_object, value)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         self._is_shown = True
         if self.placement is Placement.OMITTED:
-            return f"<span {self._root_attributes(oob=oob)} hidden></span>"
+            return Markup("<span {} hidden></span>").format(self._root_attributes(oob=oob))
         if self.placement is Placement.BUTTON:
             return self._button_html(oob=oob)
         if self.placement is Placement.PAGE:
@@ -2701,27 +2971,33 @@ class WebActionRenderer(WebRenderer[ActionView]):
         shortcut = _web_shortcut(view.shortcut)
         # the shortcut a hint, lighter than the action's text and kept apart from it
         kbd = (
-            f'<kbd class="ml-6 font-sans text-xs text-base-content/50">{shortcut[0]}</kbd>'
+            Markup('<kbd class="ml-6 font-sans text-xs text-base-content/50">{}</kbd>').format(
+                shortcut[0]
+            )
             if shortcut
             else ""
         )
-        label = (
-            '<span class="flex items-center gap-2 whitespace-nowrap">'
-            f"{_file_icon(view.icon)}{check}{html.escape(view.text)}</span>{kbd}"
-        )
-        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+        label = Markup(
+            '<span class="flex items-center gap-2'
+            ' whitespace-nowrap">{file_icon}{check}{text}</span>{kbd}'
+        ).format(file_icon=_file_icon(view.icon), check=check, text=view.text, kbd=kbd)
+        key = Markup(' data-shortcut="{}"').format(shortcut[1]) if shortcut else ""
         if not view.is_enabled:
-            item = f'<button type="button" class="justify-between" disabled>{label}</button>'
+            item = Markup(
+                '<button type="button" class="justify-between" disabled>{}</button>'
+            ).format(label)
         else:
-            item = self._active_html('class="justify-between"', label, key)
-        menu_disabled = "" if view.is_enabled else ' class="menu-disabled"'
-        return f"<li {self._root_attributes(oob=oob)}{menu_disabled}>{item}</li>"
+            item = self._active_html(Markup('class="justify-between"'), label, key)
+        menu_disabled = "" if view.is_enabled else Markup(' class="menu-disabled"')
+        return Markup("<li {root_attributes}{menu_disabled}>{item}</li>").format(
+            root_attributes=self._root_attributes(oob=oob), menu_disabled=menu_disabled, item=item
+        )
 
-    def _button_html(self, *, oob: bool) -> str:
+    def _button_html(self, *, oob: bool) -> Markup:
         """Render a header button: Save the highlighted one, its shortcut in the tooltip."""
         view = self._view
         shortcut = _web_shortcut(view.shortcut)
-        text = html.escape(view.text)
+        text = view.text
         tooltip = f"{text} ({shortcut[0]})" if shortcut else text
         style = "btn-primary" if isinstance(view, SaveAction) else "btn-ghost"
         icon = _file_icon(view.icon)
@@ -2730,16 +3006,16 @@ class WebActionRenderer(WebRenderer[ActionView]):
                 icon = _icon("new")
             else:
                 icon = _icon("open" if isinstance(view, OpenFileAction) else "save")
-        attributes = (
-            f'{self._root_attributes(oob=oob)} class="btn btn-sm {style}" title="{tooltip}"'
-        )
-        label = f'{icon}<span class="toolbar-label">{text}</span>'
+        attributes = Markup(
+            '{root_attributes} class="btn btn-sm {style}" title="{tooltip}"'
+        ).format(root_attributes=self._root_attributes(oob=oob), style=style, tooltip=tooltip)
+        label = Markup('{}<span class="toolbar-label">{}</span>').format(icon, text)
         if not view.is_enabled:
-            return f'<button {attributes} type="button" disabled>{label}</button>'
-        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+            return Markup('<button {} type="button" disabled>{}</button>').format(attributes, label)
+        key = Markup(' data-shortcut="{}"').format(shortcut[1]) if shortcut else ""
         return self._active_html(attributes, label, key)
 
-    def _tool_html(self, *, oob: bool) -> str:
+    def _tool_html(self, *, oob: bool) -> Markup:
         """Render a toolbar button, pressed while checked, its shortcut in the tooltip.
 
         With an icon, it keeps only the icon on a phone, as the header's buttons do: the
@@ -2747,26 +3023,36 @@ class WebActionRenderer(WebRenderer[ActionView]):
         """
         view = self._view
         shortcut = _web_shortcut(view.shortcut)
-        text = html.escape(view.text)
+        text = view.text
         icon = _file_icon(view.icon)
-        label = f'{icon}<span class="toolbar-label">{text}</span>' if icon else text
+        label = (
+            Markup('{}<span class="toolbar-label">{}</span>').format(icon, text) if icon else text
+        )
         if shortcut:
-            tooltip = f' title="{text} ({shortcut[0]})"'
+            tooltip = Markup(' title="{} ({})"').format(text, shortcut[0])
         else:
-            tooltip = f' title="{text}"' if icon else ""
+            tooltip = Markup(' title="{}"').format(text) if icon else Markup()
         is_checked = view.is_checkable and view.is_checked
         active = " btn-active" if is_checked else ""
-        pressed = f' aria-pressed="{str(is_checked).lower()}"' if view.is_checkable else ""
-        attributes = (
-            f'{self._root_attributes(oob=oob)} class="btn btn-ghost btn-sm{active}"'
-            f"{tooltip}{pressed}"
+        pressed = (
+            Markup(' aria-pressed="{}"').format(str(is_checked).lower())
+            if view.is_checkable
+            else ""
+        )
+        attributes = Markup(
+            '{root_attributes} class="btn btn-ghost btn-sm{active}"{tooltip}{pressed}'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            active=active,
+            tooltip=tooltip,
+            pressed=pressed,
         )
         if not self.is_enabled:
-            return f'<button {attributes} type="button" disabled>{label}</button>'
-        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
+            return Markup('<button {} type="button" disabled>{}</button>').format(attributes, label)
+        key = Markup(' data-shortcut="{}"').format(shortcut[1]) if shortcut else ""
         return self._active_html(attributes, label, key)
 
-    def _page_link_html(self, *, oob: bool) -> str:
+    def _page_link_html(self, *, oob: bool) -> Markup:
         """Render a toolbar link to a page: still a link to its address, for a new tab.
 
         A click posts `triggered` instead of following the link: the router navigates,
@@ -2775,58 +3061,99 @@ class WebActionRenderer(WebRenderer[ActionView]):
         view = self._view
         is_current = view.is_checkable and view.is_checked
         shortcut = _web_shortcut(view.shortcut)
-        text = html.escape(view.text)
-        tooltip = f' title="{text} ({shortcut[0]})"' if shortcut else ""
+        text = view.text
+        tooltip = Markup(' title="{} ({})"').format(text, shortcut[0]) if shortcut else ""
         icon = _file_icon(view.icon)
-        label = f"{icon}{text}"
+        label = Markup("{}{}").format(icon, text)
         gap = " gap-2" if icon else ""
         classes = f"tab tab-active{gap}" if is_current else f"tab{gap}"
-        current = ' aria-current="page"' if is_current else ""
+        current = Markup(' aria-current="page"') if is_current else ""
         if not view.is_enabled:
-            return (
-                f'<a {self._root_attributes(oob=oob)} class="tab tab-disabled{gap}"'
-                f' aria-disabled="true"{tooltip}>{label}</a>'
+            return Markup(
+                '<a {root_attributes} class="tab tab-disabled{gap}"'
+                ' aria-disabled="true"{tooltip}>{label}</a>'
+            ).format(
+                root_attributes=self._root_attributes(oob=oob),
+                gap=gap,
+                tooltip=tooltip,
+                label=label,
             )
-        key = f' data-shortcut="{shortcut[1]}"' if shortcut else ""
-        href = html.escape(self.href or "")
-        return (
-            f'<a {self._root_attributes(oob=oob)} class="{classes}" href="{href}"{current}'
-            f'{tooltip} hx-post="/widget/{self.widget_id}"'
-            f""" hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{label}</a>"""
+        key = Markup(' data-shortcut="{}"').format(shortcut[1]) if shortcut else ""
+        href = self.href or ""
+        return Markup(
+            '<a {root_attributes} class="{classes}" href="{href}"{current}'
+            '{tooltip} hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{label}</a>"""
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            classes=classes,
+            href=href,
+            current=current,
+            tooltip=tooltip,
+            widget_id=self.widget_id,
+            key=key,
+            label=label,
         )
 
-    def _active_html(self, attributes: str, label: str, key: str) -> str:
+    def _active_html(self, attributes: str, label: str, key: str) -> Markup:
         """Render the element a click (or the page's key handler, through `key`) activates."""
         view = self._view
         if isinstance(view, (SaveAction, SaveAsAction)):
             # it fires the action, so it posts the page's form, a download as answer
-            return (
-                f'<button {attributes} type="submit" form="{SAVE_FORM_ID}" name="trigger"'
-                f' value="{self.widget_id}" {_CLOSE_DROPDOWN}{key}>{label}</button>'
+            return Markup(
+                '<button {attributes} type="submit" form="{SAVE_FORM_ID}" name="trigger"'
+                ' value="{widget_id}" {CLOSE_DROPDOWN}{key}>{label}</button>'
+            ).format(
+                attributes=attributes,
+                SAVE_FORM_ID=SAVE_FORM_ID,
+                widget_id=self.widget_id,
+                CLOSE_DROPDOWN=_CLOSE_DROPDOWN,
+                key=key,
+                label=label,
             )
         if isinstance(view, OpenFileAction):
-            accept = "" if self.accept is None else f' accept="{html.escape(self.accept)}"'
-            return (
-                f'<label {attributes}>{label}<input type="file" name="file"{accept}'
+            accept = "" if self.accept is None else Markup(' accept="{}"').format(self.accept)
+            return Markup(
+                '<label {attributes}>{label}<input type="file" name="file"{accept}'
                 ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
-                f' hx-trigger="change" hx-vals=\'{{"trigger": "{self.widget_id}"}}\''
-                f' hx-swap="none" autocomplete="off" {_CLOSE_DROPDOWN}{key}></label>'
+                """ hx-trigger="change" hx-vals='{{"trigger": "{widget_id}"}}'"""
+                ' hx-swap="none" autocomplete="off" {CLOSE_DROPDOWN}{key}></label>'
+            ).format(
+                attributes=attributes,
+                label=label,
+                accept=accept,
+                widget_id=self.widget_id,
+                CLOSE_DROPDOWN=_CLOSE_DROPDOWN,
+                key=key,
             )
         if isinstance(view, PickFileAction):
             types = ",".join(self.file_types)
-            accept = f' accept="{html.escape(types)}"' if types else ""
+            accept = Markup(' accept="{}"').format(types) if types else ""
             # emptied once sent: picking the same file again is a change too
-            return (
-                f'<label {attributes}>{label}<input type="file" name="file"{accept}'
-                f' class="hidden" hx-post="/widget/{self.widget_id}/file"'
+            return Markup(
+                '<label {attributes}>{label}<input type="file" name="file"{accept}'
+                ' class="hidden" hx-post="/widget/{widget_id}/file"'
                 ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
                 ' data-clear-after-post autocomplete="off"'
-                f" {_CLOSE_DROPDOWN}{key}></label>"
+                " {CLOSE_DROPDOWN}{key}></label>"
+            ).format(
+                attributes=attributes,
+                label=label,
+                accept=accept,
+                widget_id=self.widget_id,
+                CLOSE_DROPDOWN=_CLOSE_DROPDOWN,
+                key=key,
             )
-        return (
-            f'<button {attributes} type="button"'
-            f' hx-post="/widget/{self.widget_id}" hx-vals=\'{{"event": "triggered"}}\''
-            f' hx-swap="none" {_CLOSE_DROPDOWN}{key}>{label}</button>'
+        return Markup(
+            '<button {attributes} type="button"'
+            """ hx-post="/widget/{widget_id}" hx-vals='{{"event": "triggered"}}'"""
+            ' hx-swap="none" {CLOSE_DROPDOWN}{key}>{label}</button>'
+        ).format(
+            attributes=attributes,
+            widget_id=self.widget_id,
+            CLOSE_DROPDOWN=_CLOSE_DROPDOWN,
+            key=key,
+            label=label,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -2864,15 +3191,14 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
         #: set by its toolbar: a bar between buttons rather than a menu's line
         self.is_in_toolbar = False
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         if self.is_in_toolbar:
-            return (
-                f'<div {self._root_attributes(oob=oob)} role="separator"'
+            return Markup(
+                '<div {} role="separator"'
                 ' aria-orientation="vertical" class="mx-1 h-5 w-px bg-base-300"></div>'
-            )
-        return (
-            f'<li {self._root_attributes(oob=oob)} role="separator">'
-            '<hr class="my-1 border-base-300 p-0"></li>'
+            ).format(self._root_attributes(oob=oob))
+        return Markup('<li {} role="separator"><hr class="my-1 border-base-300 p-0"></li>').format(
+            self._root_attributes(oob=oob)
         )
 
 
@@ -2895,7 +3221,7 @@ class WebToolBarRenderer(WebRenderer[ToolBar]):
             elif isinstance(child.renderer, WebSeparatorRenderer):
                 child.renderer.is_in_toolbar = True
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         items = _between_items(
             [
                 (isinstance(child, SeparatorAction), child.renderer.to_html())
@@ -2903,12 +3229,15 @@ class WebToolBarRenderer(WebRenderer[ToolBar]):
                 if isinstance(child.renderer, WebRenderer)
             ]
         )
-        title = html.escape(self._view.title)
-        label = f' aria-label="{title}"' if title else ""
-        return (
-            f'<div {self._root_attributes(oob=oob)} role="toolbar"{label}'
-            ' class="flex items-center gap-1">'
-            f"{''.join(item for _, item in items)}</div>"
+        title = self._view.title
+        label = Markup(' aria-label="{}"').format(title) if title else ""
+        return Markup(
+            '<div {root_attributes} role="toolbar"{label} class="flex items-center'
+            ' gap-1">{join}</div>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            label=label,
+            join=Markup("").join(item for (_, item) in items),
         )
 
 
@@ -2930,7 +3259,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             dict.fromkeys(("title", "text", "kind", "accept_text", "reject_text"), self._mark_dirty)
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         title_id = f"{self.widget_id}-title"
         text_id = f"{self.widget_id}-text"
@@ -2943,33 +3272,51 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         accept = self._button_html("accept", view.accept_text, "btn btn-primary", disabled)
         # a disabled dialog can't be closed: its answer would be ignored
         cancel = (
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
-            """ hx-vals='{"event": "dismiss"}'"""
+            Markup(
+                ' hx-post="/widget/{}" hx-trigger="cancel"'
+                """ hx-vals='{{"event": "dismiss"}}'"""
+            ).format(self.widget_id)
             if self.is_enabled
             else " data-keep-open"
         )
         title = (
-            f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
+            Markup('<h2 id="{}" class="text-lg font-bold">{}</h2>').format(title_id, view.title)
             if view.title
             else ""
         )
-        labelledby = f' aria-labelledby="{title_id}"' if view.title else ""
-        return (
-            f'<dialog {self._root_attributes(oob=oob)} class="modal" data-dialog'
-            f'{labelledby} aria-describedby="{text_id}"{cancel} hx-swap="none">'
-            f'<div class="modal-box">{title}'
-            f'<p id="{text_id}" class="py-4 whitespace-pre-line">{html.escape(view.text)}</p>'
-            f'<div class="modal-action">{reject}{accept}</div></div></dialog>'
+        labelledby = Markup(' aria-labelledby="{}"').format(title_id) if view.title else ""
+        return Markup(
+            '<dialog {root_attributes} class="modal" data-dialog'
+            '{labelledby} aria-describedby="{text_id}"{cancel} hx-swap="none">'
+            '<div class="modal-box">{title}'
+            '<p id="{text_id}" class="py-4 whitespace-pre-line">{text}</p>'
+            '<div class="modal-action">{reject}{accept}</div></div></dialog>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            labelledby=labelledby,
+            text_id=text_id,
+            cancel=cancel,
+            title=title,
+            text=view.text,
+            reject=reject,
+            accept=accept,
         )
 
-    def _button_html(self, event: str, text: str, classes: str, disabled: str) -> str:
+    def _button_html(self, event: str, text: str, classes: str, disabled: str) -> Markup:
         # the dialog's own `close`, not `cancel`: no dismissal posted on top of the answer
         autofocus = " autofocus" if event == "accept" else ""
-        return (
-            f'<button type="button" class="{classes}" hx-post="/widget/{self.widget_id}"'
-            f""" hx-vals='{{"event": "{event}"}}'"""
-            f" data-close-dialog{autofocus}{disabled}>"
-            f"{html.escape(text)}</button>"
+        return Markup(
+            '<button type="button" class="{classes}" hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "{event}"}}'"""
+            " data-close-dialog{autofocus}{disabled}>"
+            "{text}</button>"
+        ).format(
+            classes=classes,
+            widget_id=self.widget_id,
+            event=event,
+            autofocus=autofocus,
+            disabled=disabled,
+            text=text,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -3013,7 +3360,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
     def accept_id(self) -> str:
         return f"{self.widget_id}-accept"
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         is_whole, self._is_whole = self._is_whole, False
         if oob and not is_whole:
             return self._accept_html(oob=True)
@@ -3023,41 +3370,59 @@ class WebFormDialogRenderer(WebDialogRenderer):
         disabled = "" if self.is_enabled else " disabled"
         reject = self._button_html("reject", view.reject_text, "btn", disabled)
         cancel = (
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
-            """ hx-vals='{"event": "dismiss"}'"""
+            Markup(
+                ' hx-post="/widget/{}" hx-trigger="cancel"'
+                """ hx-vals='{{"event": "dismiss"}}'"""
+            ).format(self.widget_id)
             if self.is_enabled
             else " data-keep-open"
         )
         title = (
-            f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
+            Markup('<h2 id="{}" class="text-lg font-bold">{}</h2>').format(title_id, view.title)
             if view.title
             else ""
         )
         text = (
-            f'<p id="{text_id}" class="whitespace-pre-line">{html.escape(view.text)}</p>'
+            Markup('<p id="{}" class="whitespace-pre-line">{}</p>').format(text_id, view.text)
             if view.text
             else ""
         )
-        labelledby = f' aria-labelledby="{title_id}"' if view.title else ""
-        describedby = f' aria-describedby="{text_id}"' if view.text else ""
+        labelledby = Markup(' aria-labelledby="{}"').format(title_id) if view.title else ""
+        describedby = Markup(' aria-describedby="{}"').format(text_id) if view.text else ""
         form = view.form.renderer
         form_html = form.to_html() if isinstance(form, WebRenderer) else ""
-        return (
-            f'<dialog {self._root_attributes(oob=oob)} class="modal" data-dialog'
-            f'{labelledby}{describedby}{cancel} hx-swap="none">'
-            f'<div class="modal-box flex flex-col gap-4">{title}{text}{form_html}'
-            f'<div class="modal-action">{reject}{self._accept_html(oob=False)}</div>'
+        return Markup(
+            '<dialog {root_attributes} class="modal" data-dialog'
+            '{labelledby}{describedby}{cancel} hx-swap="none">'
+            '<div class="modal-box flex flex-col gap-4">{title}{text}{form_html}'
+            '<div class="modal-action">{reject}{accept_html}</div>'
             "</div></dialog>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            labelledby=labelledby,
+            describedby=describedby,
+            cancel=cancel,
+            title=title,
+            text=text,
+            form_html=form_html,
+            reject=reject,
+            accept_html=self._accept_html(oob=False),
         )
 
-    def _accept_html(self, *, oob: bool) -> str:
-        swap = ' hx-swap-oob="true"' if oob else ""
+    def _accept_html(self, *, oob: bool) -> Markup:
+        swap = Markup(' hx-swap-oob="true"') if oob else ""
         disabled = "" if self.is_enabled and self._form_view.is_accept_enabled else " disabled"
-        return (
-            f'<button id="{self.accept_id}" type="button" class="btn btn-primary"{swap}'
-            f' hx-post="/widget/{self.widget_id}"'
-            f""" hx-vals='{{"event": "accept"}}'{disabled}>"""
-            f"{html.escape(self._form_view.accept_text)}</button>"
+        return Markup(
+            '<button id="{accept_id}" type="button" class="btn btn-primary"{swap}'
+            ' hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "accept"}}'{disabled}>"""
+            "{accept_text}</button>"
+        ).format(
+            accept_id=self.accept_id,
+            swap=swap,
+            widget_id=self.widget_id,
+            disabled=disabled,
+            accept_text=self._form_view.accept_text,
         )
 
     def _refresh_accept(self, view: DialogView, rendered_object: str, value: Any) -> None:
@@ -3077,17 +3442,20 @@ class WebPageRenderer(WebRenderer[PageView]):
         super().render()
         self._adopt(self._view.content_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
-        content = "".join(
+    def to_html(self, *, oob: bool = False) -> Markup:
+        content = Markup("").join(
             view.renderer.to_html()
             for view in self._view.content_views
             # at the end of the page instead (see `WebDialogRenderer`)
             if isinstance(view.renderer, WebRenderer) and not isinstance(view, DialogView)
         )
-        return (
-            f"<section {self._root_attributes(oob=oob)}"
-            f' data-width="{self._view.width.name.lower()}" class="flex flex-col gap-6">'
-            f"{content}</section>"
+        return Markup(
+            '<section {root_attributes} data-width="{lower}" class="flex flex-col'
+            ' gap-6">{content}</section>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            lower=self._view.width.name.lower(),
+            content=content,
         )
 
 
@@ -3106,31 +3474,36 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         stretched_views = self._view.stretched_views
         if not any(stretch > 0 for _, stretch in stretched_views):
             # as wide as their content: a container query would measure them as 0 wide
-            cells = "".join(
-                '<div class="min-w-0 has-[>[hidden]]:hidden" style="flex: none">'
-                f"{view.renderer.to_html()}</div>"
+            cells = Markup("").join(
+                Markup(
+                    '<div class="min-w-0 has-[>[hidden]]:hidden" style="flex: none">{}</div>'
+                ).format(view.renderer.to_html())
                 for view, _ in stretched_views
                 if isinstance(view.renderer, WebRenderer)
             )
             align = " justify-end" if self._view.align is Align.END else ""
-            return f'<div {self._root_attributes(oob=oob)} class="flex gap-6{align}">{cells}</div>'
-        cells = "".join(
-            '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
-            # no share: as wide as its content
-            f' style="--share: {f"{stretch} 1 0%" if stretch > 0 else "none"}">'
-            f"{view.renderer.to_html()}</div>"
+            return Markup('<div {root_attributes} class="flex gap-6{align}">{cells}</div>').format(
+                root_attributes=self._root_attributes(oob=oob), align=align, cells=cells
+            )
+        cells = Markup("").join(
+            Markup(
+                '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
+                # no share: as wide as its content
+                ' style="--share: {}">'
+                "{}</div>"
+            ).format(f"{stretch} 1 0%" if stretch > 0 else "none", view.renderer.to_html())
             for view, stretch in stretched_views
             if isinstance(view.renderer, WebRenderer)
         )
         # the row's own width is queried from its root, the views laid out inside it
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="@container">'
-            f'<div class="flex flex-col gap-6 @2xl:flex-row">{cells}</div></div>'
-        )
+        return Markup(
+            '<div {} class="@container">'
+            '<div class="flex flex-col gap-6 @2xl:flex-row">{}</div></div>'
+        ).format(self._root_attributes(oob=oob), cells)
 
 
 class WebVerticalRenderer(WebRenderer[VerticalView]):
@@ -3142,13 +3515,15 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
-        content = "".join(
+    def to_html(self, *, oob: bool = False) -> Markup:
+        content = Markup("").join(
             view.renderer.to_html()
             for view in self._view.children_views
             if isinstance(view.renderer, WebRenderer)
         )
-        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
+        return Markup('<div {} class="flex flex-col gap-6">{}</div>').format(
+            self._root_attributes(oob=oob), content
+        )
 
 
 class WebSplitterRenderer(WebRenderer[SplitterView]):
@@ -3176,11 +3551,11 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         super().render()
         self._adopt(self._view.panes)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         is_vertical = view.orientation is Orientation.VERTICAL
         shown = sum(size for pane, size in zip(view.panes, view.sizes) if pane.is_visible) or 1
-        disabled = "" if self.is_enabled else ' aria-disabled="true"'
+        disabled = "" if self.is_enabled else Markup(' aria-disabled="true"')
         # a separator's orientation is its line's: across the splitter
         border_orientation = "horizontal" if is_vertical else "vertical"
         pane_class = (
@@ -3197,29 +3572,44 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             pane_id = f"{self.widget_id}-pane-{index}"
             if index > 0:
                 cells.append(
-                    f'<div class="cui-splitter-border" role="separator"'
-                    f' aria-orientation="{border_orientation}" aria-controls="{pane_id}"'
-                    f' aria-label="{html.escape(view.border_text)}" aria-valuemin="0"'
-                    f' aria-valuemax="100" aria-valuenow="{round(100 * before / shown)}"'
-                    f' tabindex="{0 if self.is_enabled else -1}"{disabled}></div>'
+                    Markup(
+                        '<div class="cui-splitter-border" role="separator"'
+                        ' aria-orientation="{border_orientation}" aria-controls="{pane_id}"'
+                        ' aria-label="{border_text}" aria-valuemin="0"'
+                        ' aria-valuemax="100" aria-valuenow="{round}"'
+                        ' tabindex="{value}"{disabled}></div>'
+                    ).format(
+                        border_orientation=border_orientation,
+                        pane_id=pane_id,
+                        border_text=view.border_text,
+                        round=round(100 * before / shown),
+                        value=0 if self.is_enabled else -1,
+                        disabled=disabled,
+                    )
                 )
             if pane.is_visible:
                 before += size
             cells.append(
-                f'<div id="{pane_id}" data-pane class="{pane_class}"'
-                f' style="--share: {size} 1 0%">{pane.renderer.to_html()}</div>'
+                Markup(
+                    '<div id="{pane_id}" data-pane class="{pane_class}" style="--share: {size} 1'
+                    ' 0%">{to_html}</div>'
+                ).format(
+                    pane_id=pane_id,
+                    pane_class=pane_class,
+                    size=size,
+                    to_html=pane.renderer.to_html(),
+                )
             )
         if is_vertical:
-            return (
-                f"<div {self._root_attributes(oob=oob)} data-splitter>"
-                f'<div class="flex h-128 flex-col">{"".join(cells)}</div></div>'
-            )
+            return Markup(
+                '<div {} data-splitter><div class="flex h-128 flex-col">{}</div></div>'
+            ).format(self._root_attributes(oob=oob), Markup("").join(cells))
         # the splitter's own width is queried from its root, the panes laid out inside it
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="@container" data-splitter>'
+        return Markup(
+            '<div {} class="@container" data-splitter>'
             '<div class="flex flex-col gap-6 @2xl:flex-row @2xl:gap-0">'
-            f"{''.join(cells)}</div></div>"
-        )
+            "{}</div></div>"
+        ).format(self._root_attributes(oob=oob), Markup("").join(cells))
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "resize":
@@ -3261,25 +3651,35 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         is_open = " open" if self._view.is_expanded else ""
-        summary_attributes = "" if self.is_enabled else ' tabindex="-1" aria-disabled="true"'
+        summary_attributes = (
+            "" if self.is_enabled else Markup(' tabindex="-1" aria-disabled="true"')
+        )
         summary_classes = "" if self.is_enabled else " pointer-events-none opacity-50"
-        content = "".join(
+        content = Markup("").join(
             view.renderer.to_html()
             for view in self._view.children_views
             if isinstance(view.renderer, WebRenderer)
         )
         # `toggle` also fires when the server swaps it in open: posting the state the
         # server already has, which `dispatch` ignores
-        return (
-            f"<details {self._root_attributes(oob=oob)}{is_open}"
+        return Markup(
+            "<details {root_attributes}{is_open}"
             ' class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="toggle"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="toggle"'
             ' data-post-event data-post-open hx-swap="none">'
-            f'<summary class="collapse-title font-semibold{summary_classes}"{summary_attributes}>'
-            f"{html.escape(self._view.title)}</summary>"
-            f'<div class="collapse-content flex flex-col gap-6">{content}</div></details>'
+            '<summary class="collapse-title font-semibold{summary_classes}"{summary_attributes}>'
+            "{title}</summary>"
+            '<div class="collapse-content flex flex-col gap-6">{content}</div></details>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            is_open=is_open,
+            widget_id=self.widget_id,
+            summary_classes=summary_classes,
+            summary_attributes=summary_attributes,
+            title=self._view.title,
+            content=content,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -3318,60 +3718,81 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             }
         )
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         positions = {
             path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
         }
         # clipped to a pane too narrow for it, the focus rings at its edges left whole
-        return (
-            f"<ul {self._root_attributes(oob=oob)}"
-            ' class="flex flex-col gap-0.5 overflow-clip [overflow-clip-margin:4px]">'
-            f"{self._nodes_html(self._view.nodes, (), positions)}</ul>"
-        )
+        return Markup(
+            '<ul {} class="flex flex-col gap-0.5 overflow-clip [overflow-clip-margin:4px]">{}</ul>'
+        ).format(self._root_attributes(oob=oob), self._nodes_html(self._view.nodes, (), positions))
 
     def _nodes_html(
         self, nodes: Iterable[TreeNode], parent: TreePath, positions: Mapping[TreePath, int]
-    ) -> str:
+    ) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
         items: list[str] = []
         for node in nodes:
             path = (*parent, node.key)
-            position, label = positions[path], html.escape(node.label)
+            position, label = positions[path], node.label
             children = ""
             if len(node.children) == 0:
-                toggle = '<span class="size-6 shrink-0" aria-hidden="true"></span>'
+                toggle = Markup('<span class="size-6 shrink-0" aria-hidden="true"></span>')
             else:
                 is_expanded = path in self._view.expanded
                 turn = "" if is_expanded else " -rotate-90"
                 # named by its node, which `aria-expanded` says it expands or collapses
-                toggle = (
-                    f'<button id="{self.widget_id}-toggle-{position}" type="button"'
+                toggle = Markup(
+                    '<button id="{widget_id}-toggle-{position}" type="button"'
                     ' class="btn btn-ghost btn-xs btn-square"'
-                    f' aria-expanded="{str(is_expanded).lower()}" aria-label="{label}"'
-                    f"{self._post('toggle', path, expanded=not is_expanded)}{disabled}>"
-                    f"{_icon('chevron', 'size-3' + turn)}</button>"
+                    ' aria-expanded="{lower}" aria-label="{label}"'
+                    "{post}{disabled}>"
+                    "{chevron_icon}</button>"
+                ).format(
+                    widget_id=self.widget_id,
+                    position=position,
+                    lower=str(is_expanded).lower(),
+                    label=label,
+                    post=self._post("toggle", path, expanded=not is_expanded),
+                    disabled=disabled,
+                    chevron_icon=_icon("chevron", "size-3" + turn),
                 )
                 if is_expanded:
-                    children = (
+                    children = Markup(
                         '<ul class="ms-3 flex flex-col gap-0.5 border-s border-base-300 ps-1">'
-                        f"{self._nodes_html(node.children, path, positions)}</ul>"
-                    )
+                        "{}</ul>"
+                    ).format(self._nodes_html(node.children, path, positions))
             is_selected = path == self._view.selected
-            selected = ' aria-current="true"' if is_selected else ""
+            selected = Markup(' aria-current="true"') if is_selected else ""
             variant = "btn-soft btn-primary" if is_selected else "btn-ghost"
             mark_id = f"{self.widget_id}-mark-{position}"
-            described = "" if node.mark is None else f' aria-describedby="{mark_id}"'
-            items.append(
-                f'<li><div class="flex items-center gap-1">{toggle}'
-                f'<button id="{self.widget_id}-node-{position}" type="button"'
-                f' class="btn btn-sm {variant} min-w-0 shrink justify-start font-normal"'
-                f"{selected}{described}"
-                f"{self._post('select', path)}{disabled}>{self._node_content(node, mark_id)}"
-                f"</button></div>{children}</li>"
+            described = (
+                "" if node.mark is None else Markup(' aria-describedby="{}"').format(mark_id)
             )
-        return "".join(items)
+            items.append(
+                Markup(
+                    '<li><div class="flex items-center gap-1">{toggle}'
+                    '<button id="{widget_id}-node-{position}" type="button"'
+                    ' class="btn btn-sm {variant} min-w-0 shrink justify-start font-normal"'
+                    "{selected}{described}"
+                    "{post}{disabled}>{node_content}"
+                    "</button></div>{children}</li>"
+                ).format(
+                    toggle=toggle,
+                    widget_id=self.widget_id,
+                    position=position,
+                    variant=variant,
+                    selected=selected,
+                    described=described,
+                    post=self._post("select", path),
+                    disabled=disabled,
+                    node_content=self._node_content(node, mark_id),
+                    children=children,
+                )
+            )
+        return Markup("").join(items)
 
-    def _node_content(self, node: TreeNode, mark_id: str) -> str:
+    def _node_content(self, node: TreeNode, mark_id: str) -> Markup:
         """Show a node's icon, its label as bold or underlined as it says, then its mark.
 
         The mark's icon is hidden from screen readers, which read its name (at `mark_id`)
@@ -3383,26 +3804,30 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             for style, is_on in (("font-bold", node.is_bold), ("underline", node.is_underlined))
             if is_on
         ]
-        label = f'<span class="{" ".join(["truncate", *styles])}">{html.escape(node.label)}</span>'
+        label = Markup('<span class="{}">{}</span>').format(
+            " ".join(["truncate", *styles]), node.label
+        )
         mark = ""
         if node.mark is not None:
             icon, color = _MARK_ICONS[node.mark]
-            text = html.escape(self._view.mark_text(node.mark))
-            mark = (
-                f'<span class="shrink-0 {color}">{_icon(icon)}</span>'
-                f'<span id="{mark_id}" hidden>{text}</span>'
-            )
-        return f"{_file_icon(node.icon)}{label}{mark}"
+            text = self._view.mark_text(node.mark)
+            mark = Markup(
+                '<span class="shrink-0 {color}">{icon}</span><span id="{mark_id}"'
+                " hidden>{text}</span>"
+            ).format(color=color, icon=_icon(icon), mark_id=mark_id, text=text)
+        return Markup("{file_icon}{label}{mark}").format(
+            file_icon=_file_icon(node.icon), label=label, mark=mark
+        )
 
-    def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> str:
+    def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> Markup:
         """Get the attributes posting an event of the node at `path`, without swapping it back."""
         values = {"event": event, "path": json.dumps(list(path))}
         if event == "toggle":
             values["expanded"] = str(expanded).lower()
-        return (
-            f" hx-post=\"/widget/{self.widget_id}\" hx-vals='{html.escape(json.dumps(values))}'"
+        return Markup(
+            """ hx-post="/widget/{}" hx-vals='{}'"""
             ' hx-swap="none"'
-        )
+        ).format(self.widget_id, json.dumps(values))
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled tree can't be clicked: a post saying otherwise is refused
@@ -3463,43 +3888,58 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
         """The id of the drawer's checkbox, checked while the drawer shows on a phone."""
         return f"{self.widget_id}-drawer"
 
-    def to_html(self, *, oob: bool = False) -> str:
-        title = html.escape(self._view.title)
-        heading = f'<h2 class="font-semibold text-primary">{title}</h2>' if title else ""
-        content = "".join(
+    def to_html(self, *, oob: bool = False) -> Markup:
+        title = self._view.title
+        heading = (
+            Markup('<h2 class="font-semibold text-primary">{}</h2>').format(title) if title else ""
+        )
+        content = Markup("").join(
             view.renderer.to_html()
             for view in self._view.children_views
             if isinstance(view.renderer, WebRenderer)
         )
-        name = title or html.escape(self._view.toggle_text)
+        name = title or self._view.toggle_text
         retracted = "" if self._view.is_expanded else " data-retracted"
         # bottom padding keeps the last view clear of the fixed status bar
-        aside = (
-            f'<aside {self._root_attributes(oob=oob)}{retracted} aria-label="{name}"'
+        aside = Markup(
+            '<aside {root_attributes}{retracted} aria-label="{name}"'
             ' class="cui-sidebar flex min-h-full w-80 max-w-[85vw] flex-col gap-6 border-r'
-            f' border-base-300 bg-base-100 p-4 pb-20">{heading}{content}</aside>'
+            ' border-base-300 bg-base-100 p-4 pb-20">{heading}{content}</aside>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            retracted=retracted,
+            name=name,
+            heading=heading,
+            content=content,
         )
         return aside + self.toggle_html(oob=True) if oob else aside
 
-    def toggle_html(self, *, oob: bool = False) -> str:
+    def toggle_html(self, *, oob: bool = False) -> Markup:
         """Get the header's button retracting and expanding the sidebar.
 
         `aria-expanded` tells whether the column shows; the page's script keeps it
         telling whether the drawer shows on a phone.
         """
-        swap = ' hx-swap-oob="true"' if oob else ""
+        swap = Markup(' hx-swap-oob="true"') if oob else ""
         expanded = "true" if self._view.is_expanded else "false"
-        text = html.escape(self._view.toggle_text)
+        text = self._view.toggle_text
         # posted by the page's script on a wide screen only, once the column has changed,
         # with whether it is now expanded
-        return (
-            f'<button id="{self.widget_id}-toggle" type="button"{swap}'
+        return Markup(
+            '<button id="{widget_id}-toggle" type="button"{swap}'
             ' class="btn btn-ghost btn-square btn-sm"'
-            f' data-sidebar-toggle="{self.drawer_id}" aria-controls="{self.widget_id}"'
-            f' aria-expanded="{expanded}" aria-label="{text}" title="{text}"'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="sidebar-toggle"'
-            """ hx-vals='{"event": "toggle"}' hx-swap="none">"""
-            f"{_icon('sidebar', 'size-5')}</button>"
+            ' data-sidebar-toggle="{drawer_id}" aria-controls="{widget_id}"'
+            ' aria-expanded="{expanded}" aria-label="{text}" title="{text}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="sidebar-toggle"'
+            """ hx-vals='{{"event": "toggle"}}' hx-swap="none">"""
+            "{sidebar_icon}</button>"
+        ).format(
+            widget_id=self.widget_id,
+            swap=swap,
+            drawer_id=self.drawer_id,
+            expanded=expanded,
+            text=text,
+            sidebar_icon=_icon("sidebar", "size-5"),
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -3512,17 +3952,22 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             self._view.is_expanded = is_expanded
         self._view.toggled.emit(is_expanded)
 
-    def drawer_html(self, content: str) -> str:
+    def drawer_html(self, content: str) -> Markup:
         """Lay out `content`, the pages' column, beside the sidebar, in a drawer on a phone."""
-        return (
+        return Markup(
             '<div class="cui-drawer drawer lg:drawer-open">'
-            f'<input id="{self.drawer_id}" type="checkbox" class="drawer-toggle"'
+            '<input id="{drawer_id}" type="checkbox" class="drawer-toggle"'
             ' tabindex="-1" aria-hidden="true">'
-            f'<div class="drawer-content">{content}</div>'
+            '<div class="drawer-content">{content}</div>'
             '<div class="drawer-side z-30">'
-            f'<label for="{self.drawer_id}" class="drawer-overlay"'
-            f' aria-label="{html.escape(self._view.toggle_text)}"></label>'
-            f"{self.to_html()}</div></div>"
+            '<label for="{drawer_id}" class="drawer-overlay"'
+            ' aria-label="{toggle_text}"></label>'
+            "{to_html}</div></div>"
+        ).format(
+            drawer_id=self.drawer_id,
+            content=content,
+            toggle_text=self._view.toggle_text,
+            to_html=self.to_html(),
         )
 
 
@@ -3564,11 +4009,11 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
     def _item_id(self, view: View) -> str:
         return f"{self.widget_id}-item-{id(view)}"
 
-    def _item_html(self, view: View) -> str:
+    def _item_html(self, view: View) -> Markup:
         content = view.renderer.to_html() if isinstance(view.renderer, WebRenderer) else ""
-        return f'<div id="{self._item_id(view)}">{content}</div>'
+        return Markup('<div id="{}">{}</div>').format(self._item_id(view), content)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         views = self._view.item_views
         sent, self._sent = self._sent, list(views)
         is_whole, self._is_whole = self._is_whole, False
@@ -3576,17 +4021,16 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
             kept = [view for view in sent if view in views]
             if kept == [view for view in views if view in sent]:
                 return self._changes_html(sent, views)
-        items = "".join(self._item_html(view) for view in views)
+        items = Markup("").join(self._item_html(view) for view in views)
         # `cui-list`: its expanders join in one box (see `css/app.css`)
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="cui-list flex flex-col gap-3">'
-            f"{items}</div>"
+        return Markup('<div {} class="cui-list flex flex-col gap-3">{}</div>').format(
+            self._root_attributes(oob=oob), items
         )
 
-    def _changes_html(self, sent: list[View], views: list[View]) -> str:
+    def _changes_html(self, sent: list[View], views: list[View]) -> Markup:
         """Delete the items gone and put each new one after its neighbour, in order."""
         fragments = [
-            f'<div id="{self._item_id(view)}" hx-swap-oob="delete"></div>'
+            Markup('<div id="{}" hx-swap-oob="delete"></div>').format(self._item_id(view))
             for view in sent
             if view not in views
         ]
@@ -3598,8 +4042,10 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
                 if index > 0
                 else f"afterbegin:#{self.widget_id}"
             )
-            fragments.append(f'<div hx-swap-oob="{place}">{self._item_html(view)}</div>')
-        return "".join(fragments)
+            fragments.append(
+                Markup('<div hx-swap-oob="{}">{}</div>').format(place, self._item_html(view))
+            )
+        return Markup("").join(fragments)
 
     def _refresh_item_views(
         self, view: ListView[Any], _rendered_object: str, value: list[View]
@@ -3657,13 +4103,15 @@ class WebTabPageRenderer(WebRenderer[TabPage]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
-        content = "".join(
+    def to_html(self, *, oob: bool = False) -> Markup:
+        content = Markup("").join(
             view.renderer.to_html()
             for view in self._view.children_views
             if isinstance(view.renderer, WebRenderer)
         )
-        return f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-6">{content}</div>'
+        return Markup('<div {} class="flex flex-col gap-6">{}</div>').format(
+            self._root_attributes(oob=oob), content
+        )
 
     def _refresh_tab(self, view: TabPage, rendered_object: str, value: Any) -> None:
         self._refresh_enabled(view, rendered_object, value)
@@ -3690,7 +4138,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         super().render()
         self._adopt(self._view.tabs)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         current = self._view.current_index
         tabs: list[str] = []
         panels: list[str] = []
@@ -3704,20 +4152,44 @@ class WebTabsRenderer(WebRenderer[TabView]):
             disabled = "" if tab.is_enabled and self.is_enabled else " disabled"
             # only the current tab in the tab order: the arrow keys move between them
             tabs.append(
-                f'<button type="button" role="tab" id="{tab_id}" aria-controls="{panel_id}"'
-                f' aria-selected="{str(is_current).lower()}" tabindex="{0 if is_current else -1}"'
-                f' class="tab{active}" data-tab hx-post="/widget/{self.widget_id}"'
-                f""" hx-vals='{{"event": "select", "index": "{index}"}}' hx-swap='none'"""
-                f"{hidden}{disabled}>{html.escape(tab.title)}</button>"
+                Markup(
+                    '<button type="button" role="tab" id="{tab_id}" aria-controls="{panel_id}"'
+                    ' aria-selected="{lower}" tabindex="{value}"'
+                    ' class="tab{active}" data-tab hx-post="/widget/{widget_id}"'
+                    """ hx-vals='{{"event": "select", "index": "{index}"}}' hx-swap='none'"""
+                    "{hidden}{disabled}>{title}</button>"
+                ).format(
+                    tab_id=tab_id,
+                    panel_id=panel_id,
+                    lower=str(is_current).lower(),
+                    value=0 if is_current else -1,
+                    active=active,
+                    widget_id=self.widget_id,
+                    index=index,
+                    hidden=hidden,
+                    disabled=disabled,
+                    title=tab.title,
+                )
             )
             panels.append(
-                f'<div role="tabpanel" id="{panel_id}" aria-labelledby="{tab_id}"'
-                f"{'' if is_current else ' hidden'}>{tab.renderer.to_html()}</div>"
+                Markup(
+                    '<div role="tabpanel" id="{panel_id}"'
+                    ' aria-labelledby="{tab_id}"{value}>{to_html}</div>'
+                ).format(
+                    panel_id=panel_id,
+                    tab_id=tab_id,
+                    value="" if is_current else " hidden",
+                    to_html=tab.renderer.to_html(),
+                )
             )
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="flex flex-col gap-4">'
-            f'<div role="tablist" class="tabs tabs-border">{"".join(tabs)}</div>'
-            f"{''.join(panels)}</div>"
+        return Markup(
+            '<div {root_attributes} class="flex flex-col gap-4">'
+            '<div role="tablist" class="tabs tabs-border">{join}</div>'
+            "{join2}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            join=Markup("").join(tabs),
+            join2=Markup("").join(panels),
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -3749,21 +4221,29 @@ class WebGridRenderer(WebRenderer[GridView]):
         super().render()
         self._adopt(self._view.children_views)
 
-    def to_html(self, *, oob: bool = False) -> str:
-        cells = "".join(
-            '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:[grid-area:var(--area)]"'
-            f' style="--area: {row + 1} / {column + 1} / span {row_span} / span {column_span}">'
-            f"{view.renderer.to_html()}</div>"
+    def to_html(self, *, oob: bool = False) -> Markup:
+        cells = Markup("").join(
+            Markup(
+                '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:[grid-area:var(--area)]"'
+                ' style="--area: {value} / {value2} / span {row_span} / span {column_span}">'
+                "{to_html}</div>"
+            ).format(
+                value=row + 1,
+                value2=column + 1,
+                row_span=row_span,
+                column_span=column_span,
+                to_html=view.renderer.to_html(),
+            )
             for view, (row, column, row_span, column_span) in self._view.positioned_views
             if isinstance(view.renderer, WebRenderer)
         )
         columns = f"repeat({self._view.column_count}, minmax(0, 1fr))"
         # the grid's own width is queried from its root, the views laid out inside it
-        return (
-            f'<div {self._root_attributes(oob=oob)} class="@container">'
+        return Markup(
+            '<div {root_attributes} class="@container">'
             '<div class="grid grid-cols-1 items-start gap-6 @2xl:grid-cols-(--columns)"'
-            f' style="--columns: {columns}">{cells}</div></div>'
-        )
+            ' style="--columns: {columns}">{cells}</div></div>'
+        ).format(root_attributes=self._root_attributes(oob=oob), columns=columns, cells=cells)
 
 
 #: the main column's width, following the shown page's `PageView.width`: switching pages
@@ -3805,29 +4285,32 @@ class WebRouterRenderer(WebRenderer[Router]):
                 page.action.renderer.placement = Placement.PAGE
                 page.action.renderer.href = page_path(page.route)
 
-    def to_html(self, *, oob: bool = False) -> str:
+    def to_html(self, *, oob: bool = False) -> Markup:
         slots: list[str] = []
         for page in self._view.pages:
             if not isinstance(page.renderer, WebRenderer):
                 continue
             hidden = "" if page.route == self._view.current_route else " hidden"
             slots.append(
-                f'<div data-route="{html.escape(page.route)}"{hidden}>'
-                f"{page.renderer.to_html()}</div>"
+                Markup('<div data-route="{route}"{hidden}>{to_html}</div>').format(
+                    route=page.route, hidden=hidden, to_html=page.renderer.to_html()
+                )
             )
-        return f"<div {self._root_attributes(oob=oob)}>{''.join(slots)}</div>"
+        return Markup("<div {}>{}</div>").format(
+            self._root_attributes(oob=oob), Markup("").join(slots)
+        )
 
-    def toolbar_html(self) -> str:
-        links = "".join(
+    def toolbar_html(self) -> Markup:
+        links = Markup("").join(
             page.action.renderer.to_html()
             for page in self._view.pages
             if isinstance(page.action.renderer, WebActionRenderer)
         )
         # a row of its own under the brand on a narrow screen, next to it on a wider one
-        return (
+        return Markup(
             '<nav aria-label="Pages" class="tabs tabs-box tabs-sm order-last w-full'
-            f' flex-nowrap overflow-x-auto sm:order-none sm:w-auto">{links}</nav>'
-        )
+            ' flex-nowrap overflow-x-auto sm:order-none sm:w-auto">{}</nav>'
+        ).format(links)
 
 
 #: first segments of the backend's own addresses, which no page's address can take
@@ -3845,17 +4328,16 @@ def check_routes(main_view: MainView) -> None:
         raise ValueError(msg)
 
 
-def _theme_option(choice: str, text: str) -> str:
+def _theme_option(choice: str, text: str) -> Markup:
     # picked by `page.js`, which also closes the dropdown
-    return (
-        f'<li><button type="button" class="theme-option" data-theme-option="{choice}"'
-        f">{text}</button></li>"
-    )
+    return Markup(
+        '<li><button type="button" class="theme-option" data-theme-option="{}">{}</button></li>'
+    ).format(choice, text)
 
 
 #: the header's Theme menu: Light, Dark, or System (the browser's preference). Its button
 #: shows the theme in use, the sun or the moon, however it was chosen
-_THEME_MENU: Final = (
+_THEME_MENU: Final = Markup(
     '<div class="dropdown dropdown-end">'
     '<div tabindex="0" role="button" class="theme-toggle btn btn-ghost btn-sm btn-square"'
     ' aria-label="Theme" title="Theme">'
@@ -3869,8 +4351,12 @@ _THEME_MENU: Final = (
     '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></div>'
     '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-40 rounded-box border'
     ' border-base-300 bg-base-100 p-2 shadow-lg">'
-    f"{_theme_option('composeui', 'Light')}{_theme_option('composeui-dark', 'Dark')}"
-    f"{_theme_option('system', 'System')}</ul></div>"
+    "{theme_option}{theme_option2}"
+    "{theme_option3}</ul></div>"
+).format(
+    theme_option=_theme_option("composeui", "Light"),
+    theme_option2=_theme_option("composeui-dark", "Dark"),
+    theme_option3=_theme_option("system", "System"),
 )
 
 
@@ -3945,31 +4431,44 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         # the pages' toolbar wraps to a row of its own on a narrow screen
         wrap = " flex-wrap" if toolbar else ""
         # bottom padding keeps the last row clear of the fixed status bar
-        main = (
-            f'<main class="mx-auto {_MAIN_WIDTHS} px-4 pt-8 pb-20">'
+        main = Markup(
+            '<main class="mx-auto {} px-4 pt-8 pb-20">'
             '<div class="card border border-base-300 bg-base-100 shadow-md">'
             '<div class="card-body gap-6 p-6">'
-            f"{''.join(content)}"
+            "{}"
             "</div></div></main>"
-        )
+        ).format(_MAIN_WIDTHS, Markup("").join(content))
         return get_page(
             self._view.title,
             # sticky: the menus stay at hand however long the form is
-            f'<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
-            " border-base-300"
-            ' bg-base-100 px-4">'
-            f"{sidebar.toggle_html() if sidebar else ''}{self.brand_html()}{toolbar}"
-            '<nav class="ml-auto flex items-center gap-1">'
-            f"{''.join(toolbars)}{''.join(menus)}</nav>"
-            f"{_THEME_MENU}"
-            "</header>"
-            f"{sidebar.drawer_html(main) if sidebar else main}"
-            f"{status_bar}{self._dialogs_html()}",
+            Markup(
+                '<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
+                " border-base-300"
+                ' bg-base-100 px-4">'
+                "{value}{brand_html}{toolbar}"
+                '<nav class="ml-auto flex items-center gap-1">'
+                "{join}{join2}</nav>"
+                "{THEME_MENU}"
+                "</header>"
+                "{value2}"
+                "{status_bar}{dialogs_html}"
+            ).format(
+                wrap=wrap,
+                value=sidebar.toggle_html() if sidebar else "",
+                brand_html=self.brand_html(),
+                toolbar=toolbar,
+                join=Markup("").join(toolbars),
+                join2=Markup("").join(menus),
+                THEME_MENU=_THEME_MENU,
+                value2=sidebar.drawer_html(main) if sidebar else main,
+                status_bar=status_bar,
+                dialogs_html=self._dialogs_html(),
+            ),
             self._view.language,
             jobs_running=self._view.jobs.is_running,
         )
 
-    def _dialogs_html(self) -> str:
+    def _dialogs_html(self) -> Markup:
         """Render every dialog of the tree, outside the pages hiding their content."""
         dialogs: list[str] = []
         views: list[View] = list(self._view.children_views)
@@ -3978,22 +4477,24 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             views.extend(view.children_views)
             if isinstance(view, DialogView) and isinstance(view.renderer, WebDialogRenderer):
                 dialogs.append(view.renderer.to_html())
-        return "".join(dialogs)
+        return Markup("").join(dialogs)
 
-    def brand_html(self, *, oob: bool = False) -> str:
+    def brand_html(self, *, oob: bool = False) -> Markup:
         """Show the app's title after a badge of its initial, standing in for an app icon."""
         title = self._view.title
-        initial = html.escape(title.strip()[:1].upper())
-        swap = ' hx-swap-oob="true"' if oob else ""
+        initial = title.strip()[:1].upper()
+        swap = Markup(' hx-swap-oob="true"') if oob else ""
         return (
             # on a narrow screen, the title gives way to the header's buttons rather than
             # pushing them to a row of their own
-            f'<div id="cui-brand"{swap} class="flex min-w-0 flex-1 basis-0 items-center gap-2'
-            ' sm:flex-none sm:basis-auto">'
-            '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
-            ' rounded-field bg-primary text-sm font-bold text-primary-content">'
-            f"{initial}</span>"
-            f'<h1 class="truncate text-lg font-semibold">{html.escape(title)}</h1></div>'
+            Markup(
+                '<div id="cui-brand"{swap} class="flex min-w-0 flex-1 basis-0 items-center gap-2'
+                ' sm:flex-none sm:basis-auto">'
+                '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
+                ' rounded-field bg-primary text-sm font-bold text-primary-content">'
+                "{initial}</span>"
+                '<h1 class="truncate text-lg font-semibold">{title}</h1></div>'
+            ).format(swap=swap, initial=initial, title=title)
         )
 
     def close(self) -> None:

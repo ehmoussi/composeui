@@ -1,7 +1,7 @@
 """The headers every response carries, whatever route or middleware answers it.
 
 - Scripts: the page runs only the app's own script files, so text that ever got past
-  the escaping (`html.escape`) can't run as a script, inline or evaluated. Inline style
+  the escaping (`Markup`) can't run as a script, inline or evaluated. Inline style
   attributes stay allowed: the renderers lay out with them, and they run nothing.
 - Clickjacking: another site could show the app in a hidden frame, so the user's clicks
   reach it from the app's own page, which the origin check (`origin.py`) lets through. So
