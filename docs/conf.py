@@ -50,6 +50,14 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 html_theme = "furo"
 html_title = f"ComposeUI {release}"
+html_static_path = ["_static"]
+html_favicon = "_static/favicon.svg"
+# the logos already hold the name, so the sidebar doesn't repeat it under them
+html_theme_options = {
+    "light_logo": "composeui-logo-light.svg",
+    "dark_logo": "composeui-logo-dark.svg",
+    "sidebar_hide_name": True,
+}
 
 # the guides link to the repository's files (`../src/examples/pipeform.py`), which the site
 # does not hold: those links go to the files on GitHub
