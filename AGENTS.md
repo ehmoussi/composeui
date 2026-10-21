@@ -99,6 +99,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   annotations that `attrs`/`cattrs` evaluate at runtime (view fields), since `X | Y` fails
   there on 3.9 (ruff's `keep-runtime-typing` stops pyupgrade from rewriting them).
 - Use `qtpy` imports, never `PySide6`/`PyQt*` directly, in `qtcore`.
+- In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
+  escapes every value (see the `web-security` skill).
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
 - Match the existing comment density: brief docstrings, comments explain *why*.
 
