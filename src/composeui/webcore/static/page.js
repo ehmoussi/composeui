@@ -555,7 +555,9 @@ function dispatch(target, type) {
   target.dispatchEvent(new CustomEvent(type, { bubbles: true }));
 }
 /* a dialog's button closes it first, so the focus returns where it was, then posts its
-   answer; a dialog Escape mustn't dismiss stays open (`cancel` doesn't bubble) */
+   answer. A dialog Escape mustn't dismiss stays open: the browser lets its `cancel` be
+   refused only once per user action, then closes it anyway on the next Escape, and the
+   page opens it again, still shown on the server (neither event bubbles). */
 document.addEventListener("click", function (event) {
   if (event.target.closest("input,select,button") === null) dispatch(event.target, "activate");
   var closing = event.target.closest("[data-close-dialog]");
@@ -563,6 +565,11 @@ document.addEventListener("click", function (event) {
 }, true);
 document.addEventListener("cancel", function (event) {
   if ("keepOpen" in event.target.dataset) event.preventDefault();
+}, true);
+document.addEventListener("close", function (event) {
+  var dialog = event.target;
+  // one swapped out, or swapped in closed by the server, is no longer this one shown
+  if ("keepOpen" in dialog.dataset && dialog.isConnected && !dialog.hidden) dialog.showModal();
 }, true);
 /* a menu's item, or the Theme menu's choice, closes its dropdown (daisyUI's stays open
    while it has the focus) */

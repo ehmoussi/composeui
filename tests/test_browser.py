@@ -897,9 +897,11 @@ def test_escape_leaves_a_disabled_dialog_open(browser: Browser) -> None:
             page.keyboard.press("Alt+Shift+KeyL")
         expect(dialog).to_be_visible()
 
-        page.keyboard.press("Escape")
-
-        expect(dialog).to_have_js_property("open", value=True)
+        # the browser refuses only the first `cancel`, then closes it all the same
+        for _ in range(3):
+            page.keyboard.press("Escape")
+            expect(dialog).to_have_js_property("open", value=True)
+        expect(dialog).to_be_visible()
         context.close()
 
 
