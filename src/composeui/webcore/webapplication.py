@@ -28,8 +28,9 @@ from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import View
+from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
-from composeui.webcore.origin import NoFramingMiddleware, SameOriginMiddleware
+from composeui.webcore.origin import SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
     homepage,
@@ -123,8 +124,8 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/{route}", page),
         ],
         middleware=[
-            # outermost: every response, a refusal too, forbids frames
-            Middleware(NoFramingMiddleware),
+            # outermost: every response, a refusal too, carries them
+            Middleware(SecurityHeadersMiddleware),
             # before a route reads the body: Starlette would spool an upload of any size
             Middleware(BodySizeLimitMiddleware),
             # a request another origin sent is refused before it reaches a session
