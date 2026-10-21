@@ -3168,7 +3168,9 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
 
     def __init__(self, view: SplitterView) -> None:
         super().__init__(view)
-        self._refresh_dispatcher["sizes"] = self._mark_dirty
+        self._refresh_dispatcher.update(
+            {"sizes": self._mark_dirty, "border_text": self._mark_dirty}
+        )
 
     def render(self) -> None:
         super().render()

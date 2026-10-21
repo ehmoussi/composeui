@@ -1961,6 +1961,8 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
     def __init__(self, view: SplitterView) -> None:
         super().__init__(view)
         self._refresh_dispatcher["sizes"] = self._refresh_sizes
+        # names a border on the web only
+        self._refresh_dispatcher["border_text"] = lambda _view, _splitter, _value: None
 
     def render(self) -> None:
         if self._rendered_object is None:

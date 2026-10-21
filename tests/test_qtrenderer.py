@@ -1383,6 +1383,19 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
     qtbot.waitUntil(lambda: widget.sizes()[1] > 0)
 
 
+def test_a_splitter_keeps_its_panes_through_a_language_switch(qtbot: QtBot) -> None:
+    view = SplitterMainView()
+    view.render(RendererType.QT)
+    widget = _widget(view.splitter)
+    assert isinstance(widget, QSplitter)
+    qtbot.addWidget(widget)
+
+    view.set_language("fr")  # its borders' name is the web's only
+
+    assert view.splitter.border_text == "Redimensionner les volets"
+    assert widget.count() == 3
+
+
 def test_a_vertical_splitter_shares_the_windows_spare_height_as_its_sizes(
     qtbot: QtBot,
 ) -> None:
