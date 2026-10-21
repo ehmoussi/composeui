@@ -9,6 +9,7 @@ directly through `handle_event`, the function the route calls.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import enum
 import hashlib
@@ -31,6 +32,7 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("httpx")
 
+import attrs
 from attrs import Factory
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
@@ -443,6 +445,90 @@ def test_view_text_is_escaped(main_view: HelloMainView, rows: _RowsMainView) -> 
     assert _element(field.to_html(), field.widget_id).attributes["value"] == hostile
     assert _element(label.to_html(), label.widget_id).text == hostile
     assert _element(table.to_html(), table.widget_id).text == hostile * 2
+
+
+#: text breaking out of an element's text, a quoted attribute (either quote) or an entity
+_HOSTILE = "'\" cui-xss='1' \"<cui-xss>&amp;"
+
+
+class _HostileFinder(HTMLParser):
+    """Collects where `_HOSTILE` became markup, or reached a script, in a page."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.found: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "cui-xss":
+            self.found.append("<cui-xss>")
+        for name, value in attrs:
+            if name == "cui-xss":
+                self.found.append(f"<{tag} cui-xss>")
+            # escaping doesn't help there: the browser unescapes it, then runs it
+            is_script = name.startswith(("on", "hx-on")) or (value or "").startswith("js:")
+            if is_script and "cui-xss" in (value or ""):
+                self.found.append(f"<{tag} {name}>")
+
+
+def _views(view: View) -> Iterator[View]:
+    yield view
+    for child_view in view.children_views:
+        yield from _views(child_view)
+
+
+@pytest.mark.parametrize(
+    "main_view_type",
+    [
+        HelloMainView,
+        PipeMainView,
+        BatmanMainView,
+        PipeChartMainView,
+        BookingMainView,
+        SiteMainView,
+        ChartPagesMainView,
+        DataFileMainView,
+        DialogsMainView,
+        RecordMainView,
+        PipesMainView,
+        HelpMainView,
+        JobsMainView,
+        PagesMainView,
+        SidebarMainView,
+        TabsMainView,
+        ToolBarMainView,
+        WorkersMainView,
+    ],
+)
+def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
+    """Catches a renderer that forgets `html.escape`: every text field of every view."""
+    main_view = main_view_type()
+    main_view.render(RendererType.WEB)
+    for view in _views(main_view):
+        for field in attrs.fields(type(view)):
+            value = getattr(view, field.name)
+            hostile: Any
+            if isinstance(value, str):
+                hostile = _HOSTILE
+            elif not value or not isinstance(value, list):
+                continue
+            elif all(isinstance(item, str) for item in value):
+                hostile = [_HOSTILE] * len(value)  # e.g. headers, choices
+            elif all(
+                isinstance(row, list) and all(isinstance(x, str) for x in row) for row in value
+            ):
+                hostile = [[_HOSTILE] * len(row) for row in value]  # e.g. rows
+            else:
+                continue
+            # a main view's title is its class's
+            with contextlib.suppress(attrs.exceptions.FrozenAttributeError):
+                setattr(view, field.name, hostile)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+    page = main_view.renderer.page_html()
+
+    finder = _HostileFinder()
+    finder.feed(page)
+    assert finder.found == []
+    assert "cui-xss" in page  # escaped, not dropped
 
 
 def test_markdown_is_shown_as_html_its_own_markup_escaped() -> None:
