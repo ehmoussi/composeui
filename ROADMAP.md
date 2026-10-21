@@ -121,6 +121,11 @@ The user guide's "Web backend" section covers what users see.
 
 - **htmx request/response**, no websockets or JS framework; Starlette, not FastAPI;
   hand-written HTML per renderer (no Jinja2), all view text through `html.escape`.
+- **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs
+  script files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:`
+  value or trigger filter. A renderer marks its element (`data-post-event`,
+  `data-close-dialog`, ...) or triggers on a custom event (`enter-key`, `escape-key`,
+  `activate`), and `static/page.js` does the rest.
 - **Ids.** A renderer's rendered object is `cui-{id(view)}-{role}`; a hidden fragment's
   root keeps its id (`hidden` attribute) so a later swap has a target.
 - **Updates.** Setting a view attribute marks its renderer dirty in a request-scoped set

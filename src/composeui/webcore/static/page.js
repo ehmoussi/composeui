@@ -487,7 +487,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 /* menu shortcuts: Alt+Shift+<key> clicks the item marked with that key. Matched on the
    physical key (`code`), so it works whatever character the keyboard layout, or the
-   Option key on macOS, would type. (No dollar sign in here: this page is a string.Template.) */
+   Option key on macOS, would type. */
 document.addEventListener("keydown", function (event) {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
   var item = document.querySelector('[data-shortcut="' + event.code + '"]');
@@ -523,6 +523,56 @@ function openDialogs() {
   );
 }
 
+/* what the markup can't say itself: the page's policy (`headers.py`) runs no inline
+   handler, and no code htmx would evaluate (`hx-on`, `js:` values, trigger filters). The
+   values a request posts beside its element's own (see `htmx-config` in `page.py`): */
+document.addEventListener("htmx:configRequest", function (event) {
+  var element = event.detail.elt;
+  var parameters = event.detail.parameters;
+  var triggering = event.detail.triggeringEvent;
+  if ("postEvent" in element.dataset) parameters.event = triggering.type;
+  if ("postPicked" in element.dataset) parameters.picked = triggering.target.value;
+  if ("postOpen" in element.dataset) parameters.open = element.open;
+  if ("sidebarToggle" in element.dataset) {
+    var sidebar = document.getElementById(element.getAttribute("aria-controls"));
+    parameters.expanded = !sidebar.hasAttribute("data-retracted");
+  }
+});
+document.addEventListener("htmx:afterRequest", function (event) {
+  if ("clearAfterPost" in event.detail.elt.dataset) event.detail.elt.value = "";
+});
+/* the triggers htmx would filter: Enter, Escape, and `activate` (a click, or Enter, not
+   from a field or a button, which take their own) for a table's rows. Captured, so they
+   come before the keydown's own handlers, as htmx's filters did. */
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Enter") dispatch(event.target, "enter-key");
+  else if (event.key === "Escape") dispatch(event.target, "escape-key");
+  if (event.key === "Enter" && event.target.closest("input,select,button") === null) {
+    dispatch(event.target, "activate");
+  }
+}, true);
+function dispatch(target, type) {
+  target.dispatchEvent(new CustomEvent(type, { bubbles: true }));
+}
+/* a dialog's button closes it first, so the focus returns where it was, then posts its
+   answer; a dialog Escape mustn't dismiss stays open (`cancel` doesn't bubble) */
+document.addEventListener("click", function (event) {
+  if (event.target.closest("input,select,button") === null) dispatch(event.target, "activate");
+  var closing = event.target.closest("[data-close-dialog]");
+  if (closing !== null) closing.closest("dialog").close();
+}, true);
+document.addEventListener("cancel", function (event) {
+  if ("keepOpen" in event.target.dataset) event.preventDefault();
+}, true);
+/* a menu's item, or the Theme menu's choice, closes its dropdown (daisyUI's stays open
+   while it has the focus) */
+document.addEventListener("click", function (event) {
+  var option = event.target.closest("[data-theme-option]");
+  if (option !== null) setTheme(option.dataset.themeOption);
+  if (option !== null || event.target.closest("[data-close-dropdown]") !== null) {
+    document.activeElement.blur();
+  }
+});
 /* the answer to a request whose element a swap has since replaced (e.g. a row clicked
    before the answer to a click on another row) still swaps its fragments: htmx looks
    for them from the element, which is no longer in the page. Whether it is, is read

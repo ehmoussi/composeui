@@ -15,7 +15,7 @@ import struct
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import pytest
@@ -24,7 +24,7 @@ pytest.importorskip("starlette")
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
-from playwright.sync_api import Error, expect, sync_playwright
+from playwright.sync_api import Browser, Error, expect, sync_playwright
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse
 from starlette.routing import Route as StarletteRoute
@@ -58,7 +58,7 @@ from tests.workers import WorkersMainView
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from playwright.sync_api import Browser, FloatRect, Locator, Page, Route
+    from playwright.sync_api import BrowserContext, FloatRect, Locator, Page, Route
     from starlette.requests import Request
 
 pytestmark = pytest.mark.browser
@@ -342,6 +342,34 @@ def browser() -> Iterator[Browser]:
             pytest.skip(f"no Chromium for Playwright: {error.message.splitlines()[0]}")
         yield browser
         browser.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_policy_violation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Fail a test whose page did something its policy refused (`headers.py`).
+
+    The browser only reports it, so a script or a style the policy blocks would otherwise
+    just quietly not work. A frame refused to another site is the policy at work.
+    """
+    violations: list[str] = []
+    new_context = Browser.new_context
+
+    def checked_context(browser: Browser, **kwargs: Any) -> BrowserContext:
+        context = new_context(browser, **kwargs)
+        context.on(
+            "console",
+            lambda message: (
+                violations.append(message.text)
+                if "Content Security Policy" in message.text
+                and "frame-ancestors" not in message.text
+                else None
+            ),
+        )
+        return context
+
+    monkeypatch.setattr(Browser, "new_context", checked_context)
+    yield
+    assert violations == []
 
 
 @pytest.fixture
@@ -654,6 +682,8 @@ def test_the_theme_menu_overrides_the_browser_until_set_back_to_system(page: Pag
     expect(option("System")).to_have_attribute("aria-pressed", "true")
 
     page.get_by_role("button", name="Dark").click()  # from the menu still open
+    # the menu closed: the focus it kept open left it
+    assert page.evaluate("document.activeElement === document.body")
     dark = background()
     assert dark != light
     # the choice outlives a reload, and wins over the browser's light preference
@@ -845,6 +875,32 @@ def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) 
         clear.click()
     expect(dialog).to_be_hidden()
     expect(name).to_be_hidden()
+
+
+class _BusyDialogsApp(WebApplication[DialogsMainView]):
+    """The dialogs app, its dialog disabled: its answer would be ignored."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=DialogsMainView)
+
+    def setup_session(self, main_view: DialogsMainView) -> None:
+        main_view.confirm_clear.is_enabled = False
+
+
+def test_escape_leaves_a_disabled_dialog_open(browser: Browser) -> None:
+    with _serve(_BusyDialogsApp().create_starlette_app()) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        dialog = page.get_by_role("dialog", name="Clear the name")
+        with _posted(page):
+            page.keyboard.press("Alt+Shift+KeyL")
+        expect(dialog).to_be_visible()
+
+        page.keyboard.press("Escape")
+
+        expect(dialog).to_have_js_property("open", value=True)
+        context.close()
 
 
 def _box(locator: Locator) -> FloatRect:

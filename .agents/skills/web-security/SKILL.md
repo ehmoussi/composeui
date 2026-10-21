@@ -69,8 +69,8 @@ ComposeUI against these yet: each "What to check" is an open question, not a fin
 | Area of the change | Cheat sheet | What to check in ComposeUI |
 | --- | --- | --- |
 | Uploads: Open (`POST /state`), `PickFileAction` | [File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) | The size limits (`MAX_STATE_SIZE`, `MAX_FILE_SIZE`). A study is a zip, which may lie about its sizes (zip bomb): `open_study` takes only the two members, stored or deflated (`zipfile` unpacks bzip2 and LZMA whole), unencrypted, and never reads one with `archive.read` (it unpacks the whole member first): a bounded read cuts a lying member, which then fails its CRC. The study's SQLite file comes from the user too, schema included: `SqliteModel.open_data` refuses one not made as a new one is (`_schema`: tables' columns, other objects' SQL), runs its checks and migrations with `trusted_schema` off, and cuts them after `open_time_limit`. Tables' `CHECK` constraints aren't compared (they can't query, but can call costly functions such as `randomblob`). |
-| Any text a view shows, the page's scripts | [XSS Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html), [DOM-based XSS](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html) | XSS defeats every CSRF defense. `hx-on:*` and `hx-vals='js:...'` run JavaScript: no view text may reach them, even escaped. |
-| Response headers, the page's scripts | [Content Security Policy](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html) | Only icons send a `default-src` policy. The page's script is a file (`static/page.js`), so `script-src 'self'` allows it; but the inline `on*=` handlers in `webrenderer.py` still need `'unsafe-inline'`, and htmx's `hx-on` and `js:` values `'unsafe-eval'`. |
+| Any text a view shows, the page's scripts | [XSS Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html), [DOM-based XSS](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html) | XSS defeats every CSRF defense. The policy refuses `hx-on:*`, `hx-vals='js:...'`, trigger filters (`[...]`) and `on*=` handlers; `page.js` does their work from `data-*` attributes and custom events (`enter-key`, `escape-key`, `activate`). |
+| Response headers, the page's scripts | [Content Security Policy](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html) | `headers.POLICY` on every response: scripts only from the app's files (`static/page.js`, htmx, uPlot, Cally), no inline script or handler, no `eval`; inline `style` attributes allowed (`style-src-attr`), `<style>` elements not. Icons add their own `default-src 'none'`. A violation shows only in the browser's console: `tests/test_browser.py` fails a test on one. |
 | Response headers | [HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) | `Strict-Transport-Security` once served over HTTPS (`nosniff` and `Referrer-Policy` are sent). |
 | The session cookie, `SessionStore`, `session_ttl` | [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) | The cookie's `Secure` and `__Host-`; the idle timeout (1 hour); no absolute timeout; renewing the id (little need without a login). |
 | Sessions, chart images, jobs, uploads | [Denial of Service](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html) | Every cookie-less `GET /` builds a main view (and a model) in memory, up to `max_sessions`; nothing limits one client's share. Chart images (matplotlib) and jobs cost CPU per request. |
@@ -85,7 +85,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 
 | Defense | Where | What it does |
 | --- | --- | --- |
-| `SecurityHeadersMiddleware` | `headers.py` | Adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin` (the app's own requests keep `Referer`, the origin check's fallback) to every response. Outermost middleware, so refusals get them too. |
+| `SecurityHeadersMiddleware` | `headers.py` | Adds `Content-Security-Policy` (`POLICY`, with `frame-ancestors 'none'`) and `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin` (the app's own requests keep `Referer`, the origin check's fallback) to every response. Outermost middleware, so refusals get them too. |
 | `BodySizeLimitMiddleware` | `limits.py` | Answers 413 to a body over `MAX_BODY_SIZE` (the largest upload plus 1 MiB): by `Content-Length` before reading, else (chunked) once the body read passes it. Starlette would otherwise spool a multipart body of any size to disk before the routes check `MAX_STATE_SIZE` and `MAX_FILE_SIZE`. |
 | Session limit | `session.py` (`SessionStore.create`), `WebApplication.max_sessions` | At most `max_sessions` (1000) live, sessions being built included: a new browser then gets 503. Full refuses new sessions rather than dropping old ones, so cookie-less requests can't push out a user's unsaved work. No limit per client yet (one client can still take every slot for `session_ttl`). |
 | `SameOriginMiddleware` | `origin.py` | Answers 403 to any method outside `SAFE_METHODS` (GET, HEAD, OPTIONS) unless `is_same_origin`: `Sec-Fetch-Site` must be `same-origin`; without it, `Origin`, then `Referer`, must equal the request's own origin (`URL(scope=scope)`: scheme plus `Host`); with none, refused. |
@@ -116,7 +116,11 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
    `postMessage`): that is client-side CSRF, which no server check stops.
 7. **Don't weaken the cookie.** Keep `same_site="lax"` (or stricter), signed, and with no
    `Domain` shared with subdomains.
-8. **Don't frame the app**, not even from itself. If a feature needs a frame, ask the user
+8. **No code in the markup.** No `<script>` without `src`, no `on*=` handler, no `hx-on`,
+   no `js:` value, no `hx-trigger` filter: the policy refuses them, and htmx runs
+   without `allowEval`. Put the behavior in `static/page.js`, keyed on a `data-*`
+   attribute. `test_no_markup_runs_code` checks the markup of the main views it lists.
+9. **Don't frame the app**, not even from itself. If a feature needs a frame, ask the user
    first: it means `frame-ancestors 'self'` and `SAMEORIGIN` instead.
 
 ## Testing
