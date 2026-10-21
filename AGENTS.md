@@ -113,7 +113,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.
 - `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
-  same checks on Python 3.9 to 3.14 for every pull request and push to `main`.
+  same checks on Python 3.9 to 3.14 for every pull request and push to `main`. A change of
+  the documentation only (`docs/`, Markdown files) runs only the docs build and its lint.
 
 ## Commits
 
