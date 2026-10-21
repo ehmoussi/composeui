@@ -288,11 +288,18 @@ class SessionStore:
     """
 
     def __init__(
-        self, build_session: Callable[[], tuple[MainView, Model | None]], *, ttl: float
+        self,
+        build_session: Callable[[], tuple[MainView, Model | None]],
+        *,
+        ttl: float,
+        max_sessions: int,
     ) -> None:
         self._build_session = build_session
         self._ttl = ttl
+        self._max_sessions = max_sessions
         self._sessions: dict[str, tuple[WebSession, float]] = {}
+        #: sessions being built, outside the lock: they count against `max_sessions` too
+        self._building = 0
         self._lock = threading.Lock()
 
     def get(self, session_id: Any) -> WebSession | None:
@@ -306,12 +313,27 @@ class SessionStore:
             self._sessions[session_id] = (session, time.monotonic())
             return session
 
-    def create(self) -> tuple[str, WebSession]:
-        # built outside the store's lock: building runs app code, which may be slow
-        session = WebSession(*self._build_session())
-        session_id = secrets.token_urlsafe(32)
+    def create(self) -> tuple[str, WebSession] | None:
+        """Build a new session; None while `max_sessions` are live.
+
+        A full store refuses new sessions rather than dropping old ones: requests without
+        a cookie, which anyone can send, would otherwise push out the users' own sessions
+        and their unsaved work.
+        """
         with self._lock:
-            self._sessions[session_id] = (session, time.monotonic())
+            self._drop_expired()
+            if len(self._sessions) + self._building >= self._max_sessions:
+                return None
+            self._building += 1
+        try:
+            # built outside the store's lock: building runs app code, which may be slow
+            session = WebSession(*self._build_session())
+            session_id = secrets.token_urlsafe(32)
+            with self._lock:
+                self._sessions[session_id] = (session, time.monotonic())
+        finally:
+            with self._lock:
+                self._building -= 1
         return session_id, session
 
     def drop(self, session_id: Any) -> None:

@@ -120,7 +120,9 @@ How it differs from a desktop window:
 - **One app state per browser.** A signed session cookie gives each browser its own main
   view. The tabs of one browser share it. Sessions live in the server's memory: a restart
   starts them all over. The server drops a session after an hour without use
-  (`session_ttl`).
+  (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
+  full, a new browser gets an error (503) until a session ends, and the open sessions keep
+  working.
 - **Only the app's own pages change a session.** The server refuses a POST from another
   origin (403), as protection against cross-site request forgery. Another origin includes
   another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,

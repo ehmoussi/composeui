@@ -1748,6 +1748,31 @@ def test_an_idle_session_expires() -> None:
     assert len(app.session_views) == 2  # the reload started a fresh session
 
 
+class _TwoSessionsHelloApp(_HelloApp):
+    max_sessions = 2
+
+
+def test_a_full_server_refuses_new_sessions_but_keeps_its_own() -> None:
+    """Requests without a cookie, which anyone can send, can't push out a user's session."""
+    app = _TwoSessionsHelloApp()
+    web = app.create_starlette_app()
+    with _Browser(web) as alice, _Browser(web) as bob, _Browser(web) as carol:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = app.session_views
+
+        refused = carol.get("/")
+
+        assert refused.status_code == 503
+        assert len(app.session_views) == 2  # no main view built for it
+        _type_name(alice, alice_view, "Alice")  # the live sessions still work
+        assert alice_view.form.name.text == "Alice"
+        # Exit ends Bob's session, which leaves room for Carol's
+        bob.post(f"/widget/{_action_id(bob_view.file_menu.exit_app)}", data={"event": "triggered"})
+        assert carol.get("/").status_code == 200
+        assert len(app.session_views) == 3
+
+
 def test_a_state_file_opens_in_every_new_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
