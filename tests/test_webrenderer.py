@@ -60,6 +60,7 @@ from composeui.core.view import (
     LogType,
     LogView,
     MainView,
+    MarkdownView,
     Menu,
     PageView,
     Router,
@@ -105,6 +106,7 @@ from composeui.webcore.webrenderer import (
 )
 from examples import pipeform
 from examples.batman import BatmanMainView
+from examples.markdownviewer import MarkdownViewerMainView
 from examples.pipecatalogue import (
     Material,
     Pipe,
@@ -114,14 +116,17 @@ from examples.pipecatalogue import (
 from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import MEASUREMENTS, PipeChartMainView
 from examples.pipeform import PipeMainView
+from examples.pipesweep import PipeSweepMainView
+from examples.taskview import TaskMainView
 from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
 from tests.bookings import BookingMainView
-from tests.buildings import SiteMainView, styled_site
+from tests.buildings import SiteMainView, SitePlanMainView, styled_site
 from tests.charts import ChartPagesMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
+from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
@@ -453,11 +458,16 @@ _HOSTILE = "'\" cui-xss='1' \"<cui-xss>&amp;"
 
 
 class _HostileFinder(HTMLParser):
-    """Collects where `_HOSTILE` became markup, or reached a script, in a page."""
+    """Collects where `_HOSTILE` became markup, reached a script, or shows changed, in a page.
+
+    Shown changed, it was escaped twice (`&lt;` shown) or cut. An attribute holding JSON
+    (`data-chart`, `hx-vals`) is read as JSON: its strings show the text.
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self.found: list[str] = []
+        self.shown = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "cui-xss":
@@ -469,6 +479,37 @@ class _HostileFinder(HTMLParser):
             is_script = name.startswith(("on", "hx-on")) or (value or "").startswith("js:")
             if is_script and "cui-xss" in (value or ""):
                 self.found.append(f"<{tag} {name}>")
+            for text in _json_strings(value or ""):
+                self._check_shown(text, f"<{tag} {name}>")
+
+    def handle_data(self, data: str) -> None:
+        self._check_shown(data, "text")
+
+    def _check_shown(self, text: str, where: str) -> None:
+        self.shown += text.count(_HOSTILE)
+        if "cui-xss" in text.replace(_HOSTILE, ""):
+            self.found.append(f"{where} {text!r}")
+
+
+def _json_strings(value: str) -> list[str]:
+    """Get the strings in `value` if it is a JSON object or array, else `value` itself."""
+    if not value.startswith(("{", "[")):
+        return [value]
+    try:
+        data = json.loads(value)
+    except ValueError:
+        return [value]
+    strings: list[str] = []
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            strings.append(item)
+        elif isinstance(item, dict):
+            stack.extend([*item.keys(), *item.values()])
+        elif isinstance(item, list):
+            stack.extend(item)
+    return strings
 
 
 def _views(view: View) -> Iterator[View]:
@@ -483,11 +524,17 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     PipeMainView,
     BatmanMainView,
     PipeChartMainView,
+    PipeCatalogueMainView,
+    PipeSweepMainView,
+    MarkdownViewerMainView,
+    TaskMainView,
     BookingMainView,
     SiteMainView,
+    SitePlanMainView,
     ChartPagesMainView,
     DataFileMainView,
     DialogsMainView,
+    EditedPipeMainView,
     RecordMainView,
     PipesMainView,
     HelpMainView,
@@ -497,18 +544,26 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     TabsMainView,
     ToolBarMainView,
     WorkersMainView,
+    GridMainView,
+    HorizontalMainView,
+    VerticalMainView,
+    SplitterMainView,
+    VerticalSplitterMainView,
+    EditableTableMainView,
+    SortedRoomsMainView,
+    CellWidgetsMainView,
+    StyledTablesMainView,
 ]
 
 
-@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
-def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
-    """Catches a renderer that forgets `html.escape`: every text field of every view."""
-    main_view = main_view_type()
-    main_view.render(RendererType.WEB)
+def _poison(main_view: MainView) -> None:
+    """Set every text of every view under `main_view` to `_HOSTILE`."""
     for view in _views(main_view):
         for field in attrs.fields(type(view)):
             value = getattr(view, field.name)
             hostile: Any
+            if isinstance(view, TableView) and field.name == "search":
+                continue  # it would hide every row: see `_states`
             if isinstance(value, str):
                 hostile = _HOSTILE
             elif not value or not isinstance(value, list):
@@ -521,16 +576,59 @@ def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
                 hostile = [[_HOSTILE] * len(row) for row in value]  # e.g. rows
             else:
                 continue
-            # a main view's title is its class's
-            with contextlib.suppress(attrs.exceptions.FrozenAttributeError):
+            if isinstance(view, MarkdownView) and field.name == "text":
+                # Markdown reads `&amp;` as an entity: one more to show it
+                hostile = _HOSTILE.replace("&amp;", "&amp;amp;")
+            # a main view's title is its class's; a value a combo box doesn't offer
+            with contextlib.suppress(attrs.exceptions.FrozenAttributeError, ValueError):
                 setattr(view, field.name, hostile)
-    assert isinstance(main_view.renderer, WebMainRenderer)
-    page = main_view.renderer.page_html()
 
-    finder = _HostileFinder()
-    finder.feed(page)
-    assert finder.found == []
-    assert "cui-xss" in page  # escaped, not dropped
+
+def _states(main_view: MainView) -> Iterator[str]:
+    """Bring `main_view` to each state that shows other text, naming it once there.
+
+    As first shown; then with what only shows on demand: dialogs, a cell's field, a
+    table's search, its filter editor, and the error or chip of each column filtered.
+    """
+    yield "as first shown"
+    tables: list[tuple[TableView, WebTableRenderer]] = []
+    for view in _views(main_view):
+        if isinstance(view, DialogView):
+            view.open()
+        renderer = view.renderer
+        if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
+            tables.append((view, renderer))
+            for column in view.editable_columns:
+                if view.rows and column not in view.cell_widgets:
+                    renderer.dispatch("start_edit", {"row": "0", "column": str(column)})
+                    break
+    yield "dialogs open, a cell edited"
+    for view, renderer in tables:
+        view.search = _HOSTILE  # last: it hides every row
+        for column in view.filterable_columns:
+            renderer.dispatch("open_editor", {"column": str(column)})
+            renderer.dispatch("add_filter", {"column": str(column), "value": _HOSTILE})
+            yield f"column {column} filtered"
+            renderer.dispatch("open_editor", {"column": str(column)})
+            yield f"column {column}'s filter edited"
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
+def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
+    """Catches a renderer that forgets `html.escape`, or escapes twice, in any view text.
+
+    Every text field of every view, in each state that shows other text (`_states`).
+    """
+    main_view = main_view_type()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+    _poison(main_view)
+
+    for state in _states(main_view):
+        finder = _HostileFinder()
+        finder.feed(main_view.renderer.page_html())
+        assert finder.found == [], state
+        assert finder.shown > 0, state  # escaped, not dropped
 
 
 class _ScriptFinder(HTMLParser):
