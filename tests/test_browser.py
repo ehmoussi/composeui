@@ -25,6 +25,9 @@ pytest.importorskip("playwright.sync_api")
 
 import uvicorn
 from playwright.sync_api import Error, expect, sync_playwright
+from starlette.applications import Starlette
+from starlette.responses import HTMLResponse
+from starlette.routing import Route as StarletteRoute
 
 from composeui.core import chartimage
 from composeui.webcore.webapplication import WebApplication
@@ -56,7 +59,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from playwright.sync_api import Browser, FloatRect, Locator, Page, Route
-    from starlette.applications import Starlette
+    from starlette.requests import Request
 
 pytestmark = pytest.mark.browser
 
@@ -546,6 +549,21 @@ def test_a_form_posted_from_another_port_is_refused(page: Page, base_url: str) -
     assert response_info.value.status == 403
     page.goto(base_url)
     expect(page.get_by_label("Name")).to_have_value("")
+
+
+def test_another_site_cannot_show_the_app_in_a_frame(page: Page, base_url: str) -> None:
+    def framing(_request: Request) -> HTMLResponse:
+        return HTMLResponse(f'<iframe src="{base_url}/"></iframe>')
+
+    # a real server: Chromium blocks a frame of a local address in a page without one
+    with _serve(Starlette(routes=[StarletteRoute("/", framing)])) as other:
+        with page.expect_response(f"{base_url}/") as response_info:
+            page.goto(other)
+
+        assert response_info.value.status == 200  # sent, but not shown
+        # the browser shows its own error page in the frame, not the app
+        (frame,) = page.main_frame.child_frames
+        expect(frame.locator("#app")).to_have_count(0)
 
 
 def test_a_field_is_invalid_exactly_while_its_log_shows_an_error(page: Page) -> None:

@@ -74,6 +74,7 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
+from composeui.webcore.icons import icon_url
 from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.session import WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -1670,6 +1671,28 @@ def test_a_post_from_the_app_s_own_page_is_served(app: _HelloApp, headers: dict[
 
     assert response.status_code == 200
     assert session_view.form.name.text == "Ada"
+
+
+def test_no_response_may_be_shown_in_a_frame(app: _HelloApp, tmp_path: Path) -> None:
+    """Another site's frame would get the user's clicks past the origin check."""
+    icon = tmp_path / "logo.svg"
+    icon.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    icon_address = icon_url(str(icon))
+    assert icon_address is not None
+    with _Browser(app.create_starlette_app()) as browser:
+        responses = [browser.get("/")]
+        (main_view,) = app.session_views
+        responses += [
+            browser.get(f"/widget/{_field_id(main_view.form.name)}"),
+            browser.get("/state"),
+            browser.get("/static/htmx.min.js"),
+            browser.get(icon_address),  # with a policy of its own
+            browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
+        ]
+
+    for response in responses:
+        assert response.headers["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in response.headers.get_list("content-security-policy")
 
 
 def test_a_request_without_a_live_session_reloads_the_page(
