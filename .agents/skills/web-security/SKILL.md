@@ -86,6 +86,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 | Defense | Where | What it does |
 | --- | --- | --- |
 | `NoFramingMiddleware` | `origin.py` | Adds `frame-ancestors 'none'` and `X-Frame-Options: DENY` to every response. Outermost middleware, so refusals get them too. |
+| `BodySizeLimitMiddleware` | `limits.py` | Answers 413 to a body over `MAX_BODY_SIZE` (the largest upload plus 1 MiB): by `Content-Length` before reading, else (chunked) once the body read passes it. Starlette would otherwise spool a multipart body of any size to disk before the routes check `MAX_STATE_SIZE` and `MAX_FILE_SIZE`. |
 | `SameOriginMiddleware` | `origin.py` | Answers 403 to any method outside `SAFE_METHODS` (GET, HEAD, OPTIONS) unless `is_same_origin`: `Sec-Fetch-Site` must be `same-origin`; without it, `Origin`, then `Referer`, must equal the request's own origin (`URL(scope=scope)`: scheme plus `Host`); with none, refused. |
 | `SameSite=Lax` cookie | `webapplication.py` (`SessionMiddleware`) | Defense in depth: no session cookie on cross-site POSTs. |
 | No state change on GET | `routes.py` | Save and Save As post the page's hidden `cui-save` form to `POST /state/download`, which fires the action, then answers the file. `GET /state` only downloads. |
@@ -107,7 +108,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 4. **Don't add CORS** (`CORSMiddleware`, `Access-Control-Allow-*`) without the user's
    decision. Never a wildcard origin with credentials.
 5. **Keep the middleware order** in `create_starlette_app`: `NoFramingMiddleware`, then
-   `SameOriginMiddleware`, then `SessionMiddleware`.
+   `BodySizeLimitMiddleware`, then `SameOriginMiddleware`, then `SessionMiddleware`.
 6. **Escape everything a view or user supplies** with `html.escape`, attributes included.
    Keep Markdown's raw HTML off. Don't build a request's URL or method in the page's script
    from attacker-controllable input (`location`, `window.name`, `document.referrer`,

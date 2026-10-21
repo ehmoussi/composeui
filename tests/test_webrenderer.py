@@ -75,6 +75,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.webcore.icons import icon_url
+from composeui.webcore.limits import MAX_BODY_SIZE
 from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.session import WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -2013,6 +2014,22 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     assert reason in response.text
     assert main_view.form.name.text == "Bob"
     assert main_view.state_filepath is None
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+def test_a_body_larger_than_any_upload_is_refused_before_it_is_read(
+    main_view: HelloMainView, client: TestClient, chunked: bool
+) -> None:
+    """Starlette would spool it whole to a temporary file: no limit until the route's."""
+    body = b"x" * (MAX_BODY_SIZE + 1)
+    headers = {"Content-Type": "multipart/form-data; boundary=b"}
+    # without a length (chunked), the body is cut once it passes the limit
+    content = iter([body[:1024], body[1024:]]) if chunked else body
+
+    response = client.post("/state", content=content, headers=headers)
+
+    assert response.status_code == 413
+    assert main_view.status_bar.message == ""  # the route never ran
 
 
 def test_an_uploaded_file_name_cannot_reach_the_download_header(
