@@ -4466,7 +4466,12 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             ),
             self._view.language,
             jobs_running=self._view.jobs.is_running,
+            icon=self._app_icon_url(),
         )
+
+    def _app_icon_url(self) -> str | None:
+        app_icon = self._view.app_icon
+        return None if app_icon is None else icon_url(str(app_icon))
 
     def _dialogs_html(self) -> Markup:
         """Render every dialog of the tree, outside the pages hiding their content."""
@@ -4480,9 +4485,19 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         return Markup("").join(dialogs)
 
     def brand_html(self, *, oob: bool = False) -> Markup:
-        """Show the app's title after a badge of its initial, standing in for an app icon."""
+        """Show the app's title after its icon, or a badge of its initial without one."""
         title = self._view.title
-        initial = title.strip()[:1].upper()
+        url = self._app_icon_url()
+        badge = (
+            Markup(
+                '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
+                ' rounded-field bg-primary text-sm font-bold text-primary-content">{}</span>'
+            ).format(title.strip()[:1].upper())
+            if url is None
+            else Markup(
+                '<img src="{}" alt="" aria-hidden="true" class="size-8 shrink-0 object-contain">'
+            ).format(url)
+        )
         swap = Markup(' hx-swap-oob="true"') if oob else ""
         return (
             # on a narrow screen, the title gives way to the header's buttons rather than
@@ -4490,11 +4505,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             Markup(
                 '<div id="cui-brand"{swap} class="flex min-w-0 flex-1 basis-0 items-center gap-2'
                 ' sm:flex-none sm:basis-auto">'
-                '<span aria-hidden="true" class="grid size-8 shrink-0 place-items-center'
-                ' rounded-field bg-primary text-sm font-bold text-primary-content">'
-                "{initial}</span>"
+                "{badge}"
                 '<h1 class="truncate text-lg font-semibold">{title}</h1></div>'
-            ).format(swap=swap, initial=initial, title=title)
+            ).format(swap=swap, badge=badge, title=title)
         )
 
     def close(self) -> None:

@@ -196,6 +196,24 @@ def test_markdown_renderer_shows_the_text_formatted(qtbot: QtBot) -> None:
     assert _blocks(browser) == [("Results", 2, False), ("All done.", 0, False)]
 
 
+def test_the_window_shows_the_app_s_icon_composeui_s_by_default(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = HelpMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    assert not window.windowIcon().isNull()
+
+    monkeypatch.setattr(HelpMainView, "app_icon", None)
+    iconless = HelpMainView()
+    iconless.render(RendererType.QT)
+    assert isinstance(iconless.renderer, QtWidgetRenderer)
+    assert isinstance(iconless.renderer.qt_object, QMainWindow)
+    assert iconless.renderer.qt_object.windowIcon().isNull()
+
+
 def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
     view = HelpMainView()
     view.render(RendererType.QT)

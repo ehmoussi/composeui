@@ -2497,6 +2497,8 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
             self._rendered_object.setMinimumSize(
                 self._view.minimum_width, self._view.minimum_height
             )
+            if self._view.app_icon is not None:
+                self._rendered_object.setWindowIcon(QIcon(str(self._view.app_icon)))
             self._add_child_widgets(self._view, self._rendered_object)
             self.refresh()
 

@@ -26,6 +26,7 @@ _PAGE = Template("""<!DOCTYPE html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>$title</title>
+$icon_link
 <!-- no copies of past pages: going back or forward reloads the page from the server,
      whose state they would contradict, at the address of a page of the app. Nothing
      htmx would run or style inline, which the page's policy refuses (`headers.py`). -->
@@ -97,10 +98,14 @@ def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
     return Markup('<div id="cui-jobs"{}{} hidden></div>').format(poll, swap)
 
 
-def get_page(title: str, content: Markup, language: str, *, jobs_running: bool) -> str:
+def get_page(
+    title: str, content: Markup, language: str, *, jobs_running: bool, icon: str | None = None
+) -> str:
+    """Get the app's page showing `content`, with the browser tab's `icon` at its address."""
     return _PAGE.substitute(
         {
             "title": escape(title),
+            "icon_link": Markup('<link rel="icon" href="{}" />').format(icon) if icon else "",
             "content": content,
             "language": escape(language),
             "page_marker": page_marker(language, title),

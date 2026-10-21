@@ -61,6 +61,26 @@ first ones, or none. `connect(callback, now=True)` also calls the callback once,
 A `MainView` adds command-line options with its `add_arguments` classmethod. It gets their
 values in `apply_arguments`, once it is wired. On the web, this happens for every session.
 
+### The app's icon
+
+A `MainView` shows its `app_icon`, an image file, as the app's icon. The default is
+ComposeUI's icon. Set your own in the subclass, or set `None` for no icon:
+
+```python
+from pathlib import Path
+
+
+@define_view
+class PipeMainView(MainView):
+    app_title = T("Pipe Form")
+    app_icon = Path(__file__).parent / "images" / "pipe.svg"
+```
+
+- **Qt** shows it as the window's icon.
+- **The web** shows it in the browser tab and in the page's header, before the title.
+  Without an icon, the header shows the first letter of the title in a badge.
+- **Textual** shows no icon.
+
 ### Compose views from mixins
 
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines

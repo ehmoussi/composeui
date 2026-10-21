@@ -51,7 +51,8 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 html_theme = "furo"
 html_title = f"ComposeUI {release}"
 html_static_path = ["_static"]
-html_favicon = "_static/favicon.svg"
+# the default icon of the apps (`MainView.app_icon`)
+html_favicon = "../src/composeui/images/composeui.svg"
 # the logos already hold the name, so the sidebar doesn't repeat it under them
 html_theme_options = {
     "light_logo": "composeui-logo-light.svg",
