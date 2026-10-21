@@ -130,8 +130,13 @@ How it differs from a desktop window:
   proxy, keep these headers and the `Host` header as the browser sent them.
 - **No page of the app shows in a frame,** not even in a frame of the app's own site. This
   stops another site from showing the app in a hidden frame to get the user's clicks
-  (clickjacking). Every response sends `Content-Security-Policy: frame-ancestors 'none'`
-  and `X-Frame-Options: DENY`. It also sends `X-Content-Type-Options: nosniff`, so the
+  (clickjacking). Every response sends `frame-ancestors 'none'` in its
+  `Content-Security-Policy`, and `X-Frame-Options: DENY`.
+- **The page runs only the app's own script files.** The same `Content-Security-Policy`
+  refuses inline scripts and code that htmx would evaluate. If a text ever got past the
+  escaping, the browser would not run it. The page loads scripts, styles, and images only
+  from the app. It allows inline `style` attributes, which run no code.
+- **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
   browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
   addresses of the app are not sent to other sites.
 - **Wire behavior inside the views,** as in the quickstart, with `app.connect`, or in

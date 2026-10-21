@@ -26,8 +26,10 @@ _PAGE = Template("""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>$title</title>
 <!-- no copies of past pages: going back or forward reloads the page from the server,
-     whose state they would contradict, at the address of a page of the app -->
-<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}' />
+     whose state they would contradict, at the address of a page of the app. Nothing
+     htmx would run or style inline, which the page's policy refuses (`headers.py`). -->
+<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true,
+  "allowEval": false, "allowScriptTags": false, "includeIndicatorStyles": false}' />
 <script src="$htmx_url"></script>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="$css_url" rel="stylesheet" type="text/css" />

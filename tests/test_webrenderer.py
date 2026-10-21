@@ -76,6 +76,7 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
+from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
 from composeui.webcore.page import JOBS_POLL_MS
@@ -476,29 +477,30 @@ def _views(view: View) -> Iterator[View]:
         yield from _views(child_view)
 
 
-@pytest.mark.parametrize(
-    "main_view_type",
-    [
-        HelloMainView,
-        PipeMainView,
-        BatmanMainView,
-        PipeChartMainView,
-        BookingMainView,
-        SiteMainView,
-        ChartPagesMainView,
-        DataFileMainView,
-        DialogsMainView,
-        RecordMainView,
-        PipesMainView,
-        HelpMainView,
-        JobsMainView,
-        PagesMainView,
-        SidebarMainView,
-        TabsMainView,
-        ToolBarMainView,
-        WorkersMainView,
-    ],
-)
+#: main views showing every kind of view, between them
+_MAIN_VIEW_TYPES: list[type[MainView]] = [
+    HelloMainView,
+    PipeMainView,
+    BatmanMainView,
+    PipeChartMainView,
+    BookingMainView,
+    SiteMainView,
+    ChartPagesMainView,
+    DataFileMainView,
+    DialogsMainView,
+    RecordMainView,
+    PipesMainView,
+    HelpMainView,
+    JobsMainView,
+    PagesMainView,
+    SidebarMainView,
+    TabsMainView,
+    ToolBarMainView,
+    WorkersMainView,
+]
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
 def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
     """Catches a renderer that forgets `html.escape`: every text field of every view."""
     main_view = main_view_type()
@@ -529,6 +531,35 @@ def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
     finder.feed(page)
     assert finder.found == []
     assert "cui-xss" in page  # escaped, not dropped
+
+
+class _ScriptFinder(HTMLParser):
+    """Collects the markup that runs code: what the page's policy refuses (`headers.py`)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.found: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script" and "src" not in dict(attrs):
+            self.found.append("<script>")
+        for name, value in attrs:
+            is_code = (value or "").startswith(("js:", "javascript:"))
+            is_filter = name == "hx-trigger" and "[" in (value or "")  # evaluated by htmx
+            if name.startswith(("on", "hx-on")) or is_code or is_filter:
+                self.found.append(f"<{tag} {name}={value!r}>")
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
+def test_no_markup_runs_code(main_view_type: type[MainView]) -> None:
+    """The page's script does what inline handlers and htmx's evaluated values would."""
+    main_view = main_view_type()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+
+    finder = _ScriptFinder()
+    finder.feed(main_view.renderer.page_html())
+    assert finder.found == []
 
 
 def test_markdown_is_shown_as_html_its_own_markup_escaped() -> None:
@@ -1779,7 +1810,7 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
 
     for response in responses:
         assert response.headers["x-frame-options"] == "DENY"
-        assert "frame-ancestors 'none'" in response.headers.get_list("content-security-policy")
+        assert POLICY in response.headers.get_list("content-security-policy")
         assert response.headers.get_list("x-content-type-options") == ["nosniff"]
         assert response.headers["referrer-policy"] == "same-origin"
 
@@ -3314,7 +3345,7 @@ def test_a_disabled_dialog_cannot_be_answered(
     page = dialog_client.get("/").text
     element = _element(page, dialog_id)
     assert "hx-trigger" not in element.attributes
-    assert element.attributes["oncancel"] == "event.preventDefault()"
+    assert "data-keep-open" in element.attributes  # the page's script keeps it open
     buttons = [attributes for tag, attributes in element.descendants if tag == "button"]
     assert all("disabled" in attributes for attributes in buttons)
     assert "<b>busy</b>" in element.text

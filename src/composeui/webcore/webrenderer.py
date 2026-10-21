@@ -290,7 +290,7 @@ class WebRenderer(Renderer[TView, str]):
 
         The field is described by the row's help, if any, and its log, read out with the
         field, and is `aria-invalid` while the log shows an error (the page script keeps
-        that in step when only the log is swapped, see `page.py`). A field a `<label for>`
+        that in step when only the log is swapped, see `page.js`). A field a `<label for>`
         can't name, a radio group or a checkbox, is labelled by the row's label instead.
         Nothing outside a row.
         """
@@ -368,7 +368,7 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
             f' placeholder="{html.escape(self._view.placeholder)}"{self._extra_attributes()}'
             f' hx-post="/widget/{self.widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
-            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             # the browser must not refill the field on reload: the server's value wins
             ' autocomplete="off"'
             f"{disabled}>"
@@ -584,7 +584,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
 
     The button opens a popover holding Cally's calendar (`<calendar-date>`, which daisyUI
     styles in the theme's colors), its months and days in the page's language (see
-    `page.py`); the date picked posts as its change (`pick`), in ISO 8601. Like the number
+    `page.js`); the date picked posts as its change (`pick`), in ISO 8601. Like the number
     fields, a date typed out of `minimum`/`maximum` isn't refused; the calendar offers only
     those in range.
     """
@@ -631,7 +631,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             f' value="{html.escape(view.shown_text(view.value))}"'
             f' placeholder="{html.escape(date_hint(view.placeholder, view.date_format))}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
-            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             f' autocomplete="off"{disabled}>'
             f'<button id="{self.widget_id}-pick" type="button"'
             ' class="btn btn-ghost btn-sm btn-square"'
@@ -644,7 +644,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             f' style="position-anchor: --{self.widget_id}">'
             f'<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="change"'
-            """ hx-vals='js:{event: "pick", picked: event.target.value}' hx-swap="none">"""
+            """ hx-vals='{"event": "pick"}' data-post-picked hx-swap="none">"""
             f'<span slot="previous" aria-label="{html.escape(view.previous_month_text)}">'
             f"{_icon('chevron', 'size-4 rotate-90')}</span>"
             f'<span slot="next" aria-label="{html.escape(view.next_month_text)}">'
@@ -714,7 +714,7 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
 
     The field posts as a text input's (see `_WebTextFieldRenderer`). The browser can't
     hand a page its files' paths: the button opens the browser's picker, a hidden file
-    input beside it (see `page.py`) uploading the file picked (`/widget/{id}/file`), and
+    input beside it (see `page.js`) uploading the file picked (`/widget/{id}/file`), and
     the session keeps a copy (see `WebSession.pick_file`), whose path the field then
     shows. The root is a `<div>` holding them, so a row's label names the field with
     `aria-labelledby`.
@@ -752,7 +752,7 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             ' class="input w-full" type="text" name="value"'
             f' value="{html.escape(view.text)}" placeholder="{html.escape(view.placeholder)}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:300ms, change"'
-            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             f' autocomplete="off"{disabled}>'
             f'<button id="{self.widget_id}-browse" type="button" class="btn btn-square"'
             f' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
@@ -760,7 +760,7 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             f'<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
             f' aria-hidden="true" hx-post="/widget/{self.widget_id}/file"'
             ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
-            ' hx-on::after-request="this.value = \'\'" autocomplete="off"'
+            ' data-clear-after-post autocomplete="off"'
             f"{disabled}>{reload_button}</div>"
         )
 
@@ -931,7 +931,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
 
     The browser stops the handle on each step. The moves are posted debounced
     (`input`) and on release (`change`); meanwhile the page's script keeps the value
-    in step (see `page.py`). Beside the track rather than above the handle, and in a
+    in step (see `page.js`). Beside the track rather than above the handle, and in a
     slot as wide as the widest value, so the row is as tall as a text field's and the
     track keeps its length. The root is a `<div>` holding both, so a row's label names
     the input with `aria-labelledby`. Like every control, never swapped back after a
@@ -968,7 +968,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             ' class="range range-primary" name="value"'
             f' min="{minimum}" max="{top}" step="{step}" value="{value}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="input changed delay:150ms, change"'
-            ' hx-vals="js:{event: event.type}" hx-swap="none" hx-sync="this:queue all"'
+            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             f' autocomplete="off"{disabled}>'
             # read out by the input itself, as its value
             f'<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
@@ -1070,7 +1070,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
 
     The user zooms by dragging across it, back out with a double click, and reads the
     values at the cursor in its legend; a series' legend entry hides or shows it. A new
-    `series` list swaps the figure, the page keeping the user's zoom (see `page.py`).
+    `series` list swaps the figure, the page keeping the user's zoom (see `page.js`).
 
     A click on the plot, rather than the end of a drag, posts its point: `clicked` emits
     it. Its corner downloads its image as a report's figure, in the format picked beside:
@@ -1198,7 +1198,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         return f"{view.title}: {description}" if view.title and description else view.title
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        # a click on the plot (see `page.py`), at a point in the axes' values
+        # a click on the plot (see `page.js`), at a point in the axes' values
         if event != "click" or not self.is_enabled:
             super().dispatch(event, form)
         try:
@@ -1353,10 +1353,6 @@ class TableViewLike(ViewLike, Protocol):
 _ARIA_SORT: Final[dict[bool | None, str]] = {None: "none", False: "ascending", True: "descending"}
 
 
-#: an htmx trigger's filter: the event isn't from a field or a button
-_NOT_FROM_A_CONTROL: Final = "!target.closest(&apos;input,select,button&apos;)"
-
-
 class WebTableRenderer(WebRenderer[TableViewLike]):
     """A table under its filter bar, scrolling sideways on its own when wider than the page.
 
@@ -1367,7 +1363,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     (`aria-selected`), and a click adds or removes its row.
 
     Double clicking a cell of `editable_columns`, or pressing F2 on its row (see
-    `page.py`), edits it: the table comes back with a field in the cell, named by its
+    `page.js`), edits it: the table comes back with a field in the cell, named by its
     header, its text selected. Enter or leaving the field posts the text, Escape puts the
     old text back first; either way the cell is text again. The page keeps the text the
     user is typing through a swap of the table, e.g. answering the double click's clicks.
@@ -1376,7 +1372,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
     posting its change and never swapped back for it (only a check-all box in the header
     follows); a button after the cell's text, or the text as a link-like button, posting
     a click. A check-all column's header starts with its box, partly checked (see
-    `page.py`) while some rows are; its click swaps back the rows, not itself.
+    `page.js`) while some rows are; its click swaps back the rows, not itself.
 
     A cell of `cell_styles` has its background color, its text black or white on it, and
     its mark before its text, named for screen readers; a disabled one is grayed, its
@@ -1693,7 +1689,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             f' value="{html.escape(text)}" aria-label="{value_label}"'
             f' placeholder="{html.escape(placeholder)}"'
             f' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
-            f' hx-post="/widget/{self.widget_id}" hx-trigger="keydown[key==&apos;Escape&apos;]"'
+            f' hx-post="/widget/{self.widget_id}" hx-trigger="escape-key"'
             """ hx-vals='{"event": "close_editor"}' hx-swap="none">"""
             f"{self._error_html()}"
             f'<button type="submit" class="btn btn-sm btn-primary">'
@@ -1781,9 +1777,8 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         return (
             f'<tr id="{self.widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
             f'{selected} hx-post="/widget/{self.widget_id}"'
-            # not from a cell's field or widget, which takes its own clicks and Enter
-            f' hx-trigger="click[{_NOT_FROM_A_CONTROL}],'
-            f' keydown[key==&apos;Enter&apos;&amp;&amp;{_NOT_FROM_A_CONTROL}]"'
+            # a click or Enter, not from a cell's field or widget, which takes its own
+            ' hx-trigger="activate"'
             f""" hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
             f"{cells}</tr>"
         )
@@ -1818,7 +1813,7 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             ' class="input input-ghost input-sm w-full min-w-0" name="text" data-cell'
             f' value="{html.escape(text)}" data-original="{html.escape(text)}"'
             f' aria-label="{header}" autocomplete="off" autofocus'
-            ' hx-trigger="keydown[key==&apos;Enter&apos;], blur"'
+            ' hx-trigger="enter-key, blur"'
             f"{post('edit')}></td>"
         )
 
@@ -2278,7 +2273,7 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
         """Render the "?" button and the help it opens, which also describes the field.
 
         Closed, the popover is hidden, which `aria-describedby` still reads. The page's
-        script places it beside the button (see `page.py`).
+        script places it beside the button (see `page.js`).
         """
         if not self.has_help():
             return ""
@@ -2471,7 +2466,7 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
 
 
 #: closes an open daisyUI dropdown (it stays open while something in it has focus)
-_CLOSE_DROPDOWN = 'hx-on:click="document.activeElement.blur()"'
+_CLOSE_DROPDOWN = "data-close-dropdown"
 
 
 def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
@@ -2481,7 +2476,7 @@ def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
     file, Ctrl+S saves the page, Ctrl+Q quits Firefox on Linux), so `Ctrl+x` becomes
     `Alt+Shift+X`, the combination web apps use for their own shortcuts. Returns the
     label to show and the physical key (`KeyboardEvent.code`) the page's key handler
-    matches (see `page.py`); None for any other shortcut, which has no free web
+    matches (see `page.js`); None for any other shortcut, which has no free web
     equivalent (e.g. `Ctrl+Shift+s` would collide with `Ctrl+s`'s `Alt+Shift+S`).
     """
     match = re.fullmatch(r"ctrl\+([a-z0-9])", shortcut or "", flags=re.IGNORECASE)
@@ -2825,7 +2820,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
                 f'<label {attributes}>{label}<input type="file" name="file"{accept}'
                 f' class="hidden" hx-post="/widget/{self.widget_id}/file"'
                 ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
-                ' hx-on::after-request="this.value = \'\'" autocomplete="off"'
+                ' data-clear-after-post autocomplete="off"'
                 f" {_CLOSE_DROPDOWN}{key}></label>"
             )
         return (
@@ -2951,7 +2946,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
             """ hx-vals='{"event": "dismiss"}'"""
             if self.is_enabled
-            else ' oncancel="event.preventDefault()"'
+            else " data-keep-open"
         )
         title = (
             f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
@@ -2973,7 +2968,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         return (
             f'<button type="button" class="{classes}" hx-post="/widget/{self.widget_id}"'
             f""" hx-vals='{{"event": "{event}"}}'"""
-            f""" onclick="this.closest('dialog').close()"{autofocus}{disabled}>"""
+            f" data-close-dialog{autofocus}{disabled}>"
             f"{html.escape(text)}</button>"
         )
 
@@ -3031,7 +3026,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
             f' hx-post="/widget/{self.widget_id}" hx-trigger="cancel"'
             """ hx-vals='{"event": "dismiss"}'"""
             if self.is_enabled
-            else ' oncancel="event.preventDefault()"'
+            else " data-keep-open"
         )
         title = (
             f'<h2 id="{title_id}" class="text-lg font-bold">{html.escape(view.title)}</h2>'
@@ -3161,7 +3156,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
 
     A border is an ARIA window splitter (a focusable separator) the user drags, or moves
     with the arrow keys; the browser shares the width between the panes beside it at
-    once (see `page.py`), then posts every pane's width (`resize`): like every control,
+    once (see `page.js`), then posts every pane's width (`resize`): like every control,
     the splitter is never swapped back after one. A splitter narrower than 42rem stacks
     its panes, as a row does, without borders; side by side, a pane is at least 12rem
     wide, for its text to be read. A border shows only between panes shown (see
@@ -3189,7 +3184,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         pane_class = (
             "min-h-0 overflow-auto has-[>[hidden]]:hidden flex-(--share)"
             if is_vertical
-            # side by side, each wide enough to read its text (`page.py` reads it too)
+            # side by side, each wide enough to read its text (`page.js` reads it too)
             else "min-w-0 has-[>[hidden]]:hidden @2xl:min-w-48 @2xl:flex-(--share)"
         )
         cells: list[str] = []
@@ -3279,7 +3274,7 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
             f"<details {self._root_attributes(oob=oob)}{is_open}"
             ' class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="toggle"'
-            ' hx-vals="js:{event: event.type, open: event.target.open}" hx-swap="none">'
+            ' data-post-event data-post-open hx-swap="none">'
             f'<summary class="collapse-title font-semibold{summary_classes}"{summary_attributes}>'
             f"{html.escape(self._view.title)}</summary>"
             f'<div class="collapse-content flex flex-col gap-6">{content}</div></details>'
@@ -3443,7 +3438,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
 
     The main renderer wraps it in a daisyUI drawer (`drawer_html`): a column beside the
     pages on a wide screen, and on a phone a drawer over them, closed by a click beside
-    it. A button in the header (`toggle_html`; see `page.py`) retracts and expands the
+    it. A button in the header (`toggle_html`; see `page.js`) retracts and expands the
     column, which the browser does before posting it (`toggle`), like every control
     never swapped back after one; on a phone, it shows and hides the drawer instead.
     The button isn't in the aside's fragment: a swap of the aside brings it along.
@@ -3493,15 +3488,15 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
         swap = ' hx-swap-oob="true"' if oob else ""
         expanded = "true" if self._view.is_expanded else "false"
         text = html.escape(self._view.toggle_text)
-        # posted by the page's script on a wide screen only, once the column has changed
-        is_expanded = f'!document.getElementById("{self.widget_id}").hasAttribute("data-retracted")'
+        # posted by the page's script on a wide screen only, once the column has changed,
+        # with whether it is now expanded
         return (
             f'<button id="{self.widget_id}-toggle" type="button"{swap}'
             ' class="btn btn-ghost btn-square btn-sm"'
             f' data-sidebar-toggle="{self.drawer_id}" aria-controls="{self.widget_id}"'
             f' aria-expanded="{expanded}" aria-label="{text}" title="{text}"'
             f' hx-post="/widget/{self.widget_id}" hx-trigger="sidebar-toggle"'
-            f' hx-vals=\'js:{{event: "toggle", expanded: {is_expanded}}}\' hx-swap="none">'
+            """ hx-vals='{"event": "toggle"}' hx-swap="none">"""
             f"{_icon('sidebar', 'size-5')}</button>"
         )
 
@@ -3678,7 +3673,7 @@ class WebTabPageRenderer(WebRenderer[TabPage]):
 class WebTabsRenderer(WebRenderer[TabView]):
     """A row of tabs (an ARIA tab list), then a panel per tab, only the current one shown.
 
-    The browser shows the tab picked, by a click or the arrow keys (see `page.py`),
+    The browser shows the tab picked, by a click or the arrow keys (see `page.js`),
     before posting it (`select`): like every control, the tabs are never swapped back
     after a pick, only when the server changes them.
     """
@@ -3849,10 +3844,10 @@ def check_routes(main_view: MainView) -> None:
 
 
 def _theme_option(choice: str, text: str) -> str:
-    # `setTheme` in `page.py`; the blur closes the dropdown
+    # picked by `page.js`, which also closes the dropdown
     return (
         f'<li><button type="button" class="theme-option" data-theme-option="{choice}"'
-        f""" onclick="setTheme('{choice}'); document.activeElement.blur()">{text}</button></li>"""
+        f">{text}</button></li>"
     )
 
 
