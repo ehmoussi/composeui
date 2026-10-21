@@ -1184,6 +1184,14 @@ tables (`model.runs.add(...)`).
   the previous version to `migrations` (`{1: add_stress_column}`). When the user opens a
   study saved by an older version, the model brings it up to date. A study saved by a newer
   version is refused.
+- **Opened databases are checked.** A study can come from anyone, such as a web upload or
+  an email. Its database must be made as a new one is: the same tables with the same
+  columns, and the same views, triggers and indexes, with the same SQL. Otherwise it is
+  refused, because a view or a trigger in the file would run in the app. So each migration
+  must leave the database as a new one at its version. For example, it recreates a view from
+  the same SQL as `create`. The `CHECK` and `REFERENCES` of a table are not compared,
+  because `ALTER TABLE ... ADD COLUMN` can't add all of them. Opening a database, its
+  migrations included, stops after `open_time_limit` seconds (30 by default).
 - **Writing from a job.** The function of a [job](#running-work-in-threads) can write to
   the tables: the model's lock lets one thread at a time use the connection. The `changed`
   signal of a write in a job is emitted on the main thread, through

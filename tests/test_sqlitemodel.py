@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import struct
 import threading
 import tracemalloc
@@ -21,7 +22,6 @@ from composeui.core.view import ButtonView, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
-    import sqlite3
     from collections.abc import Iterator
     from pathlib import Path
 
@@ -214,6 +214,9 @@ def test_every_database_keeps_the_models_settings(
         db.execute("INSERT OR REPLACE INTO part(id, name) VALUES (1, 'screw')")
         # the replaced row went through the delete trigger (recursive triggers are on)
         assert [row["name"] for row in db.execute("SELECT name FROM removed")] == ["bolt"]
+        # trusted again once an opened database's schema is checked: the app's own
+        (trusted,) = db.execute("PRAGMA trusted_schema").fetchone()
+        assert trusted == 1
     model.close()
 
 
@@ -329,6 +332,71 @@ def test_an_archive_lying_about_its_size_is_refused_before_it_is_unpacked(
         == "Can't open 'study.hello': it isn't a valid .hello file."
     )
     assert peak < 8 * 1024 * 1024
+
+
+#: a query that never ends: the numbers counted up from 1, none of them kept
+_ENDLESS = (
+    "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n) SELECT x FROM n WHERE x < 0"
+)
+
+
+def _study_with(app: App, path: Path, script: str, *, version: int = 1) -> None:
+    """Save a study, its database changed by `script` as a forged file's would be."""
+    _save(app, path)
+    with zipfile.ZipFile(path) as archive:
+        views = archive.read("views.json")
+        data = path.with_suffix(".sqlite")
+        data.write_bytes(archive.read("data.sqlite"))
+    db = sqlite3.connect(data)
+    db.executescript(f"{script}; PRAGMA user_version = {version};")
+    db.close()
+    _archive(views, data.read_bytes())(path)
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        # a view that never ends, in place of the table the app queries
+        f"DROP TABLE run; CREATE VIEW run(id, radius) AS {_ENDLESS}",
+        f"CREATE VIEW forever AS {_ENDLESS}",  # an object the app doesn't have
+        "CREATE TRIGGER rewrite AFTER INSERT ON run BEGIN UPDATE run SET radius = 0; END",
+        "CREATE INDEX by_radius ON run(radius)",
+        "ALTER TABLE run ADD COLUMN extra TEXT",
+    ],
+)
+def test_a_database_not_made_as_a_new_one_is_refused(app: App, tmp_path: Path, script: str) -> None:
+    app.model.runs.add(80.0)
+    path = tmp_path / "study.hello"
+    _study_with(app, path, script)
+
+    _open(app, path)
+
+    message = "Can't open 'study.hello': its data doesn't match this application."
+    assert app.main_view.status_bar.message == message
+    assert app.model.runs.radii() == [80.0]
+
+
+class _SlowMigrationModel(RunsModel):
+    """A model whose migration queries a view of the file, which may never end."""
+
+    schema_version = 2
+    migrations = MappingProxyType({1: lambda db: db.execute("SELECT count(*) FROM forever")})
+    open_time_limit = 0.2
+
+
+def test_opening_a_database_is_cut_after_its_time_limit(app: App, tmp_path: Path) -> None:
+    path = tmp_path / "study.hello"
+    _study_with(app, path, f"CREATE VIEW forever AS {_ENDLESS}")
+    slow = ModelApplication(build_main_view=HelloMainView, build_model=_SlowMigrationModel)
+    opening = threading.Thread(target=_open, args=(slow, path), daemon=True)
+
+    opening.start()
+    opening.join(10)
+
+    assert not opening.is_alive()
+    message = "Can't open 'study.hello': its data isn't a valid database."
+    assert slow.main_view.status_bar.message == message
+    slow.model.close()
 
 
 def test_a_job_s_writes_are_told_on_the_main_thread(app: App) -> None:
