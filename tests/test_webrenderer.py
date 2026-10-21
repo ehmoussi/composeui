@@ -2453,15 +2453,25 @@ def test_the_page_loads_nothing_from_another_host(client: TestClient) -> None:
     assert client.get("/static/app.css").status_code == 200
 
 
+def test_the_page_has_no_inline_script(client: TestClient) -> None:
+    """The page's script is a static file: a policy can allow it by address, not inline."""
+    page = client.get("/").text
+
+    assert re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", page) == []
+
+
 def test_the_page_names_each_static_file_by_its_content(client: TestClient) -> None:
     """A new stylesheet or script has a new address: a browser can't keep an older copy."""
     page = client.get("/").text
 
-    addresses = re.findall(r'(?:src|href)="(/static/[^"]*)"', page)
+    addresses = re.findall(r'(?:src|href|data-uplot|data-cally)="(/static/[^"]*)"', page)
 
     assert sorted(address.split("?")[0] for address in addresses) == [
         "/static/app.css",
+        "/static/cally.js",
         "/static/htmx.min.js",
+        "/static/page.js",
+        "/static/uPlot.iife.min.js",
     ]
     for address in addresses:
         body = client.get(address).content
