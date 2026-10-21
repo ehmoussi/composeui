@@ -130,6 +130,9 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
   route against every refused header set (`cross-site`, `same-site`, `none`, foreign and
   `null` `Origin`, foreign `Referer`, no header).
 - A new kind of response goes in `test_every_response_carries_the_security_headers`.
+- `test_every_view_text_is_escaped` puts hostile text in every text field of each main
+  view it lists, then parses the page. A new view type is covered once a listed main view
+  shows it.
 
 `tests/test_browser.py` (Chromium, `make browser-test`), for what only a browser shows:
 
