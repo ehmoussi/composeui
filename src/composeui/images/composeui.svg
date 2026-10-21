@@ -3,13 +3,13 @@
        ComposeUI's icon without its fan-out lines and view square, which blur when small -->
   <defs>
     <linearGradient id="composeui-bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4a63e8"/>
-      <stop offset="1" stop-color="#5b45c6"/>
+      <stop offset="0" stop-color="#3446a8"/>
+      <stop offset="1" stop-color="#1d1a4f"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#composeui-bg)"/>
   <path d="M36.5 20.5 A15 15 0 1 0 36.5 43.5" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
   <circle cx="46.4" cy="18.9" r="4" fill="#2fd4c4"/>
-  <circle cx="50.4" cy="32.0" r="4" fill="#fff"/>
-  <circle cx="46.4" cy="45.1" r="4" fill="#c3a8f0"/>
+  <circle cx="50.4" cy="32.0" r="4" fill="#ffc857"/>
+  <circle cx="46.4" cy="45.1" r="4" fill="#ff8fc7"/>
 </svg>
