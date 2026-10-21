@@ -277,5 +277,8 @@ uv sync --group dev --group docs --all-extras
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
 `make browser-test` and `make docs` on Python 3.13. Run `make check test` before you commit.
 
+A change of the documentation only, in `docs/` and the Markdown files, runs only the `docs`
+job. That job also lints the Python files of `docs/`.
+
 On a push to `main`, the `pages` job publishes the site that `make docs` built to GitHub
 Pages, at https://ehmoussi.github.io/composeui3/. A pull request only builds the site.
