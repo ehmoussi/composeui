@@ -126,6 +126,10 @@ How it differs from a desktop window:
   another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
   `Origin`, or `Referer` header. A request without any of them is refused. Behind a reverse
   proxy, keep these headers and the `Host` header as the browser sent them.
+- **No page of the app shows in a frame,** not even in a frame of the app's own site. This
+  stops another site from showing the app in a hidden frame to get the user's clicks
+  (clickjacking). Every response sends `Content-Security-Policy: frame-ancestors 'none'`
+  and `X-Frame-Options: DENY`.
 - **Wire behavior inside the views,** as in the quickstart, with `app.connect`, or in
   `WebApplication.setup_session`. `setup_session` runs for the main view of each new session.
   The app replays `app.connect(view=app.main_view...)` on every new session. The callback

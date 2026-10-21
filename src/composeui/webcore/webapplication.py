@@ -28,7 +28,7 @@ from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import View
-from composeui.webcore.origin import SameOriginMiddleware
+from composeui.webcore.origin import NoFramingMiddleware, SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
     homepage,
@@ -122,7 +122,9 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             Route("/{route}", page),
         ],
         middleware=[
-            # first: a request another origin sent is refused before it reaches a session
+            # outermost: every response, a refusal too, forbids frames
+            Middleware(NoFramingMiddleware),
+            # a request another origin sent is refused before it reaches a session
             Middleware(SameOriginMiddleware),
             # A per-process signing key is enough: sessions live in this process only,
             # so a cookie from before a restart has no session left to point at anyway.
