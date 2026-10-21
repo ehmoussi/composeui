@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import struct
 import threading
+import tracemalloc
 import zipfile
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
@@ -238,11 +240,38 @@ def _views_only(path: Path) -> None:
     HelloMainView().save_state(path)
 
 
-def _archive(views: bytes, data: bytes) -> Callable[[Path], None]:
+def _archive(
+    views: bytes, data: bytes, compression: int = zipfile.ZIP_STORED
+) -> Callable[[Path], None]:
     def write(path: Path) -> None:
-        with zipfile.ZipFile(path, "w") as archive:
+        with zipfile.ZipFile(path, "w", compression) as archive:
             archive.writestr("views.json", views)
             archive.writestr("data.sqlite", data)
+
+    return write
+
+
+def _forged(
+    views: bytes, *, declared: int | None = None, method: int | None = None, flags: int = 0
+) -> Callable[[Path], None]:
+    """Write an archive whose `views.json` lies about its size, method or flags.
+
+    Its entries say so twice, in its local header and in the central directory.
+    """
+
+    def write(path: Path) -> None:
+        _archive(views, b"", zipfile.ZIP_DEFLATED)(path)
+        data = bytearray(path.read_bytes())
+        local, central = data.find(b"PK\x03\x04"), data.find(b"PK\x01\x02")
+        if declared is not None:
+            struct.pack_into("<I", data, local + 22, declared)
+            struct.pack_into("<I", data, central + 24, declared)
+        if method is not None:
+            struct.pack_into("<H", data, local + 8, method)
+            struct.pack_into("<H", data, central + 10, method)
+        struct.pack_into("<H", data, local + 6, flags)
+        struct.pack_into("<H", data, central + 8, flags)
+        path.write_bytes(data)
 
     return write
 
@@ -258,6 +287,10 @@ def _archive(views: bytes, data: bytes) -> Callable[[Path], None]:
             _archive(json.dumps({"form": {"age": {"value": "abc"}}}).encode(), b""),
             "it doesn't match this application",
         ),
+        # a method `zipfile` unpacks whole (bzip2), or can't unpack (9, Deflate64)
+        (_archive(b"{}", b"", zipfile.ZIP_BZIP2), "it isn't a valid .hello file"),
+        (_forged(b"{}", method=9), "it isn't a valid .hello file"),
+        (_forged(b"{}", flags=0x1), "it isn't a valid .hello file"),  # encrypted
     ],
 )
 def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
@@ -274,6 +307,28 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
     assert app.model.runs.radii() == [80.0]
     assert app.main_view.form.name.text == "Bob"
     assert app.main_view.state_filepath is None
+
+
+def test_an_archive_lying_about_its_size_is_refused_before_it_is_unpacked(
+    app: App, tmp_path: Path
+) -> None:
+    """A zip bomb: 64 MiB of views in a few kilobytes, said to be 2 bytes."""
+    path = tmp_path / "study.hello"
+    _forged(b" " * (64 * 1024 * 1024), declared=2)(path)
+    assert path.stat().st_size < 1024 * 1024
+
+    tracemalloc.start()
+    try:
+        _open(app, path)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    assert (
+        app.main_view.status_bar.message
+        == "Can't open 'study.hello': it isn't a valid .hello file."
+    )
+    assert peak < 8 * 1024 * 1024
 
 
 def test_a_job_s_writes_are_told_on_the_main_thread(app: App) -> None:
