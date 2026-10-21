@@ -24,6 +24,12 @@ if TYPE_CHECKING:
 VIEWS_NAME = "views.json"
 #: what reading a damaged archive can raise
 _BAD_ARCHIVE_ERRORS = (zipfile.BadZipFile, zlib.error, EOFError)
+#: the compression methods a study's archive may use: what `save_study` writes. `zipfile`
+#: unpacks a bzip2 or LZMA member whole, whatever size is read, so a few bytes of one can
+#: unpack into gigabytes; another method it can't unpack at all (`NotImplementedError`)
+_COMPRESSIONS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
+#: a member's flag of an encrypted one, which `zipfile` won't read without a password
+_ENCRYPTED = 0x1
 
 
 def has_data(model: Model | None) -> bool:
@@ -77,13 +83,23 @@ def open_study(
     try:
         with zipfile.ZipFile(path) as archive:
             members = archive.infolist()
-            if {member.filename for member in members} != {VIEWS_NAME, model.data_name}:
+            if sorted(member.filename for member in members) != sorted(
+                [VIEWS_NAME, model.data_name]
+            ) or any(
+                member.compress_type not in _COMPRESSIONS or member.flag_bits & _ENCRYPTED
+                for member in members
+            ):
                 raise InvalidStateError(invalid)
+            # The sizes the archive declares, which it may lie about: a member that unpacks
+            # into more is cut there, and then fails its CRC (`BadZipFile`).
             if max_size is not None and sum(member.file_size for member in members) > max_size:
                 msg = "the file is too large"
                 raise InvalidStateError(msg)
+            views = archive.getinfo(VIEWS_NAME)
             try:
-                data = json.loads(archive.read(VIEWS_NAME))
+                # not `archive.read`: it unpacks the whole member before cutting it
+                with archive.open(views) as member:
+                    data = json.loads(member.read(views.file_size))
             except ValueError as error:  # also covers bytes that aren't text
                 raise InvalidStateError(invalid) from error
             main_view.check_state_data(data)
