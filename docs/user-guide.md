@@ -141,7 +141,9 @@ How it differs from a desktop window:
   return, so the other browsers would show stale views.
 - **Save and Open** download the state as a file and upload a file. The File menu is in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves), because browsers keep the
-  Ctrl shortcuts for themselves.
+  Ctrl shortcuts for themselves. An uploaded file can be at most 5 MB, and the status bar
+  says when a file is too large. The server refuses a request body larger than 6 MB (413)
+  before it reads it.
 - **`--reload` restarts the server when a Python file under the current directory
   changes.** Use it for development. The new server process runs the program again (the
   script, or the `-m` module) with the same command line, to build its app again. Every
