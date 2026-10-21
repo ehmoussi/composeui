@@ -85,6 +85,7 @@ from composeui.webcore.session import WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     CHART_MAX_POINTS,
+    RENDERERS,
     RESERVED_ROUTES,
     UnsupportedEventError,
     WebActionRenderer,
@@ -554,6 +555,20 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     CellWidgetsMainView,
     StyledTablesMainView,
 ]
+
+
+def test_the_listed_main_views_show_every_web_renderer() -> None:
+    """A new widget joins the escaping test only once a listed main view shows it."""
+    shown: set[str] = set()
+    for main_view_type in _MAIN_VIEW_TYPES:
+        main_view = main_view_type()
+        main_view.render(RendererType.WEB)
+        assert isinstance(main_view.renderer, WebMainRenderer)
+        # a renderer's element is `cui-{id(view)}-{role}`
+        shown |= set(re.findall(r'id="cui-\d+-([a-z_]+)"', main_view.renderer.page_html()))
+
+    roles = {key: getattr(renderer, "_role", None) for key, renderer in RENDERERS.items()}
+    assert sorted(key for key, role in roles.items() if role and role not in shown) == []
 
 
 def _poison(main_view: MainView) -> None:

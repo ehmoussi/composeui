@@ -137,8 +137,9 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 - `test_every_view_text_is_escaped` puts hostile text in every text field of each main
   view in `_MAIN_VIEW_TYPES`, then parses the page in each state of `_states` (dialogs
   open, a cell edited, a table searched and filtered). The text must show exactly as set:
-  not as markup, and not escaped twice. A new view type is covered once a listed main view
-  shows it; text it shows only on demand needs a state in `_states`.
+  not as markup, and not escaped twice. A new widget fails
+  `test_the_listed_main_views_show_every_web_renderer` until a listed main view shows it;
+  text it shows only on demand needs a state in `_states`.
 
 `tests/test_browser.py` (Chromium, `make browser-test`), for what only a browser shows:
 
