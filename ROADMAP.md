@@ -149,7 +149,7 @@ The user guide's "Web backend" section covers what users see.
   bad file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.
 - **Dialogs** render at the end of the page, outside the pages' slots (a hidden slot
-  would hide them). The browser opens a modal `<dialog>` only from a script: `page.py`
+  would hide them). The browser opens a modal `<dialog>` only from a script: `page.js`
   opens each one swapped in shown, once. A button closes its dialog in the browser
   first, so focus returns where it was, then posts its answer; the server swaps it closed.
 - **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are
