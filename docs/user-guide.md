@@ -131,7 +131,9 @@ How it differs from a desktop window:
 - **No page of the app shows in a frame,** not even in a frame of the app's own site. This
   stops another site from showing the app in a hidden frame to get the user's clicks
   (clickjacking). Every response sends `Content-Security-Policy: frame-ancestors 'none'`
-  and `X-Frame-Options: DENY`.
+  and `X-Frame-Options: DENY`. It also sends `X-Content-Type-Options: nosniff`, so the
+  browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
+  addresses of the app are not sent to other sites.
 - **Wire behavior inside the views,** as in the quickstart, with `app.connect`, or in
   `WebApplication.setup_session`. `setup_session` runs for the main view of each new session.
   The app replays `app.connect(view=app.main_view...)` on every new session. The callback

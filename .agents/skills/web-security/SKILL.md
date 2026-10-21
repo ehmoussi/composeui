@@ -71,7 +71,7 @@ ComposeUI against these yet: each "What to check" is an open question, not a fin
 | Uploads: Open (`POST /state`), `PickFileAction` | [File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) | The size limits (`MAX_STATE_SIZE`, `MAX_FILE_SIZE`). A study is a zip, which may lie about its sizes (zip bomb): `open_study` takes only the two members, stored or deflated (`zipfile` unpacks bzip2 and LZMA whole), unencrypted, and never reads one with `archive.read` (it unpacks the whole member first): a bounded read cuts a lying member, which then fails its CRC. The study's SQLite file comes from the user too, schema included: `SqliteModel.open_data` refuses one not made as a new one is (`_schema`: tables' columns, other objects' SQL), runs its checks and migrations with `trusted_schema` off, and cuts them after `open_time_limit`. Tables' `CHECK` constraints aren't compared (they can't query, but can call costly functions such as `randomblob`). |
 | Any text a view shows, the page's scripts | [XSS Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html), [DOM-based XSS](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html) | XSS defeats every CSRF defense. `hx-on:*` and `hx-vals='js:...'` run JavaScript: no view text may reach them, even escaped. |
 | Response headers, the page's inline scripts | [Content Security Policy](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html) | Only icons send a `default-src` policy. A strict `script-src` on the pages needs nonces or hashes for the inline scripts of `page.py`, and htmx's `hx-on` and `js:` values may need its CSP settings. |
-| Response headers | [HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) | `X-Content-Type-Options: nosniff` (icons only today), `Referrer-Policy`, and `Strict-Transport-Security` once served over HTTPS. |
+| Response headers | [HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) | `Strict-Transport-Security` once served over HTTPS (`nosniff` and `Referrer-Policy` are sent). |
 | The session cookie, `SessionStore`, `session_ttl` | [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) | The cookie's `Secure` and `__Host-`; the idle timeout (1 hour); no absolute timeout; renewing the id (little need without a login). |
 | Sessions, chart images, jobs, uploads | [Denial of Service](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html) | Every cookie-less `GET /` builds a main view (and a model) in memory, up to `max_sessions`; nothing limits one client's share. Chart images (matplotlib) and jobs cost CPU per request. |
 | Loading state, form values | [Deserialization](https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html), [Input Validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html) | State is `json` structured by `cattrs`, never pickle, and `check_state_data` checks it before anything changes. Keep it that way. |
@@ -85,7 +85,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 
 | Defense | Where | What it does |
 | --- | --- | --- |
-| `NoFramingMiddleware` | `origin.py` | Adds `frame-ancestors 'none'` and `X-Frame-Options: DENY` to every response. Outermost middleware, so refusals get them too. |
+| `SecurityHeadersMiddleware` | `headers.py` | Adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin` (the app's own requests keep `Referer`, the origin check's fallback) to every response. Outermost middleware, so refusals get them too. |
 | `BodySizeLimitMiddleware` | `limits.py` | Answers 413 to a body over `MAX_BODY_SIZE` (the largest upload plus 1 MiB): by `Content-Length` before reading, else (chunked) once the body read passes it. Starlette would otherwise spool a multipart body of any size to disk before the routes check `MAX_STATE_SIZE` and `MAX_FILE_SIZE`. |
 | Session limit | `session.py` (`SessionStore.create`), `WebApplication.max_sessions` | At most `max_sessions` (1000) live, sessions being built included: a new browser then gets 503. Full refuses new sessions rather than dropping old ones, so cookie-less requests can't push out a user's unsaved work. No limit per client yet (one client can still take every slot for `session_ttl`). |
 | `SameOriginMiddleware` | `origin.py` | Answers 403 to any method outside `SAFE_METHODS` (GET, HEAD, OPTIONS) unless `is_same_origin`: `Sec-Fetch-Site` must be `same-origin`; without it, `Origin`, then `Referer`, must equal the request's own origin (`URL(scope=scope)`: scheme plus `Host`); with none, refused. |
@@ -108,7 +108,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
    API), stop and ask the user: OWASP wants it listed, authenticated, and secured with CORS.
 4. **Don't add CORS** (`CORSMiddleware`, `Access-Control-Allow-*`) without the user's
    decision. Never a wildcard origin with credentials.
-5. **Keep the middleware order** in `create_starlette_app`: `NoFramingMiddleware`, then
+5. **Keep the middleware order** in `create_starlette_app`: `SecurityHeadersMiddleware`, then
    `BodySizeLimitMiddleware`, then `SameOriginMiddleware`, then `SessionMiddleware`.
 6. **Escape everything a view or user supplies** with `html.escape`, attributes included.
    Keep Markdown's raw HTML off. Don't build a request's URL or method in the page's script
@@ -129,7 +129,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 - A new unsafe route goes in `test_a_post_from_another_origin_is_refused`, which runs each
   route against every refused header set (`cross-site`, `same-site`, `none`, foreign and
   `null` `Origin`, foreign `Referer`, no header).
-- A new kind of response goes in `test_no_response_may_be_shown_in_a_frame`.
+- A new kind of response goes in `test_every_response_carries_the_security_headers`.
 
 `tests/test_browser.py` (Chromium, `make browser-test`), for what only a browser shows:
 
