@@ -1,4 +1,9 @@
-# ComposeUI
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/_static/composeui-logo-dark.svg">
+    <img alt="ComposeUI" src="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/_static/composeui-logo-light.svg" width="268" height="64">
+  </picture>
+</h1>
 
 A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as
 typed [`attrs`](https://www.attrs.org/) classes. A `Renderer` binds each view to a concrete
