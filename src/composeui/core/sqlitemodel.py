@@ -14,6 +14,7 @@ import re
 import sqlite3
 import tempfile
 import threading
+import time
 import weakref
 from pathlib import Path
 from types import MappingProxyType
@@ -149,6 +150,9 @@ class SqliteModel(Model):
     schema_version: ClassVar[int] = 1
     #: by version: the function bringing a database at that version to the next one
     migrations: ClassVar[Mapping[int, Callable[[sqlite3.Connection], None]]] = {}
+    #: seconds opening a study's database may take, checks and migrations included: its
+    #: schema comes from the file, and a view of it may never finish (e.g. a recursive one)
+    open_time_limit: ClassVar[float] = 30.0
     #: set on the connection of every study's database: SQLite keeps these per connection,
     #: not in the file, and New and Open each start a connection of their own. No WAL
     #: journal: it lets other connections read during a write, and the model has one
@@ -256,15 +260,34 @@ class SqliteModel(Model):
             target.close()
 
     def open_data(self, path: Path) -> None:
+        """Open a study's database, refused unless it is made as a new one is.
+
+        The file may come from anyone (e.g. a web upload): its schema is the file's own,
+        whose views and triggers would run in the app. Until it is checked, its views and
+        triggers may call no function with side effects (`trusted_schema`), and the whole
+        open is cut after `open_time_limit`.
+        """
         database = _Database(self.pragmas)
+        db = database.connection
         try:
             source = sqlite3.connect(str(path))
             try:
-                source.backup(database.connection)
+                source.backup(db)
             finally:
                 source.close()
-            self._check(database.connection)
-            self._upgrade(database.connection)
+            db.execute("PRAGMA trusted_schema = OFF")
+            deadline = time.monotonic() + self.open_time_limit
+            # a true answer interrupts the statement running (`OperationalError`)
+            db.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
+            try:
+                self._check(db)
+                self._upgrade(db)
+                self._check_schema(db)
+            finally:
+                db.set_progress_handler(None, 0)
+            db.execute(
+                _pragma_statement("trusted_schema", self.pragmas.get("trusted_schema", "ON"))
+            )
         except sqlite3.DatabaseError as error:
             database.close()
             msg = "its data isn't a valid database"
@@ -299,9 +322,21 @@ class SqliteModel(Model):
         previous.close()
 
     def _check(self, db: sqlite3.Connection) -> None:
-        (result,) = db.execute("PRAGMA quick_check").fetchone()
+        # not `quick_check`, which skips the indexes' content: a study's database is small
+        (result,) = db.execute("PRAGMA integrity_check").fetchone()
         if result != "ok":
             msg = "its data is damaged"
+            raise InvalidStateError(msg)
+
+    def _check_schema(self, db: sqlite3.Connection) -> None:
+        """Refuse a database (brought up to date) not made as a new one is."""
+        new = self._new_database()
+        try:
+            expected = _schema(new.connection)
+        finally:
+            new.close()
+        if _schema(db) != expected:
+            msg = "its data doesn't match this application"
             raise InvalidStateError(msg)
 
     def _upgrade(self, db: sqlite3.Connection) -> None:
@@ -341,6 +376,26 @@ class _Database:
 
     def close(self) -> None:
         self._finalizer()
+
+
+def _schema(db: sqlite3.Connection) -> set[tuple[object, ...]]:
+    """Get what a database is made of: each table's columns, each other object's SQL.
+
+    A table's columns, not its SQL: a migration can only add a column (`ALTER TABLE ...
+    ADD COLUMN`), without the `CHECK` or `REFERENCES` a new database's table may have.
+    Neither can query the database, so the file's own are kept.
+    """
+    schema: set[tuple[object, ...]] = set()
+    for kind, name, table_name, sql in db.execute(
+        "SELECT type, name, tbl_name, sql FROM sqlite_master"
+    ):
+        if kind == "table":
+            # by name, not position: a column added by a migration comes last
+            rows = db.execute("SELECT * FROM pragma_table_xinfo(?)", (name,))
+            schema.add((kind, name, frozenset(tuple(row)[1:] for row in rows)))
+        else:
+            schema.add((kind, name, table_name, " ".join((sql or "").split())))
+    return schema
 
 
 def _pragma_statement(name: str, value: int | str) -> str:
