@@ -1,6 +1,6 @@
 ---
 name: web-security
-description: "Invoke before adding or changing anything in ComposeUI's web backend that a browser reaches: a route, a method, a middleware, a response header, the session cookie, a form, an htmx attribute, a download or upload, or the page's scripts; and when reviewing such a change or asked whether the web backend is secure. Holds the CSRF and clickjacking rules taken from OWASP's cheat sheets, the defenses already in `webcore`, how to test them, and the known gaps."
+description: "Invoke before adding or changing anything in ComposeUI's web backend that a browser reaches: a route, a method, a middleware, a response header, the session cookie, a form, an htmx attribute, a download or upload, or the page's scripts; and when reviewing such a change or asked whether the web backend is secure. Holds the CSRF and clickjacking rules taken from OWASP's cheat sheets, the defenses already in `webcore`, how to test them, the known gaps, and which other OWASP cheat sheet to read for uploads, XSS, CSP, headers, sessions, denial of service, deserialization and queries."
 ---
 
 # Web Security
@@ -59,6 +59,27 @@ Fetch Metadata rules:
   ignored. Never use `ALLOW-FROM`.
 - Put the headers on every response, not only some pages. Proxies can strip them.
 - `SameSite` and frame-busting scripts are not a defense on their own.
+
+## Other OWASP references
+
+The rules above cover CSRF and clickjacking only. For a change in another area, read the
+cheat sheet that covers it first, then check the code against it. Nobody has audited
+ComposeUI against these yet: each "What to check" is an open question, not a finding.
+
+| Area of the change | Cheat sheet | What to check in ComposeUI |
+| --- | --- | --- |
+| Uploads: Open (`POST /state`), `PickFileAction` | [File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) | The size limits (`MAX_STATE_SIZE`, `MAX_FILE_SIZE`). A study is a zip: `open_study` caps the sum of the sizes the archive declares (`member.file_size`); check that an archive can't unpack past it (zip bomb). The study's SQLite file comes from the user too (see SQLite's advice on untrusted database files). |
+| Any text a view shows, the page's scripts | [XSS Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html), [DOM-based XSS](https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html) | XSS defeats every CSRF defense. `hx-on:*` and `hx-vals='js:...'` run JavaScript: no view text may reach them, even escaped. |
+| Response headers, the page's inline scripts | [Content Security Policy](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html) | Only icons send a `default-src` policy. A strict `script-src` on the pages needs nonces or hashes for the inline scripts of `page.py`, and htmx's `hx-on` and `js:` values may need its CSP settings. |
+| Response headers | [HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html) | `X-Content-Type-Options: nosniff` (icons only today), `Referrer-Policy`, and `Strict-Transport-Security` once served over HTTPS. |
+| The session cookie, `SessionStore`, `session_ttl` | [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) | The cookie's `Secure` and `__Host-`; the idle timeout (1 hour); no absolute timeout; renewing the id (little need without a login). |
+| Sessions, chart images, jobs, uploads | [Denial of Service](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html) | Every cookie-less `GET /` builds a main view (and a model) in memory: check what limits the number of sessions. Chart images (matplotlib) and jobs cost CPU per request. |
+| Loading state, form values | [Deserialization](https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html), [Input Validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html) | State is `json` structured by `cattrs`, never pickle, and `check_state_data` checks it before anything changes. Keep it that way. |
+| `SqliteModel` and model code | [Query Parameterization](https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html) | Values go as query parameters; the one f-string query (`PRAGMA user_version`) passes through `int()`. |
+| Errors, `--debug`, refused requests | [Error Handling](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html), [Logging](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) | No traceback reaches the browser, even with `--debug`. Whether to log the origin check's refusals. |
+
+For a whole review, use [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
+Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
 
 ## What `webcore` already does
 
