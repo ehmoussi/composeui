@@ -32,6 +32,7 @@ from composeui.core.application import ModelApplication, _add_reference_to_signa
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
     DATA_TABLE_WINDOW,
+    SEARCH_DELAY_MS,
     ActionView,
     ButtonVariant,
     CellStyle,
@@ -2493,6 +2494,8 @@ async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None
         await pilot.click(bar.search)
         await pilot.press(*"ROOM")
         await pilot.pause()
+        assert view.rooms.search == ""  # once the user stops typing: one search, not four
+        await pilot.pause(SEARCH_DELAY_MS / 1000 * 2)
         assert _shown_column(table, 0) == ["Bedroom"]
         assert str(bar.count.render()) == "1 of 4"
         await pilot.press(*["backspace"] * 4)
@@ -2699,7 +2702,7 @@ async def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name() ->
         bar = box.bar
         assert bar.display
         await pilot.click(bar.search)
-        await pilot.press(*"room")
+        await pilot.press(*"room", "enter")  # searches at once
         await pilot.pause()
         assert (view.rooms.search, view.rooms.row_count) == ("room", 1)
         assert str(bar.count.render()) == "1 of 3"

@@ -912,7 +912,8 @@ the app's order.
 
 While a column is filterable, a bar above the table has:
 
-- a search over the text of the filterable columns;
+- a search over the text of the filterable columns, once the user stops typing for
+  `SEARCH_DELAY_MS` (300 ms), or presses Enter;
 - "+ Filter", which adds a filter on a column. The filter shows as a chip. A click on the
   chip opens it for editing, and so does Enter, since the focus lands on the chip.
 

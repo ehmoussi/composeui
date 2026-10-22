@@ -7,11 +7,12 @@ from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.widgets import Button, Input, Select, Static
 
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.view import as_pattern, split_pattern
+from composeui.core.view import SEARCH_DELAY_MS, as_pattern, split_pattern
 from composeui.textualcore.widgets.composetable import ComposeTable
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.timer import Timer
 
 
 #: a chip's remove button: a multiplication sign, as a close button often is
@@ -74,7 +75,9 @@ class ComposeFilterBar(Horizontal):
     closes it. A chip's
     text opens the editor on its filter, its remove button removes it. The signals emit only for the
     user: `search_edited` the text typed, `filter_added` a column and its text,
-    `filter_removed` a column, and `filters_cleared`.
+    `filter_removed` a column, and `filters_cleared`. `search_edited` waits
+    `SEARCH_DELAY_MS` after the last key, but emits at once on Enter or once the search is
+    cleared.
     """
 
     DEFAULT_CSS = """
@@ -119,6 +122,7 @@ class ComposeFilterBar(Horizontal):
         self.filter_added: Signal[int, str] = Signal()
         self.filter_removed: Signal[int] = Signal()
         self.filters_cleared: SignalNoArgs = SignalNoArgs()
+        self._search_timer: Timer | None = None
         self._texts: dict[str, str] = {}
         self._filters: list[tuple[int, str, str, str]] = []
         #: the column whose chip takes the focus once shown, its filter just added
@@ -181,6 +185,7 @@ class ComposeFilterBar(Horizontal):
 
     def set_search(self, text: str) -> None:
         if self.search.value != text:
+            self._stop_search_timer()  # the app's search, not the user's typed before
             with self.search.prevent(Input.Changed):
                 self.search.value = text
 
@@ -231,12 +236,27 @@ class ComposeFilterBar(Horizontal):
     def on_input_changed(self, event: Input.Changed) -> None:
         event.stop()
         if event.input is self.search:
-            self.search_edited.emit(event.value)
+            self._stop_search_timer()
+            if event.value == "":
+                self._emit_search()
+            else:
+                self._search_timer = self.set_timer(SEARCH_DELAY_MS / 1000, self._emit_search)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
         if event.input is self.value:
             self._add()
+        elif event.input is self.search and self._search_timer is not None:
+            self._emit_search()
+
+    def _stop_search_timer(self) -> None:
+        if self._search_timer is not None:
+            self._search_timer.stop()
+            self._search_timer = None
+
+    def _emit_search(self) -> None:
+        self._stop_search_timer()
+        self.search_edited.emit(self.search.value)
 
     def on_select_changed(self, event: Select.Changed) -> None:
         event.stop()

@@ -58,6 +58,7 @@ from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
     DATA_TABLE_WINDOW,
+    SEARCH_DELAY_MS,
     ActionView,
     ButtonVariant,
     CellStyle,
@@ -2399,7 +2400,7 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     bar, table = box.bar, box.table
 
     qtbot.keyClicks(bar.search, "ROOM")
-    assert view.rooms.search == "ROOM"
+    qtbot.waitUntil(lambda: view.rooms.search == "ROOM", timeout=SEARCH_DELAY_MS * 5)
     assert _shown_column(table, 0) == ["Bedroom"]
     assert bar.count.text() == "1 of 4"
     bar.search.selectAll()
@@ -2640,6 +2641,8 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(qtbot: QtB
     assert bar.isVisible()
     assert [bar.column.itemText(i) for i in range(bar.column.count())] == ["Room", "Temperature"]
     qtbot.keyClicks(bar.search, "room")
+    assert view.rooms.search == ""  # once the user stops typing: one search, not four
+    qtbot.keyClick(bar.search, Qt.Key.Key_Return)  # or at once
     assert (view.rooms.search, names(), bar.count.text()) == ("room", ["Bedroom"], "1 of 3")
     bar.search.selectAll()
     qtbot.keyClick(bar.search, Qt.Key.Key_Backspace)
