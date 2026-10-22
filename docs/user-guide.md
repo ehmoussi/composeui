@@ -1132,8 +1132,8 @@ order (`sort_by`). The source orders the rows once for each click.
 - **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
   starts with its position. The header shows Qt's sort indicator. A selected row has the
   highlight colors. Shift+click selects the rows from the one clicked last; Space
-  selects the current row, and Enter activates it. The table's context menu has
-  "Export CSV…", which asks where to save the file. While a job orders the rows, the
+  selects the current row, and Enter activates it. "Export CSV…", above the rows and in
+  their context menu, asks where to save the file. While a job orders the rows, the
   cursor over them is busy.
 - **Textual** draws the headers on the first line, then the lines on screen alone. A
   cursor marks a row: the arrow keys, Page Up, Page Down, Home and End move it. Space

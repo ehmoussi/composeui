@@ -2806,7 +2806,7 @@ def test_a_large_table_draws_each_row_with_one_read_of_its_cells(
     assert box.table.model().index(last, 1).data() == f"{last / 2:.3f}"
 
 
-def test_a_large_table_s_context_menu_exports_its_rows_as_csv(
+def test_a_large_table_s_button_exports_its_rows_as_csv(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     view = RoomsDataMainView()
@@ -2822,9 +2822,15 @@ def test_a_large_table_s_context_menu_exports_its_rows_as_csv(
         return str(tmp_path / "rooms"), filters
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    # a button above the rows, and the table's context menu, share the action
     (action,) = (action for action in box.table.actions() if action.text() == "Export CSV…")
+    assert box.export.defaultAction() is action
+    window = _widget(view)
+    window.show()
+    qtbot.waitExposed(window)
+    assert box.export.isVisible()
 
-    action.trigger()
+    qtbot.mouseClick(box.export, Qt.MouseButton.LeftButton)
 
     assert asked == [("Export CSV", "table.csv", "CSV (*.csv)")]
     assert (tmp_path / "rooms.csv").read_text(encoding="utf-8").splitlines() == [

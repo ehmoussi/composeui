@@ -1253,8 +1253,9 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     Its filter bar (`QTableFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`).
-    The context menu's Export CSV asks where to write the rows (`export_csv`). While a
-    job orders the rows (`is_ordering`), the cursor over them is busy.
+    Export CSV, above the rows and in their context menu, asks where to write the rows
+    (`export_csv`). While a job orders the rows (`is_ordering`), the cursor over them is
+    busy.
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
