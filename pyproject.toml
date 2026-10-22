@@ -58,6 +58,9 @@ web = [
 report = [
     "matplotlib>=3.9",
 ]
+reload = [
+    "watchfiles>=1.1.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -78,6 +81,7 @@ dev = [
     "pytest-qt>=4.5.0",
     "ruff>=0.15.17",
     "textual-dev>=1.8.0",
+    "watchfiles>=1.1.1",
 ]
 docs = [
     "furo>=2024.8.6",
