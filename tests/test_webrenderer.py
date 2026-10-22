@@ -2326,15 +2326,16 @@ def test_a_reload_server_logs_its_pages_asks_only_once_it_restarted(
     ]
 
 
-def test_another_server_neither_reloads_its_pages_nor_keeps_its_sessions(
+def test_another_server_s_pages_ask_nothing_a_reload_server_s_reloading_once(
     app: _HelloApp,
 ) -> None:
     with _Browser(app.create_starlette_app()) as browser:
         page = browser.get("/").text
+        # a tab a `--reload` server served, still open once another server took its port
         poll = browser.get("/reload?instance=any")
 
     assert 'id="cui-reload"' not in page
-    assert poll.status_code == 404
+    assert poll.headers["hx-refresh"] == "true"  # into a page that asks nothing
 
 
 def test_a_saved_session_opens_only_under_an_id_the_server_makes(

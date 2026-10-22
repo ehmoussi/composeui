@@ -104,12 +104,12 @@ def reload_poll(request: Request) -> Response:
     """Tell a page of a ``--reload`` server whether another process of it served the page.
 
     Then its answer reloads the page (``HX-Refresh``), which runs the changed code. Only
-    a read: the next request restores the session (`SessionStore`).
+    a read: the next request restores the session (`SessionStore`). A server without
+    ``--reload`` reloads the page too: a tab a ``--reload`` server served, left open on
+    its address, would else ask it every second, for ever.
     """
     instance = _reload_instance(request)
-    if instance is None:
-        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
-    if request.query_params.get("instance") == instance:
+    if instance is not None and request.query_params.get("instance") == instance:
         return Response(status_code=204, headers=_NO_STORE)
     return Response(headers=_RELOAD)
 
