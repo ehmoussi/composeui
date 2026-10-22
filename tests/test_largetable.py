@@ -1,4 +1,4 @@
-"""Tests of the example largetable: readings in a `ListSource`, shown by a `DataTableView`."""
+"""Tests of the example largetable: readings in SQLite, shown by a `DataTableView`."""
 
 from __future__ import annotations
 
@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from composeui.core.application import Application
+from composeui.core.application import ModelApplication
 from composeui.core.registry import RendererType
-from examples.largetable import LargeTableMainView
+from examples.largetable import LargeTableMainView, ReadingsModel
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
@@ -20,11 +21,35 @@ ROWS = 300
 TEMPERATURE = 2
 
 
+App = ModelApplication[LargeTableMainView, ReadingsModel]
+
+
 @pytest.fixture
-def main_view() -> LargeTableMainView:
-    main_view = Application(build_main_view=LargeTableMainView).main_view
-    main_view.apply_arguments(argparse.Namespace(rows=ROWS))
-    return main_view
+def app() -> Iterator[App]:
+    app = App(
+        build_main_view=LargeTableMainView,
+        build_model=ReadingsModel,
+        setup_model=LargeTableMainView.connect_model,
+    )
+    yield app
+    app.model.close()
+
+
+@pytest.fixture
+def main_view(app: App) -> LargeTableMainView:
+    app.main_view.apply_arguments(argparse.Namespace(rows=ROWS))
+    app.main_view.jobs.wait()
+    return app.main_view
+
+
+def test_the_readings_are_written_in_a_job_and_shown_once_written(app: App) -> None:
+    app.main_view.apply_arguments(argparse.Namespace(rows=ROWS))
+    assert app.main_view.info.text == f"Writing {ROWS} readings..."
+    app.main_view.jobs.wait()
+    assert app.main_view.table.row_count == ROWS
+    # a study's readings, opened with -f: written already
+    app.main_view.apply_arguments(argparse.Namespace(rows=ROWS))
+    assert not app.main_view.jobs.is_running
 
 
 def _temperatures(main_view: LargeTableMainView) -> list[float]:
@@ -93,9 +118,10 @@ def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> Non
     qt_renderer = pytest.importorskip("composeui.qtcore.qtrenderer")
     qt_core = pytest.importorskip("qtpy.QtCore")
     QPoint, Qt = qt_core.QPoint, qt_core.Qt  # noqa: N806 (Qt's own names)
-    main_view = LargeTableMainView()
+    main_view, model = LargeTableMainView(), ReadingsModel()
     main_view.render(RendererType.QT)
-    main_view.apply_arguments(argparse.Namespace(rows=ROWS))
+    main_view.connect_model(model)
+    model.readings.fill(ROWS)  # in the test's thread: no job to wait for
     assert isinstance(main_view.renderer, qt_renderer.QtWidgetRenderer)
     window = main_view.renderer.qt_object
     qtbot.addWidget(window)
@@ -111,3 +137,4 @@ def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> Non
     temperatures = [float(table.model().index(row, TEMPERATURE).data()) for row in range(ROWS)]
     assert len(temperatures) == ROWS
     assert temperatures == sorted(temperatures)
+    model.close()

@@ -154,6 +154,7 @@ def _taskview(main_view: Any, _model: Optional[Model]) -> None:
 
 def _largetable(main_view: Any, _model: Optional[Model]) -> None:
     main_view.apply_arguments(argparse.Namespace(rows=1_000_000))
+    main_view.jobs.wait(timeout=120)
     # as two clicks on its header: the hottest first
     main_view.table.sort_by("temperature")
     main_view.table.sort_by("temperature")
@@ -234,7 +235,13 @@ def _examples() -> list[Example]:
         ),
         Example("taskview", taskview.TaskMainView, _taskview),
         Example("batman", batman.BatmanMainView),
-        Example("largetable", largetable.LargeTableMainView, _largetable),
+        Example(
+            "largetable",
+            largetable.LargeTableMainView,
+            _largetable,
+            largetable.ReadingsModel,
+            largetable.LargeTableMainView.connect_model,
+        ),
         Example("markdownviewer", markdownviewer.MarkdownViewerMainView, _markdownviewer),
         Example(
             "webhello",
