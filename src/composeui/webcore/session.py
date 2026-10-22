@@ -283,8 +283,10 @@ class WebSession(RenderTarget):
                 return None
             return renderer.image(image_format, query)
 
-    def table_csv(self, widget_id: str) -> Iterator[str] | None:
-        """Get the CSV of one of this session's large tables, in pieces; None if it isn't one.
+    def table_csv(self, widget_id: str) -> tuple[str, Iterator[str]] | None:
+        """Get the file name and the CSV, in pieces, of one of this session's large tables.
+
+        None if it isn't one.
 
         The rows shown at the call (`DataTableView.csv_chunks`), each piece read under the
         session's lock: the session's other requests go on between two pieces.
@@ -293,7 +295,7 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if not isinstance(renderer, WebDataTableRenderer):
                 return None
-            chunks = renderer.csv_chunks()
+            filename, chunks = renderer.csv_file()
 
         def locked() -> Iterator[str]:
             while True:
@@ -303,7 +305,7 @@ class WebSession(RenderTarget):
                     return
                 yield chunk
 
-        return locked()
+        return filename, locked()
 
     def poll_jobs(self) -> str:
         """Render the jobs' poller as it is now, and what changed outside any request.

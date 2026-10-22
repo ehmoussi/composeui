@@ -217,7 +217,23 @@ def test_every_database_keeps_the_models_settings(
         # trusted again once an opened database's schema is checked: the app's own
         (trusted,) = db.execute("PRAGMA trusted_schema").fetchone()
         assert trusted == 1
+        # read apart during a write (`SqliteModel.reading`)
+        assert tuple(db.execute("PRAGMA journal_mode").fetchone()) == ("wal",)
     model.close()
+
+
+def test_a_saved_study_s_data_leaves_no_journal_beside_it(tmp_path: Path) -> None:
+    model = PartsModel()
+    path = tmp_path / "data.sqlite"
+    model.save_data(path)
+    model.close()
+
+    saved = sqlite3.connect(path)
+    try:
+        assert saved.execute("PRAGMA journal_mode").fetchone() == ("delete",)
+    finally:
+        saved.close()
+    assert [file.name for file in tmp_path.iterdir()] == ["data.sqlite"]
 
 
 def test_a_study_of_an_older_version_is_brought_up_to_date(app: App, tmp_path: Path) -> None:

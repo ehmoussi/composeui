@@ -115,6 +115,8 @@ class ComposeDataTable(ScrollView, can_focus=True):
         self.row_activated: Signal[int] = Signal()
         self.copy_requested: SignalNoArgs = SignalNoArgs()
         self.export_path_chosen: Signal[Path] = Signal()
+        #: the name the export's dialog offers
+        self.export_filename = "table.csv"
         self.set_export_text("Export CSV")
 
     def set_export_text(self, text: str) -> None:
@@ -124,7 +126,9 @@ class ComposeDataTable(ScrollView, can_focus=True):
         self.refresh_bindings()
 
     def action_export(self) -> None:
-        dialog = FileSave(filters=Filters(Filter("CSV", _is_csv)), default_file="table.csv")
+        dialog = FileSave(
+            filters=Filters(Filter("CSV", _is_csv)), default_file=self.export_filename
+        )
         self.app.push_screen(dialog, self._export_path_chosen)
 
     def _export_path_chosen(self, path: Path | None) -> None:

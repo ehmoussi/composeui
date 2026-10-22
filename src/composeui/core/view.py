@@ -3191,6 +3191,8 @@ DATA_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows"), "export": T("Expor
 DATA_TABLE_WINDOW = 200
 #: the rows whose values a `DataTableView` keeps, the ones read last
 DATA_TABLE_CACHE = 1_000
+#: the rows from which a `DataTableView` orders its source's in a job, on Qt and Textual
+DATA_TABLE_JOB_ROWS = 100_000
 
 
 def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> None:
@@ -3205,6 +3207,17 @@ def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> N
             file.write(chunk)
     if job is not None and job.is_canceled:
         path.unlink()
+
+
+def _ordered_ids(
+    _job: Optional[Job[Sequence[Any]]],
+    source: TableSource[Any],
+    sort: Optional[Sort],
+    search: str,
+    filters: Mapping[str, Filter],
+) -> Sequence[Any]:
+    """Ask `source` for the ids of a large table's rows shown, in a job or not."""
+    return _compact_ids(source.ordered_ids(sort, search, filters))
 
 
 def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
@@ -3225,7 +3238,9 @@ class DataTableView(View):
     they are integers). `rows` gives the cells of the rows at some positions, formatted
     as `column_formats` says. It reads them from the source by windows of
     `DATA_TABLE_WINDOW` rows, and keeps the values of the last `DATA_TABLE_CACHE` rows.
-    The source's `changed` makes it read the order and the cells again.
+    The source's `changed` makes it read the order and the cells again. A source of
+    `DATA_TABLE_JOB_ROWS` rows or more orders them in a job on Qt and Textual
+    (`is_ordering`), and `ordered` emits once the rows have their new order.
 
     The columns are the source's, by name: `sort_column`, the keys of `filters` and of
     `column_formats`. A filter is the text the user typed (see `parse_filter`), and the
@@ -3311,6 +3326,8 @@ class DataTableView(View):
     )
     #: the columns the user filters in the table's bar, by name: none hides the bar
     filterable_columns: list[str] = attrs.field(factory=list[str])
+    #: the name Export CSV offers for the file; the app's, not a study's
+    export_filename: str = attrs.field(default="table.csv", metadata={OMIT: True})
     selection_mode: SelectionMode = attrs.field(
         default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
     )
@@ -3343,6 +3360,9 @@ class DataTableView(View):
     # signals
     selection_changed: Signal[list[Any]] = attrs.Factory(Signal[list[Any]])
     row_activated: Signal[Any] = attrs.Factory(Signal[Any])
+    #: the rows shown have a new order, e.g. to show `row_count`: a sort, a search, a
+    #: filter, the source's change
+    ordered: SignalNoArgs = attrs.Factory(SignalNoArgs)
     #: the ids of the rows shown, in order
     _order: Sequence[Any] = attrs.field(factory=list, init=False, repr=False, metadata={OMIT: True})
     #: the values of the rows read last, by id, the oldest first
@@ -3357,6 +3377,16 @@ class DataTableView(View):
     _anchor: Optional[int] = attrs.field(
         default=None, init=False, repr=False, metadata={OMIT: True}
     )
+    #: the source whose ids `_order` holds
+    _order_source: Optional[TableSource[Any]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: a job is ordering the rows
+    _ordering: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    #: the settings changed while a job ordered the rows: its order is outdated
+    _order_again: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    #: the main view's jobs' `running_changed` is connected
+    _watches_jobs: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -3610,18 +3640,85 @@ class DataTableView(View):
             return
         self._cache.clear()
         self._total = 0 if source is None else source.count()
+        if source is not self._order_source and len(self._order) > 0:
+            # the old source's ids: no row until the new source's order, selected ones kept
+            self._order, self._order_source = [], source
+            self._refresh_order()
         self._read_order()
 
-    def _read_order(self) -> None:
-        """Ask the source for the ids of the rows shown, and drop the selected ones it hides.
+    @property
+    def is_ordering(self) -> bool:
+        """Tell whether a job is ordering the rows, the old order shown meanwhile."""
+        return self._ordering
 
-        The renderer gets the new `row_count`, and shows the rows from their new order.
+    def _read_order(self) -> None:
+        """Ask the source for the ids of the rows shown, in their order, then show them.
+
+        A source of `DATA_TABLE_JOB_ROWS` rows or more, in an app whose window the main
+        thread draws (Qt, Textual), orders them in a job, the app staying responsive
+        meanwhile (`is_ordering`). One job at a time: the settings changed while it runs
+        order the rows again once it's over, its order dropped.
         """
-        self._order = [] if self.source is None else self._ordered_ids(self.source)
+        source = self.source
+        jobs = self._ordering_jobs()
+        if source is None:
+            self._show_order(None, [])
+        elif jobs is None:
+            self._show_order(source, _ordered_ids(None, source, *self._order_settings(source)))
+        elif self._ordering:
+            self._order_again = True
+        else:
+            self._order_again = False
+            self._set_ordering(is_ordering=True)
+            job = jobs.start(_ordered_ids, source, *self._order_settings(source))
+            job.finished.connect(lambda ids: self._ordered(source, ids))
+            job.failed.connect(lambda _error: self._ordered(source, None))
+
+    def _ordering_jobs(self) -> Optional[Jobs]:
+        """Get the jobs to order the rows in, or None to order them on the main thread."""
+        main_view = None if self._main_view is None else self._main_view()
+        if main_view is None or self._total < DATA_TABLE_JOB_ROWS:
+            return None
+        renderer = main_view.renderer
+        if not isinstance(renderer, MainRenderer) or not renderer.draws_on_main_thread:
+            return None
+        if not self._watches_jobs:
+            # New and Open drop the jobs, the ordering's too: its order never comes
+            main_view.jobs.running_changed.connect(self._jobs_running)
+            self._watches_jobs = True
+        return main_view.jobs
+
+    def _jobs_running(self, is_running: bool) -> None:
+        if not is_running and self._ordering:  # dropped
+            self._set_ordering(is_ordering=False)
+            self._read_order()
+
+    def _ordered(self, source: TableSource[Any], ids: Optional[Sequence[Any]]) -> None:
+        """Show the order a job got, unless the settings changed meanwhile: order again."""
+        self._set_ordering(is_ordering=False)
+        if self._order_again or source is not self.source:
+            self._read_order()
+        elif ids is not None:  # else it failed, logged: the old order stays
+            self._show_order(source, ids)
+
+    def _set_ordering(self, *, is_ordering: bool) -> None:
+        self._ordering = is_ordering
+        renderer = self.renderer
+        if isinstance(renderer, (Renderer, RendererContainer)):
+            renderer.refresh_attribute("is_ordering", is_ordering)
+
+    def _refresh_order(self) -> None:
+        """Give the renderer the new `row_count`: it shows the rows from their new order."""
         self._anchor = None  # a position of the old order
         renderer = self.renderer
         if isinstance(renderer, (Renderer, RendererContainer)):
             renderer.refresh_attribute("row_count", self.row_count)
+
+    def _show_order(self, source: Optional[TableSource[Any]], ids: Sequence[Any]) -> None:
+        """Show the rows `ids`, in order, drop the selected ones it hides, emit `ordered`."""
+        self._order, self._order_source = ids, source
+        self._refresh_order()
+        self.ordered.emit()
         if len(self.selected_ids) > 0:
             selected = self._selected
             shown = {row_id for row_id in self._order if row_id in selected}
@@ -3630,8 +3727,10 @@ class DataTableView(View):
                 self.selected_ids = kept
                 self.selection_changed.emit(kept)
 
-    def _ordered_ids(self, source: TableSource[Any]) -> Sequence[Any]:
-        """Ask `source` for the ids of the rows shown, as the settings sort and filter them."""
+    def _order_settings(
+        self, source: TableSource[Any]
+    ) -> tuple[Optional[Sort], str, dict[str, Filter]]:
+        """Get what `source` orders the rows by: the sort, the search, the filters parsed."""
         columns = {column.name: column for column in source.columns}
         filters: dict[str, Filter] = {}
         for name, text in self.filters.items():
@@ -3642,7 +3741,7 @@ class DataTableView(View):
         sort = None
         if self.sort_column is not None and self.sort_column in columns:
             sort = Sort(self.sort_column, descending=self.sort_descending)
-        return _compact_ids(source.ordered_ids(sort, self.search, filters))
+        return sort, self.search, filters
 
     def _source_column(self, name: str, action: str) -> SourceColumn:
         """Get the source's column `name`, for `action`; any column without a source yet."""

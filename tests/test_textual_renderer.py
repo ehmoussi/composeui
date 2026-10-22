@@ -115,6 +115,8 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
     EditableTableMainView,
+    GatedMainView,
+    GatedSource,
     MillionRowsMainView,
     MillionSource,
     Room,
@@ -2741,6 +2743,34 @@ async def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard() ->
         await pilot.pause()
         # the value, then its half
         assert app.clipboard == "2\t0.5\n6\t1.5"
+
+
+@pytest.mark.asyncio
+async def test_a_large_source_s_rows_show_loading_while_a_job_orders_them() -> None:
+    view = GatedMainView()
+    view.render(RendererType.TEXTUAL)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    source = view.table.source
+    assert isinstance(source, GatedSource)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        table = app.query_one(ComposeDataTable)
+        source.gate.clear()
+        view.table.sort_by("value")
+        view.table.sort_by("value")  # descending, while the job orders
+        await pilot.pause()
+        assert table.loading
+
+        source.gate.set()
+        for _ in range(100):
+            await pilot.pause(0.05)
+            if not view.table.is_ordering:
+                break
+        assert not table.loading
+        assert view.table.rows(0, 1) == [(source.size - 1, [str(source.size - 1)])]
 
 
 @pytest.mark.asyncio

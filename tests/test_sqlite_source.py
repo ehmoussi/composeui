@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import datetime
 import enum
+import re
+import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 import pytest
 
+from composeui.core import sqlitemodel
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, as_parameters
 from composeui.core.view import DataTableView, ListSource, Sort, SourceColumn, parse_filter
 
@@ -210,3 +213,60 @@ def test_the_rows_stay_in_sqlite_python_reading_only_the_ids_and_the_window(
     table.rows(10_000, 10_010)
     assert table.row_count == 20_000 + len(PLACES)
     assert reads == ["200 rows"]
+
+
+def test_a_table_s_cells_are_read_while_another_thread_orders_its_rows(
+    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started, gate = threading.Event(), threading.Event()
+
+    def slow_regexp(pattern: str, value: Any) -> bool:  # held up, as a slow query is
+        started.set()
+        gate.wait(10)
+        return re.search(pattern, value, re.IGNORECASE) is not None
+
+    monkeypatch.setattr(sqlitemodel, "_regexp", slow_regexp)
+    ordered: list[Sequence[Hashable]] = []
+    read: list[dict[Any, list[Any]]] = []
+    filters = {"name": parse_filter("/^lake$/", str)}
+    ordering = threading.Thread(target=lambda: ordered.append(sql.ordered_ids(None, "", filters)))
+    ordering.start()
+    assert started.wait(5)
+
+    try:
+        # as a job's order would: the table draws its rows meanwhile, the order still held
+        reading = threading.Thread(target=lambda: read.append(sql.cells([4], ["name"])))
+        reading.start()
+        reading.join(5)
+        assert read == [{4: ["O'Brien bay"]}]
+        model.new()  # New, while the order reads the old study's rows
+    finally:
+        gate.set()
+    ordering.join(5)
+
+    assert ordered == [[1, 5]]
+
+
+def test_a_table_s_rows_are_read_while_a_write_is_uncommitted(
+    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sqlitemodel, "WAIT_SECONDS", 1.0)  # a reader locked out fails soon
+    read: list[tuple[int, dict[Any, list[Any]], Sequence[Hashable]]] = []
+
+    def read_rows() -> None:
+        deepest = sql.ordered_ids(Sort("depth", descending=True), "", {})[:2]
+        read.append((sql.count(), sql.cells([4], ["name"]), deepest))
+
+    # as a job writing many rows in one transaction: it holds the model's connection
+    with model.places.connection() as db:
+        db.execute("PRAGMA cache_size = 10")  # the write spills to the disk
+        db.executemany(
+            "INSERT INTO place(name, depth, kind) VALUES (?, 99, 'lake')",
+            ((f"sea {i}" * 20,) for i in range(5_000)),
+        )
+        reading = threading.Thread(target=read_rows)
+        reading.start()
+        reading.join(5)
+
+    assert read == [(len(PLACES), {4: ["O'Brien bay"]}, [1, 5])]  # the rows committed
+    assert sql.count() == len(PLACES) + 5_000

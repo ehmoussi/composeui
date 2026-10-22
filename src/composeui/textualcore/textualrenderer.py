@@ -1456,6 +1456,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
 
 class DataTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
+    export_filename: str
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -1497,6 +1498,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`),
     through the terminal. Its key `e` asks where to write the rows as CSV (`export_csv`).
+    While a job orders the rows (`is_ordering`), Textual's loading indicator covers them.
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1517,6 +1519,8 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
                 "selection_mode": lambda _view, _table, _value: None,
                 "selected_ids": self._repaint,
                 "texts": self._refresh_texts,
+                "export_filename": self._refresh_export_filename,
+                "is_ordering": self._refresh_is_ordering,
             }
         )
 
@@ -1561,6 +1565,18 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         rendered_object.table.reset()
         rendered_object.bar.set_count(view.count_text)
         rendered_object.empty.display = view.row_count == 0 and view.count_text != ""
+
+    @staticmethod
+    def _refresh_export_filename(
+        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: str
+    ) -> None:
+        rendered_object.table.export_filename = value
+
+    @staticmethod
+    def _refresh_is_ordering(
+        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: bool
+    ) -> None:
+        rendered_object.table.loading = value
 
     @staticmethod
     def _refresh_texts(

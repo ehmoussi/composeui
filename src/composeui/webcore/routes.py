@@ -202,11 +202,15 @@ async def chart_image(request: Request) -> Response:
     if result is None:
         return PlainTextResponse("Unknown widget", status_code=404)
     filename, body = result
-    # the title's own letters, which a header's latin-1 may not have, and a fallback
-    ascii_name = filename.encode("ascii", "replace").decode().replace("?", "_")
-    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
-    headers = {**_NO_STORE, "Content-Disposition": disposition}
+    headers = {**_NO_STORE, "Content-Disposition": _attachment(filename)}
     return Response(body, media_type=chartimage.MEDIA_TYPES[image_format], headers=headers)
+
+
+def _attachment(filename: str) -> str:
+    """Get the `Content-Disposition` of a download named `filename`."""
+    # the name's own letters, which a header's latin-1 may not have, and a fallback
+    ascii_name = filename.encode("ascii", "replace").decode().replace("?", "_")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
 def table_csv(request: Request) -> Response:
@@ -217,10 +221,11 @@ def table_csv(request: Request) -> Response:
     session = _session(request)
     if session is None:
         return RedirectResponse("/", status_code=303)
-    chunks = session.table_csv(request.path_params["widget_id"])
-    if chunks is None:
+    result = session.table_csv(request.path_params["widget_id"])
+    if result is None:
         return PlainTextResponse("Unknown widget", status_code=404)
-    headers = {**_NO_STORE, "Content-Disposition": 'attachment; filename="table.csv"'}
+    filename, chunks = result
+    headers = {**_NO_STORE, "Content-Disposition": _attachment(filename)}
     return StreamingResponse(chunks, media_type="text/csv; charset=utf-8", headers=headers)
 
 

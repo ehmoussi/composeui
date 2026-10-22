@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Optional
 
 import attrs
@@ -9,6 +10,7 @@ from attrs import Factory
 
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
+    DATA_TABLE_JOB_ROWS,
     CellStyle,
     CellWidget,
     Column,
@@ -226,3 +228,47 @@ class RoomsDataMainView(MainView):
             {"name": T("Room"), "temperature": T("Temperature"), "occupants": T("Occupants")},
             [Room("Kitchen", 21.5, 2), Room("Hall", 18.0), Room("Bedroom", 19.5, 1)],
         )
+
+
+class GatedSource:
+    """`size` rows, valued by their ids, whose order waits for `gate` to be set.
+
+    So a test sees a table while a job orders its rows. It records the sort of each order
+    asked (`orders`). Descending reverses the rows; any other order keeps them.
+    """
+
+    columns = (SourceColumn("value", "Value", int),)
+
+    def __init__(self) -> None:
+        self.changed = SignalNoArgs()
+        self.size = DATA_TABLE_JOB_ROWS
+        self.gate = threading.Event()
+        self.gate.set()
+        self.orders: list[Optional[Sort]] = []
+
+    def ordered_ids(
+        self, sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
+    ) -> range:
+        self.orders.append(sort)
+        self.gate.wait(10)
+        if sort is not None and sort.descending:
+            return range(self.size - 1, -1, -1)
+        return range(self.size)
+
+    def count(self) -> int:
+        return self.size
+
+    def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[int]]:
+        return {row_id: [row_id] for row_id in ids if row_id < self.size}
+
+
+@define_view
+class GatedMainView(MainView):
+    app_title = "Gated"
+    extension = ".gated"
+
+    table: DataTableView = child(DataTableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.table.source = GatedSource()

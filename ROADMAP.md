@@ -115,7 +115,12 @@ filters; `largetable.py` shows a million readings in SQLite with it. Ctrl+C copi
 selected rows as tab-separated text (`selection_text`), through the page's clipboard on
 the web. Export CSV writes the rows shown (`csv_chunks`, a window at a time): in a job
 to a file the user picks on Qt and Textual (`export_csv`), streamed by `GET
-/widget/{id}/csv` on the web, a plain link since it only reads. Its queries run on the main thread: about a second to sort a million rows. The
+/widget/{id}/csv` on the web, a plain link since it only reads. A source of
+`DATA_TABLE_JOB_ROWS` rows or more orders them in a job on Qt and Textual (one at a time,
+once more for settings changed meanwhile, again after New or Open drop it); the web orders
+them in the request's thread, as a job's result would wait for the page's next poll.
+`SqliteSource` reads on read-only connections of its own (`SqliteModel.reading`), in WAL
+mode: neither the order, the cells nor a job's write waits for another. The
 view isn't generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.

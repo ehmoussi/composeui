@@ -1212,6 +1212,7 @@ class TableViewLike(ViewLike, Protocol):
 
 class DataTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
+    export_filename: str
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -1252,7 +1253,8 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     Its filter bar (`QTableFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`).
-    The context menu's Export CSV asks where to write the rows (`export_csv`).
+    The context menu's Export CSV asks where to write the rows (`export_csv`). While a
+    job orders the rows (`is_ordering`), the cursor over them is busy.
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1273,6 +1275,9 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
                 "selection_mode": lambda _view, _table, _value: None,
                 "selected_ids": self._repaint,
                 "texts": self._refresh_texts,
+                # read as the user exports
+                "export_filename": lambda _view, _table, _value: None,
+                "is_ordering": self._refresh_is_ordering,
             }
         )
 
@@ -1327,13 +1332,23 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         # "empty": the web's; here the headers stay, over no row
         rendered_object.table.export_action.setText(f"{value.get('export', '')}…")
 
+    @staticmethod
+    def _refresh_is_ordering(
+        _view: DataTableViewLike, rendered_object: QDataFilterTable, value: bool
+    ) -> None:
+        rows = rendered_object.table.viewport()
+        if value:
+            rows.setCursor(Qt.CursorShape.BusyCursor)
+        else:
+            rows.unsetCursor()
+
     def _export(self) -> None:
         """Ask where to write the rows shown as CSV, and write them there."""
         table = self._rendered_object
         if table is None:
             return
         path, _chosen = QFileDialog.getSaveFileName(
-            table, self._view.texts.get("export", ""), "table.csv", "CSV (*.csv)"
+            table, self._view.texts.get("export", ""), self._view.export_filename, "CSV (*.csv)"
         )
         if path != "":
             filepath = Path(path)

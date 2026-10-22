@@ -4981,11 +4981,14 @@ def test_a_large_table_s_link_downloads_its_rows_shown_as_csv(
     )
     assert "download" in link
     main_view.rooms.filters = {"temperature": ">19"}
+    main_view.rooms.export_filename = "pièces.csv"
 
     response = rooms_data_client.get(address)
 
     assert response.headers["content-type"] == "text/csv; charset=utf-8"
-    assert response.headers["content-disposition"] == 'attachment; filename="table.csv"'
+    assert response.headers["content-disposition"] == (
+        "attachment; filename=\"pi_ces.csv\"; filename*=UTF-8''pi%C3%A8ces.csv"
+    )
     assert response.headers["x-frame-options"] == "DENY"  # streamed, still guarded
     assert response.text.splitlines() == [
         "Room,Temperature,Occupants",
