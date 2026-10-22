@@ -15,6 +15,7 @@ model
 sqlitemodel
 study
 jobs
+reload
 translation
 renderer
 registry

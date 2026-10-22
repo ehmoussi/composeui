@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QDate, QPoint, QPointF, QSize, Qt
+from qtpy.QtCore import QDate, QEvent, QPoint, QPointF, QSize, Qt
 from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap
 from qtpy.QtWidgets import (
     QAbstractButton,
@@ -76,7 +76,7 @@ from composeui.core.view import (
     TreeNode,
     replace_cell,
 )
-from composeui.qtcore.qtrenderer import QtActionRenderer, QtWidgetRenderer
+from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
@@ -212,6 +212,31 @@ def test_the_window_shows_the_app_s_icon_composeui_s_by_default(
     assert isinstance(iconless.renderer, QtWidgetRenderer)
     assert isinstance(iconless.renderer.qt_object, QMainWindow)
     assert iconless.renderer.qt_object.windowIcon().isNull()
+
+
+def test_a_main_view_shown_in_another_s_window_replaces_its_parts(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    previous = HelpMainView()
+    previous.render(RendererType.QT)
+    window = _widget(previous)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    menus = [action.text() for action in window.menuBar().actions()]
+    content = window.centralWidget()
+    # e.g. the changed code on a reload, which drops the icon
+    monkeypatch.setattr(HelpMainView, "app_icon", None)
+    view = HelpMainView()
+    view.renderer = QtMainRenderer(view, window)
+
+    view.render(RendererType.QT)
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    assert [action.text() for action in window.menuBar().actions()] == menus  # not twice
+    assert window.statusBar() is _widget(view.status_bar)
+    assert window.centralWidget() is not content  # deleted
+    assert window.isAncestorOf(_widget(view.help))
+    assert window.windowIcon().isNull()
 
 
 def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:

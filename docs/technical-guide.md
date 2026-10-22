@@ -108,6 +108,51 @@ The web backend renders HTML on the server and updates the page with htmx. Its d
 decisions are in "Design notes for the web backend" in [`ROADMAP.md`](../ROADMAP.md). Read
 them before you change `composeui.webcore`.
 
+### Reloading on a change
+
+`--reload` is in `composeui.core.reload`, without a toolkit, and `composeui.qtcore.qtapplication`
+uses it. The user guide says what the user sees
+([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). It works
+like this:
+
+1. **A supervisor process.** With `--reload`, the process that the user starts runs
+   `run_reloading` and shows no window. It runs the same command line again in a child
+   process (`program_command`). The `COMPOSEUI_RELOADED` environment variable marks the
+   child, so the child shows the app and does not start a supervisor of its own. The
+   variable holds a scratch directory that the two processes share.
+2. **Watching the files.** `watch_changes` watches the Python files under the current
+   directory. It skips hidden directories, `__pycache__`, `node_modules`, and
+   `site-packages`. With watchfiles, the system reports the changes
+   (`force_polling=False`). Without watchfiles, and for a Windows drive under WSL
+   (`has_change_events`), the supervisor compares the modification times every half
+   second. watchfiles polls everywhere on WSL by default, and its polling misses changes.
+3. **The change request.** On a change, the supervisor writes the paths of the changed files
+   to the `changes` file of the scratch directory. The app looks for it every 200 ms, and
+   takes it: it renames it to `taken` (`take_changes`). From then on, the supervisor waits
+   for the app as long as the app needs. While a modal dialog is open, the app waits until
+   it closes: a dialog's own event loop also runs the timer, and its callback goes on with
+   the app after it. Then the app saves the study to the same directory
+   (`save_reloaded_state`): the view state, the model's data, and in `session.json` the
+   study file's path and the language shown.
+4. **In place.** When only the app's own code changed (`can_reload_in_place`),
+   `rerun_program` removes the program's modules from `sys.modules`. These are the modules
+   under the current directory, without ComposeUI's. Then it runs the program again as a new
+   `__main__`. The app's `run` calls `keep_rerun`, which keeps the new app and ends the
+   program there, as `run` would. `_Reloads` opens the study in the new main view. It
+   detaches the previous views from their widgets (`_forget_widgets`), and renders the new
+   main view into the same `QMainWindow` (`QtMainRenderer(view, window)` removes the
+   previous bars, menus, and sidebar). Then the app removes the `taken` file
+   (`acknowledge_changes`), and the supervisor keeps it running.
+5. **In a new process.** When ComposeUI's own code changed, the app exits after it saves the
+   study. It does the same when the new main view fails to show. The supervisor then starts
+   a new child, which opens the study (`load_reloaded_state`). It does the same when the app
+   does not take the request within 5 seconds, after it terminates it. When the program
+   fails while it runs again, for example on a syntax error, the app logs the error, keeps
+   the previous code, and answers.
+
+The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM). The
+web's `--reload` is uvicorn's, which restarts the server process.
+
 ## Add a widget
 
 1. Define the view in `core/view.py`. Set its `_renderer_key`:

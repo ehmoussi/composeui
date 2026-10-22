@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractSpinBox,
     QCheckBox,
+    QDockWidget,
     QFileDialog,
     QFormLayout,
     QGridLayout,
@@ -26,6 +27,7 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QMenuBar,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -2480,8 +2482,11 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
 
 
 class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):
-    def __init__(self, view: MainView) -> None:
+    def __init__(self, view: MainView, window: QMainWindow | None = None) -> None:
         super().__init__(view)
+        #: another main view's window to show this one in, in place of its parts, e.g.
+        #: the previous code's on a reload: the window keeps its place and size
+        self._window = window
         self._refresh_dispatcher.update(
             {
                 "title": self._refresh_title,
@@ -2493,7 +2498,11 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QMainWindow()
+            if self._window is None:
+                self._rendered_object = QMainWindow()
+            else:
+                self._rendered_object = self._window
+                self._clear_window(self._window)
             self._rendered_object.setMinimumSize(
                 self._view.minimum_width, self._view.minimum_height
             )
@@ -2545,6 +2554,25 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
 
     def _build_extensions(self) -> str:
         return _file_filters(self._view.file_view.extensions)
+
+    @staticmethod
+    def _clear_window(window: QMainWindow) -> None:
+        """Remove what another main view set on `window`: its bars, menus, sidebar and icon.
+
+        Its content goes once replaced (`setCentralWidget`).
+        """
+        window.setWindowIcon(QIcon())  # set again only if this main view has one
+        # the previous bars are deleted
+        window.setMenuBar(QMenuBar())
+        window.setStatusBar(None)  # type: ignore[arg-type]  # Qt takes none: it removes the bar
+        for child in window.findChildren(QWidget, "", Qt.FindChildOption.FindDirectChildrenOnly):
+            if isinstance(child, QToolBar):
+                window.removeToolBar(child)
+            elif isinstance(child, QDockWidget):
+                window.removeDockWidget(child)
+            elif not isinstance(child, QMenu):
+                continue
+            child.deleteLater()
 
     @staticmethod
     def _add_child_widgets(view: MainView, rendered_object: QMainWindow) -> None:
