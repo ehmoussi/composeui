@@ -2170,9 +2170,17 @@ def test_an_app_s_own_options_apply_to_every_new_session(
     assert all('value="Ada"' in page for page in pages)
 
 
+@pytest.mark.parametrize(("watchfiles", "polling"), [(True, "false"), (False, None)])
 def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    watchfiles: bool,
+    polling: str | None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if watchfiles:
+        pytest.importorskip("watchfiles")
+    else:
+        monkeypatch.setitem(sys.modules, "watchfiles", None)  # not installed
     study = PipeMainView()
     study.pages.inputs.pipe_form.name.text = "Main line"
     state_file = tmp_path / "study.pipe"
@@ -2185,18 +2193,26 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     monkeypatch.setattr(
         "sys.argv", ["pipeform", "--backend", "web", "--reload", "-f", str(state_file)]
     )
-    monkeypatch.setattr(
-        "composeui.webcore.webapplication.uvicorn.run",
-        lambda app, **kwargs: served.append((app, kwargs)),
-    )
-    # restores the variable `run` sets for the reloaded process
+    polled: list[str | None] = []
+
+    def serve(app: str, **kwargs: Any) -> None:
+        served.append((app, kwargs))
+        polled.append(os.environ.get("WATCHFILES_FORCE_POLLING"))
+
+    monkeypatch.setattr("composeui.webcore.webapplication.uvicorn.run", serve)
+    # restore the variables `run` sets for the reloaded process
     monkeypatch.setenv("COMPOSEUI_WEB_ENTRY", "")
+    monkeypatch.setenv("WATCHFILES_FORCE_POLLING", "")
+    monkeypatch.delenv("WATCHFILES_FORCE_POLLING")  # unset, as by default
 
     pipeform.main()
 
     ((import_string, options),) = served
     assert options["reload"] is True
     assert options["factory"] is True
+    # the system reports the changes of the files here, outside a Windows drive on WSL:
+    # watchfiles, if installed, waits for them
+    assert polled == [polling]
     # what uvicorn's reloaded process does with it, without spawning one
     factory = import_from_string(import_string)
     with _Browser(factory()) as client:

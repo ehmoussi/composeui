@@ -164,7 +164,8 @@ log's set-up, runs again too. Start the program as a script or with `-m`, for ex
 `uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
 (`watchfiles`), the system reports the changes. Without it, the backends check the files
 at a fixed interval. They also check them for a project on a Windows drive under WSL
-(`/mnt/c/...`), as the system does not report those changes.
+(`/mnt/c/...`), as the system does not report those changes. Set
+`WATCHFILES_FORCE_POLLING` to choose for the web yourself.
 
 ## Web backend
 

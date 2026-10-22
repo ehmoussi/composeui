@@ -25,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
 from composeui.core.application import Application, _add_reference_to_signals
+from composeui.core.reload import has_change_events
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import View
@@ -68,6 +69,9 @@ _AttributePath = tuple[str, ...]
 
 #: environment variable naming the program a reloaded server process runs again
 _RELOAD_ENTRY_VARIABLE = "COMPOSEUI_WEB_ENTRY"
+#: environment variable telling watchfiles whether to poll the files, rather than wait for
+#: the system to report their changes
+_FORCE_POLLING_VARIABLE = "WATCHFILES_FORCE_POLLING"
 #: set while `create_reloaded_starlette_app` runs the program: the apps it ran, unserved
 _RELOADED_APPS: ContextVar[list[WebApplication[Any]] | None] = ContextVar(
     "composeui_web_reloaded_apps", default=None
@@ -141,6 +145,14 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
     )
     app.state.sessions = sessions
     return app
+
+
+def _has_watchfiles() -> bool:
+    """Tell whether watchfiles is installed, for uvicorn's reloader watches with it then."""
+    try:
+        return importlib.util.find_spec("watchfiles") is not None
+    except ValueError:  # in `sys.modules` without a spec, e.g. blocked as None
+        return False
 
 
 def _entry_point() -> str:
@@ -283,6 +295,14 @@ class WebApplication(Application[MainViewT]):
             return
         # uvicorn reloads only an app it can import by name, in a process of its own
         os.environ[_RELOAD_ENTRY_VARIABLE] = _entry_point()
+        # uvicorn watches with watchfiles, if installed, which polls anywhere on WSL by
+        # default and misses changes so, where the system reports them
+        if (
+            _FORCE_POLLING_VARIABLE not in os.environ
+            and _has_watchfiles()
+            and has_change_events(Path.cwd())
+        ):
+            os.environ[_FORCE_POLLING_VARIABLE] = "false"
         uvicorn.run(
             f"{__name__}:{create_reloaded_starlette_app.__name__}",
             factory=True,
