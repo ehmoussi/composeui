@@ -250,7 +250,8 @@ class SqliteSource:
 
     def count(self) -> int:
         with self._table.reading() as db:
-            (count,) = db.execute(f"SELECT COUNT(*) FROM ({self._query})").fetchone()  # noqa: S608 (the app's query)
+            # read to the end: the connection is reused (see `SqliteModel.reading`)
+            ((count,),) = db.execute(f"SELECT COUNT(*) FROM ({self._query})").fetchall()  # noqa: S608 (the app's query)
         return int(count)
 
     def ordered_ids(
@@ -502,6 +503,10 @@ class SqliteModel(Model):
         model's `close`, is deleted once the query is over. Once the model is closed,
         raises `sqlite3.ProgrammingError`, as `connection()` does: e.g. a web download
         its session's end cuts short.
+
+        The connection is reused, e.g. for the next window of a large table: read each
+        query's rows to the end in the block. A query left half read keeps the rows as
+        they were when it started, for the next reader too.
         """
         with self._readers_lock:
             if self._closed:  # its file is gone
@@ -509,18 +514,16 @@ class SqliteModel(Model):
                 raise sqlite3.ProgrammingError(msg)
             database = self._database
             database.readers += 1
+            db = database.idle_readers.pop() if len(database.idle_readers) > 0 else None
         try:
-            uri = f"{database.path.as_uri()}?mode=ro"
-            db = sqlite3.connect(uri, uri=True, timeout=WAIT_SECONDS)
-            try:
-                for statement in database.pragma_statements:
-                    db.execute(statement)
-                yield db
-            finally:
-                db.close()
+            if db is None:
+                db = database.open_reader()
+            yield db
         finally:
             with self._readers_lock:
                 database.readers -= 1
+                if db is not None:
+                    database.idle_readers.append(db)
                 if database.readers == 0 and (database is not self._database or self._closed):
                     database.close()
 
@@ -669,10 +672,22 @@ class _Database:
         self.connection.row_factory = sqlite3.Row
         for statement in statements:
             self.connection.execute(statement)
+        #: the read-only connections not in use, for the next queries `reading` it
+        self.idle_readers: list[sqlite3.Connection] = []
         # also when the model is dropped unclosed (e.g. an expired web session's)
-        self._finalizer = weakref.finalize(self, _discard, self.connection, self.path)
+        self._finalizer = weakref.finalize(
+            self, _discard, self.connection, self.path, self.idle_readers
+        )
         #: the queries reading it on connections of their own (`SqliteModel.reading`)
         self.readers = 0
+
+    def open_reader(self) -> sqlite3.Connection:
+        """Open a read-only connection, with the model's `pragmas`: any thread uses it."""
+        uri = f"{self.path.as_uri()}?mode=ro"
+        reader = sqlite3.connect(uri, uri=True, timeout=WAIT_SECONDS, check_same_thread=False)
+        for statement in self.pragma_statements:
+            reader.execute(statement)
+        return reader
 
     def start_journal(self) -> None:
         """Set the journal of the model's `pragmas`, which the file keeps."""
@@ -713,7 +728,10 @@ def _pragma_statement(name: str, value: int | str) -> str:
     return f"PRAGMA {name} = {value}"
 
 
-def _discard(connection: sqlite3.Connection, path: Path) -> None:
+def _discard(connection: sqlite3.Connection, path: Path, readers: list[sqlite3.Connection]) -> None:
+    for reader in readers:  # first: the last connection closed deletes the WAL journal
+        reader.close()
+    readers.clear()
     connection.close()
     # the WAL journal's files too, which the last connection closed deletes, unless it crashed
     for name in (path.name, f"{path.name}-wal", f"{path.name}-shm"):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import enum
 import re
+import sqlite3
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -288,3 +289,26 @@ def test_a_table_s_rows_are_read_while_a_write_is_uncommitted(
 
     assert read == [(len(PLACES), {4: ["O'Brien bay"]}, [1, 5])]  # the rows committed
     assert sql.count() == len(PLACES) + 5_000
+
+
+def test_reads_reuse_a_connection_and_see_each_write_committed(
+    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    connect = sqlite3.connect
+
+    def counted(database: str, *args: Any, **kwargs: Any) -> sqlite3.Connection:
+        opened.append(database)
+        return connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counted)
+    table = DataTableView(source=sql)
+    for start in range(len(PLACES)):  # as many reads as a table's windows
+        table.rows(start, start + 1)
+        table.source = None
+        table.source = sql
+    assert len(opened) <= 1
+
+    model.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))  # committed: seen at once
+    assert sql.count() == len(PLACES) + 1
+    assert sql.cells([7], ["name"]) == {7: ["Deep"]}
