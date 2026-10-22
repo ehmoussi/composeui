@@ -20,6 +20,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QSizePolicy,
     QTableView,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -188,19 +189,25 @@ class QDataTableView(QTableView):
 class QDataFilterTable(QWidget):
     """A large table under its filter bar, which shows only while a column filters.
 
-    When the search or the filters hide every row, `empty` says so under the headers.
+    `export` shows the table's `export_action` above the rows, at their right, as the
+    web's link: the context menu alone hides it. When the search or the filters hide
+    every row, `empty` says so under the headers.
     """
 
     def __init__(self, table: DataTableLike) -> None:
         super().__init__()
         self.bar = QTableFilterBar()
         self.table = QDataTableView(table)
+        self.export = QToolButton()
+        self.export.setDefaultAction(self.table.export_action)
+        self.export.setAutoRaise(True)
         self.empty = QLabel()
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setVisible(False)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.bar)
+        layout.addWidget(self.export, 0, Qt.AlignmentFlag.AlignRight)
         layout.addWidget(self.table, 1)
         layout.addWidget(self.empty)
         self.bar.setVisible(False)
