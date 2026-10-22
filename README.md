@@ -42,6 +42,7 @@ uv sync --extra pyside6     # + PySide6, needed to actually render a window
 uv sync --extra tui         # + Textual, for the terminal backend
 uv sync --extra web         # + Starlette/uvicorn, for the web backend
 uv sync --extra report      # + matplotlib, for charts' report images
+uv sync --extra reload      # + watchfiles, for faster --reload in development
 ```
 
 Requires Python >= 3.9.
