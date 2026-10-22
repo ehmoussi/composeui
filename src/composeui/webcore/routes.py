@@ -62,6 +62,12 @@ def _session_or_new(request: Request) -> WebSession | None:
     return session
 
 
+def _reload_instance(request: Request) -> str | None:
+    """Get the id of this process of a ``--reload`` server; None for another server."""
+    instance: str | None = request.app.state.reload_instance
+    return instance
+
+
 def _too_many_sessions() -> Response:
     return PlainTextResponse(
         "Too many sessions are open: try again later.", status_code=503, headers=_NO_STORE
@@ -76,7 +82,7 @@ def homepage(request: Request) -> Response:
     path = session.home_path()
     if path is not None:
         return RedirectResponse(path, status_code=303, headers=_NO_STORE)
-    return HTMLResponse(session.page_html(), headers=_NO_STORE)
+    return HTMLResponse(session.page_html(_reload_instance(request)), headers=_NO_STORE)
 
 
 def page(request: Request) -> Response:
@@ -90,7 +96,21 @@ def page(request: Request) -> Response:
         return _too_many_sessions()
     if not session.open_route(request.path_params["route"]):
         return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
-    return HTMLResponse(session.page_html(), headers=_NO_STORE)
+    return HTMLResponse(session.page_html(_reload_instance(request)), headers=_NO_STORE)
+
+
+def reload_poll(request: Request) -> Response:
+    """Tell a page of a ``--reload`` server whether another process of it served the page.
+
+    Then its answer reloads the page (``HX-Refresh``), which runs the changed code. Only
+    a read: the next request restores the session (`SessionStore`).
+    """
+    instance = _reload_instance(request)
+    if instance is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    if request.query_params.get("instance") == instance:
+        return Response(status_code=204, headers=_NO_STORE)
+    return Response(headers=_RELOAD)
 
 
 async def widget_event(request: Request) -> Response:

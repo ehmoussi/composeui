@@ -193,9 +193,14 @@ def _run_as_main(previous_main: types.ModuleType) -> None:
     exec(code, program.__dict__)  # noqa: S102
 
 
-def save_reloaded_state(main_view: MainView, model: Model | None) -> None:
-    """Save the views' state and the model's data, for the next run to open."""
-    directory = _state_directory()
+def save_reloaded_state(
+    main_view: MainView, model: Model | None, directory: Path | None = None
+) -> None:
+    """Save the views' state and the model's data, for the next run to open.
+
+    Into `directory`, an existing one, else the one the supervisor shares with the app.
+    """
+    directory = _state_directory() if directory is None else directory
     state_filepath = main_view.state_filepath
     save_study(main_view, model, directory / _STUDY_NAME)
     # the user's study is still the file they opened, not this scratch one
@@ -207,9 +212,14 @@ def save_reloaded_state(main_view: MainView, model: Model | None) -> None:
     (directory / _SESSION_NAME).write_text(json.dumps(session))
 
 
-def load_reloaded_state(main_view: MainView, model: Model | None) -> None:
-    """Open the state the previous run saved, if any and if it still fits the app."""
-    directory = _state_directory()
+def load_reloaded_state(
+    main_view: MainView, model: Model | None, directory: Path | None = None
+) -> None:
+    """Open the state the previous run saved, if any and if it still fits the app.
+
+    From `directory`, else the one the supervisor shares with the app.
+    """
+    directory = _state_directory() if directory is None else directory
     if not (directory / _STUDY_NAME).exists():
         return
     session = _read_session(directory / _SESSION_NAME)
