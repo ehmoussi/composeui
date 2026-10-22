@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 #: the key exporting the rows shown as CSV
 EXPORT_KEY = "e"
+#: the characters a cell shows as spaces, on one line
+_SPACES = str.maketrans(dict.fromkeys("\t\n\r\v\f", " "))
 
 
 def _is_csv(path: Path) -> bool:
@@ -246,9 +248,11 @@ class ComposeDataTable(ScrollView, can_focus=True):
         if len(cells) == 0:
             return start.ljust(len(start) + max(width, 0))
         share = max(width // len(cells), 1)
+        # a line break or a tab would break the line: a space, as Ctrl+C copies it
+        flat = [cell.translate(_SPACES) for cell in cells]
         parts = [
             (cell if len(cell) < share else cell[: max(share - 2, 0)] + "…").ljust(share)
-            for cell in cells
+            for cell in flat
         ]
         return (start + "".join(parts)).ljust(len(start) + max(width, 0))
 

@@ -962,17 +962,38 @@ document.addEventListener("scroll", function (event) {
 }, true);
 /* Ctrl+C in a large table's frame copies its selected rows, unless the user selected text
    there, which the browser copies: the server answers them in the hidden element posting
-   the copy, which the page writes to the clipboard once swapped in */
+   the copy. Firefox and Safari let the page write the clipboard only during the user's
+   Ctrl+C, before the answer: the clipboard gets an item then, its text a promise the
+   answer keeps (`copyAnswers`). No row selected, it's refused: the clipboard keeps its
+   text. A browser without `ClipboardItem` writes the text once answered. */
+var copyAnswers = [];
 document.addEventListener("copy", function (event) {
   var frame = event.target instanceof Element ? event.target.closest("[data-virtual-scroll]") : null;
   if (frame === null || !document.getSelection().isCollapsed) return;
   event.preventDefault();
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    var text = new Promise(function (resolve, reject) {
+      copyAnswers.push({ resolve: resolve, reject: reject });
+    });
+    var item = new ClipboardItem({
+      "text/plain": text.then(function (copied) {
+        return new Blob([copied], { type: "text/plain" });
+      }),
+    });
+    navigator.clipboard.write([item]).catch(function () {});  /* nothing to copy */
+  }
   dispatch(frame.parentElement.querySelector("[data-copied]"), "copy-rows");
 });
 document.addEventListener("htmx:load", function (event) {
   var copied = event.detail.elt;
-  if (copied.matches("[data-copied]") && copied.textContent !== "") {
-    navigator.clipboard.writeText(copied.textContent);
+  if (!copied.matches("[data-copied]")) return;
+  var answer = copyAnswers.shift();
+  var text = copied.textContent;
+  if (answer !== undefined) {
+    if (text !== "") answer.resolve(text);
+    else answer.reject(new Error("no row selected"));
+  } else if (text !== "" && navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(function () {});
   }
 });
 /* neither bubbles */

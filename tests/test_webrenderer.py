@@ -4888,9 +4888,12 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
     assert scroll("first") == ""
     assert len(source.read) <= 3 * DATA_TABLE_WINDOW
 
+    # disabled: the rows scrolled to still show, but none is selected
     main_view.table.is_enabled = False
     response = million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "0"})
-    assert response.status_code == 400
+    assert _window(response.text, table_id)[0].get("aria-rowindex") == "2"
+    selected = million_client.post(f"/widget/{table_id}", data={"event": "select", "position": "0"})
+    assert selected.status_code == 400
 
 
 def test_a_large_table_s_header_sorts_by_its_column_from_the_top(

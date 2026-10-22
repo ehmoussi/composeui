@@ -39,11 +39,13 @@ from composeui.core.view import (
     ChartKind,
     DialogKind,
     EditRefusedError,
+    ListSource,
     MainView,
     ReferenceLine,
     RendererType,
     SelectionMode,
     Series,
+    T,
     TreeNode,
     View,
     define_view,
@@ -2771,6 +2773,25 @@ async def test_a_large_source_s_rows_show_loading_while_a_job_orders_them() -> N
                 break
         assert not table.loading
         assert view.table.rows(0, 1) == [(source.size - 1, [str(source.size - 1)])]
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_s_cell_shows_on_its_row_s_line_its_breaks_as_spaces() -> None:
+    view = RoomsDataMainView()
+    view.rooms.source = ListSource(
+        Room, {"name": T("Room"), "temperature": T("Temperature")}, [Room("Hall\tway\nB", 18.0)]
+    )
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        await pilot.pause()
+        line = app.query_one(ComposeDataTable).render_line(1).text
+
+    assert "Hall way B" in line
+    assert line.split() == ["1", "Hall", "way", "B", "18.0"]
 
 
 @pytest.mark.asyncio

@@ -201,7 +201,7 @@ class LargeTableMainView(MainView):
 
     def _show_count(self) -> None:
         if self._source is not None:
-            count, total = self.table.row_count, self._source.count()
+            count, total = self.table.row_count, self.table.total
             milliseconds = self._source.seconds * 1000
             self.info.text = f"{count:,} of {total:,} rows, ordered in {milliseconds:,.0f} ms"
 

@@ -42,6 +42,9 @@ PLACES = [
     Place(4, "O'Brien bay", 7.25, datetime.date(2024, 5, 2), Kind.HARBOUR),
     Place(5, "lake", 12.5, None, Kind.LAKE),
     Place(6, "", 0.5, datetime.date(2022, 2, 2), Kind.HARBOUR),
+    # SQLite folds the case of ASCII letters alone
+    Place(8, "Grande École", None, None, Kind.LAKE),
+    Place(9, "Straße", 1.0, None, Kind.HARBOUR),
 ]
 HEADERS = {"name": "Name", "depth": "Depth", "surveyed": "Surveyed", "kind": "Kind"}
 
@@ -50,6 +53,8 @@ class Places(SqliteTable):
     create = (
         "CREATE TABLE place(id INTEGER PRIMARY KEY, name TEXT NOT NULL, depth REAL,"
         " surveyed TEXT, kind TEXT NOT NULL);"
+        # a filter on depth may read by it: the rows mustn't come in its order
+        "CREATE INDEX place_depth ON place(depth);"
     )
 
     def add(self, place: Place) -> None:
@@ -118,8 +123,16 @@ def _both(
         ("name", "/^(pond|harbour)/"),
         ("name", "100%"),
         ("name", "="),
+        ("name", "école"),
+        ("name", "=GRANDE ÉCOLE"),
+        ("name", "!=grande école"),
+        ("name", "!école"),
+        ("name", "*ÉCOLE"),
+        ("name", "grande é*"),
+        ("name", "Straße"),
         ("depth", ">7.25"),
         ("depth", ">=7.25"),
+        ("depth", ">=3"),
         ("depth", "<3"),
         ("depth", "<=3"),
         ("depth", "!=12.5"),
@@ -136,7 +149,7 @@ def test_each_filter_keeps_the_rows_a_list_source_keeps(
 ) -> None:
     field_type = next(c.type for c in listed.columns if c.name == column)
     found, expected = _both(sql, listed, filters={column: parse_filter(text, field_type)})
-    assert sorted(found) == sorted(expected), text  # type: ignore[type-var]
+    assert found == expected, text  # in the source's order: unsorted, by id
 
 
 @pytest.mark.parametrize("column", ["name", "depth", "surveyed", "kind"])
@@ -149,13 +162,18 @@ def test_a_sort_orders_as_a_list_source_empty_cells_last(
 
 
 def test_a_search_finds_its_text_as_typed_in_the_text_columns(
-    sql: SqliteSource, listed: ListSource[Place]
+    model: PlacesModel, sql: SqliteSource, listed: ListSource[Place]
 ) -> None:
     # a quote, and LIKE's wildcards, are text
-    for needle in ("o'b", "100%", "_", " HARBOUR "):
+    for needle in ("o'b", "100%", "_", " HARBOUR ", "ÉCOLE", "straße"):
         found, expected = _both(sql, listed, search=needle)
-        assert sorted(found) == sorted(expected), needle  # type: ignore[type-var]
+        assert found == expected, needle
     assert sql.ordered_ids(None, "12.5", {}) == []  # no text column holds it
+    # a source without text columns: no row holds any text
+    columns = [SourceColumn("depth", "Depth", Optional[float])]
+    numbers = SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns)
+    numbered = ListSource(Place, {"depth": "Depth"}, PLACES, id_field="id")
+    assert numbers.ordered_ids(None, "5", {}) == numbered.ordered_ids(None, "5", {}) == []
 
 
 def test_cells_read_the_rows_asked_as_their_columns_types(sql: SqliteSource) -> None:

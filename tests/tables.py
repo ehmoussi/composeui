@@ -231,10 +231,11 @@ class RoomsDataMainView(MainView):
 
 
 class GatedSource:
-    """`size` rows, valued by their ids, whose order waits for `gate` to be set.
+    """`size` rows, valued by their ids, whose order asked in a job's thread waits for `gate`.
 
-    So a test sees a table while a job orders its rows. It records the sort of each order
-    asked (`orders`). Descending reverses the rows; any other order keeps them.
+    So a test sees a table while a job orders its rows; on the main thread, it doesn't wait.
+    It records the sort of each order asked (`orders`). Descending reverses the rows; any
+    other order keeps them.
     """
 
     columns = (SourceColumn("value", "Value", int),)
@@ -245,17 +246,22 @@ class GatedSource:
         self.gate = threading.Event()
         self.gate.set()
         self.orders: list[Optional[Sort]] = []
+        #: for each count asked, whether on the main thread
+        self.counted_on_main: list[bool] = []
 
     def ordered_ids(
         self, sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
     ) -> range:
         self.orders.append(sort)
-        self.gate.wait(10)
+        size = self.size  # as a query reads the rows as they are when it starts
+        if threading.current_thread() is not threading.main_thread():
+            self.gate.wait(10)
         if sort is not None and sort.descending:
-            return range(self.size - 1, -1, -1)
-        return range(self.size)
+            return range(size - 1, -1, -1)
+        return range(size)
 
     def count(self) -> int:
+        self.counted_on_main.append(threading.current_thread() is threading.main_thread())
         return self.size
 
     def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[int]]:

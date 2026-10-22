@@ -65,6 +65,7 @@ from composeui.core.view import (
     CellStyle,
     ChartKind,
     ChartView,
+    DataTableView,
     DialogKind,
     EditRefusedError,
     FloatInputView,
@@ -72,10 +73,12 @@ from composeui.core.view import (
     IntInputView,
     LabelView,
     LineStyle,
+    ListSource,
     ReferenceLine,
     RendererType,
     SelectionMode,
     Series,
+    T,
     TreeNode,
     replace_cell,
 )
@@ -2732,10 +2735,75 @@ def test_a_large_source_s_rows_are_ordered_in_a_job_the_old_order_shown_meanwhil
     qtbot.waitUntil(lambda: not view.table.is_ordering)
     assert first() == "0"
 
-    # a smaller source: ordered at once
+    # the source changes while a job orders: counted and ordered in the next job, the
+    # running job's order dropped
+    source.gate.clear()
+    view.table.sort_descending = True
     source.size = DATA_TABLE_JOB_ROWS - 1
+    source.counted_on_main.clear()
     source.changed.emit()
-    assert (view.table.is_ordering, view.table.row_count) == (False, source.size)
+    assert view.table.row_count == DATA_TABLE_JOB_ROWS  # the old order meanwhile
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    assert (model.rowCount(), view.table.total) == (source.size, source.size)
+    assert source.counted_on_main == [False]
+
+    # a new source: neither a count nor "no rows match" before its rows' first order
+    other = GatedSource()
+    other.gate.clear()
+    view.table.source = other
+    assert view.table.is_ordering
+    assert (view.table.row_count, view.table.count_text) == (0, "")
+    assert box.empty.isHidden()
+    other.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    assert model.rowCount() == other.size
+
+
+def test_a_large_table_s_new_source_shows_its_columns_in_the_bar(qtbot: QtBot) -> None:
+    view = RoomsDataMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.rooms)
+    assert isinstance(box, QDataFilterTable)
+    view.rooms.filters = {"name": "Hall"}
+
+    # as an app swapping its rows: the bar shows the new source's columns, filtering by name
+    view.rooms.source = ListSource(Room, {"name": T("Room")}, [Room("Hall", 18.0)])
+
+    columns = [box.bar.column.itemText(index) for index in range(box.bar.column.count())]
+    assert columns == ["Room"]
+    assert [chip.open_button.text() for chip in box.bar.chips] == ["Room: Hall ✎"]
+
+
+def test_a_large_table_draws_each_row_with_one_read_of_its_cells(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    read: list[int] = []
+    rows = DataTableView.rows
+
+    def counted(table: DataTableView, start: int, stop: int) -> list[tuple[Any, list[str]]]:
+        read.append(start)
+        return rows(table, start, stop)
+
+    monkeypatch.setattr(DataTableView, "rows", counted)
+    view = MillionRowsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    box = _widget(view.table)
+    assert isinstance(box, QDataFilterTable)
+    read.clear()
+
+    box.table.viewport().grab()
+
+    # Qt asks each cell's text and colors apart: the row's cells are formatted once
+    assert 0 < len(read) == len(set(read))
+    last = read[-1]  # the row the model keeps
+    view.table.column_formats = {"half": ".3f"}  # the same rows, formatted again
+    assert box.table.model().index(last, 1).data() == f"{last / 2:.3f}"
 
 
 def test_a_large_table_s_context_menu_exports_its_rows_as_csv(

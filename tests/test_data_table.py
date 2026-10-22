@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import enum
+import gc
 import tracemalloc
+import weakref
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
@@ -109,6 +111,20 @@ def test_the_rows_read_first_go_once_more_rows_are_read_than_the_cache_keeps() -
     assert source.read[2:] == [list(range(DATA_TABLE_WINDOW))]
 
 
+def test_the_rows_asked_stay_while_the_rows_they_need_more_of_are_read() -> None:
+    source = CountingSource(_samples(6 * DATA_TABLE_WINDOW))
+    table = DataTableView(source=source)
+    table.rows(0, 1)  # the first window: the oldest one kept
+    for window in range(2, 6):  # as many rows as the cache keeps
+        table.rows(window * DATA_TABLE_WINDOW, window * DATA_TABLE_WINDOW + 1)
+
+    # rows of the oldest window kept, and of the next one, not read yet
+    end = DATA_TABLE_WINDOW + 50
+    rows = table.rows(DATA_TABLE_WINDOW - 50, end)
+
+    assert all(cells[0] != "" for _row_id, cells in rows)
+
+
 def test_rows_known_by_text_ids_read_as_rows_known_by_numbers() -> None:
     samples = ListSource(Sample, {"value": "Value"}, _samples(3), id_field="name")
     table = DataTableView(source=samples, sort_column="value", sort_descending=True)
@@ -199,6 +215,25 @@ def test_the_source_s_change_reads_the_order_and_the_rows_again(
     assert (table.row_count, source.orders) == (4, 2)
     assert table.rows(3, 4) == [(3, ["new", "9.0", "probe", ""])]
     assert len(source.read) == 2
+
+
+def test_a_source_s_change_orders_its_table_once_and_keeps_no_table_alive(
+    source: CountingSource,
+) -> None:
+    table = DataTableView(source=source)
+    table.source = source  # again, e.g. as a study opens
+    orders = source.orders
+
+    source.changed.emit()
+    assert source.orders == orders + 1
+
+    table.source = CountingSource(_samples(3))  # replaced: its change orders no table
+    source.changed.emit()
+    assert source.orders == orders + 1
+    gone = weakref.ref(table)
+    del table
+    gc.collect()
+    assert gone() is None
 
 
 def test_a_row_gone_from_the_source_shows_empty_cells_until_its_change(

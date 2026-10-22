@@ -1951,6 +1951,9 @@ class Filter:
     value: Any = None
     #: a range's end
     upper: Any = None
+    #: a text's filter typed in ASCII characters alone, which SQLite folds as Python does
+    #: (see `SqliteSource`)
+    typed_ascii: bool = True
 
     def matches(self, value: Any, text: str) -> bool:
         """Tell whether a cell passes: its value (its text in a text column) and its text."""
@@ -2050,12 +2053,17 @@ def _parse_text(text: str) -> Filter:
         ("!", FilterOperator.NOT_CONTAINS),
     ):
         if text.startswith(prefix) and len(text) > len(prefix):
-            return Filter(comparison, text[len(prefix) :].strip().casefold())
+            return _text_filter(comparison, text[len(prefix) :].strip())
     if len(text) > 1 and text.endswith("*") and not text.startswith("*"):
-        return Filter(FilterOperator.STARTS_WITH, text[:-1].casefold())
+        return _text_filter(FilterOperator.STARTS_WITH, text[:-1])
     if len(text) > 1 and text.startswith("*") and not text.endswith("*"):
-        return Filter(FilterOperator.ENDS_WITH, text[1:].casefold())
-    return Filter(FilterOperator.CONTAINS, text.strip("*").casefold())
+        return _text_filter(FilterOperator.ENDS_WITH, text[1:])
+    return _text_filter(FilterOperator.CONTAINS, text.strip("*"))
+
+
+def _text_filter(operator: FilterOperator, text: str) -> Filter:
+    """Get the filter comparing the cells with `text`, ignoring any case (casefolded)."""
+    return Filter(operator, text.casefold(), typed_ascii=text.isascii())
 
 
 def parse_filter(text: str, field_type: Any = str) -> Filter:
@@ -3209,15 +3217,37 @@ def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> N
         path.unlink()
 
 
+class _WeakCallback:
+    """A view's method connected to a signal, held weakly, and called no more once dropped.
+
+    So a source outliving its table (e.g. the model's) keeps no table alive, and calls
+    none that replaced it.
+    """
+
+    def __init__(self, method: Callable[[], None]) -> None:
+        self._method: Optional[weakref.WeakMethod[Callable[[], None]]] = weakref.WeakMethod(method)
+
+    def drop(self) -> None:
+        self._method = None
+
+    def __call__(self) -> None:
+        method = None if self._method is None else self._method()
+        if method is not None:
+            method()
+
+
 def _ordered_ids(
-    _job: Optional[Job[Sequence[Any]]],
+    _job: Optional[Job[tuple[Optional[int], Sequence[Any]]]],
     source: TableSource[Any],
     sort: Optional[Sort],
     search: str,
     filters: Mapping[str, Filter],
-) -> Sequence[Any]:
-    """Ask `source` for the ids of a large table's rows shown, in a job or not."""
-    return _compact_ids(source.ordered_ids(sort, search, filters))
+    *,
+    is_counting: bool,
+) -> tuple[Optional[int], Sequence[Any]]:
+    """Ask `source` for its rows' count, if `is_counting`, then the ids of those shown."""
+    total = source.count() if is_counting else None
+    return total, _compact_ids(source.ordered_ids(sort, search, filters))
 
 
 def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
@@ -3287,11 +3317,22 @@ class DataTableView(View):
     def _reconcile_source(
         self, attribute: attrs.Attribute[Any], source: Optional[TableSource[Any]]
     ) -> Optional[TableSource[Any]]:
-        """Read the new source's rows, and read them again each time they change."""
+        """Read the new source's rows, and read them again each time they change.
+
+        The renderer shows the new source's columns, e.g. in the filter bar.
+        """
         object.__setattr__(self, attribute.name, source)
+        if self._listener is not None:
+            # the old source's `changed` keeps it, inert: a signal can't drop one callback
+            self._listener.drop()
+            self._listener = None
         if source is not None:
-            source.changed.connect(lambda: self._source_changed(source))
+            self._listener = _WeakCallback(self._read_source_again)
+            source.changed.connect(self._listener)
         self._source_changed(source)
+        renderer = self.renderer
+        if isinstance(renderer, (Renderer, RendererContainer)):
+            renderer.refresh_attribute(attribute.name, source)
         return source
 
     def _reconcile_mode(
@@ -3383,10 +3424,18 @@ class DataTableView(View):
     )
     #: a job is ordering the rows
     _ordering: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
-    #: the settings changed while a job ordered the rows: its order is outdated
-    _order_again: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
     #: the main view's jobs' `running_changed` is connected
     _watches_jobs: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    #: connected to the source's `changed`, until the source is replaced
+    _listener: Optional[_WeakCallback] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: the requests for the order: each new one makes the orders asked before outdated
+    _order_request: int = attrs.field(default=0, init=False, repr=False, metadata={OMIT: True})
+    #: the latest request waits for the job running to be over
+    _order_pending: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    #: the source changed since `_total` counted its rows: the next order counts them
+    _recount: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -3433,8 +3482,8 @@ class DataTableView(View):
 
         E.g. "1,234 of 1,000,000", in `filter_texts`' words.
         """
-        if self.row_count == self._total:
-            return ""
+        if self.row_count == self._total or self._order_source is not self.source:
+            return ""  # all shown, or the source's rows not ordered yet
         count = self.filter_texts.get("count", "")
         return count.format(shown=f"{self.row_count:,}", total=f"{self._total:,}")
 
@@ -3594,6 +3643,9 @@ class DataTableView(View):
         ids = self.ids(start, stop)
         if self.source is None or len(ids) == 0:
             return []
+        for row_id in ids:  # the latest read: the windows read next don't evict them
+            if row_id in self._cache:
+                self._cache.move_to_end(row_id)
         if any(row_id not in self._cache for row_id in ids):
             self._read_windows(self.source, max(start, 0), max(start, 0) + len(ids))
         columns = self.source.columns
@@ -3639,12 +3691,23 @@ class DataTableView(View):
         if source is not self.source:  # a source replaced since
             return
         self._cache.clear()
-        self._total = 0 if source is None else source.count()
+        if source is None:
+            self._total, self._recount = 0, False
+        elif source is not self._order_source or self._ordering_jobs() is None:
+            # a new source: its count says whether a job orders its rows
+            self._total, self._recount = source.count(), False
+        else:
+            self._recount = True  # in the ordering job, the rows' count costing a query too
         if source is not self._order_source and len(self._order) > 0:
             # the old source's ids: no row until the new source's order, selected ones kept
-            self._order, self._order_source = [], source
+            self._order, self._order_source = [], None
             self._refresh_order()
         self._read_order()
+
+    @property
+    def total(self) -> int:
+        """Get the number of the source's rows, before the search and the filters."""
+        return self._total
 
     @property
     def is_ordering(self) -> bool:
@@ -3659,20 +3722,26 @@ class DataTableView(View):
         meanwhile (`is_ordering`). One job at a time: the settings changed while it runs
         order the rows again once it's over, its order dropped.
         """
+        # any order asked before, a job's still running, is outdated
+        self._order_request += 1
+        self._order_pending = False
         source = self.source
         jobs = self._ordering_jobs()
         if source is None:
-            self._show_order(None, [])
+            self._show_order(None, 0, [])
         elif jobs is None:
-            self._show_order(source, _ordered_ids(None, source, *self._order_settings(source)))
+            settings = self._order_settings(source)
+            order = _ordered_ids(None, source, *settings, is_counting=self._recount)
+            self._show_order(source, *order)
         elif self._ordering:
-            self._order_again = True
+            self._order_pending = True
         else:
-            self._order_again = False
+            request = self._order_request
             self._set_ordering(is_ordering=True)
-            job = jobs.start(_ordered_ids, source, *self._order_settings(source))
-            job.finished.connect(lambda ids: self._ordered(source, ids))
-            job.failed.connect(lambda _error: self._ordered(source, None))
+            settings = self._order_settings(source)
+            job = jobs.start(_ordered_ids, source, *settings, is_counting=self._recount)
+            job.finished.connect(lambda order: self._ordered(request, order))
+            job.failed.connect(lambda _error: self._ordered(request, None))
 
     def _ordering_jobs(self) -> Optional[Jobs]:
         """Get the jobs to order the rows in, or None to order them on the main thread."""
@@ -3693,13 +3762,18 @@ class DataTableView(View):
             self._set_ordering(is_ordering=False)
             self._read_order()
 
-    def _ordered(self, source: TableSource[Any], ids: Optional[Sequence[Any]]) -> None:
-        """Show the order a job got, unless the settings changed meanwhile: order again."""
+    def _ordered(self, request: int, order: Optional[tuple[Optional[int], Sequence[Any]]]) -> None:
+        """Show the order a job got for `request`, unless a newer one was asked meanwhile.
+
+        A newer request waiting for the job orders now; one answered at once (e.g. the
+        source got smaller) is shown already: the job's order is dropped.
+        """
         self._set_ordering(is_ordering=False)
-        if self._order_again or source is not self.source:
+        if request == self._order_request:
+            if order is not None:  # else it failed, logged: the old order stays
+                self._show_order(self.source, *order)
+        elif self._order_pending:
             self._read_order()
-        elif ids is not None:  # else it failed, logged: the old order stays
-            self._show_order(source, ids)
 
     def _set_ordering(self, *, is_ordering: bool) -> None:
         self._ordering = is_ordering
@@ -3714,8 +3788,21 @@ class DataTableView(View):
         if isinstance(renderer, (Renderer, RendererContainer)):
             renderer.refresh_attribute("row_count", self.row_count)
 
-    def _show_order(self, source: Optional[TableSource[Any]], ids: Sequence[Any]) -> None:
-        """Show the rows `ids`, in order, drop the selected ones it hides, emit `ordered`."""
+    def _read_source_again(self) -> None:
+        self._source_changed(self.source)
+
+    def _show_order(
+        self,
+        source: Optional[TableSource[Any]],
+        total: Optional[int],
+        ids: Sequence[Any],
+    ) -> None:
+        """Show the rows `ids`, in order, drop the selected ones it hides, emit `ordered`.
+
+        `total` is the source's rows' count, if counted with the order.
+        """
+        if total is not None:
+            self._total, self._recount = total, False
         self._order, self._order_source = ids, source
         self._refresh_order()
         self.ordered.emit()
