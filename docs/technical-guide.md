@@ -8,9 +8,26 @@ backend, and run the checks. To build an app with ComposeUI, read the
 
 - [Project layout](#project-layout)
 - [Architecture](#architecture)
+  - [The core imports no backend](#the-core-imports-no-backend)
+  - [The registry](#the-registry)
+  - [Views and renderers](#views-and-renderers)
+  - [Signals](#signals)
+  - [View state](#view-state)
+  - [A button click](#a-button-click)
+  - [The web backend](#the-web-backend)
+  - [A button click on the web](#a-button-click-on-the-web)
+  - [Reloading on a change](#reloading-on-a-change)
 - [Add a widget](#add-a-widget)
 - [Add a backend](#add-a-backend)
 - [Development](#development)
+  - [Setup](#setup)
+  - [Commands](#commands)
+  - [Tests](#tests)
+  - [Translations](#translations)
+  - [Styles of the web backend](#styles-of-the-web-backend)
+  - [Code style](#code-style)
+  - [Documentation site](#documentation-site)
+  - [Continuous integration](#continuous-integration)
 
 ## Project layout
 
@@ -67,7 +84,7 @@ rendered object. It syncs them in both directions:
 
 | Method | Direction | Does |
 | --- | --- | --- |
-| `render()` | view to toolkit | Creates the rendered object, then calls `refresh()`. |
+| `render()` | view to toolkit | Creates the rendered object. |
 | `refresh()` | view to toolkit | Calls every handler of `_refresh_dispatcher` with the current value of its attribute. |
 | `refresh_attribute(name, value)` | view to toolkit | Calls the handler of one attribute. |
 | `update_state()` | toolkit to view | Calls `_update_state(view, rendered_object)` inside `stop_refresh()`. |
@@ -79,14 +96,18 @@ handler. When a view attribute changes and it has no handler,
 While `update_state()` runs, `is_updating_state()` is true. `notify_renderer` then doesn't
 refresh the toolkit with the values that came from it.
 
-`call_on_main_thread(callback)` calls the callback directly by default. A renderer whose
-toolkit has thread affinity, such as Qt, overrides it to run the callback on its main
-thread.
+`call_on_main_thread(callback)` calls the callback directly by default. Each backend of this
+repo overrides it: Qt and Textual run the callback on their main thread, and the web runs it
+under the session's lock. See [A button click](#a-button-click).
 
 ### Signals
 
-`Signal.connect` and `Application.connect` read the parameter names of a callback. They
-inject `view`, `main_view`, and `model` keyword arguments when the callback asks for them.
+`Signal.connect` and `Application.connect` read the parameter names of a callback:
+
+- `Signal.connect` injects the `main_view` and `model` keyword arguments when the callback
+  asks for them. The callback gets only as many of the signal's arguments as it takes.
+- `Application.connect` also injects `view`, the view that it connects.
+
 These names are part of the API: keep them exact.
 
 ### View state
@@ -102,11 +123,111 @@ be excluded:
 - Text that the app's code sets, not the user, takes the `UI_TEXT` metadata key. See
   [Saving and loading state](user-guide.md#saving-and-loading-state).
 
+### A button click
+
+An event goes from the toolkit's widget to the view, and a change goes back from the view to
+the toolkit's widget. For example, a page has a `ButtonView` and a `LabelView`. A callback
+connected to the button's `clicked` signal sets the label's `text` to "Done". On every backend,
+one click does this:
+
+![Each backend turns the click into the view's clicked signal. In composeui.core, the signal runs the callback, which sets the label's text, and notify_renderer calls refresh_attribute. Each backend's label handler then shows the value.](images/button-click.svg)
+
+1. **The button's renderer emits the view's signal.** It turns the toolkit's click into the
+   `clicked` signal of the `ButtonView`.
+2. **The signal runs the callback.** `Signal.emit` calls each connected callback, with the
+   arguments that it injects (see [Signals](#signals)).
+3. **The view notifies its renderer.** The callback sets `label.text = "Done"`.
+   `notify_renderer` compares the new value with the old one, and calls
+   `refresh_attribute("text", "Done")` on the label's renderer.
+4. **The renderer shows the value.** The `"text"` handler of the label renderer's
+   `_refresh_dispatcher` changes the toolkit's widget.
+
+Steps 2 and 3 are in `composeui.core`, and are the same on every backend. Steps 1 and 4 are
+the backend's:
+
+- **Qt.** The button is a `QPushButton`. Its Qt `clicked` signal calls
+  `QtButtonRenderer._emit_clicked`, which emits the view's `clicked`. The click and the callback
+  run in Qt's event loop, on the main thread. The label's `"text"` handler calls
+  `QLabel.setText`. `QtWidgetRenderer.refresh_attribute` blocks the widget's signals while it
+  sets the value. So the widget does not send the app's own change back to the view as an edit
+  of the user.
+- **Textual.** The button is a `ComposeButton`, a Textual `Button`. Its `on_button_pressed`
+  emits its own `clicked` signal, which is connected to the view's. The click and the callback
+  run in the app's event loop. The label's `"text"` handler calls `Label.update`.
+  `TextualWidgetRenderer.refresh_attribute` goes through `call_on_main_thread`, which calls the
+  handler directly on the app's own thread. A widget that is not mounted yet, for example on a
+  screen that is not shown, gets its state when it is mounted (`_is_waiting_to_mount`).
+- **The web.** The button is a `<button>` element in the browser. htmx posts the click to the
+  server, and `WebButtonRenderer.dispatch` emits the view's `clicked`. No widget lives between
+  two requests. So the label's `"text"` handler, `_mark_dirty`, changes nothing in the page: it
+  marks the renderer dirty, and the server sends the label's fragment in its response. See
+  [A button click on the web](#a-button-click-on-the-web).
+
+A change can also come from another thread, for example a job's. `call_on_main_thread` hands
+it over:
+
+- **Qt.** It queues the change on Qt's main thread (`_MainThreadInvoker`).
+- **Textual.** It runs the change with `App.call_from_thread`.
+- **The web.** It runs the change under the session's lock. The next response, or the next
+  fetch of `/jobs`, sends the change.
+
 ### The web backend
 
 The web backend renders HTML on the server and updates the page with htmx. Its design
 decisions are in "Design notes for the web backend" in [`ROADMAP.md`](../ROADMAP.md). Read
 them before you change `composeui.webcore`.
+
+- **The id is the rendered object.** The web has no live widget between two requests. A web
+  renderer's rendered object is the id of its HTML fragment, `cui-{id(view)}-{role}`.
+- **One main view per session.** Each browser session has its own main view, in a `WebSession`
+  (`session.py`). `WebApplication.connect` records each connection, and connects it again on the
+  main view of each new session.
+- **Events go in, fragments come out.** An event goes to the server. The response sends back
+  the fragments that the event changed, and htmx swaps them into the page.
+
+### A button click on the web
+
+This is the click of [A button click](#a-button-click) on the web, step by step:
+
+![The browser posts the click. The middleware checks it. The route gives it to the session, which dispatches it to the button's renderer under its lock. The callback changes the label, which marks the label's renderer dirty. The session renders the dirty fragments, and htmx swaps them into the page.](images/web-click.svg)
+
+1. **The browser posts the event.** The button's fragment (`WebButtonRenderer.to_html`) has
+   `hx-post="/widget/{id}"` and `hx-vals` with `event=click`. Its `hx-swap="none"` tells htmx
+   not to swap the button with the response.
+2. **The middleware checks the request.** `create_starlette_app` in `webapplication.py` adds
+   the middleware. `SecurityHeadersMiddleware` (`headers.py`) adds the security headers to
+   every response. `BodySizeLimitMiddleware` (`limits.py`) refuses a body that is too large.
+   `SameOriginMiddleware` (`origin.py`) refuses a request from another origin. Starlette's
+   `SessionMiddleware` reads the signed session cookie.
+3. **The route finds the session.** `widget_event` (`routes.py`) gets the session from the
+   cookie's id. When the session is gone, the response has `HX-Refresh`, and the page reloads
+   with a new session. Otherwise, the route calls `WebSession.handle_event` in a thread: the
+   app's callbacks are synchronous code, and must not block the event loop.
+4. **The session dispatches the event.** `handle_event` finds the renderer by its id in the
+   session's own `renderers`. An id of another session is not found. `_respond` takes the
+   session's lock and opens `collect_dirty()`, a set of dirty renderers for this request. Then
+   it calls `WebButtonRenderer.dispatch`, which refuses the click when the button is disabled.
+5. **The signal runs the callback.** `dispatch` emits `clicked`. The callback sets
+   `label.text = "Done"`.
+6. **The label's renderer becomes dirty.** `notify_renderer`, the `on_setattr` hook of every
+   view field, calls the renderer's `refresh_attribute("text", ...)`. The handler in the
+   `_refresh_dispatcher` of `WebLabelRenderer` is `_mark_dirty`. It only adds the renderer to
+   the dirty set: the renderer renders nothing yet.
+7. **The session renders the dirty fragments.** `_respond` adds the renderers that a thread
+   changed since the last response (`take_pending`) to the dirty ones. `render_dirty` calls
+   `to_html(oob=True)` on each, which adds `hx-swap-oob="true"` to the root element. It drops a
+   fragment that another dirty fragment contains, else htmx would swap it twice.
+8. **The session adds the page's fragments.** When the event changed the main view's title,
+   language, or running jobs, `_respond` adds their fragments too. When the event opened
+   another page, `_respond` also returns the page's address.
+9. **The route responds.** `_widget_response` sends the fragments as HTML. With a new page, it
+   adds `HX-Push-Url`, which puts the address in the browser's history. When the app closed
+   (the Exit action), it drops the session and responds with `HX-Redirect` to `/`.
+10. **htmx swaps the fragments.** htmx puts each `hx-swap-oob` fragment in place of the element
+    with the same id. The label shows "Done". The button stays as it is.
+
+The other routes follow the same steps. `widget_file` gives an upload to the session in place of
+a form. `jobs_poll` runs no event: its response sends the changes that the threads made.
 
 ### Reloading on a change
 
@@ -168,7 +289,8 @@ another process answers with `HX-Refresh`.
 
 ## Add a widget
 
-1. Define the view in `core/view.py`. Set its `_renderer_key`:
+1. Define the view in `core/view.py`. Set its `_renderer_key`, and give it a class docstring:
+   the [widget catalog](#documentation-site) shows its first paragraph.
 
    ```python
    @define_view
@@ -203,6 +325,10 @@ another process answers with `HX-Refresh`.
        def _update_state(view: LabelViewLike, rendered_object: QLabel) -> None:
            view.text = rendered_object.text()
    ```
+
+   A web renderer has no widget to keep. It renders its fragment in `to_html`, and applies the
+   browser's events to the view in `dispatch`. Its handlers mark it dirty (`_mark_dirty`). See
+   [A button click on the web](#a-button-click-on-the-web).
 
 3. Add tests for each backend that exercise the real rendered widgets. See
    [Tests](#tests).
@@ -290,13 +416,22 @@ committed. It needs no Node or npm.
   ignore list. Fix lint properly rather than adding `noqa`, unless it is clearly justified.
 - `mypy` must pass. Fully type-annotate new code: the package ships `py.typed`.
 - Every Python module starts with `from __future__ import annotations`, after its
-  docstring. `make lint` adds it to a new file.
+  docstring. Ruff enforces it (`required-imports`, rule I002), and `make lint` adds it to a
+  new file. The annotations are then strings:
+  - Do not quote them.
+  - Define the views that `attrs` and `cattrs` resolve at module level, not inside a
+    function, so that their field types resolve from the module's globals.
+  - Give a `cattrs` hook its type explicitly, with
+    `CONVERTER.register_structure_hook(cls, func)`, not as a bare decorator, which reads
+    the annotation.
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that isn't `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
+- Match the comment density of the code around: brief docstrings, and comments that explain
+  why.
 
 ### Documentation site
 

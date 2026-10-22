@@ -78,8 +78,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   handler raises `MissingRefreshAttributeFunctionError`).
 - Views are reactive: setting a view attribute pushes the change to its renderer. Don't add
   manual `update()`/`refresh()` calls.
-- `Signal.connect` / `Application.connect` inject `view`, `main_view` and `model` keyword
-  arguments based on the callback's parameter names; keep those names exact.
+- `Signal.connect` injects `main_view` and `model`, and `Application.connect` also `view`, as
+  keyword arguments based on the callback's parameter names; keep those names exact.
 - View state is (de)serialized with `cattrs` (`MainView.save_state` / `load_state`); new view
   fields must remain serializable, or be excluded like `Signal`/`Renderer`/`Validator` fields.
 
