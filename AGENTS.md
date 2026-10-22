@@ -29,7 +29,7 @@ make check   # lint + mypy + translations
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
 make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs `--group docs`)
-make screenshots   # docs/images/<example>-<backend>.png for the examples guide and README (Chromium)
+make screenshots   # docs/images/<example>-<backend>.png for the docs and README (Chromium)
 ```
 
 Run a single test file or test:
@@ -115,6 +115,35 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`. A change of
   the documentation only (`docs/`, Markdown files) runs only the docs build and its lint.
+
+## Documentation
+
+Load the `documentation-style` skill before you write or review documentation: `README.md`,
+`docs/`, docstrings, `ROADMAP.md`, this file, or a skill. It holds the writing rules, which
+document owns what, and the checks.
+
+- **Change the docs in the commit that changes the behavior.** A new view gets a section
+  in `docs/user-guide.md` and a class docstring, which the widget catalog shows. In
+  `ROADMAP.md`, add it to "Already there" and remove its entry. A new example gets its
+  section, its overview row, its contents entry, and its screenshots in
+  `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/`
+  and the docstrings for it, and fix every place.
+- **Keep the path of a new user working:** the README's installation and quickstart, then
+  the user guide's "Core concepts" and "Building views", then "Where to start" in the
+  examples guide. Introduce a name before an example uses it, or link to its section. When
+  the quickstart changes, run `make screenshots EXAMPLES=quickstart`.
+- **Run every code example that you change.** Check each name against `composeui.core`, and
+  run the example with `uv run python` in a scratch directory.
+- **Keep the navigation in step.** The contents lists of the user guide and the examples
+  guide follow their `##` and `###` headings. Keep headings stable and unique: other pages
+  link to them, and anchors work down to `###` only.
+- **Keep the two copies in step.** Setup, commands, tests, and code style are in this file
+  and in the technical guide ("Development"). Change both.
+- **Keep user docs for users.** Internal design decisions go in `ROADMAP.md` or in a code
+  comment, rules for agents here or in a skill. Do not document an example that is not
+  committed.
+- **`make docs` must pass** (warnings are errors) after any change to `docs/` or a
+  docstring.
 
 ## Commits
 
