@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import struct
@@ -200,7 +201,20 @@ def _opened(model: PartsModel, tmp_path: Path) -> None:
     model.open_data(path)
 
 
-@pytest.mark.parametrize("start", [_started, _new, _opened])
+def _opened_with_other_pages(model: PartsModel, tmp_path: Path) -> None:
+    """Open a study's database as another tool may write it: its pages of 8 KiB."""
+    path = tmp_path / "data.sqlite"
+    model.save_data(path)
+    other = sqlite3.connect(path)
+    try:
+        other.execute("PRAGMA page_size = 8192")
+        other.execute("VACUUM")  # rewritten in pages of the new size
+    finally:
+        other.close()
+    model.open_data(path)
+
+
+@pytest.mark.parametrize("start", [_started, _new, _opened, _opened_with_other_pages])
 def test_every_database_keeps_the_models_settings(
     start: Callable[[PartsModel, Path], None], tmp_path: Path
 ) -> None:
@@ -220,6 +234,37 @@ def test_every_database_keeps_the_models_settings(
         # read apart during a write (`SqliteModel.reading`)
         assert tuple(db.execute("PRAGMA journal_mode").fetchone()) == ("wal",)
     model.close()
+
+
+def test_closing_a_model_waits_for_no_write_running() -> None:
+    model = PartsModel()
+    writing, done = threading.Event(), threading.Event()
+
+    def write() -> None:  # as a job's long write, e.g. filling a table
+        with contextlib.suppress(sqlite3.Error), model.parts.connection():
+            writing.set()
+            done.wait(10)
+
+    writer = threading.Thread(target=write)
+    writer.start()
+    assert writing.wait(5)
+    closing = threading.Thread(target=model.close)  # as closing the app does
+    closing.start()
+    closing.join(2)
+    is_closed = not closing.is_alive()
+    done.set()
+    writer.join(5)
+
+    assert is_closed
+
+
+def test_a_closed_model_reads_nothing_more_apart_as_its_connection() -> None:
+    model = PartsModel()
+    model.close()
+
+    for connection in (model.parts.connection, model.parts.reading):
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"), connection():
+            pass
 
 
 def test_a_saved_study_s_data_leaves_no_journal_beside_it(tmp_path: Path) -> None:

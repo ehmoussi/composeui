@@ -2571,7 +2571,8 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         return html_
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if not self.is_enabled:
+        # a scroll only reads: a disabled table still shows the rows scrolled to
+        if not self.is_enabled and event != "scroll":
             super().dispatch(event, form)
         handlers: dict[str, Callable[[Mapping[str, str]], None]] = {
             "search": self._search,

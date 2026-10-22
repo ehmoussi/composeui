@@ -2153,6 +2153,13 @@ def test_ctrl_c_writes_a_large_table_s_selected_row_to_the_clipboard(
     )
     page = context.new_page()
     page.goto("/")
+    page.evaluate("navigator.clipboard.writeText('kept')")  # what the user copied before
+    # no row selected: nothing to copy, the clipboard keeps its text
+    page.get_by_role("button", name="Value").focus()
+    with _posted(page):
+        page.keyboard.press("ControlOrMeta+c")
+    expect(page.locator("[data-copied]")).to_have_text("")
+    assert page.evaluate("navigator.clipboard.readText()") == "kept"
     # the row at position 3 holds 2 * 2, then its half
     row = page.get_by_role("row").filter(has=page.get_by_role("cell", name="4", exact=True))
     with _posted(page):

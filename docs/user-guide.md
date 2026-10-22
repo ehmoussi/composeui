@@ -1100,12 +1100,14 @@ main_view.readings.source = ListSource(
   (in the text columns) and `filters` (as typed, see "Sorting and filtering"). Each new
   setting asks the source for the order once. The view keeps only the ids, in an `array`
   when they are integers (8 bytes each). `ordered` emits once the rows have their new
-  order, e.g. to show `row_count`.
+  order, e.g. to show `row_count` of `total` (the source's rows, before the search and
+  the filters).
 - **A source of 100,000 rows or more** (`DATA_TABLE_JOB_ROWS`) orders its rows in a
   [job](#running-work-in-threads) on Qt and Textual, so the window stays responsive. The
   table shows the old order meanwhile (`is_ordering`). A setting changed while the job
-  runs orders the rows once more when it's over. The web orders them in the request's
-  own thread: the page never freezes.
+  runs orders the rows once more when it's over. The job counts the rows too, when the
+  source changed. The web orders them in the request's own thread: the page never
+  freezes.
 - **The cells** show the values as `column_formats` says, e.g. `".2f"` or `".0%"`: an
   empty cell for None, and an enum by its text.
 - **The selection** is by id: `selected_ids`, which a new order keeps on the rows it
@@ -1177,15 +1179,19 @@ main_view.readings.source = SqliteSource(
 
 - **The columns** are the query's that the table shows, with their types: they sort and
   filter as a `ListSource`'s. Only these columns sort and filter, by name: SQLite takes no
-  column name as a parameter. The filters' values are parameters.
+  column name as a parameter. The filters' values are parameters. Unsorted, the rows come
+  in the order of their ids.
 - **The table's `changed`** reads the rows again, e.g. after a job wrote some.
 - **Index the columns that sort.** Without an index, SQLite reads every row to sort them:
   about a second for a million rows.
 - **The source reads on connections of its own** (`SqliteModel.reading`): the order and
   the cells never wait for each other, nor for a write, e.g. a job writing rows. They
   read the rows committed: the table's `changed` reads them again once a write commits.
-- **The case of a text** is ignored for ASCII letters alone (``COLLATE NOCASE``), where a
-  `ListSource` ignores any case. A `/regex/` filter calls Python on each row.
+- **The case of a text** is ignored as a `ListSource` ignores it, with one difference.
+  Text typed in ASCII alone compares in SQLite (`COLLATE NOCASE`), which an index serves:
+  it doesn't find a cell whose letters fold into it, e.g. "strasse" doesn't find "Straße".
+  Other text calls Python on each row ("École" finds "ÉCOLE"), as a `/regex/` filter does.
+  A text sorts ignoring the case of ASCII letters alone.
 
 [`largetable.py`](../src/examples/largetable.py) writes its readings into SQLite in a job,
 then shows them this way.

@@ -50,17 +50,24 @@ class QDataTableModel(QAbstractTableModel):
     a time. `reset` shows a new order of the rows; `repaint` the same rows, formatted or
     selected again. The rows' headers are their positions, from 1. A selected row has the
     palette's highlight colors.
+
+    Qt asks for each cell's text and colors apart: the model keeps the row it read last,
+    so the view formats each row drawn once, not once a cell and a role.
     """
 
     def __init__(self, table: DataTableLike, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._table = table
+        #: the row read last: its position, its id and its cells
+        self._row: Optional[tuple[int, Any, list[str]]] = None
 
     def reset(self) -> None:
         self.beginResetModel()
+        self._row = None
         self.endResetModel()
 
     def repaint(self) -> None:
+        self._row = None
         if self.rowCount() > 0 and self.columnCount() > 0:
             last = self.index(self.rowCount() - 1, self.columnCount() - 1)
             self.dataChanged.emit(self.index(0, 0), last)
@@ -78,10 +85,12 @@ class QDataTableModel(QAbstractTableModel):
         }
         if not index.isValid() or (role != Qt.ItemDataRole.DisplayRole and role not in looks):
             return None
-        rows = self._table.rows(index.row(), index.row() + 1)
-        if len(rows) == 0:  # rows not shown any longer, the model not reset yet
-            return None
-        row_id, cells = rows[0]
+        if self._row is None or self._row[0] != index.row():
+            rows = self._table.rows(index.row(), index.row() + 1)
+            if len(rows) == 0:  # rows not shown any longer, the model not reset yet
+                return None
+            self._row = (index.row(), *rows[0])
+        _position, row_id, cells = self._row
         if role in looks:
             is_selected = self._table.is_selected(row_id)
             return QApplication.palette().brush(looks[role]) if is_selected else None

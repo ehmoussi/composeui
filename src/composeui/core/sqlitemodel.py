@@ -187,6 +187,22 @@ def _compiled(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern, re.IGNORECASE)
 
 
+def _casefold(value: Any) -> str:
+    """SQL's ``casefold``: a cell's text as Python compares it, ignoring any case."""
+    return "" if value is None else str(value).casefold()
+
+
+def _folded(cell: str, *, is_ascii: bool) -> str:
+    """Get the SQL of `cell`, case-folded by Python unless compared with ASCII text typed.
+
+    SQLite ignores the case of ASCII letters alone: "é" wouldn't find "É". Text typed in
+    ASCII keeps SQLite's comparison, which an index serves, without Python's call per row
+    (3 to 4 times slower). It doesn't find a cell whose letters fold into it: "strasse"
+    doesn't find "Straße", which "Straße" finds.
+    """
+    return cell if is_ascii else f"casefold({cell})"
+
+
 def _regexp(pattern: str, value: Any) -> bool:
     """SQLite's ``REGEXP``: whether `pattern` is found in `value`'s text, ignoring case."""
     return _compiled(pattern).search("" if value is None else str(value)) is not None
@@ -204,9 +220,11 @@ class SqliteSource:
     of its own (`SqliteModel.reading`): the rows committed, never waiting for a write, nor
     the cells for the order a job reads.
 
-    A text sorts and compares ignoring the case of ASCII letters alone (``NOCASE``),
-    where a `ListSource` ignores any case. Equal cells keep the order of their ids. A
-    ``/regex/`` filter calls Python on each row: index the columns that sort instead.
+    A text compares ignoring its case as a `ListSource` does, but text typed in ASCII
+    alone compares in SQLite (see `_folded`). It sorts ignoring the case of ASCII letters
+    alone (``NOCASE``). Equal cells, and the rows unsorted, keep the order of their ids.
+    A ``/regex/`` filter, or a text not in ASCII, calls Python on each row: index the
+    columns that sort instead.
     """
 
     def __init__(
@@ -246,9 +264,15 @@ class SqliteSource:
             for name, column in self._columns.items()
             if column_kind(column.type) is ColumnKind.TEXT
         ]
-        if needle != "" and len(texts) > 0:
+        if needle != "" and len(texts) == 0:
+            conditions.append("0")  # no text column holds it, as a `ListSource` finds
+        elif needle != "":
+            is_ascii = needle.isascii()
+            if not is_ascii:
+                needle = needle.casefold()
+            cells = [_folded(_identifier(name), is_ascii=is_ascii) for name in texts]
             conditions.append(
-                "(" + " OR ".join(f"{_identifier(name)} LIKE ? ESCAPE '\\'" for name in texts) + ")"
+                "(" + " OR ".join(f"{cell} LIKE ? ESCAPE '\\'" for cell in cells) + ")"
             )
             parameters.extend([f"%{_escaped(needle)}%"] * len(texts))
         for name, row_filter in filters.items():
@@ -267,8 +291,12 @@ class SqliteSource:
             # the empty cells last, in both orders
             sql += f" ORDER BY ({name} IS NULL OR {name} = '') ASC, {order}{direction}, "
             sql += self._id
+        else:
+            # by id: else in the order of an index a filter reads by, which no header shows
+            sql += f" ORDER BY {self._id}"
         with self._table.reading() as db:
             db.create_function("regexp", 2, _regexp, deterministic=True)
+            db.create_function("casefold", 1, _casefold, deterministic=True)
             return [row[0] for row in db.execute(sql, parameters)]
 
     def cells(self, ids: Sequence[Any], columns: Sequence[str]) -> dict[Any, list[Any]]:
@@ -312,9 +340,12 @@ class SqliteSource:
         if operator in _LIKES:
             pattern, is_negated = _LIKES[operator]
             negation = "NOT " if is_negated else ""
-            return f"{text} {negation}LIKE ? ESCAPE '\\'", [pattern.format(_escaped(value))]
+            cell = _folded(text, is_ascii=row_filter.typed_ascii)
+            return f"{cell} {negation}LIKE ? ESCAPE '\\'", [pattern.format(_escaped(value))]
         if operator in _TEXT_COMPARISONS:
-            return f"{text} {_TEXT_COMPARISONS[operator]} ? COLLATE NOCASE", [value]
+            collation = " COLLATE NOCASE" if row_filter.typed_ascii else ""
+            cell = _folded(text, is_ascii=row_filter.typed_ascii)
+            return f"{cell} {_TEXT_COMPARISONS[operator]} ?{collation}", [value]
         if operator is FilterOperator.MATCHES:
             return f"regexp(?, {name})", [value.pattern]
         if operator is FilterOperator.RANGE:
@@ -468,9 +499,14 @@ class SqliteModel(Model):
         model's other queries run meanwhile, e.g. a large table's cells while a job orders
         its rows or writes some (`SqliteSource`). In the WAL journal, it reads the rows
         committed, during a write too. A database New or Open replace meanwhile, or the
-        model's `close`, is deleted once the query is over.
+        model's `close`, is deleted once the query is over. Once the model is closed,
+        raises `sqlite3.ProgrammingError`, as `connection()` does: e.g. a web download
+        its session's end cuts short.
         """
         with self._readers_lock:
+            if self._closed:  # its file is gone
+                msg = "Cannot operate on a closed database."
+                raise sqlite3.ProgrammingError(msg)
             database = self._database
             database.readers += 1
         try:
@@ -517,6 +553,7 @@ class SqliteModel(Model):
                 source.backup(db)
             finally:
                 source.close()
+            database.start_journal()  # after the backup: it keeps the file's page size
             db.execute("PRAGMA trusted_schema = OFF")
             deadline = time.monotonic() + self.open_time_limit
             # a true answer interrupts the statement running (`OperationalError`)
@@ -546,13 +583,15 @@ class SqliteModel(Model):
             table.changed.emit()
 
     def close(self) -> None:
-        with self._lock, self._readers_lock:
+        # not the write's turn: closing the app doesn't wait for a job's long write
+        with self._readers_lock:
             self._closed = True
             if self._database.readers == 0:  # else the last query `reading` it closes it
                 self._database.close()
 
     def _new_database(self) -> _Database:
         database = _Database(self.pragmas)
+        database.start_journal()
         db = database.connection
         for table in self._tables:
             db.executescript(table.create)
@@ -606,12 +645,22 @@ class SqliteModel(Model):
 
 
 class _Database:
-    """A connection to a scratch database in a temporary file, deleted with it."""
+    """A connection to a scratch database in a temporary file, deleted with it.
+
+    Its journal is SQLite's default until `start_journal` sets the one of `pragmas`: a
+    backup into a WAL database from one of another page size fails.
+    """
 
     def __init__(self, pragmas: Mapping[str, int | str]) -> None:
-        statements = [_pragma_statement(name, value) for name, value in pragmas.items()]
+        statements = [
+            _pragma_statement(name, value)
+            for name, value in pragmas.items()
+            if name != "journal_mode"
+        ]
         #: the model's `pragmas`, set on each connection: SQLite keeps them per connection
         self.pragma_statements = statements
+        journal = pragmas.get("journal_mode")
+        self._journal = None if journal is None else _pragma_statement("journal_mode", journal)
         fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
         os.close(fd)
         self.path = Path(name)
@@ -624,6 +673,11 @@ class _Database:
         self._finalizer = weakref.finalize(self, _discard, self.connection, self.path)
         #: the queries reading it on connections of their own (`SqliteModel.reading`)
         self.readers = 0
+
+    def start_journal(self) -> None:
+        """Set the journal of the model's `pragmas`, which the file keeps."""
+        if self._journal is not None:
+            self.connection.execute(self._journal)
 
     def close(self) -> None:
         self._finalizer()
