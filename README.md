@@ -87,7 +87,7 @@ class GreetingInputView(InputView):
 @define_view
 class HelloMainView(MainView):
     app_title = "Hello ComposeUI"
-    extension = ".hello"  # of its study files
+    extension = ".hello"  # the file type of its studies, which the File menu saves
 
     greeting: GreetingInputView = Factory(GreetingInputView)
 
