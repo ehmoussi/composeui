@@ -15,9 +15,11 @@ import datetime
 import enum
 import hashlib
 import json
+import logging
 import math
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -82,7 +84,7 @@ from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
 from composeui.webcore.page import JOBS_POLL_MS
-from composeui.webcore.session import WebSession
+from composeui.webcore.session import SessionStore, WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     CHART_MAX_POINTS,
@@ -1950,6 +1952,7 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
             browser.get("/state"),
             browser.get("/static/htmx.min.js"),
             browser.get(icon_address),  # with a policy of its own
+            browser.get("/reload?instance=any"),  # only a `--reload` server's
             browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
 
@@ -2194,31 +2197,134 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
         "sys.argv", ["pipeform", "--backend", "web", "--reload", "-f", str(state_file)]
     )
     polled: list[str | None] = []
+    pages: list[str] = []
+    saved: list[list[str]] = []
 
     def serve(app: str, **kwargs: Any) -> None:
         served.append((app, kwargs))
         polled.append(os.environ.get("WATCHFILES_FORCE_POLLING"))
+        # what uvicorn's reloaded process does with it, without spawning one
+        with _Browser(import_from_string(app)()) as client:
+            pages.append(client.get("/").text)
+        # stopped, as for a change: its session saved, for the next process
+        saved_sessions = Path(os.environ["COMPOSEUI_WEB_SAVED_SESSIONS"])
+        saved.append([path.name for path in saved_sessions.iterdir()])
 
     monkeypatch.setattr("composeui.webcore.webapplication.uvicorn.run", serve)
     # restore the variables `run` sets for the reloaded process
-    monkeypatch.setenv("COMPOSEUI_WEB_ENTRY", "")
+    for variable in (
+        "COMPOSEUI_WEB_ENTRY",
+        "COMPOSEUI_WEB_SAVED_SESSIONS",
+        "COMPOSEUI_WEB_COOKIE_SIGNING",
+    ):
+        monkeypatch.setenv(variable, "")
     monkeypatch.setenv("WATCHFILES_FORCE_POLLING", "")
     monkeypatch.delenv("WATCHFILES_FORCE_POLLING")  # unset, as by default
 
     pipeform.main()
 
-    ((import_string, options),) = served
+    ((_, options),) = served
     assert options["reload"] is True
     assert options["factory"] is True
     # the system reports the changes of the files here, outside a Windows drive on WSL:
     # watchfiles, if installed, waits for them
     assert polled == [polling]
-    # what uvicorn's reloaded process does with it, without spawning one
-    factory = import_from_string(import_string)
-    with _Browser(factory()) as client:
-        page = client.get("/").text
+    (page,) = pages
     assert "<title>Pipe Form</title>" in page
     assert 'value="Main line"' in page
+    assert 'id="cui-reload"' in page  # it reloads once the server restarts
+    assert [len(names) for names in saved] == [1]
+
+
+def _reload_instance(page: str) -> str:
+    """Get the server process a page names in its reload poller."""
+    found = re.search(r'id="cui-reload" hx-get="/reload\?instance=([^"]+)"', page)
+    assert found is not None
+    return found[1]
+
+
+def test_a_reload_server_s_next_process_keeps_the_sessions_and_reloads_their_pages(
+    app: _HelloApp, tmp_path: Path
+) -> None:
+    key = secrets.token_urlsafe(32)
+
+    def serve() -> Starlette:  # a process of a `--reload` server
+        return app.create_starlette_app(saved_sessions=tmp_path, secret_key=key)
+
+    with _Browser(serve()) as before:
+        page = before.get("/").text
+        _type_name(before, app.session_views[0], "Bob")
+        instance = _reload_instance(page)
+        unchanged = before.get(f"/reload?instance={instance}")
+        cookies = before.cookies
+    # leaving the client stopped the server, which saved the session
+    (saved,) = tmp_path.iterdir()
+    with _Browser(serve()) as after:
+        after.cookies = cookies
+        restarted = after.get(f"/reload?instance={instance}")
+        page = after.get("/").text
+        opened = not saved.exists()
+        polled = after.get(f"/reload?instance={_reload_instance(page)}")
+
+    assert unchanged.status_code == 204
+    assert restarted.headers["hx-refresh"] == "true"  # the page reloads, with the new code
+    assert 'value="Bob"' in page
+    assert polled.status_code == 204
+    assert len(app.session_views) == 2  # built again, and opened
+    assert opened
+    assert saved.exists()  # saved again, for the next process
+
+
+def test_a_reload_server_logs_its_pages_asks_only_once_it_restarted(
+    app: _HelloApp,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    access = logging.getLogger("uvicorn.access")
+    monkeypatch.setattr(access, "filters", [])  # none left for the other tests
+    app.create_starlette_app(saved_sessions=tmp_path)  # a process of a `--reload` server
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        # as uvicorn logs each request: client, method, path, HTTP version, status
+        for path, status in [
+            ("/reload?instance=any", 204),  # not restarted
+            ("/reload?instance=any", 200),  # restarted: the page reloads
+            ("/widget/1", 204),
+        ]:
+            access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", "GET", path, "1.1", status)
+
+    assert [record.getMessage() for record in caplog.records] == [
+        '127.0.0.1:50000 - "GET /reload?instance=any HTTP/1.1" 200',
+        '127.0.0.1:50000 - "GET /widget/1 HTTP/1.1" 204',
+    ]
+
+
+def test_another_server_neither_reloads_its_pages_nor_keeps_its_sessions(
+    app: _HelloApp,
+) -> None:
+    with _Browser(app.create_starlette_app()) as browser:
+        page = browser.get("/").text
+        poll = browser.get("/reload?instance=any")
+
+    assert 'id="cui-reload"' not in page
+    assert poll.status_code == 404
+
+
+def test_a_saved_session_opens_only_under_an_id_the_server_makes(
+    app: _HelloApp, tmp_path: Path
+) -> None:
+    saved = tmp_path / "saved"
+    saved.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "study").write_text("{}")
+    sessions: SessionStore = app.create_starlette_app(saved_sessions=saved).state.sessions
+
+    # e.g. a cookie signed with the key, and so trusted: still never a path elsewhere
+    assert sessions.get("../outside") is None
+    assert (outside / "study").exists()
+    assert app.session_views == []
 
 
 class _SlowGreetingApp(_HelloApp):

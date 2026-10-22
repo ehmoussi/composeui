@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import importlib.abc
 import importlib.util
+import logging
 import os
 import secrets
 import sys
+import tempfile
 import types
 from collections import deque
 from contextvars import ContextVar
+from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
 
@@ -38,6 +42,7 @@ from composeui.webcore.routes import (
     icon,
     jobs_poll,
     page,
+    reload_poll,
     state_download,
     state_save,
     state_upload,
@@ -49,7 +54,7 @@ from composeui.webcore.session import SessionStore
 from composeui.webcore.webrenderer import check_routes
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import AsyncIterator, Sequence
 
     from typing_extensions import TypeVarTuple, Unpack
 
@@ -69,6 +74,11 @@ _AttributePath = tuple[str, ...]
 
 #: environment variable naming the program a reloaded server process runs again
 _RELOAD_ENTRY_VARIABLE = "COMPOSEUI_WEB_ENTRY"
+#: environment variables of a ``--reload`` server's processes: the directory where they
+#: leave their sessions to the next, and the key signing the sessions' cookies, which
+#: the next must take too
+_SAVED_SESSIONS_VARIABLE = "COMPOSEUI_WEB_SAVED_SESSIONS"
+_SIGNING_VARIABLE = "COMPOSEUI_WEB_COOKIE_SIGNING"
 #: environment variable telling watchfiles whether to poll the files, rather than wait for
 #: the system to report their changes
 _FORCE_POLLING_VARIABLE = "WATCHFILES_FORCE_POLLING"
@@ -105,11 +115,19 @@ def _resolve(main_view: MainView, path: _AttributePath) -> object:
     return functools.reduce(getattr, path, cast("object", main_view))
 
 
-def create_starlette_app(sessions: SessionStore) -> Starlette:
-    """Create the Starlette app serving one main view per browser session."""
+def create_starlette_app(
+    sessions: SessionStore, *, secret_key: str | None = None, reloading: bool = False
+) -> Starlette:
+    """Create the Starlette app serving one main view per browser session.
+
+    `secret_key` signs the session cookie, a new one by default. A ``--reload`` server's
+    process (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and
+    its pages reload once another process serves (`reload_poll`).
+    """
     app = Starlette(
         routes=[
             Route("/", homepage),
+            Route("/reload", reload_poll),
             Route("/widget/{widget_id}", widget_event, methods=["POST"]),
             Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
             Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
@@ -135,16 +153,64 @@ def create_starlette_app(sessions: SessionStore) -> Starlette:
             # a request another origin sent is refused before it reaches a session
             Middleware(SameOriginMiddleware),
             # A per-process signing key is enough: sessions live in this process only,
-            # so a cookie from before a restart has no session left to point at anyway.
+            # so a cookie from before a restart has no session left to point at anyway;
+            # a `--reload` server's processes share one, as their sessions outlive them.
             # `same_site="lax"`: cross-site POSTs carry no session cookie, a layer under
             # `SameOriginMiddleware`, which also refuses other ports and subdomains.
-            Middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32), same_site="lax"),
+            Middleware(
+                SessionMiddleware,
+                secret_key=secret_key or secrets.token_urlsafe(32),
+                same_site="lax",
+            ),
             # the stylesheet, the scripts and a chart's points shrink several times
             Middleware(GZipMiddleware, minimum_size=1024),
         ],
+        lifespan=_saving(sessions) if reloading else None,
     )
     app.state.sessions = sessions
+    #: this process of a `--reload` server, which its pages name: None for another server
+    app.state.reload_instance = secrets.token_urlsafe(8) if reloading else None
+    if reloading:
+        _hide_reload_polls()
     return app
+
+
+#: the arguments of uvicorn's access log record, in order: the path has its query
+_ACCESS_FIELDS = ("client", "method", "path", "http_version", "status")
+
+
+def _is_logged(record: logging.LogRecord) -> bool:
+    """Tell whether uvicorn logs a request: not a page's ask answered "not restarted".
+
+    Every page asks every second (`reload_poll`), which would flood the access log. The
+    answer that reloads the page stays: once per restart, it shows the page followed.
+    """
+    args = record.args
+    if not isinstance(args, tuple) or len(args) != len(_ACCESS_FIELDS):
+        return True
+    path = str(args[_ACCESS_FIELDS.index("path")])
+    status = args[_ACCESS_FIELDS.index("status")]
+    return path.split("?", maxsplit=1)[0] != "/reload" or status != HTTPStatus.NO_CONTENT
+
+
+def _hide_reload_polls() -> None:
+    """Keep the pages' asks out of uvicorn's access log, once its logging is set up."""
+    access = logging.getLogger("uvicorn.access")
+    if _is_logged not in access.filters:
+        access.addFilter(_is_logged)
+
+
+def _saving(
+    sessions: SessionStore,
+) -> Callable[[Starlette], contextlib.AbstractAsyncContextManager[None]]:
+    """Get a lifespan saving the sessions once the server stops, e.g. for a change."""
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        yield
+        sessions.save_all()
+
+    return lifespan
 
 
 def _has_watchfiles() -> bool:
@@ -209,7 +275,10 @@ def create_reloaded_starlette_app() -> Starlette:
     if len(apps) == 0:
         msg = f"{name} didn't run a WebApplication"
         raise RuntimeError(msg)
-    return apps[0].create_starlette_app()
+    return apps[0].create_starlette_app(
+        saved_sessions=Path(os.environ[_SAVED_SESSIONS_VARIABLE]),
+        secret_key=os.environ[_SIGNING_VARIABLE],
+    )
 
 
 class WebApplication(Application[MainViewT]):
@@ -271,15 +340,25 @@ class WebApplication(Application[MainViewT]):
     def setup_session(self, main_view: MainViewT) -> None:
         """Wire a new session's main view; override to connect app-level behavior."""
 
-    def create_starlette_app(self) -> Starlette:
+    def create_starlette_app(
+        self, *, saved_sessions: Path | None = None, secret_key: str | None = None
+    ) -> Starlette:
         """Create the Starlette app, building a fresh main view for each new session.
 
         A page whose route takes one of the backend's addresses stops it here, before
-        serving, rather than failing every request.
+        serving, rather than failing every request. A ``--reload`` server's process gets
+        `saved_sessions`, the directory where its processes leave their sessions to the
+        next, and `secret_key`, which they all sign the sessions' cookies with.
         """
         check_routes(self.main_view)
+        sessions = SessionStore(
+            self._new_session,
+            ttl=self.session_ttl,
+            max_sessions=self.max_sessions,
+            saved=saved_sessions,
+        )
         return create_starlette_app(
-            SessionStore(self._new_session, ttl=self.session_ttl, max_sessions=self.max_sessions)
+            sessions, secret_key=secret_key, reloading=saved_sessions is not None
         )
 
     def run(self) -> None:
@@ -303,13 +382,17 @@ class WebApplication(Application[MainViewT]):
             and has_change_events(Path.cwd())
         ):
             os.environ[_FORCE_POLLING_VARIABLE] = "false"
-        uvicorn.run(
-            f"{__name__}:{create_reloaded_starlette_app.__name__}",
-            factory=True,
-            reload=True,
-            host=self._args.host,
-            port=self._args.port,
-        )
+        with tempfile.TemporaryDirectory(prefix="composeui-sessions-") as saved_sessions:
+            # for the server's processes, which keep the sessions across its restarts
+            os.environ[_SAVED_SESSIONS_VARIABLE] = saved_sessions
+            os.environ[_SIGNING_VARIABLE] = secrets.token_urlsafe(32)
+            uvicorn.run(
+                f"{__name__}:{create_reloaded_starlette_app.__name__}",
+                factory=True,
+                reload=True,
+                host=self._args.host,
+                port=self._args.port,
+            )
 
     def _new_session(self) -> tuple[MainViewT, Model | None]:
         """Build a new session's main view, wired, and its model."""

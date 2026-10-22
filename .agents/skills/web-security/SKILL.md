@@ -92,7 +92,7 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 | `SameSite=Lax` cookie | `webapplication.py` (`SessionMiddleware`) | Defense in depth: no session cookie on cross-site POSTs. |
 | No state change on GET | `routes.py` | Save and Save As post the page's hidden `cui-save` form to `POST /state/download`, which fires the action, then answers the file. `GET /state` only downloads. |
 | Escaped output | `webrenderer.py`, `page.py` | HTML is built with `markupsafe.Markup`: `Markup(template).format(...)` escapes every argument that isn't `Markup` itself, `hx-vals` JSON included. Markdown renders with `{"html": False}`, its output marked safe. `test_the_web_backend_builds_its_html_with_markup` refuses an HTML f-string or `html.escape` there. |
-| Unguessable cookie | `webapplication.py` | Signed with a per-process `secrets.token_urlsafe(32)` key. Widget ids are `id()`-based and guessable, so they only resolve inside their own session (`SessionStore`). |
+| Unguessable cookie | `webapplication.py` | Signed with a per-process `secrets.token_urlsafe(32)` key; a `--reload` server's processes share one, made by the process `run` starts and passed in their environment, so the sessions they save survive their restarts. Widget ids are `id()`-based and guessable, so they only resolve inside their own session (`SessionStore`). A saved session opens only under an id of the form `SessionStore.create` makes, its directory's name. |
 | Icon files | `routes.py` (`_ICON_HEADERS`) | `default-src 'none'` and `nosniff`: an SVG opened on its own runs no script. |
 
 ## Rules for a change

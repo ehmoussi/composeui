@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import secrets
 import socket
 import struct
 import threading
@@ -79,11 +80,12 @@ class _BrowserHelloApp(HelloApp):
 
 
 @contextlib.contextmanager
-def _serve(app: Starlette) -> Iterator[str]:
-    """Serve `app` on a free local port while the block runs; yield its base url."""
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
+def _serve(app: Starlette, port: int | None = None) -> Iterator[str]:
+    """Serve `app` on `port`, else a free one, while the block runs; yield its base url."""
+    if port is None:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
@@ -555,6 +557,32 @@ def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:
     assert download.suggested_filename.endswith(".hello")
     assert "Alice" in Path(download.path()).read_text()
     expect(name).to_have_value("Alice")
+
+
+def test_a_reload_server_s_page_reloads_on_its_session_once_the_server_restarts(
+    browser: Browser, tmp_path: Path
+) -> None:
+    app = _BrowserHelloApp()
+    key = secrets.token_urlsafe(32)
+
+    def serve(port: int | None = None) -> contextlib.AbstractContextManager[str]:
+        # a process of a `--reload` server
+        return _serve(app.create_starlette_app(saved_sessions=tmp_path, secret_key=key), port)
+
+    with serve() as base_url:
+        context = browser.new_context(base_url=base_url)
+        page = context.new_page()
+        page.goto("/")
+        with _posted(page):
+            page.get_by_label("Name").press_sequentially("Bob")
+    # stopped, e.g. for a change: the page's asks fail meanwhile, and are asked again
+    with serve(urlsplit(base_url).port), page.expect_event("load"):
+        pass  # the next process answers an ask: the page reloads by itself
+
+    # the server's page, the session the previous process left
+    expect(page.get_by_label("Name")).to_have_value("Bob")
+    expect(page.locator("footer")).to_have_text("Hello, Bob!")
+    context.close()
 
 
 def test_a_form_posted_from_another_port_is_refused(page: Page, base_url: str) -> None:

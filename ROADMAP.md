@@ -109,9 +109,9 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 5 — Later, when needed
 
-- **Web: keep sessions across restarts.** Persist each session's `save_state` JSON (a
-  directory, or Redis) and reload it when a cookie for an unknown session arrives; needs a
-  fixed signing key from the environment. Only worth it for a deployed app, which also
+- **Web: keep sessions across restarts.** `--reload` already keeps them, in a scratch
+  directory, with a signing key that lives as long as the server. A deployed app needs a
+  lasting store (a directory, or Redis) and a fixed signing key from the environment, and
   raises multi-process serving (sessions live in one process's memory today).
 - **Web: type-check `static/page.js`.** Add `// @ts-check` and JSDoc types, checked by
   `tsc --noEmit --allowJs` as a CI-only step; start with uPlot's chart options. Only worth

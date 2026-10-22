@@ -223,13 +223,18 @@ How it differs from a desktop window:
   before it reads it.
 - **`--reload` restarts the server when a Python file under the current directory
   changes.** Use it for development. The new server process runs the program again (the
-  script, or the `-m` module) with the same command line, to build its app again. Every
-  restart drops the sessions.
+  script, or the `-m` module) with the same command line, to build its app again. The
+  sessions stay: the stopping process saves each session's study (the view state, and the
+  data of the model), with its study file and language. The next process opens it when
+  the session's browser comes back. The page asks the server every second whether it
+  restarted, and reloads by itself once it did, so it shows the changed code as you left
+  it. When the saved state no longer fits the changed views, the session starts as a new
+  one does.
 - **Pages have their own address.** With a router (see [Pages](#pages)), each page is at
   `/<route>`, and `/` sends the browser to the first page. The toolbar of the pages is in the
   header. When the user changes pages, the browser's history gets the new address. So back,
   forward, bookmarks, and reloads land on that page. A route can't be `icon`, `jobs`,
-  `state`, `static`, or `widget`, because the backend uses these addresses.
+  `reload`, `state`, `static`, or `widget`, because the backend uses these addresses.
 - **Icons** are the image files that actions name (`action.icon = "icons/run.svg"`, the
   path that Qt reads). The backend serves them. An SVG icon is drawn in the color of the
   text, so it follows the light and dark themes: only its shape counts, as with a Lucide or

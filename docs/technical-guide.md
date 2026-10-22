@@ -157,7 +157,14 @@ change only after the app answered or exited, so it never prints over a terminal
 
 The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM). The
 web's `--reload` is uvicorn's, which restarts the server process. The web app only tells
-watchfiles not to poll where the system reports the changes.
+watchfiles not to poll where the system reports the changes. Its sessions outlive the
+processes: the process that `run` starts makes a scratch directory and a key that signs
+the session cookies, and gives both to the server's processes through environment
+variables. Each process saves its sessions as it stops, in its lifespan's end
+(`SessionStore.save_all`, with `save_reloaded_state`). The next opens a session there
+when its cookie comes back, under the same id (`SessionStore._restore`). Its pages ask
+`GET /reload` every second, naming the process that served them (`reload_poller`):
+another process answers with `HX-Refresh`.
 
 ## Add a widget
 

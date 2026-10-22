@@ -91,7 +91,7 @@ from composeui.core.view import (
     walk_tree,
 )
 from composeui.webcore.icons import icon_url
-from composeui.webcore.page import SAVE_FORM_ID, get_page
+from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping
@@ -4314,7 +4314,7 @@ class WebRouterRenderer(WebRenderer[Router]):
 
 
 #: first segments of the backend's own addresses, which no page's address can take
-RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "state", "static", "widget"})
+RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "reload", "state", "static", "widget"})
 
 
 def check_routes(main_view: MainView) -> None:
@@ -4404,7 +4404,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
 
-    def page_html(self) -> str:
+    def page_html(self, reload_instance: str | None = None) -> str:
+        """Get the whole page; with `reload_instance`, it reloads once its server restarts."""
         menus: list[str] = []
         toolbars: list[str] = []
         content: list[str] = []
@@ -4465,7 +4466,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 dialogs_html=self._dialogs_html(),
             ),
             self._view.language,
-            jobs_running=self._view.jobs.is_running,
+            pollers=jobs_poller(is_running=self._view.jobs.is_running)
+            + reload_poller(reload_instance),
             icon=self._app_icon_url(),
         )
 

@@ -3,7 +3,8 @@
 A session is identified by a random id stored in Starlette's signed session cookie.
 Every tab of a browser shares that cookie, so they share one session (and one app
 state), the way two windows on the same document would; different browsers or users
-get their own. State lives in this process only: a restart starts every session over.
+get their own. State lives in this process only: a restart starts every session over,
+except with ``--reload``, whose server keeps them across its restarts (`SessionStore`).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
+from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.renderer import NoRenderedObjectError
 from composeui.core.study import has_data, open_study, save_study
 from composeui.webcore.page import jobs_poller, page_marker
@@ -113,12 +115,23 @@ class WebSession(RenderTarget):
             router.navigate(route)
             return True
 
-    def page_html(self) -> str:
+    def page_html(self, reload_instance: str | None = None) -> str:
+        """Get the whole page; with `reload_instance`, it reloads once its server restarts."""
         with self.lock:
             if not isinstance(self.main_view.renderer, WebMainRenderer):
                 raise NoRenderedObjectError
             self.take_pending()  # the whole page shows them
-            return self.main_view.renderer.page_html()
+            return self.main_view.renderer.page_html(reload_instance)
+
+    def save_to(self, directory: Path) -> None:
+        """Save the session's study, its file and language, for `open_saved` to open."""
+        with self.lock:
+            save_reloaded_state(self.main_view, self.model, directory)
+
+    def open_saved(self, directory: Path) -> None:
+        """Open what `save_to` saved, if it still fits the main view (else it's dropped)."""
+        with self.lock, collect_dirty():  # the whole page is sent next: drop the fragments
+            load_reloaded_state(self.main_view, self.model, directory)
 
     def handle_event(
         self, widget_id: str, event: str, form: Mapping[str, str]
@@ -279,12 +292,20 @@ class WebSession(RenderTarget):
             return jobs_poller(is_running=self.main_view.jobs.is_running) + pending
 
 
+#: a session id, as `SessionStore.create` makes them: also the name of its saved directory
+_SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
+
+
 class SessionStore:
     """The live sessions by id, each dropped once idle for longer than `ttl` seconds.
 
     Expiry is checked whenever the store is used, so an idle server keeps its sessions
     until the next request. A dropped session's `StatusBar` timer may still fire; it
     then clears a message on a tree nothing displays any more, which is harmless.
+
+    With `saved`, a ``--reload`` server's directory, `save_all` saves the live sessions
+    there as the server stops. The server started next opens one there when its browser
+    comes back, under the same id: its cookie, signed with the same key, still names it.
     """
 
     def __init__(
@@ -293,10 +314,12 @@ class SessionStore:
         *,
         ttl: float,
         max_sessions: int,
+        saved: Path | None = None,
     ) -> None:
         self._build_session = build_session
         self._ttl = ttl
         self._max_sessions = max_sessions
+        self._saved = saved
         self._sessions: dict[str, tuple[WebSession, float]] = {}
         #: sessions being built, outside the lock: they count against `max_sessions` too
         self._building = 0
@@ -308,7 +331,7 @@ class SessionStore:
             self._drop_expired()
             entry = self._sessions.get(session_id) if isinstance(session_id, str) else None
             if entry is None:
-                return None
+                return self._restore(session_id)
             session = entry[0]
             self._sessions[session_id] = (session, time.monotonic())
             return session
@@ -335,6 +358,43 @@ class SessionStore:
             with self._lock:
                 self._building -= 1
         return session_id, session
+
+    def save_all(self) -> None:
+        """Save every live session into `saved`, as the server stops; nothing without it."""
+        if self._saved is None:
+            return
+        with self._lock:
+            sessions = [
+                (session_id, session) for session_id, (session, _) in self._sessions.items()
+            ]
+        for session_id, session in sessions:
+            directory = self._saved / session_id
+            directory.mkdir(exist_ok=True)
+            session.save_to(directory)
+
+    def _restore(self, session_id: Any) -> WebSession | None:
+        """Open the session the previous server saved under `session_id`; None if none.
+
+        Called with the lock held. The session is built under it too, unlike `create`'s,
+        so two requests of its browser can't both open it: only a ``--reload`` server,
+        for its developer, saves sessions.
+        """
+        if (
+            self._saved is None
+            or not isinstance(session_id, str)
+            # its directory's name: never a path elsewhere
+            or _SESSION_ID.fullmatch(session_id) is None
+            or len(self._sessions) + self._building >= self._max_sessions
+        ):
+            return None
+        directory = self._saved / session_id
+        if not directory.is_dir():
+            return None
+        session = WebSession(*self._build_session())
+        session.open_saved(directory)
+        shutil.rmtree(directory, ignore_errors=True)
+        self._sessions[session_id] = (session, time.monotonic())
+        return session
 
     def drop(self, session_id: Any) -> None:
         with self._lock:

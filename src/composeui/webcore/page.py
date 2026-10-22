@@ -43,7 +43,7 @@ $icon_link
 $content
 </div>
 $page_marker
-$jobs_poller
+$pollers
 <form id="$save_form" method="post" action="/state/download" hidden></form>
 </body>
 
@@ -98,10 +98,34 @@ def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
     return Markup('<div id="cui-jobs"{}{} hidden></div>').format(poll, swap)
 
 
+#: milliseconds between two asks, in a page of a ``--reload`` server, whether it restarted
+RELOAD_POLL_MS = 1000
+
+
+def reload_poller(instance: str | None) -> Markup:
+    """Get the element asking a ``--reload`` server whether it restarted; none without.
+
+    It asks every `RELOAD_POLL_MS`, naming `instance`, the server's process that served
+    the page. Another process answers with ``HX-Refresh``: the page reloads, with the
+    changed code and its session restored. An ask that fails while the server restarts is
+    asked again.
+    """
+    if instance is None:
+        return Markup()
+    return Markup(
+        '<div id="cui-reload" hx-get="/reload?instance={}" hx-trigger="every {}ms"'
+        ' hx-swap="none" hidden></div>'
+    ).format(instance, RELOAD_POLL_MS)
+
+
 def get_page(
-    title: str, content: Markup, language: str, *, jobs_running: bool, icon: str | None = None
+    title: str, content: Markup, language: str, *, pollers: Markup, icon: str | None = None
 ) -> str:
-    """Get the app's page showing `content`, with the browser tab's `icon` at its address."""
+    """Get the app's page showing `content`, with the browser tab's `icon` at its address.
+
+    `pollers` are the elements asking the server for news: `jobs_poller`'s, and
+    `reload_poller`'s.
+    """
     return _PAGE.substitute(
         {
             "title": escape(title),
@@ -109,7 +133,7 @@ def get_page(
             "content": content,
             "language": escape(language),
             "page_marker": page_marker(language, title),
-            "jobs_poller": jobs_poller(is_running=jobs_running),
+            "pollers": pollers,
             "save_form": SAVE_FORM_ID,
             **_STATIC_URLS,
         }
