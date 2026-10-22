@@ -156,7 +156,8 @@ timer starts once the Textual app is mounted (`mounted_callbacks`). The supervis
 change only after the app answered or exited, so it never prints over a terminal app.
 
 The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM). The
-web's `--reload` is uvicorn's, which restarts the server process.
+web's `--reload` is uvicorn's, which restarts the server process. The web app only tells
+watchfiles not to poll where the system reports the changes.
 
 ## Add a widget
 
