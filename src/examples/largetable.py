@@ -6,6 +6,7 @@ reads only the rows it shows, as the user scrolls. Python holds the shown rows' 
 the readings. A click on a header sorts them, and the table's bar searches and filters
 them; the label says how many rows pass and how long SQLite took. A click selects rows
 (Shift+click a range, on Qt and Textual), and a double click or Enter shows a reading.
+Ctrl+C copies the selected rows; Export CSV writes the rows shown to a file.
 """
 
 from __future__ import annotations

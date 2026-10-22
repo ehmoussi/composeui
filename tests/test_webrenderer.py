@@ -4966,6 +4966,34 @@ def rooms_data_client(rooms_data_views: list[RoomsDataMainView]) -> Iterator[Tes
         yield client
 
 
+def test_a_large_table_s_link_downloads_its_rows_shown_as_csv(
+    rooms_data_views: list[RoomsDataMainView], rooms_data_client: TestClient
+) -> None:
+    page = rooms_data_client.get("/").text
+    (main_view,) = rooms_data_views
+    table_id = _widget_id(main_view.rooms.renderer)
+    address = f"/widget/{table_id}/csv"
+    link = next(
+        attributes
+        for tag, attributes in _element(page, table_id).descendants
+        if tag == "a" and attributes.get("href") == address
+    )
+    assert "download" in link
+    main_view.rooms.filters = {"temperature": ">19"}
+
+    response = rooms_data_client.get(address)
+
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert response.headers["content-disposition"] == 'attachment; filename="table.csv"'
+    assert response.headers["x-frame-options"] == "DENY"  # streamed, still guarded
+    assert response.text.splitlines() == [
+        "Room,Temperature,Occupants",
+        "Kitchen,21.5,2",
+        "Bedroom,19.5,1",
+    ]
+    assert rooms_data_client.get("/widget/nothing/csv").status_code == 404
+
+
 def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
     rooms_data_views: list[RoomsDataMainView], rooms_data_client: TestClient
 ) -> None:

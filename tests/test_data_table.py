@@ -293,6 +293,46 @@ def test_ctrl_c_copies_the_selected_rows_as_shown_tab_separated(
     assert table.selection_text() == "multi line\t2.0\tprobe\t"
 
 
+def test_an_export_gives_the_rows_shown_as_csv_their_values_in_full(
+    table: DataTableView, source: CountingSource, tmp_path: Path
+) -> None:
+    source.records = [
+        Sample('a, "b"', 1.25, Kind.GAUGE, None),
+        Sample("multi\nline", 2.0, note=0.1),
+        Sample("hidden", 3.0),
+        *_samples(DATA_TABLE_WINDOW + 1),
+    ]
+    table.column_formats = {"value": ".1f"}
+    table.filters = {"name": "!hidden"}
+    table.sort_column = "value"
+    reads = len(source.read)
+    chunks = table.csv_chunks()
+    lines = next(chunks).splitlines() + next(chunks).splitlines()
+
+    # a new order once the export started: the export keeps its own
+    table.sort_descending = True
+    lines += "".join(chunks).splitlines()
+
+    assert lines[:8] == [
+        "Name,Value,Kind,Note",
+        "s0000,0.0,gauge,",
+        "s0001,0.25,probe,",
+        "s0002,0.5,probe,",
+        "s0003,0.75,gauge,",
+        "s0004,1.0,probe,",
+        '"a, ""b""",1.25,gauge,',  # quoted; not as `column_formats` shows it
+        "s0005,1.25,probe,",
+    ]
+    assert len(lines) == 1 + DATA_TABLE_WINDOW + 3 + 1  # the line break quoted too
+    assert len(set(lines)) == len(lines)  # each row once
+    assert lines[-1] == f"s{DATA_TABLE_WINDOW:04d},{DATA_TABLE_WINDOW / 4},probe,"
+    assert '"multi\nline",2.0,probe,0.1' in "\n".join(lines)
+    assert all(len(ids) <= DATA_TABLE_WINDOW for ids in source.read[reads:])
+
+    table.export_csv(tmp_path / "rows.csv")  # not in an app: written at once
+    assert (tmp_path / "rows.csv").read_text(encoding="utf-8").startswith("Name,Value,")
+
+
 def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) -> None:
     activated: list[Any] = []
     table.row_activated.connect(activated.append)

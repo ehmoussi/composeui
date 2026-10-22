@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from typing import TYPE_CHECKING
 
 import pytest
@@ -96,6 +97,34 @@ def test_the_label_says_how_many_readings_are_selected_and_which_was_activated(
 
     sensor, site, temperature = table.rows(1, 2)[0][1][:3]
     assert main_view.picked.text == f"{sensor} in {site}: {float(temperature)} °C"
+
+
+def test_an_export_writes_the_rows_shown_in_a_job_the_status_bar_saying_so(
+    main_view: LargeTableMainView, tmp_path: Path
+) -> None:
+    table = main_view.table
+    table.search = "Lyon"
+    table.sort_by("temperature")
+    path = tmp_path / "lyon.csv"
+
+    table.export_csv(path)
+    assert main_view.jobs.is_running
+    main_view.jobs.wait()
+
+    with path.open(encoding="utf-8", newline="") as file:
+        header, *rows = list(csv.reader(file))
+    assert header == ["Sensor", "Site", "Temperature (°C)", "Pressure (kPa)", "Status"]
+    assert len(rows) == table.row_count
+    # in the table's order, each value in full: not as the table formats it
+    shown = table.rows(0, len(rows))
+    assert [row[0] for row in rows] == [cells[0] for _id, cells in shown]
+    assert [float(row[TEMPERATURE]) for row in rows] == _temperatures(main_view)
+    message = f"Exported {table.row_count} rows to lyon.csv."
+    assert main_view.status_bar.message == message
+
+    table.export_csv(tmp_path / "missing" / "lyon.csv")
+    main_view.jobs.wait()
+    assert main_view.status_bar.message.startswith("Can't export to lyon.csv: [Errno 2]")
 
 
 def test_a_study_saves_the_search_without_the_readings(

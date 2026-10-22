@@ -2738,3 +2738,32 @@ async def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard() ->
         await pilot.pause()
         # the value, then its half
         assert app.clipboard == "2\t0.5\n6\t1.5"
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_s_key_exports_its_rows_as_csv(tmp_path: Path) -> None:
+    view = RoomsDataMainView()
+    view.rooms.sort_column = "temperature"
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        app.query_one(ComposeDataTable).focus()
+        await pilot.pause()
+        footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
+        assert "Export CSV" in footer
+
+        await pilot.press("e")
+        await pilot.pause()
+        assert [type(screen).__name__ for screen in app.screen_stack] == ["Screen", "FileSave"]
+        app.screen.dismiss(tmp_path / "rooms")  # as the dialog's Save button does
+        await pilot.pause()
+
+    assert (tmp_path / "rooms.csv").read_text(encoding="utf-8").splitlines() == [
+        "Room,Temperature,Occupants",
+        "Hall,18.0,",
+        "Bedroom,19.5,1",
+        "Kitchen,21.5,2",
+    ]

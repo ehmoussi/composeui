@@ -1108,6 +1108,11 @@ main_view.readings.source = ListSource(
 - **Ctrl+C** copies the selected rows, in their order, as tab-separated text that a
   spreadsheet takes: a line per row, the cells as shown, without the headers
   (`selection_text`). The rows are read from the source a window at a time.
+- **Export CSV** writes the rows shown, in their order, to a CSV file in UTF-8: the
+  headers, then each value in full, not as `column_formats` shows it (`export_csv`). In
+  an app, a job writes the file, a window of rows at a time, and the status bar says when
+  it's done. A new order meanwhile doesn't change the file. `csv_chunks` gives the same
+  text in pieces.
 
 The study saves the settings and `selected_ids`, never the rows or the source: the app
 gives the view its source again, e.g. from its command line or its model.
@@ -1118,17 +1123,20 @@ order (`sort_by`). The source orders the rows once for each click.
 - **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
   starts with its position. The header shows Qt's sort indicator. A selected row has the
   highlight colors. Shift+click selects the rows from the one clicked last; Space
-  selects the current row, and Enter activates it.
+  selects the current row, and Enter activates it. The table's context menu has
+  "Export CSV…", which asks where to save the file.
 - **Textual** draws the headers on the first line, then the lines on screen alone. A
   cursor marks a row: the arrow keys, Page Up, Page Down, Home and End move it. Space
   selects its row, Shift+Space and Shift+click a range, and Enter or a double click
-  activates it. The sorted column's header ends with ▲ or ▼.
+  activates it. The sorted column's header ends with ▲ or ▼. The key `e` asks where to
+  export the rows as CSV.
 - **The web** scrolls the rows in a frame, and draws only those around the view: once
   the user stops scrolling, the page asks for the rows shown. Past 400,000 rows, the
   scroll bar keeps the height of 400,000, and its position maps to a row by its ratio.
   Each header is a button, with `aria-sort`: a sort scrolls back to the top. A click or
   Enter on a row selects it (`aria-selected`, or `aria-current` for one row at most). The
-  web selects no range and activates no row.
+  web selects no range and activates no row. The "Export CSV" link under the frame
+  downloads the rows as `table.csv`: the server streams them, a window at a time.
 
 Name the columns the user filters in `filterable_columns`, e.g.
 `child(DataTableView, filterable_columns=["sensor", "temperature"])`. The table then shows

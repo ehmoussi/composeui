@@ -2686,3 +2686,31 @@ def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard(qtbot: QtB
 
     # in the table's order: the value, then its half
     assert QApplication.clipboard().text() == "2\t0.5\n6\t1.5"
+
+
+def test_a_large_table_s_context_menu_exports_its_rows_as_csv(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = RoomsDataMainView()
+    view.render(RendererType.QT)
+    box = _widget(view.rooms)
+    assert isinstance(box, QDataFilterTable)
+    qtbot.addWidget(_widget(view))
+    view.rooms.filters = {"temperature": ">19"}
+    asked: list[tuple[str, str, str]] = []
+
+    def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
+        asked.append((caption, name, filters))
+        return str(tmp_path / "rooms"), filters
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    (action,) = (action for action in box.table.actions() if action.text() == "Export CSV…")
+
+    action.trigger()
+
+    assert asked == [("Export CSV", "table.csv", "CSV (*.csv)")]
+    assert (tmp_path / "rooms.csv").read_text(encoding="utf-8").splitlines() == [
+        "Room,Temperature,Occupants",
+        "Kitchen,21.5,2",
+        "Bedroom,19.5,1",
+    ]
