@@ -48,6 +48,7 @@ and what each backend shows. To install ComposeUI and write a first window, read
   - [Sorting and filtering](#sorting-and-filtering)
   - [Widgets in cells](#widgets-in-cells)
   - [How cells and headers look](#how-cells-and-headers-look)
+- [A large table](#a-large-table)
 - [A list of views](#a-list-of-views)
 - [Charts](#charts)
   - [Kinds of chart](#kinds-of-chart)
@@ -1071,6 +1072,50 @@ What each backend shows:
 
 The Measurements tab of [`pipechart.py`](../src/examples/pipechart.py) uses each of these
 looks.
+
+## A large table
+
+A `DataTableView` shows rows that a source keeps, such as a million results of a study.
+It never reads all of them: it reads the rows it shows, a window at a time. A
+`TableView` keeps every row as text, which suits a small table that the user edits.
+
+```python
+from composeui.core.view import DataTableView, ListSource, T, child
+
+readings: DataTableView = child(DataTableView, column_formats={"temperature": ".2f"})
+
+# once the app has the records
+main_view.readings.source = ListSource(
+    Reading, {"sensor": T("Sensor"), "temperature": T("Temperature")}, records
+)
+```
+
+- **The source** is a `TableSource`: its `columns`, `ordered_ids` (the ids of the rows
+  shown, in order), `cells` (the values of some rows) and a `changed` signal. A
+  `ListSource` keeps `attrs` records in memory. Another source can keep the rows in a
+  database, and sort and filter them there.
+- **The settings** name the source's columns: `sort_column`, `sort_descending`, `search`
+  (in the text columns) and `filters` (as typed, see "Sorting and filtering"). Each new
+  setting asks the source for the order once. The view keeps only the ids, in an `array`
+  when they are integers (8 bytes each).
+- **The cells** show the values as `column_formats` says, e.g. `".2f"` or `".0%"`: an
+  empty cell for None, and an enum by its text.
+- **The selection** is by id: `selected_ids`, which a new order keeps on the rows it
+  still shows.
+
+The study saves the settings and `selected_ids`, never the rows or the source: the app
+gives the view its source again, e.g. from its command line or its model.
+
+- **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
+  starts with its position.
+- **Textual** draws the headers on the first line, then the lines on screen alone. The
+  arrow keys, Page Up, Page Down, Home and End scroll.
+- **The web** shows the rows by pages of 50, with Previous and Next buttons and the count
+  ("Rows 51 to 100 of 1,000,000"). Turning the page swaps only the page's rows.
+
+The user doesn't sort, filter or select the rows in the table yet: the app sets the
+settings, e.g. from a form. [`largetable.py`](../src/examples/largetable.py) shows a
+million rows this way.
 
 ## A list of views
 

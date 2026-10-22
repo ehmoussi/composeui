@@ -1,25 +1,33 @@
-"""Tables whose cells the user edits, shared by the backend tests of editable cells."""
+"""Tables shared by the backend tests: cells the user edits, and a large table's rows."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
 
+from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
     CellStyle,
     CellWidget,
     Column,
+    DataTableView,
     HeaderGroup,
     MainView,
     NodeMark,
     RecordTableView,
+    SourceColumn,
     T,
     TableView,
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from composeui.core.view import Filter, Sort
 
 
 @define_view
@@ -161,3 +169,38 @@ class StyledTablesMainView(MainView):
         self.numbers.headers = ["Value"]
         self.numbers.row_headers = ["Number of calls", "Time (s)"]
         self.numbers.rows = [["2500"], ["3.2"]]
+
+
+class MillionSource:
+    """A million rows (`count`), as a database would give them: an integer id each.
+
+    It records the ids whose cells a table reads (`read`).
+    """
+
+    columns = (SourceColumn("value", "Value", int), SourceColumn("half", "Half", float))
+
+    def __init__(self) -> None:
+        self.changed = SignalNoArgs()
+        self.count = 1_000_000
+        self.read: list[int] = []
+
+    def ordered_ids(
+        self, _sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
+    ) -> range:
+        return range(self.count)
+
+    def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[float]]:
+        self.read.extend(ids)
+        return {row_id: [row_id * 2, row_id / 2] for row_id in ids if row_id < self.count}
+
+
+@define_view
+class MillionRowsMainView(MainView):
+    app_title = "Million"
+    extension = ".million"
+
+    table: DataTableView = child(DataTableView, column_formats={"half": ".1f"})
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.table.source = MillionSource()

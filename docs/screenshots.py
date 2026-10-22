@@ -14,6 +14,7 @@ chromium` once.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import contextlib
 import datetime
@@ -39,6 +40,7 @@ from composeui.textualcore.textualapplication import TextualApplication, Textual
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from examples import (
     batman,
+    largetable,
     markdownviewer,
     pipecatalogue,
     pipechart,
@@ -150,6 +152,14 @@ def _taskview(main_view: Any, _model: Optional[Model]) -> None:
         main_view.jobs.wait(timeout=30)
 
 
+def _largetable(main_view: Any, _model: Optional[Model]) -> None:
+    main_view.apply_arguments(argparse.Namespace(rows=1_000_000))
+    form = main_view.form
+    form.descending.is_checked = True
+    form.sort.value = "temperature"
+    form.sort.value_changed.emit("temperature")
+
+
 def _markdownviewer(main_view: Any, _model: Optional[Model]) -> None:
     readme = ROOT / "README.md"
     main_view.markdown_file.text = "README.md"
@@ -220,6 +230,7 @@ def _examples() -> list[Example]:
         ),
         Example("taskview", taskview.TaskMainView, _taskview),
         Example("batman", batman.BatmanMainView),
+        Example("largetable", largetable.LargeTableMainView, _largetable),
         Example("markdownviewer", markdownviewer.MarkdownViewerMainView, _markdownviewer),
         Example(
             "webhello",
