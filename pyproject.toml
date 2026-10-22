@@ -38,15 +38,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-pyside6 = [
-    "pyqtgraph>=0.13.7",
-    "pyside6>=6.10.3",
-]
-tui = [
-    "textual>=8.2.8",
-    "textual-fspicker>=0.6.0",
-    "textual-plotext>=1.0.1",
-]
+pyside6 = ["pyqtgraph>=0.13.7", "pyside6>=6.10.3"]
+tui = ["textual>=8.2.8", "textual-fspicker>=0.6.0", "textual-plotext>=1.0.1"]
 web = [
     "itsdangerous>=2.2.0",
     "markdown-it-py>=3.0.0",
@@ -55,12 +48,8 @@ web = [
     "starlette>=0.49.3",
     "uvicorn>=0.39.0",
 ]
-report = [
-    "matplotlib>=3.9",
-]
-reload = [
-    "watchfiles>=1.1.1",
-]
+report = ["matplotlib>=3.9"]
+reload = ["watchfiles>=1.1.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -69,9 +58,7 @@ where = ["src"]
 include = ["composeui*"]
 
 [dependency-groups]
-browser = [
-    "playwright>=1.60.0",
-]
+browser = ["playwright>=1.60.0"]
 dev = [
     "httpx>=0.28.1",
     "mypy>=1.19.1",
@@ -83,11 +70,12 @@ dev = [
     "textual-dev>=1.8.0",
     "watchfiles>=1.1.1",
 ]
-docs = [
-    "furo>=2024.8.6",
-    "myst-parser>=3.0.1",
-    "sphinx>=7.4.7",
-]
+docs = ["furo>=2024.8.6", "myst-parser>=3.0.1", "sphinx>=7.4.7"]
+
+
+[tool.uv]
+constraint-dependencies = ["certifi>=2026.10.19"]
+
 
 [[tool.mypy.overrides]]
 # pyqtgraph ships no type hints: the chart widget is typed at its edges
