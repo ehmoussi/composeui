@@ -382,10 +382,13 @@ def run_reloading(
             child = subprocess.Popen(command, env=env)  # noqa: S603
             for changed in changes:
                 if len(changed) > 0:
+                    in_place = _reload_in_place(child, changed, Path(state_directory))
+                    if not in_place:
+                        _stop(child)
+                    # once the app exited, if it did: a terminal app draws over the terminal
                     names = ", ".join(sorted(os.path.relpath(p, directory) for p in changed))
                     LOGGER.info("Reloading: %s changed", names)
-                    if not _reload_in_place(child, changed, Path(state_directory)):
-                        _stop(child)
+                    if not in_place:
                         child = subprocess.Popen(command, env=env)  # noqa: S603
                     continue
                 code = None if child is None else child.poll()

@@ -121,11 +121,13 @@ browser gets its own copy of it.
 
 ### Reloading the app on a change
 
-Use `--reload` for development, on Qt or the web: the app runs the changed code when a
+Use `--reload` for development, on every backend: the app runs the changed code when a
 Python file under the current directory changes. The web restarts its server (see
-[Web backend](#web-backend)). Qt does not open a window in the process that you start.
-That process runs the program again in a child process, with the same command line, and
-the child shows the window:
+[Web backend](#web-backend)). On Qt and Textual, the process that you start does not show
+the app. That process runs the program again in a child process, with the same command
+line, and the child shows the app.
+
+On Qt:
 
 - **On a change of the app's code,** the window stays open, at its place and size. The app
   saves the study (the view state, and the data of the model). Then it runs the program
@@ -153,13 +155,16 @@ an instrument's connection, can't: the new model fails to open it while the prev
 holds it. Then every change fails as the changed code does, and the window keeps the
 previous code. For such a model, start the app again yourself after a change.
 
+On Textual, the app saves the study and exits on every change, and a new child process
+starts and opens the study. So the terminal shows the app again as you left it, with the
+same study file and language. Quit the app, for example with Ctrl+Q, to end the program.
+
 The program runs again on every change, so code that it runs at the start, such as a
 log's set-up, runs again too. Start the program as a script or with `-m`, for example
 `uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
 (`watchfiles`), the system reports the changes. Without it, the backends check the files
-at a fixed interval. Qt also checks them for a project on a Windows drive under WSL
-(`/mnt/c/...`), as the system does not report those changes. Textual does not have
-`--reload`.
+at a fixed interval. They also check them for a project on a Windows drive under WSL
+(`/mnt/c/...`), as the system does not report those changes.
 
 ## Web backend
 

@@ -446,6 +446,73 @@ def test_a_qt_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> Non
     ]
 
 
+#: a Textual app logging its process and what its main view shows. The first run changes
+#: the state once mounted, then waits for a change; the next exits once mounted
+_TEXTUAL_APP = textwrap.dedent(
+    """
+    import os, pathlib
+    import attrs
+    from composeui.core.view import IntInputView, MainView, define_view
+    from composeui.textualcore.textualapplication import TextualApplication
+
+    @define_view
+    class CountMainView(MainView):
+        count: IntInputView = attrs.Factory(IntInputView)
+
+    class LoggingApplication(TextualApplication):
+        def render(self, renderer_type):
+            super().render(renderer_type)
+            main_view = self.main_view
+            app = main_view.renderer.app
+            fields = (os.getpid(), main_view.count.value, main_view.language)
+            with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as log:
+                log.write("|".join(map(str, fields)) + "\\n")
+            if main_view.count.value is None:
+                def change():
+                    main_view.count.value = 7
+                    main_view.set_language("fr")
+                app.mounted_callbacks.append(change)
+            else:
+                app.mounted_callbacks.append(app.exit)
+
+    LoggingApplication(build_main_view=CountMainView).run()
+    """
+)
+
+
+def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("textual")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_TEXTUAL_APP)
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--reload"],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            # no terminal here
+            "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
+            "RUNS_LOG": str(log),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for(lambda: _lines(log) == 1)
+        with script.open("a") as file:
+            file.write("# changed\n")
+        assert program.wait(timeout=_TIMEOUT) == 0
+    finally:
+        _stop(program)
+
+    first, second = (line.split("|") for line in log.read_text().splitlines())
+    assert first[1:] == ["None", "en"]
+    assert second[0] != first[0]  # a new process
+    assert second[1:] == ["7", "fr"]  # the state, and the language, the first left
+
+
 def test_a_supervisor_told_to_stop_stops_its_app(tmp_path: Path) -> None:
     pid_file = tmp_path / "app.pid"
     app = (
