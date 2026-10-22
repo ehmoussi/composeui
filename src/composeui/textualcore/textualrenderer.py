@@ -32,6 +32,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    DataTableByPosition,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -1528,20 +1529,23 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         if self._rendered_object is None:
             self._rendered_object = ComposeDataFilterTable(self._view)
             table, bar = self._rendered_object.table, self._rendered_object.bar
-            table.header_clicked.connect(self._sort_by)
-            table.row_clicked.connect(self._select)
+            columns = DataTableByPosition(self._view)
+            table.header_clicked.connect(columns.sort_by)
+            table.row_clicked.connect(
+                lambda position, is_extended: columns.select(position, is_extended=is_extended)
+            )
             table.row_activated.connect(self._view.activate_at)
             table.copy_requested.connect(self._copy)
             table.export_path_chosen.connect(self._view.export_csv)
-            bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
-            bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
-                self._name(column), is_pattern=is_pattern
+            bar.check = columns.filter_error
+            bar.placeholder = lambda column, is_pattern: columns.filter_placeholder(
+                column, is_pattern=is_pattern
             )
-            bar.takes_pattern = lambda column: self._view.filter_takes_pattern(self._name(column))
+            bar.takes_pattern = columns.filter_takes_pattern
             bar.search_edited.connect(self._update_search)
-            bar.filter_added.connect(self._add_filter)
-            bar.filter_removed.connect(self._remove_filter)
-            bar.filters_cleared.connect(self._clear_filters)
+            bar.filter_added.connect(columns.add_filter)
+            bar.filter_removed.connect(columns.remove_filter)
+            bar.filters_cleared.connect(columns.clear_filters)
 
     @classmethod
     def _refresh_source(
@@ -1557,10 +1561,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
     ) -> None:
         """Show a new order of the rows: the sort mark, the count, and no row if none."""
-        names = view.column_names
-        sort = None
-        if view.sort_column in names:
-            sort = (names.index(view.sort_column), view.sort_descending)
+        sort = DataTableByPosition(view).sort
         rendered_object.table.set_sort(sort)
         rendered_object.table.reset()
         rendered_object.bar.set_count(view.count_text)
@@ -1597,8 +1598,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
     def _refresh_filterable_columns(
         view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: list[str]
     ) -> None:
-        names = view.column_names
-        columns = [(names.index(name), view.header(name)) for name in names if name in value]
+        columns = DataTableByPosition(view).bar_columns(value)
         rendered_object.bar.set_columns(columns)
         rendered_object.bar.display = len(columns) > 0
 
@@ -1612,50 +1612,16 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
     def _refresh_filters(
         view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
     ) -> None:
-        names = view.column_names
-        rendered_object.bar.set_filters(
-            [
-                (names.index(name), view.filter_chip(name), value[name], view.header(name))
-                for name in names
-                if name in value
-            ]
-        )
-
-    def _select(self, position: int, is_extended: bool) -> None:
-        if is_extended:
-            self._view.extend_to(position)
-        else:
-            self._view.select_at(position)
+        rendered_object.bar.set_filters(DataTableByPosition(view).chips(value))
 
     def _copy(self) -> None:
         app = self._get_app()
         if app is not None:
             app.copy_to_clipboard(self._view.selection_text())
 
-    def _name(self, column: int) -> str:
-        """Get the name of the source's column at `column`, as the bar and the header know it."""
-        return self._view.column_names[column]
-
     def _update_search(self, text: str) -> None:
         with self.stop_refresh():
             self._view.search = text
-
-    def _add_filter(self, column: int, text: str) -> None:
-        self._view.filters = {**self._view.filters, self._name(column): text}
-
-    def _remove_filter(self, column: int) -> None:
-        name = self._name(column)
-        self._view.filters = {
-            other: text for other, text in self._view.filters.items() if other != name
-        }
-
-    def _clear_filters(self) -> None:
-        self._view.filters = {}
-
-    def _sort_by(self, column: int) -> None:
-        names = self._view.column_names
-        if column < len(names):
-            self._view.sort_by(names[column])
 
     @staticmethod
     def _repaint(

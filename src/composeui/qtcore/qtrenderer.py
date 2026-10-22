@@ -64,6 +64,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    DataTableByPosition,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -1286,22 +1287,25 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         if self._rendered_object is None:
             self._rendered_object = QDataFilterTable(self._view)
             table, bar = self._rendered_object.table, self._rendered_object.bar
-            table.header_clicked.connect(self._sort_by)
-            table.row_clicked.connect(self._select)
+            columns = DataTableByPosition(self._view)
+            table.header_clicked.connect(columns.sort_by)
+            table.row_clicked.connect(
+                lambda position, is_extended: columns.select(position, is_extended=is_extended)
+            )
             table.row_activated.connect(self._view.activate_at)
             table.copy_requested.connect(
                 lambda: QApplication.clipboard().setText(self._view.selection_text())
             )
             table.export_requested.connect(self._export)
-            bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
-            bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
-                self._name(column), is_pattern=is_pattern
+            bar.check = columns.filter_error
+            bar.placeholder = lambda column, is_pattern: columns.filter_placeholder(
+                column, is_pattern=is_pattern
             )
-            bar.takes_pattern = lambda column: self._view.filter_takes_pattern(self._name(column))
+            bar.takes_pattern = columns.filter_takes_pattern
             bar.search_edited.connect(self._update_search)
-            bar.filter_added.connect(self._add_filter)
-            bar.filter_removed.connect(self._remove_filter)
-            bar.filters_cleared.connect(self._clear_filters)
+            bar.filter_added.connect(columns.add_filter)
+            bar.filter_removed.connect(columns.remove_filter)
+            bar.filters_cleared.connect(columns.clear_filters)
             self.refresh()
 
     @classmethod
@@ -1318,10 +1322,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         """Show a new order of the rows: the sort indicator, the count, and no row if none."""
         table = rendered_object.table
         table.data_model.reset()
-        names = view.column_names
-        sort = None
-        if view.sort_column in names:
-            sort = (names.index(view.sort_column), view.sort_descending)
+        sort = DataTableByPosition(view).sort
         table.set_sort_indicator(sort)
         rendered_object.bar.set_count(view.count_text)
         rendered_object.empty.setVisible(view.row_count == 0 and view.count_text != "")
@@ -1369,8 +1370,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     def _refresh_filterable_columns(
         view: DataTableViewLike, rendered_object: QDataFilterTable, value: list[str]
     ) -> None:
-        names = view.column_names
-        columns = [(names.index(name), view.header(name)) for name in names if name in value]
+        columns = DataTableByPosition(view).bar_columns(value)
         rendered_object.bar.set_columns(columns)
         rendered_object.bar.setVisible(len(columns) > 0)
 
@@ -1384,45 +1384,11 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     def _refresh_filters(
         view: DataTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
     ) -> None:
-        names = view.column_names
-        rendered_object.bar.set_filters(
-            [
-                (names.index(name), view.filter_chip(name), value[name], view.header(name))
-                for name in names
-                if name in value
-            ]
-        )
-
-    def _select(self, position: int, is_extended: bool) -> None:
-        if is_extended:
-            self._view.extend_to(position)
-        else:
-            self._view.select_at(position)
-
-    def _name(self, column: int) -> str:
-        """Get the name of the source's column at `column`, as the bar and the header know it."""
-        return self._view.column_names[column]
+        rendered_object.bar.set_filters(DataTableByPosition(view).chips(value))
 
     def _update_search(self, text: str) -> None:
         with self.stop_refresh():
             self._view.search = text
-
-    def _add_filter(self, column: int, text: str) -> None:
-        self._view.filters = {**self._view.filters, self._name(column): text}
-
-    def _remove_filter(self, column: int) -> None:
-        name = self._name(column)
-        self._view.filters = {
-            other: text for other, text in self._view.filters.items() if other != name
-        }
-
-    def _clear_filters(self) -> None:
-        self._view.filters = {}
-
-    def _sort_by(self, column: int) -> None:
-        names = self._view.column_names
-        if column < len(names):
-            self._view.sort_by(names[column])
 
     @staticmethod
     def _repaint(_view: DataTableViewLike, rendered_object: QDataFilterTable, _value: Any) -> None:
