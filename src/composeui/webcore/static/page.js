@@ -960,6 +960,21 @@ document.addEventListener("scroll", function (event) {
   clearTimeout(frame.windowTimer);
   frame.windowTimer = setTimeout(function () { fetchWindow(frame); }, WINDOW_SCROLL_MS);
 }, true);
+/* Ctrl+C in a large table's frame copies its selected rows, unless the user selected text
+   there, which the browser copies: the server answers them in the hidden element posting
+   the copy, which the page writes to the clipboard once swapped in */
+document.addEventListener("copy", function (event) {
+  var frame = event.target instanceof Element ? event.target.closest("[data-virtual-scroll]") : null;
+  if (frame === null || !document.getSelection().isCollapsed) return;
+  event.preventDefault();
+  dispatch(frame.parentElement.querySelector("[data-copied]"), "copy-rows");
+});
+document.addEventListener("htmx:load", function (event) {
+  var copied = event.detail.elt;
+  if (copied.matches("[data-copied]") && copied.textContent !== "") {
+    navigator.clipboard.writeText(copied.textContent);
+  }
+});
 /* neither bubbles */
 document.addEventListener("beforetoggle", placeHelp, true);
 document.addEventListener("toggle", placeHelp, true);

@@ -12,7 +12,7 @@ from qtpy.QtCore import (
     Qt,
     Signal,
 )
-from qtpy.QtGui import QPalette
+from qtpy.QtGui import QKeySequence, QPalette
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -108,12 +108,14 @@ class QDataTableView(QTableView):
 
     The table selects no row itself: `row_clicked` emits the position the user clicked,
     or the current one on Space, and whether Shift extends the selection to it;
-    `row_activated` emits it on a double click, Enter or Return.
+    `row_activated` emits it on a double click, Enter or Return. `copy_requested` emits
+    on the platform's Copy shortcut (Ctrl+C).
     """
 
     header_clicked = Signal(int)
     row_clicked = Signal(int, bool)
     row_activated = Signal(int)
+    copy_requested = Signal()
 
     def __init__(self, table: DataTableLike) -> None:
         super().__init__()
@@ -138,7 +140,9 @@ class QDataTableView(QTableView):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         current = self.currentIndex()
-        if current.isValid() and event.key() == Qt.Key.Key_Space:
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self.copy_requested.emit()
+        elif current.isValid() and event.key() == Qt.Key.Key_Space:
             is_extended = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             self.row_clicked.emit(current.row(), is_extended)
         elif current.isValid() and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):

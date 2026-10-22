@@ -15,6 +15,7 @@ from qtpy.QtGui import (
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractSpinBox,
+    QApplication,
     QCheckBox,
     QDockWidget,
     QFileDialog,
@@ -1236,6 +1237,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_takes_pattern(self, column: str) -> bool: ...
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
+    def selection_text(self) -> str: ...
 
 
 class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable]):
@@ -1247,6 +1249,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
 
     Its filter bar (`QTableFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
+    Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`).
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1278,6 +1281,9 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
             table.header_clicked.connect(self._sort_by)
             table.row_clicked.connect(self._select)
             table.row_activated.connect(self._view.activate_at)
+            table.copy_requested.connect(
+                lambda: QApplication.clipboard().setText(self._view.selection_text())
+            )
             bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 self._name(column), is_pattern=is_pattern

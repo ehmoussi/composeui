@@ -5002,3 +5002,20 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
 
     post(event="remove_filter", column="1")
     assert (main_view.rooms.filters, main_view.rooms.row_count) == ({}, 3)
+
+
+def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
+    million_views: list[MillionRowsMainView], million_client: TestClient
+) -> None:
+    page = million_client.get("/").text
+    (main_view,) = million_views
+    table_id = _widget_id(main_view.table.renderer)
+    assert _element(page, f"{table_id}-copied").text == ""
+    main_view.table.selection_mode = SelectionMode.MULTIPLE
+    main_view.table.selected_ids = [3, 1]
+
+    response = million_client.post(f"/widget/{table_id}", data={"event": "copy"})
+
+    copied = _swapped(response.text, f"{table_id}-copied")
+    assert copied.text == "2\t0.5\n6\t1.5"  # in the table's order
+    assert copied.attributes.get("hx-trigger") == "copy-rows"  # the next copy posts again

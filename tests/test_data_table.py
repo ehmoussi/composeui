@@ -271,6 +271,28 @@ def test_a_shift_click_adds_the_rows_from_the_one_selected_last(table: DataTable
     assert table.selected_ids == [7]
 
 
+def test_ctrl_c_copies_the_selected_rows_as_shown_tab_separated(
+    table: DataTableView, source: CountingSource
+) -> None:
+    assert table.selection_text() == ""
+    source.records = [
+        Sample("a\tb", 1.25, Kind.GAUGE, None),
+        Sample("multi\nline", 2.0),
+        Sample("c", 3.0),
+    ]
+    table.column_formats = {"value": ".1f"}
+    table.selection_mode = SelectionMode.MULTIPLE
+    table.selected_ids = [2, 0]
+    table.sort_column, table.sort_descending = "value", True
+    reads = len(source.read)
+
+    # in their order, as shown, a tab in a cell a space
+    assert table.selection_text() == "c\t3.0\tprobe\t\na b\t1.2\tgauge\t"
+    assert len(source.read) == reads + 1  # one read, outside the table's cache
+    table.selected_ids = [1]
+    assert table.selection_text() == "multi line\t2.0\tprobe\t"
+
+
 def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) -> None:
     activated: list[Any] = []
     table.row_activated.connect(activated.append)

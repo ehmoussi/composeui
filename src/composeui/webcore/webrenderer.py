@@ -2382,6 +2382,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_takes_pattern(self, column: str) -> bool: ...
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
+    def selection_text(self) -> str: ...
 
 
 class _ByPosition:
@@ -2453,7 +2454,9 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     on a row, or Enter on it, selects it (`select_at`): only the rows come back, the row
     keeping the focus. The web neither extends a selection nor activates a row. While a
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
-    above the frame.
+    above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
+    text (`DataTableView.selection_text`) comes back in a hidden element, which the page
+    writes to the clipboard.
     """
 
     _role = "data_table"
@@ -2470,6 +2473,8 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         self._focused_header: str | None = None
         #: the position of the row that takes the focus as it comes back: the user selected it
         self._focused_row: int | None = None
+        #: the text the user copied, sent once in the "copied" part
+        self._copied = ""
         self._refresh_dispatcher.update(
             {
                 **dict.fromkeys(
@@ -2529,20 +2534,23 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
                 "rows": self._rows_html,
                 "count": self._count_html,
                 "error": self._error_html,
+                "copied": self._copied_html,
                 "bar": self._bar_html,
             }
             # the bar last: it may hold the element that sent the request, which htmx
             # swaps nothing more from once it's gone
-            order = ("frame", "rows", "count", "error", "bar")
+            order = ("frame", "rows", "count", "error", "copied", "bar")
             fragments = Markup("").join(renders[part](oob=True) for part in order if part in parts)
             self._focus_add_filter, self._focused_chip = False, None
             return fragments
         html_ = Markup(
-            '<div {root_attributes} class="flex flex-col gap-2">{bar_html}{frame_html}</div>'
+            '<div {root_attributes} class="flex flex-col gap-2">'
+            "{bar_html}{frame_html}{copied_html}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             bar_html=self._bar_html(),
             frame_html=self._frame_html(),
+            copied_html=self._copied_html(),
         )
         self._focus_add_filter, self._focused_chip = False, None
         return html_
@@ -2560,6 +2568,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             "sort": self._sort,
             "select": self._select,
             "scroll": self._scroll,
+            "copy": self._copy,
         }
         if event not in handlers:
             super().dispatch(event, form)
@@ -2591,6 +2600,23 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         if start != self._start:
             self._start = start
             self._mark_parts("rows")
+
+    def _copy(self, _form: Mapping[str, str]) -> None:
+        self._copied = self._view.selection_text()
+        self._mark_parts("copied")
+
+    def _copied_html(self, *, oob: bool = False) -> Markup:
+        """Render the hidden element posting a copy, holding the text copied once answered."""
+        copied, self._copied = self._copied, ""
+        return Markup(
+            '<pre id="{widget_id}-copied" hidden data-copied hx-post="/widget/{widget_id}"'
+            """ hx-trigger="copy-rows" hx-vals='{{"event": "copy"}}' hx-swap="none"{oob}>"""
+            "{copied}</pre>"
+        ).format(
+            widget_id=self.widget_id,
+            oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
+            copied=copied,
+        )
 
     def _scale(self) -> float:
         """Get the rows each row's height of the scroll bar stands for: 1 up to the cap."""

@@ -1105,6 +1105,9 @@ main_view.readings.source = ListSource(
   still shows. A click on a row selects it: with `SelectionMode.MULTIPLE`, it adds the
   row, or removes it if selected. `selection_changed` emits the ids, and a double click
   emits the row's id with `row_activated`.
+- **Ctrl+C** copies the selected rows, in their order, as tab-separated text that a
+  spreadsheet takes: a line per row, the cells as shown, without the headers
+  (`selection_text`). The rows are read from the source a window at a time.
 
 The study saves the settings and `selected_ids`, never the rows or the source: the app
 gives the view its source again, e.g. from its command line or its model.

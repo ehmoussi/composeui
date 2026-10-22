@@ -2665,3 +2665,24 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(qtbot: QtB
         ["Kitchen", "Hall", "Bedroom"],
         False,
     )
+
+
+def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard(qtbot: QtBot) -> None:
+    view = MillionRowsMainView()
+    view.table.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    container = _widget(view.table)
+    assert isinstance(container, QDataFilterTable)
+    table, model = container.table, container.table.model()
+    for row in (3, 1):
+        center = table.visualRect(model.index(row, 0)).center()
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+
+    qtbot.keyClick(table, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+
+    # in the table's order: the value, then its half
+    assert QApplication.clipboard().text() == "2\t0.5\n6\t1.5"

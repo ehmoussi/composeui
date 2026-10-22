@@ -2143,3 +2143,22 @@ def test_a_large_table_draws_the_rows_scrolled_to_keeping_the_focus(
     first = page.locator("tr[data-window-row]").first.get_attribute("aria-rowindex")
     assert first is not None
     assert int(first) > 1_000
+
+
+def test_ctrl_c_writes_a_large_table_s_selected_row_to_the_clipboard(
+    browser: Browser, million_base_url: str
+) -> None:
+    context = browser.new_context(
+        base_url=million_base_url, permissions=["clipboard-read", "clipboard-write"]
+    )
+    page = context.new_page()
+    page.goto("/")
+    # the row at position 3 holds 2 * 2, then its half
+    row = page.get_by_role("row").filter(has=page.get_by_role("cell", name="4", exact=True))
+    with _posted(page):
+        row.click()
+    with _posted(page):
+        page.keyboard.press("ControlOrMeta+c")
+    expect(page.locator("[data-copied]")).to_have_text("4\t1.0")
+    assert page.evaluate("navigator.clipboard.readText()") == "4\t1.0"
+    context.close()

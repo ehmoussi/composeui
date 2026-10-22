@@ -2721,3 +2721,20 @@ async def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name() ->
         await pilot.click(chip.remove_button)
         await pilot.pause()
         assert (view.rooms.filters, view.rooms.row_count, box.empty.display) == ({}, 3, False)
+
+
+@pytest.mark.asyncio
+async def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard() -> None:
+    view = MillionRowsMainView()
+    view.table.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        app.query_one(ComposeDataTable).focus()
+        await pilot.press("down", "space", "down", "down", "space", "ctrl+c")
+        await pilot.pause()
+        # the value, then its half
+        assert app.clipboard == "2\t0.5\n6\t1.5"
