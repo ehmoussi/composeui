@@ -119,6 +119,48 @@ for example `QtApplication(build_main_view=HelloMainView).run()`.
 Every application takes a function that builds the main view, because on the web every
 browser gets its own copy of it.
 
+### Reloading the app on a change
+
+Use `--reload` for development, on Qt or the web: the app runs the changed code when a
+Python file under the current directory changes. The web restarts its server (see
+[Web backend](#web-backend)). Qt does not open a window in the process that you start.
+That process runs the program again in a child process, with the same command line, and
+the child shows the window:
+
+- **On a change of the app's code,** the window stays open, at its place and size. The app
+  saves the study (the view state, and the data of the model). Then it runs the program
+  again in the same process, with the program's modules imported again, and shows the new
+  main view in the window. The new main view opens the study, and keeps its study file and
+  the language shown.
+  When the saved state no longer fits the changed views, for example after you rename a
+  field, the new main view starts as the app starts.
+- **When the changed code fails,** for example on a syntax error, the window keeps the
+  previous code, and the error is logged. The next change runs the code again.
+- **On a change of ComposeUI's own code,** the app saves the study and stops, and a new
+  child process starts and opens the study. Its window opens again. A running app can't
+  import ComposeUI again, because its objects keep the old classes. An app that does not
+  answer within 5 seconds, for example while it is busy, is terminated, and its state
+  since the previous change is lost. While a dialog is open, the app runs the changed code
+  once it closes.
+- **When you close the window,** the program ends.
+
+On a change of the app's code, the app builds a new model before it closes the previous
+one. The previous model stays open until the new main view shows, because the window keeps
+the previous code if the changed code fails. So for a moment, two models are open. Most
+models allow it: the SQLite model, for example, works on its own copy of the data. A model
+that takes something only one user can hold, for example a locked file, a network port, or
+an instrument's connection, can't: the new model fails to open it while the previous model
+holds it. Then every change fails as the changed code does, and the window keeps the
+previous code. For such a model, start the app again yourself after a change.
+
+The program runs again on every change, so code that it runs at the start, such as a
+log's set-up, runs again too. Start the program as a script or with `-m`, for example
+`uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
+(`watchfiles`), the system reports the changes. Without it, the backends check the files
+at a fixed interval. Qt also checks them for a project on a Windows drive under WSL
+(`/mnt/c/...`), as the system does not report those changes. Textual does not have
+`--reload`.
+
 ## Web backend
 
 The web backend serves the views as a web page instead of a window.
