@@ -11,6 +11,7 @@ from starlette.responses import (
     PlainTextResponse,
     RedirectResponse,
     Response,
+    StreamingResponse,
 )
 
 from composeui.core import chartimage
@@ -206,6 +207,21 @@ async def chart_image(request: Request) -> Response:
     disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
     headers = {**_NO_STORE, "Content-Disposition": disposition}
     return Response(body, media_type=chartimage.MEDIA_TYPES[image_format], headers=headers)
+
+
+def table_csv(request: Request) -> Response:
+    """Download a large table's rows shown as CSV, streamed a window of rows at a time.
+
+    A plain link, like a chart's image: it only reads.
+    """
+    session = _session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=303)
+    chunks = session.table_csv(request.path_params["widget_id"])
+    if chunks is None:
+        return PlainTextResponse("Unknown widget", status_code=404)
+    headers = {**_NO_STORE, "Content-Disposition": 'attachment; filename="table.csv"'}
+    return StreamingResponse(chunks, media_type="text/csv; charset=utf-8", headers=headers)
 
 
 def jobs_poll(request: Request) -> Response:

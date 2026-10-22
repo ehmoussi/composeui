@@ -66,5 +66,8 @@
   "Error": "Erreur",
   "Choose a file": "Choisir un fichier",
   "Reload": "Recharger",
-  "No rows": "Aucune ligne"
+  "No rows": "Aucune ligne",
+  "Export CSV": "Exporter en CSV",
+  "Exported {count} rows to {name}.": "{count} lignes exportées dans {name}.",
+  "Can't export to {name}: {error}.": "Impossible d'exporter dans {name} : {error}."
 }

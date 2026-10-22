@@ -1455,6 +1455,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
 
 
 class DataTableViewLike(ViewLike, Protocol):
+    texts: dict[str, str]
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -1482,6 +1483,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
     def selection_text(self) -> str: ...
+    def export_csv(self, path: Path) -> None: ...
 
 
 class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataFilterTable]):
@@ -1494,7 +1496,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
     Its filter bar (`ComposeFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`),
-    through the terminal.
+    through the terminal. Its key `e` asks where to write the rows as CSV (`export_csv`).
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1514,8 +1516,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
                 # each click asks the view, which knows the mode
                 "selection_mode": lambda _view, _table, _value: None,
                 "selected_ids": self._repaint,
-                # the web's pages: the rows here are scrolled
-                "texts": lambda _view, _table, _value: None,
+                "texts": self._refresh_texts,
             }
         )
 
@@ -1527,6 +1528,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
             table.row_clicked.connect(self._select)
             table.row_activated.connect(self._view.activate_at)
             table.copy_requested.connect(self._copy)
+            table.export_path_chosen.connect(self._view.export_csv)
             bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 self._name(column), is_pattern=is_pattern
@@ -1559,6 +1561,13 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         rendered_object.table.reset()
         rendered_object.bar.set_count(view.count_text)
         rendered_object.empty.display = view.row_count == 0 and view.count_text != ""
+
+    @staticmethod
+    def _refresh_texts(
+        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+    ) -> None:
+        # "empty": the web's; here the headers stay, over no row
+        rendered_object.table.set_export_text(value.get("export", ""))
 
     @staticmethod
     def _refresh_filter_texts(

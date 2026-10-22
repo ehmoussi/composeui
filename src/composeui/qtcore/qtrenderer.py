@@ -1211,6 +1211,7 @@ class TableViewLike(ViewLike, Protocol):
 
 
 class DataTableViewLike(ViewLike, Protocol):
+    texts: dict[str, str]
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -1238,6 +1239,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
     def selection_text(self) -> str: ...
+    def export_csv(self, path: Path) -> None: ...
 
 
 class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable]):
@@ -1250,6 +1252,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     Its filter bar (`QTableFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`).
+    The context menu's Export CSV asks where to write the rows (`export_csv`).
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1269,8 +1272,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
                 # each click asks the view, which knows the mode
                 "selection_mode": lambda _view, _table, _value: None,
                 "selected_ids": self._repaint,
-                # the web's pages: the rows here are scrolled
-                "texts": lambda _view, _table, _value: None,
+                "texts": self._refresh_texts,
             }
         )
 
@@ -1284,6 +1286,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
             table.copy_requested.connect(
                 lambda: QApplication.clipboard().setText(self._view.selection_text())
             )
+            table.export_requested.connect(self._export)
             bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 self._name(column), is_pattern=is_pattern
@@ -1316,6 +1319,27 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         table.set_sort_indicator(sort)
         rendered_object.bar.set_count(view.count_text)
         rendered_object.empty.setVisible(view.row_count == 0 and view.count_text != "")
+
+    @staticmethod
+    def _refresh_texts(
+        _view: DataTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
+    ) -> None:
+        # "empty": the web's; here the headers stay, over no row
+        rendered_object.table.export_action.setText(f"{value.get('export', '')}…")
+
+    def _export(self) -> None:
+        """Ask where to write the rows shown as CSV, and write them there."""
+        table = self._rendered_object
+        if table is None:
+            return
+        path, _chosen = QFileDialog.getSaveFileName(
+            table, self._view.texts.get("export", ""), "table.csv", "CSV (*.csv)"
+        )
+        if path != "":
+            filepath = Path(path)
+            if filepath.suffix.lower() != ".csv":
+                filepath = filepath.with_name(f"{filepath.name}.csv")
+            self._view.export_csv(filepath)
 
     @staticmethod
     def _refresh_filter_texts(

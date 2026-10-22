@@ -45,7 +45,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
-| [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar |
+| [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
@@ -305,6 +305,8 @@ It shows:
 - a selection of several rows: the label under the table counts them, and shows the
   reading that a double click or Enter activates (on Qt and Textual). Ctrl+C copies them,
   to paste in a spreadsheet.
+- an export of the rows shown to a CSV file: a job writes it on Qt and Textual, and the
+  status bar says when it's done; the web downloads it.
 - an [option of the app's own](user-guide.md#command-line-options-of-your-own): `--rows`,
   the readings to make up (1,000,000 by default).
 - a study that saves the readings with the model, and the table's settings with the views.

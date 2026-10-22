@@ -94,7 +94,7 @@ from composeui.webcore.icons import icon_url
 from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable, Mapping
+    from collections.abc import Generator, Iterable, Iterator, Mapping
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
@@ -2383,6 +2383,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
     def selection_text(self) -> str: ...
+    def csv_chunks(self) -> Iterator[str]: ...
 
 
 class _ByPosition:
@@ -2456,7 +2457,8 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
     above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
     text (`DataTableView.selection_text`) comes back in a hidden element, which the page
-    writes to the clipboard.
+    writes to the clipboard. A link under the frame downloads the rows shown as CSV
+    (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
     """
 
     _role = "data_table"
@@ -2545,12 +2547,17 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             return fragments
         html_ = Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
-            "{bar_html}{frame_html}{copied_html}</div>"
+            "{bar_html}{frame_html}{copied_html}"
+            # a plain link: htmx can't start a download
+            '<a class="btn btn-ghost btn-xs self-start" href="/widget/{widget_id}/csv"'
+            " download>{export}</a></div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             bar_html=self._bar_html(),
             frame_html=self._frame_html(),
             copied_html=self._copied_html(),
+            widget_id=self.widget_id,
+            export=self._view.texts.get("export", ""),
         )
         self._focus_add_filter, self._focused_chip = False, None
         return html_
@@ -2600,6 +2607,10 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         if start != self._start:
             self._start = start
             self._mark_parts("rows")
+
+    def csv_chunks(self) -> Iterator[str]:
+        """Get the rows shown as CSV, in pieces, for their download."""
+        return self._view.csv_chunks()
 
     def _copy(self, _form: Mapping[str, str]) -> None:
         self._copied = self._view.selection_text()

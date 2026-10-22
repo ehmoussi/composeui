@@ -11,13 +11,25 @@ from textual.geometry import Size
 from textual.scroll_view import ScrollView
 from textual.strip import Strip
 from textual.widgets import Static
+from textual_fspicker import FileSave, Filters
+from textual_fspicker.path_filters import Filter
 
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterBar
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from textual import events
     from textual.app import ComposeResult
+
+
+#: the key exporting the rows shown as CSV
+EXPORT_KEY = "e"
+
+
+def _is_csv(path: Path) -> bool:
+    return path.suffix.lower() == ".csv"
 
 
 class DataTableLike(Protocol):
@@ -48,7 +60,8 @@ class ComposeDataTable(ScrollView, can_focus=True):
     the table scrolling to keep it shown. The table selects no row itself: `row_clicked`
     emits the position of the row the user clicked, or the cursor's on Space, and whether
     Shift extends the selection to it; `row_activated` emits it on a double click or
-    Enter. A selected row has the primary color. `copy_requested` emits on Ctrl+C.
+    Enter. A selected row has the primary color. `copy_requested` emits on Ctrl+C. Its
+    key `e` asks where to export the rows as CSV, which `export_path_chosen` emits.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -101,6 +114,24 @@ class ComposeDataTable(ScrollView, can_focus=True):
         self.row_clicked: Signal[int, bool] = Signal()
         self.row_activated: Signal[int] = Signal()
         self.copy_requested: SignalNoArgs = SignalNoArgs()
+        self.export_path_chosen: Signal[Path] = Signal()
+        self.set_export_text("Export CSV")
+
+    def set_export_text(self, text: str) -> None:
+        """Describe the key exporting the rows, e.g. in the app's footer."""
+        self._bindings.key_to_bindings.pop(EXPORT_KEY, None)
+        self._bindings.bind(EXPORT_KEY, "export", text)
+        self.refresh_bindings()
+
+    def action_export(self) -> None:
+        dialog = FileSave(filters=Filters(Filter("CSV", _is_csv)), default_file="table.csv")
+        self.app.push_screen(dialog, self._export_path_chosen)
+
+    def _export_path_chosen(self, path: Path | None) -> None:
+        if path is not None:
+            self.export_path_chosen.emit(
+                path if _is_csv(path) else path.with_name(f"{path.name}.csv")
+            )
 
     def set_sort(self, sort: tuple[int, bool] | None) -> None:
         """Show the order: by a column, descending or not; None for the source's own."""

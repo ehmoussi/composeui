@@ -10,10 +10,12 @@ import array
 import contextlib
 import contextvars
 import copy
+import csv
 import datetime
 import decimal
 import enum
 import functools
+import io
 import json
 import logging
 import math
@@ -47,7 +49,7 @@ from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
-from composeui.core.jobs import Jobs
+from composeui.core.jobs import Job, Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
@@ -3178,13 +3180,27 @@ class ListSource(Generic[RecordT]):
         return _cell_text(getattr(record, name))
 
 
-#: the text of a large table, on the web: what it says without rows
-DATA_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows")}
+#: the text of a large table: what the web says without rows, and its export's action
+DATA_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows"), "export": T("Export CSV")}
 
 #: the rows a `DataTableView` reads from its source at once, from a multiple of it on
 DATA_TABLE_WINDOW = 200
 #: the rows whose values a `DataTableView` keeps, the ones read last
 DATA_TABLE_CACHE = 1_000
+
+
+def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> None:
+    """Write a large table's CSV, as `DataTableView.csv_chunks` gives it, in a job or not.
+
+    A job canceled (New, Open, closing the app) stops, and leaves no part of the file.
+    """
+    with path.open("w", encoding="utf-8", newline="") as file:
+        for chunk in chunks:
+            if job is not None and job.is_canceled:
+                break
+            file.write(chunk)
+    if job is not None and job.is_canceled:
+        path.unlink()
 
 
 def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
@@ -3222,7 +3238,8 @@ class DataTableView(View):
     column's header sorts by it (`sort_by`). A click on a row selects it (`select_at`);
     on Qt and Textual, Shift extends the selection (`extend_to`), and a double click or
     Enter activates the row (`activate_at`). Ctrl+C copies the selected rows to the
-    clipboard (`selection_text`).
+    clipboard (`selection_text`). Export CSV writes the rows shown to a file
+    (`export_csv`): Qt's context menu, Textual's key `e`, the web's link under the rows.
 
     While `filterable_columns` names columns, a filter bar shows above the rows, as a
     `TableView`'s: a search, "+ Filter" opening an editor of a column and a value, and the
@@ -3434,6 +3451,56 @@ class DataTableView(View):
                 cells = self._cells(columns, values.get(row_id, ()))
                 lines.append("\t".join(" ".join(cell.split()) for cell in cells))
         return "\n".join(lines)
+
+    def csv_chunks(self) -> Iterator[str]:
+        """Get the rows shown as CSV, in pieces: the headers, then a window of rows each.
+
+        The rows in their order, each value in full, not as `column_formats` shows it:
+        None as an empty cell, an enum by its value, a date as ISO. The order is the one
+        shown at the call: a new order, while the pieces are read, changes none of them.
+        The rows are read from the source a window at a time, outside the table's cache.
+        """
+        source, order = self.source, self._order
+        if source is None:
+            return iter(())
+        names = [column.name for column in source.columns]
+        headers = self.headers
+
+        def chunks() -> Iterator[str]:
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(headers)
+            yield buffer.getvalue()
+            for start in range(0, len(order), DATA_TABLE_WINDOW):
+                buffer.seek(0)
+                buffer.truncate()
+                window = order[start : start + DATA_TABLE_WINDOW]
+                values = source.cells(window, names)
+                writer.writerows(
+                    [_cell_text(value) for value in values.get(row_id, [None] * len(names))]
+                    for row_id in window
+                )
+                yield buffer.getvalue()
+
+        return chunks()
+
+    def export_csv(self, path: Path) -> None:
+        """Write the rows shown to the CSV file `path`, in UTF-8, as `csv_chunks` gives them.
+
+        In an app, a job writes them, the app staying responsive, and the status bar says
+        when it's done, or why it failed. Else they are written before the call returns.
+        """
+        chunks, count = self.csv_chunks(), self.row_count
+        main_view = None if self._main_view is None else self._main_view()
+        if main_view is None:
+            _write_csv(None, chunks, path)
+            return
+        job = main_view.jobs.start(_write_csv, chunks, path)
+        done = self.tr("Exported {count} rows to {name}.")
+        failed = self.tr("Can't export to {name}: {error}.")
+        show = main_view.status_bar.show_message
+        job.finished.connect(lambda _: show(done.format(count=f"{count:,}", name=path.name)))
+        job.failed.connect(lambda error: show(failed.format(name=path.name, error=error)))
 
     def is_selected(self, row_id: Any) -> bool:
         """Tell whether the row `row_id` is selected."""

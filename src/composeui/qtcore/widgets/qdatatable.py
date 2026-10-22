@@ -12,7 +12,7 @@ from qtpy.QtCore import (
     Qt,
     Signal,
 )
-from qtpy.QtGui import QKeySequence, QPalette
+from qtpy.QtGui import QAction, QKeySequence, QPalette
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -109,13 +109,15 @@ class QDataTableView(QTableView):
     The table selects no row itself: `row_clicked` emits the position the user clicked,
     or the current one on Space, and whether Shift extends the selection to it;
     `row_activated` emits it on a double click, Enter or Return. `copy_requested` emits
-    on the platform's Copy shortcut (Ctrl+C).
+    on the platform's Copy shortcut (Ctrl+C), `export_requested` on `export_action`, in
+    the table's context menu.
     """
 
     header_clicked = Signal(int)
     row_clicked = Signal(int, bool)
     row_activated = Signal(int)
     copy_requested = Signal()
+    export_requested = Signal()
 
     def __init__(self, table: DataTableLike) -> None:
         super().__init__()
@@ -137,6 +139,10 @@ class QDataTableView(QTableView):
         columns.sectionClicked.connect(self._header_clicked)
         self.clicked.connect(self._row_clicked)
         self.doubleClicked.connect(lambda index: self.row_activated.emit(index.row()))
+        self.export_action = QAction(self)
+        self.export_action.triggered.connect(self.export_requested.emit)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
+        self.addAction(self.export_action)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         current = self.currentIndex()

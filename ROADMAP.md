@@ -113,7 +113,9 @@ above the rows (the web's bar is `WebFilterBarRenderer`, shared by both tables).
 A `SqliteSource` (in `core/sqlitemodel.py`) gives it a query's rows, which SQLite sorts and
 filters; `largetable.py` shows a million readings in SQLite with it. Ctrl+C copies the
 selected rows as tab-separated text (`selection_text`), through the page's clipboard on
-the web. Its queries run on the main thread: about a second to sort a million rows. The
+the web. Export CSV writes the rows shown (`csv_chunks`, a window at a time): in a job
+to a file the user picks on Qt and Textual (`export_csv`), streamed by `GET
+/widget/{id}/csv` on the web, a plain link since it only reads. Its queries run on the main thread: about a second to sort a million rows. The
 view isn't generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.
@@ -121,15 +123,12 @@ its fields, and the source needs the filters of `view.py`.
 1. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
    the order, a boolean mask per filter, and the row's index as its id. Tests: the same
    cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
-2. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
-   a file the user picks on Qt and Textual, a streamed download on the web (the
-   `web-security` skill for the route).
-3. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+2. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
    message.
-4. **The user moves rows**, in `TableView` and in the large table: move up and move down
+3. **The user moves rows**, in `TableView` and in the large table: move up and move down
    actions on the view on each backend, then drag and drop on Qt.
    - For a `SqliteTable`, keep the order in a table of positions, as
       [composeui-table](https://github.com/ehmoussi/composeui-table) does
