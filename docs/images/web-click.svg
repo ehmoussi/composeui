@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640" role="img" aria-labelledby="title desc">
+  <title id="title">A button click on the web</title>
+  <desc id="desc">htmx posts the click to /widget/{id}. The middleware checks the request.
+    The route widget_event calls WebSession.handle_event in a thread. Under the session's lock,
+    collect_dirty opens a set of dirty renderers, and the button's renderer dispatches the click.
+    The clicked signal runs the app's callback, which sets label.text. notify_renderer calls
+    refresh_attribute, and _mark_dirty adds the label's renderer to the dirty set.
+    render_dirty renders each dirty fragment with hx-swap-oob. The route sends them back,
+    and htmx swaps each fragment by its id.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11.5px; }
+      .title { font-size: 14px; font-weight: 600; }
+      .step { font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .dot { fill: #6366f1; }
+      .browser { fill: #ecfdf5; stroke: #10b981; }
+      .server { fill: #f6f8fa; stroke: #8c959f; }
+      .session { fill: #fff7ed; stroke: #f59e0b; }
+      .renderer { fill: #f5f3ff; stroke: #8b5cf6; }
+      .note { fill: #ffffff; stroke: #d0d7de; }
+      .lock { fill: #fde68a; stroke: #f59e0b; }
+      .lifeline { stroke: #d0d7de; stroke-width: 1.5; stroke-dasharray: 5 5; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .reply { stroke: #57606a; stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted { fill: #9198a1; }
+        .step { fill: #ffffff; }
+        .dot { fill: #6366f1; }
+        .browser { fill: #052e1f; stroke: #34d399; }
+        .server { fill: #21262d; stroke: #6e7681; }
+        .session { fill: #3b2a10; stroke: #f59e0b; }
+        .renderer { fill: #2e1065; stroke: #a78bfa; }
+        .note { fill: #0d1117; stroke: #30363d; }
+        .lock { fill: #78350f; stroke: #f59e0b; }
+        .lifeline { stroke: #30363d; }
+        .line, .reply { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="638.5" rx="12"/>
+
+  <!-- the five parts, each with its lifeline -->
+  <rect class="browser" x="20" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="100" y="44" text-anchor="middle">Browser</text>
+  <text class="muted" x="100" y="63" text-anchor="middle">htmx, page.js</text>
+
+  <rect class="server" x="210" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="290" y="44" text-anchor="middle">Middleware</text>
+  <text class="muted mono" x="290" y="63" text-anchor="middle">webapplication.py</text>
+
+  <rect class="server" x="390" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="470" y="44" text-anchor="middle">Route</text>
+  <text class="muted mono" x="470" y="63" text-anchor="middle">routes.py</text>
+
+  <rect class="session" x="580" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="660" y="44" text-anchor="middle">WebSession</text>
+  <text class="muted mono" x="660" y="63" text-anchor="middle">session.py</text>
+
+  <rect class="renderer" x="780" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="860" y="44" text-anchor="middle">Renderers, views</text>
+  <text class="muted mono" x="860" y="63" text-anchor="middle">webrenderer.py</text>
+
+  <line class="lifeline" x1="100" y1="76" x2="100" y2="600"/>
+  <line class="lifeline" x1="290" y1="76" x2="290" y2="600"/>
+  <line class="lifeline" x1="470" y1="76" x2="470" y2="600"/>
+  <line class="lifeline" x1="660" y1="76" x2="660" y2="600"/>
+  <line class="lifeline" x1="860" y1="76" x2="860" y2="600"/>
+
+  <!-- the session's lock, held from the event to the fragments -->
+  <rect class="lock" x="654" y="212" width="12" height="262" rx="3"/>
+
+  <!-- 1: the click -->
+  <circle class="dot" cx="30" cy="112" r="10"/><text class="step" x="30" y="116" text-anchor="middle">1</text>
+  <text class="mono" x="195" y="104" text-anchor="middle">POST /widget/{id}</text>
+  <text class="mono" x="195" y="119" text-anchor="middle">event=click</text>
+  <line class="line" x1="100" y1="128" x2="288" y2="128" marker-end="url(#arrow)"/>
+
+  <!-- 2: the middleware -->
+  <circle class="dot" cx="220" cy="160" r="10"/><text class="step" x="220" y="164" text-anchor="middle">2</text>
+  <text x="380" y="152" text-anchor="middle">same origin, body size,</text>
+  <text x="380" y="167" text-anchor="middle">signed session cookie</text>
+  <line class="line" x1="290" y1="176" x2="468" y2="176" marker-end="url(#arrow)"/>
+
+  <!-- 3: the route hands the event to the session -->
+  <circle class="dot" cx="400" cy="208" r="10"/><text class="step" x="400" y="212" text-anchor="middle">3</text>
+  <text class="mono" x="565" y="200" text-anchor="middle">handle_event(id, event,</text>
+  <text class="mono" x="565" y="215" text-anchor="middle">form), in a thread</text>
+  <line class="line" x1="470" y1="224" x2="652" y2="224" marker-end="url(#arrow)"/>
+
+  <!-- 4: the session dispatches to the renderer -->
+  <circle class="dot" cx="590" cy="256" r="10"/><text class="step" x="590" y="260" text-anchor="middle">4</text>
+  <text class="mono" x="760" y="248" text-anchor="middle">collect_dirty(),</text>
+  <text class="mono" x="760" y="263" text-anchor="middle">renderer.dispatch()</text>
+  <line class="line" x1="666" y1="272" x2="858" y2="272" marker-end="url(#arrow)"/>
+
+  <!-- 5: the signal runs the app's callback -->
+  <circle class="dot" cx="728" cy="310" r="10"/><text class="step" x="728" y="314" text-anchor="middle">5</text>
+  <rect class="note" x="745" y="288" width="240" height="44" rx="6"/>
+  <text class="mono" x="865" y="306" text-anchor="middle">clicked.emit(): a callback</text>
+  <text class="mono" x="865" y="322" text-anchor="middle">sets label.text = "Done"</text>
+
+  <!-- 6: the label's renderer is marked dirty -->
+  <circle class="dot" cx="728" cy="364" r="10"/><text class="step" x="728" y="368" text-anchor="middle">6</text>
+  <rect class="note" x="745" y="342" width="240" height="44" rx="6"/>
+  <text class="mono" x="865" y="360" text-anchor="middle">refresh_attribute("text")</text>
+  <text class="mono" x="865" y="376" text-anchor="middle">→ _mark_dirty: label</text>
+
+  <!-- 7: the dirty fragments are rendered -->
+  <circle class="dot" cx="590" cy="418" r="10"/><text class="step" x="590" y="422" text-anchor="middle">7</text>
+  <text class="mono" x="760" y="410" text-anchor="middle">render_dirty(): label</text>
+  <text class="mono" x="760" y="425" text-anchor="middle">.to_html(oob=True)</text>
+  <line class="reply" x1="860" y1="434" x2="668" y2="434" marker-end="url(#arrow)"/>
+
+  <!-- 8: the session adds the page's own fragments -->
+  <circle class="dot" cx="400" cy="466" r="10"/><text class="step" x="400" y="470" text-anchor="middle">8</text>
+  <text x="565" y="458" text-anchor="middle">fragments (+ title, jobs</text>
+  <text x="565" y="473" text-anchor="middle">poller), page's address</text>
+  <line class="reply" x1="654" y1="482" x2="472" y2="482" marker-end="url(#arrow)"/>
+
+  <!-- 9: the response -->
+  <circle class="dot" cx="30" cy="514" r="10"/><text class="step" x="30" y="518" text-anchor="middle">9</text>
+  <text class="mono" x="285" y="522" text-anchor="middle">200 text/html (+ HX-Push-Url on a new page)</text>
+  <line class="reply" x1="470" y1="532" x2="102" y2="532" marker-end="url(#arrow)"/>
+
+  <!-- 10: htmx swaps the fragment -->
+  <circle class="dot" cx="30" cy="568" r="10"/><text class="step" x="30" y="572" text-anchor="middle">10</text>
+  <rect class="note" x="48" y="548" width="290" height="44" rx="6"/>
+  <text x="193" y="566" text-anchor="middle">htmx swaps each hx-swap-oob fragment</text>
+  <text x="193" y="582" text-anchor="middle">in place of the element with its id</text>
+
+  <!-- legend -->
+  <rect class="lock" x="560" y="614" width="12" height="12" rx="3"/>
+  <text class="muted" x="580" y="624">the session's lock is held</text>
+  <line class="reply" x1="770" y1="620" x2="810" y2="620"/>
+  <text class="muted" x="818" y="624">a return value</text>
+</svg>
