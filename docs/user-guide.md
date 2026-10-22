@@ -1497,8 +1497,10 @@ tables (`model.runs.add(...)`).
   on the model's connection.
 - **Reads apart.** `with self.reading() as db:` gives a connection that only reads, and
   takes no turn: it neither waits for a write nor holds one up. It reads the rows
-  committed, not those of a transaction still open. A large table's
-  [`SqliteSource`](#rows-in-sqlite) reads its rows this way.
+  committed, not those of a transaction still open. The connection is reused: read each
+  query's rows to the end in the block, else the next reader sees the rows as they were
+  when the query started. A large table's [`SqliteSource`](#rows-in-sqlite) reads its
+  rows this way.
 - **Settings.** `pragmas` is set on the connection of every study, because SQLite keeps
   these settings per connection, not in the file. Foreign keys and recursive triggers are
   on. `synchronous` is off, because the model's database is a scratch copy and the study file
