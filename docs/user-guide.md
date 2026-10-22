@@ -10,6 +10,8 @@ and what each backend shows. To install ComposeUI and write a first window, read
 
 - [Core concepts](#core-concepts)
 - [Building views](#building-views)
+- [The main view](#the-main-view)
+- [Saving and loading state](#saving-and-loading-state)
 - [Backends](#backends)
 - [Widgets](#widgets)
 - [Pages](#pages)
@@ -22,7 +24,6 @@ and what each backend shows. To install ComposeUI and write a first window, read
 - [A list of views](#a-list-of-views)
 - [Charts](#charts)
 - [Running work in threads](#running-work-in-threads)
-- [Saving and loading state](#saving-and-loading-state)
 - [A SQLite model](#a-sqlite-model)
 - [Translating the app](#translating-the-app)
 - [Reloading the app on a change](#reloading-the-app-on-a-change)
@@ -32,12 +33,17 @@ and what each backend shows. To install ComposeUI and write a first window, read
 
 | Concept | Role |
 | --- | --- |
-| `View` (`composeui.core.view`) | A typed `attrs` data class that describes UI state (`MainView`, `InputView`, `FormView`, `ActionView`, and others). You compose views by nesting view fields inside other views. |
-| `Signal` (`composeui.core.signal`) | A typed event emitter. `signal.connect(callback)` accepts callbacks that take `view`, `main_view`, or `model` keyword arguments. The signal injects them automatically, on the views' signals and on the model's signals. |
-| `Renderer` / `RendererContainer` (`composeui.core.renderer`) | Binds a `View` to a concrete toolkit widget, and keeps the two in sync in both directions (`refresh_attribute` / `update_state`). |
-| `Application` / `ModelApplication` (`composeui.core.application`) | Owns the `MainView`, and optionally a `Model`. Parses the command line (`--debug`, `--log`, `--log-signals`, `-f FILE`) and drives rendering. |
-| `Model` (`composeui.core.model`) | Base class for the app's data, meant to be subclassed. `SqliteModel` keeps the data in a [SQLite database](#a-sqlite-model). |
-| `Jobs` (`composeui.core.jobs`) | `main_view.jobs`: functions that [run in threads](#running-work-in-threads). Their results are emitted on the main thread. |
+| View (`composeui.core.view`) | A typed `attrs` class that holds the state of a part of the UI, such as `InputView`, `FormView`, or `TableView`. You compose views by nesting view fields in other views. See [Building views](#building-views). |
+| Main view | The root view, a subclass of `MainView`: the window, with its menus, its status bar, and its content. See [The main view](#the-main-view). |
+| Signal (`composeui.core.signal`) | An event of a view or a model, such as `clicked`. `signal.connect(callback)` calls the callback on each event, and gives it the `view`, `main_view`, or `model` that it asks for. |
+| Model (`composeui.core.model`) | The app's data beside the views. It is optional. `SqliteModel` keeps the data in a [SQLite database](#a-sqlite-model). |
+| Study | The file that the File menu saves and opens: the state of the views, and the data of the model. The `extension` of the main view names its file type. See [Saving and loading state](#saving-and-loading-state). |
+| Backend | The toolkit that shows the views: Qt, Textual, or the web. `run(MainViewClass)` starts the app on the backend that `--backend` names. See [Backends](#backends). |
+| Jobs (`composeui.core.jobs`) | `main_view.jobs`: functions that [run in threads](#running-work-in-threads). Their results are emitted on the main thread. |
+
+A backend binds each view to a widget with a renderer. The renderer keeps the two in sync in
+both directions, so the app's code never calls it. The
+[technical guide](technical-guide.md#views-and-renderers) explains renderers.
 
 ### Views are reactive
 
@@ -57,48 +63,6 @@ def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
 
 A callback can take fewer of the signal's arguments than the signal emits. It then gets the
 first ones, or none. `connect(callback, now=True)` also calls the callback once, right away.
-
-### Command-line options of your own
-
-A `MainView` adds command-line options with its `add_arguments` classmethod. It gets their
-values in `apply_arguments`, once it is wired. On the web, this happens for every session.
-
-### The app's icon
-
-A `MainView` shows its `app_icon`, an image file, as the app's icon. The default is
-ComposeUI's icon. Set your own in the subclass, or set `None` for no icon:
-
-```python
-from pathlib import Path
-
-
-@define_view
-class PipeMainView(MainView):
-    app_title = T("Pipe Form")
-    app_icon = Path(__file__).parent / "images" / "pipe.svg"
-```
-
-- **Qt** shows it as the window's icon.
-- **The web** shows it in the browser tab and in the page's header, before the title.
-  Without an icon, the header shows the first letter of the title in a badge.
-- **Textual** shows no icon.
-
-### Compose views from mixins
-
-You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
-`FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
-available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
-`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`,
-`TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
-
-Larger views have sections of their own:
-
-- `PageView` and `Router` for an app split into [pages](#pages).
-- `TabView` for [tabs](#tabs).
-- `SplitterView` for [resizable panes](#resizable-panes).
-- `ToolBar` for a [toolbar](#toolbars).
-- `DialogView` for [dialogs](#dialogs).
-- `SidebarView` for a [sidebar](#sidebar).
 
 ## Building views
 
@@ -279,6 +243,98 @@ value is good:
 In a [form dialog](#form-dialogs), OK stays disabled while a check fails.
 [`src/examples/pipeform.py`](../src/examples/pipeform.py) checks its name field, and has two
 checks of several rows.
+
+### Compose views from mixins
+
+You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
+`FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
+available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
+`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`,
+`TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+
+Larger views have sections of their own:
+
+- `PageView` and `Router` for an app split into [pages](#pages).
+- `TabView` for [tabs](#tabs).
+- `SplitterView` for [resizable panes](#resizable-panes).
+- `ToolBar` for a [toolbar](#toolbars).
+- `DialogView` for [dialogs](#dialogs).
+- `SidebarView` for a [sidebar](#sidebar).
+
+## The main view
+
+A subclass of `MainView` is the app. Its class variables configure it:
+
+- **`app_title`** is the name of the app, in the title of the window.
+- **`extension`** is the file type of its studies, for example `".pipes"`.
+- **`has_file_menu = False`** leaves out the File menu, for an app without studies (see
+  [The File menu and picking a file](#the-file-menu-and-picking-a-file)).
+- **`app_icon`** is the icon of the app (see [The app's icon](#the-apps-icon)).
+- **`translations_dir`** is the directory of its catalogs (see
+  [Translating the app](#translating-the-app)).
+
+Its view fields are the content of the window, one above the other. Its `status_bar` shows
+short messages, and its `jobs` [run work in threads](#running-work-in-threads).
+
+### The app's icon
+
+A `MainView` shows its `app_icon`, an image file, as the app's icon. The default is
+ComposeUI's icon. Set your own in the subclass, or set `None` for no icon:
+
+```python
+from pathlib import Path
+
+
+@define_view
+class PipeMainView(MainView):
+    app_title = T("Pipe Form")
+    app_icon = Path(__file__).parent / "images" / "pipe.svg"
+```
+
+- **Qt** shows it as the window's icon.
+- **The web** shows it in the browser tab and in the page's header, before the title.
+  Without an icon, the header shows the first letter of the title in a badge.
+- **Textual** shows no icon.
+
+### Command-line options of your own
+
+A `MainView` adds command-line options with its `add_arguments` classmethod. It gets their
+values in `apply_arguments`, once it is wired. On the web, this happens for every session.
+
+```python
+import argparse
+from pathlib import Path
+
+
+@define_view
+class MarkdownMainView(MainView):
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--markdown", type=Path, metavar="FILE", help="Show the Markdown FILE.")
+
+    def apply_arguments(self, args: argparse.Namespace) -> None:
+        if args.markdown is not None:
+            self.open_markdown(args.markdown)  # a method of the app
+```
+
+[`src/examples/markdownviewer.py`](../src/examples/markdownviewer.py) adds `--markdown`.
+
+## Saving and loading state
+
+Save and Open in the File menu save and open the study, in a file with the `extension` of the
+main view. `-f FILE` on the command line opens a study at the start. Without a model, the
+study holds the state of the views. A model can add its data to the study (see
+[A SQLite model](#a-sqlite-model)).
+
+`MainView.save_state(path)` and `MainView.load_state(path)` serialize and deserialize the
+full view tree to JSON with `cattrs`. They skip the `Signal` and `Renderer` fields
+automatically. On load, they update the live view tree in place, so the renderer bindings
+and signal connections survive the load.
+
+The text that the user reads rather than enters (labels, titles, headers, button and menu
+text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's code, in its
+language, not from a study. Tag a text field of your own views the same way:
+`attrs.field(default="", metadata={UI_TEXT: True})`.
 
 ## Backends
 
@@ -1232,18 +1288,6 @@ class PipeMainView(MainView):
 
 [`src/examples/taskview.py`](../src/examples/taskview.py) runs 25 jobs at once, and cancels
 them.
-
-## Saving and loading state
-
-`MainView.save_state(path)` and `MainView.load_state(path)` serialize and deserialize the
-full view tree to JSON with `cattrs`. They skip the `Signal` and `Renderer` fields
-automatically. On load, they update the live view tree in place, so the renderer bindings
-and signal connections survive the load.
-
-The text that the user reads rather than enters (labels, titles, headers, button and menu
-text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's code, in its
-language, not from a study. Tag a text field of your own views the same way:
-`attrs.field(default="", metadata={UI_TEXT: True})`.
 
 ## A SQLite model
 
