@@ -39,6 +39,7 @@ from composeui.core.renderer import (
 from composeui.core.view import (
     CHECKED_TEXTS,
     PLAIN_CELL,
+    SEARCH_DELAY_MS,
     ActionView,
     Align,
     ButtonVariant,
@@ -1543,12 +1544,14 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             '{search_icon}<input id="{widget_id}-search" type="search"'
             ' name="search" value="{search}"'
             ' placeholder="{search_label}" aria-label="{search_label}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, search"'
+            ' hx-post="/widget/{widget_id}"'
+            ' hx-trigger="input changed delay:{delay}ms, search"'
             ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
             ' autocomplete="off"{disabled}></label>'
         ).format(
             search_icon=_icon("search"),
             widget_id=self.widget_id,
+            delay=SEARCH_DELAY_MS,
             search=self._filtered.search,
             search_label=search_label,
             disabled=disabled,

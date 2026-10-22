@@ -2221,6 +2221,10 @@ class HeaderGroup:
         return self.column <= column < self.column + self.column_count
 
 
+#: the milliseconds a table's filter bar waits after the last key typed in its search
+#: before it searches: one search for a word, not one per letter (Enter searches at once)
+SEARCH_DELAY_MS = 300
+
 #: the text of a table's filter bar, which the renderers show
 FILTER_TEXTS: Mapping[str, str] = {
     "search": T("Search"),

@@ -18,7 +18,7 @@ from qtpy.QtWidgets import (
     QWidgetItem,
 )
 
-from composeui.core.view import as_pattern, split_pattern
+from composeui.core.view import SEARCH_DELAY_MS, as_pattern, split_pattern
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 if TYPE_CHECKING:
@@ -162,7 +162,8 @@ class QTableFilterBar(QWidget):
     value field invalid; Escape closes it. Clicking a chip opens the editor on its
     filter, its remove button removes it. The signals emit only for the user: `search_edited` the
     text typed, `filter_added` a column and its text, `filter_removed` a column, and
-    `filters_cleared`.
+    `filters_cleared`. `search_edited` waits `SEARCH_DELAY_MS` after the last key, but
+    emits at once on Enter or once the search is cleared.
     """
 
     search_edited = Signal(str)
@@ -186,7 +187,12 @@ class QTableFilterBar(QWidget):
         self.search.setClearButtonEnabled(True)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView)
         self.search.addAction(icon, QLineEdit.ActionPosition.LeadingPosition)
-        self.search.textEdited.connect(self.search_edited)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(SEARCH_DELAY_MS)
+        self._search_timer.timeout.connect(self._emit_search)
+        self.search.textEdited.connect(self._search_typed)
+        self.search.returnPressed.connect(self._emit_search)
         self.add_filter = QToolButton()
         self.add_filter.clicked.connect(self._open_new_editor)
         self.column = QComboBox()
@@ -256,7 +262,18 @@ class QTableFilterBar(QWidget):
 
     def set_search(self, text: str) -> None:
         if self.search.text() != text:
+            self._search_timer.stop()  # the app's search, not the user's typed before
             self.search.setText(text)
+
+    def _search_typed(self, text: str) -> None:
+        if text == "":
+            self._emit_search()
+        else:
+            self._search_timer.start()
+
+    def _emit_search(self) -> None:
+        self._search_timer.stop()
+        self.search_edited.emit(self.search.text())
 
     def set_filters(self, filters: list[tuple[int, str, str, str]]) -> None:
         """Show each filter as a chip: its column, the chip's text, the text typed, the header."""
