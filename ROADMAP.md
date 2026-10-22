@@ -104,41 +104,18 @@ three backends in one step.
 `TableSource`, the protocol of a source of rows, is in `core/view.py`, with `Sort`,
 `SourceColumn` and `ListSource` (a source of `attrs` records in memory). So is the view,
 `DataTableView` (working name), which Qt (`QDataTableView`), Textual (`ComposeDataTable`,
-on `ScrollView` and `render_line`) and the web show, the web by pages of 50 rows with
-Previous and Next buttons. `largetable.py` shows a million rows with it. The view isn't
+on `ScrollView` and `render_line`) and the web (a scrolled frame, see its design note
+below) show. A click on a header sorts by its column (`sort_by`), each
+backend showing the order. A click on a row selects it (`select_at`), Shift extending the
+selection on Qt and Textual (`extend_to`), and a double click or Enter activates it there
+(`activate_at`). While `filterable_columns` names columns, `TableView`'s filter bar shows
+above the rows (the web's bar is `WebFilterBarRenderer`, shared by both tables).
+`largetable.py` shows a million rows with it. The view isn't
 generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.
 
-1. **Sort.** A header click sets `sort_column` and `sort_descending`, and the header shows
-   the order: `sortIndicatorChanged` on Qt, a click on a header line on Textual, a header
-   button on the web, as in `TableView`. Tests on each backend: a click sorts, a second
-   click reverses, and the selection stays on its rows.
-2. **Select.** As `selection_mode` allows: a click, Ctrl+click and Shift+click on Qt (a
-   `QItemSelection` of ranges, turned into ids by the view) and on the web; Space and
-   Shift with the arrow keys on Textual. A double click or Enter emits `row_activated`.
-   Tests on each backend: `selected_ids`, `selection_changed`, a range over rows not
-   read yet, and `selected_ids` set by the app shown.
-3. **Search and filters.** Reuse the filter bars of `TableView`: `QTableFilterBar` on Qt,
-   `ComposeFilterBar` on Textual, the web table's bar. They take the same text and show
-   the count ("1,234 of 1,000,000 rows"); a filter that the source can't apply is
-   marked invalid, as an unparsable one is. Tests on each backend: a search, a filter,
-   its removal, and the count.
-4. **The web: a scroll instead of pages.**
-   - A window of rows between two filler rows that give the scroll bar its full height,
-     each row of the same fixed height. When the scroll pauses, `page.js` asks the
-     fragment route (`GET /widget/{id}?start=…`) for the window shown, and drops an
-     answer that comes after a newer request (`hx-sync`). A sort or a filter swaps the
-     first window and the count.
-   - A browser caps an element's height (check it: about 33M px in Chrome, 17M in
-     Firefox). Past that, the filler rows keep the cap, and a scroll position maps to a
-     row by its ratio.
-   - `aria-rowcount` and `aria-rowindex` tell a screen reader where the rows are.
-   - Follow the `web-security` skill for the route. The scroll code adds to `page.js`
-     (958 lines today): see its type-check entry in "5 — Later, when needed".
-   - Tests: `tests/test_webrenderer.py` for the route's answer, and browser tests for
-     the scroll, past the cap too, and the keys.
-5. **A source on a `SqliteTable`**, which stays as it is: a `SqliteTable` can hold several
+1. **A source on a `SqliteTable`**, which stays as it is: a `SqliteTable` can hold several
    SQL tables, and not each one shows in a table.
    - Add `SqliteSource` to `core/sqlitemodel.py`. It takes the `SqliteTable` (its
      `connection()`, and its `changed` signal), the app's `SELECT`, its id column and
@@ -154,22 +131,22 @@ its fields, and the source needs the filters of `view.py`.
    - Example: `pipesweep.py` shows its runs (`sweep_run`) in a `DataTableView`.
    - Tests: each filter operator against `ListSource`'s answers, a quote or a `%` in a
      search, a column that isn't declared refused, and `changed` after a job's write.
-6. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
+2. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
    the order, a boolean mask per filter, and the row's index as its id. Tests: the same
    cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
-7. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
+3. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
    a window at a time: the clipboard on Qt and Textual, the page's clipboard on the web.
-8. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
+4. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
    a file the user picks on Qt and Textual, a streamed download on the web (the
    `web-security` skill for the route).
-9. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+5. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
    message.
-10. **The user moves rows**, in `TableView` and in the large table: move up and move down
-    actions on the view on each backend, then drag and drop on Qt.
-    - For a `SqliteTable`, keep the order in a table of positions, as
+6. **The user moves rows**, in `TableView` and in the large table: move up and move down
+   actions on the view on each backend, then drag and drop on Qt.
+   - For a `SqliteTable`, keep the order in a table of positions, as
       [composeui-table](https://github.com/ehmoussi/composeui-table) does
       (`core/ordering.py`): a trigger puts each new row last, and one window-function
       query moves the rows. Copy that SQL, run it through `SqliteModel.connection()`
@@ -275,6 +252,14 @@ The user guide's "Web backend" section covers what users see.
   fragment as an OOB swap (`render_dirty`). Controls use `hx-swap="none"` and the sender
   is never swapped back, so typing is never interrupted; the one exception is a float
   field left with unparsable text, swapped back to the view's value.
+- **A large table's frame.** `WebDataTableRenderer` draws a window of rows between two
+  filler rows (`style` heights, which the policy allows) that give the scroll bar every
+  row's height. `page.js` posts the first row shown once the scroll stops outside the
+  window, and only the `<tbody>` comes back (in a `<template>`, as a table's parts), so
+  the scroll position stays. Browsers cap an element's height: past
+  `DATA_TABLE_SCROLLED_ROWS`, a row's height stands for `data-scale` rows, and the window
+  lands at the scroll position, a few rows off the exact ratio. A new order swaps the
+  whole frame, back at the top.
 - **A table's parts.** A sort, a search or a filter swaps only what it changes (the
   headers' row, the `<tbody>`, the count, the filter bar), never the search field being
   typed in. The bar goes last in the response: it may hold the element that sent the

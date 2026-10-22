@@ -936,6 +936,30 @@ function placeHelp(event) {
     help.style.setProperty("--arrow-x", rect.left + rect.width / 2 - left + "px");
   }
 }
+/* a large table draws the rows around the view alone (see `WebDataTableRenderer`): once
+   the user stops scrolling its frame outside them, post the first row shown, which the
+   frame's hidden field takes. Past the rows the scroll bar's height stands for, a row's
+   height stands for `data-scale` rows. Scrolling doesn't bubble: captured. */
+var WINDOW_SCROLL_MS = 100;
+function fetchWindow(frame) {
+  var rows = frame.querySelectorAll("tr[data-window-row]");
+  if (rows.length === 0) return;
+  var view = frame.getBoundingClientRect();
+  var head = frame.querySelector("thead").getBoundingClientRect().height;
+  var first = rows[0].getBoundingClientRect();
+  var last = rows[rows.length - 1].getBoundingClientRect();
+  if (first.top <= view.top + head && last.bottom >= view.bottom) return;  // drawn already
+  var shown = Math.floor((frame.scrollTop / first.height) * Number(frame.dataset.scale));
+  var start = frame.querySelector("[data-scroll-start]");
+  start.value = String(shown);
+  dispatch(start, "scroll-window");
+}
+document.addEventListener("scroll", function (event) {
+  var frame = event.target;
+  if (!(frame instanceof HTMLElement) || !("virtualScroll" in frame.dataset)) return;
+  clearTimeout(frame.windowTimer);
+  frame.windowTimer = setTimeout(function () { fetchWindow(frame); }, WINDOW_SCROLL_MS);
+}, true);
 /* neither bubbles */
 document.addEventListener("beforetoggle", placeHelp, true);
 document.addEventListener("toggle", placeHelp, true);

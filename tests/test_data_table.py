@@ -143,6 +143,42 @@ def test_the_sort_the_search_and_the_filters_read_the_order_again(
     assert len(source.read) == 1
 
 
+def test_a_header_s_clicks_sort_ascending_descending_then_as_the_source_gives(
+    table: DataTableView, source: CountingSource
+) -> None:
+    table.sort_by("kind")
+    assert (table.sort_column, table.sort_descending) == ("kind", False)
+    assert table.ids(0, 3) == [0, 3, 6]  # "gauge" before "probe", ties in the source's order
+    table.sort_by("kind")
+    assert (table.sort_column, table.sort_descending) == ("kind", True)
+    table.sort_by("value")  # another column: ascending again, the source asked once
+    assert (table.sort_column, table.sort_descending, table.ids(0, 2)) == ("value", False, [0, 1])
+    assert source.orders == 4
+    table.sort_by("value")
+    table.sort_by("value")
+    assert (table.sort_column, table.sort_descending, table.ids(0, 2)) == (None, False, [0, 1])
+
+    with pytest.raises(ValueError, match="sort by DataTableView's column 'mass'"):
+        table.sort_by("mass")
+
+
+def test_the_filter_bar_reads_its_count_chips_errors_and_hints_by_column_name(
+    table: DataTableView,
+) -> None:
+    assert table.count_text == ""  # every row shown
+    table.filters = {"value": ">=249.5", "name": "/s09[89]/"}
+    assert table.count_text == "2 of 1,000"
+    assert table.filter_chip("value") == "Value: >=249.5"
+    assert table.filter_chip("name") == "Name matches s09[89]"
+    assert table.filter_error("value", "heavy") == '"heavy" isn\'t a number'
+    assert table.filter_error("value", "<3") is None
+    assert table.filter_takes_pattern("name")
+    assert not table.filter_takes_pattern("value")
+    assert table.filter_placeholder("value") == ">=20, 18..24"
+    with pytest.raises(ValueError, match="filter DataTableView's column 'mass'"):
+        table.filter_error("mass", "1")
+
+
 def test_the_settings_name_the_source_s_columns(table: DataTableView) -> None:
     with pytest.raises(ValueError, match="sort by DataTableView's column 'mass'"):
         table.sort_column = "mass"
@@ -192,6 +228,58 @@ def test_a_new_order_drops_the_selected_rows_it_hides(table: DataTableView) -> N
     assert table.selected_ids == [5]
     with pytest.raises(ValueError, match="selects a single row"):
         table.selected_ids = [5, 9]
+
+
+def test_the_user_s_clicks_select_a_row_or_toggle_rows_saying_so(
+    table: DataTableView,
+) -> None:
+    emitted: list[list[Any]] = []
+    table.selection_changed.connect(emitted.append)
+    table.sort_column, table.sort_descending = "value", True
+
+    table.select_at(0)
+    table.select_at(0)  # already selected: no change
+    table.select_at(1)
+    assert (table.selected_ids, emitted) == ([998], [[999], [998]])
+    assert table.is_selected(998)
+    assert not table.is_selected(999)
+
+    table.selection_mode = SelectionMode.MULTIPLE
+    table.select_at(3)
+    table.select_at(1)  # selected: removed
+    assert table.selected_ids == [996]
+    table.select_at(2_000)  # no row there
+    assert len(emitted) == 4
+
+
+def test_a_shift_click_adds_the_rows_from_the_one_selected_last(table: DataTableView) -> None:
+    table.selection_mode = SelectionMode.MULTIPLE
+    table.selected_ids = [500]
+    table.extend_to(3)  # none selected by the user yet: a click
+    table.extend_to(5)
+    assert table.selected_ids == [500, 3, 4, 5]
+    table.select_at(900)
+    table.extend_to(898)  # backwards, rows never read
+    assert table.selected_ids == [500, 3, 4, 5, 900, 898, 899]
+
+    table.search = "s0"  # a new order: its positions start no range
+    table.extend_to(1)
+    assert table.selected_ids[-1] == 1
+
+    table.selection_mode = SelectionMode.SINGLE
+    table.extend_to(7)
+    assert table.selected_ids == [7]
+
+
+def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) -> None:
+    activated: list[Any] = []
+    table.row_activated.connect(activated.append)
+    table.sort_column, table.sort_descending = "value", True
+
+    table.activate_at(2)
+    table.activate_at(5_000)  # no row there
+
+    assert activated == [997]
 
 
 def test_a_new_source_s_rows_replace_the_old_one_s(

@@ -76,7 +76,7 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
-from composeui.textualcore.widgets.composedatatable import ComposeDataTable
+from composeui.textualcore.widgets.composedatatable import ComposeDataFilterTable
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
@@ -1455,31 +1455,62 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
 
 
 class DataTableViewLike(ViewLike, Protocol):
+    sort_column: str | None
+    sort_descending: bool
+    search: str
+    filters: dict[str, str]
+    filterable_columns: list[str]
+    filter_texts: dict[str, str]
+
     @property
     def headers(self) -> list[str]: ...
     @property
+    def column_names(self) -> list[str]: ...
+    @property
     def row_count(self) -> int: ...
     def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
+    def sort_by(self, column: str) -> None: ...
+    def is_selected(self, row_id: Any) -> bool: ...
+    def select_at(self, position: int) -> None: ...
+    def extend_to(self, position: int) -> None: ...
+    def activate_at(self, position: int) -> None: ...
+    @property
+    def count_text(self) -> str: ...
+    def header(self, column: str) -> str: ...
+    def filter_error(self, column: str, text: str) -> str | None: ...
+    def filter_takes_pattern(self, column: str) -> bool: ...
+    def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
+    def filter_chip(self, column: str) -> str: ...
 
 
-class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataTable]):
-    """A large table: Textual asks the view for the lines it draws, as the user scrolls."""
+class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataFilterTable]):
+    """A large table: Textual asks the view for the lines it draws, as the user scrolls.
+
+    A click on a header sorts by its column (`DataTableView.sort_by`). A click on a row,
+    or Space on the cursor's, selects it (`select_at`), Shift extending the selection
+    (`extend_to`); a double click or Enter activates it (`activate_at`).
+
+    Its filter bar (`ComposeFilterBar`) searches it, and filters the columns of
+    `filterable_columns`: the bar knows them by their position among the source's.
+    """
 
     def __init__(self, view: DataTableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
-                "source": self._reset,
+                "source": self._refresh_source,
                 "row_count": self._reset,
                 "column_formats": self._repaint,
+                "filter_texts": self._refresh_filter_texts,
+                "filterable_columns": self._refresh_filterable_columns,
+                "search": self._refresh_search,
+                "filters": self._refresh_filters,
                 # shown with the order they give, which the view sends as `row_count`
-                **{
-                    name: lambda _view, _table, _value: None
-                    for name in ("sort_column", "sort_descending", "search", "filters")
-                },
-                # not shown yet: the user neither sorts nor selects
+                "sort_column": lambda _view, _table, _value: None,
+                "sort_descending": lambda _view, _table, _value: None,
+                # each click asks the view, which knows the mode
                 "selection_mode": lambda _view, _table, _value: None,
-                "selected_ids": lambda _view, _table, _value: None,
+                "selected_ids": self._repaint,
                 # the web's pages: the rows here are scrolled
                 "texts": lambda _view, _table, _value: None,
             }
@@ -1487,18 +1518,119 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeDataTable(self._view)
+            self._rendered_object = ComposeDataFilterTable(self._view)
+            table, bar = self._rendered_object.table, self._rendered_object.bar
+            table.header_clicked.connect(self._sort_by)
+            table.row_clicked.connect(self._select)
+            table.row_activated.connect(self._view.activate_at)
+            bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
+            bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
+                self._name(column), is_pattern=is_pattern
+            )
+            bar.takes_pattern = lambda column: self._view.filter_takes_pattern(self._name(column))
+            bar.search_edited.connect(self._update_search)
+            bar.filter_added.connect(self._add_filter)
+            bar.filter_removed.connect(self._remove_filter)
+            bar.filters_cleared.connect(self._clear_filters)
+
+    @classmethod
+    def _refresh_source(
+        cls, view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: Any
+    ) -> None:
+        """Show the new source's columns in the bar, then its rows."""
+        cls._refresh_filterable_columns(view, rendered_object, view.filterable_columns)
+        cls._refresh_filters(view, rendered_object, view.filters)
+        cls._reset(view, rendered_object, value)
 
     @staticmethod
-    def _reset(_view: DataTableViewLike, rendered_object: ComposeDataTable, _value: Any) -> None:
-        rendered_object.reset()
+    def _reset(
+        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
+    ) -> None:
+        """Show a new order of the rows: the sort mark, the count, and no row if none."""
+        names = view.column_names
+        sort = None
+        if view.sort_column in names:
+            sort = (names.index(view.sort_column), view.sort_descending)
+        rendered_object.table.set_sort(sort)
+        rendered_object.table.reset()
+        rendered_object.bar.set_count(view.count_text)
+        rendered_object.empty.display = view.row_count == 0 and view.count_text != ""
 
     @staticmethod
-    def _repaint(_view: DataTableViewLike, rendered_object: ComposeDataTable, _value: Any) -> None:
-        rendered_object.repaint()
+    def _refresh_filter_texts(
+        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+    ) -> None:
+        rendered_object.bar.set_texts(value)
+        rendered_object.bar.set_count(view.count_text)
+        rendered_object.empty.update(value.get("no_match", ""))
 
     @staticmethod
-    def _update_state(_view: DataTableViewLike, _rendered_object: ComposeDataTable) -> None:
+    def _refresh_filterable_columns(
+        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: list[str]
+    ) -> None:
+        names = view.column_names
+        columns = [(names.index(name), view.header(name)) for name in names if name in value]
+        rendered_object.bar.set_columns(columns)
+        rendered_object.bar.display = len(columns) > 0
+
+    @staticmethod
+    def _refresh_search(
+        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: str
+    ) -> None:
+        rendered_object.bar.set_search(value)
+
+    @staticmethod
+    def _refresh_filters(
+        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+    ) -> None:
+        names = view.column_names
+        rendered_object.bar.set_filters(
+            [
+                (names.index(name), view.filter_chip(name), value[name], view.header(name))
+                for name in names
+                if name in value
+            ]
+        )
+
+    def _select(self, position: int, is_extended: bool) -> None:
+        if is_extended:
+            self._view.extend_to(position)
+        else:
+            self._view.select_at(position)
+
+    def _name(self, column: int) -> str:
+        """Get the name of the source's column at `column`, as the bar and the header know it."""
+        return self._view.column_names[column]
+
+    def _update_search(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.search = text
+
+    def _add_filter(self, column: int, text: str) -> None:
+        self._view.filters = {**self._view.filters, self._name(column): text}
+
+    def _remove_filter(self, column: int) -> None:
+        name = self._name(column)
+        self._view.filters = {
+            other: text for other, text in self._view.filters.items() if other != name
+        }
+
+    def _clear_filters(self) -> None:
+        self._view.filters = {}
+
+    def _sort_by(self, column: int) -> None:
+        names = self._view.column_names
+        if column < len(names):
+            self._view.sort_by(names[column])
+
+    @staticmethod
+    def _repaint(
+        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
+    ) -> None:
+        rendered_object.table.repaint()
+
+    @staticmethod
+    def _update_state(_view: DataTableViewLike, _rendered_object: ComposeDataFilterTable) -> None:
         """Copy nothing: the user changes nothing in the table yet."""
 
 

@@ -56,7 +56,10 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
-from composeui.textualcore.widgets.composedatatable import ComposeDataTable
+from composeui.textualcore.widgets.composedatatable import (
+    ComposeDataFilterTable,
+    ComposeDataTable,
+)
 from composeui.textualcore.widgets.composedateinput import (
     ComposeCalendar,
     ComposeDateInput,
@@ -114,6 +117,7 @@ from tests.tables import (
     MillionRowsMainView,
     MillionSource,
     Room,
+    RoomsDataMainView,
     SortedRoomsMainView,
     StyledTablesMainView,
 )
@@ -2623,7 +2627,97 @@ async def test_a_large_table_draws_the_lines_on_screen_reading_only_their_window
         assert table.render_line(0).text.split() == ["Value", "Half"]  # still on top
         assert len(source.read) < 10 * DATA_TABLE_WINDOW
 
-        source.count = 3
+        source.size = 3
         source.changed.emit()
         await pilot.pause()
         assert table.virtual_size.height == 4
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_s_header_clicks_sort_by_its_column_marking_the_order() -> None:
+    view = MillionRowsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        table = app.query_one(ComposeDataTable)
+        # the positions take "1,000,000 ", the two columns share the 70 cells left
+        half = (len("1,000,000 ") + 35 + 2, 0)
+        await pilot.click(ComposeDataTable, offset=half)
+        assert (view.table.sort_column, view.table.sort_descending) == ("half", False)
+        assert table.render_line(0).text.split() == ["Value", "Half", "▲"]
+        await pilot.click(ComposeDataTable, offset=half)
+        assert table.render_line(0).text.split() == ["Value", "Half", "▼"]
+        await pilot.click(ComposeDataTable, offset=(3, 0))  # over the positions: nothing
+        await pilot.click(ComposeDataTable, offset=(15, 2))  # on a row: nothing
+        assert view.table.sort_column == "half"
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_s_cursor_and_clicks_select_its_rows_and_activate_one() -> None:
+    view = MillionRowsMainView()
+    view.table.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    activated: list[Any] = []
+    view.table.row_activated.connect(activated.append)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        table = app.query_one(ComposeDataTable)
+        table.focus()
+        await pilot.press("down", "down", "space", "down", "down", "shift+space", "enter")
+        assert view.table.selected_ids == [2, 3, 4]
+        assert activated == [4]
+
+        await pilot.click(ComposeDataTable, offset=(15, 1))  # the first row's line
+        await pilot.click(ComposeDataTable, offset=(15, 3))  # the selected third: off
+        await pilot.double_click(ComposeDataTable, offset=(15, 7))
+        assert view.table.selected_ids == [3, 4, 0, 6]
+        assert activated == [4, 6]
+
+        await pilot.press("end")
+        assert table.cursor == 999_999
+        last = table.scrollable_content_region.height - 1
+        assert table.render_line(last).text.split()[0] == "1,000,000"
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name() -> None:
+    view = RoomsDataMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        box = app.query_one(ComposeDataFilterTable)
+        bar = box.bar
+        assert bar.display
+        await pilot.click(bar.search)
+        await pilot.press(*"room")
+        await pilot.pause()
+        assert (view.rooms.search, view.rooms.row_count) == ("room", 1)
+        assert str(bar.count.render()) == "1 of 3"
+        await pilot.press(*["backspace"] * 4)
+        await pilot.pause()
+
+        await _add_filter(pilot, bar, 1, "warm")  # the temperature: by the column's name
+        assert str(bar.value.tooltip) == '"warm" isn\'t a number'
+        await _add_filter(pilot, bar, 1, ">19")
+        assert view.rooms.filters == {"temperature": ">19"}
+        assert view.rooms.row_count == 2
+        (chip,) = bar.chips.query(ComposeFilterChip)
+        assert str(chip.open_button.label) == "Temperature: >19 \u270e"
+
+        view.rooms.filters = {"temperature": ">30"}
+        await pilot.pause()
+        assert box.empty.display
+        (chip,) = bar.chips.query(ComposeFilterChip)
+        await pilot.click(chip.remove_button)
+        await pilot.pause()
+        assert (view.rooms.filters, view.rooms.row_count, box.empty.display) == ({}, 3, False)

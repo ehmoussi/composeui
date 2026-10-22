@@ -1101,21 +1101,37 @@ main_view.readings.source = ListSource(
 - **The cells** show the values as `column_formats` says, e.g. `".2f"` or `".0%"`: an
   empty cell for None, and an enum by its text.
 - **The selection** is by id: `selected_ids`, which a new order keeps on the rows it
-  still shows.
+  still shows. A click on a row selects it: with `SelectionMode.MULTIPLE`, it adds the
+  row, or removes it if selected. `selection_changed` emits the ids, and a double click
+  emits the row's id with `row_activated`.
 
 The study saves the settings and `selected_ids`, never the rows or the source: the app
 gives the view its source again, e.g. from its command line or its model.
 
-- **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
-  starts with its position.
-- **Textual** draws the headers on the first line, then the lines on screen alone. The
-  arrow keys, Page Up, Page Down, Home and End scroll.
-- **The web** shows the rows by pages of 50, with Previous and Next buttons and the count
-  ("Rows 51 to 100 of 1,000,000"). Turning the page swaps only the page's rows.
+A click on a column's header sorts by it: ascending, descending, then in the source's
+order (`sort_by`). The source orders the rows once for each click.
 
-The user doesn't sort, filter or select the rows in the table yet: the app sets the
-settings, e.g. from a form. [`largetable.py`](../src/examples/largetable.py) shows a
-million rows this way.
+- **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
+  starts with its position. The header shows Qt's sort indicator. A selected row has the
+  highlight colors. Shift+click selects the rows from the one clicked last; Space
+  selects the current row, and Enter activates it.
+- **Textual** draws the headers on the first line, then the lines on screen alone. A
+  cursor marks a row: the arrow keys, Page Up, Page Down, Home and End move it. Space
+  selects its row, Shift+Space and Shift+click a range, and Enter or a double click
+  activates it. The sorted column's header ends with ▲ or ▼.
+- **The web** scrolls the rows in a frame, and draws only those around the view: once
+  the user stops scrolling, the page asks for the rows shown. Past 400,000 rows, the
+  scroll bar keeps the height of 400,000, and its position maps to a row by its ratio.
+  Each header is a button, with `aria-sort`: a sort scrolls back to the top. A click or
+  Enter on a row selects it (`aria-selected`, or `aria-current` for one row at most). The
+  web selects no range and activates no row.
+
+Name the columns the user filters in `filterable_columns`, e.g.
+`child(DataTableView, filterable_columns=["sensor", "temperature"])`. The table then shows
+the filter bar of [Sorting and filtering](#sorting-and-filtering) above its rows: a search,
+"+ Filter", the filters as chips, and the count of the rows shown ("1,234 of 1,000,000").
+Without them, the app alone sets the search and the filters.
+[`largetable.py`](../src/examples/largetable.py) shows a million rows this way.
 
 ## A list of views
 

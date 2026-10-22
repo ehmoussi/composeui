@@ -121,8 +121,12 @@ _RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
 )
 
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
-#: the rows of a large table's page
-DATA_TABLE_PAGE = 50
+#: the rows of a large table the page draws at once, around those scrolled to
+DATA_TABLE_WINDOW_ROWS = 100
+#: the rows of a large table that the scroll bar's height can stand for at most, 2.25rem
+#: each: past them, a scroll position maps to a row by its ratio, as browsers cap an
+#: element's height (about 33M pixels in Chrome, 17M in Firefox)
+DATA_TABLE_SCROLLED_ROWS = 400_000
 #: seconds a status bar waits past its message's timeout before fetching itself again
 _AUTO_CLEAR_MARGIN = 0.25
 
@@ -954,126 +958,6 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         self._view.clicked.emit()
 
 
-class DataTableViewLike(ViewLike, Protocol):
-    texts: dict[str, str]
-
-    @property
-    def headers(self) -> list[str]: ...
-    @property
-    def row_count(self) -> int: ...
-    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
-
-
-class WebDataTableRenderer(WebRenderer[DataTableViewLike]):
-    """A large table, by pages of `DATA_TABLE_PAGE` rows: Previous and Next turn them.
-
-    Only the page's part (its count and its `<table>`) is swapped when the user turns a
-    page, never the buttons, which keep the focus. Each row starts with its position, from
-    1. A new order of the rows shows its page at the same place, or its last page.
-    """
-
-    _role = "data_table"
-
-    def __init__(self, view: DataTableViewLike) -> None:
-        super().__init__(view)
-        #: the page shown, counted from 0
-        self._page = 0
-        #: whether only the page's part is swapped: the user turned the page
-        self._is_page_dirty = False
-        self._refresh_dispatcher.update(
-            {
-                **dict.fromkeys(
-                    ("source", "row_count", "column_formats", "texts"), self._mark_dirty
-                ),
-                # shown with the order they give, which the view sends as `row_count`
-                **{
-                    name: lambda _view, _table, _value: None
-                    for name in ("sort_column", "sort_descending", "search", "filters")
-                },
-                # not shown yet: the user neither sorts nor selects
-                "selection_mode": lambda _view, _table, _value: None,
-                "selected_ids": lambda _view, _table, _value: None,
-            }
-        )
-
-    def to_html(self, *, oob: bool = False) -> Markup:
-        last_page = max(self._view.row_count - 1, 0) // DATA_TABLE_PAGE
-        self._page = min(self._page, last_page)
-        is_page, self._is_page_dirty = self._is_page_dirty and oob, False
-        if is_page:
-            return self._page_html(oob=True)
-        texts = self._view.texts
-        disabled = "" if self.is_enabled else " disabled"
-        return Markup(
-            '<div {root_attributes} class="flex flex-col gap-2">'
-            '<div class="flex items-center gap-2">'
-            '<button type="button" class="btn btn-sm"{previous}{disabled}>{previous_text}</button>'
-            '<button type="button" class="btn btn-sm"{next}{disabled}>{next_text}</button>'
-            "</div>{page_html}</div>"
-        ).format(
-            root_attributes=self._root_attributes(oob=oob),
-            previous=self._post("previous"),
-            next=self._post("next"),
-            disabled=disabled,
-            previous_text=texts.get("previous", ""),
-            next_text=texts.get("next", ""),
-            page_html=self._page_html(oob=False),
-        )
-
-    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event not in ("previous", "next") or not self.is_enabled:
-            super().dispatch(event, form)
-        last_page = max(self._view.row_count - 1, 0) // DATA_TABLE_PAGE
-        step = 1 if event == "next" else -1
-        page = min(max(self._page + step, 0), last_page)
-        if page != self._page:
-            self._page = page
-            self._is_page_dirty = True
-            self._mark_dirty(self._view, self.widget_id, page)
-
-    def _post(self, event: str) -> Markup:
-        return Markup(
-            """ hx-post="/widget/{}" hx-vals='{}'"""
-            ' hx-swap="none"'
-        ).format(self.widget_id, json.dumps({"event": event}))
-
-    def _page_html(self, *, oob: bool) -> Markup:
-        """Render the page's part: its count, then its rows under the headers."""
-        view = self._view
-        start = self._page * DATA_TABLE_PAGE
-        rows = view.rows(start, start + DATA_TABLE_PAGE)
-        texts = view.texts
-        if len(rows) == 0:
-            count = texts.get("empty", "")
-        else:
-            count = texts.get("count", "").format(
-                first=f"{start + 1:,}", last=f"{start + len(rows):,}", total=f"{view.row_count:,}"
-            )
-        head = Markup("").join(
-            Markup('<th scope="col">{}</th>').format(header) for header in view.headers
-        )
-        body = Markup("").join(
-            Markup('<tr><th scope="row" class="tabular-nums">{position}</th>{cells}</tr>').format(
-                position=f"{start + offset + 1:,}",
-                cells=Markup("").join(Markup("<td>{}</td>").format(cell) for cell in cells),
-            )
-            for offset, (_row_id, cells) in enumerate(rows)
-        )
-        return Markup(
-            '<div id="{widget_id}-page" class="flex flex-col gap-2"{oob}>'
-            '<p class="text-sm" aria-live="polite">{count}</p>'
-            '<div class="overflow-x-auto rounded-box border border-base-300">'
-            '<table class="table table-zebra table-sm">'
-            "<thead><tr><td></td>{head}</tr></thead><tbody>{body}</tbody></table></div></div>"
-        ).format(
-            widget_id=self.widget_id,
-            oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
-            count=count,
-            head=head,
-            body=body,
-        )
-
-
 class ProgressBarViewLike(ViewLike, Protocol):
     value: int
     maximum: int | None
@@ -1561,7 +1445,327 @@ class TableViewLike(ViewLike, Protocol):
 _ARIA_SORT: Final[dict[bool | None, str]] = {None: "none", False: "ascending", True: "descending"}
 
 
-class WebTableRenderer(WebRenderer[TableViewLike]):
+class FilteredLike(Protocol):
+    """What a table's filter bar reads and sets, its columns known by their positions."""
+
+    search: str
+    filters: dict[int, str]
+
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def filter_texts(self) -> dict[str, str]: ...
+    @property
+    def filterable_columns(self) -> list[int]: ...
+    def filter_error(self, column: int, text: str) -> str | None: ...
+    def filter_takes_pattern(self, column: int) -> bool: ...
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str: ...
+    def filter_chip(self, column: int) -> str: ...
+
+
+class WebFilterBarRenderer(WebRenderer[TView]):
+    """A table's renderer with a filter bar: a search, "+ Filter" and the filters' chips.
+
+    The bar reads and sets `_filtered`, its columns known by their positions. The search
+    posts as the user types; "+ Filter" opens an editor in the bar (a column, a value and
+    Add), and the filters show as chips. A change swaps only the parts it changes
+    (`_mark_parts`): "bar", "count" or "error", never the field the user types in; a
+    value that can't filter swaps only its message in, the page marking the field invalid.
+    """
+
+    def __init__(self, view: TView) -> None:
+        super().__init__(view)
+        #: the filter editor, while open: its column (None for the first) and its text
+        self._editor: tuple[int | None, str] | None = None
+        #: why the editor's text can't filter, once the user added it
+        self._editor_error: str | None = None
+        #: whether "+ Filter" takes the focus back, the editor or a chip just gone
+        self._focus_add_filter = False
+        #: the column whose chip takes the focus, its filter just added: Enter reopens it
+        self._focused_chip: int | None = None
+
+    @staticmethod
+    def _table_part(markup: Markup, *, oob: bool) -> Markup:
+        """Wrap a part of the `<table>` swapped out of band in a `<template>` of its own.
+
+        htmx parses an answer as a template's content: a `<tr>` or a `<tbody>` among the
+        rest would switch the parser to a table's rules for what follows, mangling the
+        next fragments, e.g. another table swapped whole.
+        """
+        return Markup("<template>{}</template>").format(markup) if oob else markup
+
+    @property
+    @abstractmethod
+    def _filtered(self) -> FilteredLike:
+        """Get what the bar reads and sets: the view, or what knows its columns by position."""
+
+    @abstractmethod
+    def _count_text(self) -> str:
+        """Count the rows shown, while the search or the filters hide some: else ""."""
+
+    @abstractmethod
+    def _mark_parts(self, *parts: str) -> None:
+        """Swap these parts of the table: "bar", "count" or "error", or its own."""
+
+    def _oob(self, *, oob: bool) -> Markup:
+        return Markup(' hx-swap-oob="true"') if oob else Markup()
+
+    def _post(self, values: Mapping[str, str | int]) -> Markup:
+        """Get the attributes posting an event of the table, without swapping its element back."""
+        return Markup(
+            """ hx-post="/widget/{}" hx-vals='{}'"""
+            ' hx-swap="none"'
+        ).format(self.widget_id, json.dumps(values))
+
+    def _count_html(self, *, oob: bool = False) -> Markup:
+        text = self._count_text()
+        return Markup(
+            '<span id="{widget_id}-count" class="ms-auto text-sm opacity-70"'
+            ' aria-live="polite"{oob}>{text}</span>'
+        ).format(widget_id=self.widget_id, oob=self._oob(oob=oob), text=text)
+
+    def _filterable_columns(self) -> list[int]:
+        return [
+            column
+            for column in self._filtered.filterable_columns
+            if column < len(self._filtered.headers)
+        ]
+
+    def _bar_html(self, *, oob: bool = False) -> Markup:
+        bar_id = f"{self.widget_id}-bar"
+        if len(self._filterable_columns()) == 0:
+            return Markup('<div id="{}" hidden{}></div>').format(bar_id, self._oob(oob=oob))
+        texts = self._filtered.filter_texts
+        disabled = "" if self.is_enabled else " disabled"
+        search_label = texts.get("search", "")
+        search = Markup(
+            '<label class="input input-sm w-56">'
+            '{search_icon}<input id="{widget_id}-search" type="search"'
+            ' name="search" value="{search}"'
+            ' placeholder="{search_label}" aria-label="{search_label}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, search"'
+            ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
+            ' autocomplete="off"{disabled}></label>'
+        ).format(
+            search_icon=_icon("search"),
+            widget_id=self.widget_id,
+            search=self._filtered.search,
+            search_label=search_label,
+            disabled=disabled,
+        )
+        if self._editor is None:
+            focus = " autofocus" if self._focus_add_filter else ""
+            editor = Markup(
+                '<button id="{widget_id}-add-filter" type="button"'
+                ' class="btn btn-sm btn-soft"{post}'
+                "{focus}{disabled}>{get}</button>"
+            ).format(
+                widget_id=self.widget_id,
+                post=self._post({"event": "open_editor"}),
+                focus=focus,
+                disabled=disabled,
+                get=texts.get("add_filter", ""),
+            )
+        else:
+            editor = self._editor_html()
+        chips = Markup("").join(
+            self._chip_html(column) for column in sorted(self._filtered.filters)
+        )
+        clear = ""
+        if len(self._filtered.filters) >= 2:  # noqa: PLR2004
+            clear = Markup(
+                '<button type="button" class="btn btn-sm btn-ghost"{post}{disabled}>{get}</button>'
+            ).format(
+                post=self._post({"event": "clear_filters"}),
+                disabled=disabled,
+                get=texts.get("clear", ""),
+            )
+        return Markup(
+            '<div id="{bar_id}" role="search" class="flex flex-wrap items-center gap-2"'
+            "{oob}>{search}{editor}{chips}{clear}{count_html}</div>"
+        ).format(
+            bar_id=bar_id,
+            oob=self._oob(oob=oob),
+            search=search,
+            editor=editor,
+            chips=chips,
+            clear=clear,
+            count_html=self._count_html(),
+        )
+
+    def _editor_html(self) -> Markup:
+        assert self._editor is not None
+        texts = self._filtered.filter_texts
+        columns = self._filterable_columns()
+        column, typed = self._editor
+        chosen = column if column in columns else columns[0]
+        text, is_pattern = split_pattern(typed)
+        takes_pattern = self._filtered.filter_takes_pattern(chosen)
+        is_pattern = is_pattern and takes_pattern
+        options = Markup("").join(
+            Markup(
+                '<option value="{option}"'
+                ' data-placeholder="{filter_placeholder}"'
+                ' data-pattern-placeholder="{pattern_placeholder}"'
+                "{value}>"
+                "{headers}</option>"
+            ).format(
+                option=option,
+                filter_placeholder=self._filtered.filter_placeholder(option),
+                pattern_placeholder=self._pattern_placeholder(option),
+                value=" selected" if option == chosen else "",
+                headers=self._filtered.headers[option],
+            )
+            for option in columns
+        )
+        value_id = f"{self.widget_id}-value"
+        value_label = texts.get("value", "")
+        pattern_label = texts.get("pattern", "")
+        placeholder = self._filtered.filter_placeholder(chosen, is_pattern=is_pattern)
+        # a checkbox drawn as a button: on, the value is a regular expression; the page
+        # shows it only for a column a pattern filters, and hints at what to type
+        pattern = Markup(
+            '<label class="btn btn-sm btn-soft font-mono has-checked:btn-primary"'
+            ' title="{pattern_label}" data-filter-pattern{value}>'
+            '<input type="checkbox" name="pattern" value="1" class="sr-only"'
+            ' aria-label="{pattern_label}"{value2}>.*</label>'
+        ).format(
+            pattern_label=pattern_label,
+            value="" if takes_pattern else " hidden",
+            value2=" checked" if is_pattern else "",
+        )
+        return Markup(
+            '<form id="{widget_id}-editor" class="flex flex-wrap items-center gap-2"'
+            "{post}>"
+            '<select name="column" class="select select-sm w-auto" data-filter-column'
+            ' aria-label="{get}">{options}</select>'
+            "{pattern}"
+            '<input id="{value_id}" name="value" class="input input-sm w-60" type="text"'
+            ' value="{text}" aria-label="{value_label}"'
+            ' placeholder="{placeholder}"'
+            ' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
+            ' hx-post="/widget/{widget_id}" hx-trigger="escape-key"'
+            """ hx-vals='{{"event": "close_editor"}}' hx-swap="none">"""
+            "{error_html}"
+            '<button type="submit" class="btn btn-sm btn-primary">'
+            "{get2}</button></form>"
+        ).format(
+            widget_id=self.widget_id,
+            post=self._post({"event": "add_filter"}),
+            get=texts.get("column", ""),
+            options=options,
+            pattern=pattern,
+            value_id=value_id,
+            text=text,
+            value_label=value_label,
+            placeholder=placeholder,
+            error_html=self._error_html(),
+            get2=texts.get("add", ""),
+        )
+
+    def _pattern_placeholder(self, column: int) -> str:
+        """Hint at a regular expression filtering `column`, or "" if none does."""
+        if not self._filtered.filter_takes_pattern(column):
+            return ""
+        return self._filtered.filter_placeholder(column, is_pattern=True)
+
+    def _error_html(self, *, oob: bool = False) -> Markup:
+        """Render the editor's message, why its text can't filter; the page marks the field."""
+        error = self._editor_error
+        hidden = "" if error else " hidden"
+        return Markup(
+            '<span id="{widget_id}-value-error" class="text-sm text-error"'
+            ' data-log="error"{hidden}{oob}>{value}</span>'
+        ).format(widget_id=self.widget_id, hidden=hidden, oob=self._oob(oob=oob), value=error or "")
+
+    def _chip_html(self, column: int) -> Markup:
+        if column >= len(self._filtered.headers):
+            return Markup()
+        texts, header = self._filtered.filter_texts, self._filtered.headers[column]
+        remove = texts.get("remove", "{header}").format(header=header)
+        edit = texts.get("edit", "{header}").format(header=header)
+        disabled = "" if self.is_enabled else " disabled"
+        focus = " autofocus" if self._focused_chip == column else ""
+        # named by its text, the filter; the pencil and the tooltip say it edits it
+        return Markup(
+            '<span class="badge badge-soft badge-primary gap-1 pe-0">'
+            '<button id="{widget_id}-chip-{column}" type="button"'
+            ' class="inline-flex cursor-pointer items-center gap-1 hover:underline"'
+            ' title="{edit}"'
+            "{post}{focus}{disabled}>"
+            "{filter_chip}{pencil_icon}</button>"
+            '<button type="button" class="btn btn-ghost btn-xs btn-circle"'
+            ' aria-label="{remove}" title="{remove}"'
+            "{post2}{disabled}>\u00d7</button>"
+            "</span>"
+        ).format(
+            widget_id=self.widget_id,
+            column=column,
+            edit=edit,
+            post=self._post({"event": "open_editor", "column": column}),
+            focus=focus,
+            disabled=disabled,
+            filter_chip=self._filtered.filter_chip(column),
+            pencil_icon=_icon("pencil", "size-3"),
+            remove=remove,
+            post2=self._post({"event": "remove_filter", "column": column}),
+        )
+
+    def _column(self, form: Mapping[str, str], columns: list[int]) -> int | None:
+        """Get the column posted, if one of `columns`: a stale page may post another."""
+        column = form.get("column", "")
+        return int(column) if column.isdigit() and int(column) in columns else None
+
+    def _search(self, form: Mapping[str, str]) -> None:
+        # not swapped back: the user is typing in it
+        with self.stop_refresh():
+            self._filtered.search = form.get("search", "")
+
+    def _open_editor(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._filterable_columns())
+        text = self._filtered.filters.get(column, "") if column is not None else ""
+        self._editor, self._editor_error = (column, text), None
+        self._mark_parts("bar")
+
+    def _close_editor(self, _form: Mapping[str, str]) -> None:
+        self._editor, self._editor_error = None, None
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+
+    def _add_filter(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, self._filterable_columns())
+        if column is None or self._editor is None:
+            self._mark_parts("bar")  # a stale page: the bar as it now is
+            return
+        text = form.get("value", "")
+        if form.get("pattern") == "1" and self._filtered.filter_takes_pattern(column):
+            text = as_pattern(text)
+        error = self._filtered.filter_error(column, text)
+        if error is not None:
+            # the field keeps the text typed: only its message is swapped in
+            self._editor, self._editor_error = (column, text), error
+            self._mark_parts("error")
+            return
+        self._close_editor(form)
+        self._focus_add_filter, self._focused_chip = False, column
+        self._filtered.filters = {**self._filtered.filters, column: text}
+
+    def _remove_filter(self, form: Mapping[str, str]) -> None:
+        column = self._column(form, list(self._filtered.filters))
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+        if column is not None:
+            self._filtered.filters = {
+                other: text for other, text in self._filtered.filters.items() if other != column
+            }
+
+    def _clear_filters(self, _form: Mapping[str, str]) -> None:
+        self._focus_add_filter = True
+        self._mark_parts("bar")
+        self._filtered.filters = {}
+
+
+class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     """A table under its filter bar, scrolling sideways on its own when wider than the page.
 
     Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
@@ -1603,14 +1807,6 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         super().__init__(view)
         #: the cell the user is editing, by row and column
         self._editing: tuple[int, int] | None = None
-        #: the filter editor, while open: its column (None for the first) and its text
-        self._editor: tuple[int | None, str] | None = None
-        #: why the editor's text can't filter, once the user added it
-        self._editor_error: str | None = None
-        #: whether "+ Filter" takes the focus back, the editor or a chip just gone
-        self._focus_add_filter = False
-        #: the column whose chip takes the focus, its filter just added: Enter reopens it
-        self._focused_chip: int | None = None
         #: the parts to swap, unless the whole table is (`_mark_dirty`)
         self._dirty_parts: set[str] = set()
         self._is_whole_dirty = False
@@ -1659,6 +1855,16 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             self._dirty_parts.update(parts)
             dirty[self.widget_id] = self
 
+    @property
+    def _filtered(self) -> FilteredLike:
+        return self._view
+
+    def _count_text(self) -> str:
+        shown, total = len(self._view.shown_rows), len(self._view.rows)
+        if shown == total:
+            return ""
+        return self._view.filter_texts.get("count", "").format(shown=shown, total=total)
+
     def to_html(self, *, oob: bool = False) -> Markup:
         parts, self._dirty_parts = self._dirty_parts, set()
         is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
@@ -1694,16 +1900,6 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         )
         self._focus_add_filter, self._focused_chip = False, None
         return html_
-
-    def _oob(self, *, oob: bool) -> Markup:
-        return Markup(' hx-swap-oob="true"') if oob else Markup()
-
-    def _post(self, values: Mapping[str, str | int]) -> Markup:
-        """Get the attributes posting an event of the table, without swapping its element back."""
-        return Markup(
-            """ hx-post="/widget/{}" hx-vals='{}'"""
-            ' hx-swap="none"'
-        ).format(self.widget_id, json.dumps(values))
 
     def _head_html(self, *, oob: bool = False) -> Markup:
         """Render the headers: a row of them, under a row of `header_groups` if any.
@@ -1824,209 +2020,6 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
             and widget.check_all
             and column < len(self._view.headers)
         ]
-
-    @staticmethod
-    def _table_part(markup: Markup, *, oob: bool) -> Markup:
-        """Wrap a part of the `<table>` swapped out of band in a `<template>` of its own.
-
-        htmx parses an answer as a template's content: a `<tr>` or a `<tbody>` among the
-        rest would switch the parser to a table's rules for what follows, mangling the
-        next fragments, e.g. another table swapped whole.
-        """
-        return Markup("<template>{}</template>").format(markup) if oob else markup
-
-    def _count_html(self, *, oob: bool = False) -> Markup:
-        shown, total = len(self._view.shown_rows), len(self._view.rows)
-        text = ""
-        if shown != total:
-            text = self._view.filter_texts.get("count", "").format(shown=shown, total=total)
-        return Markup(
-            '<span id="{widget_id}-count" class="ms-auto text-sm opacity-70"'
-            ' aria-live="polite"{oob}>{text}</span>'
-        ).format(widget_id=self.widget_id, oob=self._oob(oob=oob), text=text)
-
-    def _filterable_columns(self) -> list[int]:
-        return [
-            column for column in self._view.filterable_columns if column < len(self._view.headers)
-        ]
-
-    def _bar_html(self, *, oob: bool = False) -> Markup:
-        bar_id = f"{self.widget_id}-bar"
-        if len(self._filterable_columns()) == 0:
-            return Markup('<div id="{}" hidden{}></div>').format(bar_id, self._oob(oob=oob))
-        texts = self._view.filter_texts
-        disabled = "" if self.is_enabled else " disabled"
-        search_label = texts.get("search", "")
-        search = Markup(
-            '<label class="input input-sm w-56">'
-            '{search_icon}<input id="{widget_id}-search" type="search"'
-            ' name="search" value="{search}"'
-            ' placeholder="{search_label}" aria-label="{search_label}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, search"'
-            ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
-            ' autocomplete="off"{disabled}></label>'
-        ).format(
-            search_icon=_icon("search"),
-            widget_id=self.widget_id,
-            search=self._view.search,
-            search_label=search_label,
-            disabled=disabled,
-        )
-        if self._editor is None:
-            focus = " autofocus" if self._focus_add_filter else ""
-            editor = Markup(
-                '<button id="{widget_id}-add-filter" type="button"'
-                ' class="btn btn-sm btn-soft"{post}'
-                "{focus}{disabled}>{get}</button>"
-            ).format(
-                widget_id=self.widget_id,
-                post=self._post({"event": "open_editor"}),
-                focus=focus,
-                disabled=disabled,
-                get=texts.get("add_filter", ""),
-            )
-        else:
-            editor = self._editor_html()
-        chips = Markup("").join(self._chip_html(column) for column in sorted(self._view.filters))
-        clear = ""
-        if len(self._view.filters) >= 2:  # noqa: PLR2004
-            clear = Markup(
-                '<button type="button" class="btn btn-sm btn-ghost"{post}{disabled}>{get}</button>'
-            ).format(
-                post=self._post({"event": "clear_filters"}),
-                disabled=disabled,
-                get=texts.get("clear", ""),
-            )
-        return Markup(
-            '<div id="{bar_id}" role="search" class="flex flex-wrap items-center gap-2"'
-            "{oob}>{search}{editor}{chips}{clear}{count_html}</div>"
-        ).format(
-            bar_id=bar_id,
-            oob=self._oob(oob=oob),
-            search=search,
-            editor=editor,
-            chips=chips,
-            clear=clear,
-            count_html=self._count_html(),
-        )
-
-    def _editor_html(self) -> Markup:
-        assert self._editor is not None
-        texts = self._view.filter_texts
-        columns = self._filterable_columns()
-        column, typed = self._editor
-        chosen = column if column in columns else columns[0]
-        text, is_pattern = split_pattern(typed)
-        takes_pattern = self._view.filter_takes_pattern(chosen)
-        is_pattern = is_pattern and takes_pattern
-        options = Markup("").join(
-            Markup(
-                '<option value="{option}"'
-                ' data-placeholder="{filter_placeholder}"'
-                ' data-pattern-placeholder="{pattern_placeholder}"'
-                "{value}>"
-                "{headers}</option>"
-            ).format(
-                option=option,
-                filter_placeholder=self._view.filter_placeholder(option),
-                pattern_placeholder=self._pattern_placeholder(option),
-                value=" selected" if option == chosen else "",
-                headers=self._view.headers[option],
-            )
-            for option in columns
-        )
-        value_id = f"{self.widget_id}-value"
-        value_label = texts.get("value", "")
-        pattern_label = texts.get("pattern", "")
-        placeholder = self._view.filter_placeholder(chosen, is_pattern=is_pattern)
-        # a checkbox drawn as a button: on, the value is a regular expression; the page
-        # shows it only for a column a pattern filters, and hints at what to type
-        pattern = Markup(
-            '<label class="btn btn-sm btn-soft font-mono has-checked:btn-primary"'
-            ' title="{pattern_label}" data-filter-pattern{value}>'
-            '<input type="checkbox" name="pattern" value="1" class="sr-only"'
-            ' aria-label="{pattern_label}"{value2}>.*</label>'
-        ).format(
-            pattern_label=pattern_label,
-            value="" if takes_pattern else " hidden",
-            value2=" checked" if is_pattern else "",
-        )
-        return Markup(
-            '<form id="{widget_id}-editor" class="flex flex-wrap items-center gap-2"'
-            "{post}>"
-            '<select name="column" class="select select-sm w-auto" data-filter-column'
-            ' aria-label="{get}">{options}</select>'
-            "{pattern}"
-            '<input id="{value_id}" name="value" class="input input-sm w-60" type="text"'
-            ' value="{text}" aria-label="{value_label}"'
-            ' placeholder="{placeholder}"'
-            ' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
-            ' hx-post="/widget/{widget_id}" hx-trigger="escape-key"'
-            """ hx-vals='{{"event": "close_editor"}}' hx-swap="none">"""
-            "{error_html}"
-            '<button type="submit" class="btn btn-sm btn-primary">'
-            "{get2}</button></form>"
-        ).format(
-            widget_id=self.widget_id,
-            post=self._post({"event": "add_filter"}),
-            get=texts.get("column", ""),
-            options=options,
-            pattern=pattern,
-            value_id=value_id,
-            text=text,
-            value_label=value_label,
-            placeholder=placeholder,
-            error_html=self._error_html(),
-            get2=texts.get("add", ""),
-        )
-
-    def _pattern_placeholder(self, column: int) -> str:
-        """Hint at a regular expression filtering `column`, or "" if none does."""
-        if not self._view.filter_takes_pattern(column):
-            return ""
-        return self._view.filter_placeholder(column, is_pattern=True)
-
-    def _error_html(self, *, oob: bool = False) -> Markup:
-        """Render the editor's message, why its text can't filter; the page marks the field."""
-        error = self._editor_error
-        hidden = "" if error else " hidden"
-        return Markup(
-            '<span id="{widget_id}-value-error" class="text-sm text-error"'
-            ' data-log="error"{hidden}{oob}>{value}</span>'
-        ).format(widget_id=self.widget_id, hidden=hidden, oob=self._oob(oob=oob), value=error or "")
-
-    def _chip_html(self, column: int) -> Markup:
-        if column >= len(self._view.headers):
-            return Markup()
-        texts, header = self._view.filter_texts, self._view.headers[column]
-        remove = texts.get("remove", "{header}").format(header=header)
-        edit = texts.get("edit", "{header}").format(header=header)
-        disabled = "" if self.is_enabled else " disabled"
-        focus = " autofocus" if self._focused_chip == column else ""
-        # named by its text, the filter; the pencil and the tooltip say it edits it
-        return Markup(
-            '<span class="badge badge-soft badge-primary gap-1 pe-0">'
-            '<button id="{widget_id}-chip-{column}" type="button"'
-            ' class="inline-flex cursor-pointer items-center gap-1 hover:underline"'
-            ' title="{edit}"'
-            "{post}{focus}{disabled}>"
-            "{filter_chip}{pencil_icon}</button>"
-            '<button type="button" class="btn btn-ghost btn-xs btn-circle"'
-            ' aria-label="{remove}" title="{remove}"'
-            "{post2}{disabled}>\u00d7</button>"
-            "</span>"
-        ).format(
-            widget_id=self.widget_id,
-            column=column,
-            edit=edit,
-            post=self._post({"event": "open_editor", "column": column}),
-            focus=focus,
-            disabled=disabled,
-            filter_chip=self._view.filter_chip(column),
-            pencil_icon=_icon("pencil", "size-3"),
-            remove=remove,
-            post2=self._post({"event": "remove_filter", "column": column}),
-        )
 
     def _row_html(
         self,
@@ -2248,65 +2241,12 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
         self._view.selected_rows = rows
         self._view.selection_changed.emit(rows)
 
-    def _column(self, form: Mapping[str, str], columns: list[int]) -> int | None:
-        """Get the column posted, if one of `columns`: a stale page may post another."""
-        column = form.get("column", "")
-        return int(column) if column.isdigit() and int(column) in columns else None
-
     def _sort(self, form: Mapping[str, str]) -> None:
         column = self._column(form, self._view.sortable_columns)
         if column is None:
             self._mark_parts("head", "body")  # as it now is
             return
         self._view.sort_by(column)
-
-    def _search(self, form: Mapping[str, str]) -> None:
-        # not swapped back: the user is typing in it
-        with self.stop_refresh():
-            self._view.search = form.get("search", "")
-
-    def _open_editor(self, form: Mapping[str, str]) -> None:
-        column = self._column(form, self._filterable_columns())
-        text = self._view.filters.get(column, "") if column is not None else ""
-        self._editor, self._editor_error = (column, text), None
-        self._mark_parts("bar")
-
-    def _close_editor(self, _form: Mapping[str, str]) -> None:
-        self._editor, self._editor_error = None, None
-        self._focus_add_filter = True
-        self._mark_parts("bar")
-
-    def _add_filter(self, form: Mapping[str, str]) -> None:
-        column = self._column(form, self._filterable_columns())
-        if column is None or self._editor is None:
-            self._mark_parts("bar")  # a stale page: the bar as it now is
-            return
-        text = form.get("value", "")
-        if form.get("pattern") == "1" and self._view.filter_takes_pattern(column):
-            text = as_pattern(text)
-        error = self._view.filter_error(column, text)
-        if error is not None:
-            # the field keeps the text typed: only its message is swapped in
-            self._editor, self._editor_error = (column, text), error
-            self._mark_parts("error")
-            return
-        self._close_editor(form)
-        self._focus_add_filter, self._focused_chip = False, column
-        self._view.filters = {**self._view.filters, column: text}
-
-    def _remove_filter(self, form: Mapping[str, str]) -> None:
-        column = self._column(form, list(self._view.filters))
-        self._focus_add_filter = True
-        self._mark_parts("bar")
-        if column is not None:
-            self._view.filters = {
-                other: text for other, text in self._view.filters.items() if other != column
-            }
-
-    def _clear_filters(self, _form: Mapping[str, str]) -> None:
-        self._focus_add_filter = True
-        self._mark_parts("bar")
-        self._view.filters = {}
 
     def _edit(self, event: str, form: Mapping[str, str]) -> None:
         """Start editing a cell, or end it with the text posted."""
@@ -2414,6 +2354,372 @@ class WebTableRenderer(WebRenderer[TableViewLike]):
 
 
 TValue = TypeVar("TValue")
+
+
+class DataTableViewLike(ViewLike, Protocol):
+    texts: dict[str, str]
+    sort_column: str | None
+    sort_descending: bool
+    selection_mode: SelectionMode
+    search: str
+    filters: dict[str, str]
+    filterable_columns: list[str]
+    filter_texts: dict[str, str]
+
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def column_names(self) -> list[str]: ...
+    @property
+    def row_count(self) -> int: ...
+    @property
+    def count_text(self) -> str: ...
+    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
+    def sort_by(self, column: str) -> None: ...
+    def is_selected(self, row_id: Any) -> bool: ...
+    def select_at(self, position: int) -> None: ...
+    def filter_error(self, column: str, text: str) -> str | None: ...
+    def filter_takes_pattern(self, column: str) -> bool: ...
+    def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
+    def filter_chip(self, column: str) -> str: ...
+
+
+class _ByPosition:
+    """A large table's filter settings, its columns known by their positions in its source."""
+
+    def __init__(self, view: DataTableViewLike) -> None:
+        self._view = view
+
+    @property
+    def headers(self) -> list[str]:
+        return self._view.headers
+
+    @property
+    def filter_texts(self) -> dict[str, str]:
+        return self._view.filter_texts
+
+    @property
+    def search(self) -> str:
+        return self._view.search
+
+    @search.setter
+    def search(self, text: str) -> None:
+        self._view.search = text
+
+    @property
+    def filters(self) -> dict[int, str]:
+        names = self._view.column_names
+        return {
+            names.index(name): text for name, text in self._view.filters.items() if name in names
+        }
+
+    @filters.setter
+    def filters(self, filters: dict[int, str]) -> None:
+        names = self._view.column_names
+        self._view.filters = {names[column]: text for column, text in filters.items()}
+
+    @property
+    def filterable_columns(self) -> list[int]:
+        names = self._view.column_names
+        return [names.index(name) for name in names if name in self._view.filterable_columns]
+
+    def filter_error(self, column: int, text: str) -> str | None:
+        return self._view.filter_error(self._view.column_names[column], text)
+
+    def filter_takes_pattern(self, column: int) -> bool:
+        return self._view.filter_takes_pattern(self._view.column_names[column])
+
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
+        return self._view.filter_placeholder(self._view.column_names[column], is_pattern=is_pattern)
+
+    def filter_chip(self, column: int) -> str:
+        return self._view.filter_chip(self._view.column_names[column])
+
+
+class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
+    """A large table, scrolled in a frame: the page draws only the rows around the view.
+
+    The frame holds the headers, a window of `DATA_TABLE_WINDOW_ROWS` rows, and two filler
+    rows that give the scroll bar the height of every row. When the user stops scrolling
+    outside the window, `page.js` posts the first row shown (`scroll`), and only the
+    `<tbody>` comes back, the scroll position kept. Past `DATA_TABLE_SCROLLED_ROWS` rows,
+    the fillers stop growing: a scroll position maps to a row by its ratio (`data-scale`).
+    Each row starts with its position, from 1, and tells screen readers where it is
+    (`aria-rowindex` of `aria-rowcount`).
+
+    A new order of the rows (a sort, a search, a filter, the source changed) swaps the
+    whole frame, scrolled to the top. A header is a button sorting by its column
+    (`DataTableView.sort_by`), keeping the focus as it comes back (`autofocus`). A click
+    on a row, or Enter on it, selects it (`select_at`): only the rows come back, the row
+    keeping the focus. The web neither extends a selection nor activates a row. While a
+    column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
+    above the frame.
+    """
+
+    _role = "data_table"
+
+    def __init__(self, view: DataTableViewLike) -> None:
+        super().__init__(view)
+        self._by_position = _ByPosition(view)
+        #: the position of the window's first row
+        self._start = 0
+        #: the parts to swap ("frame", "rows", "bar", "count", "error"), unless the whole
+        self._dirty_parts: set[str] = set()
+        self._is_whole_dirty = False
+        #: the column whose header takes the focus as it comes back: the user sorted by it
+        self._focused_header: str | None = None
+        #: the position of the row that takes the focus as it comes back: the user selected it
+        self._focused_row: int | None = None
+        self._refresh_dispatcher.update(
+            {
+                **dict.fromkeys(
+                    ("source", "texts", "filter_texts", "filterable_columns"), self._mark_whole
+                ),
+                "row_count": self._reorder,
+                **dict.fromkeys(
+                    ("column_formats", "selected_ids", "selection_mode"),
+                    self._part_marker("rows"),
+                ),
+                "search": self._part_marker("bar"),
+                "filters": self._part_marker("bar"),
+                # shown with the order they give, which the view sends as `row_count`
+                "sort_column": lambda _view, _table, _value: None,
+                "sort_descending": lambda _view, _table, _value: None,
+            }
+        )
+
+    @property
+    def _filtered(self) -> FilteredLike:
+        return self._by_position
+
+    def _count_text(self) -> str:
+        return self._view.count_text
+
+    def _mark_whole(self, view: DataTableViewLike, rendered_object: str, value: Any) -> None:
+        self._is_whole_dirty = True
+        self._mark_dirty(view, rendered_object, value)
+
+    def _part_marker(self, *parts: str) -> Callable[[DataTableViewLike, str, Any], None]:
+        def mark(_view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
+            self._mark_parts(*parts)
+
+        return mark
+
+    def _mark_parts(self, *parts: str) -> None:
+        dirty = _DIRTY.get()
+        if dirty is not None:
+            self._dirty_parts.update(parts)
+            dirty[self.widget_id] = self
+
+    def _reorder(self, _view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
+        """Show a new order of the rows from its first: the frame comes back to the top."""
+        self._start = 0
+        self._mark_parts("frame", "count")
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        parts, self._dirty_parts = self._dirty_parts, set()
+        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
+        if not is_whole:
+            if "bar" in parts:
+                parts.discard("count")  # in the bar
+            if "frame" in parts:
+                parts.discard("rows")  # in the frame
+            renders = {
+                "frame": self._frame_html,
+                "rows": self._rows_html,
+                "count": self._count_html,
+                "error": self._error_html,
+                "bar": self._bar_html,
+            }
+            # the bar last: it may hold the element that sent the request, which htmx
+            # swaps nothing more from once it's gone
+            order = ("frame", "rows", "count", "error", "bar")
+            fragments = Markup("").join(renders[part](oob=True) for part in order if part in parts)
+            self._focus_add_filter, self._focused_chip = False, None
+            return fragments
+        html_ = Markup(
+            '<div {root_attributes} class="flex flex-col gap-2">{bar_html}{frame_html}</div>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            bar_html=self._bar_html(),
+            frame_html=self._frame_html(),
+        )
+        self._focus_add_filter, self._focused_chip = False, None
+        return html_
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if not self.is_enabled:
+            super().dispatch(event, form)
+        handlers: dict[str, Callable[[Mapping[str, str]], None]] = {
+            "search": self._search,
+            "open_editor": self._open_editor,
+            "close_editor": self._close_editor,
+            "add_filter": self._add_filter,
+            "remove_filter": self._remove_filter,
+            "clear_filters": self._clear_filters,
+            "sort": self._sort,
+            "select": self._select,
+            "scroll": self._scroll,
+        }
+        if event not in handlers:
+            super().dispatch(event, form)
+        handlers[event](form)
+
+    def _sort(self, form: Mapping[str, str]) -> None:
+        column = form.get("column", "")
+        if column not in self._view.column_names:
+            super().dispatch("sort", form)
+        self._focused_header = column
+        self._view.sort_by(column)
+
+    def _select(self, form: Mapping[str, str]) -> None:
+        position = form.get("position", "")
+        if not position.isdigit() or int(position) >= self._view.row_count:
+            # a row a stale page still shows: swap the rows back as they now are
+            self._mark_parts("rows")
+            return
+        self._focused_row = int(position)
+        self._view.select_at(int(position))
+
+    def _scroll(self, form: Mapping[str, str]) -> None:
+        """Draw the window around the first row shown, a fifth of it above."""
+        shown = form.get("start", "")
+        if not shown.isdigit():
+            return
+        last_start = max(self._view.row_count - DATA_TABLE_WINDOW_ROWS, 0)
+        start = min(max(int(shown) - DATA_TABLE_WINDOW_ROWS // 5, 0), last_start)
+        if start != self._start:
+            self._start = start
+            self._mark_parts("rows")
+
+    def _scale(self) -> float:
+        """Get the rows each row's height of the scroll bar stands for: 1 up to the cap."""
+        return max(self._view.row_count / DATA_TABLE_SCROLLED_ROWS, 1.0)
+
+    def _header_html(self, name: str, header: str, *, is_focused: bool) -> Markup:
+        """Render a column's header: a button sorting by the column, its order after it."""
+        view = self._view
+        order = view.sort_descending if view.sort_column == name else None
+        arrow = {None: "", False: " ▲", True: " ▼"}[order]
+        return Markup(
+            '<th scope="col" aria-sort="{aria_sort}" class="p-0">'
+            '<button type="button" class="btn btn-ghost btn-sm w-full justify-start'
+            ' font-semibold"{post}{disabled}{autofocus}>'
+            '{header}<span aria-hidden="true">{arrow}</span></button></th>'
+        ).format(
+            aria_sort=_ARIA_SORT[order],
+            post=self._post({"event": "sort", "column": name}),
+            disabled="" if self.is_enabled else " disabled",
+            autofocus=" autofocus" if is_focused else "",
+            header=header,
+            arrow=arrow,
+        )
+
+    def _row_html(
+        self, position: int, row_id: Any, cells: list[str], *, is_focused: bool
+    ) -> Markup:
+        """Render a row: its position, then its cells; a click or Enter selects it."""
+        is_selected = self._view.is_selected(row_id)
+        if self._view.selection_mode is SelectionMode.MULTIPLE:
+            selected = Markup(' aria-selected="{}"').format("true" if is_selected else "false")
+        else:
+            selected = Markup(' aria-current="true"') if is_selected else Markup()
+        content = Markup(
+            '<th scope="row" class="tabular-nums whitespace-nowrap">{position}</th>{cells}'
+        ).format(
+            position=f"{position + 1:,}",
+            cells=Markup("").join(
+                Markup('<td class="whitespace-nowrap">{}</td>').format(cell) for cell in cells
+            ),
+        )
+        if not self.is_enabled:
+            return Markup('<tr class="h-9" aria-rowindex="{}"{} data-window-row>{}</tr>').format(
+                position + 2, selected, content
+            )
+        return Markup(
+            '<tr class="h-9 cursor-pointer" tabindex="0" aria-rowindex="{index}"'
+            '{selected}{autofocus} data-window-row hx-post="/widget/{widget_id}"'
+            """ hx-trigger="activate" hx-vals='{vals}' hx-swap="none">{content}</tr>"""
+        ).format(
+            index=position + 2,
+            selected=selected,
+            autofocus=" autofocus" if is_focused else "",
+            widget_id=self.widget_id,
+            vals=json.dumps({"event": "select", "position": str(position)}),
+            content=content,
+        )
+
+    def _frame_html(self, *, oob: bool = False) -> Markup:
+        """Render the scrolled frame: the headers, then the window of rows between fillers.
+
+        Its hidden field takes the first row shown, which `page.js` posts on a scroll.
+        """
+        view = self._view
+        focused, self._focused_header = self._focused_header, None
+        head = Markup("").join(
+            self._header_html(name, header, is_focused=name == focused)
+            for name, header in zip(view.column_names, view.headers)
+        )
+        return Markup(
+            '<div id="{widget_id}-frame" class="max-h-[36rem] overflow-y-auto rounded-box'
+            ' border border-base-300" tabindex="0"'
+            ' data-virtual-scroll data-scale="{scale}"{oob}>'
+            '<input type="hidden" name="start" data-scroll-start'
+            ' hx-post="/widget/{widget_id}" hx-trigger="scroll-window"'
+            """ hx-vals='{{"event": "scroll"}}' hx-swap="none" hx-sync="this:replace">"""
+            '<table class="table table-zebra table-sm" aria-rowcount="{row_count}">'
+            '<thead class="sticky top-0 z-10 bg-base-100"><tr aria-rowindex="1"><td></td>'
+            "{head}</tr></thead>{rows_html}</table></div>"
+        ).format(
+            widget_id=self.widget_id,
+            scale=f"{self._scale():.6f}",
+            oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
+            row_count=view.row_count + 1,
+            head=head,
+            rows_html=self._rows_html(),
+        )
+
+    def _rows_html(self, *, oob: bool = False) -> Markup:
+        """Render the `<tbody>`: the window of rows, between the fillers standing for the rest.
+
+        A filler is as tall as its rows, `_scale` of them to a row's height.
+        """
+        view = self._view
+        start = min(self._start, max(view.row_count - 1, 0))
+        rows = view.rows(start, start + DATA_TABLE_WINDOW_ROWS)
+        width = len(view.headers) + 1
+        if len(rows) == 0:
+            empty = view.filter_texts.get("no_match", "") if view.count_text else ""
+            body = Markup(
+                '<tr><td colspan="{}" class="text-center opacity-70">{}</td></tr>'
+            ).format(width, empty or view.texts.get("empty", ""))
+        else:
+            focused_row, self._focused_row = self._focused_row, None
+            stop = start + len(rows)
+            body = Markup("{before}{rows}{after}").format(
+                before=self._filler_html(start, width),
+                rows=Markup("").join(
+                    self._row_html(
+                        start + offset, row_id, cells, is_focused=start + offset == focused_row
+                    )
+                    for offset, (row_id, cells) in enumerate(rows)
+                ),
+                after=self._filler_html(view.row_count - stop, width),
+            )
+        return self._table_part(
+            Markup('<tbody id="{}-rows"{}>{}</tbody>').format(
+                self.widget_id, Markup(' hx-swap-oob="true"') if oob else Markup(), body
+            ),
+            oob=oob,
+        )
+
+    def _filler_html(self, count: int, width: int) -> Markup:
+        """Render a row standing for `count` rows not drawn: as tall as they'd be, scaled."""
+        if count <= 0:
+            return Markup()
+        return Markup(
+            '<tr aria-hidden="true" style="height: calc(2.25rem * {})"><td colspan="{}"></td></tr>'
+        ).format(f"{count / self._scale():.3f}", width)
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

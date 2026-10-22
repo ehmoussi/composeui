@@ -2267,6 +2267,64 @@ def _sorted_by(
     return [item for item, _ in ordered] + [item for item, cell in keyed if cell is None]
 
 
+def _filter_error(tr: Callable[[str], str], text: str, field_type: Any) -> Optional[str]:
+    """Say why `text` can't filter a column of `field_type`, translated by `tr`; None if it can."""
+    try:
+        parse_filter(text, field_type)
+    except FilterError as error:
+        messages = {
+            FilterProblem.EMPTY: tr("Type a value to filter by"),
+            FilterProblem.NOT_A_NUMBER: tr('"{text}" isn\'t a number'),
+            FilterProblem.NOT_A_DATE: tr('"{text}" isn\'t a date, as 2024-01-31'),
+            FilterProblem.NOT_A_BOOLEAN: tr('"{text}" isn\'t true or false'),
+            FilterProblem.REVERSED_RANGE: tr("The range's start is after its end"),
+            FilterProblem.NOT_A_PATTERN: tr('"{text}" isn\'t a valid regular expression'),
+        }
+        return messages[error.problem].format(text=error.text)
+    return None
+
+
+def _filter_placeholder(tr: Callable[[str], str], field_type: Any, *, is_pattern: bool) -> str:
+    """Hint at what filters a column of `field_type`: a regular expression, or else text."""
+    kind = column_kind(field_type)
+    if is_pattern and kind is ColumnKind.TEXT:
+        return tr("a regular expression, as Room [1-3]")
+    if kind is ColumnKind.NUMBER:
+        return tr(">=20, 18..24")
+    if kind is ColumnKind.DATE:
+        return tr(">=2024-01-31")
+    if kind is ColumnKind.BOOLEAN:
+        return tr("true or false")
+    return tr("contains, =exact, start*, !not")
+
+
+def _filter_chip(texts: Mapping[str, str], header: str, typed: str, *, takes_pattern: bool) -> str:
+    """Show a filter as its chip does: its column's header, then the text typed.
+
+    Apart, as a label and its value: the header isn't part of what's typed. A regular
+    expression without its slashes: "Room matches Room [1-3]".
+    """
+    text, is_pattern = split_pattern(typed)
+    if is_pattern and takes_pattern:
+        chip = texts.get("chip_pattern", "{header} {filter}")
+    else:
+        chip, text = texts.get("chip", "{header}: {filter}"), typed
+    return chip.format(header=header, filter=text)
+
+
+def _store(view: View, attribute: attrs.Attribute[Any], value: Any) -> None:
+    """Set `view`'s attribute, then notify its renderer: it shows the view as it now is."""
+    old = getattr(view, attribute.name)
+    object.__setattr__(view, attribute.name, value)
+    renderer = view.renderer
+    if (
+        old != value
+        and isinstance(renderer, (Renderer, RendererContainer))
+        and not renderer.is_updating_state()
+    ):
+        renderer.refresh_attribute(attribute.name, value)
+
+
 def _sort_value(value: Any) -> Any:
     """Get the value a field's cell sorts and filters by: an enum by its text, as shown."""
     return _cell_text(value) if isinstance(value, enum.Enum) else value
@@ -2415,15 +2473,7 @@ class TableMixin:
 
     def _store(self, attribute: attrs.Attribute[Any], value: Any) -> None:
         """Set an attribute, then notify the renderer: it shows the view as it now is."""
-        old = getattr(self, attribute.name)
-        object.__setattr__(self, attribute.name, value)
-        renderer = cast("View", self).renderer
-        if (
-            old != value
-            and isinstance(renderer, (Renderer, RendererContainer))
-            and not renderer.is_updating_state()
-        ):
-            renderer.refresh_attribute(attribute.name, value)
+        _store(cast("View", self), attribute, value)
 
     def _restyle(self, attribute: attrs.Attribute[Any], value: Any) -> Any:
         """Set how the table looks, and notify the renderer, which shows it with the rows."""
@@ -2522,20 +2572,7 @@ class TableMixin:
 
     def filter_error(self, column: int, text: str) -> Optional[str]:
         """Say why `text` can't filter `column`, translated; None if it can."""
-        try:
-            parse_filter(text, self._column_type(column))
-        except FilterError as error:
-            tr = cast("View", self).tr
-            messages = {
-                FilterProblem.EMPTY: tr("Type a value to filter by"),
-                FilterProblem.NOT_A_NUMBER: tr('"{text}" isn\'t a number'),
-                FilterProblem.NOT_A_DATE: tr('"{text}" isn\'t a date, as 2024-01-31'),
-                FilterProblem.NOT_A_BOOLEAN: tr('"{text}" isn\'t true or false'),
-                FilterProblem.REVERSED_RANGE: tr("The range's start is after its end"),
-                FilterProblem.NOT_A_PATTERN: tr('"{text}" isn\'t a valid regular expression'),
-            }
-            return messages[error.problem].format(text=error.text)
-        return None
+        return _filter_error(cast("View", self).tr, text, self._column_type(column))
 
     def filter_takes_pattern(self, column: int) -> bool:
         """Tell whether a regular expression filters `column`: a text column."""
@@ -2543,17 +2580,8 @@ class TableMixin:
 
     def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
         """Hint at what filters `column`, translated: a regular expression, or else text."""
-        kind = column_kind(self._column_type(column))
         tr = cast("View", self).tr
-        if is_pattern and kind is ColumnKind.TEXT:
-            return tr("a regular expression, as Room [1-3]")
-        if kind is ColumnKind.NUMBER:
-            return tr(">=20, 18..24")
-        if kind is ColumnKind.DATE:
-            return tr(">=2024-01-31")
-        if kind is ColumnKind.BOOLEAN:
-            return tr("true or false")
-        return tr("contains, =exact, start*, !not")
+        return _filter_placeholder(tr, self._column_type(column), is_pattern=is_pattern)
 
     def filter_chip(self, column: int) -> str:
         """Show a filter as its chip does: its column's header, then the text typed.
@@ -2562,12 +2590,12 @@ class TableMixin:
         expression without its slashes: "Room matches Room [1-3]".
         """
         header = self.headers[column] if column < len(self.headers) else ""
-        text, is_pattern = split_pattern(self.filters[column])
-        if is_pattern and self.filter_takes_pattern(column):
-            chip = self.filter_texts.get("chip_pattern", "{header} {filter}")
-        else:
-            chip, text = self.filter_texts.get("chip", "{header}: {filter}"), self.filters[column]
-        return chip.format(header=header, filter=text)
+        return _filter_chip(
+            self.filter_texts,
+            header,
+            self.filters[column],
+            takes_pattern=self.filter_takes_pattern(column),
+        )
 
     def mark_text(self, mark: NodeMark) -> str:
         """Get the name of `mark` in the main view's language."""
@@ -3002,6 +3030,10 @@ class TableSource(Protocol[IdT]):
         """Get the signal emitted once the rows changed."""
         ...
 
+    def count(self) -> int:
+        """Get the number of rows, before any search or filter."""
+        ...
+
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> Sequence[IdT]:
@@ -3075,6 +3107,9 @@ class ListSource(Generic[RecordT]):
         self._set_records(records)
         self._changed.emit()
 
+    def count(self) -> int:
+        return len(self._records)
+
     def _set_records(self, records: Sequence[RecordT]) -> None:
         rows = {
             index if self._id_field is None else getattr(record, self._id_field): record
@@ -3143,13 +3178,8 @@ class ListSource(Generic[RecordT]):
         return _cell_text(getattr(record, name))
 
 
-#: the text of a large table's pages, on the web
-DATA_TABLE_TEXTS: Mapping[str, str] = {
-    "previous": T("Previous"),
-    "next": T("Next"),
-    "count": T("Rows {first} to {last} of {total}"),
-    "empty": T("No rows"),
-}
+#: the text of a large table, on the web: what it says without rows
+DATA_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows")}
 
 #: the rows a `DataTableView` reads from its source at once, from a multiple of it on
 DATA_TABLE_WINDOW = 200
@@ -3188,9 +3218,14 @@ class DataTableView(View):
     A study saves the settings and `selected_ids`, as JSON values (e.g. integers), and
     never the rows or the source: the app gives the view its source again.
 
-    Qt and Textual scroll the rows, drawing only those on screen. The web shows them by
-    pages, with Previous and Next buttons and `texts`. The user doesn't sort, filter or
-    select them yet (see the "Large tables" plan of ``ROADMAP.md``).
+    Each backend scrolls the rows, drawing only those around the view. A click on a
+    column's header sorts by it (`sort_by`). A click on a row selects it (`select_at`);
+    on Qt and Textual, Shift extends the selection (`extend_to`), and a double click or
+    Enter activates the row (`activate_at`).
+
+    While `filterable_columns` names columns, a filter bar shows above the rows, as a
+    `TableView`'s: a search, "+ Filter" opening an editor of a column and a value, and the
+    filters as chips. It counts the rows shown while some are hidden (`count_text`).
     """
 
     _renderer_key = "data_table"
@@ -3234,8 +3269,7 @@ class DataTableView(View):
         """Read the order of the rows as `value` sorts or filters them."""
         if getattr(self, attribute.name) == value:
             return value
-        value = notify_renderer(self, attribute, value)
-        object.__setattr__(self, attribute.name, value)
+        _store(self, attribute, value)
         self._read_order()
         return value
 
@@ -3245,10 +3279,16 @@ class DataTableView(View):
     )
     #: the format of each column's values, by column name (e.g. ``".6g"``): `format`'s
     column_formats: dict[str, str] = attrs.field(factory=dict[str, str])
-    #: the text of the pages, which the web shows (see `DATA_TABLE_TEXTS`)
+    #: the text the web shows (see `DATA_TABLE_TEXTS`)
     texts: dict[str, str] = attrs.field(
         factory=lambda: dict(DATA_TABLE_TEXTS), metadata={UI_TEXT: True}
     )
+    #: the text of the filter bar, by what it's for (see `FILTER_TEXTS`)
+    filter_texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(FILTER_TEXTS), metadata={UI_TEXT: True}
+    )
+    #: the columns the user filters in the table's bar, by name: none hides the bar
+    filterable_columns: list[str] = attrs.field(factory=list[str])
     selection_mode: SelectionMode = attrs.field(
         default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
     )
@@ -3266,8 +3306,18 @@ class DataTableView(View):
         validator=[_check_filters],
         on_setattr=[attrs.setters.validate, _reorder],
     )
+
+    def _reconcile_selected(self, attribute: attrs.Attribute[Any], ids: list[Any]) -> list[Any]:
+        """Keep the selected ids in a set too, for `is_selected`, and notify the renderer."""
+        object.__setattr__(self, "_selected", set(ids))
+        return cast("list[Any]", notify_renderer(self, attribute, ids))
+
     # after the settings: loading saved state selects the rows once in their order
-    selected_ids: list[Any] = attrs.field(factory=list, validator=[_check_selected_ids])
+    selected_ids: list[Any] = attrs.field(
+        factory=list,
+        validator=[_check_selected_ids],
+        on_setattr=[attrs.setters.validate, _reconcile_selected],
+    )
     # signals
     selection_changed: Signal[list[Any]] = attrs.Factory(Signal[list[Any]])
     row_activated: Signal[Any] = attrs.Factory(Signal[Any])
@@ -3277,9 +3327,18 @@ class DataTableView(View):
     _cache: OrderedDict[Any, Sequence[Any]] = attrs.field(
         factory=OrderedDict, init=False, repr=False, metadata={OMIT: True}
     )
+    #: `selected_ids`, as a set
+    _selected: set[Any] = attrs.field(factory=set, init=False, repr=False, metadata={OMIT: True})
+    #: the number of the source's rows, before any search or filter
+    _total: int = attrs.field(default=0, init=False, repr=False, metadata={OMIT: True})
+    #: the position the user selected last, where a range they extend starts
+    _anchor: Optional[int] = attrs.field(
+        default=None, init=False, repr=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        self._selected = set(self.selected_ids)
         self.source = self.source
 
     @property
@@ -3290,9 +3349,113 @@ class DataTableView(View):
         return [translate_again(column.header, self._tr) for column in self.source.columns]
 
     @property
+    def column_names(self) -> list[str]:
+        """Get the names of the source's columns, in its order."""
+        return [] if self.source is None else [column.name for column in self.source.columns]
+
+    @property
     def row_count(self) -> int:
         """Get the number of rows shown: the rows the search and the filters pass."""
         return len(self._order)
+
+    def sort_by(self, column: str) -> None:
+        """Sort as a click on the column's header does: ascending, descending, then not.
+
+        The source orders the rows once, for the column and the direction together.
+        """
+        fields = attrs.fields(cast("type[AttrsInstance]", type(self)))
+        self._check_sort_column(fields.sort_column, column)
+        if self.sort_column != column:
+            settings: tuple[Optional[str], bool] = (column, False)
+        elif not self.sort_descending:
+            settings = (column, True)
+        else:
+            settings = (None, False)
+        for attribute, value in zip((fields.sort_column, fields.sort_descending), settings):
+            _store(self, attribute, value)
+        self._read_order()
+
+    @property
+    def count_text(self) -> str:
+        """Count the rows shown, while the search or the filters hide some: else "".
+
+        E.g. "1,234 of 1,000,000", in `filter_texts`' words.
+        """
+        if self.row_count == self._total:
+            return ""
+        count = self.filter_texts.get("count", "")
+        return count.format(shown=f"{self.row_count:,}", total=f"{self._total:,}")
+
+    def filter_error(self, column: str, text: str) -> Optional[str]:
+        """Say why `text` can't filter `column`, translated; None if it can."""
+        return _filter_error(self.tr, text, self._source_column(column, "filter").type)
+
+    def filter_takes_pattern(self, column: str) -> bool:
+        """Tell whether a regular expression filters `column`: a text column."""
+        return column_kind(self._source_column(column, "filter").type) is ColumnKind.TEXT
+
+    def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str:
+        """Hint at what filters `column`, translated: a regular expression, or else text."""
+        field_type = self._source_column(column, "filter").type
+        return _filter_placeholder(self.tr, field_type, is_pattern=is_pattern)
+
+    def filter_chip(self, column: str) -> str:
+        """Show the filter of `column` as its chip does: its header, then the text typed."""
+        header = self.header(column)
+        takes_pattern = self.filter_takes_pattern(column)
+        return _filter_chip(
+            self.filter_texts, header, self.filters[column], takes_pattern=takes_pattern
+        )
+
+    def header(self, column: str) -> str:
+        """Get the header of the source's column `column`, translated."""
+        names = self.column_names
+        return self.headers[names.index(column)] if column in names else column
+
+    def is_selected(self, row_id: Any) -> bool:
+        """Tell whether the row `row_id` is selected."""
+        return row_id in self._selected
+
+    def select_at(self, position: int) -> None:
+        """Select the row at `position` as the user's click does, and say so if it changed.
+
+        One row at most selects it; any number of rows add it, or remove it if selected.
+        """
+        ids = self.ids(position, position + 1)
+        if len(ids) == 0:
+            return
+        self._anchor = position
+        (row_id,) = ids
+        if self.selection_mode is SelectionMode.SINGLE:
+            selected = [row_id]
+        elif row_id in self._selected:
+            selected = [selected_id for selected_id in self.selected_ids if selected_id != row_id]
+        else:
+            selected = [*self.selected_ids, row_id]
+        self._select(selected)
+
+    def extend_to(self, position: int) -> None:
+        """Add the rows from the one selected last to `position`, as a Shift+click does.
+
+        One row at most, or none selected last: as `select_at`.
+        """
+        if self.selection_mode is SelectionMode.SINGLE or self._anchor is None:
+            self.select_at(position)
+            return
+        first, last = sorted((self._anchor, position))
+        added = [row_id for row_id in self.ids(first, last + 1) if row_id not in self._selected]
+        self._select([*self.selected_ids, *added])
+
+    def activate_at(self, position: int) -> None:
+        """Emit `row_activated` with the id of the row at `position`, as a double click."""
+        ids = self.ids(position, position + 1)
+        if len(ids) > 0:
+            self.row_activated.emit(ids[0])
+
+    def _select(self, selected: list[Any]) -> None:
+        if selected != self.selected_ids:
+            self.selected_ids = selected
+            self.selection_changed.emit(selected)
 
     def ids(self, start: int, stop: int) -> list[Any]:
         """Get the ids of the rows shown from position `start` to `stop` (excluded)."""
@@ -3352,6 +3515,7 @@ class DataTableView(View):
         if source is not self.source:  # a source replaced since
             return
         self._cache.clear()
+        self._total = 0 if source is None else source.count()
         self._read_order()
 
     def _read_order(self) -> None:
@@ -3360,11 +3524,12 @@ class DataTableView(View):
         The renderer gets the new `row_count`, and shows the rows from their new order.
         """
         self._order = [] if self.source is None else self._ordered_ids(self.source)
+        self._anchor = None  # a position of the old order
         renderer = self.renderer
         if isinstance(renderer, (Renderer, RendererContainer)):
             renderer.refresh_attribute("row_count", self.row_count)
         if len(self.selected_ids) > 0:
-            selected = set(self.selected_ids)
+            selected = self._selected
             shown = {row_id for row_id in self._order if row_id in selected}
             kept = [row_id for row_id in self.selected_ids if row_id in shown]
             if kept != self.selected_ids:
