@@ -32,20 +32,34 @@ toolkit widget:
 
 ## Installation
 
-Not yet published to PyPI. Clone the repository and install with [uv](https://docs.astral.sh/uv/):
+Requires Python >= 3.9. ComposeUI is not yet published to PyPI. Install it with
+[uv](https://docs.astral.sh/uv/), with the extras of the backends that you want:
+
+| Extra | Installs | For |
+| --- | --- | --- |
+| `web` | Starlette, uvicorn | The web backend, the default |
+| `pyside6` | PySide6 | The Qt backend, a desktop window |
+| `tui` | Textual | The Textual backend, a terminal |
+| `report` | matplotlib | The report images of charts |
+| `reload` | watchfiles | A faster `--reload` in development |
+
+To try ComposeUI and its example apps, clone the repository and install every extra:
 
 ```bash
 git clone https://github.com/ehmoussi/composeui3
 cd composeui3
-uv sync                     # core dependencies
-uv sync --extra pyside6     # + PySide6, needed to actually render a window
-uv sync --extra tui         # + Textual, for the terminal backend
-uv sync --extra web         # + Starlette/uvicorn, for the web backend
-uv sync --extra report      # + matplotlib, for charts' report images
-uv sync --extra reload      # + watchfiles, for faster --reload in development
+uv sync --all-extras
 ```
 
-Requires Python >= 3.9.
+To choose extras, give them all in one command, for example
+`uv sync --extra web --extra pyside6`. Each `uv sync` removes the extras that it does not
+name, so a second `uv sync --extra tui` would remove the web and Qt backends.
+
+To use ComposeUI in a project of your own, add it from GitHub:
+
+```bash
+uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui3"
+```
 
 ## Quickstart
 
