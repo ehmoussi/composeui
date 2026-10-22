@@ -9,6 +9,10 @@ study only changes when it's saved.
 from __future__ import annotations
 
 import contextlib
+import datetime
+import decimal
+import enum
+import functools
 import os
 import re
 import sqlite3
@@ -23,7 +27,15 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, Uni
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.view import CONVERTER
+from composeui.core.view import (
+    CONVERTER,
+    ColumnKind,
+    Filter,
+    FilterOperator,
+    Sort,
+    SourceColumn,
+    column_kind,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping, Sequence
@@ -115,6 +127,188 @@ class SqliteTable:
         """Run the query `sql` and get its rows' first column, e.g. a list of names."""
         with self.connection() as db:
             return [row[0] for row in db.execute(sql, parameters)]
+
+
+#: the ids a query takes at most at once, below SQLite's limit of parameters
+_IDS_PER_QUERY = 900
+#: each text operator, as a `LIKE` pattern of the filter's value (escaped), negated or not
+_LIKES: Mapping[FilterOperator, tuple[str, bool]] = MappingProxyType(
+    {
+        FilterOperator.CONTAINS: ("%{}%", False),
+        FilterOperator.NOT_CONTAINS: ("%{}%", True),
+        FilterOperator.STARTS_WITH: ("{}%", False),
+        FilterOperator.ENDS_WITH: ("%{}", False),
+    }
+)
+#: each text comparison, in SQL, ignoring the case of ASCII letters
+_TEXT_COMPARISONS: Mapping[FilterOperator, str] = MappingProxyType(
+    {FilterOperator.TEXT_EQUAL: "=", FilterOperator.TEXT_NOT_EQUAL: "<>"}
+)
+#: each comparison, in SQL
+_COMPARISONS: Mapping[FilterOperator, str] = MappingProxyType(
+    {
+        FilterOperator.EQUAL: "=",
+        FilterOperator.NOT_EQUAL: "<>",
+        FilterOperator.LESS: "<",
+        FilterOperator.LESS_OR_EQUAL: "<=",
+        FilterOperator.GREATER: ">",
+        FilterOperator.GREATER_OR_EQUAL: ">=",
+    }
+)
+
+
+def _escaped(text: str) -> str:
+    r"""Escape `LIKE`'s wildcards in `text`, with a backslash (``ESCAPE '\'``)."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _sql_value(value: Any) -> Any:
+    """Get a filter's value as SQLite stores it: a date as ISO text, a number as a number."""
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    if isinstance(value, decimal.Decimal):
+        return float(value)
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
+
+
+@functools.lru_cache(maxsize=32)
+def _compiled(pattern: str) -> re.Pattern[str]:
+    return re.compile(pattern, re.IGNORECASE)
+
+
+def _regexp(pattern: str, value: Any) -> bool:
+    """SQLite's ``REGEXP``: whether `pattern` is found in `value`'s text, ignoring case."""
+    return _compiled(pattern).search("" if value is None else str(value)) is not None
+
+
+class SqliteSource:
+    """A `TableSource` of a query's rows, which a large table reads a window at a time.
+
+    It takes the `SqliteTable` whose rows the query reads, the query itself, the column
+    of the rows' ids (e.g. a primary key) and the query's columns that the table shows.
+    SQLite sorts and filters the rows: the order is a ``SELECT`` of the ids, and the cells
+    a ``SELECT`` of some ids' rows, so no more rows than those shown come to Python. The
+    table's `changed` reads them again. Only the declared columns sort and filter, by name:
+    SQLite takes no column name as a parameter, the values are.
+
+    A text sorts and compares ignoring the case of ASCII letters alone (``NOCASE``),
+    where a `ListSource` ignores any case. Equal cells keep the order of their ids. A
+    ``/regex/`` filter calls Python on each row: index the columns that sort instead.
+    """
+
+    def __init__(
+        self,
+        table: SqliteTable,
+        query: str,
+        *,
+        id_column: str,
+        columns: Sequence[SourceColumn],
+    ) -> None:
+        self._table = table
+        self._query = query
+        self._id = _identifier(id_column)
+        self._columns = {column.name: column for column in columns}
+
+    @property
+    def columns(self) -> Sequence[SourceColumn]:
+        return tuple(self._columns.values())
+
+    @property
+    def changed(self) -> SignalNoArgs:
+        return self._table.changed
+
+    def count(self) -> int:
+        with self._table.connection() as db:
+            (count,) = db.execute(f"SELECT COUNT(*) FROM ({self._query})").fetchone()  # noqa: S608 (the app's query)
+        return int(count)
+
+    def ordered_ids(
+        self, sort: Sort | None, search: str, filters: Mapping[str, Filter]
+    ) -> list[Any]:
+        conditions: list[str] = []
+        parameters: list[Any] = []
+        needle = search.strip()
+        texts = [
+            name
+            for name, column in self._columns.items()
+            if column_kind(column.type) is ColumnKind.TEXT
+        ]
+        if needle != "" and len(texts) > 0:
+            conditions.append(
+                "(" + " OR ".join(f"{_identifier(name)} LIKE ? ESCAPE '\\'" for name in texts) + ")"
+            )
+            parameters.extend([f"%{_escaped(needle)}%"] * len(texts))
+        for name, row_filter in filters.items():
+            condition, values = self._condition(self._column(name), row_filter)
+            conditions.append(condition)
+            parameters.extend(values)
+        sql = f"SELECT {self._id} FROM ({self._query})"  # noqa: S608 (quoted, the app's query)
+        if len(conditions) > 0:
+            sql += " WHERE " + " AND ".join(conditions)
+        if sort is not None:
+            column = self._column(sort.column)
+            name = _identifier(column.name)
+            is_text = column_kind(column.type) is ColumnKind.TEXT
+            order = f"{name} COLLATE NOCASE" if is_text else name
+            direction = " DESC" if sort.descending else ""
+            # the empty cells last, in both orders
+            sql += f" ORDER BY ({name} IS NULL OR {name} = '') ASC, {order}{direction}, "
+            sql += self._id
+        with self._table.connection() as db:
+            db.create_function("regexp", 2, _regexp, deterministic=True)
+            return [row[0] for row in db.execute(sql, parameters)]
+
+    def cells(self, ids: Sequence[Any], columns: Sequence[str]) -> dict[Any, list[Any]]:
+        types = [self._column(name).type for name in columns]
+        names = ", ".join(_identifier(name) for name in columns)
+        found: dict[Any, list[Any]] = {}
+        with self._table.connection() as db:
+            for start in range(0, len(ids), _IDS_PER_QUERY):
+                chunk = list(ids[start : start + _IDS_PER_QUERY])
+                marks = ", ".join("?" * len(chunk))
+                sql = (
+                    f"SELECT {self._id}, {names} FROM ({self._query})"  # noqa: S608 (quoted)
+                    f" WHERE {self._id} IN ({marks})"
+                )
+                for row in db.execute(sql, chunk):
+                    found[row[0]] = [
+                        None if value is None else CONVERTER.structure(value, field_type)
+                        for value, field_type in zip(tuple(row)[1:], types)
+                    ]
+        return found
+
+    def _column(self, name: str) -> SourceColumn:
+        column = self._columns.get(name)
+        if column is None:
+            msg = f"Cannot read the column {name!r} of a SqliteSource: it declares none so."
+            raise ValueError(msg)
+        return column
+
+    @staticmethod
+    def _condition(column: SourceColumn, row_filter: Filter) -> tuple[str, list[Any]]:
+        """Get the SQL condition of `row_filter` on `column`, and its parameters.
+
+        As `Filter.matches` reads a cell: an empty one's text is "", and it fails a
+        comparison.
+        """
+        name = _identifier(column.name)
+        text = f"COALESCE({name}, '')"
+        operator, value = row_filter.operator, row_filter.value
+        if operator is FilterOperator.EMPTY:
+            return f"({name} IS NULL OR {name} = '')", []
+        if operator in _LIKES:
+            pattern, is_negated = _LIKES[operator]
+            negation = "NOT " if is_negated else ""
+            return f"{text} {negation}LIKE ? ESCAPE '\\'", [pattern.format(_escaped(value))]
+        if operator in _TEXT_COMPARISONS:
+            return f"{text} {_TEXT_COMPARISONS[operator]} ? COLLATE NOCASE", [value]
+        if operator is FilterOperator.MATCHES:
+            return f"regexp(?, {name})", [value.pattern]
+        if operator is FilterOperator.RANGE:
+            return f"{name} BETWEEN ? AND ?", [_sql_value(value), _sql_value(row_filter.upper)]
+        return f"{name} {_COMPARISONS[operator]} ?", [_sql_value(value)]
 
 
 class _DeclaredTable(Generic[SqliteTableT]):

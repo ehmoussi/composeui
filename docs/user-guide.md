@@ -49,6 +49,7 @@ and what each backend shows. To install ComposeUI and write a first window, read
   - [Widgets in cells](#widgets-in-cells)
   - [How cells and headers look](#how-cells-and-headers-look)
 - [A large table](#a-large-table)
+  - [Rows in SQLite](#rows-in-sqlite)
 - [A list of views](#a-list-of-views)
 - [Charts](#charts)
   - [Kinds of chart](#kinds-of-chart)
@@ -1090,10 +1091,10 @@ main_view.readings.source = ListSource(
 )
 ```
 
-- **The source** is a `TableSource`: its `columns`, `ordered_ids` (the ids of the rows
-  shown, in order), `cells` (the values of some rows) and a `changed` signal. A
-  `ListSource` keeps `attrs` records in memory. Another source can keep the rows in a
-  database, and sort and filter them there.
+- **The source** is a `TableSource`: its `columns`, `count` (its rows), `ordered_ids`
+  (the ids of the rows shown, in order), `cells` (the values of some rows) and a `changed`
+  signal. A `ListSource` keeps `attrs` records in memory, for rows the app has already. A
+  `SqliteSource` keeps them in SQLite (see [Rows in SQLite](#rows-in-sqlite)).
 - **The settings** name the source's columns: `sort_column`, `sort_descending`, `search`
   (in the text columns) and `filters` (as typed, see "Sorting and filtering"). Each new
   setting asks the source for the order once. The view keeps only the ids, in an `array`
@@ -1132,6 +1133,39 @@ the filter bar of [Sorting and filtering](#sorting-and-filtering) above its rows
 "+ Filter", the filters as chips, and the count of the rows shown ("1,234 of 1,000,000").
 Without them, the app alone sets the search and the filters.
 [`largetable.py`](../src/examples/largetable.py) shows a million rows this way.
+
+### Rows in SQLite
+
+A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQLite sorts
+and filters them, and the table reads only the ids of the rows shown and the rows it
+draws: the rows never all come to Python.
+
+```python
+from composeui.core.sqlitemodel import SqliteSource
+from composeui.core.view import SourceColumn
+
+main_view.readings.source = SqliteSource(
+    model.readings,  # a SqliteTable: its connection, and its changed signal
+    "SELECT * FROM reading",
+    id_column="id",
+    columns=[
+        SourceColumn("sensor", T("Sensor")),
+        SourceColumn("temperature", T("Temperature"), float),
+    ],
+)
+```
+
+- **The columns** are the query's that the table shows, with their types: they sort and
+  filter as a `ListSource`'s. Only these columns sort and filter, by name: SQLite takes no
+  column name as a parameter. The filters' values are parameters.
+- **The table's `changed`** reads the rows again, e.g. after a job wrote some.
+- **Index the columns that sort.** Without an index, SQLite reads every row to sort them:
+  about a second for a million rows, on the main thread.
+- **The case of a text** is ignored for ASCII letters alone (``COLLATE NOCASE``), where a
+  `ListSource` ignores any case. A `/regex/` filter calls Python on each row.
+
+[`largetable.py`](../src/examples/largetable.py) writes its readings into SQLite in a job,
+then shows them this way.
 
 ## A list of views
 

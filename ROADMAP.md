@@ -110,41 +110,27 @@ backend showing the order. A click on a row selects it (`select_at`), Shift exte
 selection on Qt and Textual (`extend_to`), and a double click or Enter activates it there
 (`activate_at`). While `filterable_columns` names columns, `TableView`'s filter bar shows
 above the rows (the web's bar is `WebFilterBarRenderer`, shared by both tables).
-`largetable.py` shows a million rows with it. The view isn't
+A `SqliteSource` (in `core/sqlitemodel.py`) gives it a query's rows, which SQLite sorts and
+filters; `largetable.py` shows a million readings in SQLite with it. Its queries run on
+the main thread: about a second to sort a million rows. The view isn't
 generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.
 
-1. **A source on a `SqliteTable`**, which stays as it is: a `SqliteTable` can hold several
-   SQL tables, and not each one shows in a table.
-   - Add `SqliteSource` to `core/sqlitemodel.py`. It takes the `SqliteTable` (its
-     `connection()`, and its `changed` signal), the app's `SELECT`, its id column and
-     its columns.
-   - `ordered_ids` runs `SELECT id FROM (<query>) WHERE … ORDER BY …`, with the filters'
-     values as parameters, and `cells` runs `… WHERE id IN (…)` on a window. A column
-     sorts only when the source declares it: SQLite takes no column name as a parameter.
-   - A text filter is a `LIKE … ESCAPE`. A `/regex/` filter calls a `regexp` function
-     that the source adds to the connection, which scans every row.
-   - Docs: the user guide tells the app to index the columns that sort (a sort on a
-     column with no index scans the table; measure it on 1M rows). The query blocks the
-     main thread while it runs; running it as a job is for later, if an app needs it.
-   - Example: `pipesweep.py` shows its runs (`sweep_run`) in a `DataTableView`.
-   - Tests: each filter operator against `ListSource`'s answers, a quote or a `%` in a
-     search, a column that isn't declared refused, and `changed` after a job's write.
-2. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
+1. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
    the order, a boolean mask per filter, and the row's index as its id. Tests: the same
    cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
-3. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
+2. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
    a window at a time: the clipboard on Qt and Textual, the page's clipboard on the web.
-4. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
+3. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
    a file the user picks on Qt and Textual, a streamed download on the web (the
    `web-security` skill for the route).
-5. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+4. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
    message.
-6. **The user moves rows**, in `TableView` and in the large table: move up and move down
+5. **The user moves rows**, in `TableView` and in the large table: move up and move down
    actions on the view on each backend, then drag and drop on Qt.
    - For a `SqliteTable`, keep the order in a table of positions, as
       [composeui-table](https://github.com/ehmoussi/composeui-table) does
