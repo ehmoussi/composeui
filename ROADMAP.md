@@ -111,26 +111,25 @@ selection on Qt and Textual (`extend_to`), and a double click or Enter activates
 (`activate_at`). While `filterable_columns` names columns, `TableView`'s filter bar shows
 above the rows (the web's bar is `WebFilterBarRenderer`, shared by both tables).
 A `SqliteSource` (in `core/sqlitemodel.py`) gives it a query's rows, which SQLite sorts and
-filters; `largetable.py` shows a million readings in SQLite with it. Its queries run on
-the main thread: about a second to sort a million rows. The view isn't
-generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
+filters; `largetable.py` shows a million readings in SQLite with it. Ctrl+C copies the
+selected rows as tab-separated text (`selection_text`), through the page's clipboard on
+the web. Its queries run on the main thread: about a second to sort a million rows. The
+view isn't generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.
 
 1. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
    the order, a boolean mask per filter, and the row's index as its id. Tests: the same
    cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
-2. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
-   a window at a time: the clipboard on Qt and Textual, the page's clipboard on the web.
-3. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
+2. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
    a file the user picks on Qt and Textual, a streamed download on the web (the
    `web-security` skill for the route).
-4. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+3. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
    message.
-5. **The user moves rows**, in `TableView` and in the large table: move up and move down
+4. **The user moves rows**, in `TableView` and in the large table: move up and move down
    actions on the view on each backend, then drag and drop on Qt.
    - For a `SqliteTable`, keep the order in a table of positions, as
       [composeui-table](https://github.com/ehmoussi/composeui-table) does

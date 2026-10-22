@@ -12,7 +12,7 @@ from textual.scroll_view import ScrollView
 from textual.strip import Strip
 from textual.widgets import Static
 
-from composeui.core.signal import Signal
+from composeui.core.signal import Signal, SignalNoArgs
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterBar
 
 if TYPE_CHECKING:
@@ -48,7 +48,7 @@ class ComposeDataTable(ScrollView, can_focus=True):
     the table scrolling to keep it shown. The table selects no row itself: `row_clicked`
     emits the position of the row the user clicked, or the cursor's on Space, and whether
     Shift extends the selection to it; `row_activated` emits it on a double click or
-    Enter. A selected row has the primary color.
+    Enter. A selected row has the primary color. `copy_requested` emits on Ctrl+C.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -61,6 +61,7 @@ class ComposeDataTable(ScrollView, can_focus=True):
         Binding("space", "click_cursor(False)", "Select", show=False),
         Binding("shift+space", "click_cursor(True)", "Select up to", show=False),
         Binding("enter", "activate_cursor", "Activate", show=False),
+        Binding("ctrl+c", "copy_rows", "Copy", show=False),
     ]
     COMPONENT_CLASSES: ClassVar[set[str]] = {
         "data-table--header",
@@ -99,6 +100,7 @@ class ComposeDataTable(ScrollView, can_focus=True):
         self.header_clicked: Signal[int] = Signal()
         self.row_clicked: Signal[int, bool] = Signal()
         self.row_activated: Signal[int] = Signal()
+        self.copy_requested: SignalNoArgs = SignalNoArgs()
 
     def set_sort(self, sort: tuple[int, bool] | None) -> None:
         """Show the order: by a column, descending or not; None for the source's own."""
@@ -116,6 +118,9 @@ class ComposeDataTable(ScrollView, can_focus=True):
     def action_click_cursor(self, is_extended: bool) -> None:
         if self.cursor < self._table.row_count:
             self.row_clicked.emit(self.cursor, is_extended)
+
+    def action_copy_rows(self) -> None:
+        self.copy_requested.emit()
 
     def action_activate_cursor(self) -> None:
         if self.cursor < self._table.row_count:

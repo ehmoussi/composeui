@@ -1481,6 +1481,7 @@ class DataTableViewLike(ViewLike, Protocol):
     def filter_takes_pattern(self, column: str) -> bool: ...
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
     def filter_chip(self, column: str) -> str: ...
+    def selection_text(self) -> str: ...
 
 
 class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataFilterTable]):
@@ -1492,6 +1493,8 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     Its filter bar (`ComposeFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
+    Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`),
+    through the terminal.
     """
 
     def __init__(self, view: DataTableViewLike) -> None:
@@ -1523,6 +1526,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
             table.header_clicked.connect(self._sort_by)
             table.row_clicked.connect(self._select)
             table.row_activated.connect(self._view.activate_at)
+            table.copy_requested.connect(self._copy)
             bar.check = lambda column, text: self._view.filter_error(self._name(column), text)
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 self._name(column), is_pattern=is_pattern
@@ -1597,6 +1601,11 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
             self._view.extend_to(position)
         else:
             self._view.select_at(position)
+
+    def _copy(self) -> None:
+        app = self._get_app()
+        if app is not None:
+            app.copy_to_clipboard(self._view.selection_text())
 
     def _name(self, column: int) -> str:
         """Get the name of the source's column at `column`, as the bar and the header know it."""

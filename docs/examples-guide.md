@@ -303,7 +303,8 @@ It shows:
   a search in the text columns, and a filter on any column. The label says how many rows
   pass and how long SQLite took to order them, as the source reports it.
 - a selection of several rows: the label under the table counts them, and shows the
-  reading that a double click or Enter activates (on Qt and Textual).
+  reading that a double click or Enter activates (on Qt and Textual). Ctrl+C copies them,
+  to paste in a spreadsheet.
 - an [option of the app's own](user-guide.md#command-line-options-of-your-own): `--rows`,
   the readings to make up (1,000,000 by default).
 - a study that saves the readings with the model, and the table's settings with the views.

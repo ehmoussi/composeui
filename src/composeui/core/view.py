@@ -3221,7 +3221,8 @@ class DataTableView(View):
     Each backend scrolls the rows, drawing only those around the view. A click on a
     column's header sorts by it (`sort_by`). A click on a row selects it (`select_at`);
     on Qt and Textual, Shift extends the selection (`extend_to`), and a double click or
-    Enter activates the row (`activate_at`).
+    Enter activates the row (`activate_at`). Ctrl+C copies the selected rows to the
+    clipboard (`selection_text`).
 
     While `filterable_columns` names columns, a filter bar shows above the rows, as a
     `TableView`'s: a search, "+ Filter" opening an editor of a column and a value, and the
@@ -3411,6 +3412,28 @@ class DataTableView(View):
         """Get the header of the source's column `column`, translated."""
         names = self.column_names
         return self.headers[names.index(column)] if column in names else column
+
+    def selection_text(self) -> str:
+        """Get the selected rows as Ctrl+C copies them: tab-separated text, a line per row.
+
+        The rows in their order, the cells as the table shows them, without the headers,
+        as a spreadsheet takes them. A tab or a line break in a cell is a space. The rows
+        are read from the source a window at a time, outside the table's cache.
+        """
+        if self.source is None or len(self._selected) == 0:
+            return ""
+        selected = self._selected
+        ids = [row_id for row_id in self._order if row_id in selected]
+        columns = self.source.columns
+        names = [column.name for column in columns]
+        lines: list[str] = []
+        for start in range(0, len(ids), DATA_TABLE_WINDOW):
+            window = ids[start : start + DATA_TABLE_WINDOW]
+            values = self.source.cells(window, names)
+            for row_id in window:
+                cells = self._cells(columns, values.get(row_id, ()))
+                lines.append("\t".join(" ".join(cell.split()) for cell in cells))
+        return "\n".join(lines)
 
     def is_selected(self, row_id: Any) -> bool:
         """Tell whether the row `row_id` is selected."""
