@@ -52,6 +52,169 @@ request is never swapped back (the focus rule), changes elsewhere arrive as OOB 
 `aria-*` links between a field, its label and its log, and a `make css` rebuild when new
 classes appear (a test fails otherwise).
 
+### Large tables
+
+A scientific app's results can have millions of rows. `TableView` holds them all as
+formatted text, and doesn't scale to that (measured on 1M rows of 10 cells, and on the web
+on 100k rows):
+
+- **Memory.** About 800 MB, each cell a Python `str`.
+- **Time.** Building the rows takes 12 s. Each sort takes 1.3 s and each search 0.5 s.
+- **The web.** It writes a `<tr>` per shown row, and swaps the whole `<tbody>` on a sort
+  or a filter: 6 s and 27 MB of HTML for 100k rows.
+- **Saved state.** `rows` is saved with the study, so a study would hold the whole
+  result as JSON.
+
+Qt already draws only the rows on screen (`QTextTableView` is on a `QAbstractTableModel`).
+Textual's `DataTable` draws only the visible lines, but keeps every row.
+
+Add a read-only table backed by a data source, on the three backends. Keep `TableView`
+for the small tables that the user edits (an analysis' parameters, a list of load cases).
+
+The design:
+
+- **Everything but the drawing is in `core`.** Sorting, searching, filtering, selection,
+  the cache and the cells' formats are computed once, so they behave the same on each
+  backend. A renderer only turns its scroll position into a range of rows.
+- **The source does the work on the data.** It sorts and filters with SQL or numpy, never
+  row by row in Python, and no backend reads every row.
+- **The view holds the order, not the data.** For each sort, search and set of filters,
+  the view asks the source once for the shown rows' ids, in order, and keeps them in an
+  `array` (8 MB for 1M integer ids). A position then gives its row's id at once:
+  scrolling to any position, a range selection (Shift+click) and the count need no query.
+  The cells are read by id, a window of rows at a time.
+- **Rows are selected by id, not by index**, so the selection stays on its rows when the
+  data or the order changes. An id that is gone drops from the selection.
+- **The filters are those of `TableView`.** The user types the same text, `parse_filter`
+  parses it into a `Filter`, and the source turns each `Filter` into its own query (a
+  `WHERE` clause, a numpy mask). A source that can't apply an operator says so, and the
+  filter bar marks the filter invalid.
+- **Saved state** holds the settings (the sort, the search, the filters) and
+  `selected_ids`, never the data or the source. The app gives the view its source again
+  after loading, as it builds its model.
+
+The steps. Each one is a commit of its own that `make check test` passes, with its tests
+and its documentation, and leaves the table usable as far as it goes. The registry test
+requires the same renderer keys on every backend
+(`test_every_backend_registers_the_same_renderer_keys`), so a step that adds the
+renderers adds them on Qt, Textual and the web together. Then each feature lands on the
+three backends in one step.
+
+1. **The source protocol and a list source.**
+   - Add the module `composeui.core.tablesource` (and its page in `docs/api/`): the
+     `TableSource` protocol, with its `columns` (name, header and type),
+     `ordered_ids(sort, search, filters)` (the shown rows' ids, in order),
+     `cells(ids, columns)` (the rows' values) and a `changed` signal. The filters are
+     the `Filter`s that `parse_filter` gives.
+   - Add `ListSource`, on a list of `attrs` records, sorted, searched and filtered in
+     Python, as `TableView` does.
+   - Tests: the order, the search and each filter operator, on a `ListSource`.
+   - Done when another source can be written from the protocol alone.
+2. **The view, in `core`, with no renderer yet.**
+   - Add `DataTableView` (working name) to `core/view.py`, generic over its ids' type,
+     with no `_renderer_key` yet: step 3 sets it with the renderers, so the widget
+     catalog (`docs/_ext/widgetcatalog.py`) lists the view once it shows.
+   - Its attributes: `source` (excluded from the saved state, as a `Signal` is),
+     `sort_column`, `sort_descending`, `search`, `filters`, `selected_ids`,
+     `selection_mode` and `column_formats` (e.g. `.6g`). Its signals:
+     `selection_changed` (the ids) and `row_activated` (an id).
+   - What renderers read: `row_count`, and `rows(start, stop)` (the ids and the
+     formatted cells). The ids in order are kept in an `array`, and the windows read
+     last in a cache (e.g. 4 windows of 200 rows), cleared by a new order or `changed`.
+     Selecting a range takes its ids from the `array`; an id that is gone drops from
+     the selection.
+   - Tests: a source that counts its reads checks that `rows` reads only the windows
+     asked, and that a sort or `changed` reads the order again. Saving and loading
+     keep the settings and `selected_ids`, without the data.
+   - Done when a test drives the whole view with no backend.
+3. **Show the rows on the three backends.** The headers and the rows, scrolled, with no
+   sort, filters or selection yet. Set `_renderer_key = "data_table"`, and register it in
+   the `RENDERERS` of each backend.
+   - **Qt.** A `QAbstractTableModel` on `QTableView`: `rowCount` is `row_count`, `data`
+     reads `rows` from the cache, and a new order resets the model.
+   - **Textual.** A widget on `ScrollView` and `render_line` (Textual's line API), as
+     `DataTable` keeps every row: `virtual_size` has a line per row, each drawn line
+     reads its row from the view, the header line stays on top, and the arrow keys,
+     Page Up and Page Down scroll.
+   - **The web.** Pages of rows first, not a scroll: the rows of one page, the count,
+     and Previous and Next buttons, through the existing event route. Step 7 adds the
+     scroll.
+   - Docs: a section in the user guide (what it is for, against `TableView`, and what
+     each backend shows), and the widget in "Already there" at the top of this file.
+   - Example: an app of generated results (e.g. 1M rows of numbers), with its section
+     and screenshots in the examples guide.
+   - Tests: on each backend, a source of 1M rows shows its first rows, the count, and
+     the rows at another position after a scroll (or on another page).
+   - Done when the example shows 1M rows on each backend without reading them all.
+4. **Sort.** A header click sets `sort_column` and `sort_descending`, and the header shows
+   the order: `sortIndicatorChanged` on Qt, a click on a header line on Textual, a header
+   button on the web, as in `TableView`. Tests on each backend: a click sorts, a second
+   click reverses, and the selection stays on its rows.
+5. **Select.** As `selection_mode` allows: a click, Ctrl+click and Shift+click on Qt (a
+   `QItemSelection` of ranges, turned into ids by the view) and on the web; Space and
+   Shift with the arrow keys on Textual. A double click or Enter emits `row_activated`.
+   Tests on each backend: `selected_ids`, `selection_changed`, a range over rows not
+   read yet, and `selected_ids` set by the app shown.
+6. **Search and filters.** Reuse the filter bars of `TableView`: `QTableFilterBar` on Qt,
+   `ComposeFilterBar` on Textual, the web table's bar. They take the same text and show
+   the count ("1,234 of 1,000,000 rows"); a filter that the source can't apply is
+   marked invalid, as an unparsable one is. Tests on each backend: a search, a filter,
+   its removal, and the count.
+7. **The web: a scroll instead of pages.**
+   - A window of rows between two filler rows that give the scroll bar its full height,
+     each row of the same fixed height. When the scroll pauses, `page.js` asks the
+     fragment route (`GET /widget/{id}?start=…`) for the window shown, and drops an
+     answer that comes after a newer request (`hx-sync`). A sort or a filter swaps the
+     first window and the count.
+   - A browser caps an element's height (check it: about 33M px in Chrome, 17M in
+     Firefox). Past that, the filler rows keep the cap, and a scroll position maps to a
+     row by its ratio.
+   - `aria-rowcount` and `aria-rowindex` tell a screen reader where the rows are.
+   - Follow the `web-security` skill for the route. The scroll code adds to `page.js`
+     (958 lines today): see its type-check entry in "5 — Later, when needed".
+   - Tests: `tests/test_webrenderer.py` for the route's answer, and browser tests for
+     the scroll, past the cap too, and the keys.
+8. **A source on a `SqliteTable`**, which stays as it is: a `SqliteTable` can hold several
+   SQL tables, and not each one shows in a table.
+   - Add `SqliteSource` to `core/sqlitemodel.py`. It takes the `SqliteTable` (its
+     `connection()`, and its `changed` signal), the app's `SELECT`, its id column and
+     its columns.
+   - `ordered_ids` runs `SELECT id FROM (<query>) WHERE … ORDER BY …`, with the filters'
+     values as parameters, and `cells` runs `… WHERE id IN (…)` on a window. A column
+     sorts only when the source declares it: SQLite takes no column name as a parameter.
+   - A text filter is a `LIKE … ESCAPE`. A `/regex/` filter calls a `regexp` function
+     that the source adds to the connection, which scans every row.
+   - Docs: the user guide tells the app to index the columns that sort (a sort on a
+     column with no index scans the table; measure it on 1M rows). The query blocks the
+     main thread while it runs; running it as a job is for later, if an app needs it.
+   - Example: `pipesweep.py` shows its runs (`sweep_run`) in a `DataTableView`.
+   - Tests: each filter operator against `ListSource`'s answers, a quote or a `%` in a
+     search, a column that isn't declared refused, and `changed` after a job's write.
+9. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
+   the order, a boolean mask per filter, and the row's index as its id. Tests: the same
+   cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
+10. **Copy.** Ctrl+C copies the selected rows as tab-separated text, read from the source
+    a window at a time: the clipboard on Qt and Textual, the page's clipboard on the web.
+11. **Export.** Export the shown rows, in their order, as CSV, read a window at a time: to
+    a file the user picks on Qt and Textual, a streamed download on the web (the
+    `web-security` skill for the route).
+12. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+    optional methods, and editable columns. An edit is parsed into the column's type
+    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
+    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
+    message.
+13. **The user moves rows**, in `TableView` and in the large table: move up and move down
+    actions on the view on each backend, then drag and drop on Qt.
+    - For a `SqliteTable`, keep the order in a table of positions, as
+      [composeui-table](https://github.com/ehmoussi/composeui-table) does
+      (`core/ordering.py`): a trigger puts each new row last, and one window-function
+      query moves the rows. Copy that SQL, run it through `SqliteModel.connection()`
+      without its own commits, and make `get_row_ids(positions)` keep the order of the
+      positions it gets.
+    - Also worth copying: its `ListTableModel.move_rows` (the destination shifted by the
+      rows taken from above it), and on Qt, `_pack_positions` and `dropMimeData` (each
+      run of rows moved by one `beginMoveRows`).
+
 ## 2 — Charts
 
 `ChartView` is in (user guide, "Charts"): line, step, scatter and bar charts, log axes,
