@@ -110,10 +110,10 @@ them before you change `composeui.webcore`.
 
 ### Reloading on a change
 
-`--reload` is in `composeui.core.reload`, without a toolkit, and `composeui.qtcore.qtapplication`
-uses it. The user guide says what the user sees
-([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). It works
-like this:
+`--reload` is in `composeui.core.reload`, without a toolkit. The application modules of Qt
+and Textual use it. The user guide says what the user sees
+([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). On Qt, it
+works like this:
 
 1. **A supervisor process.** With `--reload`, the process that the user starts runs
    `run_reloading` and shows no window. It runs the same command line again in a child
@@ -149,6 +149,11 @@ like this:
    does not take the request within 5 seconds, after it terminates it. When the program
    fails while it runs again, for example on a syntax error, the app logs the error, keeps
    the previous code, and answers.
+
+Textual has the supervisor and the change request, but not the reload in place: its app
+saves the study and exits on every request, and the supervisor starts a new child. Its
+timer starts once the Textual app is mounted (`mounted_callbacks`). The supervisor logs a
+change only after the app answered or exited, so it never prints over a terminal app.
 
 The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM). The
 web's `--reload` is uvicorn's, which restarts the server process.

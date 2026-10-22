@@ -2599,6 +2599,8 @@ class _ComposeUIApp(App[None]):
         self._view = view
         self._root = root
         self.registered_actions: dict[str, ActionView] = {}
+        #: called once the app is mounted, e.g. to start a timer, which needs it running
+        self.mounted_callbacks: list[Callable[[], None]] = []
         super().__init__()
 
     def compose(self) -> ComposeResult:
@@ -2609,6 +2611,8 @@ class _ComposeUIApp(App[None]):
         self.title = self._view.title
         _refresh_tree(self._view)
         _register_actions(self, self._view)
+        for callback in self.mounted_callbacks:
+            callback()
 
     def action_trigger(self, action_id: str) -> None:
         action_view = self.registered_actions.get(action_id)

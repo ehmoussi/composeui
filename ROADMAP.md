@@ -119,9 +119,10 @@ signals emitted on the main thread (`examples/pipesweep.py`).
   brings Node into CI, and it can't check the `data-*` attributes and custom events it
   shares with `webrenderer.py`, which the browser tests cover.
 
-- **Textual: `--reload`.** Run `rerun_program` in the Textual app, as `qtcore` does, and
-  mount the new main view in the running `App`; a new process otherwise
-  (`composeui.core.reload` has no toolkit).
+- **Textual: reload in place.** Its `--reload` runs the app again in a new process on
+  every change. Run `rerun_program` in the Textual app instead, as `qtcore` does, and
+  mount the new main view in the running `App`, so the widgets keep their state (a scroll
+  position, the focus) when only the app's code changed.
 - **Qt `--reload`: what a reload still loses or keeps.** The widgets' own state, which no
   view holds (a scroll position, a column's width, the focus), is lost. The previous
   classes stay in memory: the `cattrs` converter keeps their hooks, so memory grows a bit
