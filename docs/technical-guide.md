@@ -16,7 +16,10 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [A button click](#a-button-click)
   - [The web backend](#the-web-backend)
   - [A button click on the web](#a-button-click-on-the-web)
-  - [Reloading on a change](#reloading-on-a-change)
+- [Reloading on a change](#reloading-on-a-change)
+  - [Reloading on Qt](#reloading-on-qt)
+  - [Reloading on Textual](#reloading-on-textual)
+  - [Reloading on the web](#reloading-on-the-web)
 - [Add a widget](#add-a-widget)
 - [Add a backend](#add-a-backend)
 - [Development](#development)
@@ -229,12 +232,16 @@ This is the click of [A button click](#a-button-click) on the web, step by step:
 The other routes follow the same steps. `widget_file` gives an upload to the session in place of
 a form. `jobs_poll` runs no event: its response sends the changes that the threads made.
 
-### Reloading on a change
+## Reloading on a change
 
-`--reload` is in `composeui.core.reload`, without a toolkit. The application modules of Qt
-and Textual use it. The user guide says what the user sees
-([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). On Qt, it
-works like this:
+`--reload` runs the app's changed code each time that a Python file is saved. The user guide
+says what the user sees
+([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). Qt and Textual
+use `composeui.core.reload`, without a toolkit. The web uses uvicorn's reload.
+
+### Reloading on Qt
+
+On Qt, `--reload` works like this:
 
 1. **A supervisor process.** With `--reload`, the process that the user starts runs
    `run_reloading` and shows no window. It runs the same command line again in a child
@@ -271,13 +278,18 @@ works like this:
    fails while it runs again, for example on a syntax error, the app logs the error, keeps
    the previous code, and answers.
 
-Textual has the supervisor and the change request, but not the reload in place: its app
+The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM).
+
+### Reloading on Textual
+
+Textual has the supervisor and the change request of Qt, but not the reload in place: its app
 saves the study and exits on every request, and the supervisor starts a new child. Its
 timer starts once the Textual app is mounted (`mounted_callbacks`). The supervisor logs a
 change only after the app answered or exited, so it never prints over a terminal app.
 
-The supervisor stops its child when it exits, also on Ctrl+C or `kill` (SIGTERM). The
-web's `--reload` is uvicorn's, which restarts the server process. The web app only tells
+### Reloading on the web
+
+The web's `--reload` is uvicorn's, which restarts the server process. The web app only tells
 watchfiles not to poll where the system reports the changes. Its sessions outlive the
 processes: the process that `run` starts makes a scratch directory and a key that signs
 the session cookies, and gives both to the server's processes through environment
@@ -344,8 +356,17 @@ another process answers with `HX-Refresh`.
 3. In its application module, add its application classes as `APPLICATION` and
    `MODEL_APPLICATION`. They are built from `build_main_view=`, plus `build_model=` and
    `setup_model=` for the model application.
+4. Add the new backend's `RENDERERS` to
+   `test_every_backend_registers_the_same_renderer_keys` in
+   `tests/test_renderer_registry.py`. A backend of this repo registers every key, so that
+   every view renders on it. Then add tests for its renderers and its application. See
+   [Tests](#tests).
+5. Add the backend and its extra to the "Backends" table of the
+   [user guide](user-guide.md#backends). In each feature section of the user guide, say what
+   the new backend shows, as the section does for Qt, Textual, and the web.
 
-`core/view.py` should not need changes.
+`core/view.py` should not need changes. `run` reads the `--backend` choices from
+`RendererType`, so the new backend is one of them.
 
 ## Development
 
