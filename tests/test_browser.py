@@ -51,7 +51,12 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.tables import CellWidgetsMainView, EditableTableMainView, SortedRoomsMainView
+from tests.tables import (
+    CellWidgetsMainView,
+    EditableTableMainView,
+    MillionRowsMainView,
+    SortedRoomsMainView,
+)
 from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
@@ -166,6 +171,23 @@ def vertical_base_url() -> Iterator[str]:
     app = WebApplication(build_main_view=VerticalMainView).create_starlette_app()
     with _serve(app) as url:
         yield url
+
+
+@pytest.fixture(scope="module")
+def million_base_url() -> Iterator[str]:
+    """Serve an app with a large table of a million rows, for the whole module."""
+    app = WebApplication(build_main_view=MillionRowsMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture
+def million_page(browser: Browser, million_base_url: str) -> Iterator[Page]:
+    """Open the app with a large table like `page`, in a session of its own."""
+    context = browser.new_context(base_url=million_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
 
 
 @pytest.fixture(scope="module")
@@ -2080,3 +2102,44 @@ def test_the_filter_editor_s_toggle_shows_for_text_and_hints_at_a_pattern(
     expect(page.get_by_role("button", name="Room matches ^(hall|attic)$")).to_be_focused()
     expect(page.get_by_role("row").filter(has_text="kitchen")).to_have_count(0)
     expect(page.get_by_role("row").filter(has_text="Attic")).to_have_count(1)
+
+
+def test_a_large_table_draws_the_rows_scrolled_to_keeping_the_focus(
+    million_page: Page,
+) -> None:
+    page = million_page
+    page.goto("/")
+    # the row at position 3 holds 2 * 2
+    row = page.get_by_role("row").filter(has=page.get_by_role("cell", name="4", exact=True))
+    with _posted(page):
+        row.click()
+    expect(row).to_have_attribute("aria-current", "true")
+    expect(row).to_be_focused()
+    half = page.get_by_role("button", name="Half")
+    with _posted(page):
+        half.click()
+    expect(page.locator("th[aria-sort=ascending]")).to_have_count(1)
+    expect(half).to_be_focused()
+
+    frame = page.locator("[data-virtual-scroll]")
+    frame.hover()
+    with _posted(page):
+        page.mouse.wheel(0, 40_000)
+    # the rows drawn cover the frame, wherever it was scrolled to, and it stays there
+    top = frame.evaluate("frame => frame.scrollTop")
+    assert top > 0
+    page.wait_for_function(
+        """frame => {
+            const rows = frame.querySelectorAll("tr[data-window-row]");
+            const view = frame.getBoundingClientRect();
+            const head = frame.querySelector("thead").getBoundingClientRect().height;
+            return rows.length > 0
+                && rows[0].getBoundingClientRect().top <= view.top + head
+                && rows[rows.length - 1].getBoundingClientRect().bottom >= view.bottom;
+        }""",
+        arg=frame.element_handle(),
+    )
+    assert frame.evaluate("frame => frame.scrollTop") == top
+    first = page.locator("tr[data-window-row]").first.get_attribute("aria-rowindex")
+    assert first is not None
+    assert int(first) > 1_000

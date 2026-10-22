@@ -14,6 +14,7 @@ from composeui.core.view import (
     Column,
     DataTableView,
     HeaderGroup,
+    ListSource,
     MainView,
     NodeMark,
     RecordTableView,
@@ -172,7 +173,7 @@ class StyledTablesMainView(MainView):
 
 
 class MillionSource:
-    """A million rows (`count`), as a database would give them: an integer id each.
+    """A million rows (`size`), as a database would give them: an integer id each.
 
     It records the ids whose cells a table reads (`read`).
     """
@@ -181,17 +182,20 @@ class MillionSource:
 
     def __init__(self) -> None:
         self.changed = SignalNoArgs()
-        self.count = 1_000_000
+        self.size = 1_000_000
         self.read: list[int] = []
 
     def ordered_ids(
         self, _sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
     ) -> range:
-        return range(self.count)
+        return range(self.size)
+
+    def count(self) -> int:
+        return self.size
 
     def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[float]]:
         self.read.extend(ids)
-        return {row_id: [row_id * 2, row_id / 2] for row_id in ids if row_id < self.count}
+        return {row_id: [row_id * 2, row_id / 2] for row_id in ids if row_id < self.size}
 
 
 @define_view
@@ -204,3 +208,21 @@ class MillionRowsMainView(MainView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.source = MillionSource()
+
+
+@define_view
+class RoomsDataMainView(MainView):
+    """Rooms in a large table whose bar searches them and filters two of their columns."""
+
+    app_title = "Rooms"
+    extension = ".rooms"
+
+    rooms: DataTableView = child(DataTableView, filterable_columns=["name", "temperature"])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.rooms.source = ListSource(
+            Room,
+            {"name": T("Room"), "temperature": T("Temperature"), "occupants": T("Occupants")},
+            [Room("Kitchen", 21.5, 2), Room("Hall", 18.0), Room("Bedroom", 19.5, 1)],
+        )

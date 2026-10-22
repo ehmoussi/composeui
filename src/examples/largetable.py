@@ -1,12 +1,14 @@
 """A large table: `python -m examples.largetable --backend qt` (or `textual`, or `web`).
 
 A million sensor readings (``--rows`` sets how many), in a `ListSource`, shown by a
-`DataTableView`: the table reads the rows it shows from the source, as the user scrolls
-(on the web, turns its pages). The form sorts, searches and filters them; the label says
-how many rows pass and how long the source took.
+`DataTableView`: the table reads the rows it shows from the source, as the user scrolls.
+A click on a header sorts them, and the table's bar
+searches and filters them; the label says how many rows pass and how long the source
+took. A click selects rows (Shift+click a range, on Qt and Textual), and a double click or
+Enter shows a reading.
 
-It follows the "Large tables" plan of ``ROADMAP.md``: the table itself doesn't sort,
-filter or select its rows yet.
+It follows the "Large tables" plan of ``ROADMAP.md``: the source is in memory, and sorts
+and filters the readings in Python.
 """
 
 from __future__ import annotations
@@ -15,30 +17,29 @@ import enum
 import functools
 import random
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 
 from composeui.core import application
 from composeui.core.registry import RendererType
+from composeui.core.signal import Signal
 from composeui.core.view import (
     OMIT,
     DataTableView,
-    FilterError,
-    GroupFormView,
-    LabelRowCheckBoxView,
-    LabelRowComboboxView,
-    LabelRowInputView,
+    Filter,
     LabelView,
     ListSource,
-    LogType,
     MainView,
+    SelectionMode,
+    Sort,
     child,
     define_view,
 )
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Hashable, Mapping, Sequence
 
 SITES = ("Lyon", "Grenoble", "Nantes", "Lille", "Toulouse")
 
@@ -89,26 +90,21 @@ def readings(count: int) -> tuple[Reading, ...]:
     )
 
 
-@define_view
-class SortRowView(LabelRowComboboxView[str]):
-    pass
+class TimedSource(ListSource[Reading]):
+    """The readings, saying how many pass and how long they took to order (`ordered`)."""
 
+    def __init__(self, made: Sequence[Reading]) -> None:
+        super().__init__(Reading, HEADERS, made)
+        #: the rows passing and the seconds the order took, each time the table asks it
+        self.ordered: Signal[int, float] = Signal[int, float]()
 
-@define_view
-class SourceForm(GroupFormView):
-    sort: SortRowView = child(
-        SortRowView,
-        label="Sort by",
-        values={"Source order": "", **{header: name for name, header in HEADERS.items()}},
-        value="",
-    )
-    descending: LabelRowCheckBoxView = child(LabelRowCheckBoxView, label="Descending")
-    search: LabelRowInputView = child(
-        LabelRowInputView, label="Search", placeholder="A sensor, a site, a status"
-    )
-    temperature: LabelRowInputView = child(
-        LabelRowInputView, label="Temperature", placeholder=">25, 18..24, !=21"
-    )
+    def ordered_ids(
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
+    ) -> list[Hashable]:
+        start = time.perf_counter()
+        ids = super().ordered_ids(sort, search, filters)
+        self.ordered.emit(len(ids), time.perf_counter() - start)
+        return ids
 
 
 @define_view
@@ -116,57 +112,44 @@ class LargeTableMainView(MainView):
     app_title = "Large Table"
     extension = ".largetable"
 
-    form: SourceForm = child(SourceForm, title="Source")
     info: LabelView = child(LabelView)
     table: DataTableView = child(
-        DataTableView, column_formats={"temperature": ".2f", "pressure": ".2f"}
+        DataTableView,
+        column_formats={"temperature": ".2f", "pressure": ".2f"},
+        selection_mode=SelectionMode.MULTIPLE,
+        filterable_columns=list(HEADERS),
     )
+    picked: LabelView = child(LabelView, text="No reading selected")
     #: the readings generated
     _total: int = attrs.field(default=0, init=False, metadata={OMIT: True})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        form = self.form
-        form.sort.value_changed.connect(self.order)
-        form.descending.toggled.connect(self.order)
-        form.search.editing_finished.connect(self.order)
-        form.temperature.editing_finished.connect(self.order)
+        self.table.selection_changed.connect(self._show_selected)
+        self.table.row_activated.connect(self._show_activated)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--rows", type=int, default=1_000_000, help="the readings to generate")
 
     def apply_arguments(self, args: argparse.Namespace) -> None:
-        made = readings(args.rows)
         self._total = args.rows
-        start = time.perf_counter()
+        source = TimedSource(readings(args.rows))
+        source.ordered.connect(self._show_count)
         # not saved with a study: the readings come from the command line
-        self.table.source = ListSource(Reading, HEADERS, made)
-        self._show_count(time.perf_counter() - start)
+        self.table.source = source
 
-    def order(self) -> None:
-        """Give the table the form's sort, search and filter: it asks the source again."""
-        form, table = self.form, self.table
-        form.temperature.log_message = ""
-        text = form.temperature.text.strip()
-        start = time.perf_counter()
-        try:
-            table.filters = {"temperature": text} if text != "" else {}
-        except FilterError as error:
-            form.temperature.log_type = LogType.ERROR
-            form.temperature.log_message = (
-                f"Not a filter: {error.problem.name.lower().replace('_', ' ')}"
-            )
-            return
-        table.sort_column = form.sort.value or None
-        table.sort_descending = form.descending.is_checked
-        table.search = form.search.text
-        self._show_count(time.perf_counter() - start)
+    def _show_selected(self, ids: list[Any]) -> None:
+        self.picked.text = f"{len(ids):,} readings selected" if ids else "No reading selected"
 
-    def _show_count(self, seconds: float) -> None:
-        self.info.text = (
-            f"{self.table.row_count:,} of {self._total:,} rows, ordered in {seconds * 1000:,.0f} ms"
-        )
+    def _show_activated(self, row_id: Any) -> None:
+        source = self.table.source
+        if isinstance(source, TimedSource):
+            reading = source.records[row_id]  # a row's id is its index in the readings
+            self.picked.text = f"{reading.sensor} in {reading.site}: {reading.temperature} °C"
+
+    def _show_count(self, count: int, seconds: float) -> None:
+        self.info.text = f"{count:,} of {self._total:,} rows, ordered in {seconds * 1000:,.0f} ms"
 
 
 def main() -> None:

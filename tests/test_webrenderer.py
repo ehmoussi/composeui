@@ -147,6 +147,7 @@ from tests.tables import (
     MillionRowsMainView,
     MillionSource,
     Room,
+    RoomsDataMainView,
     RoomsMainView,
     SortedRoomsMainView,
     StyledTablesMainView,
@@ -534,13 +535,16 @@ class _Note:
 
 @define_view
 class _NotesMainView(MainView):
-    """A large table whose header and cell, from its source, are hostile text."""
+    """A large table whose header, cell, search and filter are hostile text."""
 
-    notes: DataTableView = child(DataTableView)
+    notes: DataTableView = child(DataTableView, filterable_columns=["text"])
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.notes.source = ListSource(_Note, {"text": _HOSTILE}, [_Note(_HOSTILE)])
+        # the bar's search and chip show it too, the row still shown
+        self.notes.search = _HOSTILE
+        self.notes.filters = {"text": "=" + _HOSTILE}
 
 
 #: main views showing every kind of view, between them
@@ -4839,7 +4843,13 @@ def million_client(million_views: list[MillionRowsMainView]) -> Iterator[TestCli
         yield client
 
 
-def test_a_large_table_s_pages_turn_swapping_their_rows_alone(
+def _window(markup: str, table_id: str) -> list[dict[str, str | None]]:
+    """Get the rows a large table drew, from its `<tbody>`: no filler."""
+    body = _element(markup, f"{table_id}-rows")
+    return [attributes for tag, attributes in body.descendants if "data-window-row" in attributes]
+
+
+def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
     million_views: list[MillionRowsMainView], million_client: TestClient
 ) -> None:
     page = million_client.get("/").text
@@ -4847,22 +4857,148 @@ def test_a_large_table_s_pages_turn_swapping_their_rows_alone(
     table_id = _widget_id(main_view.table.renderer)
     source = main_view.table.source
     assert isinstance(source, MillionSource)
-    assert "Rows 1 to 50 of 1,000,000" in _element(page, f"{table_id}-page").text
-    assert '<th scope="row" class="tabular-nums">50</th>' in page
+    frame = _element(page, f"{table_id}-frame")
+    # a million rows, 400,000 rows' height: a row's height stands for 2.5 rows
+    assert frame.attributes.get("data-scale") == "2.500000"
+    assert dict(frame.descendants)["table"].get("aria-rowcount") == "1000001"
+    rows = _window(page, table_id)
+    assert [row.get("aria-rowindex") for row in (rows[0], rows[-1])] == ["2", "101"]
 
-    def turn(event: str) -> str:
-        response = million_client.post(f"/widget/{table_id}", data={"event": event})
+    def scroll(start: str) -> str:
+        response = million_client.post(
+            f"/widget/{table_id}", data={"event": "scroll", "start": start}
+        )
         assert response.status_code == 200
         return response.text
 
-    turned = turn("next")
-    assert "Rows 51 to 100 of 1,000,000" in _swapped(turned, f"{table_id}-page").text
-    assert _find(turned, table_id) is None  # its buttons stay, the focus on them
-    assert "<td>100</td><td>25.0</td>" in turned
-    turn("previous")
-    assert _find(turn("previous"), f"{table_id}-page") is None  # the first page already
-    assert len(source.read) == DATA_TABLE_WINDOW
+    scrolled = scroll("500000")
+    assert _find(scrolled, f"{table_id}-frame") is None  # the scroll position stays
+    rows = _window(scrolled, table_id)
+    # from a fifth of the window above the first row shown
+    assert [row.get("aria-rowindex") for row in (rows[0], rows[-1])] == ["499982", "500081"]
+    fillers = [
+        attributes.get("style")
+        for tag, attributes in _element(scrolled, f"{table_id}-rows").descendants
+        if attributes.get("aria-hidden") == "true"
+    ]
+    assert fillers == ["height: calc(2.25rem * 199992.000)", "height: calc(2.25rem * 199968.000)"]
+    assert '<td class="whitespace-nowrap">1000000</td>' in scrolled
+    assert scroll("500000") == ""  # drawn already
+    assert scroll("first") == ""
+    assert len(source.read) <= 3 * DATA_TABLE_WINDOW
 
     main_view.table.is_enabled = False
-    response = million_client.post(f"/widget/{table_id}", data={"event": "next"})
+    response = million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "0"})
     assert response.status_code == 400
+
+
+def test_a_large_table_s_header_sorts_by_its_column_from_the_top(
+    million_views: list[MillionRowsMainView], million_client: TestClient
+) -> None:
+    million_client.get("/")
+    (main_view,) = million_views
+    table_id = _widget_id(main_view.table.renderer)
+    million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "5000"})
+
+    response = million_client.post(f"/widget/{table_id}", data={"event": "sort", "column": "half"})
+
+    assert (main_view.table.sort_column, main_view.table.sort_descending) == ("half", False)
+    frame = _swapped(response.text, f"{table_id}-frame")
+    headers = [attributes for tag, attributes in frame.descendants if tag == "th"][:2]
+    assert [header.get("aria-sort") for header in headers] == ["none", "ascending"]
+    buttons = [attributes for tag, attributes in frame.descendants if tag == "button"]
+    assert ["autofocus" in button for button in buttons] == [False, True]
+    assert _window(response.text, table_id)[0].get("aria-rowindex") == "2"
+
+    refused = million_client.post(f"/widget/{table_id}", data={"event": "sort", "column": "mass"})
+    assert refused.status_code == 400
+
+
+def test_a_large_table_s_row_selected_by_a_click_keeps_the_focus(
+    million_views: list[MillionRowsMainView], million_client: TestClient
+) -> None:
+    million_client.get("/")
+    (main_view,) = million_views
+    table_id = _widget_id(main_view.table.renderer)
+    million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "70"})
+
+    def select(position: str) -> str:
+        response = million_client.post(
+            f"/widget/{table_id}", data={"event": "select", "position": position}
+        )
+        assert response.status_code == 200
+        return response.text
+
+    selected = select("52")
+    assert _find(selected, f"{table_id}-frame") is None  # the scroll position stays
+    rows = _window(selected, table_id)  # from position 50
+    assert main_view.table.selected_ids == [52]
+    assert [row.get("aria-current") for row in rows[1:4]] == [None, "true", None]
+    assert ["autofocus" in row for row in rows[1:4]] == [False, True, False]
+
+    main_view.table.selection_mode = SelectionMode.MULTIPLE
+    select("54")
+    rows = _window(select("52"), table_id)  # selected: off
+    assert main_view.table.selected_ids == [54]
+    assert [row.get("aria-selected") for row in rows[2:5]] == ["false", "false", "true"]
+
+    # a row a stale page still shows: the rows as they now are, nothing selected
+    assert _window(select("1000000"), table_id)[0].get("aria-rowindex") == "52"
+    assert main_view.table.selected_ids == [54]
+
+
+@pytest.fixture
+def rooms_data_views() -> list[RoomsDataMainView]:
+    """Each session's main view, kept by `rooms_data_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def rooms_data_client(rooms_data_views: list[RoomsDataMainView]) -> Iterator[TestClient]:
+    class RoomsApp(WebApplication[RoomsDataMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=RoomsDataMainView)
+
+        def setup_session(self, main_view: RoomsDataMainView) -> None:
+            rooms_data_views.append(main_view)
+
+    with _Browser(RoomsApp().create_starlette_app()) as client:
+        yield client
+
+
+def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
+    rooms_data_views: list[RoomsDataMainView], rooms_data_client: TestClient
+) -> None:
+    page = rooms_data_client.get("/").text
+    (main_view,) = rooms_data_views
+    table_id = _widget_id(main_view.rooms.renderer)
+    assert _element(page, f"{table_id}-bar").attributes.get("role") == "search"
+
+    def post(**data: str) -> str:
+        response = rooms_data_client.post(f"/widget/{table_id}", data=data)
+        assert response.status_code == 200
+        return response.text
+
+    # typed: the rows and the count come back, never the field typed in
+    searched = post(event="search", search="room")
+    assert main_view.rooms.search == "room"
+    _swapped(searched, f"{table_id}-frame")
+    assert len(_window(searched, table_id)) == 1
+    assert _swapped(searched, f"{table_id}-count").text == "1 of 3"
+    assert _find(searched, f"{table_id}-bar") is None
+    post(event="search", search="")
+
+    # the editor knows the columns by their positions: the temperature is the second
+    editor = _swapped(post(event="open_editor"), f"{table_id}-bar")
+    options = [attributes for tag, attributes in editor.descendants if tag == "option"]
+    assert [option.get("value") for option in options] == ["0", "1"]
+    error = post(event="add_filter", column="1", value="warm")
+    assert _swapped(error, f"{table_id}-value-error").text == '"warm" isn\'t a number'
+    added = post(event="add_filter", column="1", value=">19")
+    assert main_view.rooms.filters == {"temperature": ">19"}
+    assert "Temperature: >19" in _swapped(added, f"{table_id}-bar").text
+    _swapped(added, f"{table_id}-frame")
+    assert len(_window(added, table_id)) == 2
+
+    post(event="remove_filter", column="1")
+    assert (main_view.rooms.filters, main_view.rooms.row_count) == ({}, 3)

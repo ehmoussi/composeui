@@ -79,6 +79,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qdatatable import QDataFilterTable
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -113,6 +114,7 @@ from tests.tables import (
     MillionRowsMainView,
     MillionSource,
     Room,
+    RoomsDataMainView,
     SortedRoomsMainView,
     StyledTablesMainView,
 )
@@ -2524,8 +2526,9 @@ def test_a_large_table_draws_the_rows_on_screen_reading_only_their_windows(
     window.resize(800, 600)
     window.show()
     qtbot.waitExposed(window)
-    table = _widget(view.table)
-    assert isinstance(table, QTableView)
+    container = _widget(view.table)
+    assert isinstance(container, QDataFilterTable)
+    table = container.table
     model = table.model()
     source = view.table.source
     assert isinstance(source, MillionSource)
@@ -2542,6 +2545,123 @@ def test_a_large_table_draws_the_rows_on_screen_reading_only_their_windows(
     # the rows drawn, by windows: never the million
     assert len(source.read) < 10 * DATA_TABLE_WINDOW
 
-    source.count = 3
+    source.size = 3
     source.changed.emit()
     assert model.rowCount() == 3
+
+
+def test_a_large_table_s_header_clicks_sort_by_its_column_showing_the_order(
+    qtbot: QtBot,
+) -> None:
+    view = MillionRowsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    container = _widget(view.table)
+    assert isinstance(container, QDataFilterTable)
+    table = container.table
+    header = table.horizontalHeader()
+
+    def click(column: int) -> None:
+        position = QPoint(header.sectionViewportPosition(column) + 5, header.height() // 2)
+        qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=position)
+
+    assert not header.isSortIndicatorShown()
+    click(1)
+    assert (view.table.sort_column, view.table.sort_descending) == ("half", False)
+    assert header.isSortIndicatorShown()
+    assert (header.sortIndicatorSection(), header.sortIndicatorOrder()) == (
+        1,
+        Qt.SortOrder.AscendingOrder,
+    )
+    click(1)
+    assert header.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder
+    click(1)
+    assert view.table.sort_column is None
+    assert not header.isSortIndicatorShown()
+
+
+def test_a_large_table_s_clicks_select_its_rows_and_a_double_click_activates_one(
+    qtbot: QtBot,
+) -> None:
+    view = MillionRowsMainView()
+    view.table.selection_mode = SelectionMode.MULTIPLE
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    container = _widget(view.table)
+    assert isinstance(container, QDataFilterTable)
+    table = container.table
+    model = table.model()
+    activated: list[Any] = []
+    view.table.row_activated.connect(activated.append)
+
+    def click(row: int, modifier: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier) -> None:
+        center = table.visualRect(model.index(row, 0)).center()
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, modifier, center)
+
+    click(1)
+    click(4, Qt.KeyboardModifier.ShiftModifier)
+    assert view.table.selected_ids == [1, 2, 3, 4]
+    assert model.index(2, 1).data(Qt.ItemDataRole.BackgroundRole) is not None
+    assert model.index(5, 1).data(Qt.ItemDataRole.BackgroundRole) is None
+    click(2)  # selected: unselected
+    assert view.table.selected_ids == [1, 3, 4]
+
+    table.setCurrentIndex(model.index(6, 0))
+    qtbot.keyClick(table, Qt.Key.Key_Space)
+    qtbot.keyClick(table, Qt.Key.Key_Return)
+    # a double click: a click, which selects the row, then the double click
+    click(0)
+    center = table.visualRect(model.index(0, 0)).center()
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    assert view.table.selected_ids == [1, 3, 4, 6, 0]
+    assert activated == [6, 0]
+
+
+def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(qtbot: QtBot) -> None:
+    view = RoomsDataMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    box = _widget(view.rooms)
+    assert isinstance(box, QDataFilterTable)
+    bar, model = box.bar, box.table.model()
+
+    def names() -> list[str]:
+        return [model.index(row, 0).data() for row in range(model.rowCount())]
+
+    assert bar.isVisible()
+    assert [bar.column.itemText(i) for i in range(bar.column.count())] == ["Room", "Temperature"]
+    qtbot.keyClicks(bar.search, "room")
+    assert (view.rooms.search, names(), bar.count.text()) == ("room", ["Bedroom"], "1 of 3")
+    bar.search.selectAll()
+    qtbot.keyClick(bar.search, Qt.Key.Key_Backspace)
+    assert (view.rooms.search, len(names()), bar.count.isVisible()) == ("", 3, False)
+
+    qtbot.mouseClick(bar.add_filter, Qt.MouseButton.LeftButton)
+    bar.column.setCurrentIndex(bar.column.findText("Temperature"))
+    qtbot.keyClicks(bar.value, "warm")
+    qtbot.keyClick(bar.value, Qt.Key.Key_Return)
+    assert bar.value.toolTip() == '"warm" isn\'t a number'  # by the column's name
+    bar.value.selectAll()
+    qtbot.keyClicks(bar.value, ">19")
+    qtbot.keyClick(bar.value, Qt.Key.Key_Return)
+    assert view.rooms.filters == {"temperature": ">19"}
+    assert names() == ["Kitchen", "Bedroom"]
+    assert [chip.open_button.accessibleName() for chip in bar.chips] == ["Temperature: >19"]
+
+    view.rooms.filters = {"temperature": ">30"}
+    assert box.empty.isVisible()
+    qtbot.mouseClick(bar.chips[0].remove_button, Qt.MouseButton.LeftButton)
+    assert (view.rooms.filters, names(), box.empty.isVisible()) == (
+        {},
+        ["Kitchen", "Hall", "Bedroom"],
+        False,
+    )

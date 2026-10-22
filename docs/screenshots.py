@@ -154,10 +154,14 @@ def _taskview(main_view: Any, _model: Optional[Model]) -> None:
 
 def _largetable(main_view: Any, _model: Optional[Model]) -> None:
     main_view.apply_arguments(argparse.Namespace(rows=1_000_000))
-    form = main_view.form
-    form.descending.is_checked = True
-    form.sort.value = "temperature"
-    form.sort.value_changed.emit("temperature")
+    # as two clicks on its header: the hottest first
+    main_view.table.sort_by("temperature")
+    main_view.table.sort_by("temperature")
+    # a filter added in the bar
+    main_view.table.filters = {"status": "=ok"}
+    # a click on the second row, then a Shift+click on the fourth
+    main_view.table.select_at(1)
+    main_view.table.extend_to(3)
 
 
 def _markdownviewer(main_view: Any, _model: Optional[Model]) -> None:

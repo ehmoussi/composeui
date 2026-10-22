@@ -32,44 +32,51 @@ def _temperatures(main_view: LargeTableMainView) -> list[float]:
     return [float(cells[TEMPERATURE]) for _row_id, cells in rows]
 
 
-def test_the_form_sorts_the_table_s_rows(main_view: LargeTableMainView) -> None:
-    form = main_view.form
-    form.descending.is_checked = True
-    form.sort.value = "temperature"
-    form.sort.value_changed.emit("temperature")
+def test_each_order_of_the_rows_says_how_many_pass(main_view: LargeTableMainView) -> None:
+    assert main_view.info.text.startswith(f"{ROWS} of {ROWS} rows, ordered in")
+    main_view.table.search = "Lyon"  # as typed in the table's bar
+    lyon = main_view.table.row_count
+    assert 0 < lyon < ROWS
+    assert main_view.info.text.startswith(f"{lyon} of {ROWS} rows")
+
+    main_view.table.sort_by("temperature")  # as a click on its header
 
     temperatures = _temperatures(main_view)
-    assert len(temperatures) == ROWS
-    assert temperatures == sorted(temperatures, reverse=True)
-    assert main_view.info.text.startswith(f"{ROWS} of {ROWS} rows")
+    assert temperatures == sorted(temperatures)
+    assert main_view.info.text.startswith(f"{lyon} of {ROWS} rows")
 
 
-def test_a_temperature_filter_keeps_the_rows_it_passes_or_says_why_it_cannot(
+def test_the_bar_filters_any_column_saying_why_a_value_cannot(
     main_view: LargeTableMainView,
 ) -> None:
-    temperature = main_view.form.temperature
-    temperature.text = ">25"
-    temperature.editing_finished.emit()
-    assert _temperatures(main_view) != []
+    table = main_view.table
+    assert table.filter_error("temperature", "warm") == '"warm" isn\'t a number'
+    table.filters = {"temperature": ">25", "status": "=fault"}
+
+    assert 0 < table.row_count < ROWS
     assert all(value > 25 for value in _temperatures(main_view))
+    assert {cells[4] for _row_id, cells in table.rows(0, table.row_count)} == {"fault"}
+    assert main_view.info.text.startswith(f"{table.row_count} of {ROWS} rows")
 
-    count = main_view.table.row_count
-    temperature.text = ">warm"
-    temperature.editing_finished.emit()
-    assert temperature.log_message == "Not a filter: not a number"
-    assert main_view.table.row_count == count
 
-    temperature.text = ">99"
-    temperature.editing_finished.emit()
-    assert (temperature.log_message, main_view.table.row_count) == ("", 0)
-    assert main_view.info.text.startswith(f"0 of {ROWS} rows")
+def test_the_label_says_how_many_readings_are_selected_and_which_was_activated(
+    main_view: LargeTableMainView,
+) -> None:
+    table = main_view.table
+    table.select_at(0)
+    table.extend_to(2)
+    assert main_view.picked.text == "3 readings selected"
+
+    table.activate_at(1)
+
+    sensor, site, temperature = table.rows(1, 2)[0][1][:3]
+    assert main_view.picked.text == f"{sensor} in {site}: {float(temperature)} °C"
 
 
 def test_a_study_saves_the_search_without_the_readings(
     main_view: LargeTableMainView, tmp_path: Path
 ) -> None:
-    main_view.form.search.text = "Lyon"
-    main_view.form.search.editing_finished.emit()
+    main_view.table.search = "Lyon"
     path = tmp_path / "study.largetable"
     main_view.save_state(path)
 
@@ -81,21 +88,26 @@ def test_a_study_saves_the_search_without_the_readings(
     assert sites == {"Lyon"}
 
 
-def test_choosing_a_sort_in_qt_s_list_sorts_the_rendered_table(qtbot: QtBot) -> None:
+def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
     qt_renderer = pytest.importorskip("composeui.qtcore.qtrenderer")
+    qt_core = pytest.importorskip("qtpy.QtCore")
+    QPoint, Qt = qt_core.QPoint, qt_core.Qt  # noqa: N806 (Qt's own names)
     main_view = LargeTableMainView()
     main_view.render(RendererType.QT)
     main_view.apply_arguments(argparse.Namespace(rows=ROWS))
     assert isinstance(main_view.renderer, qt_renderer.QtWidgetRenderer)
     window = main_view.renderer.qt_object
     qtbot.addWidget(window)
-    combobox = window.findChild(qt_widgets.QComboBox)
-
-    combobox.setCurrentIndex(combobox.findText("Temperature (°C)"))
-
-    assert main_view.form.sort.value == "temperature"
     table = window.findChild(qt_widgets.QTableView)
+    header = table.horizontalHeader()
+    window.show()
+    qtbot.waitExposed(window)
+
+    position = QPoint(header.sectionViewportPosition(TEMPERATURE) + 5, header.height() // 2)
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=position)
+
+    assert main_view.table.sort_column == "temperature"
     temperatures = [float(table.model().index(row, TEMPERATURE).data()) for row in range(ROWS)]
     assert len(temperatures) == ROWS
     assert temperatures == sorted(temperatures)

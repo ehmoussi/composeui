@@ -66,8 +66,5 @@
   "Error": "Erreur",
   "Choose a file": "Choisir un fichier",
   "Reload": "Recharger",
-  "Previous": "Précédente",
-  "Next": "Suivante",
-  "Rows {first} to {last} of {total}": "Lignes {first} à {last} sur {total}",
   "No rows": "Aucune ligne"
 }
