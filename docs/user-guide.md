@@ -157,6 +157,10 @@ if __name__ == "__main__":
   It is not a field, so the state does not save it.
 - **`__attrs_post_init__` wires the view once it is built.** Call
   `super().__attrs_post_init__()` first, then set values and connect signals.
+- **`T("...")` and `self.tr("...")` mark a text for translation.** Later examples of this
+  guide write their text so, for example `Column("radius", T("Radius"))`. Import `T` from
+  `composeui.core.view`. Until the app has catalogs, the text shows as written. See
+  [Translating the app](#translating-the-app).
 
 ### `child` or `Factory`
 
@@ -287,7 +291,7 @@ from pathlib import Path
 
 @define_view
 class PipeMainView(MainView):
-    app_title = T("Pipe Form")
+    app_title = "Pipe Form"
     app_icon = Path(__file__).parent / "images" / "pipe.svg"
 ```
 
