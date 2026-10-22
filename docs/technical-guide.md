@@ -327,7 +327,9 @@ uv sync --group dev --group docs --all-extras
   example by filling in its form or running its job, so every backend shows the same
   state. It needs the `browser` group and Chromium, as `make browser-test` does. When an
   example changes what it shows, update its set-up in the script, run
-  `make screenshots EXAMPLES=<example>`, and commit the images.
+  `make screenshots EXAMPLES=<example>`, and commit the images. The script also takes
+  `docs/images/quickstart-web.png` for the README. It runs the code of the README's
+  quickstart, so run `make screenshots EXAMPLES=quickstart` when the quickstart changes.
 
 ### Continuous integration
 

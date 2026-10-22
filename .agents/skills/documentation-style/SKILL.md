@@ -134,7 +134,7 @@ When the feature is a new widget, the widget catalog lists it from its class doc
 Also update the list of widgets
 ("Already there: ...") at the top of `ROADMAP.md`, and delete its roadmap entry.
 `ROADMAP.md` keeps only the work that is left. Keep the contents list at the top of the
-guide in step with its `##` headings.
+guide in step with its `##` and `###` headings.
 
 ## Document an example app
 
@@ -148,9 +148,10 @@ An example section in `docs/examples-guide.md` usually has this content, in this
 When you add an example, also add its row to the overview table, with its default backend
 (the `default_backend` of its `run` call, else web), and its entry in the contents list.
 When you add an example, also add its set-up to `docs/screenshots.py` and run
-`make screenshots EXAMPLES=<example>`. When an example changes what it shows, update its
-section, its row, and its screenshots. The module
-docstring of each example is the first source for what it shows: check it against the code.
+`make screenshots EXAMPLES=<example>`. When the README's quickstart changes, run
+`make screenshots EXAMPLES=quickstart`: the script runs the quickstart's code from the README.
+When an example changes what it shows, update its section, its row, and its screenshots. The
+module docstring of each example is the first source for what it shows: check it against the code.
 Do not document an example that is not committed.
 
 ## Write clear technical English
