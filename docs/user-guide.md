@@ -9,6 +9,7 @@ and what each backend shows. To install ComposeUI and write a first window, read
 ## Contents
 
 - [Core concepts](#core-concepts)
+- [Building views](#building-views)
 - [Backends](#backends)
 - [Web backend](#web-backend)
 - [Widgets](#widgets)
@@ -97,6 +98,186 @@ Larger views have sections of their own:
 - `ToolBar` for a [toolbar](#toolbars).
 - `DialogView` for [dialogs](#dialogs).
 - `SidebarView` for a [sidebar](#sidebar).
+
+## Building views
+
+This section builds a small form, with its layout and its checks:
+
+```python
+import enum
+from typing import Optional
+
+from attrs import Factory
+
+from composeui.core.application import run
+from composeui.core.view import (
+    Align,
+    ButtonView,
+    FormView,
+    HorizontalView,
+    LabelRowCheckBoxView,
+    LabelRowComboboxView,
+    LabelRowFloatInputView,
+    LabelRowInputView,
+    MainView,
+    child,
+    define_view,
+)
+
+
+class Material(enum.Enum):
+    STEEL = "Steel"
+    COPPER = "Copper"
+
+
+@define_view
+class NameRow(LabelRowInputView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.set_validator(self._check_name, self.text_edited)
+        self.run_validator()  # shows the error before the first edit
+
+    def _check_name(self) -> Optional[str]:
+        return "A name is required" if self.text == "" else None
+
+
+@define_view
+class PipeForm(FormView):
+    name: NameRow = child(NameRow, label="Name")
+    radius: LabelRowFloatInputView = child(LabelRowFloatInputView, label="Radius", minimum=0)
+    material: LabelRowComboboxView[Material] = child(
+        LabelRowComboboxView,
+        label="Material",
+        values={material.value: material for material in Material},
+        value=Material.STEEL,
+    )
+    insulated: LabelRowCheckBoxView = child(LabelRowCheckBoxView, label="Insulated")
+
+
+@define_view
+class FormButtons(HorizontalView):
+    align = Align.END
+
+    save: ButtonView = child(ButtonView, text="Save")
+
+
+@define_view
+class PipeMainView(MainView):
+    app_title = "Pipes"
+    extension = ".pipes"
+
+    form: PipeForm = Factory(PipeForm)
+    buttons: FormButtons = Factory(FormButtons)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.buttons.save.clicked.connect(self._save)
+
+    def _save(self) -> None:
+        self.form.check()
+        if self.form.is_valid:
+            self.status_bar.show_message(f"Saved {self.form.name.text}")
+
+
+if __name__ == "__main__":
+    run(PipeMainView)
+```
+
+### Define a view
+
+- **`@define_view` makes an `attrs` class of a view.** A field set with a view is a child
+  view. A field set with a plain value, such as `text` or `value`, is state that the
+  renderer shows. The fields are keyword-only.
+- **A class variable configures the class,** such as `app_title`, `extension`, or `align`.
+  It is not a field, so the state does not save it.
+- **`__attrs_post_init__` wires the view once it is built.** Call
+  `super().__attrs_post_init__()` first, then set values and connect signals.
+
+### `child` or `Factory`
+
+Each view needs its own child views, so a view field takes a function that builds them:
+
+- `Factory(PipeForm)` builds the view with its defaults.
+- `child(LabelRowInputView, label="Name")` builds it with these fields. Each view gets
+  its own copy of the arguments, so a list among them is never shared.
+
+Use `child` to set a few fields where the view is declared. Use a subclass with an
+`__attrs_post_init__`, as `NameRow` does, when the view also needs code: signals, checks,
+or text built from other fields.
+
+### Lay out views
+
+- **A main view, a page, and a form put their view fields one above the other,** in the
+  order of the fields.
+- **A `HorizontalView` puts its view fields side by side.** Each field takes a share of the
+  width, from its `STRETCH` metadata:
+  `attrs.field(factory=TableView, metadata={STRETCH: 3})`. A button keeps the width of its
+  text (`default_stretch = 0`). When no view takes a share, `align` packs them at the
+  start or the end of the row. On the web, a row narrower than 42rem stacks its views.
+- **A `VerticalView` puts its view fields one above the other,** for a column in a
+  `HorizontalView`, for example a table above its buttons.
+- **A `GridView` puts each view field in a cell,** from its `GRID_POSITION` metadata:
+  `metadata={GRID_POSITION: (1, 0)}`, or `GridPosition(1, 0, column_span=2)`.
+
+For panes that the user resizes, see [Resizable panes](#resizable-panes).
+
+### Forms and their fields
+
+A `FormView` shows its rows one above the other, with their labels aligned. A
+`GroupFormView` is a form in a box with a `title`. It can be a row of another form, as the
+main pipe and the incident pipe are in `pipeform.py`.
+
+Each field has three views:
+
+| View | Shows | Example |
+| --- | --- | --- |
+| `InputView` | Only the field, anywhere | A search field in a toolbar |
+| `RowInputView` | A row of a form, without a label | A field under a heading |
+| `LabelRowInputView` | A row of a form, with a `label` and an optional `help` | Most form fields |
+
+The fields:
+
+| Field | Its value | What the user does |
+| --- | --- | --- |
+| `InputView` | `text` | Types a line of text |
+| `FloatInputView` | `value`, a `float` or `None`, from `minimum` to `maximum`, with `decimals` | Types a decimal number |
+| `IntInputView` | `value`, an `int` or `None` (see [Integer input](#integer-input)) | Types a whole number |
+| `DateInputView` | `value`, a `datetime.date` or `None` (see [Date input](#date-input)) | Types or picks a date |
+| `FilePathInputView` | `text`, and `path` (see [File path input](#file-path-input)) | Types or picks a file |
+| `CheckBoxView` | `is_checked`, with its `text` beside the box | Checks or unchecks the box (`toggled`) |
+| `RadioGroupView` | `value`, one of `values` | Picks one of a few choices |
+| `ComboboxView` | `value`, one of `values` | Picks one choice in a drop-down list |
+| `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](#slider)) | Drags a handle |
+
+Each field has its row views too, for example `RowFloatInputView` and
+`LabelRowFloatInputView`.
+
+- **The text fields** emit `text_edited` on each change that the user makes, and
+  `editing_finished` when the user is done with the field, for example on Enter.
+- **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
+  is `None` or one of `values`. `value_changed` reports the user's choice.
+- **A `LabelView`** shows a line of read-only text, for example a result.
+- **The status bar** of the main view shows a short message:
+  `main_view.status_bar.show_message("Saved")`. The message goes after `timeout` seconds
+  (3 by default, 0 to keep it).
+
+### Check a form
+
+A check is a function without arguments. It returns an error message, or `None` when the
+value is good:
+
+- **A row's own check.** `row.set_validator(check, *signals)` runs `check` each time one of
+  the signals fires, and shows its message under the row's field. It does not run at once:
+  call `run_validator()` to show the error before the first edit.
+- **A check of several rows.** `form.add_validator(check, *signals, rows=(...))` checks the
+  values of several rows together. The form shows the messages of the failing checks at its
+  end, and marks the fields of `rows` as invalid.
+- **Before an action.** `form.check()` runs every check of the form and its nested forms
+  now. Then `form.is_valid` tells whether they all pass.
+
+In a [form dialog](#form-dialogs), OK stays disabled while a check fails.
+[`src/examples/pipeform.py`](../src/examples/pipeform.py) checks its name field, and has two
+checks of several rows.
 
 ## Backends
 
