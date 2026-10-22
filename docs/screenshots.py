@@ -1,5 +1,7 @@
 """Take the screenshots of the examples guide on every backend (`make screenshots`).
 
+It also takes the screenshot of the README's quickstart, from the code in the README.
+
 Each example is set up as a reader would leave it (a form filled in, records added, a job
 run to its end) before it is rendered, so that the three backends show the same state.
 The images go to `docs/images/`, as `<example>-<backend>.png`, in the light theme.
@@ -17,12 +19,14 @@ import contextlib
 import datetime
 import os
 import random
+import re
 import socket
 import sys
 import threading
 import time
+import types
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import attrs
 import uvicorn
@@ -77,6 +81,8 @@ class Example:
     backends: tuple[str, ...] = ("qt", "textual", "web")
     #: the web app's class, when the example has its own
     web_application: Optional[Callable[..., Any]] = None
+    #: the window's size on Qt and the page's on the web, in pixels
+    window: tuple[int, int] = WINDOW
 
 
 def _quiet(main_view: MainView) -> None:
@@ -167,8 +173,35 @@ def _textual_demo(main_view: Any, _model: Optional[Model]) -> None:
     form.shape.value_changed.emit("HEXAGON")
 
 
+def _quickstart_main_view() -> Callable[[], MainView]:
+    """Get the main view of the README's quickstart, run from the README's own code."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    quickstart = readme[readme.index("## Quickstart") :]
+    match = re.search(r"```python\n(.*?)```", quickstart, re.DOTALL)
+    if match is None:
+        msg = "README.md: no Python code under its Quickstart"
+        raise ValueError(msg)
+    # a module of its own, for `attrs` to resolve the views' types from its globals
+    module = types.ModuleType("quickstart")
+    sys.modules[module.__name__] = module
+    exec(compile(match.group(1), "README.md", "exec"), module.__dict__)  # noqa: S102 (the repo's own README)
+    return cast("Callable[[], MainView]", module.HelloMainView)
+
+
+def _quickstart(main_view: Any, _model: Optional[Model]) -> None:
+    main_view.greeting.text = "Ada"
+    main_view.greeting.text_edited.emit("Ada")
+
+
 def _examples() -> list[Example]:
     return [
+        Example(
+            "quickstart",
+            _quickstart_main_view(),
+            _quickstart,
+            backends=("web",),
+            window=(900, 360),
+        ),
         Example("pipeform", pipeform.PipeMainView, _pipeform),
         Example(
             "pipecatalogue",
@@ -227,7 +260,7 @@ def qt_screenshot(example: Example, path: Path) -> None:
     app = _application(example, QtApplication, QtModelApplication)
     app.render(RendererType.QT)
     window = app.main_view.renderer.qt_object
-    window.resize(*WINDOW)
+    window.resize(*example.window)
     window.show()
     # a few passes: layouts settle, and pyqtgraph draws its charts once shown
     for _ in range(10):
@@ -322,7 +355,8 @@ def _serve(app: Starlette) -> Iterator[str]:
 def web_screenshot(browser: Browser, example: Example, path: Path) -> None:
     with _serve(_web_starlette_app(example)) as url:
         context = browser.new_context(
-            viewport={"width": WINDOW[0], "height": WINDOW[1]}, color_scheme="light"
+            viewport={"width": example.window[0], "height": example.window[1]},
+            color_scheme="light",
         )
         page = context.new_page()
         page.goto(url)

@@ -107,10 +107,19 @@ uv run python hello.py                     # a web page, the default: the web ex
 The web backend serves the page at http://127.0.0.1:8000. `run` imports only the backend
 that you choose, and leaves the rest of the command line to the app (`--help` lists it).
 
-For a larger example, see [`src/examples/pipeform.py`](src/examples/pipeform.py). It has
-forms, radio groups, a checkbox, a read-only table, validation, and a File menu with save
-and load. Run it with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
-`web`.
+<img alt="The quickstart on the web: a text field holds Ada, and the status bar says Hello, Ada!" src="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/images/quickstart-web.png" width="600">
+
+### Next steps
+
+1. Read the [core concepts](docs/user-guide.md#core-concepts) of the user guide: views,
+   signals, the model, and studies.
+2. Build a form with its layout and its checks, in
+   [Building views](docs/user-guide.md#building-views).
+3. Run the example apps, in the order of the
+   [examples guide](docs/examples-guide.md#where-to-start). The first,
+   [`src/examples/pipeform.py`](src/examples/pipeform.py), has forms, radio groups, a check
+   box, a read-only table, checks, and a File menu that saves and opens:
+   `uv run python -m examples.pipeform --backend qt`, or `textual`, or `web`.
 
 ## Documentation
 

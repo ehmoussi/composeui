@@ -10,6 +10,7 @@ run them from a clone of the repository.
 
 - [Run an example](#run-an-example)
 - [Overview](#overview)
+- [Where to start](#where-to-start)
 - [Pipe form](#pipe-form)
 - [Pipe catalogue](#pipe-catalogue)
 - [Pipe chart](#pipe-chart)
@@ -50,6 +51,23 @@ options, such as `--language` and `-f FILE`.
 
 The tests in [`tests/`](../tests/) also run these examples. When you change an example,
 run its tests.
+
+## Where to start
+
+Read the examples in this order. Each one adds a few features to the ones before it:
+
+1. [Pipe form](#pipe-form): forms and their checks, pages, menus, and a translation. It
+   follows [Building views](user-guide.md#building-views) of the user guide.
+2. [Markdown viewer](#markdown-viewer): a small app without studies, with a command-line
+   option of its own.
+3. [Task view](#task-view): jobs in threads, with their progress.
+4. [Pipe chart](#pipe-chart): charts, tabs, and the widgets in the cells of a table.
+5. [Pipe catalogue](#pipe-catalogue): a SQLite model, with the views that follow it.
+6. [Pipe sweep](#pipe-sweep): a job that writes to a SQLite model.
+
+The other examples each show one topic: [Batman](#batman) the look of a chart,
+[Web hello](#web-hello) an app that only the web shows, and [Textual demo](#textual-demo)
+an app in a terminal.
 
 ## Pipe form
 
