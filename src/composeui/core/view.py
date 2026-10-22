@@ -3841,6 +3841,152 @@ class DataTableView(View):
         return column
 
 
+class DataTableLike(Protocol):
+    """What `DataTableByPosition` reads and sets of a `DataTableView`."""
+
+    search: str
+    filters: dict[str, str]
+    sort_column: Optional[str]
+    sort_descending: bool
+
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def column_names(self) -> list[str]: ...
+    @property
+    def filter_texts(self) -> dict[str, str]: ...
+    @property
+    def filterable_columns(self) -> list[str]: ...
+    def header(self, column: str) -> str: ...
+    def filter_error(self, column: str, text: str) -> Optional[str]: ...
+    def filter_takes_pattern(self, column: str) -> bool: ...
+    def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
+    def filter_chip(self, column: str) -> str: ...
+    def sort_by(self, column: str) -> None: ...
+    def select_at(self, position: int) -> None: ...
+    def extend_to(self, position: int) -> None: ...
+
+
+class DataTableByPosition:
+    """A large table as a backend's widgets know it: its columns by their positions.
+
+    A `DataTableView` knows its columns by name, and the widgets (a header, a filter bar,
+    as a `TableView`'s) by position in its source. The renderers of every backend read
+    and set the view through it, so the names map to positions in one place.
+    """
+
+    def __init__(self, view: DataTableLike) -> None:
+        self._view = view
+
+    @property
+    def headers(self) -> list[str]:
+        return self._view.headers
+
+    @property
+    def filter_texts(self) -> dict[str, str]:
+        return self._view.filter_texts
+
+    @property
+    def search(self) -> str:
+        return self._view.search
+
+    @search.setter
+    def search(self, text: str) -> None:
+        self._view.search = text
+
+    @property
+    def filters(self) -> dict[int, str]:
+        names = self._view.column_names
+        return {
+            names.index(name): text for name, text in self._view.filters.items() if name in names
+        }
+
+    @filters.setter
+    def filters(self, filters: dict[int, str]) -> None:
+        names = self._view.column_names
+        self._view.filters = {names[column]: text for column, text in filters.items()}
+
+    @property
+    def filterable_columns(self) -> list[int]:
+        return [column for column, _header in self.bar_columns(self._view.filterable_columns)]
+
+    @property
+    def sort(self) -> Optional[tuple[int, bool]]:
+        """Get the sorted column's position and whether it's descending; None if none."""
+        names = self._view.column_names
+        if self._view.sort_column not in names:
+            return None
+        return names.index(self._view.sort_column), self._view.sort_descending
+
+    def bar_columns(self, filterable_columns: list[str]) -> list[tuple[int, str]]:
+        """Get the position and the header of each of `filterable_columns`, as a bar lists them.
+
+        Takes the names, as a renderer refreshes them before the view holds them.
+        """
+        names = self._view.column_names
+        return [
+            (names.index(name), self._view.header(name))
+            for name in names
+            if name in filterable_columns
+        ]
+
+    def chips(self, filters: dict[str, str]) -> list[tuple[int, str, str, str]]:
+        """Get each of `filters` as a bar's chip, by name: as `bar_columns` takes them.
+
+        Each its position, the chip's text, the text typed and the header.
+        """
+        names = self._view.column_names
+        return [
+            (
+                names.index(name),
+                self._view.filter_chip(name),
+                filters[name],
+                self._view.header(name),
+            )
+            for name in names
+            if name in filters
+        ]
+
+    def filter_error(self, column: int, text: str) -> Optional[str]:
+        return self._view.filter_error(self._name(column), text)
+
+    def filter_takes_pattern(self, column: int) -> bool:
+        return self._view.filter_takes_pattern(self._name(column))
+
+    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
+        return self._view.filter_placeholder(self._name(column), is_pattern=is_pattern)
+
+    def filter_chip(self, column: int) -> str:
+        return self._view.filter_chip(self._name(column))
+
+    def add_filter(self, column: int, text: str) -> None:
+        """Filter the column at `column` with `text`, as the bar's Add does."""
+        self.filters = {**self.filters, column: text}
+
+    def remove_filter(self, column: int) -> None:
+        """Stop filtering the column at `column`, as its chip's remove button does."""
+        self.filters = {other: text for other, text in self.filters.items() if other != column}
+
+    def clear_filters(self) -> None:
+        self._view.filters = {}
+
+    def sort_by(self, column: int) -> None:
+        """Sort by the column at `column`, as a click on its header does."""
+        names = self._view.column_names
+        if column < len(names):
+            self._view.sort_by(names[column])
+
+    def select(self, position: int, *, is_extended: bool) -> None:
+        """Select the row at `position`, as a click does: extended to it with Shift."""
+        if is_extended:
+            self._view.extend_to(position)
+        else:
+            self._view.select_at(position)
+
+    def _name(self, column: int) -> str:
+        return self._view.column_names[column]
+
+
 TValue = TypeVar("TValue")
 
 

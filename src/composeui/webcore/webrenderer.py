@@ -20,6 +20,7 @@ import threading
 from abc import abstractmethod
 from collections import deque
 from contextvars import ContextVar
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
 
 import attrs
@@ -46,6 +47,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    DataTableByPosition,
     DialogKind,
     DialogView,
     ExitAppAction,
@@ -1464,6 +1466,10 @@ class FilteredLike(Protocol):
     def filter_chip(self, column: int) -> str: ...
 
 
+#: the parts of a filter bar each part holds: the count is in the bar
+_BAR_PARTS_INSIDE: Mapping[str, tuple[str, ...]] = MappingProxyType({"bar": ("count",)})
+
+
 class WebFilterBarRenderer(WebRenderer[TView]):
     """A table's renderer with a filter bar: a search, "+ Filter" and the filters' chips.
 
@@ -1472,10 +1478,19 @@ class WebFilterBarRenderer(WebRenderer[TView]):
     Add), and the filters show as chips. A change swaps only the parts it changes
     (`_mark_parts`): "bar", "count" or "error", never the field the user types in; a
     value that can't filter swaps only its message in, the page marking the field invalid.
+
+    A table adds its own parts (`_own_parts`), and what one holds (`_parts_inside`): a
+    change marking the whole (`_mark_dirty`) swaps the table whole.
     """
+
+    #: the parts each part holds, which swap with it rather than apart
+    _parts_inside: ClassVar[Mapping[str, tuple[str, ...]]] = _BAR_PARTS_INSIDE
 
     def __init__(self, view: TView) -> None:
         super().__init__(view)
+        #: the parts to swap, unless the whole table is (`_mark_dirty`)
+        self._dirty_parts: set[str] = set()
+        self._is_whole_dirty = False
         #: the filter editor, while open: its column (None for the first) and its text
         self._editor: tuple[int | None, str] | None = None
         #: why the editor's text can't filter, once the user added it
@@ -1505,8 +1520,55 @@ class WebFilterBarRenderer(WebRenderer[TView]):
         """Count the rows shown, while the search or the filters hide some: else ""."""
 
     @abstractmethod
+    def _own_parts(self) -> dict[str, Callable[..., Markup]]:
+        """Get how to render each of the table's own parts, in the order they're swapped."""
+
+    @abstractmethod
+    def _whole_html(self, *, oob: bool) -> Markup:
+        """Render the whole table, its bar and its parts."""
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        parts, self._dirty_parts = self._dirty_parts, set()
+        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
+        html_ = self._whole_html(oob=oob) if is_whole else self._parts_html(parts)
+        self._focus_add_filter, self._focused_chip = False, None
+        return html_
+
+    def _parts_html(self, parts: set[str]) -> Markup:
+        """Render the parts changed, out of band, each one only once."""
+        for part, inside in self._parts_inside.items():
+            if part in parts:
+                parts.difference_update(inside)
+        # the bar last: it may hold the element that sent the request, which htmx swaps
+        # nothing more from once it's gone
+        renders: dict[str, Callable[..., Markup]] = {
+            **self._own_parts(),
+            "count": self._count_html,
+            "error": self._error_html,
+            "bar": self._bar_html,
+        }
+        return Markup("").join(
+            render(oob=True) for part, render in renders.items() if part in parts
+        )
+
+    def _mark_dirty(self, view: TView, rendered_object: str, value: Any) -> None:
+        self._is_whole_dirty = True
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _part_marker(self, *parts: str) -> Callable[[TView, str, Any], None]:
+        """Get a refresh handler swapping these parts of the table."""
+
+        def mark(_view: TView, _rendered_object: str, _value: Any) -> None:
+            self._mark_parts(*parts)
+
+        return mark
+
     def _mark_parts(self, *parts: str) -> None:
         """Swap these parts of the table: "bar", "count" or "error", or its own."""
+        dirty = _DIRTY.get()
+        if dirty is not None:
+            self._dirty_parts.update(parts)
+            dirty[self.widget_id] = self
 
     def _oob(self, *, oob: bool) -> Markup:
         return Markup(' hx-swap-oob="true"') if oob else Markup()
@@ -1810,9 +1872,6 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         super().__init__(view)
         #: the cell the user is editing, by row and column
         self._editing: tuple[int, int] | None = None
-        #: the parts to swap, unless the whole table is (`_mark_dirty`)
-        self._dirty_parts: set[str] = set()
-        self._is_whole_dirty = False
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
@@ -1842,22 +1901,6 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._editing = None  # its row may have moved, or be gone
         self._mark_dirty(view, rendered_object, value)
 
-    def _mark_dirty(self, view: TableViewLike, rendered_object: str, value: Any) -> None:
-        self._is_whole_dirty = True
-        super()._mark_dirty(view, rendered_object, value)
-
-    def _part_marker(self, *parts: str) -> Callable[[TableViewLike, str, Any], None]:
-        def mark(_view: TableViewLike, _rendered_object: str, _value: Any) -> None:
-            self._mark_parts(*parts)
-
-        return mark
-
-    def _mark_parts(self, *parts: str) -> None:
-        dirty = _DIRTY.get()
-        if dirty is not None:
-            self._dirty_parts.update(parts)
-            dirty[self.widget_id] = self
-
     @property
     def _filtered(self) -> FilteredLike:
         return self._view
@@ -1868,27 +1911,12 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             return ""
         return self._view.filter_texts.get("count", "").format(shown=shown, total=total)
 
-    def to_html(self, *, oob: bool = False) -> Markup:
-        parts, self._dirty_parts = self._dirty_parts, set()
-        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
-        if not is_whole:
-            if "bar" in parts:
-                parts.discard("count")  # in the bar
-            renders = {
-                "bar": self._bar_html,
-                "head": self._head_html,
-                "body": self._body_html,
-                "count": self._count_html,
-                "error": self._error_html,
-            }
-            # the bar last: it may hold the element that sent the request, which htmx
-            # swaps nothing more from once it's gone
-            order = ("head", "body", "count", "error", "bar")
-            fragments = Markup("").join(renders[part](oob=True) for part in order if part in parts)
-            self._focus_add_filter, self._focused_chip = False, None
-            return fragments
+    def _own_parts(self) -> dict[str, Callable[..., Markup]]:
+        return {"head": self._head_html, "body": self._body_html}
+
+    def _whole_html(self, *, oob: bool) -> Markup:
         grid = Markup(' role="grid" aria-multiselectable="true"') if self._is_multiple() else ""
-        html_ = Markup(
+        return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
             "{bar_html}"
             '<div class="overflow-x-auto rounded-box border border-base-300">'
@@ -1901,8 +1929,6 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             head_html=self._head_html(),
             body_html=self._body_html(),
         )
-        self._focus_add_filter, self._focused_chip = False, None
-        return html_
 
     def _head_html(self, *, oob: bool = False) -> Markup:
         """Render the headers: a row of them, under a row of `header_groups` if any.
@@ -2381,6 +2407,8 @@ class DataTableViewLike(ViewLike, Protocol):
     def sort_by(self, column: str) -> None: ...
     def is_selected(self, row_id: Any) -> bool: ...
     def select_at(self, position: int) -> None: ...
+    def extend_to(self, position: int) -> None: ...
+    def header(self, column: str) -> str: ...
     def filter_error(self, column: str, text: str) -> str | None: ...
     def filter_takes_pattern(self, column: str) -> bool: ...
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str: ...
@@ -2389,58 +2417,6 @@ class DataTableViewLike(ViewLike, Protocol):
     def csv_chunks(self) -> Iterator[str]: ...
 
     export_filename: str
-
-
-class _ByPosition:
-    """A large table's filter settings, its columns known by their positions in its source."""
-
-    def __init__(self, view: DataTableViewLike) -> None:
-        self._view = view
-
-    @property
-    def headers(self) -> list[str]:
-        return self._view.headers
-
-    @property
-    def filter_texts(self) -> dict[str, str]:
-        return self._view.filter_texts
-
-    @property
-    def search(self) -> str:
-        return self._view.search
-
-    @search.setter
-    def search(self, text: str) -> None:
-        self._view.search = text
-
-    @property
-    def filters(self) -> dict[int, str]:
-        names = self._view.column_names
-        return {
-            names.index(name): text for name, text in self._view.filters.items() if name in names
-        }
-
-    @filters.setter
-    def filters(self, filters: dict[int, str]) -> None:
-        names = self._view.column_names
-        self._view.filters = {names[column]: text for column, text in filters.items()}
-
-    @property
-    def filterable_columns(self) -> list[int]:
-        names = self._view.column_names
-        return [names.index(name) for name in names if name in self._view.filterable_columns]
-
-    def filter_error(self, column: int, text: str) -> str | None:
-        return self._view.filter_error(self._view.column_names[column], text)
-
-    def filter_takes_pattern(self, column: int) -> bool:
-        return self._view.filter_takes_pattern(self._view.column_names[column])
-
-    def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
-        return self._view.filter_placeholder(self._view.column_names[column], is_pattern=is_pattern)
-
-    def filter_chip(self, column: int) -> str:
-        return self._view.filter_chip(self._view.column_names[column])
 
 
 class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
@@ -2470,12 +2446,9 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
 
     def __init__(self, view: DataTableViewLike) -> None:
         super().__init__(view)
-        self._by_position = _ByPosition(view)
+        self._by_position = DataTableByPosition(view)
         #: the position of the window's first row
         self._start = 0
-        #: the parts to swap ("frame", "rows", "bar", "count", "error"), unless the whole
-        self._dirty_parts: set[str] = set()
-        self._is_whole_dirty = False
         #: the column whose header takes the focus as it comes back: the user sorted by it
         self._focused_header: str | None = None
         #: the position of the row that takes the focus as it comes back: the user selected it
@@ -2485,7 +2458,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         self._refresh_dispatcher.update(
             {
                 **dict.fromkeys(
-                    ("source", "texts", "filter_texts", "filterable_columns"), self._mark_whole
+                    ("source", "texts", "filter_texts", "filterable_columns"), self._mark_dirty
                 ),
                 "row_count": self._reorder,
                 **dict.fromkeys(
@@ -2511,50 +2484,18 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     def _count_text(self) -> str:
         return self._view.count_text
 
-    def _mark_whole(self, view: DataTableViewLike, rendered_object: str, value: Any) -> None:
-        self._is_whole_dirty = True
-        self._mark_dirty(view, rendered_object, value)
-
-    def _part_marker(self, *parts: str) -> Callable[[DataTableViewLike, str, Any], None]:
-        def mark(_view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
-            self._mark_parts(*parts)
-
-        return mark
-
-    def _mark_parts(self, *parts: str) -> None:
-        dirty = _DIRTY.get()
-        if dirty is not None:
-            self._dirty_parts.update(parts)
-            dirty[self.widget_id] = self
-
     def _reorder(self, _view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
         """Show a new order of the rows from its first: the frame comes back to the top."""
         self._start = 0
         self._mark_parts("frame", "count")
 
-    def to_html(self, *, oob: bool = False) -> Markup:
-        parts, self._dirty_parts = self._dirty_parts, set()
-        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
-        if not is_whole:
-            if "bar" in parts:
-                parts.discard("count")  # in the bar
-            if "frame" in parts:
-                parts.discard("rows")  # in the frame
-            renders = {
-                "frame": self._frame_html,
-                "rows": self._rows_html,
-                "count": self._count_html,
-                "error": self._error_html,
-                "copied": self._copied_html,
-                "bar": self._bar_html,
-            }
-            # the bar last: it may hold the element that sent the request, which htmx
-            # swaps nothing more from once it's gone
-            order = ("frame", "rows", "count", "error", "copied", "bar")
-            fragments = Markup("").join(renders[part](oob=True) for part in order if part in parts)
-            self._focus_add_filter, self._focused_chip = False, None
-            return fragments
-        html_ = Markup(
+    _parts_inside = MappingProxyType({**_BAR_PARTS_INSIDE, "frame": ("rows",)})
+
+    def _own_parts(self) -> dict[str, Callable[..., Markup]]:
+        return {"frame": self._frame_html, "rows": self._rows_html, "copied": self._copied_html}
+
+    def _whole_html(self, *, oob: bool) -> Markup:
+        return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">{bar_html}'
             # a plain link: htmx can't start a download
             '<a class="btn btn-ghost btn-xs self-end" href="/widget/{widget_id}/csv"'
@@ -2567,8 +2508,6 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             widget_id=self.widget_id,
             export=self._view.texts.get("export", ""),
         )
-        self._focus_add_filter, self._focused_chip = False, None
-        return html_
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a scroll only reads: a disabled table still shows the rows scrolled to
