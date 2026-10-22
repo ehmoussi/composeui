@@ -1099,7 +1099,13 @@ main_view.readings.source = ListSource(
 - **The settings** name the source's columns: `sort_column`, `sort_descending`, `search`
   (in the text columns) and `filters` (as typed, see "Sorting and filtering"). Each new
   setting asks the source for the order once. The view keeps only the ids, in an `array`
-  when they are integers (8 bytes each).
+  when they are integers (8 bytes each). `ordered` emits once the rows have their new
+  order, e.g. to show `row_count`.
+- **A source of 100,000 rows or more** (`DATA_TABLE_JOB_ROWS`) orders its rows in a
+  [job](#running-work-in-threads) on Qt and Textual, so the window stays responsive. The
+  table shows the old order meanwhile (`is_ordering`). A setting changed while the job
+  runs orders the rows once more when it's over. The web orders them in the request's
+  own thread: the page never freezes.
 - **The cells** show the values as `column_formats` says, e.g. `".2f"` or `".0%"`: an
   empty cell for None, and an enum by its text.
 - **The selection** is by id: `selected_ids`, which a new order keeps on the rows it
@@ -1113,7 +1119,7 @@ main_view.readings.source = ListSource(
   headers, then each value in full, not as `column_formats` shows it (`export_csv`). In
   an app, a job writes the file, a window of rows at a time, and the status bar says when
   it's done. A new order meanwhile doesn't change the file. `csv_chunks` gives the same
-  text in pieces.
+  text in pieces. `export_filename` is the name offered for the file (`table.csv`).
 
 The study saves the settings and `selected_ids`, never the rows or the source: the app
 gives the view its source again, e.g. from its command line or its model.
@@ -1125,19 +1131,21 @@ order (`sort_by`). The source orders the rows once for each click.
   starts with its position. The header shows Qt's sort indicator. A selected row has the
   highlight colors. Shift+click selects the rows from the one clicked last; Space
   selects the current row, and Enter activates it. The table's context menu has
-  "Export CSV…", which asks where to save the file.
+  "Export CSV…", which asks where to save the file. While a job orders the rows, the
+  cursor over them is busy.
 - **Textual** draws the headers on the first line, then the lines on screen alone. A
   cursor marks a row: the arrow keys, Page Up, Page Down, Home and End move it. Space
   selects its row, Shift+Space and Shift+click a range, and Enter or a double click
   activates it. The sorted column's header ends with ▲ or ▼. The key `e` asks where to
-  export the rows as CSV.
+  export the rows as CSV. While a job orders the rows, Textual's loading indicator
+  covers them.
 - **The web** scrolls the rows in a frame, and draws only those around the view: once
   the user stops scrolling, the page asks for the rows shown. Past 400,000 rows, the
   scroll bar keeps the height of 400,000, and its position maps to a row by its ratio.
   Each header is a button, with `aria-sort`: a sort scrolls back to the top. A click or
   Enter on a row selects it (`aria-selected`, or `aria-current` for one row at most). The
-  web selects no range and activates no row. The "Export CSV" link under the frame
-  downloads the rows as `table.csv`: the server streams them, a window at a time.
+  web selects no range and activates no row. The "Export CSV" link above the frame
+  downloads the rows: the server streams them, a window at a time.
 
 Name the columns the user filters in `filterable_columns`, e.g.
 `child(DataTableView, filterable_columns=["sensor", "temperature"])`. The table then shows
@@ -1172,7 +1180,10 @@ main_view.readings.source = SqliteSource(
   column name as a parameter. The filters' values are parameters.
 - **The table's `changed`** reads the rows again, e.g. after a job wrote some.
 - **Index the columns that sort.** Without an index, SQLite reads every row to sort them:
-  about a second for a million rows, on the main thread.
+  about a second for a million rows.
+- **The source reads on connections of its own** (`SqliteModel.reading`): the order and
+  the cells never wait for each other, nor for a write, e.g. a job writing rows. They
+  read the rows committed: the table's `changed` reads them again once a write commits.
 - **The case of a text** is ignored for ASCII letters alone (``COLLATE NOCASE``), where a
   `ListSource` ignores any case. A `/regex/` filter calls Python on each row.
 
@@ -1476,11 +1487,17 @@ A `ModelApplication` (`QtModelApplication`, `TextualModelApplication`,
 tables (`model.runs.add(...)`).
 
 - **Transactions.** `with self.connection() as db:` commits once the block ends, and rolls
-  back if the block raises. A block inside another block joins it.
+  back if the block raises. A block inside another block joins it. The threads take turns
+  on the model's connection.
+- **Reads apart.** `with self.reading() as db:` gives a connection that only reads, and
+  takes no turn: it neither waits for a write nor holds one up. It reads the rows
+  committed, not those of a transaction still open. A large table's
+  [`SqliteSource`](#rows-in-sqlite) reads its rows this way.
 - **Settings.** `pragmas` is set on the connection of every study, because SQLite keeps
   these settings per connection, not in the file. Foreign keys and recursive triggers are
   on. `synchronous` is off, because the model's database is a scratch copy and the study file
-  is written separately. Override `pragmas` to change them
+  is written separately. The journal is `WAL`, so that `reading` reads during a write; the
+  study file is saved in SQLite's default journal. Override `pragmas` to change them
   (`pragmas = {**SqliteModel.pragmas, "cache_size": -64000}`).
 - **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
   `cattrs` converter of the views. `fetch_column` gives the first column of a query, for

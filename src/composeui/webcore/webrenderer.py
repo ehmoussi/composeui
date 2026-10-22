@@ -2388,6 +2388,8 @@ class DataTableViewLike(ViewLike, Protocol):
     def selection_text(self) -> str: ...
     def csv_chunks(self) -> Iterator[str]: ...
 
+    export_filename: str
+
 
 class _ByPosition:
     """A large table's filter settings, its columns known by their positions in its source."""
@@ -2460,7 +2462,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
     above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
     text (`DataTableView.selection_text`) comes back in a hidden element, which the page
-    writes to the clipboard. A link under the frame downloads the rows shown as CSV
+    writes to the clipboard. A link above the frame downloads the rows shown as CSV
     (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
     """
 
@@ -2495,6 +2497,10 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
                 # shown with the order they give, which the view sends as `row_count`
                 "sort_column": lambda _view, _table, _value: None,
                 "sort_descending": lambda _view, _table, _value: None,
+                # read as the user downloads
+                "export_filename": lambda _view, _table, _value: None,
+                # never: the web orders in the request's thread (`draws_on_main_thread`)
+                "is_ordering": lambda _view, _table, _value: None,
             }
         )
 
@@ -2549,11 +2555,10 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             self._focus_add_filter, self._focused_chip = False, None
             return fragments
         html_ = Markup(
-            '<div {root_attributes} class="flex flex-col gap-2">'
-            "{bar_html}{frame_html}{copied_html}"
+            '<div {root_attributes} class="flex flex-col gap-2">{bar_html}'
             # a plain link: htmx can't start a download
-            '<a class="btn btn-ghost btn-xs self-start" href="/widget/{widget_id}/csv"'
-            " download>{export}</a></div>"
+            '<a class="btn btn-ghost btn-xs self-end" href="/widget/{widget_id}/csv"'
+            " download>{export}</a>{frame_html}{copied_html}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             bar_html=self._bar_html(),
@@ -2611,9 +2616,9 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             self._start = start
             self._mark_parts("rows")
 
-    def csv_chunks(self) -> Iterator[str]:
-        """Get the rows shown as CSV, in pieces, for their download."""
-        return self._view.csv_chunks()
+    def csv_file(self) -> tuple[str, Iterator[str]]:
+        """Get the download's name, and the rows shown as CSV, in pieces."""
+        return self._view.export_filename, self._view.csv_chunks()
 
     def _copy(self, _form: Mapping[str, str]) -> None:
         self._copied = self._view.selection_text()
@@ -4830,6 +4835,8 @@ _THEME_MENU: Final = Markup(
 
 class WebMainRenderer(MainRenderer[MainView, str]):
     """Renders the whole page; never swapped itself, so its attributes are no-ops."""
+
+    draws_on_main_thread = False
 
     def __init__(self, view: MainView) -> None:
         super().__init__(view)

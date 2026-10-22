@@ -4,7 +4,8 @@ A million sensor readings (``--rows`` sets how many) in a SQLite model, shown by
 `DataTableView` through a `SqliteSource`: SQLite sorts and filters them, and the table
 reads only the rows it shows, as the user scrolls. Python holds the shown rows' ids, never
 the readings. A click on a header sorts them, and the table's bar searches and filters
-them; the label says how many rows pass and how long SQLite took. A click selects rows
+them, in a job on Qt and Textual: the window stays responsive. The label says how many
+rows pass and how long SQLite took. A click selects rows
 (Shift+click a range, on Qt and Textual), and a double click or Enter shows a reading.
 Ctrl+C copies the selected rows; Export CSV writes the rows shown to a file.
 """
@@ -20,7 +21,6 @@ import attrs
 
 from composeui.core import application
 from composeui.core.registry import RendererType
-from composeui.core.signal import Signal
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, table
 from composeui.core.view import (
     OMIT,
@@ -133,20 +133,23 @@ class ReadingsModel(SqliteModel):
 
 
 class TimedSource(SqliteSource):
-    """The readings, saying how many pass and how long SQLite took to order (`ordered`)."""
+    """The readings, keeping how long SQLite took to order them last (`seconds`).
+
+    The table may ask for the order in a job's thread: it keeps the time, which the
+    main thread reads once the table shows the order, rather than showing it itself.
+    """
 
     def __init__(self, readings: Readings) -> None:
         super().__init__(readings, "SELECT * FROM reading", id_column="id", columns=COLUMNS)
         self.readings = readings
-        #: the rows passing and the seconds the order took, each time the table asks it
-        self.ordered: Signal[int, float] = Signal[int, float]()
+        self.seconds = 0.0
 
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> list[Any]:
         start = time.perf_counter()
         ids = super().ordered_ids(sort, search, filters)
-        self.ordered.emit(len(ids), time.perf_counter() - start)
+        self.seconds = time.perf_counter() - start
         return ids
 
 
@@ -170,6 +173,7 @@ class LargeTableMainView(MainView):
         super().__attrs_post_init__()
         self.table.selection_changed.connect(self._show_selected)
         self.table.row_activated.connect(self._show_activated)
+        self.table.ordered.connect(self._show_count)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -178,7 +182,6 @@ class LargeTableMainView(MainView):
     def connect_model(self, model: ReadingsModel) -> None:
         """Show the model's readings, read again whenever they change."""
         self._source = TimedSource(model.readings)
-        self._source.ordered.connect(self._show_count)
         self.table.source = self._source
 
     def apply_arguments(self, args: argparse.Namespace) -> None:
@@ -196,9 +199,11 @@ class LargeTableMainView(MainView):
             sensor, site, temperature, *_ = self._source.cells([row_id], names)[row_id]
             self.picked.text = f"{sensor} in {site}: {temperature} °C"
 
-    def _show_count(self, count: int, seconds: float) -> None:
-        total = 0 if self._source is None else self._source.count()
-        self.info.text = f"{count:,} of {total:,} rows, ordered in {seconds * 1000:,.0f} ms"
+    def _show_count(self) -> None:
+        if self._source is not None:
+            count, total = self.table.row_count, self._source.count()
+            milliseconds = self._source.seconds * 1000
+            self.info.text = f"{count:,} of {total:,} rows, ordered in {milliseconds:,.0f} ms"
 
 
 def main() -> None:

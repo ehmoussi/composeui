@@ -112,6 +112,12 @@ class SqliteTable:
             refusal = next((text for key, text in self.refusals.items() if key in message), message)
             raise RefusedError(refusal) from error
 
+    @contextlib.contextmanager
+    def reading(self) -> Generator[sqlite3.Connection]:
+        """Give a connection reading the database alone; see `SqliteModel.reading`."""
+        with self._model.reading() as db:
+            yield db
+
     def fetch(self, cls: type[T], sql: str, parameters: Parameters = ()) -> list[T]:
         """Run the query `sql` and get its rows as `cls` instances (an `attrs` class)."""
         with self.connection() as db:
@@ -129,6 +135,9 @@ class SqliteTable:
             return [row[0] for row in db.execute(sql, parameters)]
 
 
+#: the seconds a connection waits for another's lock before it fails: in the WAL journal,
+#: only a write for another's, or a `PRAGMA` changing the journal
+WAIT_SECONDS = 60.0
 #: the ids a query takes at most at once, below SQLite's limit of parameters
 _IDS_PER_QUERY = 900
 #: each text operator, as a `LIKE` pattern of the filter's value (escaped), negated or not
@@ -191,7 +200,9 @@ class SqliteSource:
     SQLite sorts and filters the rows: the order is a ``SELECT`` of the ids, and the cells
     a ``SELECT`` of some ids' rows, so no more rows than those shown come to Python. The
     table's `changed` reads them again. Only the declared columns sort and filter, by name:
-    SQLite takes no column name as a parameter, the values are.
+    SQLite takes no column name as a parameter, the values are. It reads on connections
+    of its own (`SqliteModel.reading`): the rows committed, never waiting for a write, nor
+    the cells for the order a job reads.
 
     A text sorts and compares ignoring the case of ASCII letters alone (``NOCASE``),
     where a `ListSource` ignores any case. Equal cells keep the order of their ids. A
@@ -220,7 +231,7 @@ class SqliteSource:
         return self._table.changed
 
     def count(self) -> int:
-        with self._table.connection() as db:
+        with self._table.reading() as db:
             (count,) = db.execute(f"SELECT COUNT(*) FROM ({self._query})").fetchone()  # noqa: S608 (the app's query)
         return int(count)
 
@@ -256,7 +267,7 @@ class SqliteSource:
             # the empty cells last, in both orders
             sql += f" ORDER BY ({name} IS NULL OR {name} = '') ASC, {order}{direction}, "
             sql += self._id
-        with self._table.connection() as db:
+        with self._table.reading() as db:
             db.create_function("regexp", 2, _regexp, deterministic=True)
             return [row[0] for row in db.execute(sql, parameters)]
 
@@ -264,7 +275,7 @@ class SqliteSource:
         types = [self._column(name).type for name in columns]
         names = ", ".join(_identifier(name) for name in columns)
         found: dict[Any, list[Any]] = {}
-        with self._table.connection() as db:
+        with self._table.reading() as db:
             for start in range(0, len(ids), _IDS_PER_QUERY):
                 chunk = list(ids[start : start + _IDS_PER_QUERY])
                 marks = ", ".join("?" * len(chunk))
@@ -347,11 +358,14 @@ class SqliteModel(Model):
     #: seconds opening a study's database may take, checks and migrations included: its
     #: schema comes from the file, and a view of it may never finish (e.g. a recursive one)
     open_time_limit: ClassVar[float] = 30.0
-    #: set on the connection of every study's database: SQLite keeps these per connection,
-    #: not in the file, and New and Open each start a connection of their own. No WAL
-    #: journal: it lets other connections read during a write, and the model has one
+    #: set on the connections of every study's database: SQLite keeps these per
+    #: connection, not in the file, and New and Open each start a connection of their own
     pragmas: ClassVar[Mapping[str, int | str]] = MappingProxyType(
         {
+            # the connections `reading` read during a write, its rows uncommitted (else a
+            # write spilling to the disk locks them out until it commits); the study file
+            # is saved in the default journal (`save_data`)
+            "journal_mode": "WAL",
             "foreign_keys": "ON",
             # the database is a scratch copy nothing reopens after a crash: waiting for the
             # disk on every commit protects nothing, the study file is written apart
@@ -378,6 +392,10 @@ class SqliteModel(Model):
             setattr(self, name, built)
         # one connection for the model, which threads (a worker, web requests) take in turn
         self._lock = threading.RLock()
+        # which database the queries `reading` read, and how many: held for no query, so a
+        # read never waits for the turn a write holds
+        self._readers_lock = threading.Lock()
+        self._closed = False
         self._depth = 0
         self._changed: list[SqliteTable] = []
         self._database = self._new_database()
@@ -442,6 +460,34 @@ class SqliteModel(Model):
             else:
                 job.call_on_main_thread(table.changed.emit)
 
+    @contextlib.contextmanager
+    def reading(self) -> Generator[sqlite3.Connection]:
+        """Give a connection that only reads the database, for a long query.
+
+        Unlike `connection()`, it waits for no other thread's turn, and holds none: the
+        model's other queries run meanwhile, e.g. a large table's cells while a job orders
+        its rows or writes some (`SqliteSource`). In the WAL journal, it reads the rows
+        committed, during a write too. A database New or Open replace meanwhile, or the
+        model's `close`, is deleted once the query is over.
+        """
+        with self._readers_lock:
+            database = self._database
+            database.readers += 1
+        try:
+            uri = f"{database.path.as_uri()}?mode=ro"
+            db = sqlite3.connect(uri, uri=True, timeout=WAIT_SECONDS)
+            try:
+                for statement in database.pragma_statements:
+                    db.execute(statement)
+                yield db
+            finally:
+                db.close()
+        finally:
+            with self._readers_lock:
+                database.readers -= 1
+                if database.readers == 0 and (database is not self._database or self._closed):
+                    database.close()
+
     def new(self) -> None:
         self._replace_database(self._new_database())
 
@@ -450,6 +496,8 @@ class SqliteModel(Model):
         try:
             with self._lock:
                 self._database.connection.backup(target)
+            # the backup copies the WAL journal: a file another app opens leaves none beside it
+            target.execute("PRAGMA journal_mode = DELETE")
         finally:
             target.close()
 
@@ -498,7 +546,10 @@ class SqliteModel(Model):
             table.changed.emit()
 
     def close(self) -> None:
-        self._database.close()
+        with self._lock, self._readers_lock:
+            self._closed = True
+            if self._database.readers == 0:  # else the last query `reading` it closes it
+                self._database.close()
 
     def _new_database(self) -> _Database:
         database = _Database(self.pragmas)
@@ -511,8 +562,10 @@ class SqliteModel(Model):
         return database
 
     def _replace_database(self, database: _Database) -> None:
-        with self._lock:
+        with self._lock, self._readers_lock:
             previous, self._database = self._database, database
+            if previous.readers > 0:
+                return  # closed once the queries `reading` it are over
         previous.close()
 
     def _check(self, db: sqlite3.Connection) -> None:
@@ -557,16 +610,20 @@ class _Database:
 
     def __init__(self, pragmas: Mapping[str, int | str]) -> None:
         statements = [_pragma_statement(name, value) for name, value in pragmas.items()]
+        #: the model's `pragmas`, set on each connection: SQLite keeps them per connection
+        self.pragma_statements = statements
         fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
         os.close(fd)
         self.path = Path(name)
         # threads take turns through the model's lock
-        self.connection = sqlite3.connect(name, check_same_thread=False)
+        self.connection = sqlite3.connect(name, check_same_thread=False, timeout=WAIT_SECONDS)
         self.connection.row_factory = sqlite3.Row
         for statement in statements:
             self.connection.execute(statement)
         # also when the model is dropped unclosed (e.g. an expired web session's)
         self._finalizer = weakref.finalize(self, _discard, self.connection, self.path)
+        #: the queries reading it on connections of their own (`SqliteModel.reading`)
+        self.readers = 0
 
     def close(self) -> None:
         self._finalizer()
@@ -604,4 +661,6 @@ def _pragma_statement(name: str, value: int | str) -> str:
 
 def _discard(connection: sqlite3.Connection, path: Path) -> None:
     connection.close()
-    path.unlink(missing_ok=True)
+    # the WAL journal's files too, which the last connection closed deletes, unless it crashed
+    for name in (path.name, f"{path.name}-wal", f"{path.name}-shm"):
+        path.with_name(name).unlink(missing_ok=True)

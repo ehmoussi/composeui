@@ -57,6 +57,7 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
+    DATA_TABLE_JOB_ROWS,
     DATA_TABLE_WINDOW,
     SEARCH_DELAY_MS,
     ActionView,
@@ -112,6 +113,8 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
     EditableTableMainView,
+    GatedMainView,
+    GatedSource,
     MillionRowsMainView,
     MillionSource,
     Room,
@@ -2689,6 +2692,50 @@ def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard(qtbot: QtB
 
     # in the table's order: the value, then its half
     assert QApplication.clipboard().text() == "2\t0.5\n6\t1.5"
+
+
+def test_a_large_source_s_rows_are_ordered_in_a_job_the_old_order_shown_meanwhile(
+    qtbot: QtBot,
+) -> None:
+    view = GatedMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.table)
+    assert isinstance(box, QDataFilterTable)
+    model, rows = box.table.model(), box.table.viewport()
+    source = view.table.source
+    assert isinstance(source, GatedSource)
+
+    def first() -> str:
+        return str(model.index(0, 0).data())
+
+    source.gate.clear()
+    view.table.sort_column = "value"
+    view.table.sort_descending = True  # while the job orders: one more job, once over
+
+    assert view.table.is_ordering
+    assert first() == "0"  # the old order, the window responsive
+    assert rows.cursor().shape() == Qt.CursorShape.BusyCursor
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    assert first() == str(source.size - 1)
+    assert [sort.descending for sort in source.orders if sort is not None] == [False, True]
+    assert rows.cursor().shape() != Qt.CursorShape.BusyCursor
+
+    # New or Open drops the jobs, the ordering's too: it orders again
+    source.gate.clear()
+    view.table.sort_descending = False
+    view.jobs.drop()
+    assert view.table.is_ordering
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    assert first() == "0"
+
+    # a smaller source: ordered at once
+    source.size = DATA_TABLE_JOB_ROWS - 1
+    source.changed.emit()
+    assert (view.table.is_ordering, view.table.row_count) == (False, source.size)
 
 
 def test_a_large_table_s_context_menu_exports_its_rows_as_csv(

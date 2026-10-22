@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from typing_extensions import Protocol
 
@@ -134,6 +134,11 @@ class MainRenderer(Renderer[TView, TObject]):
     Lets `MainView` talk to whichever backend rendered it through `isinstance`
     checks against this class alone, without importing any backend package.
     """
+
+    #: whether the app's window is drawn on the main thread, which long work there
+    #: freezes (Qt, Textual): a view then runs it in a job. The web's requests have
+    #: threads of their own
+    draws_on_main_thread: ClassVar[bool] = True
 
     @abstractmethod
     def close(self) -> None:

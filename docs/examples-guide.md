@@ -300,8 +300,9 @@ It shows:
   [SQLite model](user-guide.md#a-sqlite-model), a batch at a time: the window shows at
   once, and the table fills once they are written.
 - a sort by a click on a header, and the table's [filter bar](user-guide.md#sorting-and-filtering):
-  a search in the text columns, and a filter on any column. The label says how many rows
-  pass and how long SQLite took to order them, as the source reports it.
+  a search in the text columns, and a filter on any column. On Qt and Textual, a job
+  orders the rows, the window staying responsive. The label says how many rows pass and
+  how long SQLite took to order them, once the table's `ordered` emits.
 - a selection of several rows: the label under the table counts them, and shows the
   reading that a double click or Enter activates (on Qt and Textual). Ctrl+C copies them,
   to paste in a spreadsheet.
