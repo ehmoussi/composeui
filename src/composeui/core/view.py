@@ -6,6 +6,7 @@ of a view pushes the change to its renderer. The widget catalog lists the views.
 
 from __future__ import annotations
 
+import array
 import contextlib
 import contextvars
 import copy
@@ -21,7 +22,7 @@ import re
 import sys
 import threading
 import weakref
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from pathlib import Path
 from typing import (
@@ -31,6 +32,7 @@ from typing import (
     Generic,
     NamedTuple,
     Optional,
+    Protocol,
     TypeVar,
     Union,
     cast,
@@ -2234,6 +2236,41 @@ FILTER_TEXTS: Mapping[str, str] = {
     "pattern": T("Regular expression"),
 }
 
+_ItemT = TypeVar("_ItemT")
+
+
+def _sorted_by(
+    items: Sequence[_ItemT],
+    value: Callable[[_ItemT], Any],
+    text: Callable[[_ItemT], str],
+    *,
+    is_text: bool,
+    descending: bool,
+) -> list[_ItemT]:
+    """Sort `items` stably by `value`: text by `str.casefold`, empty cells last.
+
+    Values that don't compare (e.g. a column's type since changed) sort by their `text`.
+    """
+
+    def key(item: _ItemT) -> Any:
+        cell = value(item)
+        if cell is None or cell == "":
+            return None
+        return cell.casefold() if is_text else cell
+
+    keyed = [(item, key(item)) for item in items]
+    present = [(item, cell) for item, cell in keyed if cell is not None]
+    try:
+        ordered = sorted(present, key=operator.itemgetter(1), reverse=descending)
+    except TypeError:
+        ordered = sorted(present, key=lambda pair: text(pair[0]).casefold(), reverse=descending)
+    return [item for item, _ in ordered] + [item for item, cell in keyed if cell is None]
+
+
+def _sort_value(value: Any) -> Any:
+    """Get the value a field's cell sorts and filters by: an enum by its text, as shown."""
+    return _cell_text(value) if isinstance(value, enum.Enum) else value
+
 
 @define_view
 class TableMixin:
@@ -2688,24 +2725,13 @@ class TableMixin:
 
     def _sorted(self, rows: list[int], column: int) -> list[int]:
         """Sort `rows` by `column`, stably: by value, text by `str.casefold`, empty cells last."""
-        is_text = column_kind(self._column_type(column)) is ColumnKind.TEXT
-
-        def key(row: int) -> Any:
-            value = self._cell_value(row, column)
-            if value is None or value == "":
-                return None
-            return value.casefold() if is_text else value
-
-        keys = {row: key(row) for row in rows}
-        present = [row for row in rows if keys[row] is not None]
-        try:
-            present.sort(key=keys.__getitem__, reverse=self.sort_descending)
-        except TypeError:  # values that don't compare, e.g. the column's type since changed
-            present.sort(
-                key=lambda row: self._cell_text(row, column).casefold(),
-                reverse=self.sort_descending,
-            )
-        return present + [row for row in rows if keys[row] is None]
+        return _sorted_by(
+            rows,
+            lambda row: self._cell_value(row, column),
+            lambda row: self._cell_text(row, column),
+            is_text=column_kind(self._column_type(column)) is ColumnKind.TEXT,
+            descending=self.sort_descending,
+        )
 
     def _show_rows(self, selected: list[int], *, force: bool) -> list[int]:
         """Compute `shown_rows`, keep the shown rows of `selected` selected, and show both.
@@ -2902,9 +2928,7 @@ class RecordTableView(TableView, Generic[RecordT]):
     def _cell_value(self, row: int, column: int) -> Any:
         if row >= len(self.records) or column >= len(self.columns):
             return self._cell_text(row, column)
-        value = getattr(self.records[row], self.columns[column].field)
-        # an enum sorts and filters by its text, as shown
-        return _cell_text(value) if isinstance(value, enum.Enum) else value
+        return _sort_value(getattr(self.records[row], self.columns[column].field))
 
     def _emit_edit(self, row: int, column: int, text: str) -> None:
         old = self.records[row]
@@ -2933,6 +2957,443 @@ class RecordTableView(TableView, Generic[RecordT]):
         self.record_edited.emit(old, new)
         if self.records is records and self.rows is rows:
             self.records = [*records[:row], new, *records[row + 1 :]]
+
+
+@attrs.frozen
+class SourceColumn:
+    """A column of a `TableSource`: the values it holds, under `header`."""
+
+    #: the name the source knows the column by, e.g. a record's field or a query's column
+    name: str
+    header: str
+    #: the type of its values, which sets how they sort and filter (see `column_kind`)
+    type: Any = str
+
+
+@attrs.frozen
+class Sort:
+    """The order of a table's rows: by the values of the column named `column`."""
+
+    column: str
+    descending: bool = False
+
+
+IdT = TypeVar("IdT")
+
+
+class TableSource(Protocol[IdT]):
+    """The rows of a large table, each known by its id, which the table reads in windows.
+
+    The source sorts, searches and filters its rows itself (e.g. in SQL), so that a table
+    never reads them all: it asks once for the ids of the rows it shows, in order, then
+    for the cells of the rows on screen. `changed` says the rows changed, so the table
+    reads them again. An id is a hashable value that stays its row's own while the rows
+    change (e.g. a primary key), so that a table's selection stays on its rows.
+    `ListSource` is a source of records in memory.
+    """
+
+    @property
+    def columns(self) -> Sequence[SourceColumn]:
+        """Get the columns, in the order a table shows them."""
+        ...
+
+    @property
+    def changed(self) -> SignalNoArgs:
+        """Get the signal emitted once the rows changed."""
+        ...
+
+    def ordered_ids(
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
+    ) -> Sequence[IdT]:
+        """Get the ids of the rows that `search` and `filters` pass, in the order of `sort`.
+
+        `search` keeps the rows where the cell of a text column contains it, ignoring case;
+        a blank one keeps every row. `filters` holds a `Filter` by column name (see
+        `parse_filter`), which a cell passes as `Filter.matches` says. `sort` orders the
+        rows by a column's values, text ignoring case, the empty cells last in both orders
+        and equal cells in the source's order. Without it, the rows keep the source's
+        order. Raise `ValueError` for a column the source doesn't have.
+        """
+        ...
+
+    def cells(self, ids: Sequence[IdT], columns: Sequence[str]) -> Mapping[IdT, Sequence[Any]]:
+        """Get the values of the rows `ids` in `columns`, by id; an id now gone is left out.
+
+        Raise `ValueError` for a column the source doesn't have.
+        """
+        ...
+
+
+class ListSource(Generic[RecordT]):
+    """A `TableSource` of `attrs` records in memory: a row per record, a column per header.
+
+    Build it with the records' type and the headers by field:
+    ``ListSource(Room, {"name": T("Room"), "temperature": T("Temperature")})``. A row's id
+    is its index in `records`, or its `id_field` when it has one: then new records keep a
+    table's selection on the same records. Assign new `records` to change the rows, which
+    emits `changed`. It sorts, searches and filters as a `RecordTableView` does: an enum
+    by its text, as shown.
+    """
+
+    def __init__(
+        self,
+        record_type: type[RecordT],
+        headers: Mapping[str, str],
+        records: Sequence[RecordT] = (),
+        *,
+        id_field: Optional[str] = None,
+    ) -> None:
+        fields = attrs.fields_dict(attrs.resolve_types(record_type))
+        for name in [*headers, *([] if id_field is None else [id_field])]:
+            if name not in fields:
+                msg = f"Cannot build a ListSource of {record_type.__name__}: no field {name!r}."
+                raise ValueError(msg)
+        self._columns = {
+            name: SourceColumn(name, header, fields[name].type) for name, header in headers.items()
+        }
+        self._id_field = id_field
+        self._changed = SignalNoArgs()
+        self._records: tuple[RecordT, ...] = ()
+        #: the records by id, in their order
+        self._rows: dict[Hashable, RecordT] = {}
+        self._set_records(records)
+
+    @property
+    def columns(self) -> Sequence[SourceColumn]:
+        return tuple(self._columns.values())
+
+    @property
+    def changed(self) -> SignalNoArgs:
+        return self._changed
+
+    @property
+    def records(self) -> Sequence[RecordT]:
+        return self._records
+
+    @records.setter
+    def records(self, records: Sequence[RecordT]) -> None:
+        self._set_records(records)
+        self._changed.emit()
+
+    def _set_records(self, records: Sequence[RecordT]) -> None:
+        rows = {
+            index if self._id_field is None else getattr(record, self._id_field): record
+            for index, record in enumerate(records)
+        }
+        if len(rows) != len(records):
+            msg = f"Cannot set the records of a ListSource: two have the same {self._id_field}."
+            raise ValueError(msg)
+        self._records = tuple(records)
+        self._rows = rows
+
+    def ordered_ids(
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
+    ) -> list[Hashable]:
+        for name in [*filters, *([] if sort is None else [sort.column])]:
+            self._column(name)
+        needle = search.strip().casefold()
+        searched = [
+            column.name
+            for column in self._columns.values()
+            if column_kind(column.type) is ColumnKind.TEXT
+        ]
+        ids = [
+            row_id
+            for row_id, record in self._rows.items()
+            if (
+                needle == ""
+                or any(needle in self._text(record, name).casefold() for name in searched)
+            )
+            and all(
+                row_filter.matches(self._value(record, name), self._text(record, name))
+                for name, row_filter in filters.items()
+            )
+        ]
+        if sort is None:
+            return ids
+        return _sorted_by(
+            ids,
+            lambda row_id: self._value(self._rows[row_id], sort.column),
+            lambda row_id: self._text(self._rows[row_id], sort.column),
+            is_text=column_kind(self._column(sort.column).type) is ColumnKind.TEXT,
+            descending=sort.descending,
+        )
+
+    def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
+        names = [self._column(name).name for name in columns]
+        return {
+            row_id: [getattr(self._rows[row_id], name) for name in names]
+            for row_id in ids
+            if row_id in self._rows
+        }
+
+    def _column(self, name: str) -> SourceColumn:
+        column = self._columns.get(name)
+        if column is None:
+            msg = f"Cannot read the column {name!r} of a ListSource: it has none of this name."
+            raise ValueError(msg)
+        return column
+
+    @staticmethod
+    def _value(record: Any, name: str) -> Any:
+        return _sort_value(getattr(record, name))
+
+    @staticmethod
+    def _text(record: Any, name: str) -> str:
+        return _cell_text(getattr(record, name))
+
+
+#: the text of a large table's pages, on the web
+DATA_TABLE_TEXTS: Mapping[str, str] = {
+    "previous": T("Previous"),
+    "next": T("Next"),
+    "count": T("Rows {first} to {last} of {total}"),
+    "empty": T("No rows"),
+}
+
+#: the rows a `DataTableView` reads from its source at once, from a multiple of it on
+DATA_TABLE_WINDOW = 200
+#: the rows whose values a `DataTableView` keeps, the ones read last
+DATA_TABLE_CACHE = 1_000
+
+
+def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
+    """Keep integer ids in an `array` (8 bytes each), any other ids in a list."""
+    if all(isinstance(row_id, int) and not isinstance(row_id, bool) for row_id in ids):
+        with contextlib.suppress(OverflowError):
+            return array.array("q", ids)
+    return list(ids)
+
+
+@define_view
+class DataTableView(View):
+    """A large table, whose rows a source keeps and the table reads a window at a time.
+
+    `source` (a `TableSource`) sorts, searches and filters the rows. For each
+    `sort_column`, `sort_descending`, `search` and `filters`, the view asks it once for
+    the ids of the rows shown, in order, and keeps only these ids (in an `array` when
+    they are integers). `rows` gives the cells of the rows at some positions, formatted
+    as `column_formats` says. It reads them from the source by windows of
+    `DATA_TABLE_WINDOW` rows, and keeps the values of the last `DATA_TABLE_CACHE` rows.
+    The source's `changed` makes it read the order and the cells again.
+
+    The columns are the source's, by name: `sort_column`, the keys of `filters` and of
+    `column_formats`. A filter is the text the user typed (see `parse_filter`), and the
+    search looks in the text columns. The user selects rows as `selection_mode` allows:
+    `selected_ids` holds their ids, and `selection_changed` emits them when the user
+    changes them. The ids the app sets are kept as they are. A new order (a search, a
+    filter, the source's `changed`) drops the selected rows it hides, and
+    `selection_changed` emits. `row_activated` emits a row's id (a double click, Enter).
+
+    A study saves the settings and `selected_ids`, as JSON values (e.g. integers), and
+    never the rows or the source: the app gives the view its source again.
+
+    Qt and Textual scroll the rows, drawing only those on screen. The web shows them by
+    pages, with Previous and Next buttons and `texts`. The user doesn't sort, filter or
+    select them yet (see the "Large tables" plan of ``ROADMAP.md``).
+    """
+
+    _renderer_key = "data_table"
+
+    def _check_sort_column(self, _attribute: attrs.Attribute[Any], column: Optional[str]) -> None:
+        if column is not None:
+            self._source_column(column, "sort by")
+
+    def _check_filters(self, _attribute: attrs.Attribute[Any], filters: dict[str, str]) -> None:
+        for column, text in filters.items():
+            parse_filter(text, self._source_column(column, "filter").type)
+
+    def _check_selected_ids(self, _attribute: attrs.Attribute[Any], ids: list[Any]) -> None:
+        name = type(self).__name__
+        if self.selection_mode is SelectionMode.SINGLE and len(ids) > 1:
+            msg = f"Cannot set {name}.selected_ids to {ids}: the table selects a single row."
+            raise ValueError(msg)
+        if len(set(ids)) != len(ids):
+            msg = f"Cannot set {name}.selected_ids to {ids}: a row is selected twice."
+            raise ValueError(msg)
+
+    def _reconcile_source(
+        self, attribute: attrs.Attribute[Any], source: Optional[TableSource[Any]]
+    ) -> Optional[TableSource[Any]]:
+        """Read the new source's rows, and read them again each time they change."""
+        object.__setattr__(self, attribute.name, source)
+        if source is not None:
+            source.changed.connect(lambda: self._source_changed(source))
+        self._source_changed(source)
+        return source
+
+    def _reconcile_mode(
+        self, attribute: attrs.Attribute[Any], mode: SelectionMode
+    ) -> SelectionMode:
+        """Keep only the first selected row when the table comes to select a single one."""
+        if mode is SelectionMode.SINGLE and len(self.selected_ids) > 1:
+            self.selected_ids = self.selected_ids[:1]
+        return cast("SelectionMode", notify_renderer(self, attribute, mode))
+
+    def _reorder(self, attribute: attrs.Attribute[Any], value: Any) -> Any:
+        """Read the order of the rows as `value` sorts or filters them."""
+        if getattr(self, attribute.name) == value:
+            return value
+        value = notify_renderer(self, attribute, value)
+        object.__setattr__(self, attribute.name, value)
+        self._read_order()
+        return value
+
+    # first: the settings check their columns against it
+    source: Optional[TableSource[Any]] = attrs.field(
+        default=None, on_setattr=_reconcile_source, repr=False, metadata={OMIT: True}
+    )
+    #: the format of each column's values, by column name (e.g. ``".6g"``): `format`'s
+    column_formats: dict[str, str] = attrs.field(factory=dict[str, str])
+    #: the text of the pages, which the web shows (see `DATA_TABLE_TEXTS`)
+    texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(DATA_TABLE_TEXTS), metadata={UI_TEXT: True}
+    )
+    selection_mode: SelectionMode = attrs.field(
+        default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
+    )
+    sort_column: Optional[str] = attrs.field(
+        default=None,
+        validator=[_check_sort_column],
+        on_setattr=[attrs.setters.validate, _reorder],
+    )
+    sort_descending: bool = attrs.field(default=False, on_setattr=_reorder)
+    #: text the shown rows contain in a text column, ignoring case
+    search: str = attrs.field(default="", on_setattr=_reorder)
+    #: the filters by column name, as typed (see `parse_filter`)
+    filters: dict[str, str] = attrs.field(
+        factory=dict[str, str],
+        validator=[_check_filters],
+        on_setattr=[attrs.setters.validate, _reorder],
+    )
+    # after the settings: loading saved state selects the rows once in their order
+    selected_ids: list[Any] = attrs.field(factory=list, validator=[_check_selected_ids])
+    # signals
+    selection_changed: Signal[list[Any]] = attrs.Factory(Signal[list[Any]])
+    row_activated: Signal[Any] = attrs.Factory(Signal[Any])
+    #: the ids of the rows shown, in order
+    _order: Sequence[Any] = attrs.field(factory=list, init=False, repr=False, metadata={OMIT: True})
+    #: the values of the rows read last, by id, the oldest first
+    _cache: OrderedDict[Any, Sequence[Any]] = attrs.field(
+        factory=OrderedDict, init=False, repr=False, metadata={OMIT: True}
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.source = self.source
+
+    @property
+    def headers(self) -> list[str]:
+        """Get the headers of the source's columns, in its order."""
+        if self.source is None:
+            return []
+        return [translate_again(column.header, self._tr) for column in self.source.columns]
+
+    @property
+    def row_count(self) -> int:
+        """Get the number of rows shown: the rows the search and the filters pass."""
+        return len(self._order)
+
+    def ids(self, start: int, stop: int) -> list[Any]:
+        """Get the ids of the rows shown from position `start` to `stop` (excluded)."""
+        return list(self._order[max(start, 0) : max(stop, 0)])
+
+    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]:
+        """Get the id and the formatted cells of the rows shown from `start` to `stop`.
+
+        A row gone from the source since the order was read has empty cells, until its
+        `changed` reads the order again.
+        """
+        ids = self.ids(start, stop)
+        if self.source is None or len(ids) == 0:
+            return []
+        if any(row_id not in self._cache for row_id in ids):
+            self._read_windows(self.source, max(start, 0), max(start, 0) + len(ids))
+        columns = self.source.columns
+        empty = [""] * len(columns)
+        rows: list[tuple[Any, list[str]]] = []
+        for row_id in ids:
+            values = self._cache.get(row_id)
+            cells = empty if values is None else self._cells(columns, values)
+            rows.append((row_id, cells))
+        return rows
+
+    def _read_windows(self, source: TableSource[Any], start: int, stop: int) -> None:
+        """Read the values of the windows of rows from `start` to `stop` into the cache."""
+        first = start - start % DATA_TABLE_WINDOW
+        last = min(-(-stop // DATA_TABLE_WINDOW) * DATA_TABLE_WINDOW, len(self._order))
+        ids = [row_id for row_id in self._order[first:last] if row_id not in self._cache]
+        values = source.cells(ids, [column.name for column in source.columns])
+        for row_id in ids:
+            # a row gone: its cells are empty until the source says it changed
+            self._cache[row_id] = values.get(row_id, ())
+        while len(self._cache) > max(DATA_TABLE_CACHE, last - first):
+            self._cache.popitem(last=False)
+
+    def _cells(self, columns: Sequence[SourceColumn], values: Sequence[Any]) -> list[str]:
+        if len(values) == 0:  # gone
+            return [""] * len(columns)
+        return [
+            self._format(value, self.column_formats.get(column.name, ""))
+            for column, value in zip(columns, values)
+        ]
+
+    @staticmethod
+    def _format(value: Any, spec: str) -> str:
+        """Format a cell's value: None as an empty cell, an enum by its text, else by `spec`."""
+        if value is None or spec == "" or isinstance(value, enum.Enum):
+            return _cell_text(value)
+        try:
+            return format(value, spec)
+        except (TypeError, ValueError):  # a format for another type of value
+            return _cell_text(value)
+
+    def _source_changed(self, source: Optional[TableSource[Any]]) -> None:
+        if source is not self.source:  # a source replaced since
+            return
+        self._cache.clear()
+        self._read_order()
+
+    def _read_order(self) -> None:
+        """Ask the source for the ids of the rows shown, and drop the selected ones it hides.
+
+        The renderer gets the new `row_count`, and shows the rows from their new order.
+        """
+        self._order = [] if self.source is None else self._ordered_ids(self.source)
+        renderer = self.renderer
+        if isinstance(renderer, (Renderer, RendererContainer)):
+            renderer.refresh_attribute("row_count", self.row_count)
+        if len(self.selected_ids) > 0:
+            selected = set(self.selected_ids)
+            shown = {row_id for row_id in self._order if row_id in selected}
+            kept = [row_id for row_id in self.selected_ids if row_id in shown]
+            if kept != self.selected_ids:
+                self.selected_ids = kept
+                self.selection_changed.emit(kept)
+
+    def _ordered_ids(self, source: TableSource[Any]) -> Sequence[Any]:
+        """Ask `source` for the ids of the rows shown, as the settings sort and filter them."""
+        columns = {column.name: column for column in source.columns}
+        filters: dict[str, Filter] = {}
+        for name, text in self.filters.items():
+            # a filter its column no longer takes (e.g. a new source) filters nothing
+            with contextlib.suppress(FilterError):
+                if name in columns:
+                    filters[name] = parse_filter(text, columns[name].type)
+        sort = None
+        if self.sort_column is not None and self.sort_column in columns:
+            sort = Sort(self.sort_column, descending=self.sort_descending)
+        return _compact_ids(source.ordered_ids(sort, self.search, filters))
+
+    def _source_column(self, name: str, action: str) -> SourceColumn:
+        """Get the source's column `name`, for `action`; any column without a source yet."""
+        if self.source is None:
+            return SourceColumn(name, name)
+        column = next((column for column in self.source.columns if column.name == name), None)
+        if column is None:
+            msg = f"Cannot {action} {type(self).__name__}'s column {name!r}: its source has none."
+            raise ValueError(msg)
+        return column
 
 
 TValue = TypeVar("TValue")

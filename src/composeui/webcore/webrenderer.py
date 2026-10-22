@@ -121,6 +121,8 @@ _RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
 )
 
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
+#: the rows of a large table's page
+DATA_TABLE_PAGE = 50
 #: seconds a status bar waits past its message's timeout before fetching itself again
 _AUTO_CLEAR_MARGIN = 0.25
 
@@ -950,6 +952,126 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         if event != "click" or not self.is_enabled:
             super().dispatch(event, form)
         self._view.clicked.emit()
+
+
+class DataTableViewLike(ViewLike, Protocol):
+    texts: dict[str, str]
+
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def row_count(self) -> int: ...
+    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
+
+
+class WebDataTableRenderer(WebRenderer[DataTableViewLike]):
+    """A large table, by pages of `DATA_TABLE_PAGE` rows: Previous and Next turn them.
+
+    Only the page's part (its count and its `<table>`) is swapped when the user turns a
+    page, never the buttons, which keep the focus. Each row starts with its position, from
+    1. A new order of the rows shows its page at the same place, or its last page.
+    """
+
+    _role = "data_table"
+
+    def __init__(self, view: DataTableViewLike) -> None:
+        super().__init__(view)
+        #: the page shown, counted from 0
+        self._page = 0
+        #: whether only the page's part is swapped: the user turned the page
+        self._is_page_dirty = False
+        self._refresh_dispatcher.update(
+            {
+                **dict.fromkeys(
+                    ("source", "row_count", "column_formats", "texts"), self._mark_dirty
+                ),
+                # shown with the order they give, which the view sends as `row_count`
+                **{
+                    name: lambda _view, _table, _value: None
+                    for name in ("sort_column", "sort_descending", "search", "filters")
+                },
+                # not shown yet: the user neither sorts nor selects
+                "selection_mode": lambda _view, _table, _value: None,
+                "selected_ids": lambda _view, _table, _value: None,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        last_page = max(self._view.row_count - 1, 0) // DATA_TABLE_PAGE
+        self._page = min(self._page, last_page)
+        is_page, self._is_page_dirty = self._is_page_dirty and oob, False
+        if is_page:
+            return self._page_html(oob=True)
+        texts = self._view.texts
+        disabled = "" if self.is_enabled else " disabled"
+        return Markup(
+            '<div {root_attributes} class="flex flex-col gap-2">'
+            '<div class="flex items-center gap-2">'
+            '<button type="button" class="btn btn-sm"{previous}{disabled}>{previous_text}</button>'
+            '<button type="button" class="btn btn-sm"{next}{disabled}>{next_text}</button>'
+            "</div>{page_html}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            previous=self._post("previous"),
+            next=self._post("next"),
+            disabled=disabled,
+            previous_text=texts.get("previous", ""),
+            next_text=texts.get("next", ""),
+            page_html=self._page_html(oob=False),
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event not in ("previous", "next") or not self.is_enabled:
+            super().dispatch(event, form)
+        last_page = max(self._view.row_count - 1, 0) // DATA_TABLE_PAGE
+        step = 1 if event == "next" else -1
+        page = min(max(self._page + step, 0), last_page)
+        if page != self._page:
+            self._page = page
+            self._is_page_dirty = True
+            self._mark_dirty(self._view, self.widget_id, page)
+
+    def _post(self, event: str) -> Markup:
+        return Markup(
+            """ hx-post="/widget/{}" hx-vals='{}'"""
+            ' hx-swap="none"'
+        ).format(self.widget_id, json.dumps({"event": event}))
+
+    def _page_html(self, *, oob: bool) -> Markup:
+        """Render the page's part: its count, then its rows under the headers."""
+        view = self._view
+        start = self._page * DATA_TABLE_PAGE
+        rows = view.rows(start, start + DATA_TABLE_PAGE)
+        texts = view.texts
+        if len(rows) == 0:
+            count = texts.get("empty", "")
+        else:
+            count = texts.get("count", "").format(
+                first=f"{start + 1:,}", last=f"{start + len(rows):,}", total=f"{view.row_count:,}"
+            )
+        head = Markup("").join(
+            Markup('<th scope="col">{}</th>').format(header) for header in view.headers
+        )
+        body = Markup("").join(
+            Markup('<tr><th scope="row" class="tabular-nums">{position}</th>{cells}</tr>').format(
+                position=f"{start + offset + 1:,}",
+                cells=Markup("").join(Markup("<td>{}</td>").format(cell) for cell in cells),
+            )
+            for offset, (_row_id, cells) in enumerate(rows)
+        )
+        return Markup(
+            '<div id="{widget_id}-page" class="flex flex-col gap-2"{oob}>'
+            '<p class="text-sm" aria-live="polite">{count}</p>'
+            '<div class="overflow-x-auto rounded-box border border-base-300">'
+            '<table class="table table-zebra table-sm">'
+            "<thead><tr><td></td>{head}</tr></thead><tbody>{body}</tbody></table></div></div>"
+        ).format(
+            widget_id=self.widget_id,
+            oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
+            count=count,
+            head=head,
+            body=body,
+        )
 
 
 class ProgressBarViewLike(ViewLike, Protocol):
@@ -4539,6 +4661,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "chart": WebChartRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
+    "data_table": WebDataTableRenderer,
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
     "dialog": WebDialogRenderer,

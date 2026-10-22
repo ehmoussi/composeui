@@ -48,11 +48,13 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.study import save_study
 from composeui.core.view import (
+    DATA_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     ButtonView,
     ChartKind,
     ChartView,
+    DataTableView,
     DialogView,
     EditRefusedError,
     LabelRowFloatInputView,
@@ -60,6 +62,7 @@ from composeui.core.view import (
     LabelRowIntInputView,
     LabelRowRadioGroupView,
     LabelView,
+    ListSource,
     LogType,
     LogView,
     MainView,
@@ -141,6 +144,8 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
     EditableTableMainView,
+    MillionRowsMainView,
+    MillionSource,
     Room,
     RoomsMainView,
     SortedRoomsMainView,
@@ -522,6 +527,22 @@ def _views(view: View) -> Iterator[View]:
         yield from _views(child_view)
 
 
+@attrs.frozen
+class _Note:
+    text: str
+
+
+@define_view
+class _NotesMainView(MainView):
+    """A large table whose header and cell, from its source, are hostile text."""
+
+    notes: DataTableView = child(DataTableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.notes.source = ListSource(_Note, {"text": _HOSTILE}, [_Note(_HOSTILE)])
+
+
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
@@ -557,6 +578,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     SortedRoomsMainView,
     CellWidgetsMainView,
     StyledTablesMainView,
+    _NotesMainView,
 ]
 
 
@@ -4796,3 +4818,51 @@ def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(
     assert table.records[3] == Room("Study", 21, 9, is_heated=True)
     assert table.selected_rows == [3]
     assert _rows_with(body, sorted_rooms.table_id, "aria-current") == sorted_rooms.row_ids(3)
+
+
+@pytest.fixture
+def million_views() -> list[MillionRowsMainView]:
+    """Each session's main view, kept by `million_client`'s app."""
+    return []
+
+
+@pytest.fixture
+def million_client(million_views: list[MillionRowsMainView]) -> Iterator[TestClient]:
+    class MillionApp(WebApplication[MillionRowsMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=MillionRowsMainView)
+
+        def setup_session(self, main_view: MillionRowsMainView) -> None:
+            million_views.append(main_view)
+
+    with _Browser(MillionApp().create_starlette_app()) as client:
+        yield client
+
+
+def test_a_large_table_s_pages_turn_swapping_their_rows_alone(
+    million_views: list[MillionRowsMainView], million_client: TestClient
+) -> None:
+    page = million_client.get("/").text
+    (main_view,) = million_views
+    table_id = _widget_id(main_view.table.renderer)
+    source = main_view.table.source
+    assert isinstance(source, MillionSource)
+    assert "Rows 1 to 50 of 1,000,000" in _element(page, f"{table_id}-page").text
+    assert '<th scope="row" class="tabular-nums">50</th>' in page
+
+    def turn(event: str) -> str:
+        response = million_client.post(f"/widget/{table_id}", data={"event": event})
+        assert response.status_code == 200
+        return response.text
+
+    turned = turn("next")
+    assert "Rows 51 to 100 of 1,000,000" in _swapped(turned, f"{table_id}-page").text
+    assert _find(turned, table_id) is None  # its buttons stay, the focus on them
+    assert "<td>100</td><td>25.0</td>" in turned
+    turn("previous")
+    assert _find(turn("previous"), f"{table_id}-page") is None  # the first page already
+    assert len(source.read) == DATA_TABLE_WINDOW
+
+    main_view.table.is_enabled = False
+    response = million_client.post(f"/widget/{table_id}", data={"event": "next"})
+    assert response.status_code == 400

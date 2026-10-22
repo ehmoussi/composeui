@@ -16,6 +16,7 @@ run them from a clone of the repository.
 - [Pipe chart](#pipe-chart)
 - [Pipe sweep](#pipe-sweep)
 - [Task view](#task-view)
+- [Large table](#large-table)
 - [Batman](#batman)
 - [Markdown viewer](#markdown-viewer)
 - [Web hello](#web-hello)
@@ -44,6 +45,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
+| [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows, read from its source as they show, sorted, searched and filtered by a form |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
@@ -265,6 +267,41 @@ It shows:
 - [widgets in cells](user-guide.md#widgets-in-cells): the Retry button of a task runs it
   again. The error of a failed task is a link that opens a dialog with its details.
 - a [French translation](user-guide.md#translating-the-app) and a Language menu.
+
+## Large table
+
+[`largetable.py`](../src/examples/largetable.py) shows a million made-up sensor readings in
+a large table.
+
+```bash
+uv run python -m examples.largetable   # qt; or --backend web, or textual
+uv run python -m examples.largetable --rows 100000   # fewer readings, a faster start
+```
+
+On Qt:
+
+![A million readings on Qt](images/largetable-qt.png)
+
+On Textual:
+
+![A million readings on Textual](images/largetable-textual.png)
+
+On the web:
+
+![A million readings on the web](images/largetable-web.png)
+
+It shows:
+
+- a [large table](user-guide.md#a-large-table): a `DataTableView` on a `ListSource` of the
+  readings. Qt and Textual draw the rows on screen alone, and read them from the source as
+  the user scrolls. The web shows them by pages of 50.
+- the table's settings, set by a form: its sort, its search in the text columns, and a
+  [filter](user-guide.md#sorting-and-filtering) on the temperature. A filter that doesn't
+  parse shows its error under its field. The label says how many rows pass and how long the
+  source took to order them.
+- an [option of the app's own](user-guide.md#command-line-options-of-your-own): `--rows`,
+  the readings to make up (1,000,000 by default).
+- a study that saves the form and the table's settings, never the readings.
 
 ## Batman
 

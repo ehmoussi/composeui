@@ -31,6 +31,7 @@ from composeui.core import chartimage
 from composeui.core.application import ModelApplication, _add_reference_to_signals
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.view import (
+    DATA_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     CellStyle,
@@ -55,6 +56,7 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composedatatable import ComposeDataTable
 from composeui.textualcore.widgets.composedateinput import (
     ComposeCalendar,
     ComposeDateInput,
@@ -109,6 +111,8 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
     EditableTableMainView,
+    MillionRowsMainView,
+    MillionSource,
     Room,
     SortedRoomsMainView,
     StyledTablesMainView,
@@ -2596,3 +2600,30 @@ async def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows()
         assert _shown_column(table, 0) == ["Study", "kitchen"]
         assert rooms.selected_rows == [3]
         assert table.cursor_row == 0
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_draws_the_lines_on_screen_reading_only_their_windows() -> None:
+    view = MillionRowsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    source = view.table.source
+    assert isinstance(source, MillionSource)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        table = app.query_one(ComposeDataTable)
+        assert table.virtual_size.height == 1_000_001  # the headers' line, then the rows'
+        assert table.render_line(0).text.split() == ["Value", "Half"]
+        assert table.render_line(2).text.split() == ["2", "2", "0.5"]
+        table.scroll_to(y=500_000, animate=False)
+        await pilot.pause()
+        assert table.render_line(1).text.split() == ["500,001", "1000000", "250000.0"]
+        assert table.render_line(0).text.split() == ["Value", "Half"]  # still on top
+        assert len(source.read) < 10 * DATA_TABLE_WINDOW
+
+        source.count = 3
+        source.changed.emit()
+        await pilot.pause()
+        assert table.virtual_size.height == 4

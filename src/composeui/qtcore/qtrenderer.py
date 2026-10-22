@@ -101,6 +101,7 @@ from composeui.core.view import (
     walk_tree,
 )
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qdatatable import QDataTableView
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -1208,6 +1209,55 @@ class TableViewLike(ViewLike, Protocol):
     def filter_chip(self, column: int) -> str: ...
 
 
+class DataTableViewLike(ViewLike, Protocol):
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def row_count(self) -> int: ...
+    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
+
+
+class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataTableView]):
+    """A large table: Qt asks the view for the rows it draws, as the user scrolls."""
+
+    def __init__(self, view: DataTableViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "source": self._reset,
+                "row_count": self._reset,
+                "column_formats": self._repaint,
+                # shown with the order they give, which the view sends as `row_count`
+                **{
+                    name: lambda _view, _table, _value: None
+                    for name in ("sort_column", "sort_descending", "search", "filters")
+                },
+                # not shown yet: the user neither sorts nor selects
+                "selection_mode": lambda _view, _table, _value: None,
+                "selected_ids": lambda _view, _table, _value: None,
+                # the web's pages: the rows here are scrolled
+                "texts": lambda _view, _table, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QDataTableView(self._view)
+            self.refresh()
+
+    @staticmethod
+    def _reset(_view: DataTableViewLike, rendered_object: QDataTableView, _value: Any) -> None:
+        rendered_object.data_model.reset()
+
+    @staticmethod
+    def _repaint(_view: DataTableViewLike, rendered_object: QDataTableView, _value: Any) -> None:
+        rendered_object.data_model.repaint()
+
+    @staticmethod
+    def _update_state(_view: DataTableViewLike, _rendered_object: QDataTableView) -> None:
+        """Copy nothing: the user changes nothing in the table yet."""
+
+
 class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     """A table under its filter bar; the table shows `shown_rows`, in their order.
 
@@ -1680,7 +1730,7 @@ class QtGroupFormRenderer(QtFormRenderer):
 #: widgets scrolling within themselves: as tall as the room they're given, rather than
 #: their content, so they take a column's spare height, and a row's whole height; a
 #: splitter too, its panes as tall as it
-_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget, QSplitter)
+_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget, QSplitter, QDataTableView)
 
 
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
@@ -2841,6 +2891,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": QtChartRenderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
+    "data_table": QtDataTableRenderer,
     "date_input": QtDateInputRenderer,
     "file_path_input": QtFilePathInputRenderer,
     "dialog": QtDialogRenderer,

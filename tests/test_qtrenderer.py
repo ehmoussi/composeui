@@ -57,6 +57,7 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.renderer import MainRenderer, RendererContainer
 from composeui.core.view import (
+    DATA_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     CellStyle,
@@ -109,6 +110,8 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
     EditableTableMainView,
+    MillionRowsMainView,
+    MillionSource,
     Room,
     SortedRoomsMainView,
     StyledTablesMainView,
@@ -2509,3 +2512,36 @@ def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(qtbot: 
     assert _shown_column(table, 0) == ["Study", "kitchen"]
     assert rooms.selected_rows == [3]
     assert [index.row() for index in table.selectionModel().selectedRows()] == [0]
+
+
+def test_a_large_table_draws_the_rows_on_screen_reading_only_their_windows(
+    qtbot: QtBot,
+) -> None:
+    view = MillionRowsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _widget(view.table)
+    assert isinstance(table, QTableView)
+    model = table.model()
+    source = view.table.source
+    assert isinstance(source, MillionSource)
+
+    assert model.rowCount() == 1_000_000
+    assert [model.headerData(column, Qt.Orientation.Horizontal) for column in range(2)] == [
+        "Value",
+        "Half",
+    ]
+    assert (model.index(1, 0).data(), model.index(1, 1).data()) == ("2", "0.5")
+    table.scrollTo(model.index(500_000, 0), QAbstractItemView.ScrollHint.PositionAtTop)
+    qtbot.waitUntil(lambda: 500_000 in source.read)
+    assert model.headerData(500_000, Qt.Orientation.Vertical) == "500,001"
+    # the rows drawn, by windows: never the million
+    assert len(source.read) < 10 * DATA_TABLE_WINDOW
+
+    source.count = 3
+    source.changed.emit()
+    assert model.rowCount() == 3

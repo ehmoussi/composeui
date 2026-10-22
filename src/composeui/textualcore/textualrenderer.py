@@ -76,6 +76,7 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composedatatable import ComposeDataTable
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
@@ -1453,6 +1454,54 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
         pass  # a metric is read-only; nothing to read back
 
 
+class DataTableViewLike(ViewLike, Protocol):
+    @property
+    def headers(self) -> list[str]: ...
+    @property
+    def row_count(self) -> int: ...
+    def rows(self, start: int, stop: int) -> list[tuple[Any, list[str]]]: ...
+
+
+class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataTable]):
+    """A large table: Textual asks the view for the lines it draws, as the user scrolls."""
+
+    def __init__(self, view: DataTableViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "source": self._reset,
+                "row_count": self._reset,
+                "column_formats": self._repaint,
+                # shown with the order they give, which the view sends as `row_count`
+                **{
+                    name: lambda _view, _table, _value: None
+                    for name in ("sort_column", "sort_descending", "search", "filters")
+                },
+                # not shown yet: the user neither sorts nor selects
+                "selection_mode": lambda _view, _table, _value: None,
+                "selected_ids": lambda _view, _table, _value: None,
+                # the web's pages: the rows here are scrolled
+                "texts": lambda _view, _table, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeDataTable(self._view)
+
+    @staticmethod
+    def _reset(_view: DataTableViewLike, rendered_object: ComposeDataTable, _value: Any) -> None:
+        rendered_object.reset()
+
+    @staticmethod
+    def _repaint(_view: DataTableViewLike, rendered_object: ComposeDataTable, _value: Any) -> None:
+        rendered_object.repaint()
+
+    @staticmethod
+    def _update_state(_view: DataTableViewLike, _rendered_object: ComposeDataTable) -> None:
+        """Copy nothing: the user changes nothing in the table yet."""
+
+
 class TableViewLike(ViewLike, Protocol):
     headers: list[str]
     filter_texts: dict[str, str]
@@ -2801,6 +2850,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": TextualChartRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboboxRenderer,
+    "data_table": TextualDataTableRenderer,
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
     "dialog": TextualDialogRenderer,
