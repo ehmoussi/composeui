@@ -25,6 +25,7 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
   - [Check a form](#check-a-form)
   - [Compose views from mixins](#compose-views-from-mixins)
 - [The main view](#the-main-view)
+  - [The status bar](#the-status-bar)
   - [The app's icon](#the-apps-icon)
   - [Command-line options of your own](#command-line-options-of-your-own)
 - [Saving and loading state](#saving-and-loading-state)
@@ -285,9 +286,8 @@ Each field has its row views too, for example `RowFloatInputView` and
 - **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
   is `None` or one of `values`. `value_changed` reports the user's choice.
 - **A `LabelView`** shows a line of read-only text, for example a result.
-- **The status bar** of the main view shows a short message:
-  `main_view.status_bar.show_message("Saved")`. The message goes after `timeout` seconds
-  (3 by default, 0 to keep it).
+- **The [status bar](#the-status-bar)** of the main view shows a short message, for
+  example the result of a form.
 
 ### Check a form
 
@@ -338,6 +338,25 @@ A subclass of `MainView` is the app. Its class variables configure it:
 
 Its view fields are the content of the window, one above the other. Its `status_bar` shows
 short messages, and its `jobs` [run work in threads](#running-work-in-threads).
+
+### The status bar
+
+The `status_bar` of the main view is a line at the bottom of the window. It shows a short
+message to the user, for example "Saved", or why an edit was refused:
+
+```python
+main_view.status_bar.show_message("Saved")
+```
+
+- **The message goes after `timeout` seconds,** 3 by default. With a `timeout` of 0, it
+  stays until the next message, or until `clear_message()`.
+- **A new message replaces the previous one,** and its timeout starts again.
+- **`message`** holds the message shown, or `""`.
+
+ComposeUI writes in the status bar too, for example when a table refuses an edit or a study
+fails to open. Qt shows a `QStatusBar`, Textual a line at the bottom of the screen, and the
+web a footer at the bottom of the page. On the web, the page clears the message itself after
+its timeout.
 
 ### The app's icon
 
