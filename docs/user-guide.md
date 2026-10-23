@@ -421,6 +421,22 @@ text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's co
 language, not from a study. Tag a text field of your own views the same way:
 `attrs.field(default="", metadata={UI_TEXT: True})`.
 
+A study holds what the user enters and what the app computes from it: the values of the
+fields, the rows and records of a table with its sort and its filters, and the series of a
+chart. Saving, opening, and New leave the rest alone:
+
+- **Navigation:** the [page](#pages) and the [tab](#tabs) shown, and an open
+  [dialog](#dialogs).
+- **Layout:** the sizes of [resizable panes](#resizable-panes), and whether the
+  [sidebar](#sidebar) is retracted.
+- **The app's setup:** class variables, the `icon` of an [action](#toolbars) or a
+  [tree node](#tree), the `extensions` of a [file path input](#file-path-input), and the
+  `cell_widgets`, `cell_styles`, `header_groups`, and `row_headers` of a
+  [table](#a-table-of-records).
+- **What the app gives again:** the source and the rows of a [large table](#a-large-table),
+  and the views of a [list of views](#a-list-of-views), which belong to the model.
+- **The language** shown, which the main view or `--language` sets.
+
 ## Backends
 
 `run(MainViewClass)` starts the app with the backend that `--backend` names: `qt`,
