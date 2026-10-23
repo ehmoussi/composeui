@@ -3,7 +3,7 @@
 ComposeUI is a small, framework-agnostic MVVM layer for building UIs in Python. Views are
 typed `attrs` classes; a `Renderer` binds each view to a toolkit widget; `Signal` objects
 carry events between view, model and application code. See `README.md` for the overview and
-quickstart, `docs/user-guide.md` for each feature, `docs/examples-guide.md` for the example apps, and
+quickstart, `docs/user-guide/` for each feature, `docs/examples-guide.md` for the example apps, and
 `docs/technical-guide.md` for the architecture and development.
 
 ## Setup
@@ -123,7 +123,7 @@ Load the `documentation-style` skill before you write or review documentation: `
 document owns what, and the checks.
 
 - **Change the docs in the commit that changes the behavior.** A new view gets a section
-  in `docs/user-guide.md` and a class docstring, which the widget catalog shows. In
+  in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. In
   `ROADMAP.md`, add it to "Already there" and remove its entry. A new example gets its
   section, its overview row, its contents entry, and its screenshots in
   `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/`
@@ -134,9 +134,10 @@ document owns what, and the checks.
   the quickstart changes, run `make screenshots EXAMPLES=quickstart`.
 - **Run every code example that you change.** Check each name against `composeui.core`, and
   run the example with `uv run python` in a scratch directory.
-- **Keep the navigation in step.** The contents lists of the user guide and the examples
-  guide follow their `##` and `###` headings. Keep headings stable and unique: other pages
-  link to them, and anchors work down to `###` only.
+- **Keep the navigation in step.** `docs/user-guide.md` lists the pages of
+  `docs/user-guide/` and their `##` and `###` headings. The contents list of the examples
+  guide follows its `##` headings. Keep headings stable and unique in their page: other
+  pages link to them, and anchors work down to `###` only.
 - **Keep the two copies in step.** Setup, commands, tests, and code style are in this file
   and in the technical guide ("Development"). Change both.
 - **Keep user docs for users.** Internal design decisions go in `ROADMAP.md` or in a code

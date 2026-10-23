@@ -43,7 +43,7 @@ src/composeui/
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
-docs/            # the user guide, the examples guide, this guide, and the Sphinx site
+docs/            # the user guide (user-guide/), the examples guide, this guide, the Sphinx site
 ```
 
 ## Architecture
@@ -79,7 +79,7 @@ The three backends of this repo register the same keys:
 
 The views are the view-models of MVVM, and the toolkit objects are the views. The renderers
 are the binding between them. See
-[How ComposeUI maps to MVVM](user-guide.md#how-composeui-maps-to-mvvm).
+[How ComposeUI maps to MVVM](user-guide/core-concepts.md#how-composeui-maps-to-mvvm).
 
 A view is an `attrs` class. `@define_view` adds the `notify_renderer` hook to the
 `on_setattr` of its fields. When code sets a public attribute to a new value, the hook calls
@@ -128,7 +128,7 @@ be excluded:
 - Other fields that can't be serialized, such as `Validator` fields, take the `OMIT`
   metadata key.
 - Text that the app's code sets, not the user, takes the `UI_TEXT` metadata key. See
-  [Saving and loading state](user-guide.md#saving-and-loading-state).
+  [Saving and loading state](user-guide/building-views.md#saving-and-loading-state).
 
 ### A button click
 
@@ -238,10 +238,10 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 
 ## Reloading on a change
 
-`--reload` runs the app's changed code each time that a Python file is saved. The user guide
-says what the user sees
-([Reloading the app on a change](user-guide.md#reloading-the-app-on-a-change)). Qt and Textual
-use `composeui.core.reload`, without a toolkit. The web uses uvicorn's reload.
+`--reload` runs the app's changed code each time that a Python file is saved. The user guide says
+what the user sees
+([Reloading the app on a change](user-guide/running-the-app.md#reloading-the-app-on-a-change)). Qt
+and Textual use `composeui.core.reload`, without a toolkit. The web uses uvicorn's reload.
 
 ### Reloading on Qt
 
@@ -366,8 +366,8 @@ another process answers with `HX-Refresh`.
    every view renders on it. Then add tests for its renderers and its application. See
    [Tests](#tests).
 5. Add the backend and its extra to the "Backends" table of the
-   [user guide](user-guide.md#backends). In each feature section of the user guide, say what
-   the new backend shows, as the section does for Qt, Textual, and the web.
+   [user guide](user-guide/running-the-app.md#backends). In each feature section of the user guide,
+   say what the new backend shows, as the section does for Qt, Textual, and the web.
 
 `core/view.py` should not need changes. `run` reads the `--backend` choices from
 `RendererType`, so the new backend is one of them.
@@ -426,7 +426,7 @@ Every behavior change needs a test in `tests/`.
 
 `make translations` checks the catalogs of each app in `TRANSLATED_MAIN_VIEWS` of the
 `Makefile`. When you translate a new app, add its main view there. See
-[Checking the catalogs](user-guide.md#checking-the-catalogs).
+[Checking the catalogs](user-guide/translation.md#checking-the-catalogs).
 
 ### Styles of the web backend
 
@@ -469,9 +469,12 @@ backend:
 uv sync --group dev --group docs --all-extras
 ```
 
-- **The guides stay Markdown.** MyST reads `docs/*.md` as they are. A link from a guide to
-  a file outside `docs/`, such as `../src/examples/pipeform.py`, goes to that file on
-  GitHub (`docs/conf.py`).
+- **The guides stay Markdown.** MyST reads `docs/*.md` and `docs/user-guide/*.md` as they
+  are. A link from a guide to a file outside `docs/`, such as `../src/examples/pipeform.py`,
+  goes to that file on GitHub (`docs/conf.py`).
+- **The user guide is a page per topic.** `docs/user-guide.md` lists the pages of
+  `docs/user-guide/` and their sections, and its `toctree` orders them. A new page goes in
+  both.
 - **The API reference is built from the docstrings.** Each page in `docs/api/` runs
   `automodule` in an `{eval-rst}` block, because autodoc writes reStructuredText. In a
   docstring, single backticks link to the name they hold. When you add a module to

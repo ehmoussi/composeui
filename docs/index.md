@@ -26,7 +26,7 @@ Signals carry the events between the views, the model, and the app.
 - **A study file saves the app.** `MainView.save_state` writes the views' state as JSON,
   with `cattrs`, and `load_state` reads it back. A model with data of its own adds its file
   (`save_data`, `open_data`), and the study becomes an archive of both. See
-  [Saving and loading state](user-guide.md#saving-and-loading-state).
+  [Saving and loading state](user-guide/building-views.md#saving-and-loading-state).
 - **A renderer binds each view to a widget.** The backend that you choose at launch gives
   the renderer, by the view's `_renderer_key`.
 - **The renderer syncs both directions.** When code sets a view attribute, the renderer
@@ -57,7 +57,7 @@ On the web:
 1. Install ComposeUI and the extras of the backends that you want
    (see [Installation](../README.md#installation) in the README).
 2. Write a first app with the [Quickstart](../README.md#quickstart) of the README.
-3. Read the [core concepts](user-guide.md#core-concepts) of the user guide: views,
+3. Read the [core concepts](user-guide/core-concepts.md) of the user guide: views,
    signals, the model, and the app.
 4. Run the [example apps](examples-guide.md#run-an-example), and read their code.
 
