@@ -217,10 +217,7 @@ def _saving(
 
 def _has_watchfiles() -> bool:
     """Tell whether watchfiles is installed, for uvicorn's reloader watches with it then."""
-    try:
-        return importlib.util.find_spec("watchfiles") is not None
-    except ValueError:  # in `sys.modules` without a spec, e.g. blocked as None
-        return False
+    return importlib.util.find_spec("watchfiles") is not None
 
 
 def _entry_point() -> str:
@@ -256,9 +253,8 @@ def create_reloaded_starlette_app() -> Starlette:
         msg = f"can't find {name} to run it again"
         raise RuntimeError(msg)
     code = spec.loader.get_code(spec.name)
-    if code is None:
-        msg = f"{name} has no code to run"
-        raise RuntimeError(msg)
+    # none only for a compiled extension, which Python can't start as a program
+    assert code is not None
     # as its process's `__main__`, for good, not in a scratch module like `runpy`'s:
     # its classes' string annotations (`from __future__ import annotations`) are
     # resolved later, through `sys.modules[cls.__module__]`, when sessions are served
