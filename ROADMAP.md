@@ -246,9 +246,11 @@ The user guide's "Web backend" section covers what users see.
   row's height. `page.js` posts the first row shown once the scroll stops outside the
   window, and only the `<tbody>` comes back (in a `<template>`, as a table's parts), so
   the scroll position stays. Browsers cap an element's height: past
-  `DATA_TABLE_SCROLLED_ROWS`, a row's height stands for `data-scale` rows, and the window
-  lands at the scroll position, a few rows off the exact ratio. A new order swaps the
-  whole frame, back at the top.
+  `DATA_TABLE_SCROLLED_ROWS`, a filler's row height stands for more than one row. The
+  page maps the scroll position through the fillers as drawn, and posts the row under the
+  headers with its offset; the server sizes the filler above the new window so that row
+  stays there, the frame's height kept. A new order swaps the whole frame, back at the
+  top.
 - **A table's parts.** A sort, a search or a filter swaps only what it changes (the
   headers' row, the `<tbody>`, the count, the filter bar), never the search field being
   typed in. The bar goes last in the response: it may hold the element that sent the

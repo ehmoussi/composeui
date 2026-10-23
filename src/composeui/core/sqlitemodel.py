@@ -280,25 +280,45 @@ class SqliteSource:
             condition, values = self._condition(self._column(name), row_filter)
             conditions.append(condition)
             parameters.extend(values)
-        sql = f"SELECT {self._id} FROM ({self._query})"  # noqa: S608 (quoted, the app's query)
-        if len(conditions) > 0:
-            sql += " WHERE " + " AND ".join(conditions)
+        # by id unsorted: else in the order of an index a filter reads by, no header showing it
+        queries = [(conditions, self._id)]
         if sort is not None:
             column = self._column(sort.column)
             name = _identifier(column.name)
             is_text = column_kind(column.type) is ColumnKind.TEXT
             order = f"{name} COLLATE NOCASE" if is_text else name
             direction = " DESC" if sort.descending else ""
-            # the empty cells last, in both orders
-            sql += f" ORDER BY ({name} IS NULL OR {name} = '') ASC, {order}{direction}, "
-            sql += self._id
-        else:
-            # by id: else in the order of an index a filter reads by, which no header shows
-            sql += f" ORDER BY {self._id}"
+            empty = f"({name} IS NULL OR {name} = '')"
+            if len(conditions) > 0:
+                # the empty cells last, in both orders, SQLite sorting the rows passing:
+                # read in their column's index order, the table would be read row by row
+                queries = [(conditions, f"{empty} ASC, {order}{direction}, {self._id}")]
+            else:
+                # apart, the cells with a value read in their column's index order: an
+                # ORDER BY starting with the empty cells couldn't
+                queries = [
+                    ([f"NOT {empty}"], f"{order}{direction}, {self._id}"),
+                    ([empty], self._id),
+                ]
         with self._table.reading() as db:
             db.create_function("regexp", 2, _regexp, deterministic=True)
             db.create_function("casefold", 1, _casefold, deterministic=True)
-            return [row[0] for row in db.execute(sql, parameters)]
+            db.execute("BEGIN")  # the queries read the same rows, a write committed between
+            try:
+                return [
+                    row[0]
+                    for where, order_by in queries
+                    for row in db.execute(self._select_ids(where, order_by), parameters)
+                ]
+            finally:
+                db.rollback()
+
+    def _select_ids(self, conditions: list[str], order_by: str) -> str:
+        """Get the query of the ids of the rows passing `conditions`, ordered by `order_by`."""
+        sql = f"SELECT {self._id} FROM ({self._query})"  # noqa: S608 (quoted, the app's query)
+        if len(conditions) > 0:
+            sql += " WHERE " + " AND ".join(conditions)
+        return f"{sql} ORDER BY {order_by}"
 
     def cells(self, ids: Sequence[Any], columns: Sequence[str]) -> dict[Any, list[Any]]:
         types = [self._column(name).type for name in columns]

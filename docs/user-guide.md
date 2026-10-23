@@ -1101,7 +1101,7 @@ main_view.readings.source = ListSource(
   setting asks the source for the order once. The view keeps only the ids, in an `array`
   when they are integers (8 bytes each). `ordered` emits once the rows have their new
   order, e.g. to show `row_count` of `total` (the source's rows, before the search and
-  the filters).
+  the filters). A new source drops the filters and the sort on columns it doesn't have.
 - **A source of 100,000 rows or more** (`DATA_TABLE_JOB_ROWS`) orders its rows in a
   [job](#running-work-in-threads) on Qt and Textual, so the window stays responsive. The
   table shows the old order meanwhile (`is_ordering`). A setting changed while the job
@@ -1182,8 +1182,9 @@ main_view.readings.source = SqliteSource(
   column name as a parameter. The filters' values are parameters. Unsorted, the rows come
   in the order of their ids.
 - **The table's `changed`** reads the rows again, e.g. after a job wrote some.
-- **Index the columns that sort.** Without an index, SQLite reads every row to sort them:
-  about a second for a million rows.
+- **Index the columns that sort.** With nothing filtering the rows, SQLite reads them in
+  the index's order: about 0.4 seconds for a million rows, where sorting them takes about
+  a second. A search or a filter sorts only the rows passing.
 - **The source reads on connections of its own** (`SqliteModel.reading`): the order and
   the cells never wait for each other, nor for a write, e.g. a job writing rows. They
   read the rows committed: the table's `changed` reads them again once a write commits.

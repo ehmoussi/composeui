@@ -14,6 +14,7 @@ import pytest
 from composeui.core.view import (
     DATA_TABLE_CACHE,
     DATA_TABLE_WINDOW,
+    DataTableByPosition,
     DataTableView,
     FilterError,
     ListSource,
@@ -366,6 +367,41 @@ def test_an_export_gives_the_rows_shown_as_csv_their_values_in_full(
 
     table.export_csv(tmp_path / "rows.csv")  # not in an app: written at once
     assert (tmp_path / "rows.csv").read_text(encoding="utf-8").startswith("Name,Value,")
+
+
+def test_an_export_that_fails_partway_leaves_no_file(tmp_path: Path) -> None:
+    class Failing(CountingSource):
+        """Its second window of cells can't be read, e.g. its database closed meanwhile."""
+
+        def cells(
+            self, ids: Sequence[Hashable], columns: Sequence[str]
+        ) -> dict[Hashable, list[Any]]:
+            if len(self.read) > 0:
+                msg = "Cannot operate on a closed database."
+                raise RuntimeError(msg)
+            return super().cells(ids, columns)
+
+    table = DataTableView(source=Failing(_samples(2 * DATA_TABLE_WINDOW)))
+    path = tmp_path / "rows.csv"
+
+    with pytest.raises(RuntimeError, match="closed database"):
+        table.export_csv(path)
+
+    assert not path.exists()  # not a part of the rows looking whole
+
+
+def test_a_new_source_drops_the_settings_of_columns_it_does_not_have(
+    source: CountingSource,
+) -> None:
+    # set before any source, which takes any column: an app's, or a study's
+    table = DataTableView(filters={"gone": ">3", "value": ">1"}, sort_column="gone")
+
+    table.source = source
+
+    assert (table.filters, table.sort_column) == ({"value": ">1"}, None)
+    by_position = DataTableByPosition(table)
+    by_position.add_filter(0, "s00")  # as the bar's Add: the other filters stay
+    assert table.filters == {"value": ">1", "name": "s00"}
 
 
 def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) -> None:

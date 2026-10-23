@@ -49,7 +49,7 @@ from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
-from composeui.core.jobs import Job, Jobs
+from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
@@ -71,6 +71,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from attrs import AttrsInstance
+
+    from composeui.core.jobs import Job
 
 
 LOGGER = logging.getLogger("COMPOSEUI_VIEW")
@@ -3146,9 +3148,11 @@ class ListSource(Generic[RecordT]):
             for column in self._columns.values()
             if column_kind(column.type) is ColumnKind.TEXT
         ]
+        # the records once: in a job, the main thread may assign new ones meanwhile
+        rows = self._rows
         ids = [
             row_id
-            for row_id, record in self._rows.items()
+            for row_id, record in rows.items()
             if (
                 needle == ""
                 or any(needle in self._text(record, name).casefold() for name in searched)
@@ -3162,18 +3166,19 @@ class ListSource(Generic[RecordT]):
             return ids
         return _sorted_by(
             ids,
-            lambda row_id: self._value(self._rows[row_id], sort.column),
-            lambda row_id: self._text(self._rows[row_id], sort.column),
+            lambda row_id: self._value(rows[row_id], sort.column),
+            lambda row_id: self._text(rows[row_id], sort.column),
             is_text=column_kind(self._column(sort.column).type) is ColumnKind.TEXT,
             descending=sort.descending,
         )
 
     def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
         names = [self._column(name).name for name in columns]
+        rows = self._rows  # once, as `ordered_ids` does
         return {
-            row_id: [getattr(self._rows[row_id], name) for name in names]
+            row_id: [getattr(rows[row_id], name) for name in names]
             for row_id in ids
-            if row_id in self._rows
+            if row_id in rows
         }
 
     def _column(self, name: str) -> SourceColumn:
@@ -3206,15 +3211,21 @@ DATA_TABLE_JOB_ROWS = 100_000
 def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> None:
     """Write a large table's CSV, as `DataTableView.csv_chunks` gives it, in a job or not.
 
-    A job canceled (New, Open, closing the app) stops, and leaves no part of the file.
+    A job canceled (New, Open, closing the app) stops. Stopped, or failed (e.g. a cell the
+    source can't read, a full disk), it leaves no part of the file: none that looks whole.
     """
-    with path.open("w", encoding="utf-8", newline="") as file:
-        for chunk in chunks:
-            if job is not None and job.is_canceled:
-                break
-            file.write(chunk)
-    if job is not None and job.is_canceled:
-        path.unlink()
+    is_written = False
+    try:
+        with path.open("w", encoding="utf-8", newline="") as file:
+            for chunk in chunks:
+                if job is not None and job.is_canceled:
+                    break
+                file.write(chunk)
+            else:
+                is_written = True
+    finally:
+        if not is_written:
+            path.unlink(missing_ok=True)
 
 
 class _WeakCallback:
@@ -3319,9 +3330,13 @@ class DataTableView(View):
     ) -> Optional[TableSource[Any]]:
         """Read the new source's rows, and read them again each time they change.
 
-        The renderer shows the new source's columns, e.g. in the filter bar.
+        The renderer shows the new source's columns, e.g. in the filter bar. The filters
+        and the sort on columns it doesn't have go: they'd filter and sort nothing, and
+        the bar couldn't show them.
         """
         object.__setattr__(self, attribute.name, source)
+        if source is not None:
+            self._drop_other_columns_settings(source)
         if self._listener is not None:
             # the old source's `changed` keeps it, inert: a signal can't drop one callback
             self._listener.drop()
@@ -3334,6 +3349,17 @@ class DataTableView(View):
         if isinstance(renderer, (Renderer, RendererContainer)):
             renderer.refresh_attribute(attribute.name, source)
         return source
+
+    def _drop_other_columns_settings(self, source: TableSource[Any]) -> None:
+        """Drop the filters and the sort on columns `source` doesn't have, e.g. set before it."""
+        names = {column.name for column in source.columns}
+        fields = attrs.fields(cast("type[AttrsInstance]", type(self)))
+        filters = {name: text for name, text in self.filters.items() if name in names}
+        if filters != self.filters:
+            _store(self, fields.filters, filters)
+        if self.sort_column is not None and self.sort_column not in names:
+            _store(self, fields.sort_column, None)
+            _store(self, fields.sort_descending, value=False)
 
     def _reconcile_mode(
         self, attribute: attrs.Attribute[Any], mode: SelectionMode

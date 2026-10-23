@@ -4859,34 +4859,46 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
     source = main_view.table.source
     assert isinstance(source, MillionSource)
     frame = _element(page, f"{table_id}-frame")
-    # a million rows, 400,000 rows' height: a row's height stands for 2.5 rows
-    assert frame.attributes.get("data-scale") == "2.500000"
+    # a million rows, 400,000 rows' height: a filler's row height stands for 2.5 rows
     assert dict(frame.descendants)["table"].get("aria-rowcount") == "1000001"
     rows = _window(page, table_id)
     assert [row.get("aria-rowindex") for row in (rows[0], rows[-1])] == ["2", "101"]
 
-    def scroll(start: str) -> str:
+    def scroll(start: str, offset: str = "") -> str:
         response = million_client.post(
-            f"/widget/{table_id}", data={"event": "scroll", "start": start}
+            f"/widget/{table_id}", data={"event": "scroll", "start": start, "offset": offset}
         )
         assert response.status_code == 200
         return response.text
+
+    def fillers(scrolled: str) -> list[str | None]:
+        return [
+            attributes.get("style")
+            for tag, attributes in _element(scrolled, f"{table_id}-rows").descendants
+            if attributes.get("aria-hidden") == "true"
+        ]
 
     scrolled = scroll("500000")
     assert _find(scrolled, f"{table_id}-frame") is None  # the scroll position stays
     rows = _window(scrolled, table_id)
     # from a fifth of the window above the first row shown
     assert [row.get("aria-rowindex") for row in (rows[0], rows[-1])] == ["499982", "500081"]
-    fillers = [
-        attributes.get("style")
-        for tag, attributes in _element(scrolled, f"{table_id}-rows").descendants
-        if attributes.get("aria-hidden") == "true"
+    assert fillers(scrolled) == [
+        "height: calc(2.25rem * 199992.000)",
+        "height: calc(2.25rem * 199968.000)",
     ]
-    assert fillers == ["height: calc(2.25rem * 199992.000)", "height: calc(2.25rem * 199968.000)"]
     assert '<td class="whitespace-nowrap">1000000</td>' in scrolled
     assert scroll("500000") == ""  # drawn already
     assert scroll("first") == ""
     assert len(source.read) <= 3 * DATA_TABLE_WINDOW
+    # the row scrolled to stays where it was: 20 rows of the window above it, the filler
+    # above them up to it, the frame's height kept
+    scrolled = scroll("600000", offset="240100.5")
+    assert _window(scrolled, table_id)[0].get("aria-rowindex") == "599982"
+    assert fillers(scrolled) == [
+        "height: calc(2.25rem * 240080.500)",
+        "height: calc(2.25rem * 159879.500)",
+    ]
 
     # disabled: the rows scrolled to still show, but none is selected
     main_view.table.is_enabled = False
@@ -5045,7 +5057,8 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
     page = million_client.get("/").text
     (main_view,) = million_views
     table_id = _widget_id(main_view.table.renderer)
-    assert _element(page, f"{table_id}-copied").text == ""
+    copied = _element(page, f"{table_id}-copied")
+    assert (copied.text, "data-copy-answer" in copied.attributes) == ("", False)
     main_view.table.selection_mode = SelectionMode.MULTIPLE
     main_view.table.selected_ids = [3, 1]
 
@@ -5053,4 +5066,16 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
 
     copied = _swapped(response.text, f"{table_id}-copied")
     assert copied.text == "2\t0.5\n6\t1.5"  # in the table's order
+    assert "data-copy-answer" in copied.attributes  # the answer the page waits for
     assert copied.attributes.get("hx-trigger") == "copy-rows"  # the next copy posts again
+    # the table swapped whole meanwhile (e.g. its texts changed): the answer comes in it
+    main_view.table.texts = {**main_view.table.texts, "export": "Save the rows"}
+    response = million_client.post(f"/widget/{table_id}", data={"event": "copy"})
+    whole = _swapped(response.text, table_id)
+    (answer,) = [
+        attributes
+        for tag, attributes in whole.descendants
+        if attributes.get("id") == f"{table_id}-copied"
+    ]
+    assert "data-copy-answer" in answer
+    assert _element(response.text, f"{table_id}-copied").text == "2\t0.5\n6\t1.5"

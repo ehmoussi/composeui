@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import attrs
 import pytest
@@ -119,6 +119,28 @@ def test_an_id_field_keeps_the_ids_of_the_records_across_new_records() -> None:
     assert source.cells(["Bedroom", "kitchen"], ["temperature"]) == {"Bedroom": [19.0]}
     with pytest.raises(ValueError, match="two have the same name"):
         source.records = [ROOMS[0], ROOMS[0]]
+
+
+class _ReplacedWhileOrdering(ListSource[Room]):
+    """Rooms by name, replaced by others while they're ordered.
+
+    As the main thread may assign new records while a job orders a large table's rows.
+    """
+
+    def _text(self, record: Any, name: str) -> str:
+        if self.records == tuple(ROOMS):
+            self.records = [Room("Garage", 5.0)]
+        return super()._text(record, name)
+
+
+def test_an_order_reads_the_records_it_started_with_new_ones_assigned_meanwhile() -> None:
+    headers = {"name": "Room", "temperature": "Temperature"}
+    source = _ReplacedWhileOrdering(Room, headers, ROOMS, id_field="name")
+
+    ordered = source.ordered_ids(Sort("temperature"), "o", {})  # replaced as it searches
+
+    assert [room.name for room in source.records] == ["Garage"]
+    assert ordered == ["Bedroom", "Office"]  # the old rooms holding "o", sorted
 
 
 def test_a_column_the_source_does_not_have_is_refused(source: ListSource[Room]) -> None:
