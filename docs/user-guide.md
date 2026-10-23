@@ -279,7 +279,8 @@ The fields:
 | `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](#slider)) | Drags a handle |
 
 Each field has its row views too, for example `RowFloatInputView` and
-`LabelRowFloatInputView`.
+`LabelRowFloatInputView`, or `LabelRowDateInputView` for a date. The
+[widget catalog](widgets.md#form-rows) lists every row view.
 
 - **The text fields** emit `text_edited` on each change that the user makes, and
   `editing_finished` when the user is done with the field, for example on Enter.
