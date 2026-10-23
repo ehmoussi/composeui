@@ -457,6 +457,166 @@ def test_a_qt_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> Non
     ]
 
 
+def test_a_qt_app_without_reload_closes_its_model_once_its_window_is_closed(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("qtpy.QtWidgets")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_LIFECYCLE_APP.replace("VERSION = 1", "VERSION = 3"))
+    subprocess.run(  # noqa: S603
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=_TIMEOUT,
+        check=True,
+    )
+
+    events = [line.split("|")[:2] for line in log.read_text().splitlines()]
+    assert events == [["render", "3"], ["close", "3"]]  # one process, shown then closed
+
+
+#: a Qt app logging each render and model's close, with its code's version and its process.
+#: It has a model unless `WITHOUT_MODEL` is set. Its render fails once while the file
+#: `FAIL_RENDER` names exists; version 2 closes its window once shown
+_FAILING_RENDER_APP = textwrap.dedent(
+    """
+    import os, pathlib
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QApplication
+    from composeui.core.model import Model
+    from composeui.core.view import MainView
+    from composeui.qtcore.qtapplication import QtApplication, QtModelApplication
+
+    WITH_MODEL = "WITHOUT_MODEL" not in os.environ
+    BASE = QtModelApplication if WITH_MODEL else QtApplication
+
+    VERSION = 1
+
+    def log(event):
+        with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
+            file.write(f"{event}|{VERSION}|{os.getpid()}\\n")
+
+    class LoggedModel(Model):
+        def close(self):
+            log("close")
+
+    class LoggingApplication(BASE):
+        def render(self, renderer_type):
+            failing = pathlib.Path(os.environ["FAIL_RENDER"])
+            if failing.exists():
+                failing.unlink()
+                raise RuntimeError("can't show")
+            super().render(renderer_type)
+            log("render")
+            if VERSION == 2:
+                QTimer.singleShot(0, QApplication.quit)
+
+    options = {"build_model": LoggedModel} if WITH_MODEL else {}
+    LoggingApplication(build_main_view=MainView, **options).run()
+    """
+)
+
+
+@pytest.mark.parametrize("with_model", [True, False])
+def test_a_qt_app_whose_changed_code_can_t_show_runs_it_again_in_a_new_process(
+    with_model: bool,
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("qtpy.QtWidgets")
+    log = tmp_path / "runs.log"
+    failing = tmp_path / "fail-render"
+    script = tmp_path / "app.py"
+    script.write_text(_FAILING_RENDER_APP)
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--reload"],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "QT_QPA_PLATFORM": "offscreen",
+            "RUNS_LOG": str(log),
+            "FAIL_RENDER": str(failing),
+            **({} if with_model else {"WITHOUT_MODEL": "1"}),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for(lambda: "render|1" in _text(log))
+        failing.touch()
+        script.write_text(_FAILING_RENDER_APP.replace("VERSION = 1", "VERSION = 2"))
+        assert program.wait(timeout=_TIMEOUT) == 0
+    finally:
+        _stop(program)
+
+    events = [line.split("|") for line in log.read_text().splitlines()]
+    (first,) = {pid for event, version, pid in events if event == "render" and version == "1"}
+    (second,) = {pid for event, version, pid in events if event == "render" and version == "2"}
+    assert second != first  # a new process
+    expected = [
+        ["close", "1", str(program.pid)],  # the supervisor's, never shown
+        ["render", "1", first],
+        ["close", "2", first],  # the changed code's, which failed to show
+        ["close", "1", first],  # the window's, as its app exited
+        ["render", "2", second],  # shown in the new process
+        ["close", "2", second],
+    ]
+    assert events == [event for event in expected if with_model or event[0] != "close"]
+
+
+#: a Qt app without a model logging each render, with its code's version and its process.
+#: Version 2 closes its window once shown
+_NO_MODEL_APP = textwrap.dedent(
+    """
+    import os, pathlib
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QApplication
+    from composeui.core.view import MainView
+    from composeui.qtcore.qtapplication import QtApplication
+
+    VERSION = 1
+
+    class LoggingApplication(QtApplication):
+        def render(self, renderer_type):
+            super().render(renderer_type)
+            with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
+                file.write(f"render|{VERSION}|{os.getpid()}\\n")
+            if VERSION == 2:
+                QTimer.singleShot(0, QApplication.quit)
+
+    LoggingApplication(build_main_view=MainView).run()
+    """
+)
+
+
+def test_a_qt_app_without_a_model_shows_the_changed_code_in_its_window(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("qtpy.QtWidgets")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_NO_MODEL_APP)
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--reload"],
+        cwd=tmp_path,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for(lambda: "render|1" in _text(log))
+        script.write_text(_NO_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
+        assert program.wait(timeout=_TIMEOUT) == 0
+    finally:
+        _stop(program)
+
+    (_, _, app), changed = (line.split("|") for line in log.read_text().splitlines())
+    assert app != str(program.pid)  # shown by the supervisor's child
+    assert changed == ["render", "2", app]  # in the same window and process
+
+
 #: a Textual app logging its process and what its main view shows. The first run changes
 #: the state once mounted, then waits for a change; the next exits once mounted
 _TEXTUAL_APP = textwrap.dedent(
