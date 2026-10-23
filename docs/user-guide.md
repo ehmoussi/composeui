@@ -690,6 +690,25 @@ same with `pages.navigate("results")`, and reacts to it through `pages.route_cha
 
 The page shown is navigation, not study data: saving, opening, and New leave it alone.
 
+On the web, the page shown sets how wide the content grows. A subclass sets its `width`, a
+`PageWidth`:
+
+- **`NARROW`,** the default, keeps a column of fields easy to read (at most 48rem).
+- **`WIDE`** gives room for views side by side, such as tables (at most 72rem).
+- **`FULL`** takes the whole window.
+
+```python
+from composeui.core.view import PageWidth
+
+
+@define_view
+class ResultsPage(PageView):
+    route = "results"
+    width = PageWidth.WIDE
+```
+
+On Qt and Textual, the window sets the width, and `width` changes nothing.
+
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web
 puts the toolbar in the page header, with a web address per page.
 [`src/examples/pipeform.py`](../src/examples/pipeform.py) is an app with three pages: Inputs, Results, and Help.
