@@ -524,6 +524,73 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
     assert second[1:] == ["7", "fr"]  # the state, and the language, the first left
 
 
+#: a Textual app with a model logging each render and model's close, with its code's
+#: version and its process. Version 1 waits for a change; version 2 exits once mounted
+_TEXTUAL_MODEL_APP = textwrap.dedent(
+    """
+    import os, pathlib
+    from composeui.core.model import Model
+    from composeui.core.view import MainView
+    from composeui.textualcore.textualapplication import TextualModelApplication
+
+    VERSION = 1
+
+    def log(event):
+        with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
+            file.write(f"{event}|{VERSION}|{os.getpid()}\\n")
+
+    class LoggedModel(Model):
+        def close(self):
+            log("close")
+
+    class LoggingApplication(TextualModelApplication):
+        def render(self, renderer_type):
+            super().render(renderer_type)
+            log("render")
+            if VERSION == 2:
+                app = self.main_view.renderer.app
+                app.mounted_callbacks.append(app.exit)
+
+    LoggingApplication(build_main_view=MainView, build_model=LoggedModel).run()
+    """
+)
+
+
+def test_a_textual_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_TEXTUAL_MODEL_APP)
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--reload"],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
+            "RUNS_LOG": str(log),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for(lambda: "render|1" in _text(log))
+        script.write_text(_TEXTUAL_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
+        assert program.wait(timeout=_TIMEOUT) == 0
+    finally:
+        _stop(program)
+
+    events = [line.split("|") for line in log.read_text().splitlines()]
+    first, second = events[1][2], events[3][2]
+    assert second != first  # a new process
+    assert events == [
+        ["close", "1", str(program.pid)],  # the supervisor's, never shown
+        ["render", "1", first],
+        ["close", "1", first],  # its app exited for the change
+        ["render", "2", second],
+        ["close", "2", second],  # the app exited
+    ]
+
+
 # `terminate` there ends the process at once, without a signal it could handle
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has no SIGTERM")
 def test_a_supervisor_told_to_stop_stops_its_app(tmp_path: Path) -> None:
