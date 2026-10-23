@@ -46,6 +46,7 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
 - [Tabs](#tabs)
 - [Resizable panes](#resizable-panes)
   - [Panes one above the other](#panes-one-above-the-other)
+- [Menus](#menus)
 - [Toolbars](#toolbars)
 - [Sidebar](#sidebar)
 - [Dialogs](#dialogs)
@@ -749,6 +750,55 @@ with the up and down keys.
 
 The web never stacks the panes of a vertical splitter any other way: it keeps their borders
 on a narrow screen.
+
+## Menus
+
+A `Menu` groups actions under a title in the window's menu bar, for example the commands
+that act on a pipe. Its `ActionView` and `SeparatorAction` fields are its entries, in order.
+Make the menu a field of the main view:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import ActionView, MainView, Menu, define_view
+
+
+@define_view
+class PipeMenu(Menu):
+    reset_dimensions: ActionView = Factory(ActionView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "Pipe"
+        self.reset_dimensions.text = "Reset Dimensions"
+        self.reset_dimensions.shortcut = "Ctrl+r"
+
+
+@define_view
+class AppMainView(MainView):
+    pipe_menu: PipeMenu = Factory(PipeMenu)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.pipe_menu.reset_dimensions.triggered.connect(self.reset_state)
+```
+
+- `triggered` emits when the user picks the entry, or presses its `shortcut`.
+- A checkable entry (`is_checkable`) changes `is_checked` before `triggered` emits, so the
+  callbacks see the new state.
+
+Qt shows the menu in the menu bar of the window, as a `QMenu`. The web shows it as a
+drop-down list in the page header. Browsers keep the Ctrl shortcuts, so a shortcut of Ctrl
+and a letter or a digit becomes Alt+Shift: Ctrl+r becomes Alt+Shift+R. The web has no
+equivalent for other shortcuts, such as Ctrl+Shift+s. Textual has no menu bar: an
+entry with a `shortcut` is a key binding, which the footer lists. On Textual, the user
+can't reach an entry without a shortcut.
+
+The File menu is built in (see
+[The File menu and picking a file](#the-file-menu-and-picking-a-file)), and a
+[`LanguageMenu`](#translating-the-app) lets the user switch languages. In
+[`src/examples/pipeform.py`](../src/examples/pipeform.py), the Pipe menu resets the
+dimensions.
 
 ## Toolbars
 
