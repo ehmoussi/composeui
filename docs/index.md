@@ -1,7 +1,8 @@
 # ComposeUI
 
 ComposeUI is a small MVVM layer for building UIs in Python. You write the views once, as
-typed `attrs` classes. A renderer binds each view to a widget of a backend:
+typed `attrs` classes. In MVVM terms, these views are the view-models. A renderer binds each
+view to a widget of a backend:
 
 - **Qt** shows a desktop window, through `qtpy`.
 - **Textual** shows the app in a terminal.

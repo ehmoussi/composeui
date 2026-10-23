@@ -77,6 +77,10 @@ The three backends of this repo register the same keys:
 
 ### Views and renderers
 
+The views are the view-models of MVVM, and the toolkit objects are the views. The renderers
+are the binding between them. See
+[How ComposeUI maps to MVVM](user-guide.md#how-composeui-maps-to-mvvm).
+
 A view is an `attrs` class. `@define_view` adds the `notify_renderer` hook to the
 `on_setattr` of its fields. When code sets a public attribute to a new value, the hook calls
 `refresh_attribute(name, value)` on the renderer of the view. Do not add manual `update()`

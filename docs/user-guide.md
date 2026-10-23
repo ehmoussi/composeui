@@ -9,6 +9,7 @@ and what each backend shows. To install ComposeUI and write a first window, read
 ## Contents
 
 - [Core concepts](#core-concepts)
+  - [How ComposeUI maps to MVVM](#how-composeui-maps-to-mvvm)
   - [Views are reactive](#views-are-reactive)
   - [Signals inject arguments](#signals-inject-arguments)
 - [Building views](#building-views)
@@ -81,6 +82,20 @@ and what each backend shows. To install ComposeUI and write a first window, read
 A backend binds each view to a widget with a renderer. The renderer keeps the two in sync in
 both directions, so the app's code never calls it. The
 [technical guide](technical-guide.md#views-and-renderers) explains renderers.
+
+### How ComposeUI maps to MVVM
+
+ComposeUI follows the Model-View-ViewModel pattern, but its names are not the usual ones:
+
+| MVVM | ComposeUI |
+| --- | --- |
+| Model | The model, a `Model` or a `SqliteModel`. It knows no view. It tells of its changes with signals. |
+| ViewModel | The views of `composeui.core.view`. They hold the state of the UI as typed fields, and their signals and callbacks act on the model. |
+| View | The widget of the backend: a Qt widget, a Textual widget, or an HTML element. Your code does not touch it. |
+| Binding | The renderer. It pushes each change of a view to its widget, and copies the widget's state back. |
+
+Each view has one widget, and views nest as their widgets do. So the views are the
+widget tree of the UI, without the toolkit. One app runs on each backend without a change.
 
 ### Views are reactive
 
