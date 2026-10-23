@@ -77,6 +77,8 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
   - [Checking the catalogs](#checking-the-catalogs)
 - [Reloading the app on a change](#reloading-the-app-on-a-change)
 - [Web backend](#web-backend)
+  - [How the web differs from a window](#how-the-web-differs-from-a-window)
+  - [Serve the app to other users](#serve-the-app-to-other-users)
 
 ## Core concepts
 
@@ -462,7 +464,8 @@ browser gets its own copy of it.
 - **In development,** `--reload` runs the changed code each time that you save a Python
   file. See [Reloading the app on a change](#reloading-the-app-on-a-change).
 - **On the web,** each browser gets its own session, and the server protects the pages from
-  other sites. Read [Web backend](#web-backend) before you serve the app to other users.
+  other sites. Read [Serve the app to other users](#serve-the-app-to-other-users) before
+  other people use the app.
 
 ## Widgets
 
@@ -1995,30 +1998,10 @@ the scripts of charts and calendars. So the app also works offline.
 For a fuller example, see [`src/examples/webhello.py`](../src/examples/webhello.py)
 (`uv run python -m examples.webhello`), and `pipeform.py` with `--backend web`.
 
-How it differs from a desktop window:
+### How the web differs from a window
 
 - **One app state per browser.** A signed session cookie gives each browser its own main
-  view. The tabs of one browser share it. Sessions live in the server's memory: a restart
-  starts them all over. The server drops a session after an hour without use
-  (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
-  full, a new browser gets an error (503) until a session ends, and the open sessions keep
-  working.
-- **Only the app's own pages change a session.** The server refuses a POST from another
-  origin (403), as protection against cross-site request forgery. Another origin includes
-  another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
-  `Origin`, or `Referer` header. A request without any of them is refused. Behind a reverse
-  proxy, keep these headers and the `Host` header as the browser sent them.
-- **No page of the app shows in a frame,** not even in a frame of the app's own site. This
-  stops another site from showing the app in a hidden frame to get the user's clicks
-  (clickjacking). Every response sends `frame-ancestors 'none'` in its
-  `Content-Security-Policy`, and `X-Frame-Options: DENY`.
-- **The page runs only the app's own script files.** The same `Content-Security-Policy`
-  refuses inline scripts and code that htmx would evaluate. If a text ever got past the
-  escaping, the browser would not run it. The page loads scripts, styles, and images only
-  from the app. It allows inline `style` attributes, which run no code.
-- **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
-  browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
-  addresses of the app are not sent to other sites.
+  view. The tabs of one browser share it.
 - **Each session wires its own views.** Connect the signals in the views'
   `__attrs_post_init__`, as the quickstart does: each session builds its views, so each gets
   its connections. Two other places also run once per session:
@@ -2035,8 +2018,7 @@ How it differs from a desktop window:
 - **Save and Open** download the state as a file and upload a file. The File menu is in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves), because browsers keep the
   Ctrl shortcuts for themselves. An uploaded file can be at most 5 MB, and the status bar
-  says when a file is too large. The server refuses a request body larger than 6 MB (413)
-  before it reads it.
+  says when a file is too large.
 - **`--reload` restarts the server when a Python file under the current directory
   changes.** Use it for development. The new server process runs the program again (the
   script, or the `-m` module) with the same command line, to build its app again. The
@@ -2055,7 +2037,36 @@ How it differs from a desktop window:
   path that Qt reads). The backend serves them. An SVG icon is drawn in the color of the
   text, so it follows the light and dark themes: only its shape counts, as with a Lucide or
   Material icon. PNG, JPEG, GIF, WebP, and ICO files show as they are.
-- **Single process only, and no push from the server.** The page changes in response to the
-  user's own actions, with two exceptions. A status bar message clears itself after its
-  timeout. While [jobs](#running-work-in-threads) run, the page asks every second for the
-  changes from their results.
+- **No push from the server.** The page changes in response to the user's own actions,
+  with two exceptions. A status bar message clears itself after its timeout. While
+  [jobs](#running-work-in-threads) run, the page asks every second for the changes from
+  their results.
+
+### Serve the app to other users
+
+Read this section before other people use the app, on a network or behind a reverse proxy.
+
+- **Single process only.** The sessions live in the memory of one server process. A restart
+  starts them all over.
+- **Sessions have limits.** The server drops a session after an hour without use
+  (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
+  full, a new browser gets an error (503) until a session ends, and the open sessions keep
+  working.
+- **Requests have a size limit.** The server refuses a request body larger than 6 MB (413)
+  before it reads it.
+- **Only the app's own pages change a session.** The server refuses a POST from another
+  origin (403), as protection against cross-site request forgery. Another origin includes
+  another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
+  `Origin`, or `Referer` header. A request without any of them is refused. Behind a reverse
+  proxy, keep these headers and the `Host` header as the browser sent them.
+- **No page of the app shows in a frame,** not even in a frame of the app's own site. This
+  stops another site from showing the app in a hidden frame to get the user's clicks
+  (clickjacking). Every response sends `frame-ancestors 'none'` in its
+  `Content-Security-Policy`, and `X-Frame-Options: DENY`.
+- **The page runs only the app's own script files.** The same `Content-Security-Policy`
+  refuses inline scripts and code that htmx would evaluate. If a text ever got past the
+  escaping, the browser would not run it. The page loads scripts, styles, and images only
+  from the app. It allows inline `style` attributes, which run no code.
+- **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
+  browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
+  addresses of the app are not sent to other sites.
