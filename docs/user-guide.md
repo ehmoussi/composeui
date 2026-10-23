@@ -1972,10 +1972,14 @@ How it differs from a desktop window:
 - **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
   browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
   addresses of the app are not sent to other sites.
-- **Wire behavior inside the views,** as in the quickstart, with `app.connect`, or in
-  `WebApplication.setup_session`. `setup_session` runs for the main view of each new session.
-  The app replays `app.connect(view=app.main_view...)` on every new session. The callback
-  gets the `view` and `main_view` of that session, never the template that no browser shows.
+- **Each session wires its own views.** Connect the signals in the views'
+  `__attrs_post_init__`, as the quickstart does: each session builds its views, so each gets
+  its connections. Two other places also run once per session:
+  - `app.connect(view=..., signals=[...])` records a connection on `app.main_view`, a
+    template that no browser shows. The app replays it on the main view of every new
+    session, and the callback gets the `view` and `main_view` of that session.
+  - `WebApplication.setup_session(main_view)` runs for the main view of each new session.
+    Override it in a subclass.
 - **Models are per session too.** `run(..., build_model=..., setup_model=...)` builds one
   model per session. `WebModelApplication` takes the same arguments. `setup_model` wires the
   model to its main view, and callbacks that ask for `model` get the model of their session.
