@@ -118,6 +118,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.
+- `make test` fails below the coverage floor (`fail_under` in `pyproject.toml`, lines and
+  branches, child processes included). Raise it when tests close gaps; the goal is 100.
 - `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`, and the tests
   on Windows (`.\make.ps1 translations test`, Python 3.9 and 3.14). A change of
