@@ -38,6 +38,7 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
   - [Slider](#slider)
   - [Progress bar](#progress-bar)
   - [Metric](#metric)
+  - [Log message](#log-message)
   - [Expander](#expander)
   - [Tree](#tree)
   - [Markdown](#markdown)
@@ -534,6 +535,26 @@ It shows its `label` and its `value` in large type. A badge shows the change sin
 point: `delta` is the change, and `delta_text` says the point, for example "since
 yesterday". The sign of the change sets the color of the badge. To show a row of metrics,
 put them in a `HorizontalView`.
+
+### Log message
+
+A `LogView` shows a message to the user in the page, for example the error of an import.
+Set its `log_message`, and its `log_type` (`LogType`: `ERROR`, the default, `WARNING`, or
+`INFO`):
+
+```python
+from composeui.core.view import LogType
+
+main_view.import_log.log_message = "The file has no column named radius."
+main_view.import_log.log_type = LogType.WARNING
+```
+
+The view hides while `log_message` is empty. An error shows in red and a warning in
+orange. A [check of a row](#check-a-form) writes the same two fields of the row, and the
+row shows its message under its field.
+
+Qt shows a `QLabel`, Textual a `Label`, and the web a paragraph that screen readers read
+when it changes (`aria-live="polite"`).
 
 ### Expander
 
