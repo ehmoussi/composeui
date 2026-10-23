@@ -31,6 +31,7 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
 - [Saving and loading state](#saving-and-loading-state)
 - [Backends](#backends)
 - [Widgets](#widgets)
+  - [Label](#label)
   - [Buttons](#buttons)
   - [Help on a form row](#help-on-a-form-row)
   - [Integer input](#integer-input)
@@ -288,7 +289,7 @@ Each field has its row views too, for example `RowFloatInputView` and
   `editing_finished` when the user is done with the field, for example on Enter.
 - **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
   is `None` or one of `values`. `value_changed` reports the user's choice.
-- **A `LabelView`** shows a line of read-only text, for example a result.
+- **A [`LabelView`](#label)** shows a line of read-only text, for example a result.
 - **The [status bar](#the-status-bar)** of the main view shows a short message, for
   example the result of a form.
 
@@ -465,11 +466,41 @@ browser gets its own copy of it.
 
 ## Widgets
 
+This section covers the small views: a label, a button, the inputs that need more than the
+[table of fields](#forms-and-their-fields), and the views that show a result. The larger
+views have sections of their own: [tables](#a-table-of-records), [charts](#charts),
+[dialogs](#dialogs), and the views that organize the window, from [pages](#pages) to the
+[sidebar](#sidebar). The [widget catalog](widgets.md) lists every view.
+
+### Label
+
+A `LabelView` shows a line of read-only `text`, for example a caption or a result. Code sets
+the text. The user can't edit it.
+
+```python
+from composeui.core.view import LabelView, child
+
+summary: LabelView = child(LabelView, text="No pipe yet")
+```
+
+Qt shows a `QLabel`, Textual a `Label`, and the web a line of text. For several lines with
+headings and links, use a [Markdown view](#markdown).
+
 ### Buttons
 
 A `ButtonView` is a button that the user clicks (`clicked`), for example under a form to
-submit it. Its `variant` (`ButtonVariant`: primary, secondary, danger) tells the main
-action from the other actions, and from an action that destroys something.
+submit it. `text` names it.
+
+Its `variant` (`ButtonVariant`) tells the actions apart:
+
+- **`PRIMARY`,** the default, is the main action of the page, for example to submit its form.
+- **`SECONDARY`** is an action beside the main one.
+- **`DANGER`** is an action that destroys something, for example to remove rows.
+
+In a [`HorizontalView`](#lay-out-views), a button keeps the width of its text.
+
+Qt shows a `QPushButton`: a primary button is the default button, and a danger button has
+red text. Textual and the web color the button by its variant.
 
 ### Help on a form row
 
