@@ -310,6 +310,10 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
             {
                 "is_visible": self._refresh_button_visible,
                 "is_enabled": self._refresh_button_enabled,
+                "shortcut": self._refresh_shortcut,
+                # nothing shows them: a toolbar button shows its text, the app reads data
+                "icon": self._noop,
+                "data": self._noop,
             }
         )
         if isinstance(view, PickFileAction):
@@ -335,6 +339,14 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
             return
         label = _action_label(**state)
         _call_on_app_thread(self.app, functools.partial(self.app.refresh_action, view, label))
+
+    def _refresh_shortcut(
+        self, view: ActionView, _rendered_object: ActionView, value: str | None
+    ) -> None:
+        if self.app is None:
+            return  # not running yet: `_register_actions` binds the shortcut set by then
+        app, previous = self.app, view.shortcut  # called before the view stores `value`
+        _call_on_app_thread(app, functools.partial(app.rebind_action, view, previous, value))
 
     def _refresh_button_visible(
         self, _view: ActionView, _rendered_object: ActionView, value: bool
@@ -2758,18 +2770,10 @@ def _register_actions(app: _ComposeUIApp, root: View) -> None:
     views: deque[View] = deque([root])
     while views:
         current = views.popleft()
-        if isinstance(current, ActionView) and current.shortcut is not None:
-            action_id = str(id(current))
-            app.registered_actions[action_id] = current
-            app.bind(
-                _to_textual_key(current.shortcut),
-                f"trigger({action_id!r})",
-                description=_action_label(
-                    text=current.text,
-                    is_checkable=current.is_checkable,
-                    is_checked=current.is_checked,
-                ),
-            )
+        if isinstance(current, ActionView):
+            if current.shortcut is not None:
+                app.bind_action(current, current.shortcut)
+            # every action, a shortcut set later binding it then
             if isinstance(current.renderer, TextualActionRenderer):
                 current.renderer.app = app
         views.extend(current.children_views)
@@ -2812,6 +2816,35 @@ class _ComposeUIApp(App[None]):
             self.run_worker(action_view.triggered.emit, thread=True)
         else:
             action_view.triggered.emit()
+
+    def bind_action(self, action_view: ActionView, shortcut: str) -> None:
+        """Bind `shortcut` to an action, its text shown in the footer."""
+        action_id = str(id(action_view))
+        self.registered_actions[action_id] = action_view
+        self.bind(
+            _to_textual_key(shortcut),
+            f"trigger({action_id!r})",
+            description=_action_label(
+                text=action_view.text,
+                is_checkable=action_view.is_checkable,
+                is_checked=action_view.is_checked,
+            ),
+        )
+
+    def rebind_action(
+        self, action_view: ActionView, previous: str | None, shortcut: str | None
+    ) -> None:
+        """Bind an action to `shortcut` instead of `previous`; `None` for no key."""
+        if previous is not None:
+            key = _to_textual_key(previous)
+            action = f"trigger({str(id(action_view))!r})"
+            bindings = self._bindings.key_to_bindings.get(key, [])
+            bindings[:] = [binding for binding in bindings if binding.action != action]
+            if not bindings:
+                self._bindings.key_to_bindings.pop(key, None)
+        if shortcut is not None:
+            self.bind_action(action_view, shortcut)
+        self.refresh_bindings()
 
     def refresh_action(self, action_view: ActionView, label: str) -> None:
         """Show `label` as an action's description in the footer."""
