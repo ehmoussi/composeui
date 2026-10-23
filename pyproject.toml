@@ -102,6 +102,12 @@ branch = true
 # the reload tests run the apps in child processes
 patch = ["subprocess"]
 
+[tool.coverage.report]
+# the floor for now: raised as gaps close, until 100
+fail_under = 93
+# lines that never run in a test
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
 [tool.ruff]
 line-length = 100
 

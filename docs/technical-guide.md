@@ -427,6 +427,9 @@ Every behavior change needs a test in `tests/`.
   `tests/test_browser.py`, marked `browser`. These tests need the `browser` group and
   Chromium. Install Chromium once with `uv run --group browser playwright install chromium`,
   then run `make browser-test`.
+- `make test` fails when the coverage of lines and branches is below `fail_under` in
+  `pyproject.toml`. Raise `fail_under` when tests close gaps; the goal is 100. Coverage
+  also counts the child processes that the reload tests start.
 
 ### Translations
 
