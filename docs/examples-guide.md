@@ -59,7 +59,7 @@ run its tests.
 Read the examples in this order. Each one adds a few features to the ones before it:
 
 1. [Pipe form](#pipe-form): forms and their checks, pages, menus, and a translation. It
-   follows [Building views](user-guide.md#building-views) of the user guide.
+   follows [Building views](user-guide/building-views.md) of the user guide.
 2. [Markdown viewer](#markdown-viewer): a small app without studies, with a command-line
    option of its own.
 3. [Task view](#task-view): jobs in threads, with their progress.
@@ -94,16 +94,16 @@ On the web:
 
 It shows:
 
-- [forms](user-guide.md#forms-and-their-fields) with labelled rows: text, float inputs, a
-  checkbox, radio groups, and a combobox;
+- [forms](user-guide/building-views.md#forms-and-their-fields) with labelled rows: text, float
+  inputs, a checkbox, radio groups, and a combobox;
 - validation on a row, such as the name, and across rows, such as a main pipe that must
   fit the incident pipe;
-- three [pages](user-guide.md#pages): Inputs, Results (a read-only table of the
-  dimensions), and Help (a [Markdown](user-guide.md#markdown) page);
+- three [pages](user-guide/organizing-the-window.md#pages): Inputs, Results (a read-only table of
+  the dimensions), and Help (a [Markdown](user-guide/widgets.md#markdown) page);
 - a Pipe menu, whose Reset Dimensions asks for a
-  [confirmation](user-guide.md#dialogs) first;
+  [confirmation](user-guide/organizing-the-window.md#dialogs) first;
 - the File menu, which saves and loads the study as a `.pipe` file;
-- a [French translation](user-guide.md#translating-the-app) and a Language menu. To start in
+- a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
 
 ## Pipe catalogue
@@ -129,20 +129,20 @@ On the web:
 
 It shows:
 
-- a [SQLite model](user-guide.md#a-sqlite-model): the pipes are rows of the model's
-  database, not view state. The database checks every pipe added or changed: a name,
-  positive dimensions, and a wall thinner than the radius. A SQL view computes the mass of
-  each pipe from its material.
-- a [sidebar](user-guide.md#sidebar) with a form that adds a pipe;
-- a [list of views](user-guide.md#a-list-of-views): an [expander](user-guide.md#expander)
-  per pipe, with its Edit and Delete buttons. A query filters the list by material, radius,
-  and installation date.
-- a [tree](user-guide.md#tree) of the pipes by material, beside the list, in
-  [resizable panes](user-guide.md#resizable-panes). The materials are bold. A pipe has a
-  done mark when its installation date is known, and a warning mark until then. When the
+- a [SQLite model](user-guide/sqlite-model.md): the pipes are rows of the
+  model's database, not view state. The database checks every pipe added or changed: a name,
+  positive dimensions, and a wall thinner than the radius. A SQL view computes the mass of each pipe
+  from its material.
+- a [sidebar](user-guide/organizing-the-window.md#sidebar) with a form that adds a pipe;
+- a [list of views](user-guide/organizing-the-window.md#a-list-of-views): an
+  [expander](user-guide/widgets.md#expander) per pipe, with its Edit and Delete buttons. A query
+  filters the list by material, radius, and installation date.
+- a [tree](user-guide/widgets.md#tree) of the pipes by material, beside the list, in
+  [resizable panes](user-guide/organizing-the-window.md#resizable-panes). The materials are bold. A
+  pipe has a done mark when its installation date is known, and a warning mark until then. When the
   user selects a pipe in the tree, its expander expands.
-- a [form dialog](user-guide.md#form-dialogs) that edits a pipe;
-- a [date input](user-guide.md#date-input) for the installation date of a pipe;
+- a [form dialog](user-guide/organizing-the-window.md#form-dialogs) that edits a pipe;
+- a [date input](user-guide/widgets.md#date-input) for the installation date of a pipe;
 - studies saved as a `.pipes` file with the views and the database. A study saved before
   pipes had an installation date gets the column, empty, when it opens, through a
   migration (`PipeCatalogueModel.migrations`).
@@ -170,17 +170,17 @@ On the web:
 
 It shows:
 
-- a [line chart](user-guide.md#charts): each click on Add Curve plots one curve for the
+- a [line chart](user-guide/charts.md): each click on Add Curve plots one curve for the
   diameter in the form, with its own flow rates;
 - a gap in a curve: between laminar and turbulent flow neither law holds, so the curve
   leaves a gap there (a NaN);
-- [scatter series](user-guide.md#kinds-of-chart): Add Measurements plots, as dots over the
+- [scatter series](user-guide/charts.md#kinds-of-chart): Add Measurements plots, as dots over the
   curves, what a test rig measured on that pipe;
-- a [reference line](user-guide.md#reference-lines) at the pressure of the pump;
-- [tabs](user-guide.md#tabs): the chart on one tab, and the measurements in a
-  [table of records](user-guide.md#a-table-of-records) on the Measurements tab, each
-  against the computed drop;
-- [how cells and headers look](user-guide.md#how-cells-and-headers-look) on the
+- a [reference line](user-guide/charts.md#reference-lines) at the pressure of the pump;
+- [tabs](user-guide/organizing-the-window.md#tabs): the chart on one tab, and the measurements in a
+  [table of records](user-guide/tables.md#a-table-of-records) on the Measurements tab,
+  each against the computed drop;
+- [how cells and headers look](user-guide/tables.md#how-cells-and-headers-look) on the
   Measurements tab:
   - the pipe's cell spans the rows of its measurements;
   - "Pressure Drop (kPa)" is a header over "Measured" and "Computed";
@@ -189,9 +189,9 @@ It shows:
   - the Kept check box of a NaN row is disabled: that measurement can't be compared with
     the model;
   - a summary under the table shows the measurements kept, with a header before each row;
-- [widgets in cells](user-guide.md#widgets-in-cells): the Curves tab lists every curve.
-  A check box shows or hides the curve, and the box in the header shows or hides them all.
-  A combobox draws the curve as a line, in steps, or as dots.
+- [widgets in cells](user-guide/tables.md#widgets-in-cells): the Curves tab lists every
+  curve. A check box shows or hides the curve, and the box in the header shows or hides them all. A
+  combobox draws the curve as a line, in steps, or as dots.
 
 ## Pipe sweep
 
@@ -216,18 +216,18 @@ On the web:
 
 It shows:
 
-- a [job](user-guide.md#running-work-in-threads) that works in a thread, one radius at a
-  time, and [writes each run](user-guide.md#a-sqlite-model) to the model's database when
-  the run is done. The job never touches a view. The `changed` signal of each write is
-  emitted on the main thread, where the views show the runs written so far. Cancel stops
+- a [job](user-guide/threads.md) that works in a thread, one
+  radius at a time, and [writes each run](user-guide/sqlite-model.md) to the
+  model's database when the run is done. The job never touches a view. The `changed` signal of each
+  write is emitted on the main thread, where the views show the runs written so far. Cancel stops
   the sweep after the current run.
 - a form that checks the sweep before it starts, such as a wall thinner than the minimum
   radius;
-- a [progress bar](user-guide.md#progress-bar) of the runs written, and two
-  [tabs](user-guide.md#tabs): a [line chart](user-guide.md#charts) of the runs, and a table
-  of them;
+- a [progress bar](user-guide/widgets.md#progress-bar) of the runs written, and two
+  [tabs](user-guide/organizing-the-window.md#tabs): a [line chart](user-guide/charts.md) of the
+  runs, and a table of them;
 - the File menu, which saves and opens the runs with the views as a `.sweep` file;
-- a [French translation](user-guide.md#translating-the-app) and a Language menu. To start in
+- a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
 
 ## Task view
@@ -252,21 +252,21 @@ On the web:
 
 It shows:
 
-- [jobs](user-guide.md#running-work-in-threads): each task is a function that runs in a
-  thread and never touches a view. Its job emits the status of the task on the main thread,
-  where the views show it. A button cancels the jobs.
-- a configuration form with an [integer input](user-guide.md#integer-input) and a
-  [slider](user-guide.md#slider);
-- a [progress bar](user-guide.md#progress-bar) of the tasks done;
-- [metrics](user-guide.md#metric) that count the tasks. Once a run is over, they show how
+- [jobs](user-guide/threads.md): each task is a function that
+  runs in a thread and never touches a view. Its job emits the status of the task on the main
+  thread, where the views show it. A button cancels the jobs.
+- a configuration form with an [integer input](user-guide/widgets.md#integer-input) and a
+  [slider](user-guide/widgets.md#slider);
+- a [progress bar](user-guide/widgets.md#progress-bar) of the tasks done;
+- [metrics](user-guide/widgets.md#metric) that count the tasks. Once a run is over, they show how
   each count changed since the last run.
-- a [step chart](user-guide.md#colors-fill-steps-and-height) of the tasks running over the
+- a [step chart](user-guide/charts.md#colors-fill-steps-and-height) of the tasks running over the
   time of the run;
-- an [expander](user-guide.md#expander) with the table of the tasks, which collapses to
+- an [expander](user-guide/widgets.md#expander) with the table of the tasks, which collapses to
   leave only the metrics and the chart;
-- [widgets in cells](user-guide.md#widgets-in-cells): the Retry button of a task runs it
-  again. The error of a failed task is a link that opens a dialog with its details.
-- a [French translation](user-guide.md#translating-the-app) and a Language menu.
+- [widgets in cells](user-guide/tables.md#widgets-in-cells): the Retry button of a task
+  runs it again. The error of a failed task is a link that opens a dialog with its details.
+- a [French translation](user-guide/translation.md) and a Language menu.
 
 ## Large table
 
@@ -292,24 +292,25 @@ On the web:
 
 It shows:
 
-- a [large table](user-guide.md#a-large-table): a `DataTableView` on a
-  [`SqliteSource`](user-guide.md#rows-in-sqlite) of the readings. SQLite sorts and filters
-  them, indexed by the columns that sort; each backend draws the rows on screen alone,
-  and reads them as the user scrolls. Python keeps the shown rows' ids, never the readings.
-- a [job](user-guide.md#running-work-in-threads) writing the readings into the
-  [SQLite model](user-guide.md#a-sqlite-model), a batch at a time: the window shows at
-  once, and the table fills once they are written.
-- a sort by a click on a header, and the table's [filter bar](user-guide.md#sorting-and-filtering):
-  a search in the text columns, and a filter on any column. On Qt and Textual, a job
-  orders the rows, the window staying responsive. The label says how many rows pass and
-  how long SQLite took to order them, once the table's `ordered` emits.
+- a [large table](user-guide/tables.md#a-large-table): a `DataTableView` on a
+  [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) of the readings. SQLite sorts and
+  filters them, indexed by the columns that sort; each backend draws the rows on screen alone, and
+  reads them as the user scrolls. Python keeps the shown rows' ids, never the readings.
+- a [job](user-guide/threads.md) writing the readings into the
+  [SQLite model](user-guide/sqlite-model.md), a batch at a time: the window
+  shows at once, and the table fills once they are written.
+- a sort by a click on a header, and the table's
+  [filter bar](user-guide/tables.md#sorting-and-filtering): a search in the text columns,
+  and a filter on any column. On Qt and Textual, a job orders the rows, the window staying
+  responsive. The label says how many rows pass and how long SQLite took to order them, once the
+  table's `ordered` emits.
 - a selection of several rows: the label under the table counts them, and shows the
   reading that a double click or Enter activates (on Qt and Textual). Ctrl+C copies them,
   to paste in a spreadsheet.
 - an export of the rows shown to a CSV file: a job writes it on Qt and Textual, and the
   status bar says when it's done; the web downloads it.
-- an [option of the app's own](user-guide.md#command-line-options-of-your-own): `--rows`,
-  the readings to make up (1,000,000 by default).
+- an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):
+  `--rows`, the readings to make up (1,000,000 by default).
 - a study that saves the readings with the model, and the table's settings with the views.
   Opened with `-f`, it shows its own readings: none are made up.
 
@@ -335,9 +336,9 @@ On the web:
 
 It shows:
 
-- [series colors and fills](user-guide.md#colors-fill-steps-and-height): a yellow oval and
+- [series colors and fills](user-guide/charts.md#colors-fill-steps-and-height): a yellow oval and
   the edges of the bat in black, each series in the color of the logo, whatever the theme;
-- [clicks on a chart](user-guide.md#clicks-on-a-chart): `clicked` emits the point, and the
+- [clicks on a chart](user-guide/charts.md#clicks-on-a-chart): `clicked` emits the point, and the
   view says whether it is on the bat. Textual draws the logo too, but a terminal has no
   pointer to click it with.
 
@@ -363,10 +364,10 @@ On the web:
 
 It shows:
 
-- a [Markdown view](user-guide.md#markdown);
-- an [option of the app's own](user-guide.md#command-line-options-of-your-own):
+- a [Markdown view](user-guide/widgets.md#markdown);
+- an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):
   `--markdown`, beside the options of the backend;
-- a [file path input](user-guide.md#file-path-input) at the top: the user types the path of
+- a [file path input](user-guide/widgets.md#file-path-input) at the top: the user types the path of
   a file, or picks the file with the "…" button. On the web, the browser uploads it. The
   reload button reads the file again, for example after the user edits it.
 - an app without studies: `has_file_menu = False` leaves out the File menu.
@@ -374,7 +375,7 @@ It shows:
 ## Web hello
 
 [`webhello.py`](../src/examples/webhello.py) is a small form on the
-[web backend](user-guide.md#web-backend) only.
+[web backend](user-guide/running-the-app.md#web-backend) only.
 
 ```bash
 uv run python -m examples.webhello

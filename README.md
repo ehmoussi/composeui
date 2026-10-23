@@ -5,11 +5,11 @@
   </picture>
 </h1>
 
-A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as
-typed [`attrs`](https://www.attrs.org/) classes. They hold the state of the UI, but no
-toolkit code: in MVVM terms, they are the view-models
-([how ComposeUI maps to MVVM](docs/user-guide.md#how-composeui-maps-to-mvvm)). A `Renderer`
-binds each view to a toolkit widget, which plays the View role of MVVM:
+A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as typed
+[`attrs`](https://www.attrs.org/) classes. They hold the state of the UI, but no toolkit code: in
+MVVM terms, they are the view-models
+([how ComposeUI maps to MVVM](docs/user-guide/core-concepts.md#how-composeui-maps-to-mvvm)). A
+`Renderer` binds each view to a toolkit widget, which plays the View role of MVVM:
 
 - a desktop window with [Qt](https://pypi.org/project/QtPy/), through `qtpy`;
 - a terminal with [Textual](https://textual.textualize.io/);
@@ -113,10 +113,10 @@ that you choose, and leaves the rest of the command line to the app (`--help` li
 
 ### Next steps
 
-1. Read the [core concepts](docs/user-guide.md#core-concepts) of the user guide: views,
+1. Read the [core concepts](docs/user-guide/core-concepts.md) of the user guide: views,
    signals, the model, and studies.
 2. Build a form with its layout and its checks, in
-   [Building views](docs/user-guide.md#building-views).
+   [Building views](docs/user-guide/building-views.md).
 3. Run the example apps, in the order of the
    [examples guide](docs/examples-guide.md#where-to-start). The first,
    [`src/examples/pipeform.py`](src/examples/pipeform.py), has forms, radio groups, a check
