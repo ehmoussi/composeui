@@ -211,6 +211,10 @@ signals emitted on the main thread (`examples/pipesweep.py`).
   it once the script passes about 2000 lines (958 today) or several people edit it: it
   brings Node into CI, and it can't check the `data-*` attributes and custom events it
   shares with `webrenderer.py`, which the browser tests cover.
+- **Web: raw HTML in Markdown.** The web shows raw HTML in a `MarkdownView` as text
+  (`{"html": False}`), so a help page can't use `<details>` or `<kbd>`. To allow it, clean
+  markdown-it's output with `nh3` (add it to the `web` extra) and an allowlist of tags. Not
+  needed today: no view shows HTML that it doesn't escape.
 
 - **Textual: reload in place.** Its `--reload` runs the app again in a new process on
   every change. Run `rerun_program` in the Textual app instead, as `qtcore` does, and

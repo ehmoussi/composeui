@@ -114,7 +114,10 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
    pass every value to `.format(...)`, which escapes it, attributes included. Return
    `Markup` from a function returning HTML, `Markup()` for nothing, and join parts with
    `Markup("").join`. Never wrap a text in `Markup(...)` yourself: only markup that is
-   already safe, such as Markdown's. Keep Markdown's raw HTML off. Don't build a request's URL or method in the page's script
+   already safe, such as Markdown's. Keep Markdown's raw HTML off. If a feature must show
+   HTML that a user or the model can set (raw HTML in Markdown, an HTML view), ask the user
+   first, then clean it with `nh3.clean` and an allowlist of tags and attributes before you
+   mark it safe. Don't build a request's URL or method in the page's script
    from attacker-controllable input (`location`, `window.name`, `document.referrer`,
    `postMessage`): that is client-side CSRF, which no server check stops.
 7. **Don't weaken the cookie.** Keep `same_site="lax"` (or stricter), signed, and with no
