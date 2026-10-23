@@ -1742,6 +1742,13 @@ def test_each_browser_gets_its_own_main_view(app: _HelloApp) -> None:
         assert 'value="Alice"' not in bob.get("/").text
 
 
+def test_app_connect_refuses_a_view_outside_the_main_view(app: _HelloApp) -> None:
+    name = NameRowView()  # e.g. built by the program, never put in the main view
+
+    with pytest.raises(ValueError, match="isn't part of the app's main view"):
+        app.connect(view=name, signals=[name.text_edited])
+
+
 def test_app_connect_reacts_in_each_browser_on_its_own_views(app: _HelloApp) -> None:
     name = app.main_view.form.name
 
@@ -2262,6 +2269,89 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     assert [len(names) for names in saved] == [1]
 
 
+#: a program serving the hello app, as a script: `python hello.py --reload`
+_HELLO_SCRIPT = """
+from composeui.webcore.webapplication import WebApplication
+from examples.webhello import HelloMainView
+
+WebApplication(build_main_view=HelloMainView).run()
+"""
+
+
+def _restore_reload_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restore, after the test, the variables `run` sets for the reloaded process."""
+    for variable in (
+        "COMPOSEUI_WEB_ENTRY",
+        "COMPOSEUI_WEB_SAVED_SESSIONS",
+        "COMPOSEUI_WEB_COOKIE_SIGNING",
+        "WATCHFILES_FORCE_POLLING",
+    ):
+        monkeypatch.setenv(variable, "")
+
+
+def test_reload_serves_the_app_a_script_builds_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "hello.py"
+    script.write_text(_HELLO_SCRIPT)
+    program = types.ModuleType("__main__")
+    program.__file__ = str(script)  # and no `__spec__`, as for a script
+    monkeypatch.setitem(sys.modules, "__main__", program)
+    monkeypatch.setattr("sys.argv", ["hello", "--reload"])
+    _restore_reload_variables(monkeypatch)
+    pages: list[str] = []
+
+    def serve(app: str, **_: Any) -> None:
+        # what uvicorn's reloaded process does with it, without spawning one
+        with _Browser(import_from_string(app)()) as client:
+            pages.append(client.get("/").text)
+
+    monkeypatch.setattr("composeui.webcore.webapplication.uvicorn.run", serve)
+
+    WebApplication(build_main_view=HelloMainView).run()
+
+    (page,) = pages
+    assert 'id="cui-reload"' in page
+
+
+def test_reload_refuses_a_program_it_can_t_run_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    # e.g. `python -c`: neither a module nor a script
+    monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))
+    monkeypatch.setattr("sys.argv", ["hello", "--reload"])
+    _restore_reload_variables(monkeypatch)
+    served: list[str] = []
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run", lambda app, **_: served.append(app)
+    )
+
+    with pytest.raises(ValueError, match="start it as a script or with -m"):
+        WebApplication(build_main_view=HelloMainView).run()
+    assert served == []
+
+
+@pytest.mark.parametrize(
+    ("entry", "error"),
+    [
+        # renamed while the server restarts
+        ("module:examples.no_such_example", "can't find examples.no_such_example"),
+        # e.g. its `run` call moved under a condition it no longer meets
+        ("path:{script}", "didn't run a WebApplication"),
+    ],
+)
+def test_a_reloaded_process_fails_on_a_program_without_an_app(
+    entry: str, error: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "hello.py"
+    script.write_text("from examples.webhello import HelloMainView\n")
+    monkeypatch.setitem(sys.modules, "__main__", sys.modules["__main__"])
+    _restore_reload_variables(monkeypatch)
+    monkeypatch.setenv("COMPOSEUI_WEB_ENTRY", entry.format(script=script))
+    factory = import_from_string("composeui.webcore.webapplication:create_reloaded_starlette_app")
+
+    with pytest.raises(RuntimeError, match=error):
+        factory()
+
+
 def _reload_instance(page: str) -> str:
     """Get the server process a page names in its reload poller."""
     found = re.search(r'id="cui-reload" hx-get="/reload\?instance=([^"]+)"', page)
@@ -2319,10 +2409,12 @@ def test_a_reload_server_logs_its_pages_asks_only_once_it_restarted(
             ("/widget/1", 204),
         ]:
             access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", "GET", path, "1.1", status)
+        access.info("not a request")  # e.g. a handler of the program's own
 
     assert [record.getMessage() for record in caplog.records] == [
         '127.0.0.1:50000 - "GET /reload?instance=any HTTP/1.1" 200',
         '127.0.0.1:50000 - "GET /widget/1 HTTP/1.1" 204',
+        "not a request",
     ]
 
 
