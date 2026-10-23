@@ -876,6 +876,11 @@ A `FormDialogView` holds a form with OK and Cancel, for example to edit a record
 Edit button. A subclass gives its form as its `form` field. Its `text` shows above the form:
 
 ```python
+from attrs import Factory
+
+from composeui.core.view import FormDialogView, define_view
+
+
 @define_view
 class EditPipeDialog(FormDialogView):
     form: PipeForm = Factory(PipeForm)  # a FormView, with its checks
@@ -1179,7 +1184,7 @@ draws: the rows never all come to Python.
 
 ```python
 from composeui.core.sqlitemodel import SqliteSource
-from composeui.core.view import SourceColumn
+from composeui.core.view import SourceColumn, T
 
 main_view.readings.source = SqliteSource(
     model.readings,  # a SqliteTable: its connection, and its changed signal
@@ -1298,6 +1303,8 @@ per series. The x of a series names a category by its index, and its y is the he
 bar:
 
 ```python
+from composeui.core.view import ChartKind, ChartView, Series, child
+
 energy: ChartView = child(
     ChartView,
     kind=ChartKind.BAR,
@@ -1390,6 +1397,8 @@ whatever the backend, and needs no UI, for example in a batch run that writes th
 a report:
 
 ```python
+from pathlib import Path
+
 from composeui.core.chartimage import ImageOptions, chart_figure, save_chart_image
 
 save_chart_image(chart, Path("drop.pdf"), ImageOptions(width_mm=80, font_size=8))
@@ -1419,6 +1428,10 @@ thread. The function returns its result. The `finished` signal of its job emits 
 on the main thread, where the callbacks update the views:
 
 ```python
+from composeui.core.jobs import Job
+from composeui.core.view import MainView, define_view
+
+
 def simulate(job: Job[float], radius: float) -> float:  # in its thread
     for step in range(100):
         if job.is_canceled:
@@ -1617,6 +1630,11 @@ set the text through the `tr` of a view once the view is built. Point the main v
 directory of the catalogs:
 
 ```python
+from pathlib import Path
+
+from composeui.core.view import GroupFormView, MainView, T, child, define_view
+
+
 @define_view
 class PipeDimensionView(GroupFormView):
     # `child` builds a view field's view with these fields, one per view
