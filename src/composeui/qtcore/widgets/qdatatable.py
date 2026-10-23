@@ -17,7 +17,6 @@ from qtpy.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QHeaderView,
-    QLabel,
     QSizePolicy,
     QTableView,
     QToolButton,
@@ -26,6 +25,7 @@ from qtpy.QtWidgets import (
 )
 
 from composeui.qtcore.widgets.qfiltertable import QTableFilterBar
+from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QKeyEvent
@@ -201,7 +201,7 @@ class QDataFilterTable(QWidget):
         self.export = QToolButton()
         self.export.setDefaultAction(self.table.export_action)
         self.export.setAutoRaise(True)
-        self.empty = QLabel()
+        self.empty = plain_label()
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setVisible(False)
         layout = QVBoxLayout(self)

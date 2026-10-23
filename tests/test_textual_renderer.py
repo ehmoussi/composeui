@@ -23,7 +23,17 @@ from rich.style import Style
 from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
-from textual.widgets import Button, Checkbox, Footer, Input, Label, ProgressBar, TabPane
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Footer,
+    Input,
+    Label,
+    ProgressBar,
+    Static,
+    TabPane,
+)
+from textual.widgets._select import SelectCurrent
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 
@@ -110,6 +120,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
@@ -2821,3 +2832,45 @@ async def test_a_large_table_s_key_exports_its_rows_as_csv(tmp_path: Path) -> No
         "Bedroom,19.5,1",
         "Kitchen,21.5,2",
     ]
+
+
+def _widget(view: View) -> Widget:
+    assert isinstance(view.renderer, TextualWidgetRenderer)
+    assert view.renderer.widget is not None
+    return view.renderer.widget
+
+
+@pytest.mark.asyncio
+async def test_a_text_like_markup_shows_as_it_is() -> None:
+    """Textual reads a string as its markup: `[/]` would crash it, an action would run."""
+    view = MarkupMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(160, 60)) as pilot:
+        await pilot.pause()
+        note, run, keep = _widget(view.note), _widget(view.run), _widget(view.keep)
+        assert isinstance(run, Button)
+        assert isinstance(keep, Checkbox)
+        assert [str(note.render()), str(run.label), str(keep.label)] == [MARKUP] * 3
+        (current,) = _widget(view.size).query(SelectCurrent)
+        assert MARKUP in [str(static.render()) for static in current.query(Static)]
+        assert isinstance(view.form.name.renderer, RendererContainer)
+        label = view.form.name.renderer.get_renderer("label")
+        assert isinstance(label, TextualWidgetRenderer)
+        assert label.widget is not None
+        assert str(label.widget.render()) == f"{MARKUP}\n{MARKUP}"  # the label, its help
+        assert str(_widget(view.status_bar).render()) == MARKUP
+        box = _widget(view.notes)
+        assert isinstance(box, ComposeFilterTable)
+        (chip,) = box.bar.chips.query(ComposeFilterChip)
+        assert str(chip.open_button.label) == f"{MARKUP}: ={MARKUP} ✎"
+
+        view.warning.open()
+        await pilot.pause()
+        dialog = app.screen
+        assert isinstance(dialog, ComposeDialog)
+        title, text = dialog.title_label.render(), dialog.text_label.render()
+        assert [str(title), str(text)] == [MARKUP] * 2

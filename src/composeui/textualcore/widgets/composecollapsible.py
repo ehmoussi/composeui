@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from textual.content import Content
 from textual.widgets import Collapsible
 
 from composeui.core.signal import Signal
@@ -22,6 +23,10 @@ class ComposeCollapsible(Collapsible):
     def __init__(self, *children: Widget) -> None:
         super().__init__(*children)
         self.toggled: Signal[bool] = Signal()
+
+    def _watch_title(self, title: str) -> None:
+        # plain text: Textual's own reads the title as markup
+        self._title.label = Content(title)
 
     def set_expanded(self, is_expanded: bool) -> None:
         with self.prevent(Collapsible.Expanded, Collapsible.Collapsed):

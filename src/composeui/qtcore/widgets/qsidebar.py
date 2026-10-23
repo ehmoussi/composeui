@@ -7,7 +7,6 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtWidgets import (
     QDockWidget,
     QHBoxLayout,
-    QLabel,
     QMainWindow,
     QScrollArea,
     QStyle,
@@ -15,6 +14,8 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from composeui.qtcore.widgets.qplaintext import plain_label
 
 #: pixels a sidebar is wide at least while expanded, e.g. room for a form's fields
 _MINIMUM_WIDTH = 280
@@ -46,7 +47,7 @@ class QSidebar(QDockWidget):
         body_layout.setSpacing(0)
         self._header = QHBoxLayout()
         header = self._header
-        self.title = QLabel()
+        self.title = plain_label()
         font = self.title.font()
         font.setBold(True)
         self.title.setFont(font)

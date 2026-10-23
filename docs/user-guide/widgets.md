@@ -214,8 +214,8 @@ change.
 ## Markdown
 
 A `MarkdownView` shows read-only Markdown `text`, for example a help page or the summary of
-a report. Its links open in the browser. On the web, the view leaves out raw HTML, so the
-text can't inject markup.
+a report. Its links open in the browser. The view never reads raw HTML in the text as
+markup: Qt and the web show it as text, and Textual leaves out its tags.
 
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) has a help page.
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) shows a Markdown file

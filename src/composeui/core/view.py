@@ -1473,7 +1473,7 @@ class MarkdownMixin:
 class MarkdownView(MarkdownMixin, View):
     """Read-only Markdown text, for example a help page.
 
-    Its links open in the browser. On the web, the view leaves out raw HTML.
+    Its links open in the browser. Raw HTML in the text is never read as markup.
     """
 
     _renderer_key = "markdown"

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QDate, QEvent, QPoint, QPointF, QSize, Qt
-from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap
+from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap, QTextDocument
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -109,6 +109,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.sidebar import SidebarMainView
@@ -2838,3 +2839,49 @@ def test_a_large_table_s_button_exports_its_rows_as_csv(
         "Kitchen,21.5,2",
         "Bedroom,19.5,1",
     ]
+
+
+def _qt_widget(view: View) -> QWidget:
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    widget = view.renderer.qt_object
+    assert isinstance(widget, QWidget)
+    return widget
+
+
+def _shown_tool_tip(widget: QWidget) -> str:
+    """Get the text a tooltip shows: Qt reads one with a tag as HTML."""
+    document = QTextDocument()
+    document.setHtml(widget.toolTip())
+    return document.toPlainText()
+
+
+def test_a_text_like_html_shows_as_it_is(qtbot: QtBot) -> None:
+    """A label or a tooltip reads a text with a tag as HTML; a `<none>` there shows nothing."""
+    view = MarkupMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_qt_widget(view))
+
+    note = _qt_widget(view.note)
+    assert isinstance(note, QLabel)
+    assert note.textFormat() == Qt.TextFormat.PlainText
+    assert isinstance(view.form.name.renderer, RendererContainer)
+    label_renderer = view.form.name.renderer.get_renderer("label")
+    assert isinstance(label_renderer, QtWidgetRenderer)
+    label = label_renderer.qt_object
+    assert isinstance(label, QFormLabel)
+    assert label.text_label.textFormat() == Qt.TextFormat.PlainText
+    assert _shown_tool_tip(label.help_button) == MARKUP
+    assert view.form.name.help == MARKUP  # read back as set, not escaped
+    help_browser = _qt_widget(view.help)
+    assert isinstance(help_browser, QTextBrowser)
+    assert help_browser.toPlainText().strip() == MARKUP  # raw HTML is text, as on the web
+    box = _qt_widget(view.notes)
+    assert isinstance(box, QFilterTable)
+    (chip,) = box.bar.chips
+    assert _shown_tool_tip(chip.open_button) == f"Edit the filter on {MARKUP}"
+
+    view.warning.open()
+    dialog = _qt_widget(view.warning)
+    assert isinstance(dialog, QMessageBox)
+    assert dialog.textFormat() == Qt.TextFormat.PlainText
+    view.warning.reject()

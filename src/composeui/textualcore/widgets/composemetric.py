@@ -42,9 +42,9 @@ class ComposeMetric(Vertical):
 
     def __init__(self) -> None:
         super().__init__()
-        self.label = Label(classes="metric--label")
-        self.value = Label(classes="metric--value")
-        self.badge = Label(classes="metric--badge")
+        self.label = Label(classes="metric--label", markup=False)
+        self.value = Label(classes="metric--value", markup=False)
+        self.badge = Label(classes="metric--badge", markup=False)
         self.badge.display = False
 
     def compose(self) -> ComposeResult:

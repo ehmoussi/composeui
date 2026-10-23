@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from qtpy.QtCore import QPoint
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QToolButton, QToolTip, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QToolButton, QToolTip, QWidget
+
+from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 
 
 class QFormLabel(QWidget):
@@ -17,8 +19,9 @@ class QFormLabel(QWidget):
         super().__init__(*args, **kwargs)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.text_label = QLabel()
+        self.text_label = plain_label()
         layout.addWidget(self.text_label)
+        self._help = ""
         self.help_button = QToolButton()
         self.help_button.setText("?")
         self.help_button.setAutoRaise(True)
@@ -35,12 +38,13 @@ class QFormLabel(QWidget):
         self.text_label.setText(text)
 
     def help(self) -> str:
-        return self.help_button.toolTip()
+        return self._help
 
     def set_help(self, text: str) -> None:
         # on the whole label: hovering its text shows the help too
-        self.setToolTip(text)
-        self.help_button.setToolTip(text)
+        self._help = text
+        self.setToolTip(plain_tool_tip(text))
+        self.help_button.setToolTip(plain_tool_tip(text))
         self.help_button.setVisible(text != "")
 
     def set_help_button_text(self, text: str) -> None:
@@ -49,4 +53,4 @@ class QFormLabel(QWidget):
     def show_help(self) -> None:
         """Show the help under the button, as hovering it would."""
         below = self.help_button.mapToGlobal(QPoint(0, self.help_button.height()))
-        QToolTip.showText(below, self.help(), self.help_button)
+        QToolTip.showText(below, plain_tool_tip(self.help()), self.help_button)
