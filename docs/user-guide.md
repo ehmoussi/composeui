@@ -58,6 +58,8 @@ of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` clas
   - [Widgets in cells](#widgets-in-cells)
   - [How cells and headers look](#how-cells-and-headers-look)
 - [A large table](#a-large-table)
+  - [Order a large table](#order-a-large-table)
+  - [Cells, selection, copy, and export](#cells-selection-copy-and-export)
   - [Rows in SQLite](#rows-in-sqlite)
 - [A list of views](#a-list-of-views)
 - [Charts](#charts)
@@ -1212,14 +1214,18 @@ looks.
 
 ## A large table
 
-A `DataTableView` shows rows that a source keeps, such as a million results of a study.
-It never reads all of them: it reads the rows it shows, a window at a time. A
+A `DataTableView` shows the rows of a source, such as a million results of a study. It
+never reads all the rows. It reads only the rows that it shows, a window at a time. A
 `TableView` keeps every row as text, which suits a small table that the user edits.
 
 ```python
 from composeui.core.view import DataTableView, ListSource, T, child
 
-readings: DataTableView = child(DataTableView, column_formats={"temperature": ".2f"})
+readings: DataTableView = child(
+    DataTableView,
+    column_formats={"temperature": ".2f"},
+    filterable_columns=["sensor", "temperature"],
+)
 
 # once the app has the records
 main_view.readings.source = ListSource(
@@ -1227,75 +1233,109 @@ main_view.readings.source = ListSource(
 )
 ```
 
-- **The source** is a `TableSource`: its `columns`, `count` (its rows), `ordered_ids`
-  (the ids of the rows shown, in order), `cells` (the values of some rows) and a `changed`
-  signal. A `ListSource` keeps `attrs` records in memory, for rows the app has already. A
-  `SqliteSource` keeps them in SQLite (see [Rows in SQLite](#rows-in-sqlite)).
-- **The settings** name the source's columns: `sort_column`, `sort_descending`, `search`
-  (in the text columns) and `filters` (as typed, see "Sorting and filtering"). Each new
-  setting asks the source for the order once. The view keeps only the ids, in an `array`
-  when they are integers (8 bytes each). `ordered` emits once the rows have their new
-  order, e.g. to show `row_count` of `total` (the source's rows, before the search and
-  the filters). A new source drops the filters and the sort on columns it doesn't have.
-- **A source of 100,000 rows or more** (`DATA_TABLE_JOB_ROWS`) orders its rows in a
-  [job](#running-work-in-threads) on Qt and Textual, so the window stays responsive. The
-  table shows the old order meanwhile (`is_ordering`). A setting changed while the job
-  runs orders the rows once more when it's over. The job counts the rows too, when the
-  source changed. The web orders them in the request's own thread: the page never
-  freezes.
-- **The cells** show the values as `column_formats` says, e.g. `".2f"` or `".0%"`: an
-  empty cell for None, and an enum by its text.
-- **The selection** is by id: `selected_ids`, which a new order keeps on the rows it
-  still shows. A click on a row selects it: with `SelectionMode.MULTIPLE`, it adds the
-  row, or removes it if selected. `selection_changed` emits the ids, and a double click
-  emits the row's id with `row_activated`.
-- **Ctrl+C** copies the selected rows, in their order, as tab-separated text that a
-  spreadsheet takes: a line per row, the cells as shown, without the headers
-  (`selection_text`). The rows are read from the source a window at a time.
-- **Export CSV** writes the rows shown, in their order, to a CSV file in UTF-8: the
-  headers, then each value in full, not as `column_formats` shows it (`export_csv`). In
-  an app, a job writes the file, a window of rows at a time, and the status bar says when
-  it's done. A new order meanwhile doesn't change the file. `csv_chunks` gives the same
-  text in pieces. `export_filename` is the name offered for the file (`table.csv`).
+The source is a `TableSource`. Two sources come with ComposeUI:
 
-The study saves the settings and `selected_ids`, never the rows or the source: the app
-gives the view its source again, e.g. from its command line or its model.
+- **A `ListSource`** keeps `attrs` records in memory, for rows that the app has already.
+- **A `SqliteSource`** reads the rows from SQLite (see [Rows in SQLite](#rows-in-sqlite)).
+
+A source of your own gives:
+
+| Member | What it gives |
+| --- | --- |
+| `columns` | The columns of the rows |
+| `count` | The number of rows |
+| `ordered_ids` | The ids of the rows shown, in order |
+| `cells` | The values of some rows |
+| `changed` | A signal that the rows changed |
+
+When the app sets a new source, the view drops the sort and the filters on the columns that
+the new source doesn't have.
+
+### Order a large table
+
+These settings of the view name the columns of the source:
+
+- `sort_column` and `sort_descending` sort the rows.
+- `search` finds a text in the text columns.
+- `filters` hold the filters, written as the user types them (see
+  [Sorting and filtering](#sorting-and-filtering)).
 
 A click on a column's header sorts by it: ascending, descending, then in the source's
-order (`sort_by`). The source orders the rows once for each click.
+order. The app does the same with `sort_by(column)`.
 
-- **Qt** shows a `QTableView` whose model asks the view for the rows Qt draws. Each row
-  starts with its position. The header shows Qt's sort indicator. A selected row has the
-  highlight colors. Shift+click selects the rows from the one clicked last; Space
-  selects the current row, and Enter activates it. "Export CSV…", above the rows and in
-  their context menu, asks where to save the file. While a job orders the rows, the
-  cursor over them is busy.
-- **Textual** draws the headers on the first line, then the lines on screen alone. A
-  cursor marks a row: the arrow keys, Page Up, Page Down, Home and End move it. Space
-  selects its row, Shift+Space and Shift+click a range, and Enter or a double click
-  activates it. The sorted column's header ends with ▲ or ▼. The key `e` asks where to
-  export the rows as CSV. While a job orders the rows, Textual's loading indicator
-  covers them.
-- **The web** scrolls the rows in a frame, and draws only those around the view: once
-  the user stops scrolling, the page asks for the rows shown. Past 400,000 rows, the
-  scroll bar keeps the height of 400,000, and its position maps to a row by its ratio.
-  Each header is a button, with `aria-sort`: a sort scrolls back to the top. A click or
-  Enter on a row selects it (`aria-selected`, or `aria-current` for one row at most). The
-  web selects no range and activates no row. The "Export CSV" link above the frame
-  downloads the rows: the server streams them, a window at a time.
+Each new setting asks the source for the order once. The view keeps only the ids of the
+rows shown. Integer ids go in an `array`, at 8 bytes each. `ordered` emits once the rows
+have their new order. For example, its callback shows `row_count` of `total`. `total` is
+the number of the source's rows, before the search and the filters.
 
-Name the columns the user filters in `filterable_columns`, e.g.
-`child(DataTableView, filterable_columns=["sensor", "temperature"])`. The table then shows
-the filter bar of [Sorting and filtering](#sorting-and-filtering) above its rows: a search,
-"+ Filter", the filters as chips, and the count of the rows shown ("1,234 of 1,000,000").
-Without them, the app alone sets the search and the filters.
+A source of 100,000 rows or more (`DATA_TABLE_JOB_ROWS`) orders its rows in a
+[job](#running-work-in-threads) on Qt and Textual, so that the window stays responsive:
+
+- While the job runs, the table shows the previous order, and `is_ordering` is true.
+- A setting changed while the job runs orders the rows once more, when the job is over.
+- When the source changed, the job also counts its rows.
+
+The web orders the rows in the thread of the request. The page never freezes.
+
+`filterable_columns` names the columns that the user filters. The table then shows the
+filter bar of [Sorting and filtering](#sorting-and-filtering) above its rows. The bar has a
+search, "+ Filter", the filters as chips, and the count of the rows shown
+("1,234 of 1,000,000"). Without `filterable_columns`, only the app sets the search and the
+filters.
+
+### Cells, selection, copy, and export
+
+- **The cells** show the values in the format that `column_formats` gives, such as `".2f"`
+  or `".0%"`. A cell of `None` is empty. An enum shows its text.
+- **The selection** is a list of ids: `selected_ids`. A new order keeps the selected rows
+  that it still shows. A click on a row selects it. With `SelectionMode.MULTIPLE`, the
+  click adds the row, or removes it if it is selected. `selection_changed` emits the ids.
+  A double click emits the id of the row with `row_activated`.
+- **Ctrl+C** copies the selected rows, in their order, as tab-separated text that a
+  spreadsheet takes. Each row is a line, with its cells as shown, and without the headers
+  (`selection_text`). The view reads the rows from the source a window at a time.
+- **Export CSV** writes the rows shown, in their order, to a CSV file in UTF-8
+  (`export_csv`). The file has the headers, then each value in full, not in its
+  `column_formats` format. In an app, a job writes the file, a window of rows at a time,
+  and the status bar says when the file is done. A new order during the export doesn't
+  change the file. `csv_chunks` gives the same text in pieces. `export_filename` is the
+  name offered for the file (`table.csv`).
+
+The study saves the settings and `selected_ids`. It never saves the rows or the source:
+the app gives the view its source again, for example from its command line or its model.
+
+What each backend shows:
+
+- **Qt** shows a `QTableView`. Its model asks the view only for the rows that Qt draws.
+  - Each row starts with its position, and the header shows Qt's sort indicator.
+  - A selected row has the highlight colors. Shift+click selects the rows from the row
+    clicked last. Space selects the current row, and Enter activates it.
+  - "Export CSV…", above the rows and in their context menu, asks where to save the file.
+  - While a job orders the rows, the cursor over them is busy.
+- **Textual** draws the headers on the first line, then only the lines on screen.
+  - A cursor marks a row. The arrow keys, Page Up, Page Down, Home, and End move it.
+  - Space selects the row of the cursor, and Shift+Space or Shift+click a range. Enter or
+    a double click activates the row.
+  - The header of the sorted column ends with ▲ or ▼.
+  - The key `e` asks where to export the rows as CSV.
+  - While a job orders the rows, Textual's loading indicator covers them.
+- **The web** scrolls the rows in a frame, and draws only the rows near the view.
+  - Once the user stops scrolling, the page asks for the rows shown. Past 400,000 rows,
+    the scroll bar keeps the height of 400,000 rows, and its position maps to a row by its
+    ratio.
+  - Each header is a button, with `aria-sort`. A sort scrolls back to the top.
+  - A click or Enter on a row selects it (`aria-selected`, or `aria-current` for one row
+    at most). The web selects no range and activates no row.
+  - The "Export CSV" link above the frame downloads the rows. The server streams them, a
+    window at a time.
+
 [`largetable.py`](../src/examples/largetable.py) shows a million rows this way.
 
 ### Rows in SQLite
 
 A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQLite sorts
-and filters them, and the table reads only the ids of the rows shown and the rows it
-draws: the rows never all come to Python.
+and filters the rows. The table reads only the ids of the rows shown, and the rows that it
+draws. So the rows never all come to Python.
 
 ```python
 from composeui.core.sqlitemodel import SqliteSource
@@ -1312,22 +1352,28 @@ main_view.readings.source = SqliteSource(
 )
 ```
 
-- **The columns** are the query's that the table shows, with their types: they sort and
-  filter as a `ListSource`'s. Only these columns sort and filter, by name: SQLite takes no
-  column name as a parameter. The filters' values are parameters. Unsorted, the rows come
-  in the order of their ids.
-- **The table's `changed`** reads the rows again, e.g. after a job wrote some.
-- **Index the columns that sort.** With nothing filtering the rows, SQLite reads them in
-  the index's order: about 0.4 seconds for a million rows, where sorting them takes about
-  a second. A search or a filter sorts only the rows passing.
-- **The source reads on connections of its own** (`SqliteModel.reading`): the order and
-  the cells never wait for each other, nor for a write, e.g. a job writing rows. They
-  read the rows committed: the table's `changed` reads them again once a write commits.
-- **The case of a text** is ignored as a `ListSource` ignores it, with one difference.
-  Text typed in ASCII alone compares in SQLite (`COLLATE NOCASE`), which an index serves:
-  it doesn't find a cell whose letters fold into it, e.g. "strasse" doesn't find "Straße".
-  Other text calls Python on each row ("École" finds "ÉCOLE"), as a `/regex/` filter does.
-  A text sorts ignoring the case of ASCII letters alone.
+- **`columns` lists the columns of the query that the table shows,** with their types.
+  They sort and filter as the columns of a `ListSource` do. Only these columns sort and
+  filter, because SQLite takes no column name as a parameter. The values of the filters
+  are parameters. Without a sort, the rows come in the order of their ids.
+- **The `changed` signal of the table reads the rows again,** for example after a job
+  wrote rows.
+- **Index the columns that sort.** With no search and no filter, SQLite reads the rows in
+  the order of the index. This takes about 0.4 seconds for a million rows, where a sort
+  takes about a second. A search or a filter sorts only the rows that pass it.
+- **The source reads on connections of its own** (`SqliteModel.reading`). The order and
+  the cells never wait for each other, or for a write, such as a job that writes rows.
+  They read the committed rows. Once a write commits, the `changed` signal of the table
+  reads the rows again.
+- **The search and the filters ignore the case of a text,** as for a `ListSource`, with
+  one difference:
+  - SQLite compares a text typed in ASCII only (`COLLATE NOCASE`), so an index serves it.
+    It doesn't find a cell whose letters fold into the text: "strasse" doesn't find
+    "Straße".
+  - For other text, SQLite calls Python on each row, as for a `/regex/` filter: "École"
+    finds "ÉCOLE".
+
+  A sort ignores the case of ASCII letters only.
 
 [`largetable.py`](../src/examples/largetable.py) writes its readings into SQLite in a job,
 then shows them this way.
