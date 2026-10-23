@@ -6,6 +6,11 @@ and what each backend shows. To install ComposeUI and write a first window, read
 [examples guide](examples-guide.md). To change ComposeUI itself, read the
 [technical guide](technical-guide.md).
 
+[Building views](#building-views) is a complete app. The other examples show only the part
+of an app that a feature needs. A class name with a comment, such as
+`study: StudyTree = attrs.Factory(StudyTree)  # a TreeView`, stands for a view of your app
+of that kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of your app.
+
 ## Contents
 
 - [Core concepts](#core-concepts)
