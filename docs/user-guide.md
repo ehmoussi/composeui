@@ -181,7 +181,7 @@ class FormButtons(HorizontalView):
 @define_view
 class PipeMainView(MainView):
     app_title = "Pipes"
-    extension = ".pipes"
+    extension = ".pipe"
 
     form: PipeForm = Factory(PipeForm)
     buttons: FormButtons = Factory(FormButtons)
@@ -322,7 +322,7 @@ Larger views have sections of their own:
 A subclass of `MainView` is the app. Its class variables configure it:
 
 - **`app_title`** is the name of the app, in the title of the window.
-- **`extension`** is the file type of its studies, for example `".pipes"`.
+- **`extension`** is the file type of its studies, for example `".pipe"`.
 - **`has_file_menu = False`** leaves out the File menu, for an app without studies (see
   [The File menu and picking a file](#the-file-menu-and-picking-a-file)).
 - **`app_icon`** is the icon of the app (see [The app's icon](#the-apps-icon)).
