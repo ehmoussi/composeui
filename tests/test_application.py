@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from typing import TYPE_CHECKING
 
+import attrs
 import pytest
 
-from composeui.core.application import BACKEND_VARIABLE, Application, run
+from composeui.core.application import BACKEND_VARIABLE, Application, ModelApplication, run
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
-from composeui.core.view import MainView, define_view
+from composeui.core.study import save_study
+from composeui.core.view import ButtonView, MainView, define_view
 
 if TYPE_CHECKING:
     import argparse
@@ -157,3 +160,116 @@ def test_an_app_s_own_options_are_in_its_help(
 def test_run_refuses_to_set_up_a_model_it_isn_t_given() -> None:
     with pytest.raises(ValueError, match="build_model"):
         run(_CountMainView, setup_model=lambda _main_view, _model: None)
+
+
+@pytest.mark.parametrize(
+    ("option", "app_level", "signal_level"),
+    [
+        ("--log", logging.DEBUG, logging.INFO),
+        ("--log-signals", logging.INFO, logging.DEBUG),
+        ("--debug", logging.DEBUG, logging.DEBUG),
+    ],
+)
+def test_the_log_options_show_the_app_s_or_the_signals_debug_messages(
+    option: str, app_level: int, signal_level: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loggers = [logging.getLogger("COMPOSEUI"), logging.getLogger("COMPOSEUI_SIGNAL")]
+    for logger in loggers:
+        monkeypatch.setattr(logger, "level", logger.level)  # for the other tests
+    monkeypatch.setattr("sys.argv", ["count", option])
+
+    Application(build_main_view=_CountMainView).run()
+
+    assert [logger.level for logger in loggers] == [app_level, signal_level]
+
+
+def test_a_file_of_another_app_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    other = tmp_path / "a.start"
+    _StartMainView().save_state(other)
+    monkeypatch.setattr("sys.argv", ["count", "-f", str(other)])
+
+    with pytest.raises(ValueError, match=r"Invalid file extension: '\.start'"):
+        Application(build_main_view=_CountMainView).run()
+
+
+class _NotesModel(Model):
+    """A model with data of its own, saved in the study beside the views' state."""
+
+    data_name = "notes.txt"
+
+    def __init__(self) -> None:
+        self.notes = ""
+
+    def save_data(self, path: Path) -> None:
+        path.write_text(self.notes)
+
+    def open_data(self, path: Path) -> None:
+        self.notes = path.read_text()
+
+
+def test_a_model_app_opens_the_model_s_data_of_its_study(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    model = _NotesModel()
+    model.notes = "kept"
+    study = tmp_path / "a.count"
+    save_study(_CountMainView(), model, study)
+    monkeypatch.setattr("sys.argv", ["count", "-f", str(study)])
+    app = ModelApplication(build_main_view=_CountMainView, build_model=_NotesModel)
+
+    app.run()
+
+    assert app.model.notes == "kept"
+
+
+@define_view
+class _ButtonMainView(MainView):
+    button: ButtonView = attrs.Factory(ButtonView)
+
+
+def test_a_model_app_s_connect_gives_the_view_main_view_and_model_asked_for() -> None:
+    app = ModelApplication(build_main_view=_ButtonMainView, build_model=Model)
+    button = app.main_view.button
+    given: list[tuple[object, ...]] = []
+
+    @app.connect(view=button, signals=[button.clicked])
+    def everything(*, view: ButtonView, main_view: _ButtonMainView, model: Model) -> None:
+        given.append((view, main_view, model))
+
+    @app.connect(view=button, signals=[button.clicked])
+    def only_the_model(*, model: Model) -> None:
+        given.append((model,))
+
+    button.clicked.emit()
+
+    assert [[id(value) for value in values] for values in given] == [
+        [id(button), id(app.main_view), id(app.model)],
+        [id(app.model)],
+    ]
+
+
+class _UnreadableCallback:
+    """A callback whose signature can't be read, like some builtins'."""
+
+    __signature__ = "unreadable"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self) -> None:
+        self.calls += 1
+
+
+@pytest.mark.parametrize("application", [Application, ModelApplication])
+def test_a_callback_whose_signature_can_t_be_read_is_called_without_arguments(
+    application: type[Application[_ButtonMainView]],
+) -> None:
+    options = {"build_model": Model} if application is ModelApplication else {}
+    app = application(build_main_view=_ButtonMainView, **options)
+    button = app.main_view.button
+    callback = _UnreadableCallback()
+    app.connect(view=button, signals=[button.clicked])(callback)
+
+    button.clicked.emit()
+
+    assert callback.calls == 1
