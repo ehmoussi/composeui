@@ -525,7 +525,8 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
 
 
 #: a Textual app with a model logging each render and model's close, with its code's
-#: version and its process. Version 1 waits for a change; version 2 exits once mounted
+#: version and its process. Version 1 logs once mounted for a while, then waits for a
+#: change; version 2 exits once mounted
 _TEXTUAL_MODEL_APP = textwrap.dedent(
     """
     import os, pathlib
@@ -547,8 +548,12 @@ _TEXTUAL_MODEL_APP = textwrap.dedent(
         def render(self, renderer_type):
             super().render(renderer_type)
             log("render")
-            if VERSION == 2:
-                app = self.main_view.renderer.app
+            app = self.main_view.renderer.app
+            if VERSION == 1:
+                # past a few looks at whether files changed, which find none
+                waited = lambda: app.set_timer(0.5, lambda: log("waited"))
+                app.mounted_callbacks.append(waited)
+            else:
                 app.mounted_callbacks.append(app.exit)
 
     LoggingApplication(build_main_view=MainView, build_model=LoggedModel).run()
@@ -573,22 +578,46 @@ def test_a_textual_app_with_reload_closes_every_model_it_built(tmp_path: Path) -
         stderr=subprocess.DEVNULL,
     )
     try:
-        _wait_for(lambda: "render|1" in _text(log))
+        _wait_for(lambda: "waited|1" in _text(log))
         script.write_text(_TEXTUAL_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
         assert program.wait(timeout=_TIMEOUT) == 0
     finally:
         _stop(program)
 
     events = [line.split("|") for line in log.read_text().splitlines()]
-    first, second = events[1][2], events[3][2]
+    first, second = events[1][2], events[4][2]
     assert second != first  # a new process
     assert events == [
         ["close", "1", str(program.pid)],  # the supervisor's, never shown
         ["render", "1", first],
+        ["waited", "1", first],
         ["close", "1", first],  # its app exited for the change
         ["render", "2", second],
         ["close", "2", second],  # the app exited
     ]
+
+
+def test_a_textual_app_without_reload_closes_its_model_once_it_exits(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_TEXTUAL_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
+    subprocess.run(  # noqa: S603
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
+            "RUNS_LOG": str(log),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=_TIMEOUT,
+        check=True,
+    )
+
+    events = [line.split("|")[:2] for line in log.read_text().splitlines()]
+    assert events == [["render", "2"], ["close", "2"]]  # one process, shown then closed
 
 
 # `terminate` there ends the process at once, without a signal it could handle
