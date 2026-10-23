@@ -141,9 +141,7 @@ class _Reloads:
         previous = self._run
         renderer = previous.main_view.renderer
         window = renderer.qt_object if isinstance(renderer, QtMainRenderer) else None
-        if window is None:
-            msg = "the previous main view has no window"
-            raise RuntimeError(msg)
+        assert window is not None
         load_reloaded_state(run.main_view, run.model)
         previous.main_view.jobs.drop()
         _forget_widgets(previous.main_view, window)
