@@ -68,8 +68,7 @@ def _show(main_view: MainView, model: Model | None, render: Callable[[RendererTy
     render(RendererType.TEXTUAL)
     renderer = main_view.renderer
     app = renderer.app if isinstance(renderer, TextualMainRenderer) else None
-    if app is None:
-        return
+    assert app is not None
     if is_reloaded():
         # on a change, the app saves its state and exits, as only a new process imports the
         # changed code afresh: the supervisor runs it again, which opens the state
