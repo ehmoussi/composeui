@@ -6,8 +6,9 @@
 </h1>
 
 A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as
-typed [`attrs`](https://www.attrs.org/) classes. A `Renderer` binds each view to a concrete
-toolkit widget:
+typed [`attrs`](https://www.attrs.org/) classes. In MVVM terms, these views are the
+view-models: they hold the state of the UI, but no toolkit code. A `Renderer` binds each view
+to a concrete toolkit widget, the view of MVVM:
 
 - a desktop window with [Qt](https://pypi.org/project/QtPy/), through `qtpy`;
 - a terminal with [Textual](https://textual.textualize.io/);
