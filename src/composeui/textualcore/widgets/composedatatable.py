@@ -279,7 +279,7 @@ class ComposeDataFilterTable(Vertical):
         self.bar = ComposeFilterBar()
         self.bar.display = False
         self.table = ComposeDataTable(table)
-        self.empty = Static("", classes="empty")
+        self.empty = Static("", classes="empty", markup=False)
         self.empty.display = False
 
     def compose(self) -> ComposeResult:

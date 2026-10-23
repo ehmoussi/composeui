@@ -56,8 +56,8 @@ class ComposeFormDialog(ModalScreen[None]):
 
     def __init__(self, form: Widget) -> None:
         super().__init__()
-        self.title_label = Label(classes="title")
-        self.text_label = Static()
+        self.title_label = Label(classes="title", markup=False)
+        self.text_label = Static(markup=False)
         self.form = form
         self.accept_button = Button("", variant="primary", id="accept")
         self.reject_button = Button("", id="reject")

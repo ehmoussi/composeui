@@ -11,6 +11,7 @@ from qtpy.QtGui import (
     QDoubleValidator,
     QIcon,
     QKeySequence,
+    QTextDocument,
 )
 from qtpy.QtWidgets import (
     QAbstractButton,
@@ -113,6 +114,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmarkicon import mark_icon
 from composeui.qtcore.widgets.qmetric import QMetric
+from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
@@ -573,7 +575,7 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
     def _refresh_pick_text(
         _view: DateInputViewLike, rendered_object: QDateField, value: str
     ) -> None:
-        rendered_object.button.setToolTip(value)
+        rendered_object.button.setToolTip(plain_tool_tip(value))
         rendered_object.button.setAccessibleName(value)
 
     @staticmethod
@@ -684,14 +686,14 @@ class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathF
     def _refresh_browse_text(
         _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
     ) -> None:
-        rendered_object.browse_button.setToolTip(value)
+        rendered_object.browse_button.setToolTip(plain_tool_tip(value))
         rendered_object.browse_button.setAccessibleName(value)
 
     @staticmethod
     def _refresh_reload_text(
         _view: FilePathInputViewLike, rendered_object: QFilePathField, value: str
     ) -> None:
-        rendered_object.reload_button.setToolTip(value)
+        rendered_object.reload_button.setToolTip(plain_tool_tip(value))
         rendered_object.reload_button.setAccessibleName(value)
 
     @staticmethod
@@ -790,7 +792,7 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QLabel()
+            self._rendered_object = plain_label()
             self.refresh()
 
     @staticmethod
@@ -819,7 +821,11 @@ class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
 
     @staticmethod
     def _refresh_text(_view: MarkdownViewLike, rendered_object: QTextBrowser, value: str) -> None:
-        rendered_object.setMarkdown(value)
+        # raw HTML shown as text, as on the web
+        features = QTextDocument.MarkdownFeature
+        rendered_object.document().setMarkdown(
+            value, features.MarkdownDialectGitHub | features.MarkdownNoHTML
+        )
 
     @staticmethod
     def _update_state(view: MarkdownViewLike, rendered_object: QTextBrowser) -> None:
@@ -1747,7 +1753,7 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QLabel()
+            self._rendered_object = plain_label()
             self._rendered_object.setWordWrap(True)
             self.refresh()
 
@@ -1936,6 +1942,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
     def render(self) -> None:
         if self._rendered_object is None:
             box = QMessageBox()
+            box.setTextFormat(Qt.TextFormat.PlainText)
             box.setModal(True)
             release_when_hidden(box)
             self._accept_button = box.addButton("", QMessageBox.ButtonRole.AcceptRole)
@@ -2274,7 +2281,7 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
 
     @staticmethod
     def _refresh_toggle_text(_view: SidebarView, rendered_object: QSidebar, value: str) -> None:
-        rendered_object.toggle.setToolTip(value)
+        rendered_object.toggle.setToolTip(plain_tool_tip(value))
         rendered_object.toggle.setAccessibleName(value)
 
     @staticmethod
@@ -2407,7 +2414,7 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
                 item.setFont(0, font)
                 if node.mark is not None:
                     item.setIcon(1, mark_icon(node.mark))
-                    item.setToolTip(1, view.mark_text(node.mark))
+                    item.setToolTip(1, plain_tool_tip(view.mark_text(node.mark)))
                 add(item, node.children, (*path, node.key))
 
         add(rendered_object, value, ())
@@ -2440,7 +2447,7 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
     ) -> None:
         for path, item in _tree_items(rendered_object):
             if view.node(path).mark is mark:
-                item.setToolTip(1, value)
+                item.setToolTip(1, plain_tool_tip(value))
 
     @staticmethod
     def _update_state(view: TreeView, rendered_object: QTreeWidget) -> None:
@@ -2910,6 +2917,8 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
     @staticmethod
     def _refresh_text(_view: ActionView, rendered_object: QAction, text: str) -> None:
         rendered_object.setText(text)
+        rendered_object.setToolTip("")  # back to Qt's own, the text without its "&"
+        rendered_object.setToolTip(plain_tool_tip(rendered_object.toolTip()))
 
     @staticmethod
     def _refresh_icon(_view: ActionView, rendered_object: QAction, icon: str | None) -> None:

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
@@ -55,11 +56,11 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
 
     def __init__(self, view: DialogView) -> None:
         super().__init__()
-        self.title_label = Label(view.title, classes="title")
+        self.title_label = Label(view.title, classes="title", markup=False)
         self.title_label.display = view.title != ""
-        self.text_label = Static(view.text)
-        self.accept_button = Button(view.accept_text, variant="primary", id="accept")
-        self.reject_button = Button(view.reject_text, id="reject")
+        self.text_label = Static(view.text, markup=False)
+        self.accept_button = Button(Content(view.accept_text), variant="primary", id="accept")
+        self.reject_button = Button(Content(view.reject_text), id="reject")
         self.reject_button.display = view.kind is DialogKind.CONFIRM
         self.is_enabled = view.is_enabled
 

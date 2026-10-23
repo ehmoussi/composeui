@@ -46,6 +46,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.qtcore.widgets.qmarkicon import mark_icon
+from composeui.qtcore.widgets.qplaintext import plain_tool_tip
 
 if TYPE_CHECKING:
     from qtpy.QtCore import QAbstractItemModel
@@ -161,7 +162,8 @@ class QTextTableModel(QAbstractTableModel):
             return None
         if role == Qt.ItemDataRole.DecorationRole:
             return mark_icon(style.mark)
-        return self.mark_texts.get(style.mark)
+        text = self.mark_texts.get(style.mark)
+        return None if text is None else plain_tool_tip(text)
 
     @staticmethod
     def _link_look(role: int) -> Any:

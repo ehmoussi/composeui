@@ -6,7 +6,6 @@ from qtpy.QtCore import QMargins, QPoint, QRect, QSize, Qt, QTimer, Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QLabel,
     QLayout,
     QLineEdit,
     QPushButton,
@@ -19,6 +18,7 @@ from qtpy.QtWidgets import (
 )
 
 from composeui.core.view import SEARCH_DELAY_MS, as_pattern, split_pattern
+from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 if TYPE_CHECKING:
@@ -136,12 +136,12 @@ class QFilterChip(QWidget):
         self.open_button = _ChipButton()
         self.open_button.setText(f"{text} {EDIT}")
         self.open_button.setAccessibleName(text)
-        self.open_button.setToolTip(edit_text)
+        self.open_button.setToolTip(plain_tool_tip(edit_text))
         self.open_button.setAutoRaise(True)
         self.remove_button = QToolButton()
         self.remove_button.setText(REMOVE)
         self.remove_button.setAutoRaise(True)
-        self.remove_button.setToolTip(remove_text)
+        self.remove_button.setToolTip(plain_tool_tip(remove_text))
         self.remove_button.setAccessibleName(remove_text)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 0, 0, 0)
@@ -209,7 +209,7 @@ class QTableFilterBar(QWidget):
         self.add.clicked.connect(self._add)
         self.clear = QToolButton()
         self.clear.clicked.connect(self.filters_cleared)
-        self.count = QLabel()
+        self.count = plain_label()
         # as tall as the first line's fields, its text in their middle
         self.count.setMinimumHeight(self.search.sizeHint().height())
         self.count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -242,7 +242,7 @@ class QTableFilterBar(QWidget):
         self.add_filter.setText(texts.get("add_filter", ""))
         self.add.setText(texts.get("add", ""))
         self.clear.setText(texts.get("clear", ""))
-        self.pattern.setToolTip(texts.get("pattern", ""))
+        self.pattern.setToolTip(plain_tool_tip(texts.get("pattern", "")))
         self.pattern.setAccessibleName(texts.get("pattern", ""))
         self.column.setAccessibleName(texts.get("column", ""))
         self.value.setAccessibleName(texts.get("value", ""))
@@ -358,7 +358,7 @@ class QTableFilterBar(QWidget):
 
     def _mark_invalid(self, reason: str | None) -> None:
         self.value.setStyleSheet(_INVALID_STYLE if reason is not None else "")
-        self.value.setToolTip(reason or "")
+        self.value.setToolTip(plain_tool_tip(reason or ""))
         self.value.setProperty("invalid", reason is not None)
 
     def _show_placeholder(self) -> None:
@@ -383,7 +383,7 @@ class QFilterTable(QWidget):
         super().__init__()
         self.bar = QTableFilterBar()
         self.table = QTextTableView()
-        self.empty = QLabel()
+        self.empty = plain_label()
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setVisible(False)
         layout = QVBoxLayout(self)

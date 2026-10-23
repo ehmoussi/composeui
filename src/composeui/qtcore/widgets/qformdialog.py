@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Signal as QtSignal
-from qtpy.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPushButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QVBoxLayout, QWidget
+
+from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QCloseEvent
@@ -25,7 +27,7 @@ class QFormDialog(QDialog):
         super().__init__(*args, **kwargs)
         self.setModal(True)
         self._layout = QVBoxLayout(self)
-        self.text = QLabel()
+        self.text = plain_label()
         self.text.setWordWrap(True)
         self._layout.addWidget(self.text)
         self.buttons = QDialogButtonBox(

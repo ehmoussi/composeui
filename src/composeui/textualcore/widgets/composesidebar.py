@@ -80,7 +80,7 @@ class ComposeSidebar(VerticalScroll):
     """
 
     def __init__(self, *children: Widget) -> None:
-        self.title = Label(classes="sidebar--title")
+        self.title = Label(classes="sidebar--title", markup=False)
         self.toggle = ComposeSidebarToggle(self)
         super().__init__(
             Horizontal(self.title, self.toggle, classes="sidebar--header"),

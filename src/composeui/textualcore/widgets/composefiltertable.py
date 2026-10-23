@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Callable
 
 from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalScroll, Vertical
+from textual.content import Content
 from textual.widgets import Button, Input, Select, Static
 
 from composeui.core.signal import Signal, SignalNoArgs
@@ -52,10 +53,13 @@ class ComposeFilterChip(Horizontal):
         super().__init__()
         self.column = column
         self.open_button = Button(
-            f"{text} {EDIT}", compact=True, classes="chip-text", tooltip=edit_text
+            Content(f"{text} {EDIT}"),
+            compact=True,
+            classes="chip-text",
+            tooltip=Content(edit_text),
         )
         self.remove_button = Button(
-            REMOVE, compact=True, classes="chip-remove", tooltip=remove_text
+            REMOVE, compact=True, classes="chip-remove", tooltip=Content(remove_text)
         )
 
     def compose(self) -> ComposeResult:
@@ -137,7 +141,7 @@ class ComposeFilterBar(Horizontal):
         self.add = Button("", id="add", compact=True)
         self.chips = HorizontalScroll(id="chips")
         self.clear = Button("", id="clear", compact=True)
-        self.count = Static("", id="count")
+        self.count = Static("", id="count", markup=False)
         self._columns: list[tuple[int, str]] = []
         self.close_editor()
 
@@ -159,11 +163,11 @@ class ComposeFilterBar(Horizontal):
     def set_texts(self, texts: dict[str, str]) -> None:
         self._texts = texts
         self.search.placeholder = texts.get("search", "")
-        self.add_filter.label = texts.get("add_filter", "")
-        self.add.label = texts.get("add", "")
-        self.clear.label = texts.get("clear", "")
-        self.column.tooltip = texts.get("column", "")
-        self.pattern.tooltip = texts.get("pattern", "")
+        self.add_filter.label = Content(texts.get("add_filter", ""))
+        self.add.label = Content(texts.get("add", ""))
+        self.clear.label = Content(texts.get("clear", ""))
+        self.column.tooltip = Content(texts.get("column", ""))
+        self.pattern.tooltip = Content(texts.get("pattern", ""))
         self.value.tooltip = None
         self._show_chips()
 
@@ -176,7 +180,7 @@ class ComposeFilterBar(Horizontal):
     def _offer_columns(self) -> None:
         """Offer the columns, the one picked still picked, else the first."""
         selected = self.column.value
-        self.column.set_options((header, column) for column, header in self._columns)
+        self.column.set_options((Content(header), column) for column, header in self._columns)
         columns = [column for column, _ in self._columns]
         if selected in columns:
             self.column.value = selected
@@ -320,7 +324,7 @@ class ComposeFilterBar(Horizontal):
 
     def _mark_invalid(self, reason: str | None) -> None:
         self.value.set_class(reason is not None, "-invalid")
-        self.value.tooltip = reason
+        self.value.tooltip = None if reason is None else Content(reason)
 
     def _show_placeholder(self) -> None:
         column = self.column.value
@@ -355,7 +359,7 @@ class ComposeFilterTable(Vertical):
         self.bar = ComposeFilterBar()
         self.bar.display = False
         self.table = ComposeTable()
-        self.empty = Static("", classes="empty")
+        self.empty = Static("", classes="empty", markup=False)
         self.empty.display = False
 
     def compose(self) -> ComposeResult:

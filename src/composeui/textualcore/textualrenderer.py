@@ -355,7 +355,7 @@ def _show_on_button(
     button: ComposeToolbarButton, *, text: str, is_checkable: bool, is_checked: bool
 ) -> None:
     """Show an action on its toolbar button: its text, highlighted while checked."""
-    button.label = text
+    button.label = Content(text)
     button.variant = "primary" if is_checkable and is_checked else "default"
 
 
@@ -466,13 +466,13 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
         if self.screen is not None:
-            self.screen.accept_button.label = value
+            self.screen.accept_button.label = Content(value)
 
     def _refresh_reject_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
         if self.screen is not None:
-            self.screen.reject_button.label = value
+            self.screen.reject_button.label = Content(value)
 
     @staticmethod
     def _update_state(view: DialogView, rendered_object: DialogView) -> None:
@@ -549,13 +549,13 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
         if self.form_screen is not None:
-            self.form_screen.accept_button.label = value
+            self.form_screen.accept_button.label = Content(value)
 
     def _refresh_reject_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
         if self.form_screen is not None:
-            self.form_screen.reject_button.label = value
+            self.form_screen.reject_button.label = Content(value)
 
     def _refresh_is_accept_enabled(
         self, _view: DialogView, _rendered_object: DialogView, value: bool
@@ -880,7 +880,7 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
     def _refresh_pick_text(
         _view: DateInputViewLike, rendered_object: ComposeDateInput, value: str
     ) -> None:
-        rendered_object.button.tooltip = value
+        rendered_object.button.tooltip = Content(value)
 
     @staticmethod
     def _update_state(view: DateInputViewLike, rendered_object: ComposeDateInput) -> None:
@@ -963,14 +963,14 @@ class TextualFilePathInputRenderer(
     def _refresh_browse_text(
         _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
-        rendered_object.browse_button.tooltip = value
+        rendered_object.browse_button.tooltip = Content(value)
         rendered_object.picker_title = value
 
     @staticmethod
     def _refresh_reload_text(
         _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
-        rendered_object.reload_button.tooltip = value
+        rendered_object.reload_button.tooltip = Content(value)
 
     @staticmethod
     def _update_state(view: FilePathInputViewLike, rendered_object: ComposeFilePathInput) -> None:
@@ -1069,7 +1069,7 @@ class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, Label]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Label()
+            self._rendered_object = Label(markup=False)
 
     @staticmethod
     def _refresh_text(_view: LabelViewLike, rendered_object: Label, value: str) -> None:
@@ -1169,7 +1169,7 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
     def _refresh_text(
         _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: str
     ) -> None:
-        rendered_object.label = value
+        rendered_object.label = Content(value)
 
     @staticmethod
     def _refresh_is_checked(
@@ -1215,7 +1215,7 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
 
     @staticmethod
     def _refresh_text(_view: ButtonViewLike, rendered_object: ComposeButton, value: str) -> None:
-        rendered_object.label = value
+        rendered_object.label = Content(value)
 
     @staticmethod
     def _refresh_variant(
@@ -2018,7 +2018,7 @@ class TextualLogRenderer(TextualWidgetRenderer[LogViewLike, Label]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Label()
+            self._rendered_object = Label(markup=False)
             # default `width: auto` sizes to the unwrapped text - fine for a short
             # label, but a long validation message would silently overflow past the
             # terminal width and get clipped instead of wrapping.
@@ -2054,7 +2054,7 @@ class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Static()
+            self._rendered_object = Static(markup=False)
             self._rendered_object.styles.dock = "bottom"
 
     @staticmethod
@@ -2158,7 +2158,7 @@ class TextualGroupFormRenderer(TextualFormRenderer):
     @staticmethod
     def _refresh_title(view: FormView, rendered_object: Vertical, value: str) -> None:
         if isinstance(view, GroupFormView):
-            rendered_object.border_title = value
+            rendered_object.border_title = Content(value)
 
 
 class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
@@ -2338,7 +2338,7 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
     def _refresh_toggle_text(
         _view: SidebarView, rendered_object: ComposeSidebar, value: str
     ) -> None:
-        rendered_object.toggle.tooltip = value
+        rendered_object.toggle.tooltip = Content(value)
 
     @staticmethod
     def _refresh_is_expanded(
@@ -2498,7 +2498,7 @@ class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
             ]
             # an id: the tabs tell their panes by it
             self._rendered_object = TabPane(
-                self._view.title, *widgets, id=f"cui-{id(self._view)}-tab"
+                Content(self._view.title), *widgets, id=f"cui-{id(self._view)}-tab"
             )
 
     @staticmethod
@@ -2512,7 +2512,7 @@ class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
     def _refresh_title(_view: TabPage, rendered_object: TabPane, value: str) -> None:
         tabs = TextualTabPageRenderer._tabs(rendered_object)
         if tabs is not None:
-            tabs.get_tab(rendered_object).label = value
+            tabs.get_tab(rendered_object).label = Content(value)
 
     @staticmethod
     def _refresh_tab_visible(_view: TabPage, rendered_object: TabPane, value: bool) -> None:

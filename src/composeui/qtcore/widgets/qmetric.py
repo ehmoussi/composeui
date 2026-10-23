@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QVBoxLayout, QWidget
+
+from composeui.qtcore.widgets.qplaintext import plain_label
 
 #: the badge's text color and its tint behind, for a rise and a fall; readable on a light
 #: and a dark palette alike
@@ -20,15 +22,15 @@ class QMetric(QWidget):
         super().__init__(*args, **kwargs)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.label = QLabel()
+        self.label = plain_label()
         layout.addWidget(self.label)
-        self.value = QLabel()
+        self.value = plain_label()
         font = self.value.font()
         font.setPointSizeF(font.pointSizeF() * 2)
         font.setBold(True)
         self.value.setFont(font)
         layout.addWidget(self.value)
-        self.badge = QLabel()
+        self.badge = plain_label()
         self.badge.setVisible(False)
         # as wide as its text, not the column
         layout.addWidget(self.badge, alignment=Qt.AlignmentFlag.AlignLeft)

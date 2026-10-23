@@ -106,7 +106,7 @@ class ComposeRowEditor(ModalScreen[Optional[dict[int, str]]]):
     def compose(self) -> ComposeResult:
         with Vertical():
             for column, cell_input in self.inputs.items():
-                yield Label(self._headers[column])
+                yield Label(self._headers[column], markup=False)
                 yield cell_input
 
     def on_mount(self) -> None:
