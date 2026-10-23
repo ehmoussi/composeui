@@ -94,7 +94,7 @@ On the web:
 
 It shows:
 
-- [forms](user-guide.md#compose-views-from-mixins) with labelled rows: text, float inputs, a
+- [forms](user-guide.md#forms-and-their-fields) with labelled rows: text, float inputs, a
   checkbox, radio groups, and a combobox;
 - validation on a row, such as the name, and across rows, such as a main pipe that must
   fit the incident pipe;
