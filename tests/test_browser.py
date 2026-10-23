@@ -2145,6 +2145,55 @@ def test_a_large_table_draws_the_rows_scrolled_to_keeping_the_focus(
     assert int(first) > 1_000
 
 
+def test_a_large_table_scrolled_past_its_rows_shows_the_rows_its_scroll_bar_stands_for(
+    million_page: Page,
+) -> None:
+    page = million_page
+    page.goto("/")
+    frame = page.locator("[data-virtual-scroll]")
+    height = page.locator("tr[data-window-row]").first.evaluate(
+        "row => row.getBoundingClientRect().height"
+    )
+    frame.hover()
+    # about 10 rows' heights past the 100 rows drawn, where a row's height stands for 2.5:
+    # mid-row, not at a row's edge
+    with _posted(page):
+        page.mouse.wheel(0, 110.2 * height)
+    top = frame.evaluate("frame => frame.scrollTop")
+    expected = int(100 + (top - 100 * height) / height * 2.5)
+
+    under_headers = frame.evaluate(
+        """frame => {
+            const view = frame.getBoundingClientRect();
+            const head = frame.querySelector("thead").getBoundingClientRect().height;
+            const row = document.elementFromPoint(view.left + 20, view.top + head + 2)
+                .closest("tr[data-window-row]");
+            return row === null ? null : Number(row.getAttribute("aria-rowindex")) - 2;
+        }"""
+    )
+    assert under_headers == expected
+    assert frame.evaluate("frame => frame.scrollTop") == top  # the frame didn't jump
+
+
+def _clipboard_becomes(page: Page, text: str) -> bool:
+    """Wait, in the page, for the clipboard to hold `text`: the page writes it once answered.
+
+    Its item, given during Ctrl+C, gets its text from the answer: written a moment after.
+    """
+    return bool(
+        page.evaluate(
+            """async text => {
+                for (let tries = 0; tries < 100; tries++) {
+                    if (await navigator.clipboard.readText() === text) return true;
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                }
+                return false;
+            }""",
+            text,
+        )
+    )
+
+
 def test_ctrl_c_writes_a_large_table_s_selected_row_to_the_clipboard(
     browser: Browser, million_base_url: str
 ) -> None:
@@ -2167,5 +2216,5 @@ def test_ctrl_c_writes_a_large_table_s_selected_row_to_the_clipboard(
     with _posted(page):
         page.keyboard.press("ControlOrMeta+c")
     expect(page.locator("[data-copied]")).to_have_text("4\t1.0")
-    assert page.evaluate("navigator.clipboard.readText()") == "4\t1.0"
+    assert _clipboard_becomes(page, "4\t1.0")
     context.close()

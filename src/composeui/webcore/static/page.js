@@ -937,9 +937,11 @@ function placeHelp(event) {
   }
 }
 /* a large table draws the rows around the view alone (see `WebDataTableRenderer`): once
-   the user stops scrolling its frame outside them, post the first row shown, which the
-   frame's hidden field takes. Past the rows the scroll bar's height stands for, a row's
-   height stands for `data-scale` rows. Scrolling doesn't bubble: captured. */
+   the user stops scrolling its frame outside them, post the row under the headers and
+   how far down the rows it is, in rows' heights, which the frame's hidden fields take.
+   A filler stands for its rows, scaled past the rows the scroll bar's height stands for:
+   the row is where the scroll position falls among the rows each filler stands for.
+   Scrolling doesn't bubble: captured. */
 var WINDOW_SCROLL_MS = 100;
 function fetchWindow(frame) {
   var rows = frame.querySelectorAll("tr[data-window-row]");
@@ -949,9 +951,24 @@ function fetchWindow(frame) {
   var first = rows[0].getBoundingClientRect();
   var last = rows[rows.length - 1].getBoundingClientRect();
   if (first.top <= view.top + head && last.bottom >= view.bottom) return;  // drawn already
-  var shown = Math.floor((frame.scrollTop / first.height) * Number(frame.dataset.scale));
+  var body = frame.querySelector("tbody").getBoundingClientRect();
+  var count = Number(frame.querySelector("table").getAttribute("aria-rowcount")) - 1;
+  var drawn = Number(rows[0].getAttribute("aria-rowindex")) - 2;  /* the first row drawn */
+  var at = view.top + head - body.top;  /* the rows' offset under the headers */
+  var above = first.top - body.top;
+  var below = last.bottom - body.top;
+  var shown;
+  if (at < above) {
+    shown = (at / above) * drawn;
+  } else if (at < below) {
+    shown = drawn + (at - above) / first.height;
+  } else {
+    var after = count - drawn - rows.length;
+    shown = drawn + rows.length + (body.height > below ? ((at - below) / (body.height - below)) * after : 0);
+  }
+  frame.querySelector("[data-scroll-offset]").value = String(at / first.height);
   var start = frame.querySelector("[data-scroll-start]");
-  start.value = String(shown);
+  start.value = String(Math.min(Math.max(Math.floor(shown), 0), Math.max(count - 1, 0)));
   dispatch(start, "scroll-window");
 }
 document.addEventListener("scroll", function (event) {
@@ -985,8 +1002,10 @@ document.addEventListener("copy", function (event) {
   dispatch(frame.parentElement.querySelector("[data-copied]"), "copy-rows");
 });
 document.addEventListener("htmx:load", function (event) {
-  var copied = event.detail.elt;
-  if (!copied.matches("[data-copied]")) return;
+  /* the answer comes on its own, or in the whole table swapped in */
+  var elt = event.detail.elt;
+  var copied = elt.matches("[data-copy-answer]") ? elt : elt.querySelector("[data-copy-answer]");
+  if (copied === null) return;
   var answer = copyAnswers.shift();
   var text = copied.textContent;
   if (answer !== undefined) {

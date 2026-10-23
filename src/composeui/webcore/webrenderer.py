@@ -2425,8 +2425,9 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     The frame holds the headers, a window of `DATA_TABLE_WINDOW_ROWS` rows, and two filler
     rows that give the scroll bar the height of every row. When the user stops scrolling
     outside the window, `page.js` posts the first row shown (`scroll`), and only the
-    `<tbody>` comes back, the scroll position kept. Past `DATA_TABLE_SCROLLED_ROWS` rows,
-    the fillers stop growing: a scroll position maps to a row by its ratio (`data-scale`).
+    `<tbody>` comes back, the scroll position kept, that row still under the headers.
+    Past `DATA_TABLE_SCROLLED_ROWS` rows, the fillers stop growing: a filler's height
+    stands for more rows than as many drawn ones (`_fillers`).
     Each row starts with its position, from 1, and tells screen readers where it is
     (`aria-rowindex` of `aria-rowcount`).
 
@@ -2449,12 +2450,15 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         self._by_position = DataTableByPosition(view)
         #: the position of the window's first row
         self._start = 0
+        #: the filler's height above the window, in rows' heights, where the page scrolled
+        #: to; None: its rows scaled (`_scale`)
+        self._before: float | None = None
         #: the column whose header takes the focus as it comes back: the user sorted by it
         self._focused_header: str | None = None
         #: the position of the row that takes the focus as it comes back: the user selected it
         self._focused_row: int | None = None
-        #: the text the user copied, sent once in the "copied" part
-        self._copied = ""
+        #: the text the user copied, sent once in the "copied" part; None: nothing to send
+        self._copied: str | None = None
         self._refresh_dispatcher.update(
             {
                 **dict.fromkeys(
@@ -2486,7 +2490,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
 
     def _reorder(self, _view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
         """Show a new order of the rows from its first: the frame comes back to the top."""
-        self._start = 0
+        self._start, self._before = 0, None
         self._mark_parts("frame", "count")
 
     _parts_inside = MappingProxyType({**_BAR_PARTS_INSIDE, "frame": ("rows",)})
@@ -2546,14 +2550,24 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         self._view.select_at(int(position))
 
     def _scroll(self, form: Mapping[str, str]) -> None:
-        """Draw the window around the first row shown, a fifth of it above."""
+        """Draw the window around the first row shown, a fifth of it above.
+
+        The page posts the row under the headers (`start`) and how far down the frame it
+        is (`offset`, in rows' heights): the filler above the window gets the height that
+        keeps that row there, the frame's scroll position kept.
+        """
         shown = form.get("start", "")
         if not shown.isdigit():
             return
         last_start = max(self._view.row_count - DATA_TABLE_WINDOW_ROWS, 0)
         start = min(max(int(shown) - DATA_TABLE_WINDOW_ROWS // 5, 0), last_start)
-        if start != self._start:
-            self._start = start
+        try:
+            offset = float(form.get("offset", ""))
+        except ValueError:
+            offset = math.nan
+        before = offset - (int(shown) - start) if math.isfinite(offset) else None
+        if (start, before) != (self._start, self._before):
+            self._start, self._before = start, before
             self._mark_parts("rows")
 
     def csv_file(self) -> tuple[str, Iterator[str]]:
@@ -2565,16 +2579,22 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         self._mark_parts("copied")
 
     def _copied_html(self, *, oob: bool = False) -> Markup:
-        """Render the hidden element posting a copy, holding the text copied once answered."""
-        copied, self._copied = self._copied, ""
+        """Render the hidden element posting a copy, holding the text copied once answered.
+
+        An answer (`data-copy-answer`, its text empty without a row selected) is sent
+        once, out of band or in the whole table: the page waits for no other.
+        """
+        copied, self._copied = self._copied, None
         return Markup(
-            '<pre id="{widget_id}-copied" hidden data-copied hx-post="/widget/{widget_id}"'
+            '<pre id="{widget_id}-copied" hidden data-copied{answer}'
+            ' hx-post="/widget/{widget_id}"'
             """ hx-trigger="copy-rows" hx-vals='{{"event": "copy"}}' hx-swap="none"{oob}>"""
             "{copied}</pre>"
         ).format(
             widget_id=self.widget_id,
+            answer=Markup() if copied is None else Markup(" data-copy-answer"),
             oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
-            copied=copied,
+            copied="" if copied is None else copied,
         )
 
     def _scale(self) -> float:
@@ -2648,16 +2668,17 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         return Markup(
             '<div id="{widget_id}-frame" class="max-h-[36rem] overflow-y-auto rounded-box'
             ' border border-base-300" tabindex="0"'
-            ' data-virtual-scroll data-scale="{scale}"{oob}>'
+            " data-virtual-scroll{oob}>"
+            '<input type="hidden" name="offset" id="{widget_id}-offset" data-scroll-offset>'
             '<input type="hidden" name="start" data-scroll-start'
             ' hx-post="/widget/{widget_id}" hx-trigger="scroll-window"'
+            ' hx-include="#{widget_id}-offset"'
             """ hx-vals='{{"event": "scroll"}}' hx-swap="none" hx-sync="this:replace">"""
             '<table class="table table-zebra table-sm" aria-rowcount="{row_count}">'
             '<thead class="sticky top-0 z-10 bg-base-100"><tr aria-rowindex="1"><td></td>'
             "{head}</tr></thead>{rows_html}</table></div>"
         ).format(
             widget_id=self.widget_id,
-            scale=f"{self._scale():.6f}",
             oob=Markup(' hx-swap-oob="true"') if oob else Markup(),
             row_count=view.row_count + 1,
             head=head,
@@ -2680,16 +2701,16 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             ).format(width, empty or view.texts.get("empty", ""))
         else:
             focused_row, self._focused_row = self._focused_row, None
-            stop = start + len(rows)
+            before, after = self._fillers(start, len(rows))
             body = Markup("{before}{rows}{after}").format(
-                before=self._filler_html(start, width),
+                before=self._filler_html(before, width),
                 rows=Markup("").join(
                     self._row_html(
                         start + offset, row_id, cells, is_focused=start + offset == focused_row
                     )
                     for offset, (row_id, cells) in enumerate(rows)
                 ),
-                after=self._filler_html(view.row_count - stop, width),
+                after=self._filler_html(after, width),
             )
         return self._table_part(
             Markup('<tbody id="{}-rows"{}>{}</tbody>').format(
@@ -2698,13 +2719,28 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
             oob=oob,
         )
 
-    def _filler_html(self, count: int, width: int) -> Markup:
-        """Render a row standing for `count` rows not drawn: as tall as they'd be, scaled."""
-        if count <= 0:
+    def _fillers(self, start: int, drawn: int) -> tuple[float, float]:
+        """Get the heights, in rows' heights, of the fillers above and under the window.
+
+        Together they stand for the rows not drawn, scaled: the frame keeps its height. The
+        one above is where the page scrolled to (`_before`), else its rows scaled, and none
+        from the first row.
+        """
+        hidden = (self._view.row_count - drawn) / self._scale()
+        before = start / self._scale() if self._before is None else self._before
+        before = 0.0 if start == 0 else min(max(before, 0.0), hidden)
+        if start + drawn >= self._view.row_count:
+            before = hidden  # down to the last row: no filler under it
+        return before, hidden - before
+
+    @staticmethod
+    def _filler_html(height: float, width: int) -> Markup:
+        """Render a row standing for rows not drawn, `height` rows' heights tall."""
+        if height <= 0:
             return Markup()
         return Markup(
             '<tr aria-hidden="true" style="height: calc(2.25rem * {})"><td colspan="{}"></td></tr>'
-        ).format(f"{count / self._scale():.3f}", width)
+        ).format(f"{height:.3f}", width)
 
 
 class ValuesViewLike(ViewLike, Protocol, Generic[TValue]):

@@ -17,7 +17,7 @@ from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, a
 from composeui.core.view import DataTableView, ListSource, Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable, Iterator, Sequence
+    from collections.abc import Callable, Hashable, Iterator, Sequence
 
     from composeui.core.view import Filter
 
@@ -312,3 +312,32 @@ def test_reads_reuse_a_connection_and_see_each_write_committed(
     model.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))  # committed: seen at once
     assert sql.count() == len(PLACES) + 1
     assert sql.cells([7], ["name"]) == {7: ["Deep"]}
+
+
+def _plans(model: PlacesModel, order: Callable[[], object]) -> list[str]:
+    """Get SQLite's plan of each query `order` runs, on the model's read connection."""
+    queries: list[str] = []
+    with model.places.reading() as db:  # the pool gives it back to the next read
+        db.set_trace_callback(queries.append)
+    order()
+    with model.places.reading() as db:
+        db.set_trace_callback(None)
+        selects = [query for query in queries if query.startswith("SELECT")]
+        return [
+            " ".join(row[-1] for row in db.execute(f"EXPLAIN QUERY PLAN {query}").fetchall())
+            for query in selects
+        ]
+
+
+def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
+    model: PlacesModel, sql: SqliteSource
+) -> None:
+    # the rows with a depth in its index's order, then the empty ones
+    plans = _plans(model, lambda: sql.ordered_ids(Sort("depth", descending=True), "", {}))
+    assert "place_depth" in plans[0]
+    assert "TEMP B-TREE FOR ORDER BY" not in plans[0]
+    # filtered: reading the table in the index's order would cost more than sorting
+    plans = _plans(
+        model, lambda: sql.ordered_ids(Sort("depth"), "", {"kind": parse_filter("=lake")})
+    )
+    assert "place_depth" not in plans[0]
