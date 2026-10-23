@@ -2874,3 +2874,36 @@ async def test_a_text_like_markup_shows_as_it_is() -> None:
         assert isinstance(dialog, ComposeDialog)
         title, text = dialog.title_label.render(), dialog.text_label.render()
         assert [str(title), str(text)] == [MARKUP] * 2
+
+
+@pytest.mark.asyncio
+async def test_an_action_s_shortcut_icon_and_data_change_while_the_app_runs() -> None:
+    view = DialogsMainView()
+    clear = view.edit_menu.clear  # Ctrl+L opens the confirmation
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async def opens(key: str) -> bool:
+        await pilot.press(key)
+        await pilot.pause()
+        is_open = isinstance(app.screen, ComposeDialog)
+        if is_open:
+            await pilot.press("escape")
+            await pilot.pause()
+        return is_open
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        clear.icon = "clear.svg"  # nothing shows it, nor the data
+        clear.data = "names"
+        clear.shortcut = "Ctrl+k"
+        await pilot.pause()
+        assert [await opens("ctrl+l"), await opens("ctrl+k")] == [False, True]
+        clear.shortcut = None
+        await pilot.pause()
+        assert not await opens("ctrl+k")
+        clear.shortcut = "Ctrl+j"  # an action bound to no key at first gets one
+        await pilot.pause()
+        assert await opens("ctrl+j")
