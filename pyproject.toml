@@ -97,6 +97,11 @@ qt_log_ignore = [
     "This plugin does not support",
 ]
 
+[tool.coverage.run]
+branch = true
+# the reload tests run the apps in child processes
+patch = ["subprocess"]
+
 [tool.ruff]
 line-length = 100
 
