@@ -51,8 +51,7 @@ class QSplitterBorder(QSplitterHandle):
 
     def _splitter(self) -> QComposeSplitter:
         splitter = self.splitter()
-        if not isinstance(splitter, QComposeSplitter):
-            raise TypeError(splitter)
+        assert isinstance(splitter, QComposeSplitter)
         return splitter
 
 

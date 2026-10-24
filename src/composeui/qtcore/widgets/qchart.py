@@ -47,7 +47,7 @@ def _format(value: float, unit: str) -> str:
 def _tabular_font() -> QFont:
     """Get the application's font with digits of one width, where Qt has them (6.7)."""
     font = QFont()
-    if hasattr(font, "setFeature") and hasattr(QFont, "Tag"):
+    if hasattr(font, "setFeature") and hasattr(QFont, "Tag"):  # pragma: no branch
         font.setFeature(QFont.Tag("tnum"), 1)
     return font
 
