@@ -94,13 +94,13 @@ rendered object. It syncs them in both directions:
 | `render()` | view to toolkit | Creates the rendered object. |
 | `refresh()` | view to toolkit | Calls every handler of `_refresh_dispatcher` with the current value of its attribute. |
 | `refresh_attribute(name, value)` | view to toolkit | Calls the handler of one attribute. |
-| `update_state()` | toolkit to view | Calls `_update_state(view, rendered_object)` inside `stop_refresh()`. |
+| A handler of a widget signal, connected in `render()` | toolkit to view | Sets the view attribute inside `stop_refresh()`. |
 
 `_refresh_dispatcher` maps each view attribute that the renderer cares about to its
 handler. When a view attribute changes and it has no handler,
 `refresh_attribute` raises `MissingRefreshAttributeFunctionError`.
 
-While `update_state()` runs, `is_updating_state()` is true. `notify_renderer` then doesn't
+Inside `stop_refresh()`, `is_updating_state()` is true. `notify_renderer` then doesn't
 refresh the toolkit with the values that came from it.
 
 `call_on_main_thread(callback)` calls the callback directly by default. Each backend of this
@@ -315,8 +315,8 @@ another process answers with `HX-Refresh`.
    ```
 
 2. In each backend, add a renderer and its `RENDERERS` entry (`"label": QtLabelRenderer`).
-   The renderer registers a handler per view attribute, creates its rendered object in
-   `render`, and reads the user's changes back in `_update_state`:
+   The renderer registers a handler per view attribute and creates its rendered object in
+   `render`:
 
    ```python
    class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
@@ -336,11 +336,11 @@ another process answers with `HX-Refresh`.
        @staticmethod
        def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
            rendered_object.setText(value)
-
-       @staticmethod
-       def _update_state(view: LabelViewLike, rendered_object: QLabel) -> None:
-           view.text = rendered_object.text()
    ```
+
+   When the user can change the widget, `render` also connects the widget's signal to a
+   method. The method sets the view attribute inside `stop_refresh()`, as `QtInputRenderer`
+   does for the text of a `QLineEdit`.
 
    A web renderer has no widget to keep. It renders its fragment in `to_html`, and applies the
    browser's events to the view in `dispatch`. Its handlers mark it dirty (`_mark_dirty`). See

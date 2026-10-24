@@ -349,10 +349,6 @@ class WebRenderer(Renderer[TView, str]):
         if dirty is not None:
             dirty[self.widget_id] = self
 
-    @staticmethod
-    def _update_state(view: TView, rendered_object: str) -> None:
-        pass  # the browser posts its state with each event instead (see `dispatch`)
-
 
 class TextFieldViewLike(ViewLike, Protocol):
     placeholder: str
@@ -4976,10 +4972,6 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 
     @staticmethod
     def _noop(_view: MainView, _rendered_object: str, _value: Any) -> None:
-        pass
-
-    @staticmethod
-    def _update_state(view: MainView, rendered_object: str) -> None:
         pass
 
 

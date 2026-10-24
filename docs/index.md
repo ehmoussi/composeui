@@ -31,7 +31,7 @@ Signals carry the events between the views, the model, and the app.
   the renderer, by the view's `_renderer_key`.
 - **The renderer syncs both directions.** When code sets a view attribute, the renderer
   shows it (`refresh_attribute`). When the user edits the widget, the renderer writes the
-  value back into the view (`update_state`).
+  value back into the view, from the widget's signal.
 
 The [technical guide](technical-guide.md#architecture) explains the architecture in detail.
 

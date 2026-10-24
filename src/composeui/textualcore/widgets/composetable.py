@@ -315,9 +315,6 @@ class ComposeTable(DataTable[Text]):
             self._is_multiple = is_multiple
             self.fill(self._headers, self._rows)  # with or without the check column
 
-    def selected_rows(self) -> list[int]:
-        return self._selected_rows
-
     def set_selected_rows(self, rows: list[int]) -> None:
         self._selected_rows = rows
         if self._is_multiple:

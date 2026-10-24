@@ -107,7 +107,7 @@ matches one, and audits hunt for existing tests that do.
   attribute names, `RendererType` members, or view field names;
 - exact source, import, or string greps, including whole-HTML snapshot matches
   where a targeted fragment or attribute check is the real contract;
-- private predicate or call-shape tests (`_update_state`, `_refresh_*` handlers,
+- private predicate or call-shape tests (`_refresh_*` handlers,
   web `_dirty` bookkeeping) duplicated by a real widget or request test;
 - duplicate invocations of the same contract across Qt, Textual and web tests
   when the behavior lives in `composeui.core`;
@@ -173,7 +173,7 @@ inventory. Hunt for the [junk patterns](#junk-patterns).
 ## Retention bar
 
 Keep a test when it independently enforces a public view API, the renderer
-contract (`render`, `refresh_attribute`, `_update_state`, `_refresh_dispatcher`),
+contract (`render`, `refresh_attribute`, `_refresh_dispatcher`),
 `Signal`/`Application.connect` keyword injection (`view`, `main_view`, `model`),
 saved-state format and `load_state` compatibility, field exclusion from state
 (`Signal`/`Renderer`/`Validator`), backend registration, thread safety, HTML
