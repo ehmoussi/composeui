@@ -396,6 +396,7 @@ make translations  # each app's catalogs against the text it translates
 make check         # lint + mypy + translations
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
+make web-deps      # download htmx, uPlot and Cally at their versions (then make css)
 make docs          # build the documentation site into docs/_build/html
 make screenshots   # the screenshots of the examples guide, on every backend
 ```
@@ -442,6 +443,17 @@ downloads the Tailwind CLI and the daisyUI files once, into `css/vendor/`, which
 committed. It needs no Node or npm. It checks the SHA-256 of each file against the one in the
 `Makefile` and `make.ps1`, and fails when they differ. When you change `TAILWIND_VERSION` or
 `DAISYUI_VERSION`, change the SHA-256 values in both files, and delete `css/vendor/`.
+
+The page's scripts are committed in `webcore/static/`: htmx, uPlot and Cally. uPlot's
+stylesheet, `css/uPlot.min.css`, is committed too. The package then needs no download, and
+the page works offline. `make web-deps` downloads these files from npm at the versions in
+the `Makefile`, and checks their SHA-256. It adds Cally's license to `cally.js` as a
+comment. To update one of them:
+
+1. Change its version and its SHA-256 in the `Makefile` and in `make.ps1`.
+2. Change its version in the comments of `webcore/page.py`.
+3. Run `make web-deps css`, then the tests, and commit the files.
+
 ### Code style
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the
