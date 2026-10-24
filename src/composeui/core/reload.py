@@ -418,7 +418,7 @@ def run_reloading(
 
 
 def _exit(signum: int, _frame: FrameType | None) -> None:
-    raise SystemExit(128 + signum)
+    raise SystemExit(128 + signum)  # posix only: Windows' terminate sends no signal
 
 
 def _reload_in_place(
@@ -456,6 +456,6 @@ def _stop(child: subprocess.Popen[bytes] | None) -> None:
     child.terminate()
     try:
         child.wait(timeout=_STOP_TIMEOUT)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:  # posix only: Windows' terminate can't be ignored
         child.kill()
         child.wait()

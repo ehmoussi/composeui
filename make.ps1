@@ -187,10 +187,16 @@ function Invoke-Check {
 }
 
 function Invoke-Test {
-    Invoke-Offscreen {
-        Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '--cov=src',
-            '--cov-report=term-missing:skip-covered')
+    # the lines only POSIX runs, e.g. a process ignoring its termination: left out here
+    $previous = $env:COMPOSEUI_POSIX_ONLY
+    $env:COMPOSEUI_POSIX_ONLY = '# posix only'
+    try {
+        Invoke-Offscreen {
+            Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '--cov=src',
+                '--cov-report=term-missing:skip-covered')
+        }
     }
+    finally { $env:COMPOSEUI_POSIX_ONLY = $previous }
 }
 
 # the web backend in headless Chromium; skipped unless Chromium is installed:

@@ -103,10 +103,16 @@ branch = true
 patch = ["subprocess"]
 
 [tool.coverage.report]
-# the floor for now: raised as gaps close, until 100
-fail_under = 99
-# lines that never run in a test
-exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]
+# every line and branch: a new one comes with its test, or a pragma saying why
+fail_under = 100
+# lines that never run in a test; and, where COMPOSEUI_POSIX_ONLY is their mark (make.ps1
+# sets it on Windows), lines that only POSIX runs
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "${COMPOSEUI_POSIX_ONLY-no line has this mark}",
+]
 
 [tool.ruff]
 line-length = 100

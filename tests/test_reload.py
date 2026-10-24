@@ -991,3 +991,20 @@ def test_an_app_ignoring_its_termination_is_killed(
     command = [sys.executable, "-c", stubborn, str(started)]
     assert run_reloading(command, _OneLook(started.exists)) == 0
     assert time.monotonic() - begin < _TIMEOUT  # killed, not waited for
+
+
+def test_the_changes_end_with_the_watcher_s(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    watchfiles = pytest.importorskip("watchfiles")
+    app = tmp_path / "app.py"
+    notes = tmp_path / "notes.txt"
+
+    def watch(*_args: object, **_kwargs: object) -> Iterator[set[tuple[int, str]]]:
+        yield set()  # the first, set up before the changes count
+        yield {(2, str(app)), (2, str(notes))}  # then stopped, e.g. its directory removed
+
+    monkeypatch.setattr(watchfiles, "watch", watch)
+    monkeypatch.setattr("composeui.core.reload.has_change_events", lambda _directory: True)
+
+    assert list(watch_changes(tmp_path)) == [{app.resolve()}]

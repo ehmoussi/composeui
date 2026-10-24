@@ -427,9 +427,13 @@ Every behavior change needs a test in `tests/`.
   `tests/test_browser.py`, marked `browser`. These tests need the `browser` group and
   Chromium. Install Chromium once with `uv run --group browser playwright install chromium`,
   then run `make browser-test`.
-- `make test` fails when the coverage of lines and branches is below `fail_under` in
-  `pyproject.toml`. Raise `fail_under` when tests close gaps; the goal is 100. Coverage
-  also counts the child processes that the reload tests start.
+- `make test` fails when the coverage of lines and branches is below 100% (`fail_under` in
+  `pyproject.toml`). Coverage also counts the child processes that the reload tests start.
+  Add a test with each new line. When no test can reach a line, mark it
+  `# pragma: no cover` and say why in a comment.
+- A line that only POSIX runs, such as the kill of a process that ignores its
+  termination, gets a `# posix only` comment. On Windows, `make.ps1` sets
+  `COMPOSEUI_POSIX_ONLY`, and coverage leaves these lines out.
 
 ### Translations
 
