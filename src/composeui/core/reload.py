@@ -9,6 +9,7 @@ runs the program again in a new child process, which opens the study.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.abc
 import importlib.util
@@ -51,6 +52,8 @@ _TAKEN_NAME = "taken"
 #: seconds a running app has to take the files changed, or to exit, before it is
 #: terminated; once taken, running their code may take as long as it does
 _RELOAD_TIMEOUT = 5.0
+#: seconds a terminated app has to exit before it is killed
+_STOP_TIMEOUT = 5.0
 #: ComposeUI's own package: its code is never imported again in a running app
 _COMPOSEUI_DIRECTORY = Path(__file__).resolve().parent.parent
 #: set while `rerun_program` runs the program: the apps it ran, unrun
@@ -179,9 +182,8 @@ def _run_as_main(previous_main: types.ModuleType) -> None:
         msg = "can't find the program to run it again"
         raise RuntimeError(msg)
     code = spec.loader.get_code(spec.name)
-    if code is None:
-        msg = "the program has no code to run"
-        raise RuntimeError(msg)
+    # none only for a compiled extension, which Python can't start as a program
+    assert code is not None
     # as `__main__` for good, as the program's classes resolve their string annotations
     # through `sys.modules[cls.__module__]`
     program = types.ModuleType("__main__")
@@ -304,10 +306,8 @@ def _modification_times(directory: Path) -> dict[Path, int]:
         for name in files:
             if name.endswith(".py"):
                 path = Path(root, name)
-                try:
+                with contextlib.suppress(OSError):  # removed while walking
                     times[path] = path.stat().st_mtime_ns
-                except OSError:  # removed while walking
-                    continue
     return times
 
 
@@ -400,13 +400,13 @@ def run_reloading(
                     LOGGER.info("Reloading: %s changed", names)
                     if not in_place:
                         child = subprocess.Popen(command, env=env)  # noqa: S603
-                    continue
-                code = None if child is None else child.poll()
-                if code == 0:
-                    return 0
-                if code is not None:
-                    LOGGER.info("The app exited with code %s: waiting for a change", code)
-                    child = None
+                else:
+                    code = None if child is None else child.poll()
+                    if code == 0:
+                        return 0
+                    if code is not None:
+                        LOGGER.info("The app exited with code %s: waiting for a change", code)
+                        child = None
     except KeyboardInterrupt:
         pass
     finally:
@@ -455,7 +455,7 @@ def _stop(child: subprocess.Popen[bytes] | None) -> None:
         return
     child.terminate()
     try:
-        child.wait(timeout=5)
+        child.wait(timeout=_STOP_TIMEOUT)
     except subprocess.TimeoutExpired:
         child.kill()
         child.wait()

@@ -213,11 +213,11 @@ class Signal(Generic[Unpack[Ts]]):
 
     @staticmethod
     def _optional_bounds(callback: Callable[..., None]) -> frozenset[str]:
-        """Get the bounds `callback` has a default for, left out when there is none to give."""
-        try:
-            params = inspect.signature(callback).parameters
-        except (TypeError, ValueError):
-            return frozenset()
+        """Get the bounds `callback` has a default for, left out when there is none to give.
+
+        Asked once `_requested_bounds` found some: its signature can be read.
+        """
+        params = inspect.signature(callback).parameters
         return frozenset(
             name
             for name in ("main_view", "model")
