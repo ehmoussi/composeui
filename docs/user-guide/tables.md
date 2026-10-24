@@ -122,7 +122,7 @@ a task again from its Retry button, and opens the error of a failed task from a 
 What each backend shows:
 
 - **Qt** draws a checkable cell, a combobox frame, a push button, or underlined link text.
-  A double click or F2 on a combobox cell opens a `QComboBox`. Space toggles the current
+  A click or F2 on an editable combobox cell opens a `QComboBox`. Space toggles the current
   check box, or clicks the current button or link.
 - **Textual** shows the cell as text: a box (☑ or ☐), the text and ▾, the text and the
   button's text in brackets, or underlined text. A click toggles a box, and so does Space

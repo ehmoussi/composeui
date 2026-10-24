@@ -226,16 +226,19 @@ class QCellDelegate(QStyledItemDelegate):
 
     A button cell shows its text, then the button, a square as tall as the cell unless
     its text is wider; `cell_clicked` emits a click on it, or anywhere on a link cell.
-    A combobox cell is a combobox's frame around its text: editing it opens a combobox
-    of its options, the cell taking the one picked. A disabled cell is drawn grayed, its
-    button or link not clicked.
+    A combobox cell is a combobox's frame around its text: a click on it, or editing it,
+    opens a combobox of its options, the cell taking the one picked. A disabled cell is
+    drawn grayed, its button or link not clicked.
     """
 
     cell_clicked = Signal(int, int)
+    editor_created = Signal()
 
     def __init__(self, model: QTextTableModel, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._model = model
+        self._pressed: tuple[int, int] | None = None
+        self._closed: set[QWidget] = set()
 
     def _widget(self, index: _Index) -> CellWidget | None:
         return self._model.cell_widgets.get(index.column())
@@ -310,6 +313,8 @@ class QCellDelegate(QStyledItemDelegate):
         index: _Index,
     ) -> bool:
         widget = self._widget(index)
+        if event.type() == QEvent.Type.MouseButtonPress:
+            self._pressed = (index.row(), index.column())
         if (
             widget is not None
             and not self._is_disabled(index)
@@ -323,11 +328,28 @@ class QCellDelegate(QStyledItemDelegate):
                 and self.button_rect(option.rect, option, widget.text).contains(position)
             ):
                 self.cell_clicked.emit(index.row(), index.column())
+            elif (
+                widget.kind is CellKind.COMBOBOX
+                and index.column() in self._model.editable_columns
+                # not the release of a click that closed the popup
+                and self._pressed == (index.row(), index.column())
+                and isinstance(view := self.parent(), QAbstractItemView)
+            ):
+                # like a check box, a combobox answers one click, not Qt's double click
+                # (opened once the release is done: the view then resets its state, which
+                # must say the editor is open when the edit is answered)
+                handled = super().editorEvent(event, model, option, index)
+                cell = QPersistentModelIndex(index)
+                QTimer.singleShot(
+                    0, lambda: view.edit(self._model.index(cell.row(), cell.column()))
+                )
+                return handled
         return super().editorEvent(event, model, option, index)
 
     def createEditor(  # noqa: N802
         self, parent: QWidget, option: QStyleOptionViewItem, index: _Index
     ) -> QWidget:
+        self.editor_created.emit()
         widget = self._widget(index)
         if widget is None or widget.kind is not CellKind.COMBOBOX:
             return super().createEditor(parent, option, index)
@@ -338,12 +360,21 @@ class QCellDelegate(QStyledItemDelegate):
         editor.setCurrentText(text)
 
         def commit() -> None:
+            self._closed.add(editor)
             self.commitData.emit(editor)
             self.closeEditor.emit(editor)
 
         editor.activated.connect(commit)
+        editor.destroyed.connect(lambda: self._closed.discard(editor))
         QTimer.singleShot(0, editor.showPopup)
         return editor
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        # the focus lost by an editor already committed would commit it again, to a view
+        # that no longer has it
+        if isinstance(obj, QWidget) and obj in self._closed:
+            return False
+        return super().eventFilter(obj, event)
 
     def setEditorData(self, editor: QWidget, index: _Index) -> None:  # noqa: N802
         if not isinstance(editor, QComboBox):
@@ -483,6 +514,9 @@ class QTextTableView(QTableView):
         delegate = QCellDelegate(self._model, self)
         self.setItemDelegate(delegate)
         delegate.cell_clicked.connect(self.cell_clicked)
+        # the view's state can't say it: Qt resets it after some of the ways to open an editor
+        self._has_editor = False
+        delegate.editor_created.connect(self._note_editor)
         self._is_setting = False
         self.verticalHeader().setVisible(False)
         # as tall as its rows, not Qt's default height, which leaves an empty block
@@ -508,10 +542,13 @@ class QTextTableView(QTableView):
         # Qt commits the editor's text before closing it: a callback answering the edit with
         # new rows would reset the model under the open editor, which Qt then commits again
         # ("commitData called with an editor that does not belong to this view")
-        if self.state() is QAbstractItemView.State.EditingState:
+        if self._has_editor or self.state() is QAbstractItemView.State.EditingState:
             self._edits.append((row, column, text))
         else:  # a check box toggled, no editor open
             self.cell_edited.emit(row, column, text)
+
+    def _note_editor(self) -> None:
+        self._has_editor = True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         index = self.currentIndex()
@@ -578,6 +615,7 @@ class QTextTableView(QTableView):
             # the cell to edit next may not stay where it is once the edit is answered
             hint = QAbstractItemDelegate.EndEditHint.NoHint
         super().closeEditor(editor, hint)
+        self._has_editor = False
         edits, self._edits = self._edits, []
         for edit in edits:
             self.cell_edited.emit(*edit)

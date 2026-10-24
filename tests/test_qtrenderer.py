@@ -63,6 +63,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     CellStyle,
+    CellWidget,
     ChartKind,
     ChartView,
     DataTableView,
@@ -93,6 +94,7 @@ from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
+from composeui.qtcore.widgets.qtexttable import QTextTableView
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipechart import PipeChartMainView
@@ -140,7 +142,6 @@ if TYPE_CHECKING:
 
     from composeui.core.chartimage import ImageOptions
     from composeui.core.view import View
-    from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 
 @pytest.fixture(autouse=True)
@@ -1762,6 +1763,38 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
 
 
+def test_picking_a_combobox_cell_s_option_with_the_mouse_edits_it_once(qtbot: QtBot) -> None:
+    headers = ["Name", "Role"]
+    table = QTextTableView()
+    qtbot.addWidget(table)
+    table.set_editable_columns([1])
+    table.set_cell_widgets({1: CellWidget.combobox(["Input", "Output"])})
+    edited: list[tuple[int, int, str]] = []
+
+    def edit(row: int, column: int, text: str) -> None:
+        edited.append((row, column, text))
+        # answering an edit with new rows, as a view does, resets the model
+        table.set_table(headers, [["a", text]])
+
+    table.cell_edited.connect(edit)
+    table.set_table(headers, [["a", "Input"]])
+    table.show()
+    # a click opens the combobox; a click on its popup's option picks it. Qt only logs a
+    # commit to a view that no longer has the editor, which fails the test as a warning
+    qtbot.mouseClick(
+        table.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=table.visualRect(table.model().index(0, 1)).center(),
+    )
+    qtbot.waitUntil(lambda: table.state() is QAbstractItemView.State.EditingState)
+    popup = table.viewport().findChild(QComboBox).view()
+    option = popup.visualRect(popup.model().index(1, 0)).center()
+    qtbot.mouseClick(popup.viewport(), Qt.MouseButton.LeftButton, pos=option)
+    qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+    assert edited == [(0, 1, "Output")]
+    qtbot.waitUntil(lambda: table.viewport().findChild(QComboBox) is None)
+
+
 def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: QtBot) -> None:
     view = CellWidgetsMainView()
     view.render(RendererType.QT)
@@ -1798,10 +1831,10 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     assert [row[0] for row in view.variables.rows] == ["False", "False"]
     assert checks() == [Qt.CheckState.Unchecked, Qt.CheckState.Unchecked]
 
-    # editing a role opens a combobox of the roles
+    # a click on a role opens a combobox of the roles
     center = table.visualRect(model.index(0, 2)).center()
     qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
-    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+    qtbot.waitUntil(lambda: table.state() is QAbstractItemView.State.EditingState)
     editor = table.viewport().findChild(QComboBox)
     assert isinstance(editor, QComboBox)
     assert [editor.itemText(item) for item in range(editor.count())] == ["Input", "Output"]
