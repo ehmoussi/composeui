@@ -555,8 +555,13 @@ def test_a_qt_app_whose_changed_code_can_t_show_runs_it_again_in_a_new_process(
     (first,) = {pid for event, version, pid in events if event == "render" and version == "1"}
     (second,) = {pid for event, version, pid in events if event == "render" and version == "2"}
     assert second != first  # a new process
+    supervisor = events[0][2]
+    # on Windows, `program` is the launcher of the virtual environment's python.exe (see
+    # `test_a_qt_app_with_reload_closes_every_model_it_built`)
+    if with_model and sys.platform != "win32":
+        assert supervisor == str(program.pid)
     expected = [
-        ["close", "1", str(program.pid)],  # the supervisor's, never shown
+        ["close", "1", supervisor],  # the supervisor's, never shown
         ["render", "1", first],
         ["close", "2", first],  # the changed code's, which failed to show
         ["close", "1", first],  # the window's, as its app exited
@@ -745,10 +750,15 @@ def test_a_textual_app_with_reload_closes_every_model_it_built(tmp_path: Path) -
         _stop(program)
 
     events = [line.split("|") for line in log.read_text().splitlines()]
-    first, second = events[1][2], events[4][2]
+    supervisor, first, second = events[0][2], events[1][2], events[4][2]
     assert second != first  # a new process
+    # on Windows, `program` is the launcher of the virtual environment's python.exe (see
+    # `test_a_qt_app_with_reload_closes_every_model_it_built`)
+    if sys.platform != "win32":
+        assert supervisor == str(program.pid)
+    assert supervisor not in (first, second)
     assert events == [
-        ["close", "1", str(program.pid)],  # the supervisor's, never shown
+        ["close", "1", supervisor],  # the supervisor's, never shown
         ["render", "1", first],
         ["waited", "1", first],
         ["close", "1", first],  # its app exited for the change
