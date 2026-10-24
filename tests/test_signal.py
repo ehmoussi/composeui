@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import gc
+from typing import TYPE_CHECKING
+
+import pytest
 
 from composeui.core.application import Application
 from composeui.core.signal import Signal
 from composeui.core.view import MainView, StatusBar, View, define_view
+
+if TYPE_CHECKING:
+    from composeui.core.model import Model
 
 
 @define_view
@@ -117,3 +123,36 @@ def test_a_view_s_method_is_no_longer_called_once_the_view_is_gone() -> None:
     changed.emit(2)  # e.g. once the record is deleted
 
     assert shown == [1]
+
+
+def test_a_signal_disconnected_calls_none_of_its_callbacks() -> None:
+    signal: Signal[int] = Signal()
+    received: list[int] = []
+    signal.connect(received.append)
+    signal.disconnect()
+    after: list[int] = []
+    signal.connect(after.append)  # connected again since
+
+    signal.emit(1)
+
+    assert (received, after) == ([], [1])
+
+
+def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
+    def show(value: int, *, main_view: MainView) -> None:
+        pass
+
+    def sign(value: int, *, model: Model) -> None:
+        pass
+
+    def maybe_sign(value: int, *, model: Model | None = None) -> None:
+        pass
+
+    for callback, error in ((show, "The main view is missing."), (sign, "The model is missing.")):
+        signal: Signal[int] = Signal()  # e.g. a view's, not given its main view yet
+        signal.connect(callback)
+        with pytest.raises(ValueError, match=error):
+            signal.emit(1)
+    optional: Signal[int] = Signal()
+    optional.connect(maybe_sign)
+    optional.emit(1)  # its default instead

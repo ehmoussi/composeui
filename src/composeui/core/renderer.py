@@ -156,14 +156,9 @@ class RendererContainer(Generic[TView]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         """Invoke `callback` on the thread that owns the GUI event loop.
 
-        Delegates to a bound renderer: every renderer in the container shares the same
-        toolkit and thread. Falls back to a direct call if no renderer is bound yet.
+        Delegates to one of its renderers: they all share the same toolkit and thread.
         """
-        renderer = next(iter(self._renderers.values()), None)
-        if renderer is not None:
-            renderer.call_on_main_thread(callback)
-        else:
-            callback()
+        next(iter(self._renderers.values())).call_on_main_thread(callback)
 
     def get_renderer(self, name: str) -> Renderer[TView, Any]:
         return self._renderers[name]
@@ -179,15 +174,11 @@ class RendererContainer(Generic[TView]):
 
     def refresh(self) -> None:
         """Show every field of the view that a renderer has a handler for."""
-        if len(self._renderers) == 0:
-            raise NoRenderedObjectError
         for renderer in self._renderers.values():
             renderer.refresh()
 
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         """Show `value` with each renderer that has a handler for the field `attr_name`."""
-        if len(self._renderers) == 0:
-            raise NoRenderedObjectError
         for renderer in self._renderers.values():
             if renderer.has_attr(attr_name):
                 renderer.refresh_attribute(attr_name, value)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import platform
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,6 +22,8 @@ from composeui.core.reload import (
     can_reload_in_place,
     has_change_events,
     load_reloaded_state,
+    program_command,
+    rerun_program,
     run_reloading,
     save_reloaded_state,
     watch_changes,
@@ -197,14 +201,17 @@ def test_only_composeui_s_own_code_needs_a_new_process(tmp_path: Path) -> None:
     assert not can_reload_in_place([tmp_path / "app.py", composeui / "core" / "view.py"])
 
 
-@pytest.mark.parametrize("watcher", ["watchfiles", "polling"])
+@pytest.mark.parametrize("watcher", ["watchfiles", "polling", "polling-without-events"])
 def test_a_change_of_the_program_s_code_is_seen_but_not_of_another_file(
     watcher: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    if watcher == "watchfiles":
-        pytest.importorskip("watchfiles")
-    else:
+    if watcher == "polling":
         monkeypatch.setitem(sys.modules, "watchfiles", None)  # not installed
+    else:
+        pytest.importorskip("watchfiles")
+    if watcher == "polling-without-events":
+        # watchfiles installed, but no events reported, e.g. a Windows drive on WSL
+        monkeypatch.setattr("composeui.core.reload.has_change_events", lambda _directory: False)
     project = tmp_path / "project"
     app = project / "app.py"
     hidden = project / ".venv" / "lib.py"
@@ -231,6 +238,8 @@ def test_a_change_of_the_program_s_code_is_seen_but_not_of_another_file(
     while app not in seen:
         assert time.monotonic() < deadline, "timed out"
         seen |= next(changes)
+    if watcher != "watchfiles":  # polled: a look, empty, at each step
+        assert next(changes) == set()
 
     changes.close()
 
@@ -823,3 +832,162 @@ def _is_running(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+@pytest.mark.parametrize(
+    ("code", "error"),
+    [
+        ("import sys\nsys.exit(0)\n", "the program exited instead of running an app"),
+        ("count = 1\n", "the program didn't run an app"),  # e.g. its `run` call removed
+    ],
+)
+def test_a_program_run_again_without_an_app_leaves_the_previous_one(
+    code: str, error: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # the program's code, imported again
+    script = tmp_path / "app.py"
+    script.write_text(code)
+    program = types.ModuleType("__main__")
+    program.__file__ = str(script)  # `python app.py`
+    monkeypatch.setitem(sys.modules, "__main__", program)
+
+    with pytest.raises(RuntimeError, match=error):
+        rerun_program()
+
+    assert sys.modules["__main__"] is program
+
+
+def test_a_module_run_again_is_found_again_and_keeps_its_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    (tmp_path / "counter.py").write_text(
+        "from composeui.core.reload import keep_rerun\nkeep_rerun('the app')\n"
+    )
+    program = types.ModuleType("__main__")
+    program.__spec__ = importlib.util.find_spec("counter")  # `python -m counter`
+    monkeypatch.setitem(sys.modules, "__main__", program)
+    monkeypatch.setattr("sys.argv", ["counter", "--reload"])
+
+    assert rerun_program() == "the app"
+    assert program_command() == [sys.executable, "-m", "counter", "--reload"]
+
+
+def test_a_program_neither_a_script_nor_a_module_can_t_run_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))  # `python -c`
+
+    with pytest.raises(RuntimeError, match="can't find the program to run it again"):
+        rerun_program()
+    with pytest.raises(ValueError, match="start it as a script or with -m"):
+        program_command()
+
+
+def test_a_state_dropped_keeps_the_language_it_was_shown_in_if_the_same(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv(RELOADED_VARIABLE, str(tmp_path))
+    save_reloaded_state(_WordsMainView(), None)  # in English, as the app starts
+    changed = _CountMainView()
+    languages: list[str] = []
+    monkeypatch.setattr(changed, "set_language", languages.append)
+
+    load_reloaded_state(changed, None)
+
+    assert "is dropped" in caplog.text
+    assert languages == []  # no language to set back
+
+
+#: an app logging each start, which never looks at the changes, and exits on its second
+_DEAF_APP = textwrap.dedent(
+    """
+    import pathlib, sys, time
+    log = pathlib.Path(sys.argv[1])
+    with log.open("a") as file:
+        file.write("start\\n")
+    if log.read_text().count("start") == 2:
+        sys.exit(0)
+    while True:
+        time.sleep(0.05)
+    """
+)
+
+
+def test_an_app_not_taking_a_change_in_time_runs_again_in_a_new_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("composeui.core.reload._RELOAD_TIMEOUT", 0.3)
+    log = tmp_path / "runs.log"
+
+    def changes() -> Iterator[set[Path]]:
+        _wait_for(lambda: _lines(log) == 1)
+        yield {tmp_path / "app.py"}
+        while True:  # until the second app exits by itself
+            yield set()
+
+    with caplog.at_level(logging.INFO, logger="COMPOSEUI"):
+        code = run_reloading([sys.executable, "-c", _DEAF_APP, str(log)], changes())
+
+    assert code == 0
+    assert "The app didn't answer" in caplog.text
+    assert _lines(log) == 2
+
+
+class _OneLook:
+    """The changes as an iterator, not a generator: one look, once `ready`, then no more."""
+
+    def __init__(self, ready: Callable[[], bool]) -> None:
+        self._ready = ready
+        self._is_done = False
+
+    def __iter__(self) -> _OneLook:
+        return self
+
+    def __next__(self) -> set[Path]:
+        if self._is_done:
+            raise StopIteration
+        _wait_for(self._ready)
+        self._is_done = True
+        return set()
+
+
+@pytest.mark.parametrize("ending", ["exhausted", "interrupted"])
+def test_a_supervisor_whose_changes_end_stops_its_app(
+    ending: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    log = tmp_path / "runs.log"
+
+    def interrupted() -> Iterator[set[Path]]:
+        _wait_for(lambda: _lines(log) == 1)
+        raise KeyboardInterrupt  # Ctrl+C in the supervisor's terminal
+        yield set()
+
+    batches = interrupted() if ending == "interrupted" else _OneLook(lambda: _lines(log) == 1)
+
+    assert run_reloading([sys.executable, "-c", _DEAF_APP, str(log)], batches) == 0
+    assert _lines(log) == 1  # stopped, not run again
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no SIGTERM to ignore")
+def test_an_app_ignoring_its_termination_is_killed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("composeui.core.reload._STOP_TIMEOUT", 0.3)
+    started = tmp_path / "started"
+    stubborn = (
+        "import pathlib, signal, sys, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "pathlib.Path(sys.argv[1]).touch()\n"
+        "while True:\n"
+        "    time.sleep(0.05)\n"
+    )
+
+    begin = time.monotonic()
+    command = [sys.executable, "-c", stubborn, str(started)]
+    assert run_reloading(command, _OneLook(started.exists)) == 0
+    assert time.monotonic() - begin < _TIMEOUT  # killed, not waited for

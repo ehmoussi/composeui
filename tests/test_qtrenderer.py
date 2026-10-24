@@ -3498,3 +3498,20 @@ def test_a_filter_s_chip_opens_on_space_and_its_editor_closes_on_escape(qtbot: Q
     assert not bar.is_editing()
     assert view.rooms.filters == {3: "true"}
     assert bar.search.text() == "kit"
+
+
+def test_a_signal_disconnected_hears_its_widget_no_more(qtbot: QtBot) -> None:
+    view = InputView()
+    view.render(RendererType.QT)
+    field = _widget(view)
+    qtbot.addWidget(field)
+    edits: list[str] = []
+    view.text_edited.connect(edits.append)
+    field.show()
+    field.setFocus()
+
+    view.text_edited.disconnect()
+    qtbot.keyClicks(field, "a")
+
+    assert edits == []
+    assert view.text == "a"  # the field still gives the view its text
