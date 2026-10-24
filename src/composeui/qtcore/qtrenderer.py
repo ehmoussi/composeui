@@ -140,16 +140,6 @@ TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="QWidget | QAction")
 
 
-class NoQtRendererObjectError(Exception):
-    def __init__(self) -> None:
-        super().__init__("Renderer should be inherited by QtRenderer")
-
-
-class NotQWidgetError(Exception):
-    def __init__(self) -> None:
-        super().__init__("Renderer object should be of type QWidget")
-
-
 class _MainThreadInvoker(QObject):
     """Bridges a call from any thread onto the thread that owns this `QObject`."""
 
@@ -225,8 +215,8 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
 
         def refresh(view: TView, renderer_object: TWidget, value: Any) -> None:
             is_invalid = isinstance(view, FormRowView) and view.is_invalid_once(name, value)
-            if isinstance(renderer_object, QWidget):  # always, for a field renderer
-                renderer_object.setStyleSheet((self._invalid_style if is_invalid else None) or "")
+            assert isinstance(renderer_object, QWidget)  # a field renderer's
+            renderer_object.setStyleSheet((self._invalid_style if is_invalid else None) or "")
 
         return refresh
 
@@ -448,8 +438,7 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
 
     def _update_edited(self, _text: str) -> None:
         """Give the view the value edited, a whole number in range, before the spin box does."""
-        if self._rendered_object is None:
-            return
+        assert self._rendered_object is not None
         text = self._rendered_object.cleanText()
         if text == "":
             with self.stop_refresh():
@@ -604,8 +593,7 @@ class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathF
 
     def browse(self) -> None:
         """Pick a file in Qt's dialog, its path then the field's; nothing if cancelled."""
-        if self._rendered_object is None:
-            raise NoQtRendererObjectError
+        assert self._rendered_object is not None
         path = self._view.path
         directory = "" if path is None else str(path.parent)
         picked, _selected_filter = QFileDialog.getOpenFileName(
@@ -1029,8 +1017,8 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     def _save_image(self) -> None:
         """Ask where to save the chart's image, and save it as it shows, zoomed in too."""
         chart, view = self._rendered_object, self._view
-        if chart is None or not isinstance(view, ChartView):
-            return
+        assert chart is not None
+        assert isinstance(view, ChartView)
         path, chosen = QFileDialog.getSaveFileName(
             chart,
             view.save_image_text,
@@ -1266,8 +1254,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     def _export(self) -> None:
         """Ask where to write the rows shown as CSV, and write them there."""
         table = self._rendered_object
-        if table is None:
-            return
+        assert table is not None
         path, _chosen = QFileDialog.getSaveFileName(
             table, self._view.texts.get("export", ""), self._view.export_filename, "CSV (*.csv)"
         )
@@ -1504,8 +1491,9 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)
-        if self._rendered_object is not None:  # a check-all box follows its column's
-            self._refresh_checked_columns(self._view, self._rendered_object)
+        assert self._rendered_object is not None
+        # a check-all box follows its column's
+        self._refresh_checked_columns(self._view, self._rendered_object)
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
@@ -1692,56 +1680,36 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                         layout.addRow(label_object, field_container)
                     else:
                         layout.addRow(field_container)
-                elif (
-                    isinstance(field_row.renderer, QtWidgetRenderer)
-                    and field_row.renderer.qt_object is not None
-                ):
+                else:  # a nested form
+                    assert isinstance(field_row.renderer, QtWidgetRenderer)
+                    assert isinstance(field_row.renderer.qt_object, QWidget)
                     layout.addRow(field_row.renderer.qt_object)
-            if (
-                isinstance(self._view.log_view.renderer, QtWidgetRenderer)
-                and self._view.log_view.renderer.qt_object is not None
-            ):
-                layout.addRow(self._view.log_view.renderer.qt_object)
+            log = self._view.log_view.renderer
+            assert isinstance(log, QtWidgetRenderer)
+            assert isinstance(log.qt_object, QWidget)
+            layout.addRow(log.qt_object)
             self.refresh()
 
-    def _get_field_object(self, field_row_renderer: RendererContainer[View]) -> QWidget:
-        try:
-            field_renderer = field_row_renderer.get_renderer("field")
-        except KeyError as e:
-            msg = f"The field renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(field_renderer, QtWidgetRenderer):
-            raise NoQtRendererObjectError
-        field_object = field_renderer.qt_object
-        if not isinstance(field_object, QWidget):
-            raise NotQWidgetError
-        return field_object
+    @staticmethod
+    def _get_field_object(field_row_renderer: RendererContainer[View]) -> QWidget:
+        field_renderer = field_row_renderer.get_renderer("field")
+        assert isinstance(field_renderer, QtWidgetRenderer)
+        assert isinstance(field_renderer.qt_object, QWidget)
+        return field_renderer.qt_object
 
-    def _get_log_object(self, field_row_renderer: RendererContainer[View]) -> QWidget:
-        try:
-            log_renderer = field_row_renderer.get_renderer("log")
-        except KeyError as e:
-            msg = f"The log renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(log_renderer, QtLogRenderer):
-            raise NoQtRendererObjectError
-        log_object = log_renderer.qt_object
-        if not isinstance(log_object, QWidget):
-            raise NotQWidgetError
-        return log_object
+    @staticmethod
+    def _get_log_object(field_row_renderer: RendererContainer[View]) -> QWidget:
+        log_renderer = field_row_renderer.get_renderer("log")
+        assert isinstance(log_renderer, QtLogRenderer)
+        assert log_renderer.qt_object is not None
+        return log_renderer.qt_object
 
-    def _get_label_object(self, field_row_renderer: RendererContainer[View]) -> QFormLabel:
-        try:
-            label_renderer = field_row_renderer.get_renderer("label")
-        except KeyError as e:
-            msg = f"The label renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(label_renderer, QtFormLabelRenderer):
-            raise NoQtRendererObjectError
-        label_object = label_renderer.qt_object
-        if label_object is None:
-            raise NoRenderedObjectError
-        return label_object
+    @staticmethod
+    def _get_label_object(field_row_renderer: RendererContainer[View]) -> QFormLabel:
+        label_renderer = field_row_renderer.get_renderer("label")
+        assert isinstance(label_renderer, QtFormLabelRenderer)
+        assert label_renderer.qt_object is not None
+        return label_renderer.qt_object
 
 
 class QtGroupFormRenderer(QtFormRenderer):
@@ -1754,9 +1722,9 @@ class QtGroupFormRenderer(QtFormRenderer):
         )
 
     @staticmethod
-    def _refresh_title(view: FormView, rendered_object: QWidget, value: str) -> None:
-        if isinstance(rendered_object, QGroupBox) and isinstance(view, GroupFormView):
-            rendered_object.setTitle(value)
+    def _refresh_title(_view: FormView, rendered_object: QWidget, value: str) -> None:
+        assert isinstance(rendered_object, QGroupBox)
+        rendered_object.setTitle(value)
 
 
 #: widgets scrolling within themselves: as tall as the room they're given, rather than
@@ -1866,8 +1834,8 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
     def _refresh_kind(
         self, _view: DialogView, rendered_object: QMessageBox, value: DialogKind
     ) -> None:
-        if self._accept_button is None or self._reject_button is None:
-            return
+        assert self._accept_button is not None
+        assert self._reject_button is not None
         is_confirm = value is DialogKind.CONFIRM
         self._reject_button.setVisible(is_confirm)
         # Escape clicks it: the hidden reject button would otherwise answer a message
@@ -1876,14 +1844,14 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: QMessageBox, value: str
     ) -> None:
-        if self._accept_button is not None:
-            self._accept_button.setText(value)
+        assert self._accept_button is not None
+        self._accept_button.setText(value)
 
     def _refresh_reject_text(
         self, _view: DialogView, _rendered_object: QMessageBox, value: str
     ) -> None:
-        if self._reject_button is not None:
-            self._reject_button.setText(value)
+        assert self._reject_button is not None
+        self._reject_button.setText(value)
 
 
 class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
@@ -1911,8 +1879,9 @@ class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
             dialog = QFormDialog()
             release_when_hidden(dialog)
             form = self._view.form.renderer
-            if isinstance(form, QtWidgetRenderer) and isinstance(form.qt_object, QWidget):
-                dialog.set_form(form.qt_object)
+            assert isinstance(form, QtWidgetRenderer)
+            assert isinstance(form.qt_object, QWidget)
+            dialog.set_form(form.qt_object)
             dialog.answered_ok.connect(self._view.accept)
             dialog.answered_cancel.connect(self._view.reject)
             dialog.dismissed.connect(self._view.dismiss)
@@ -2054,8 +2023,7 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
         rendered_object.setSizes([size * 10_000 for size in value])
 
     def _update_sizes(self) -> None:
-        if self._rendered_object is None:
-            return
+        assert self._rendered_object is not None
         sizes = self._view.shares_of(self._rendered_object.sizes())
         if sizes == self._view.sizes:  # a click, or a move against a pane's minimum
             return
@@ -2227,10 +2195,11 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             self._rendered_object.setHeaderHidden(True)
             self._rendered_object.setColumnCount(2)
             header = self._rendered_object.header()
-            if header is not None:  # the marks as narrow as their icon, at the right
-                header.setStretchLastSection(False)
-                header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-                header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            assert header is not None
+            # the marks as narrow as their icon, at the right
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
             self._rendered_object.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
             self._rendered_object.itemSelectionChanged.connect(self._update_selected)
             self._rendered_object.itemExpanded.connect(
@@ -2304,7 +2273,8 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             return
         path = _tree_path(selected[0])
         if path == self._view.selected:
-            return
+            # Qt reports a change only: kept against a second `selection_changed`
+            return  # pragma: no cover
         with self.stop_refresh():
             self._view.selected = path
         self._view.selection_changed.emit(path)
@@ -2328,13 +2298,13 @@ def _tree_items(tree: QTreeWidget) -> list[tuple[TreePath, QTreeWidgetItem]]:
         items.append((_tree_path(item), item))
         for index in range(item.childCount()):
             child = item.child(index)
-            if child is not None:
-                add(child)
+            assert child is not None
+            add(child)
 
     for index in range(tree.topLevelItemCount()):
         item = tree.topLevelItem(index)
-        if item is not None:
-            add(item)
+        assert item is not None
+        add(item)
     return items
 
 
@@ -2404,12 +2374,10 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
         if self._rendered_object is None:
             self._rendered_object = QTabWidget()
             for tab in self._view.tabs:
-                if (
-                    isinstance(tab.renderer, QtTabPageRenderer)
-                    and tab.renderer.qt_object is not None
-                ):
-                    self._rendered_object.addTab(tab.renderer.qt_object, tab.title)
-                    tab.renderer.refresh()  # its tab's state, now that it has one
+                assert isinstance(tab.renderer, QtTabPageRenderer)
+                assert tab.renderer.qt_object is not None
+                self._rendered_object.addTab(tab.renderer.qt_object, tab.title)
+                tab.renderer.refresh()  # its tab's state, now that it has one
             # once the tabs are in: adding the first one makes it current
             self._rendered_object.currentChanged.connect(self._update_current_index)
             self._view.current_changed.add_qt_signal(self._rendered_object.currentChanged)
@@ -2470,18 +2438,17 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
             self.toolbar.setMovable(False)
             self.toolbar.toggleViewAction().setVisible(False)  # no way to close it
             for page in self._view.pages:
-                if not isinstance(page.action.renderer, QtActionRenderer):
-                    continue
+                assert isinstance(page.action.renderer, QtActionRenderer)
                 page.action.renderer.set_parent_rendered_object(self.toolbar)
                 page.action.renderer.render()
-                action = page.action.renderer.qt_object
-                if action is not None:
-                    self.toolbar.addAction(action)
+                assert page.action.renderer.qt_object is not None
+                self.toolbar.addAction(page.action.renderer.qt_object)
                 slot = QWidget()
                 slot_layout = QVBoxLayout(slot)
                 slot_layout.setContentsMargins(0, 0, 0, 0)
-                if isinstance(page.renderer, QtPageRenderer) and page.renderer.qt_object:
-                    slot_layout.addWidget(page.renderer.qt_object)
+                assert isinstance(page.renderer, QtPageRenderer)
+                assert page.renderer.qt_object is not None
+                slot_layout.addWidget(page.renderer.qt_object)
                 self._slots[page.route] = slot
                 self._rendered_object.addWidget(slot)
             self.refresh()
@@ -2526,24 +2493,21 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
 
     def open_file(self) -> Path | None:
         """Return an existing file selected by the user."""
-        if self._rendered_object is None:
-            raise NoQtRendererObjectError
+        assert self._rendered_object is not None
         filepath_str, selected_filter = QFileDialog.getOpenFileName(
             self._rendered_object, "Open File", "", self._build_extensions()
         )
         return self._build_filepath(filepath_str, selected_filter)
 
     def save_file(self) -> Path | None:
-        if self._rendered_object is None:
-            raise NoQtRendererObjectError
+        assert self._rendered_object is not None
         filepath_str, selected_filter = QFileDialog.getSaveFileName(
             self._rendered_object, "Save File", "", self._build_extensions()
         )
         return self._build_filepath(filepath_str, selected_filter)
 
     def close(self) -> None:
-        if self._rendered_object is None:
-            raise NoQtRendererObjectError
+        assert self._rendered_object is not None
         self._rendered_object.close()
 
     def _build_filepath(self, filepath_str: str, selected_filter: str) -> Path | None:
@@ -2598,9 +2562,10 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
             if isinstance(child_view.renderer, QtRouterRenderer):
                 toolbar = child_view.renderer.toolbar
                 stack = child_view.renderer.qt_object
-                if toolbar is not None and stack is not None:
-                    rendered_object.addToolBar(toolbar)
-                    central_layout.addWidget(stack)
+                assert toolbar is not None
+                assert stack is not None
+                rendered_object.addToolBar(toolbar)
+                central_layout.addWidget(stack)
             else:
                 _add_content_widget(central_layout, child_view)
         central_layout.addStretch()
@@ -2617,19 +2582,17 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         if isinstance(renderer, QtMenuRenderer):
             renderer.set_parent_rendered_object(rendered_object)
             renderer.render()
-            if renderer.qt_object is not None:
-                rendered_object.menuBar().addMenu(renderer.qt_object)
+            assert renderer.qt_object is not None
+            rendered_object.menuBar().addMenu(renderer.qt_object)
         elif isinstance(renderer, QtStatusBarRenderer):
-            if isinstance(renderer.qt_object, QStatusBar):
-                rendered_object.setStatusBar(renderer.qt_object)
+            assert isinstance(renderer.qt_object, QStatusBar)
+            rendered_object.setStatusBar(renderer.qt_object)
         elif isinstance(renderer, QtToolBarRenderer):
-            if renderer.qt_object is not None:
-                rendered_object.addToolBar(renderer.qt_object)
+            assert renderer.qt_object is not None
+            rendered_object.addToolBar(renderer.qt_object)
         elif isinstance(renderer, QtSidebarRenderer):
-            if renderer.qt_object is not None:
-                rendered_object.addDockWidget(
-                    Qt.DockWidgetArea.LeftDockWidgetArea, renderer.qt_object
-                )
+            assert renderer.qt_object is not None
+            rendered_object.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, renderer.qt_object)
         else:
             return False
         return True
@@ -2776,9 +2739,7 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
                     child_view.renderer.set_parent_rendered_object(self._rendered_object)
                     child_view.renderer.render()
                     action = child_view.renderer.qt_object
-                    if action is None:
-                        msg = f"{child_view} don't have a QAction object rendered"
-                        raise ValueError(msg)
+                    assert action is not None
                     self._rendered_object.addAction(action)
             self.refresh()
 
@@ -2804,8 +2765,8 @@ class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
                     child_view.renderer.set_parent_rendered_object(self._rendered_object)
                     child_view.renderer.render()
                     action = child_view.renderer.qt_object
-                    if action is not None:
-                        self._rendered_object.addAction(action)
+                    assert action is not None
+                    self._rendered_object.addAction(action)
             self.refresh()
 
     @staticmethod
