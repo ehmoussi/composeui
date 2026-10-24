@@ -227,7 +227,8 @@ class Signal(Generic[Unpack[Ts]]):
     @staticmethod
     def get_function_name(callback: CallbackT[Any]) -> str:
         if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
-            return Signal.get_function_name(callback.get_callback())  # type: ignore[arg-type]
+            wrapped = callback.get_callback()
+            return "<collected>" if wrapped is None else Signal.get_function_name(wrapped)  # type: ignore[arg-type]
         if isinstance(callback, functools.partial):
             inner = Signal.get_function_name(callback.func)
             args = list(map(repr, callback.args))
@@ -239,7 +240,8 @@ class Signal(Generic[Unpack[Ts]]):
     @staticmethod
     def get_function_file(callback: CallbackT[Any]) -> str:
         if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
-            return Signal.get_function_file(callback.get_callback())  # type: ignore[arg-type]
+            wrapped = callback.get_callback()
+            return "" if wrapped is None else Signal.get_function_file(wrapped)  # type: ignore[arg-type]
         if isinstance(callback, functools.partial):
             return Signal.get_function_file(callback.func)
         code = getattr(callback, "__code__", None)
@@ -321,18 +323,14 @@ class InjectedCallback(Generic[Unpack[Ts]]):
     def set_model(self, model: ReferenceType[Model]) -> None:
         self._model = model
 
-    def get_callback(self) -> Callable[..., None]:
-        callback = self._callback()
-        if callback is None:
-            msg = "callback has been garbage collected"
-            raise ValueError(msg)
-        return callback
+    def get_callback(self) -> Callable[..., None] | None:
+        """Get the callback; None once it's a method of a view collected since."""
+        return self._callback()
 
     def __call__(self, *args: Unpack[Ts]) -> None:
         callback = self._callback()
         if callback is None:
-            msg = "callback has been garbage collected"
-            raise ValueError(msg)
+            return None  # its view is gone: as Qt, which drops a deleted receiver's slot
         kwargs: dict[str, MainView | Model] = {}
         if "main_view" in self._requested_bounds:
             main_view = None if self._main_view is None else self._main_view()
