@@ -12,14 +12,18 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 from composeui.core.registry import RendererType, create_renderer
-from composeui.core.view import StatusBar
+from composeui.core.view import LabelRowInputView, StatusBar
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtStatusBarRenderer
 from composeui.textualcore.textualrenderer import RENDERERS as TEXTUAL_RENDERERS
 from composeui.textualcore.textualrenderer import TextualStatusBarRenderer
 from composeui.webcore.webrenderer import RENDERERS as WEB_RENDERERS
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
@@ -51,3 +55,14 @@ def test_create_renderer_resolves_a_key_to_the_backend_renderer() -> None:
 def test_create_renderer_returns_none_for_a_key_the_backend_does_not_provide() -> None:
     """A partial backend degrades to not rendering the view, instead of crashing."""
     assert create_renderer(RendererType.QT, "not_a_widget_any_backend_knows", StatusBar()) is None
+
+
+def test_a_labelled_row_isn_t_rendered_by_a_backend_without_its_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delitem(WEB_RENDERERS, "form_label")  # e.g. a backend of an app's own
+    row = LabelRowInputView(label="Name")
+
+    row.render(RendererType.WEB)
+
+    assert row.renderer is None

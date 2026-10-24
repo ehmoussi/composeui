@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import enum
 import gc
+import threading
 import tracemalloc
 import weakref
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 import pytest
+from attrs import Factory
 
+from composeui.core.application import Application
 from composeui.core.view import (
     DATA_TABLE_CACHE,
     DATA_TABLE_WINDOW,
@@ -20,6 +23,7 @@ from composeui.core.view import (
     ListSource,
     MainView,
     SelectionMode,
+    SourceColumn,
     child,
     define_view,
 )
@@ -470,3 +474,70 @@ def test_a_study_saves_the_settings_and_the_selection_never_the_rows(tmp_path: P
     reopened.load_state(path)
     assert reopened.samples.ids(0, 3) == [18, 15, 12]
     assert reopened.samples.selected_ids == [18, 3]
+
+
+def test_a_table_without_a_source_exports_no_row(tmp_path: Path) -> None:
+    path = tmp_path / "rows.csv"
+
+    DataTableView().export_csv(path)
+
+    assert path.read_text(encoding="utf-8") == ""
+
+
+class _NarrowedSource(CountingSource):
+    """A source whose columns narrow as it changes: e.g. a query reading fewer since."""
+
+    def __init__(self, samples: Sequence[Sample]) -> None:
+        super().__init__(samples)
+        self.width = 4
+
+    @property
+    def columns(self) -> Sequence[SourceColumn]:
+        return super().columns[: self.width]
+
+
+def test_a_filter_on_a_column_the_source_no_longer_has_filters_nothing() -> None:
+    source = _NarrowedSource(_samples(10))
+    table = DataTableView(source=source)
+    table.filters = {"value": ">1"}
+    filtered = table.row_count
+
+    source.width = 1  # its name only
+    source.changed.emit()
+
+    assert (filtered, table.row_count) == (5, 10)
+
+
+@define_view
+class _ExportMainView(MainView):
+    app_title = "Export"
+    extension = ".export"
+
+    samples: DataTableView = Factory(DataTableView)
+
+
+class _GatedCellsSource(CountingSource):
+    """A source whose cells, read in a job, wait for `gate`: an export still writing."""
+
+    def __init__(self, samples: Sequence[Sample]) -> None:
+        super().__init__(samples)
+        self.gate = threading.Event()
+
+    def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
+        if threading.current_thread() is not threading.main_thread():
+            self.gate.wait(10)
+        return super().cells(ids, columns)
+
+
+def test_an_export_canceled_partway_leaves_no_file(tmp_path: Path) -> None:
+    view = Application(build_main_view=_ExportMainView).main_view
+    source = _GatedCellsSource(_samples(2 * DATA_TABLE_WINDOW))
+    view.samples.source = source
+    path = tmp_path / "rows.csv"
+
+    view.samples.export_csv(path)  # in a job, waiting at its first window of cells
+    view.jobs.cancel()  # e.g. New, Open, or closing the app
+    source.gate.set()
+    view.jobs.wait()
+
+    assert not path.exists()

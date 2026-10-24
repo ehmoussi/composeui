@@ -2955,8 +2955,7 @@ class RecordTableView(TableView, Generic[RecordT]):
 
     def _column_type(self, column: int) -> Any:
         """Get the type of the column's field, by which its cells sort and filter."""
-        if column >= len(self.columns):
-            return str
+        assert column < len(self.columns)  # a sort's, a filter's or a header's: one of them
         try:
             fields = attrs.fields_dict(attrs.resolve_types(self.record_type))
         except TypeError:  # a table not knowing its records' type: its cells are text
@@ -2965,8 +2964,9 @@ class RecordTableView(TableView, Generic[RecordT]):
         return str if field is None else field.type
 
     def _cell_value(self, row: int, column: int) -> Any:
-        if row >= len(self.records) or column >= len(self.columns):
-            return self._cell_text(row, column)
+        # the rows are the records' cells, under their columns
+        assert row < len(self.records)
+        assert column < len(self.columns)
         return _sort_value(getattr(self.records[row], self.columns[column].field))
 
     def _emit_edit(self, row: int, column: int, text: str) -> None:
@@ -2988,9 +2988,9 @@ class RecordTableView(TableView, Generic[RecordT]):
             raise EditRefusedError from error
         # `old` as `Any`: mypy's attrs plugin doesn't take a bound type variable
         new: RecordT = attrs.evolve(cast("Any", old), **{name: value})
-        if self._edited_rows is not None:
-            # as the table will show it, to keep it selected once the records come back
-            self._edited_rows[row] = self._cells(new, self.columns)
+        assert self._edited_rows is not None  # set by `emit_cell_edited`, its only caller
+        # as the table will show it, to keep it selected once the records come back
+        self._edited_rows[row] = self._cells(new, self.columns)
         records, rows = self.records, self.rows
         super()._emit_edit(row, column, text)
         self.record_edited.emit(old, new)
@@ -3339,7 +3339,7 @@ class DataTableView(View):
         if source is not None:
             self._listener = _WeakCallback(self._read_source_again)
             source.changed.connect(self._listener)
-        self._source_changed(source)
+        self._source_changed()
         renderer = self.renderer
         if isinstance(renderer, (Renderer, RendererContainer)):
             renderer.refresh_attribute(attribute.name, source)
@@ -3708,9 +3708,9 @@ class DataTableView(View):
         except (TypeError, ValueError):  # a format for another type of value
             return _cell_text(value)
 
-    def _source_changed(self, source: Optional[TableSource[Any]]) -> None:
-        if source is not self.source:  # a source replaced since
-            return
+    def _source_changed(self) -> None:
+        """Count the rows of the source, new or changed, then order them."""
+        source = self.source
         self._cache.clear()
         if source is None:
             self._total, self._recount = 0, False
@@ -3810,7 +3810,7 @@ class DataTableView(View):
             renderer.refresh_attribute("row_count", self.row_count)
 
     def _read_source_again(self) -> None:
-        self._source_changed(self.source)
+        self._source_changed()
 
     def _show_order(
         self,
@@ -3994,8 +3994,8 @@ class DataTableByPosition:
     def sort_by(self, column: int) -> None:
         """Sort by the column at `column`, as a click on its header does."""
         names = self._view.column_names
-        if column < len(names):
-            self._view.sort_by(names[column])
+        assert column < len(names)  # a header's
+        self._view.sort_by(names[column])
 
     def select(self, position: int, *, is_extended: bool) -> None:
         """Select the row at `position`, as a click does: extended to it with Shift."""
@@ -4078,10 +4078,12 @@ class ValuesGroupMixin(Generic[TValue]):
         """Serialize `value` as its key: its label could be in another language on load."""
         if self.value is None:
             return None
-        for index, candidate in enumerate(self.values.values()):
-            if candidate == self.value:
-                return self._value_key(index, candidate)
-        return None
+        # one of `values`, as its validator keeps it
+        return next(
+            self._value_key(index, candidate)
+            for index, candidate in enumerate(self.values.values())
+            if candidate == self.value
+        )
 
     def deserialize_value(self, key: Optional[str]) -> Optional[TValue]:
         """Look up a key previously produced by `serialize_value` back into a TValue.

@@ -7,13 +7,18 @@ import json
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional
 
+import attrs
 import pytest
 
 from composeui.core.application import Application
 from composeui.core.view import (
+    CellStyle,
+    Column,
     FilterError,
     FilterProblem,
+    RecordTableView,
     SelectionMode,
+    T,
     TableView,
     parse_filter,
 )
@@ -240,3 +245,56 @@ def test_a_study_reopens_sorted_and_filtered_dropping_what_its_columns_no_longer
     data["rooms"]["sort_column"] = 9
     other.load_state_data(data)
     assert (other.rooms.sort_column, other.rooms.filters) == (None, {NAME: "en"})
+
+
+def test_a_column_no_longer_sortable_or_filterable_drops_its_sort_and_filters() -> None:
+    table = SortedRoomsMainView().rooms
+    table.sort_by(OCCUPANTS)
+    table.filters = {HEATED: "true"}
+    table.search = "room"
+
+    table.sortable_columns = [NAME]
+    table.filterable_columns = [NAME, TEMPERATURE]
+    filtered_search = table.search
+    table.filterable_columns = []  # nothing left to search
+
+    assert table.sort_column is None
+    assert table.filters == {}
+    assert (filtered_search, table.search) == ("room", "")
+
+
+def test_values_of_another_type_sort_by_their_text_and_match_no_comparison() -> None:
+    table = SortedRoomsMainView().rooms
+    # e.g. a column whose type changed since its records were made
+    table.records = [Room("Hall", 18), Room("Attic", "warm"), Room("Bedroom", 9)]  # type: ignore[arg-type]
+
+    table.sort_by(TEMPERATURE)
+    by_text = [table.records[row].name for row in table.shown_rows]
+    table.filters = {TEMPERATURE: ">10"}
+
+    assert by_text == ["Hall", "Bedroom", "Attic"]  # "18" < "9" < "warm"
+    assert [table.records[row].name for row in table.shown_rows] == ["Hall"]
+
+
+@attrs.define
+class _Inspection:
+    room: str
+    on: datetime.date
+
+
+def test_a_date_column_s_filter_is_hinted_with_a_date() -> None:
+    table = RecordTableView[_Inspection](
+        columns=[Column("room", T("Room")), Column("on", T("On"), filterable=True)]
+    )
+
+    assert table.filter_placeholder(1) == ">=2024-01-31"
+
+
+def test_the_cell_styles_of_columns_gone_are_left_out() -> None:
+    table = TableView(headers=["Room"], rows=[["Hall"]])
+    table.cell_styles = {
+        (0, 0): CellStyle(background="#dc2626"),
+        (0, 3): CellStyle(background="#dc2626"),
+    }
+
+    assert list(table.shown_cell_styles()) == [(0, 0)]
