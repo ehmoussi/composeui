@@ -2438,6 +2438,9 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
             "doesn&#39;t match this application",
         ),
     ],
+    # not the content: the too-large one would make an id of 5 MiB, longer than Windows
+    # allows the PYTEST_CURRENT_TEST variable that holds it
+    ids=["other-extension", "not-json", "not-an-object", "too-large", "half-valid"],
 )
 def test_a_rejected_state_file_changes_nothing_and_says_why(
     main_view: HelloMainView, client: TestClient, filename: str, content: bytes, reason: str
