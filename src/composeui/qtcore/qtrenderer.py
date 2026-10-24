@@ -1437,11 +1437,20 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         cls._refresh_checked_columns(view, rendered_object)
 
     @staticmethod
-    def _refresh_checked_columns(view: TableViewLike, rendered_object: QFilterTable) -> None:
+    def _refresh_checked_columns(
+        view: TableViewLike,
+        rendered_object: QFilterTable,
+        *,
+        editable_columns: list[int] | None = None,
+        cell_widgets: dict[int, CellWidget] | None = None,
+    ) -> None:
+        """Show each check-all box; with the new value of a field the view doesn't hold yet."""
+        editable = view.editable_columns if editable_columns is None else editable_columns
+        widgets = view.cell_widgets if cell_widgets is None else cell_widgets
         rendered_object.table.set_checked_columns(
             {
-                column: (view.column_checked(column), column in view.editable_columns)
-                for column, widget in view.cell_widgets.items()
+                column: (view.column_checked(column), column in editable)
+                for column, widget in widgets.items()
                 if widget.kind is CellKind.CHECK_BOX and widget.check_all
             }
         )
@@ -1451,14 +1460,14 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         cls, view: TableViewLike, rendered_object: QFilterTable, value: list[int]
     ) -> None:
         rendered_object.table.set_editable_columns(value)
-        cls._refresh_checked_columns(view, rendered_object)
+        cls._refresh_checked_columns(view, rendered_object, editable_columns=value)
 
     @classmethod
     def _refresh_cell_widgets(
         cls, view: TableViewLike, rendered_object: QFilterTable, value: dict[int, CellWidget]
     ) -> None:
         rendered_object.table.set_cell_widgets(value)
-        cls._refresh_checked_columns(view, rendered_object)
+        cls._refresh_checked_columns(view, rendered_object, cell_widgets=value)
 
     @classmethod
     def _refresh_looks(
