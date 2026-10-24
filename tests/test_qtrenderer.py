@@ -3094,6 +3094,8 @@ def test_a_view_qt_doesn_t_render_is_left_out_of_its_container(qtbot: QtBot) -> 
     assert _widget(view.items).isAncestorOf(_widget(item))
     assert isinstance(view.action.renderer, QtActionRenderer)
     assert view.action.renderer.qt_object is None
+    assert view.form.skipped.renderer is None  # a row whose field Qt doesn't register
+    assert _widget(view.form).isAncestorOf(_field_widget(view.form.shown))
     for bar in (view.menu, view.toolbar):
         assert isinstance(bar.renderer, QtWidgetRenderer)
         assert isinstance(bar.renderer.qt_object, QWidget)

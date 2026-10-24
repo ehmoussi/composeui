@@ -1999,10 +1999,11 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
                     # `VerticalScroll` (nothing ever appears to overflow the viewport).
                     row.styles.height = "auto"
                     rows.append(row)
-                else:  # a nested form
+                elif isinstance(field_row, FormView):
                     assert isinstance(field_row.renderer, TextualWidgetRenderer)
                     assert field_row.renderer.widget is not None
                     rows.append(field_row.renderer.widget)
+                # else a row whose field this backend doesn't register: left out
             log = self._view.log_view.renderer
             assert isinstance(log, TextualWidgetRenderer)
             assert log.widget is not None

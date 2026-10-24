@@ -9,6 +9,8 @@ from composeui.core.view import (
     GRID_POSITION,
     ActionView,
     ExpanderView,
+    FormRowView,
+    FormView,
     GridView,
     HorizontalView,
     LabelView,
@@ -16,6 +18,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     PageView,
+    RowInputView,
     SplitterView,
     ToolBar,
     VerticalView,
@@ -82,6 +85,19 @@ class PartialToolBar(ToolBar):
 
 
 @define_view
+class UnregisteredRowView(FormRowView):
+    """A form row whose field no backend registers."""
+
+    _field_renderer_key = "unregistered"
+
+
+@define_view
+class PartialForm(FormView):
+    shown: RowInputView = Factory(RowInputView)
+    skipped: UnregisteredRowView = Factory(UnregisteredRowView)
+
+
+@define_view
 class PartialMainView(MainView):
     app_title = "Partial"
     extension = ".partial"
@@ -94,6 +110,7 @@ class PartialMainView(MainView):
     splitter: PartialSplitter = Factory(PartialSplitter)
     expander: PartialExpander = Factory(PartialExpander)
     page: PartialPage = Factory(PartialPage)
+    form: PartialForm = Factory(PartialForm)
     items: ListView = Factory(ListView)
     shown: LabelView = Factory(LabelView)
     skipped: UnregisteredView = Factory(UnregisteredView)

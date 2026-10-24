@@ -3165,6 +3165,8 @@ async def test_a_view_textual_doesn_t_render_is_left_out_of_its_container() -> N
         assert _widget(view.expander.shown).parent is not None
         assert _widget(view.shown).is_attached
         assert _widget(view.items) in _widget(item).ancestors
+        assert view.form.skipped.renderer is None  # a row whose field Textual doesn't register
+        assert _widget(view.form) in _field_widget(view.form.shown.renderer).ancestors
         assert len(_widget(view.toolbar).query(ComposeToolbarButton)) == 1
 
 
