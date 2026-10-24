@@ -1281,7 +1281,11 @@ async def test_a_form_dialog_s_form_gets_its_state_once_its_screen_shows() -> No
         assert edit is not None
 
         await pilot.click(edit)
-        await pilot.pause()
+        # the screen's widgets mount a few messages later, more than one pause on a slow system
+        for _ in range(100):
+            await pilot.pause(0.05)
+            if material.value == CatalogueMaterial.COPPER:
+                break
 
         assert isinstance(app.screen, ComposeFormDialog)
         assert material.value == CatalogueMaterial.COPPER
