@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from typing import TYPE_CHECKING
 
@@ -99,3 +100,19 @@ def test_the_file_on_the_command_line_is_shown(
     app.run()
     assert app.main_view.document.text == "# Notes\n\n- été\n"
     assert app.main_view.markdown_file.path == markdown_file  # reloaded from the field
+
+
+def test_without_a_file_the_viewer_reads_none(markdown_file: Path) -> None:
+    main_view = MarkdownViewerMainView()
+    first = main_view.document.text
+    main_view.apply_arguments(argparse.Namespace(markdown=None))
+    main_view.markdown_file.reload_clicked.emit()  # no path to read again
+    after_reload = main_view.document.text
+
+    main_view.markdown_file.text = str(markdown_file)
+    main_view.markdown_file.editing_finished.emit()
+    markdown_file.write_text("# Changed\n", encoding="utf-8")
+    main_view.markdown_file.editing_finished.emit()  # the field left again: not read again
+
+    assert after_reload == first
+    assert main_view.document.text == "# Notes\n\n- été\n"

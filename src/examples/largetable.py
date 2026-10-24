@@ -194,10 +194,10 @@ class LargeTableMainView(MainView):
         self.picked.text = f"{len(ids):,} readings selected" if ids else "No reading selected"
 
     def _show_activated(self, row_id: Any) -> None:
-        if self._source is not None:
-            names = [column.name for column in COLUMNS]
-            sensor, site, temperature, *_ = self._source.cells([row_id], names)[row_id]
-            self.picked.text = f"{sensor} in {site}: {temperature} °C"
+        assert self._source is not None  # a row of its, activated
+        names = [column.name for column in COLUMNS]
+        sensor, site, temperature, *_ = self._source.cells([row_id], names)[row_id]
+        self.picked.text = f"{sensor} in {site}: {temperature} °C"
 
     def _show_count(self) -> None:
         if self._source is not None:

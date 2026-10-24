@@ -343,9 +343,9 @@ class PipeMainView(MainView):
         ]
 
     def _display_message_status_bar(self, value: EdgeType | None) -> None:
-        if value is not None:
-            message = self.tr("Edge type changed: {edge_type}")
-            self.status_bar.show_message(message.format(edge_type=self.tr(value.value)))
+        assert value is not None  # the user picks a radio button, never none
+        message = self.tr("Edge type changed: {edge_type}")
+        self.status_bar.show_message(message.format(edge_type=self.tr(value.value)))
 
 
 def main() -> None:

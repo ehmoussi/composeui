@@ -67,8 +67,8 @@ class TextualDemoMainView(MainView):
         self.form.shape.value_changed.connect(self._display_shape_status)
 
     def _display_shape_status(self, value: str | None) -> None:
-        if value is not None:
-            self.status_bar.show_message(f"Shape changed: {value}")
+        assert value is not None  # the user picks a radio button, never none
+        self.status_bar.show_message(f"Shape changed: {value}")
 
 
 def main() -> None:

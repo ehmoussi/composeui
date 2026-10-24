@@ -373,7 +373,8 @@ class QCellDelegate(QStyledItemDelegate):
         # the focus lost by an editor already committed would commit it again, to a view
         # that no longer has it
         if isinstance(obj, QWidget) and obj in self._closed:
-            return False
+            # Qt sends it on some runs only, as the focus moves: no test can count on it
+            return False  # pragma: no cover
         return super().eventFilter(obj, event)
 
     def setEditorData(self, editor: QWidget, index: _Index) -> None:  # noqa: N802

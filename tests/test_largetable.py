@@ -10,7 +10,7 @@ import pytest
 
 from composeui.core.application import ModelApplication
 from composeui.core.registry import RendererType
-from examples.largetable import LargeTableMainView, ReadingsModel
+from examples.largetable import LargeTableMainView, ReadingsModel, made_up
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -167,3 +167,28 @@ def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> Non
     assert len(temperatures) == ROWS
     assert temperatures == sorted(temperatures)
     model.close()
+
+
+def test_no_readings_asked_writes_none(app: App) -> None:
+    app.main_view.apply_arguments(argparse.Namespace(rows=0))
+    app.main_view.jobs.wait()
+
+    assert app.main_view.table.total == 0
+
+
+def test_the_made_up_readings_are_as_many_as_asked_the_same_each_time() -> None:
+    readings = list(made_up(3))
+
+    assert len(readings) == 3
+    assert readings == list(made_up(3))
+
+
+def test_the_rows_option_says_how_many_readings_to_write(
+    app: App, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sys.argv", ["largetable", "--rows", "5"])
+
+    app.run()  # the command line, parsed as the app's
+    app.main_view.jobs.wait()
+
+    assert app.main_view.table.total == 5

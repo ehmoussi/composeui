@@ -84,15 +84,59 @@ def test_a_canceled_sweep_keeps_the_runs_written(app: App, monkeypatch: pytest.M
     assert app.main_view.status_bar.message == "Swept 0 of 3 radii"
 
 
-def test_a_sweep_that_does_not_fit_starts_nothing(app: App) -> None:
-    app.main_view.form.min_radius.value = 50.0
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("min_radius", 50.0, "The minimum radius must be smaller than the maximum radius"),
+        ("pressure", 0.0, "Every value must be greater than 0"),
+        ("steps", 1, "A sweep takes at least 2 radii"),
+        ("thickness", 25.0, "The wall must be thinner than the minimum radius"),
+    ],
+)
+def test_a_sweep_that_does_not_fit_starts_nothing(
+    app: App, field: str, value: float, reason: str
+) -> None:
+    getattr(app.main_view.form, field).value = value
 
     app.main_view.buttons.run.clicked.emit()
 
     assert not app.main_view.jobs.is_running
     assert app.main_view.status_bar.message == "Fix the sweep first"
-    log_message = app.main_view.form.log_view.log_message
-    assert "The minimum radius must be smaller than the maximum radius" in log_message
+    assert reason in app.main_view.form.log_view.log_message
+
+
+def test_a_sweep_running_isn_t_started_again(app: App, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pipesweep, "SOLVE_SECONDS", 60)
+    app.main_view.buttons.run.clicked.emit()
+    jobs = app.main_view.jobs
+
+    app.main_view.start(app.model)  # e.g. Ctrl+Enter, the button disabled
+
+    assert jobs.is_running
+    jobs.cancel()
+    jobs.wait(timeout=5)
+
+
+def test_a_sweep_canceled_while_solving_writes_none_of_its_run(
+    app: App, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    solving, resumed = threading.Event(), threading.Event()
+    solve = pipesweep.hoop_stress
+
+    def slow_solve(pressure: float, radius: float, thickness: float) -> float:
+        solving.set()
+        resumed.wait(5)
+        return solve(pressure, radius, thickness)
+
+    monkeypatch.setattr(pipesweep, "hoop_stress", slow_solve)
+    app.main_view.buttons.run.clicked.emit()
+    assert solving.wait(5)
+
+    app.main_view.jobs.cancel()  # after the wait, before the run lands in the database
+    resumed.set()
+    app.main_view.jobs.wait(timeout=5)
+
+    assert app.model.runs.all() == []
 
 
 def test_a_saved_sweep_opens_with_its_runs(app: App, tmp_path: Path) -> None:
