@@ -130,7 +130,7 @@ widget catalog, and the API reference.
 
 - The [user guide](docs/user-guide.md) explains how to build an app: the views, their layout,
   forms and their checks, the widgets, pages, tabs, dialogs, tables, charts, threads, SQLite
-  models, translations, and the differences between the backends.
+  models, translations, the differences between the backends, and a skill for coding agents.
 - The [examples guide](docs/examples-guide.md) says what each example app shows, and how
   to run it.
 - The [technical guide](docs/technical-guide.md) explains how ComposeUI works inside, and
