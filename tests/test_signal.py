@@ -89,3 +89,31 @@ def test_now_calls_the_callback_right_away_then_on_each_emit() -> None:
     assert calls == [(app.main_view,)]
     signal.emit(3)
     assert calls == [(app.main_view,), (3, app.main_view)]
+
+
+@define_view
+class _RecordView(View):
+    """A record's view, showing what a longer-lived signal (e.g. its model's) emits."""
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.shown: list[int] = []
+
+    def show(self, value: int, *, main_view: MainView) -> None:
+        self.shown.append(value)
+
+
+def test_a_view_s_method_is_no_longer_called_once_the_view_is_gone() -> None:
+    main_view = _MainView()
+    changed: Signal[int] = Signal()  # e.g. a model's, outliving its records' views
+    changed.set_main_view(main_view)
+    record = _RecordView()
+    changed.connect(record.show)
+    changed.emit(1)
+    shown = record.shown
+    del record
+    gc.collect()
+
+    changed.emit(2)  # e.g. once the record is deleted
+
+    assert shown == [1]
