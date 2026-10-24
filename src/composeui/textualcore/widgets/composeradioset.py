@@ -46,9 +46,8 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
             if value is not None and value == candidate and not button.value:
                 button.value = True
 
-    def value(self) -> Optional[TValue]:
-        if self.pressed_index == -1:
-            return None
+    def value(self) -> TValue:
+        assert self.pressed_index != -1  # asked once a button is pressed
         return list(self._values.values())[self.pressed_index]
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:

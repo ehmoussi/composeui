@@ -399,14 +399,13 @@ class ComposeTable(DataTable[Text]):
         self.cell_edited.emit(row, column, text)
 
     def _toggle_check(self, row: int, column: int) -> None:
-        if row < len(self._rows):
-            cells = self._rows[row]
-            is_checked = (cells[column] if column < len(cells) else "").casefold() == "true"
-            self._set_cell(row, column, CHECKED_TEXTS[not is_checked])
+        assert row < len(self._rows)  # a row clicked, or the cursor's, shown only on a row
+        cells = self._rows[row]
+        is_checked = (cells[column] if column < len(cells) else "").casefold() == "true"
+        self._set_cell(row, column, CHECKED_TEXTS[not is_checked])
 
     def _pick(self, row: int, column: int) -> None:
-        if row >= len(self._rows):
-            return
+        assert row < len(self._rows)  # see `_toggle_check`
         cells = self._rows[row]
         text = cells[column] if column < len(cells) else ""
         options = list(self.cell_widgets[column].options)
@@ -421,8 +420,7 @@ class ComposeTable(DataTable[Text]):
         self.app.push_screen(picker, apply)
 
     def _edit(self, row: int, focused: int) -> None:
-        if row >= len(self._rows):
-            return
+        assert row < len(self._rows)  # see `_toggle_check`
         cells = self._rows[row]
         editor = ComposeRowEditor(
             {

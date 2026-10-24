@@ -59,8 +59,7 @@ class SplitterHandle(Widget, can_focus=True):
     @property
     def splitter(self) -> ComposeSplitter:
         parent = self.parent
-        if not isinstance(parent, ComposeSplitter):
-            raise TypeError(parent)
+        assert isinstance(parent, ComposeSplitter)
         return parent
 
     def _position(self, event: events.MouseEvent) -> int:
@@ -93,7 +92,7 @@ class SplitterHandle(Widget, can_focus=True):
         # the keys along the splitter only: the others still scroll the screen
         if action == "move":
             return parameters[1] == self.splitter.is_vertical
-        return True
+        return True  # pragma: no cover - Textual asks a widget about its own bindings only
 
     def action_move(self, cells: int, _is_vertical: Any) -> None:
         splitter = self.splitter

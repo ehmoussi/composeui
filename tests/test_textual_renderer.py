@@ -21,8 +21,10 @@ from attrs import Factory
 from rich.color import Color
 from rich.style import Style
 from rich.text import Text
+from textual.color import Color as TextualColor
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
+from textual.screen import Screen
 from textual.widgets import (
     Button,
     Checkbox,
@@ -39,7 +41,8 @@ from textual.widgets.markdown import MarkdownBlock
 
 from composeui.core import chartimage
 from composeui.core.application import ModelApplication, _add_reference_to_signals
-from composeui.core.renderer import Renderer, RendererContainer
+from composeui.core.registry import create_renderer
+from composeui.core.renderer import NoRenderedObjectError, Renderer, RendererContainer
 from composeui.core.view import (
     DATA_TABLE_WINDOW,
     SEARCH_DELAY_MS,
@@ -48,15 +51,20 @@ from composeui.core.view import (
     CellStyle,
     CellWidget,
     ChartKind,
+    DataTableView,
     DialogKind,
     EditRefusedError,
+    LabelView,
     ListSource,
+    LogType,
     MainView,
     ReferenceLine,
     RendererType,
     SelectionMode,
     Series,
     T,
+    TabPage,
+    TabView,
     TreeNode,
     View,
     define_view,
@@ -124,6 +132,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
+from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
@@ -141,6 +150,7 @@ from tests.tables import (
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
+from tests.unlabelled import NoteMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
@@ -151,7 +161,7 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
     from textual.widget import Widget
 
-    from composeui.core.view import TableView
+    from composeui.core.view import TableView, View
 
 
 def _field_widget(
@@ -1212,29 +1222,6 @@ async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tabs_start_on_the_tab_their_view_says_unreported() -> None:
-    view = TabsMainView()
-    view.tabs.current_index = 1  # e.g. by the app's setup, before rendering
-    picks: list[int] = []
-    view.tabs.current_changed.connect(picks.append)
-    view.render(RendererType.TEXTUAL)
-    assert isinstance(view.renderer, TextualMainRenderer)
-    app = view.renderer.app
-    assert app is not None
-    assert isinstance(view.tabs.renderer, TextualWidgetRenderer)
-    tabbed = view.tabs.renderer.widget
-    assert isinstance(tabbed, ComposeTabbedContent)
-    assert isinstance(view.tabs.history.renderer, TextualWidgetRenderer)
-    history = view.tabs.history.renderer.widget
-
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-
-        assert tabbed.active_pane is history
-        assert (view.tabs.current_index, picks) == (1, [])
-
-
-@pytest.mark.asyncio
 async def test_a_form_dialog_s_ok_follows_its_form_s_checks() -> None:
     view = EditedPipeMainView()
     view.render(RendererType.TEXTUAL)
@@ -1508,6 +1495,11 @@ async def test_an_expander_shows_its_views_while_expanded_by_its_title() -> None
         await pilot.press("enter")
         await pilot.pause()
         assert (history.is_expanded, history_toggles, toggles) == (True, [True], [True])
+        await pilot.press("enter")  # and back
+        await pilot.pause()
+        assert (history.is_expanded, history_toggles) == (False, [True, False])
+        await pilot.press("enter")
+        await pilot.pause()
 
         record.is_expanded = False  # set in code: collapsed, and not reported
         await pilot.pause()
@@ -2371,7 +2363,17 @@ async def test_a_step_series_is_plotted_in_steps() -> None:
 
 
 @pytest.mark.asyncio
-async def test_its_key_saves_the_chart_s_image(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("picked", "saved"),
+    [
+        ("drop", ["drop.pdf"]),  # PDF unless named
+        ("drop.png", ["drop.png"]),
+        (None, []),  # cancelled
+    ],
+)
+async def test_its_key_saves_the_chart_s_image(
+    picked: str | None, saved: list[str], tmp_path: Path
+) -> None:
     pytest.importorskip("matplotlib")
     view = PipeChartMainView()
     view.render(RendererType.TEXTUAL)
@@ -2392,10 +2394,11 @@ async def test_its_key_saves_the_chart_s_image(tmp_path: Path) -> None:
         await pilot.press("s")
         await pilot.pause()
         assert [type(screen).__name__ for screen in app.screen_stack] == ["Screen", "FileSave"]
-        app.screen.dismiss(tmp_path / "drop")  # as the dialog's Save button does
+        # as the dialog's Save button does, or Cancel
+        app.screen.dismiss(None if picked is None else tmp_path / picked)
         await pilot.pause()
 
-    assert (tmp_path / "drop.pdf").read_bytes().startswith(b"%PDF")  # PDF unless named
+    assert _names(tmp_path) == saved
 
 
 @pytest.mark.asyncio
@@ -2475,6 +2478,11 @@ def _sorted_rooms(
     box = view.rooms.renderer.widget
     assert isinstance(box, ComposeFilterTable)
     return view, app, box
+
+
+def _names(directory: Path) -> list[str]:
+    """Get the names of the files in `directory`: an async test can't list it itself."""
+    return sorted(path.name for path in directory.iterdir())
 
 
 def _shown_column(table: ComposeTable, column: int) -> list[str]:
@@ -2729,6 +2737,8 @@ async def test_a_large_table_s_cursor_and_clicks_select_its_rows_and_activate_on
         assert table.cursor == 999_999
         last = table.scrollable_content_region.height - 1
         assert table.render_line(last).text.split()[0] == "1,000,000"
+        await pilot.press("home")  # back up: scrolled to the first row
+        assert table.render_line(1).text.split()[0] == "1"
 
 
 @pytest.mark.asyncio
@@ -2834,7 +2844,11 @@ async def test_a_large_table_s_cell_shows_on_its_row_s_line_its_breaks_as_spaces
 
 
 @pytest.mark.asyncio
-async def test_a_large_table_s_key_exports_its_rows_as_csv(tmp_path: Path) -> None:
+@pytest.mark.parametrize("is_cancelled", [False, True])
+async def test_a_large_table_s_key_exports_its_rows_as_csv(
+    is_cancelled: bool,
+    tmp_path: Path,
+) -> None:
     view = RoomsDataMainView()
     view.rooms.sort_column = "temperature"
     view.render(RendererType.TEXTUAL)
@@ -2851,9 +2865,13 @@ async def test_a_large_table_s_key_exports_its_rows_as_csv(tmp_path: Path) -> No
         await pilot.press("e")
         await pilot.pause()
         assert [type(screen).__name__ for screen in app.screen_stack] == ["Screen", "FileSave"]
-        app.screen.dismiss(tmp_path / "rooms")  # as the dialog's Save button does
+        # as the dialog's Save button does, or Cancel
+        app.screen.dismiss(None if is_cancelled else tmp_path / "rooms")
         await pilot.pause()
 
+    if is_cancelled:
+        assert _names(tmp_path) == []
+        return
     assert (tmp_path / "rooms.csv").read_text(encoding="utf-8").splitlines() == [
         "Room,Temperature,Occupants",
         "Hall,18.0,",
@@ -2960,6 +2978,342 @@ async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
         assert (boxed, header()) == ("▣ Keep", "Keep")
 
 
+def _app_of(view: MainView) -> App[Any]:
+    """Render `view` on Textual, and get the app that shows it, not running yet."""
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    return app
+
+
+@pytest.mark.asyncio
+async def test_a_dialog_opened_before_the_app_runs_shows_and_its_cancel_rejects() -> None:
+    view = DialogsMainView()
+    app = _app_of(view)
+    view.confirm_clear.open()  # rendered, the app not running yet
+    answers: list[str] = []
+    view.confirm_clear.rejected.connect(lambda: answers.append("rejected"))
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        shown = isinstance(app.screen, ComposeDialog)
+        await pilot.click("#reject")
+        await pilot.pause()
+
+        assert shown
+        assert answers == ["rejected"]
+        assert view.name.text == "Ada"
+
+
+@pytest.mark.asyncio
+async def test_a_dialog_the_app_closes_under_another_screen_is_left_unanswered() -> None:
+    view = DialogsMainView()
+    app = _app_of(view)
+    answers: list[str] = []
+    view.confirm_clear.accepted.connect(lambda: answers.append("accepted"))
+    view.confirm_clear.rejected.connect(lambda: answers.append("rejected"))
+
+    async with app.run_test() as pilot:
+        view.confirm_clear.open()
+        await pilot.pause()
+        app.push_screen(Screen())  # e.g. a file picker over it
+        await pilot.pause()
+        view.confirm_clear.is_visible = False
+        await pilot.pause()
+        app.pop_screen()
+        await pilot.pause()
+
+        assert not any(isinstance(screen, ComposeDialog) for screen in app.screen_stack)
+        assert answers == []
+
+
+@pytest.mark.asyncio
+async def test_a_form_dialog_opened_before_the_app_runs_shows_once_it_does() -> None:
+    view = EditedPipeMainView()
+    app = _app_of(view)
+    view.edit_dialog.open()
+
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+
+        assert isinstance(app.screen, ComposeFormDialog)
+
+
+@pytest.mark.asyncio
+async def test_save_file_action_saves_under_the_extension_the_name_lacks(tmp_path: Path) -> None:
+    view = PipeMainView()
+    view.pages.inputs.pipe_form.name.text = "saved_name"
+    _add_reference_to_signals(view, None)
+    app = _app_of(view)
+    typed = tmp_path / "out"  # no extension: the renderer adds the study's
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        await pilot.pause()
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(typed)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(3):
+            await pilot.pause()
+
+        assert len(app.screen_stack) == 1  # modal closed
+        assert view.file_view.filepath == typed.with_suffix(".pipe")
+        assert "saved_name" in typed.with_suffix(".pipe").read_text()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("log_type", "color"),
+    [(LogType.ERROR, "red"), (LogType.WARNING, "orange"), (LogType.INFO, None)],
+)
+async def test_a_row_s_message_is_coloured_by_its_type(
+    log_type: LogType, color: str | None
+) -> None:
+    view = PipeMainView()
+    app = _app_of(view)
+    name = view.pages.inputs.pipe_form.name
+    assert isinstance(name.renderer, RendererContainer)
+    log = name.renderer.get_renderer("log")
+    assert isinstance(log, TextualWidgetRenderer)
+    label = log.widget
+    assert isinstance(label, Label)
+
+    async with app.run_test(size=(80, 40)) as pilot:
+        await pilot.pause()
+        name.log_message = "Check the name"
+        name.log_type = log_type
+        await pilot.pause()
+
+        if color is None:
+            assert not label.styles.has_rule("color")
+        else:
+            assert label.styles.color == TextualColor.parse(color)
+
+
+@pytest.mark.asyncio
+async def test_a_row_without_a_label_shows_its_field_and_its_message() -> None:
+    view = NoteMainView()
+    app = _app_of(view)
+    field = _field_widget(view.form.note.renderer)
+
+    async with app.run_test(size=(80, 20)) as pilot:
+        await pilot.pause()
+        row = field.parent
+
+        assert row is not None
+        children = list(row.children)
+        assert children[0] is field  # no label above it
+        assert [type(child) for child in children[1:]] == [Label]  # its message
+
+
+@pytest.mark.asyncio
+async def test_a_header_s_click_sorts_or_checks_only_a_column_that_allows_it() -> None:
+    rooms, rooms_app, rooms_box = _sorted_rooms()
+    rooms.rooms.sortable_columns = [2]
+    async with rooms_app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(rooms_box.table, offset=(1, 0))  # the room's
+        await pilot.pause()
+        assert rooms.rooms.sort_column is None
+
+    view = CellWidgetsMainView()
+    view.variables.editable_columns = []
+    app = _app_of(view)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(_widget(view.variables), offset=(1, 0))  # the box
+        await pilot.pause()
+        assert [row[0] for row in view.variables.rows] == ["True", "false"]
+
+
+@pytest.mark.asyncio
+async def test_the_filter_bar_clears_its_filters_and_shows_a_search_set_in_code() -> None:
+    view = SortedRoomsMainView()
+    view.rooms.filters = {1: ">=20", 3: "true"}  # the bar clears two or more
+    view, app, box = _sorted_rooms(view)
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(box.bar.clear)
+        await pilot.pause()
+        view.rooms.search = "kit"
+        await pilot.pause()
+
+        assert view.rooms.filters == {}
+        assert box.bar.search.value == "kit"
+
+
+@pytest.mark.asyncio
+async def test_a_view_textual_doesn_t_render_is_left_out_of_its_container() -> None:
+    view = PartialMainView()
+    app = _app_of(view)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        await pilot.pause()
+        item = LabelView()
+        view.items.item_views = [UnregisteredView(), item]
+        await pilot.pause()
+
+        for container in (view.row, view.column, view.grid, view.splitter, view.page):
+            assert container.skipped.renderer is None
+            assert _widget(container) in _widget(container.shown).ancestors
+        assert _widget(view.expander.shown).parent is not None
+        assert _widget(view.shown).is_attached
+        assert _widget(view.items) in _widget(item).ancestors
+        assert len(_widget(view.toolbar).query(ComposeToolbarButton)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_list_s_records_set_before_the_app_runs_show_once_it_does() -> None:
+    view = PipesMainView()
+    _add_reference_to_signals(view, None)
+    app = _app_of(view)
+    view.pipes.items = PIPES[:1]  # rendered, the app not running yet
+    column = _widget(view.pipes)
+
+    def shown() -> list[str]:
+        return [
+            str(child.title) for child in column.children if isinstance(child, ComposeCollapsible)
+        ]
+
+    async with app.run_test(size=(80, 40)) as pilot:
+        await pilot.pause()
+        first = shown()
+        view.pipes.items = []
+        await pilot.pause()
+        view.pipes.items = PIPES[1:2]  # into an empty list
+        await pilot.pause()
+
+        assert first == ["Main line"]
+        assert shown() == ["Return"]
+
+
+@pytest.mark.asyncio
+async def test_tabs_start_on_the_tab_their_view_says_unreported() -> None:
+    view = TabsMainView()
+    view.tabs.current_index = 1  # e.g. by the app's setup, before rendering
+    picks: list[int] = []
+    view.tabs.current_changed.connect(picks.append)
+    app = _app_of(view)
+    tabbed = _widget(view.tabs)
+    assert isinstance(tabbed, ComposeTabbedContent)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+
+        assert tabbed.active_pane is _widget(view.tabs.history)
+        assert (view.tabs.current_index, picks) == (1, [])
+
+
+@pytest.mark.asyncio
+async def test_tabs_changed_before_the_app_runs_show_so_once_it_does() -> None:
+    view = TabsMainView()
+    app = _app_of(view)
+    tabs = view.tabs
+    tabbed = _widget(tabs)
+    assert isinstance(tabbed, ComposeTabbedContent)
+    history, notes = _widget(tabs.history), _widget(tabs.notes)
+    assert isinstance(history, TabPane)
+    assert isinstance(notes, TabPane)
+    tabs.history.title = "Changes"
+    tabs.notes.is_visible = False
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+
+        assert str(tabbed.get_tab(history).label) == "Changes"
+        assert not tabbed.get_tab(notes).display
+
+
+@define_view
+class _TwinShortcutsMainView(MainView):
+    """Two actions sharing a key: an app's own mistake, or a key given back and forth."""
+
+    app_title = "Twins"
+    extension = ".twins"
+
+    first: ActionView = Factory(lambda: ActionView(text="First", shortcut="Ctrl+e"))
+    second: ActionView = Factory(lambda: ActionView(text="Second", shortcut="Ctrl+e"))
+
+
+@pytest.mark.asyncio
+async def test_a_key_moved_off_an_action_still_runs_the_other_bound_to_it() -> None:
+    view = _TwinShortcutsMainView()
+    app = _app_of(view)
+    triggered: list[str] = []
+    view.first.triggered.connect(lambda: triggered.append("first"))
+    view.second.triggered.connect(lambda: triggered.append("second"))
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        view.first.shortcut = "Ctrl+r"
+        await pilot.pause()
+        await pilot.press("ctrl+e")
+        await pilot.pause()
+
+        assert triggered == ["second"]
+
+
+def _textual_widgets_of(view: View) -> list[object]:
+    """Get the widgets of `view` and of its children, depth first."""
+    renderer = view.renderer
+    if isinstance(renderer, RendererContainer):
+        widgets: list[object] = [part.widget for part in renderer.renderers]  # type: ignore[attr-defined]
+    else:
+        widgets = [getattr(renderer, "widget", getattr(renderer, "app", None))]
+    for child_view in view.children_views:
+        widgets.extend(_textual_widgets_of(child_view))
+    return widgets
+
+
+@pytest.mark.parametrize(
+    "main_view_type",
+    [
+        PipeMainView,
+        PipeCatalogueMainView,
+        ChartPagesMainView,
+        DialogsMainView,
+        GridMainView,
+        PipesMainView,
+        RecordMainView,
+        SidebarMainView,
+        SplitterMainView,
+        TabsMainView,
+        ToolBarMainView,
+        CellWidgetsMainView,
+        RoomsDataMainView,
+        HelpMainView,
+        JobsMainView,
+        BookingMainView,
+        DataFileMainView,
+        EditedPipeMainView,
+        HoursMainView,
+        WorkersMainView,
+    ],
+)
+def test_a_main_view_rendered_again_keeps_every_widget(main_view_type: type[MainView]) -> None:
+    view = main_view_type()
+    view.render(RendererType.TEXTUAL)
+    before = _textual_widgets_of(view)
+
+    view.render(RendererType.TEXTUAL)
+
+    assert [id(widget) for widget in _textual_widgets_of(view)] == [id(widget) for widget in before]
+
+
+def test_a_view_shown_before_its_widget_is_built_raises() -> None:
+    view = LabelView()
+    view.renderer = create_renderer(RendererType.TEXTUAL, "label", view)
+
+    with pytest.raises(NoRenderedObjectError):
+        view.text = "Too early"
+
+
 @pytest.mark.asyncio
 async def test_ctrl_q_quits_through_the_exit_action() -> None:
     view = HelpMainView()
@@ -3019,3 +3373,519 @@ async def test_a_tab_picked_in_code_before_its_tabs_mount_shows_once_they_do() -
 
         assert tabbed.active_pane is history
         assert (view.tabs.current_index, picks) == (1, [])
+
+
+@pytest.mark.asyncio
+async def test_a_tree_reports_a_node_selected_once_and_its_collapse() -> None:
+    view = SiteMainView()
+    app = _app_of(view)
+    site = view.site
+    tree = _widget(site)
+    selections: list[tuple[str, ...]] = []
+    toggles: list[tuple[tuple[str, ...], bool]] = []
+    site.selection_changed.connect(selections.append)
+    site.toggled.connect(lambda path, is_expanded: toggles.append((path, is_expanded)))
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        await pilot.pause()
+        tree.focus()
+        await pilot.press("down", "enter", "enter")  # the top node, twice
+        await pilot.press("space")  # it was expanded
+        await pilot.pause()
+
+        assert selections == [("Building A",)]
+        assert toggles == [(("Building A",), False)]
+
+
+@pytest.mark.asyncio
+async def test_a_slider_moves_by_a_page_and_follows_a_drag() -> None:
+    view = WorkersMainView()
+    app = _app_of(view)
+    workers = view.form.workers
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(workers.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        slider.focus()
+        await pilot.press("pageup", "pagedown")  # a tenth of the track, at least a step
+        track, _ = _track_and_value(slider)
+        await pilot.mouse_down(slider, offset=(1, 1))
+        await pilot.hover(slider, offset=(len(track) // 2, 1))
+        await pilot.mouse_up(slider, offset=(len(track) // 2, 1))
+        await pilot.hover(slider, offset=(1, 1))  # released: no move
+        await pilot.pause()
+
+        assert moves[:3] == [8, 5, 2]  # by a page each, then pressed at the start
+        assert 2 < moves[-1] < 14  # dragged to the track's middle
+        assert workers.value == moves[-1]
+
+
+@pytest.mark.asyncio
+async def test_a_date_input_s_calendar_keeps_off_the_days_before_its_minimum() -> None:
+    view, app, changes = await _booking_app()
+    arrival = view.form.arrival
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(arrival.renderer)
+        assert isinstance(field, ComposeDateInput)
+        await pilot.pause()
+        arrival.minimum = datetime.date(2026, 10, 10)
+        await pilot.pause()
+        await pilot.click(field.button)
+        await pilot.pause()
+        month = app.screen.query_one(ComposeMonth)
+        await pilot.click(month, offset=(3 * 3 + 2, 2))  # Thursday the 1st, before it
+        await pilot.click(month, offset=(1, 12))  # under the weeks
+        await pilot.click(month, offset=(1, 0))  # the title's left: the month before
+        await pilot.pause()
+        cursor = month.cursor
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert cursor == datetime.date(2026, 10, 10)  # as near the month before as allowed
+        assert (arrival.value, changes) == (cursor, [cursor])
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_picker_closes_on_escape_and_a_disabled_box_ignores_space() -> None:
+    view = CellWidgetsMainView()
+    view.variables.cell_styles = {(0, 0): CellStyle(is_disabled=True)}
+    app = _app_of(view)
+    box = _widget(view.variables)
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+    edits: list[tuple[int, int, str]] = []
+    view.variables.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        first = next(iter(table.columns.values())).get_render_width(table)
+        await pilot.click(table, offset=(first + 1, 1))  # the first row's name
+        await pilot.press("space")  # its box, disabled
+        await pilot.press("f2")  # no field typed in: the role's picker
+        await pilot.pause()
+        picked = isinstance(app.screen, ComposeOptionPicker)
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("f2")
+        await pilot.pause()
+        await pilot.press("enter")  # the role it has
+        await pilot.pause()
+
+        assert picked
+        assert not isinstance(app.screen, ComposeOptionPicker)
+        assert edits == []
+        assert view.variables.rows[0][:3] == ["True", "Length", "Input"]
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_without_rows_answers_no_key_or_click() -> None:
+    view = RoomsDataMainView()
+    view.rooms.filters = {"temperature": ">30"}
+    activated: list[Any] = []
+    view.rooms.row_activated.connect(activated.append)
+    app = _app_of(view)
+
+    # 81 columns: the rows' numbers' 2, then 26 a header, one left over past the last
+    async with app.run_test(size=(81, 30)) as pilot:
+        table = app.query_one(ComposeDataTable)
+        table.focus()
+        await pilot.press("space", "enter")
+        await pilot.click(ComposeDataTable, offset=(15, 1))
+        await pilot.click(ComposeDataTable, offset=(80, 0))
+        await pilot.pause()
+
+        assert (view.rooms.selected_ids, activated, view.rooms.sort_column) == ([], [], None)
+
+
+@define_view
+class _EmptyDataMainView(MainView):
+    app_title = "Empty"
+    extension = ".empty"
+
+    table: DataTableView = Factory(DataTableView)  # no source: no column
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_without_columns_draws_its_lines_empty() -> None:
+    app = _app_of(_EmptyDataMainView())
+
+    async with app.run_test(size=(80, 20)) as pilot:
+        await pilot.pause()
+        table = app.query_one(ComposeDataTable)
+
+        assert table.render_line(0).text.strip() == ""
+
+
+@pytest.mark.asyncio
+async def test_a_splitter_s_border_stays_on_a_hover_and_beside_a_hidden_pane() -> None:
+    view = SplitterMainView()
+    app = _app_of(view)
+    resizes: list[list[int]] = []
+    view.splitter.resized.connect(resizes.append)
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        first, _second = app.query(SplitterHandle)
+        await pilot.hover(first)  # no button held: no drag
+        view.splitter.study.is_visible = False  # no pane left of the first border
+        await pilot.pause()
+        first.focus()
+        await pilot.press("right")
+        await pilot.pause()
+
+        assert len(resizes) <= 1  # nothing moved: the sizes as they were, if reported
+        assert all(sizes == view.splitter.sizes for sizes in resizes)
+
+
+@pytest.mark.asyncio
+async def test_a_disabled_dialog_isn_t_closed_by_escape() -> None:
+    view = DialogsMainView()
+    app = _app_of(view)
+    edited = EditedPipeMainView()
+    edited_app = _app_of(edited)
+
+    async with app.run_test() as pilot:
+        view.confirm_clear.open()
+        await pilot.pause()
+        view.confirm_clear.is_enabled = False
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeDialog)
+    async with edited_app.run_test(size=(100, 40)) as pilot:
+        edited.edit_dialog.open()
+        await pilot.pause()
+        edited.edit_dialog.is_enabled = False
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(edited_app.screen, ComposeFormDialog)
+
+
+@pytest.mark.asyncio
+async def test_a_combobox_without_a_value_shows_none() -> None:
+    view = TranslatedMainView()
+    app = _app_of(view)
+    combobox = _field_widget(view.shape.size.renderer)
+    assert isinstance(combobox, ComposeCombobox)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        view.shape.size.value = None
+        await pilot.pause()
+
+        assert combobox.is_blank()
+
+
+@pytest.mark.asyncio
+async def test_a_markdown_set_before_the_app_runs_shows_once_it_does() -> None:
+    view = HelpMainView()
+    app = _app_of(view)
+    view.help.text = "# Other help"  # rendered, the app not running yet
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        markdown = _widget(view.help)
+        assert isinstance(markdown, ComposeMarkdown)
+
+        assert markdown.source == "# Other help"
+
+
+@pytest.mark.asyncio
+async def test_a_file_path_s_picker_opens_here_on_a_path_typed_halfway_and_cancels() -> None:
+    view = DataFileMainView()
+    app = _app_of(view)
+    picked: list[Path] = []
+    view.form.measurements.path_picked.connect(picked.append)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        field = _field_widget(view.form.measurements.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+        field.input.focus()
+        await pilot.press(*"nowhere/da")
+        await pilot.click(field.browse_button)
+        await pilot.pause()
+        opened = [type(screen).__name__ for screen in app.screen_stack]
+        app.screen.dismiss(None)  # as the picker's Cancel does
+        await pilot.pause()
+
+        assert opened == ["Screen", "FileOpen"]
+        assert (picked, field.input.value) == ([], "nowhere/da")
+        assert field.input.has_focus
+
+
+@pytest.mark.asyncio
+async def test_a_table_emptied_under_its_cursor_answers_no_key() -> None:
+    view = CellWidgetsMainView()
+    app = _app_of(view)
+    places_view = EditableTableMainView()
+    places_app = _app_of(places_view)
+    edits: list[tuple[int, int, str]] = []
+    view.variables.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        table = _widget(view.variables)
+        assert isinstance(table, ComposeFilterTable)
+        name = next(iter(table.table.columns.values())).get_render_width(table.table) + 1
+        await pilot.click(table.table, offset=(name, 1))  # the cursor shown, on the first row
+        view.variables.rows = []  # e.g. its records deleted
+        await pilot.pause()
+        await pilot.press("space", "f2")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeOptionPicker)
+    async with places_app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        places = _widget(places_view.places)
+        assert isinstance(places, ComposeFilterTable)
+        await pilot.click(places.table, offset=(2, 1))
+        places_view.places.rows = []
+        await pilot.pause()
+        await pilot.press("f2")
+        await pilot.pause()
+        assert not isinstance(places_app.screen, ComposeRowEditor)
+
+    assert edits == []
+
+
+@pytest.mark.asyncio
+async def test_an_edit_whose_answer_empties_the_table_leaves_its_other_cells() -> None:
+    view = EditableTableMainView()
+    view.places.editable_columns = [0, 1]
+    app = _app_of(view)
+    edits: list[tuple[int, int, str]] = []
+
+    def answer(row: int, column: int, text: str) -> None:
+        edits.append((row, column, text))
+        view.places.rows = []  # e.g. the edit deletes its record
+
+    view.places.cell_edited.connect(answer)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        table = _widget(view.places)
+        assert isinstance(table, ComposeFilterTable)
+        await pilot.click(table.table, offset=(2, 1))
+        await pilot.press("f2")
+        await pilot.pause()
+        await pilot.press("end", *"side", "tab", "end", *"er", "enter")
+        await pilot.pause()
+
+        assert edits == [(0, 0, "Lakeside")]  # the note's edit had no row left
+        assert view.places.rows == []
+
+
+@pytest.mark.asyncio
+async def test_a_table_selecting_several_shows_its_cursor_first_and_checks_none_by_its_header() -> (
+    None
+):
+    view = HorizontalMainView()
+    table_view = view.tables.narrow
+    table_view.selection_mode = SelectionMode.MULTIPLE
+    app = _app_of(view)
+    emitted: list[list[int]] = []
+    table_view.selection_changed.connect(emitted.append)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        box = _widget(table_view)
+        assert isinstance(box, ComposeFilterTable)
+        await pilot.click(box.table, offset=(1, 0))  # the header of the selection's column
+        box.table.focus()
+        await pilot.press("enter")  # the cursor shows, selecting nothing yet
+        await pilot.pause()
+        shown = box.table.show_cursor
+        table_view.rows = []
+        await pilot.pause()
+        await pilot.press("enter")  # no row under the cursor
+        await pilot.pause()
+
+        assert shown
+        assert emitted == []
+
+
+@pytest.mark.asyncio
+async def test_the_filter_bar_offers_the_columns_set_before_the_app_runs_and_adds_by_button() -> (
+    None
+):
+    view, app, box = _sorted_rooms()
+    view.rooms.filterable_columns = [1, 2]  # the temperature and the occupants
+    bar = box.bar
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(bar.search)
+        await pilot.press("enter")  # nothing typed since: no search
+        await pilot.click(bar.add_filter)
+        await pilot.pause()
+        await pilot.click(bar.column)
+        await pilot.pause()
+        await pilot.press("home", "enter")  # the blank option: no column
+        await pilot.pause()
+        blank_placeholder = bar.value.placeholder
+        await pilot.click(bar.add)  # nothing to add without a column
+        await pilot.pause()
+        await _add_filter(pilot, bar, 1, ">5")  # the second offered: the occupants
+
+        assert blank_placeholder == ""
+        assert view.rooms.search == ""
+        assert view.rooms.filters == {2: ">5"}
+
+
+@pytest.mark.asyncio
+async def test_a_date_input_s_calendar_picks_no_day_outside_a_range_changed_while_open() -> None:
+    view, app, changes = await _booking_app()
+    arrival = view.form.arrival
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(arrival.renderer)
+        assert isinstance(field, ComposeDateInput)
+        await pilot.pause()
+        await pilot.click(field.button)
+        await pilot.pause()
+        month = app.screen.query_one(ComposeMonth)
+        month.maximum = datetime.date(2026, 10, 15)  # under the cursor, on the 18th
+        await pilot.press("enter")
+        await pilot.click(month, offset=(7 * 3 + 1, 2))  # right of the week's last day
+        await pilot.pause()
+
+        assert changes == []
+        assert isinstance(app.screen, ComposeCalendar)
+
+
+@pytest.mark.asyncio
+async def test_the_chart_leaves_out_what_it_has_no_data_for() -> None:
+    view = PipeChartMainView()
+    view.chart.series = []
+    view.chart.reference_lines = [ReferenceLine(5, vertical=True, label="Start")]
+    bars = ChartPagesMainView()
+    bars.router.chart.energy.series = []
+    app, bars_app = _app_of(view), _app_of(bars)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        chart = _widget(view.chart)
+        assert isinstance(chart, ComposeChart)
+        assert "Start" not in str(chart.render())  # a label beside no data
+    async with bars_app.run_test(size=(120, 40)) as pilot:
+        bars.router.current_route = "chart"
+        await pilot.pause()
+        energy = _widget(bars.router.chart.energy)
+        assert isinstance(energy, ComposeChart)
+        assert "Kitchen" not in str(energy.render())  # no bar, nor its category
+
+
+@pytest.mark.asyncio
+async def test_a_slider_too_narrow_for_its_track_draws_none_and_takes_no_drag() -> None:
+    view = WorkersMainView()
+    app = _app_of(view)
+    moves: list[int] = []
+    view.form.workers.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(view.form.workers.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        slider.styles.width = 4  # its value's slot and a space, no track
+        await pilot.pause()
+        drawn = str(slider.render())
+        await pilot.mouse_down(slider, offset=(1, 0))
+        await pilot.mouse_up(slider, offset=(1, 0))
+
+        assert (drawn, moves) == ("", [])
+
+
+@pytest.mark.asyncio
+async def test_a_splitter_s_border_released_undragged_reports_nothing() -> None:
+    view = SplitterMainView()
+    app = _app_of(view)
+    resizes: list[list[int]] = []
+    view.splitter.resized.connect(resizes.append)
+
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        first, _second = app.query(SplitterHandle)
+        await pilot.mouse_up(first)  # pressed elsewhere
+
+        assert resizes == []
+
+
+@define_view
+class _InnerFirstTab(TabPage):
+    text: LabelView = Factory(lambda: LabelView(text="One"))
+
+
+@define_view
+class _InnerSecondTab(TabPage):
+    text: LabelView = Factory(lambda: LabelView(text="Two"))
+
+
+@define_view
+class _InnerTabs(TabView):
+    first: _InnerFirstTab = Factory(lambda: _InnerFirstTab(title="First"))
+    second: _InnerSecondTab = Factory(lambda: _InnerSecondTab(title="Second"))
+
+
+@define_view
+class _OuterTab(TabPage):
+    inner: _InnerTabs = Factory(_InnerTabs)
+
+
+@define_view
+class _OtherTab(TabPage):
+    text: LabelView = Factory(lambda: LabelView(text="Other"))
+
+
+@define_view
+class _OuterTabs(TabView):
+    outer: _OuterTab = Factory(lambda: _OuterTab(title="Outer"))
+    other: _OtherTab = Factory(lambda: _OtherTab(title="Other"))
+
+
+@define_view
+class _NestedTabsMainView(MainView):
+    app_title = "Nested"
+    extension = ".nested"
+
+    tabs: _OuterTabs = Factory(_OuterTabs)
+
+
+@pytest.mark.asyncio
+async def test_a_tab_picked_in_tabs_within_tabs_is_theirs_only() -> None:
+    view = _NestedTabsMainView()
+    app = _app_of(view)
+    outer_picks: list[int] = []
+    view.tabs.current_changed.connect(outer_picks.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        inner = _widget(view.tabs.outer.inner)
+        assert isinstance(inner, ComposeTabbedContent)
+        second = _widget(view.tabs.outer.inner.second)
+        assert isinstance(second, TabPane)
+        await pilot.click(inner.get_tab(second))
+        await pilot.pause()
+
+        assert view.tabs.outer.inner.current_index == 1
+        assert (view.tabs.current_index, outer_picks) == (0, [])
+
+
+@pytest.mark.asyncio
+async def test_f2_on_a_row_whose_editable_cells_are_disabled_opens_nothing() -> None:
+    view = CellWidgetsMainView()
+    view.variables.cell_styles = {(0, 2): CellStyle(is_disabled=True)}  # its role
+    app = _app_of(view)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        box = _widget(view.variables)
+        assert isinstance(box, ComposeFilterTable)
+        name = next(iter(box.table.columns.values())).get_render_width(box.table) + 1
+        await pilot.click(box.table, offset=(name, 1))  # the first row
+        await pilot.press("f2")
+        await pilot.pause()
+
+        assert not isinstance(app.screen, (ComposeOptionPicker, ComposeRowEditor))

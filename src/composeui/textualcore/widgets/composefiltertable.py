@@ -213,9 +213,8 @@ class ComposeFilterBar(Horizontal):
         for widget in (self.column, self.value, self.add):
             widget.display = True
         self.add_filter.display = False
-        if self.is_mounted:
-            self._show_placeholder()
-            self.value.focus()
+        self._show_placeholder()
+        self.value.focus()
 
     def close_editor(self) -> None:
         had_focus = self.value.has_focus
@@ -231,8 +230,7 @@ class ComposeFilterBar(Horizontal):
 
     def set_pattern(self, *, is_pattern: bool) -> None:
         self.pattern.variant = "primary" if is_pattern else "default"
-        if self.is_mounted:
-            self._show_placeholder()
+        self._show_placeholder()
 
     def is_editing(self) -> bool:
         return bool(self.value.display)
@@ -277,8 +275,9 @@ class ComposeFilterBar(Horizontal):
             self.set_pattern(is_pattern=not self.is_pattern())
         elif button is self.clear:
             self.filters_cleared.emit()
-        elif isinstance(button.parent, ComposeFilterChip):
+        else:  # a chip's
             chip = button.parent
+            assert isinstance(chip, ComposeFilterChip)
             if button is chip.remove_button:
                 self.filter_removed.emit(chip.column)
             else:
