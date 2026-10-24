@@ -7,6 +7,7 @@ import enum
 import re
 import sqlite3
 import threading
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
@@ -341,3 +342,12 @@ def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
         model, lambda: sql.ordered_ids(Sort("depth"), "", {"kind": parse_filter("=lake")})
     )
     assert "place_depth" not in plans[0]
+
+
+def test_a_filter_by_a_decimal_keeps_the_rows_a_list_source_keeps(
+    sql: SqliteSource, listed: ListSource[Place]
+) -> None:
+    # e.g. a column of a record whose field is a `Decimal`, compared as SQLite's numbers
+    found, expected = _both(sql, listed, filters={"depth": parse_filter(">3", Decimal)})
+
+    assert found == expected

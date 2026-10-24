@@ -205,3 +205,15 @@ def test_a_job_s_callbacks_are_called_on_the_gui_thread(qtbot: QtBot) -> None:
     qtbot.waitUntil(lambda: len(threads) == 1)
 
     assert threads == [threading.main_thread()]
+
+
+def test_waiting_for_a_job_running_past_its_time_says_how_many(
+    app: ModelApplication[MainView, _Model],
+) -> None:
+    jobs = app.main_view.jobs
+    jobs.start(_sleep)
+
+    with pytest.raises(TimeoutError, match=r"1 jobs still running after 0\.1 s"):
+        jobs.wait(timeout=0.1)
+    jobs.cancel()
+    jobs.wait(timeout=5)

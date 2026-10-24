@@ -19,7 +19,8 @@ from attrs import Factory
 from composeui.core.application import ModelApplication
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table, unique_name
-from composeui.core.view import ButtonView, MainView, TableView, define_view
+from composeui.core.study import open_study
+from composeui.core.view import ButtonView, InvalidStateError, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
@@ -347,6 +348,7 @@ def _forged(
         (_views_only, "it isn't a valid .hello file"),
         (lambda path: path.write_bytes(b"PK\x03\x04 damaged"), "it isn't a valid .hello file"),
         (_archive(b"{}", b"not a database"), "its data isn't a valid database"),
+        (_archive(b"not json", b""), "it isn't a valid .hello file"),
         (
             _archive(json.dumps({"form": {"age": {"value": "abc"}}}).encode(), b""),
             "it doesn't match this application",
@@ -675,3 +677,131 @@ def test_each_model_builds_the_tables_its_classes_declare() -> None:
     assert model.notes.fetch_column("SELECT count(*) FROM note") == [0]
     model.close()
     other.close()
+
+
+class _ThirdVersionModel(MeasuredRunsModel):
+    """A version whose migration from the second one is missing: e.g. forgotten."""
+
+    schema_version = 3
+
+
+@pytest.mark.parametrize(
+    ("script", "version", "reason"),
+    [
+        # an index whose entries aren't its rows': e.g. a file cut short, then patched
+        (
+            "CREATE INDEX by_radius ON run(radius); PRAGMA writable_schema = ON;"
+            " UPDATE sqlite_master SET sql = 'CREATE INDEX by_radius ON run(id)'"
+            " WHERE name = 'by_radius'",
+            1,
+            "its data is damaged",
+        ),
+        ("SELECT 1", 0, "its data doesn't match this application"),  # no study's version
+    ],
+)
+def test_a_database_damaged_or_of_no_version_is_refused(
+    app: App, tmp_path: Path, script: str, version: int, reason: str
+) -> None:
+    app.model.runs.add(80.0)
+    path = tmp_path / "study.hello"
+    _study_with(app, path, script, version=version)
+
+    _open(app, path)
+
+    assert app.main_view.status_bar.message == f"Can't open 'study.hello': {reason}."
+    assert app.model.runs.radii() == [80.0]
+
+
+def test_a_study_a_migration_can_t_bring_up_to_date_is_refused(app: App, tmp_path: Path) -> None:
+    path = tmp_path / "study.hello"
+    _save(app, path)  # of the first version
+    third = ModelApplication(build_main_view=HelloMainView, build_model=_ThirdVersionModel)
+
+    _open(third, path)
+
+    reason = "its data (version 1) can't be brought up to date"
+    assert third.main_view.status_bar.message == f"Can't open 'study.hello': {reason}."
+    third.model.close()
+
+
+def test_a_block_raising_inside_another_undoes_both(app: App) -> None:
+    def add_then_fail_inside() -> None:
+        with app.model.connection():
+            app.model.runs.add(80.0)
+            with app.model.connection():
+                app.model.runs.add(50.0)
+                raise RuntimeError
+
+    with pytest.raises(RuntimeError):
+        add_then_fail_inside()
+
+    assert app.model.runs.radii() == []
+
+
+def test_a_model_closed_while_a_query_reads_closes_once_it_s_over() -> None:
+    model = PartsModel()
+    with model.parts.reading() as db:
+        model.close()
+        (count,) = db.execute("SELECT count(*) FROM part").fetchone()  # still readable
+
+    assert count == 0
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"), model.parts.reading():
+        pass
+
+
+def test_a_reader_that_fails_to_open_leaves_the_model_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = PartsModel()
+    connect = sqlite3.connect
+
+    def fail_once(*_args: Any, **_kwargs: Any) -> sqlite3.Connection:
+        monkeypatch.setattr("composeui.core.sqlitemodel.sqlite3.connect", connect)
+        msg = "unable to open database file"  # e.g. its file gone meanwhile
+        raise sqlite3.OperationalError(msg)
+
+    monkeypatch.setattr("composeui.core.sqlitemodel.sqlite3.connect", fail_once)
+    with pytest.raises(sqlite3.OperationalError), model.parts.reading():
+        pass
+    with model.parts.reading() as db:
+        (count,) = db.execute("SELECT count(*) FROM part").fetchone()
+
+    assert count == 0
+    model.close()
+
+
+class _DefaultJournalModel(RunsModel):
+    """A model keeping SQLite's default journal: no `journal_mode` among its pragmas."""
+
+    pragmas = MappingProxyType({"foreign_keys": "ON"})
+
+
+def test_a_model_without_a_journal_setting_keeps_sqlite_s_default(tmp_path: Path) -> None:
+    model = _DefaultJournalModel()
+    model.save_data(tmp_path / "data.sqlite")
+    model.open_data(tmp_path / "data.sqlite")
+
+    with model.runs.connection() as db:
+        (journal,) = db.execute("PRAGMA journal_mode").fetchone()
+
+    assert journal == "delete"
+    model.close()
+
+
+class _BadPragmaModel(RunsModel):
+    pragmas = MappingProxyType({"journal_mode": "WAL; DROP TABLE run"})
+
+
+def test_a_model_s_pragma_that_isn_t_a_setting_is_refused() -> None:
+    with pytest.raises(ValueError, match="Not a pragma setting"):
+        _BadPragmaModel()
+
+
+def test_a_study_larger_than_its_limit_is_refused_before_it_is_unpacked(
+    app: App, tmp_path: Path
+) -> None:
+    path = tmp_path / "study.hello"
+    _save(app, path)
+
+    with pytest.raises(InvalidStateError, match="the file is too large"):
+        open_study(app.main_view, app.model, path, max_size=10)  # e.g. the web's limit

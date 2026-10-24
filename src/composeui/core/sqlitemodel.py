@@ -11,7 +11,6 @@ from __future__ import annotations
 import contextlib
 import datetime
 import decimal
-import enum
 import functools
 import os
 import re
@@ -177,9 +176,7 @@ def _sql_value(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, decimal.Decimal):
         return float(value)
-    if isinstance(value, enum.Enum):
-        return value.value
-    return value
+    return value  # an enum's column filters as text: never compared
 
 
 @functools.lru_cache(maxsize=32)

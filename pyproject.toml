@@ -104,9 +104,9 @@ patch = ["subprocess"]
 
 [tool.coverage.report]
 # the floor for now: raised as gaps close, until 100
-fail_under = 97
+fail_under = 99
 # lines that never run in a test
-exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]
 
 [tool.ruff]
 line-length = 100
