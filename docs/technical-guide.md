@@ -439,7 +439,9 @@ new app, add its main view to both. See
 `webcore/static/app.css` is built from `css/` with Tailwind and daisyUI. When you change
 the classes used in `webcore`, run `make css`, and commit the built file. `make css`
 downloads the Tailwind CLI and the daisyUI files once, into `css/vendor/`, which is not
-committed. It needs no Node or npm.
+committed. It needs no Node or npm. It checks the SHA-256 of each file against the one in the
+`Makefile` and `make.ps1`, and fails when they differ. When you change `TAILWIND_VERSION` or
+`DAISYUI_VERSION`, change the SHA-256 values in both files, and delete `css/vendor/`.
 ### Code style
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the

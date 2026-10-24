@@ -36,6 +36,20 @@ $DaisyuiVersion = '5.7.47'
 $CssVendor = 'css/vendor'
 $TailwindPlatforms = @('linux-x64', 'linux-arm64', 'macos-x64', 'macos-arm64',
     'linux-x64-musl', 'linux-arm64-musl', 'windows-x64')
+# the SHA-256 of each download, from Tailwind's sha256sums.txt and the digests of daisyUI's
+# release assets: change them with the versions
+$Sha256 = @{
+    'tailwindcss-linux-x64'        = 'dc61b3ac6b8c9ca874c0cc4c57b2409791a64c5540404ca5f5367360babc313a'
+    'tailwindcss-linux-arm64'      = '55fd0b241214eff3de1e8ee4f22796662f2d2e7a49bcfca7477cfd0bac398195'
+    'tailwindcss-macos-x64'        = '7922e0953f2110c05976e3bf58f14e643d90427575e766b7d433f5f80cbee7e1'
+    'tailwindcss-macos-arm64'      = 'cdf646702987a743464dff4d9c60fd4480d1c1e73dd819a9a67f1078815dce9d'
+    'tailwindcss-linux-x64-musl'   = 'a04d34ceacc8f52cbe8920ad846cdeb61d3d0021dba32db0d1f77c9d9fad7a6c'
+    'tailwindcss-linux-arm64-musl' = '71ea4be79c9de9827545682df3e040053fb535d37c71ed2cfdedf9385a0868e0'
+    'tailwindcss-windows-x64.exe'  = 'e0e260ce048014e9268f6237ff18f8ccf02cef521cbd0ae04e82c2cdf7aa3955'
+    'daisyui.mjs'                  = '85819d3fe86a852237b439b13f481481aac58e562ac47694cd11c3038e994f2a'
+    'daisyui-theme.mjs'            = 'd92d2f488933dab757f046e81ebd4986e51e9423307798dc3545d09a15542c89'
+}
+
 # Runs a native command and stops on a non-zero exit code, as make does.
 function Invoke-Native {
     param([string] $Command, [string[]] $Arguments)
@@ -53,13 +67,36 @@ function Invoke-Offscreen {
     try { & $Block } finally { $env:QT_QPA_PLATFORM = $previous }
 }
 
-function Invoke-Download {
-    param([string] $Url, [string] $Path)
-    if (Test-Path $Path) { return }
-    New-Item -ItemType Directory -Force $CssVendor | Out-Null
+function Test-Sha256 {
+    param([string] $Path, [string] $Expected)
+    return (Get-FileHash -Algorithm SHA256 $Path).Hash -eq $Expected
+}
+
+# Downloads a file, kept only when its SHA-256 is the expected one.
+function Save-Verified {
+    param([string] $Url, [string] $Path, [string] $Expected)
+    New-Item -ItemType Directory -Force (Split-Path $Path) | Out-Null
     # Windows PowerShell 5.1 may default to TLS 1.0, which GitHub refuses
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $Url -OutFile $Path -UseBasicParsing
+    $download = "$Path.tmp"
+    Invoke-WebRequest -Uri $Url -OutFile $download -UseBasicParsing
+    if (-not (Test-Sha256 $download $Expected)) {
+        Remove-Item $download -Force
+        throw "The SHA-256 of $Url is not ${Expected}: the file was not kept"
+    }
+    Move-Item -Force $download $Path
+}
+
+# Downloads a file once. A file already there is checked too: it can be from an older
+# version, or have changed since.
+function Invoke-Download {
+    param([string] $Url, [string] $Path, [string] $Expected)
+    if (-not (Test-Path $Path)) {
+        Save-Verified $Url $Path $Expected
+    }
+    elseif (-not (Test-Sha256 $Path $Expected)) {
+        throw "The SHA-256 of $Path is not ${Expected}: delete $CssVendor/ to download it again"
+    }
 }
 
 function Get-TailwindPlatform {
@@ -158,10 +195,11 @@ function Invoke-Css {
     $tailwindUrl = 'https://github.com/tailwindlabs/tailwindcss/releases/download/' +
         "v$TailwindVersion/tailwindcss-$platform$suffix"
     $daisyuiUrl = "https://github.com/saadeghi/daisyui/releases/download/v$DaisyuiVersion"
-    Invoke-Download $tailwindUrl $tailwind
+    Invoke-Download $tailwindUrl $tailwind $Sha256["tailwindcss-$platform$suffix"]
     if ($suffix -eq '') { Invoke-Native chmod @('+x', $tailwind) }
-    Invoke-Download "$daisyuiUrl/daisyui.mjs" "$CssVendor/daisyui.mjs"
-    Invoke-Download "$daisyuiUrl/daisyui-theme.mjs" "$CssVendor/daisyui-theme.mjs"
+    foreach ($name in @('daisyui.mjs', 'daisyui-theme.mjs')) {
+        Invoke-Download "$daisyuiUrl/$name" "$CssVendor/$name" $Sha256[$name]
+    }
     Invoke-Native (Resolve-Path $tailwind).Path @('-i', 'css/app.css',
         '-o', 'src/composeui/webcore/static/app.css', '--minify')
 }
