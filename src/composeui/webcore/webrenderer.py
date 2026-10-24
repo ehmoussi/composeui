@@ -329,8 +329,7 @@ class WebRenderer(Renderer[TView, str]):
             renderer = container.get_renderer(part)
         except KeyError:
             return None
-        if not isinstance(renderer, WebRenderer) or renderer is self:
-            return None
+        assert isinstance(renderer, WebRenderer)  # a row's part, rendered by this backend
         return renderer
 
     def _refresh_enabled(self, view: TView, rendered_object: str, value: Any) -> None:
@@ -806,7 +805,7 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
             row_attributes=self._row_attributes(),
-            text=view.text,
+            text=self._text(),
             placeholder=view.placeholder,
             disabled=disabled,
             browse=browse,
@@ -1291,8 +1290,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         range it can't draw, and `ImportError` without matplotlib.
         """
         view = self._view
-        if not isinstance(view, ChartView):
-            raise TypeError(type(view).__name__)
+        assert isinstance(view, ChartView)  # the chart renderer's only view
         options = chartimage.ImageOptions(
             x_range=_query_range(query, "x"), y_range=_query_range(query, "y")
         )
@@ -2975,11 +2973,9 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
             dirty[field.widget_id] = field
 
     def _field_renderer(self) -> WebRenderer[Any]:
-        if not isinstance(self._view.renderer, RendererContainer):
-            raise NoRenderedObjectError
+        assert isinstance(self._view.renderer, RendererContainer)  # a row's label's
         field_renderer = self._view.renderer.get_renderer("field")
-        if not isinstance(field_renderer, WebRenderer):
-            raise NoRenderedObjectError
+        assert isinstance(field_renderer, WebRenderer)
         return field_renderer
 
 
@@ -3075,12 +3071,7 @@ class WebFormRenderer(WebRenderer[FormView]):
         )
 
     def _row_part(self, row_renderer: RendererContainer[Any], part: str) -> Markup:
-        try:
-            renderer = row_renderer.get_renderer(part)
-        except KeyError as e:
-            msg = f"The {part} renderer is missing in a row of the form {self._view}"
-            raise ValueError(msg) from e
-        return self._fragment(renderer)
+        return self._fragment(row_renderer.get_renderer(part))
 
     @staticmethod
     def _fragment(renderer: Any) -> Markup:
@@ -3772,9 +3763,8 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         }
         answer = answers.get(event)
         if answer is None:
-            super().dispatch(event, form)
-            return
-        if self.is_enabled:
+            super().dispatch(event, form)  # raises: no answer of a dialog's
+        elif self.is_enabled:
             answer()
 
 
@@ -4512,9 +4502,13 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
             renderers = (
                 renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
             )
-            for child in renderers:
-                if not isinstance(child, WebRenderer) or child._rendered_object is None:  # noqa: SLF001
-                    continue
+            # not a view this backend doesn't render, nor one never rendered
+            shown = [
+                child
+                for child in renderers
+                if isinstance(child, WebRenderer) and child._rendered_object is not None  # noqa: SLF001
+            ]
+            for child in shown:
                 if child in self.children:
                     self.children.remove(child)
                 if self._target is not None:
@@ -4588,8 +4582,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         tabs: list[str] = []
         panels: list[str] = []
         for index, tab in enumerate(self._view.tabs):
-            if not isinstance(tab.renderer, WebRenderer):
-                continue
+            assert isinstance(tab.renderer, WebRenderer)  # a tab page's, which the web has
             tab_id, panel_id = f"{self.widget_id}-tab-{index}", f"{self.widget_id}-panel-{index}"
             is_current = index == current
             active = " tab-active" if is_current else ""
@@ -4726,15 +4719,14 @@ class WebRouterRenderer(WebRenderer[Router]):
         self._adopt(self._view.pages)
         # the children are rendered first: make each page's action a link to it
         for page in self._view.pages:
-            if isinstance(page.action.renderer, WebActionRenderer):
-                page.action.renderer.placement = Placement.PAGE
-                page.action.renderer.href = page_path(page.route)
+            assert isinstance(page.action.renderer, WebActionRenderer)
+            page.action.renderer.placement = Placement.PAGE
+            page.action.renderer.href = page_path(page.route)
 
     def to_html(self, *, oob: bool = False) -> Markup:
         slots: list[str] = []
         for page in self._view.pages:
-            if not isinstance(page.renderer, WebRenderer):
-                continue
+            assert isinstance(page.renderer, WebRenderer)  # a page's, which the web has
             hidden = "" if page.route == self._view.current_route else " hidden"
             slots.append(
                 Markup('<div data-route="{route}"{hidden}>{to_html}</div>').format(
