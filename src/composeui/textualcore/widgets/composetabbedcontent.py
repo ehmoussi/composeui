@@ -23,6 +23,10 @@ class ComposeTabbedContent(TabbedContent):
         self.picked: Signal[TabPane] = Signal()
 
     def set_active(self, pane_id: str) -> None:
+        if not self.is_attached:
+            # not composed yet: shown first once mounted, as the tabs are built from it
+            self._initial = pane_id
+            return
         with self.prevent(TabbedContent.TabActivated):
             self.active = pane_id
 
