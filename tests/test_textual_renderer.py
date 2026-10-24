@@ -3612,7 +3612,11 @@ async def test_a_file_path_s_picker_opens_here_on_a_path_typed_halfway_and_cance
         await pilot.pause()
         opened = [type(screen).__name__ for screen in app.screen_stack]
         app.screen.dismiss(None)  # as the picker's Cancel does
-        await pilot.pause()
+        # the focus comes back in a call of its own, which a slow runner makes later
+        for _ in range(40):
+            if field.input.has_focus:
+                break
+            await pilot.pause(0.05)
 
         assert opened == ["Screen", "FileOpen"]
         assert (picked, field.input.value) == ([], "nowhere/da")
