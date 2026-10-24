@@ -47,16 +47,7 @@ class QRadioGroup(QWidget):
     def set_value(self, value: Any) -> None:
         for button_id, value_raw in enumerate(self._values.values()):
             if value == value_raw:
-                button = self._button_group.button(button_id)
-                if not button.isChecked():
-                    button.setChecked(True)
-
-    def value(self) -> Any:
-        checked_button = self._button_group.checkedButton()
-        if checked_button is None:
-            return None
-        value_text = checked_button.text()
-        return self._values[value_text]
+                self._button_group.button(button_id).setChecked(True)
 
     @Slot()
     def _emit_value_changed_signal(self, button_id: int) -> None:

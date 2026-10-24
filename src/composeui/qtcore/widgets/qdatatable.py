@@ -89,7 +89,9 @@ class QDataTableModel(QAbstractTableModel):
         if self._row is None or self._row[0] != index.row():
             rows = self._table.rows(index.row(), index.row() + 1)
             if len(rows) == 0:  # rows not shown any longer, the model not reset yet
-                return None
+                # a paint between the source's change and the model's reset: no test
+                # reaches that moment
+                return None  # pragma: no cover
             self._row = (index.row(), *rows[0])
         _position, row_id, cells = self._row
         if role in looks:

@@ -49,9 +49,6 @@ class QDateField(QWidget):
         self.calendar.clicked.connect(self._pick)
         self.calendar.activated.connect(self._pick)  # Enter on a day
 
-    def date(self) -> Optional[datetime.date]:
-        return self._date
-
     def set_date(self, value: Optional[datetime.date]) -> None:
         self._date = value
         self._show_date()

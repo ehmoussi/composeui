@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QDate, QEvent, QPoint, QPointF, QSize, Qt
+from qtpy.QtCore import QDate, QEvent, QModelIndex, QPoint, QPointF, QSize, Qt
 from qtpy.QtGui import (
     QAction,
     QColor,
@@ -82,6 +82,7 @@ from composeui.core.view import (
     DialogKind,
     EditRefusedError,
     FloatInputView,
+    HeaderGroup,
     InputView,
     IntInputView,
     LabelView,
@@ -94,6 +95,7 @@ from composeui.core.view import (
     SelectionMode,
     Series,
     T,
+    TableView,
     TreeNode,
     replace_cell,
 )
@@ -110,6 +112,7 @@ from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
+from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
 from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipechart import PipeChartMainView
 from examples.pipeform import EdgeType, PipeMainView
@@ -551,12 +554,22 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     qtbot.keyClicks(field.line_edit, "31/02")
     qtbot.keyClick(field.line_edit, Qt.Key.Key_Return)  # left as no date: the date back
     assert field.line_edit.text() == "03/11/2026"
-    field.line_edit.clear()
-    qtbot.keyClick(field.line_edit, Qt.Key.Key_Backspace)
+    qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
+    qtbot.keyClick(days, Qt.Key.Key_Return)  # the same day again: nothing to report
+    assert len(changes) == 2
+    field.line_edit.selectAll()
+    qtbot.keyClick(field.line_edit, Qt.Key.Key_Backspace)  # cleared: no date
+    assert (arrival.value, changes[-1]) == (None, None)
+    # without a date, the calendar opens on today's month, or the nearest it allows
+    qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
+    nearest = min(max(QDate.currentDate(), calendar.minimumDate()), calendar.maximumDate())
+    assert (calendar.yearShown(), calendar.monthShown()) == (nearest.year(), nearest.month())
+    calendar.close()
+    arrival.value = datetime.date(2026, 11, 3)
     arrival.value = None  # set in code: shown empty, the format as its hint, not reported
     assert field.line_edit.text() == ""
     assert field.line_edit.placeholderText() == "dd/mm/yyyy"
-    assert len(changes) == 2
+    assert len(changes) == 3
 
 
 def test_a_file_path_is_typed_or_picked_in_qt_s_dialog_and_reloaded(
@@ -1353,6 +1366,11 @@ def test_a_form_dialog_s_ok_follows_its_form_s_checks(qtbot: QtBot) -> None:
     assert dialog.isVisible()
     assert dialog.isAncestorOf(name)
 
+    qtbot.keyClicks(name, "?")
+    dialog.close()  # the title bar's button: as Cancel
+    assert not dialog.isVisible()
+    assert view.pipe.text == "Return, 12 m"
+
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:
     view = ToolBarMainView()
@@ -1526,6 +1544,10 @@ def test_a_vertical_splitter_shares_the_windows_spare_height_as_its_sizes(
     heights = widget.sizes()
     assert heights[0] == pytest.approx(chart + 60, abs=2)
     assert splitter.sizes == [round(100 * height / sum(heights)) for height in heights]
+
+    handle.setFocus()  # its keys are the up and down arrows
+    qtbot.keyClick(handle, Qt.Key.Key_Down)
+    assert widget.sizes()[0] == heights[0] + 16
 
 
 def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(
@@ -2773,6 +2795,10 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(qtbot: QtB
 
     view.rooms.filters = {"temperature": ">30"}
     assert box.empty.isVisible()
+    redrawn: list[object] = []
+    model.dataChanged.connect(lambda *_args: redrawn.append(None))
+    view.rooms.selected_ids = [0]  # a row the filter hides: nothing to redraw
+    assert redrawn == []
     qtbot.mouseClick(bar.chips[0].remove_button, Qt.MouseButton.LeftButton)
     assert (view.rooms.filters, names(), box.empty.isVisible()) == (
         {},
@@ -3096,8 +3122,9 @@ def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
     combobox.setFocus()
 
     qtbot.keyClick(combobox, Qt.Key.Key_Up)
+    size.value = None  # set in code: no item, and not reported
 
-    assert (size.value, seen) == (Size.SMALL, [Size.SMALL])
+    assert (seen, combobox.currentIndex()) == ([Size.SMALL], -1)
 
 
 @pytest.mark.parametrize(
@@ -3270,3 +3297,202 @@ def test_a_check_all_box_follows_its_column_turning_read_only_or_plain(qtbot: Qt
     assert disabled is not None
     assert disabled != enabled  # drawn disabled
     assert box() is None  # a plain column again
+
+
+def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    qtbot.waitExposed(chart.window())
+    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
+    view_box = chart.getPlotItem().getViewBox()
+    view.chart.y_log = True
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100 and view_box.viewRange()[1][1] < 3)
+    clicks: list[tuple[float, float]] = []
+    view.chart.clicked.connect(lambda x, y: clicks.append((x, y)))
+    point = chart.mapFromScene(view_box.mapViewToScene(QPointF(10, 1)))  # the log of 10
+
+    # first: pyqtgraph takes a click soon after another for a double one
+    qtbot.mouseClick(chart.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    qtbot.mouseClick(chart.viewport(), Qt.MouseButton.MiddleButton, pos=point)
+    qtbot.mouseDClick(chart.viewport(), Qt.MouseButton.LeftButton, pos=point)
+
+    (click,) = clicks
+    assert click == pytest.approx((10, 10), rel=0.05)  # within the pixel the mouse hit
+
+
+def test_a_log_chart_s_shown_range_is_its_values_not_their_logs(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
+    view.chart.x_log = True
+    view.chart.y_log = True
+
+    chart.getPlotItem().getViewBox().setRange(xRange=(0, 2), yRange=(1, 3), padding=0)
+
+    assert chart.shown_range() == (pytest.approx((1, 100)), pytest.approx((10, 1000)))
+
+
+def test_the_hover_leaves_out_what_isn_t_drawn_there(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot)
+    energy = view.router.chart.energy
+    view_box = chart.getPlotItem().vb
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 2)
+
+    view_box.setRange(xRange=(-3, 5), padding=0)  # zoomed out, past the categories
+    chart.show_hover(view_box.mapViewToScene(QPointF(4, 50)))
+    past = chart.hover_text()
+    energy.kind = ChartKind.LINE
+    energy.series = [
+        Series(name="Heating", x=[0, 1, 2], y=[10, 20, 30]),
+        Series(name="Unknown", x=[0, 1, 2], y=[math.nan] * 3),  # no point drawn
+    ]
+    chart.show_hover(view_box.mapViewToScene(QPointF(1, 20)))
+
+    assert past == ""
+    assert chart.hover_text().splitlines()[1:] == ["Heating: 20.00 kWh"]
+
+
+def test_a_table_s_keys_and_edits_report_only_what_changes(qtbot: QtBot) -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.variables)
+    model, header = table.model(), table.horizontalHeader()
+    clicks: list[tuple[int, int]] = []
+    edits: list[tuple[int, int, str]] = []
+    view.variables.cell_clicked.connect(lambda row, column: clicks.append((row, column)))
+    view.variables.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+
+    # Space on a link's cell clicks it
+    table.setFocus()
+    table.setCurrentIndex(model.index(0, 4))
+    qtbot.keyClick(table, Qt.Key.Key_Space)
+    # a button's or a link's column has no editor, even editable
+    view.variables.editable_columns = [0, 1, 2, 3, 4]
+    link_flags = model.flags(model.index(0, 4))
+    # Escape, or Enter on the text as it was, edits nothing
+    cell = table.visualRect(model.index(0, 1)).center()
+    for key in (Qt.Key.Key_Escape, Qt.Key.Key_Return):
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=cell)
+        qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=cell)
+        editor = table.focusWidget()
+        assert isinstance(editor, QLineEdit)
+        qtbot.keyClick(editor, key)
+        qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+    # the right button on the header's box checks nothing
+    box = QPoint(header.sectionViewportPosition(0) + header.box_width() // 2, header.height() // 2)
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.RightButton, pos=box)
+
+    assert clicks == [(0, 4)]
+    assert not link_flags & Qt.ItemFlag.ItemIsEditable
+    assert edits == []
+    assert [row[0] for row in view.variables.rows] == ["True", "false"]
+    # as a Qt model: nothing for no cell, and only an edit changes one
+    assert model.data(QModelIndex()) is None
+    assert model.setData(model.index(0, 1), "Width", Qt.ItemDataRole.DisplayRole) is False
+
+
+def test_a_disabled_cell_is_drawn_disabled(qtbot: QtBot) -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.variables)
+    button = table.visualRect(table.model().index(0, 3))
+
+    def drawn() -> QImage:
+        QApplication.processEvents()
+        return table.viewport().grab(button).toImage()
+
+    enabled = drawn()
+    view.variables.cell_styles = {(0, 3): CellStyle(is_disabled=True)}
+
+    assert drawn() != enabled
+
+
+def test_a_header_group_s_name_is_drawn_over_its_columns(qtbot: QtBot) -> None:
+    view = StyledTablesMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    header = _table(view.points).horizontalHeader()
+
+    def drawn() -> QImage:
+        QApplication.processEvents()
+        return header.grab().toImage()
+
+    named = drawn()
+    view.points.header_groups = [HeaderGroup("", 2, 2)]
+
+    assert drawn() != named
+
+
+def test_a_table_without_headers_has_no_columns(qtbot: QtBot) -> None:
+    view = TableView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+
+    model = _table(view).model()
+
+    assert (model.rowCount(), model.columnCount()) == (0, 0)
+
+
+def test_a_dialog_shown_again_at_once_keeps_its_native_window(qtbot: QtBot) -> None:
+    dialog = QMessageBox()
+    qtbot.addWidget(dialog)
+    release_when_hidden(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+
+    dialog.hide()
+    dialog.show()
+    QApplication.processEvents()  # the release the hide queued
+
+    assert dialog.testAttribute(Qt.WidgetAttribute.WA_WState_Created)
+
+
+def test_a_splitter_s_handle_moves_by_its_own_arrows_and_the_left_button_only(
+    qtbot: QtBot,
+) -> None:
+    view = SplitterMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    widget = _widget(view.splitter)
+    assert isinstance(widget, QSplitter)
+    sizes = widget.sizes()
+    resizes: list[list[int]] = []
+    view.splitter.resized.connect(resizes.append)
+    handle = widget.handle(1)
+
+    handle.setFocus()
+    qtbot.keyClick(handle, Qt.Key.Key_Up)  # across a row of panes
+    qtbot.mouseClick(handle, Qt.MouseButton.RightButton)
+
+    assert (widget.sizes(), resizes) == (sizes, [])
+
+
+def test_a_filter_s_chip_opens_on_space_and_its_editor_closes_on_escape(qtbot: QtBot) -> None:
+    view, box = _sorted_rooms(qtbot)
+    bar = box.bar
+    view.rooms.filters = {3: "true"}
+    (chip,) = bar.chips
+
+    qtbot.keyClick(chip.open_button, Qt.Key.Key_Space)
+    opened = (bar.is_editing(), bar.value.text())
+    qtbot.keyClick(bar.value, Qt.Key.Key_Escape)
+    view.rooms.search = "kit"  # set in code: shown in the field
+
+    assert opened == (True, "true")
+    assert not bar.is_editing()
+    assert view.rooms.filters == {3: "true"}
+    assert bar.search.text() == "kit"

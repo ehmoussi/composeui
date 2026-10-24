@@ -341,8 +341,7 @@ class QTableFilterBar(QWidget):
 
     def _add(self) -> None:
         column = self.column.currentData()
-        if not isinstance(column, int):
-            return
+        assert isinstance(column, int)  # the bar shows only with a column to filter
         text = self.value.text()
         if self.pattern.isChecked() and self.takes_pattern(column):
             text = as_pattern(text)

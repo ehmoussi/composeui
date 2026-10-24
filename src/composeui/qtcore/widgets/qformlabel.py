@@ -31,9 +31,6 @@ class QFormLabel(QWidget):
         # both packed at the start, the "?" right after the text
         layout.addStretch()
 
-    def text(self) -> str:
-        return self.text_label.text()
-
     def set_text(self, text: str) -> None:
         self.text_label.setText(text)
 
