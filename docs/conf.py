@@ -30,7 +30,7 @@ extensions = [
 ]
 
 source_suffix = {".md": "markdown"}
-exclude_patterns = ["_build"]
+exclude_patterns = ["_build", "_site"]
 
 # the guides link to their sections as `#core-concepts`, as GitHub does
 myst_heading_anchors = 3
@@ -51,6 +51,9 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 html_theme = "furo"
 html_title = f"ComposeUI {release}"
 html_static_path = ["_static"]
+# _site/ is copied as is to the root of the site: llms.txt for language models
+# (https://llmstxt.org), and the skill for coding agents (skills/composeui/SKILL.md)
+html_extra_path = ["_site"]
 # the default icon of the apps (`MainView.app_icon`)
 html_favicon = "../src/composeui/images/composeui.svg"
 # the logos already hold the name, so the sidebar doesn't repeat it under them

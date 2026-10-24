@@ -82,6 +82,9 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
   - [Web backend](user-guide/running-the-app.md#web-backend)
     - [How the web differs from a window](user-guide/running-the-app.md#how-the-web-differs-from-a-window)
     - [Serve the app to other users](user-guide/running-the-app.md#serve-the-app-to-other-users)
+- [Using a coding agent](user-guide/coding-agents.md)
+  - [Install the skill](user-guide/coding-agents.md#install-the-skill)
+  - [Point the agent at the documentation](user-guide/coding-agents.md#point-the-agent-at-the-documentation)
 
 ```{toctree}
 :hidden:
@@ -96,4 +99,5 @@ user-guide/threads
 user-guide/sqlite-model
 user-guide/translation
 user-guide/running-the-app
+user-guide/coding-agents
 ```

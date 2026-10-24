@@ -1,0 +1,96 @@
+---
+name: composeui
+description: "Use when writing or changing an app built with ComposeUI, the Python MVVM layer whose views are typed attrs classes that a Qt, Textual or web renderer shows: when the code imports composeui, defines a MainView, a FormView or another view with @define_view, connects a Signal, or starts an app with run(). Holds the rules that keep such an app correct on every backend, a minimal app, and where the documentation is."
+---
+
+# ComposeUI
+
+ComposeUI is a small MVVM layer. The app is a tree of views under a `MainView`. A view is a
+typed `attrs` class that holds the state of a part of the UI. A renderer of the chosen
+backend (Qt, Textual, or the web) binds each view to a widget. Signals carry events between
+the views, the model, and the app. The API is early-stage and still moving: when the
+documentation and this skill disagree, trust the documentation.
+
+Full documentation: https://ehmoussi.github.io/composeui3/ (an index for models is at
+https://ehmoussi.github.io/composeui3/llms.txt).
+
+## A minimal app
+
+```python
+from attrs import Factory
+
+from composeui.core.application import run
+from composeui.core.view import InputView, MainView, define_view
+
+
+@define_view
+class GreetingInputView(InputView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.placeholder = "Type your name..."
+        self.text_edited.connect(self._on_name_changed)
+
+    def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
+        main_view.status_bar.show_message(f"Hello, {text}!" if text else "")
+
+
+@define_view
+class HelloMainView(MainView):
+    app_title = "Hello ComposeUI"
+    extension = ".hello"
+
+    greeting: GreetingInputView = Factory(GreetingInputView)
+
+
+if __name__ == "__main__":
+    run(HelloMainView)
+```
+
+Run it with `--backend qt` (extra `pyside6`), `--backend textual` (extra `tui`), or without
+the option for the web (extra `web`, the default).
+
+## Rules
+
+- **Import views, signals and `run` from `composeui.core`.** Never import `PySide6`,
+  Textual, or Starlette in the app's views: the same views must run on every backend.
+  Use `qtpy` if the app needs Qt itself.
+- **Decorate every view class with `@define_view`,** and give it typed fields. Fields are
+  keyword-only. A class variable such as `app_title`, `extension`, or `align` configures
+  the class and is not state.
+- **A child view is a field that builds it:** `Factory(MyView)`, or
+  `child(MyView, label="Name")` to set fields. Never share one instance between views.
+- **Wire a view in `__attrs_post_init__`.** Call `super().__attrs_post_init__()` first,
+  then set values and connect signals.
+- **Views are reactive.** Set an attribute (`view.text = "..."`) and the renderer shows it.
+  Never call `update()` or `refresh()`, and never touch a widget: the app's code does not
+  see the toolkit.
+- **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
+  `connect` injects them. Spell the names exactly. A callback may take fewer of the
+  signal's arguments than it emits.
+- **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
+  where `_check` returns an error message or `None`. Then read `form.check()` and
+  `form.is_valid`.
+- **Keep the state saveable.** `MainView.save_state` writes the views' fields with
+  `cattrs`. A new field must be serializable, or the app must leave it out of the state
+  as `Signal` and validator fields are.
+- **Run slow work in jobs** (`main_view.jobs`), not in a callback: a callback blocks the UI.
+  Results are emitted on the main thread.
+- **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
+  (`T` is in `composeui.core.view`).
+- **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
+  the data and knows no view. The app gives it to `run` with `build_model=`.
+- **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
+  `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
+  every module with `from __future__ import annotations`, and do not quote annotations.
+  Define the views at module level.
+- **Run a code example before you answer with it.** The API moves: check each name against
+  `composeui.core.view` or the widget catalog before you use it.
+
+## Where to look
+
+- Which view to use: the widget catalog, https://ehmoussi.github.io/composeui3/widgets.html
+- Core concepts, views, layout, forms: the user guide,
+  https://ehmoussi.github.io/composeui3/user-guide.html
+- Complete apps to copy from: the examples guide,
+  https://ehmoussi.github.io/composeui3/examples-guide.html
+- Exact signatures: the API reference, https://ehmoussi.github.io/composeui3/api/index.html
