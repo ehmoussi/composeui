@@ -141,10 +141,14 @@ document owns what, and the checks.
   the quickstart changes, run `make screenshots EXAMPLES=quickstart`.
 - **Run every code example that you change.** Check each name against `composeui.core`, and
   run the example with `uv run python` in a scratch directory.
-- **Keep the navigation in step.** `docs/user-guide.md` lists the pages of
+- **Keep the navigation in step.** `docs/_site/llms.txt` has one entry per page of the site: add,
+  rename, or remove it with the page. `docs/user-guide.md` lists the pages of
   `docs/user-guide/` and their `##` and `###` headings. The contents list of the examples
   guide follows its `##` headings. Keep headings stable and unique in their page: other
   pages link to them, and anchors work down to `###` only.
+- **Keep the skill in step.** `docs/_site/skills/composeui/SKILL.md` is what users install for their
+  agents. When a rule of the API changes (a name, a signal argument, the state rules), change
+  it too.
 - **Keep the two copies in step.** Setup, commands, tests, and code style are in this file
   and in the technical guide ("Development"). Change both.
 - **Keep user docs for users.** Internal design decisions go in `ROADMAP.md` or in a code
