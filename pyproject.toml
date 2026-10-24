@@ -86,6 +86,16 @@ ignore_missing_imports = true
 markers = [
     "browser: drives the web backend in a real browser (Playwright); run by `make browser-test`",
 ]
+# a Qt warning fails the test: Qt reports a misuse of its API, such as a commit to a view
+# that no longer has the editor, only in its log
+qt_log_level_fail = "WARNING"
+# the offscreen platform has no fonts or grab
+qt_log_ignore = [
+    "QFontDatabase",
+    "Note that Qt no longer ships fonts",
+    "QFont::setPointSizeF",
+    "This plugin does not support",
+]
 
 [tool.ruff]
 line-length = 100
