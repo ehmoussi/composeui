@@ -46,6 +46,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     CellStyle,
+    CellWidget,
     ChartKind,
     DialogKind,
     EditRefusedError,
@@ -2911,3 +2912,26 @@ async def test_an_action_s_shortcut_icon_and_data_change_while_the_app_runs() ->
         clear.shortcut = "Ctrl+j"  # an action bound to no key at first gets one
         await pilot.pause()
         assert await opens("ctrl+j")
+
+
+@pytest.mark.asyncio
+async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.variables.renderer, TextualWidgetRenderer)
+    box = view.variables.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+
+    def header() -> str:
+        return str(next(iter(box.table.columns.values())).label)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        boxed = header()
+        view.variables.cell_widgets = {2: CellWidget.combobox(["Input", "Output"])}
+        await pilot.pause()
+
+        assert (boxed, header()) == ("▣ Keep", "Keep")

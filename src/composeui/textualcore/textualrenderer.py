@@ -1745,11 +1745,18 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
         cls._refresh_checked_columns(view, rendered_object)
 
     @staticmethod
-    def _refresh_checked_columns(view: TableViewLike, rendered_object: ComposeFilterTable) -> None:
+    def _refresh_checked_columns(
+        view: TableViewLike,
+        rendered_object: ComposeFilterTable,
+        *,
+        cell_widgets: dict[int, CellWidget] | None = None,
+    ) -> None:
+        """Show each check-all box; with the new widgets, which the view doesn't hold yet."""
+        widgets = view.cell_widgets if cell_widgets is None else cell_widgets
         rendered_object.table.set_checked_columns(
             {
                 column: view.column_checked(column)
-                for column, widget in view.cell_widgets.items()
+                for column, widget in widgets.items()
                 if widget.kind is CellKind.CHECK_BOX and widget.check_all
             }
         )
@@ -1765,7 +1772,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
         cls, view: TableViewLike, rendered_object: ComposeFilterTable, value: dict[int, CellWidget]
     ) -> None:
         rendered_object.table.set_cell_widgets(value)
-        cls._refresh_checked_columns(view, rendered_object)
+        cls._refresh_checked_columns(view, rendered_object, cell_widgets=value)
 
     @classmethod
     def _refresh_looks(
