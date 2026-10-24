@@ -2426,7 +2426,10 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
                 if isinstance(tab.renderer, TextualTabPageRenderer)
                 and tab.renderer.widget is not None
             ]
-            self._rendered_object = ComposeTabbedContent(*panes)
+            # on the view's tab: Textual reports the first tab shown as picked
+            tabs = self._view.tabs
+            initial = (self._pane_id(tabs[self._view.current_index]) or "") if tabs else ""
+            self._rendered_object = ComposeTabbedContent(*panes, initial=initial)
             self._rendered_object.picked.connect(self._update_current_index)
 
     @staticmethod

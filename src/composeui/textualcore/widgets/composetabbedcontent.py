@@ -14,8 +14,9 @@ class ComposeTabbedContent(TabbedContent):
     The message bubbles: one from tabs nested in a pane isn't this one's.
     """
 
-    def __init__(self, *panes: TabPane) -> None:
-        super().__init__()
+    def __init__(self, *panes: TabPane, initial: str = "") -> None:
+        # `initial`: the pane shown first, else the first; Textual reports it as activated
+        super().__init__(initial=initial)
         # as the compose syntax does: its positional arguments are titles, not panes
         for pane in panes:
             self.compose_add_child(pane)

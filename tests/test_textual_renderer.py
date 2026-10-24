@@ -1212,6 +1212,29 @@ async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tabs_start_on_the_tab_their_view_says_unreported() -> None:
+    view = TabsMainView()
+    view.tabs.current_index = 1  # e.g. by the app's setup, before rendering
+    picks: list[int] = []
+    view.tabs.current_changed.connect(picks.append)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.tabs.renderer, TextualWidgetRenderer)
+    tabbed = view.tabs.renderer.widget
+    assert isinstance(tabbed, ComposeTabbedContent)
+    assert isinstance(view.tabs.history.renderer, TextualWidgetRenderer)
+    history = view.tabs.history.renderer.widget
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+
+        assert tabbed.active_pane is history
+        assert (view.tabs.current_index, picks) == (1, [])
+
+
+@pytest.mark.asyncio
 async def test_a_form_dialog_s_ok_follows_its_form_s_checks() -> None:
     view = EditedPipeMainView()
     view.render(RendererType.TEXTUAL)
