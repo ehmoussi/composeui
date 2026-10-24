@@ -14,6 +14,7 @@ import datetime
 import gc
 import json
 import math
+import threading
 from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
@@ -99,6 +100,7 @@ from composeui.core.view import (
     TreeNode,
     replace_cell,
 )
+from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatatable import QDataFilterTable
@@ -154,13 +156,13 @@ from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
 
     from composeui.core.chartimage import ImageOptions
-    from composeui.core.view import MainView, View
+    from composeui.core.view import Filter, MainView, Sort, View
 
 
 @pytest.fixture(autouse=True)
@@ -3515,3 +3517,72 @@ def test_a_signal_disconnected_hears_its_widget_no_more(qtbot: QtBot) -> None:
 
     assert edits == []
     assert view.text == "a"  # the field still gives the view its text
+
+
+class _FailingGatedSource(GatedSource):
+    """A large source whose order, asked in a job, fails: e.g. its database gone."""
+
+    def ordered_ids(self, sort: Sort | None, search: str, filters: Mapping[str, Filter]) -> range:
+        if threading.current_thread() is not threading.main_thread():
+            msg = "the database is gone"
+            raise OSError(msg)
+        return super().ordered_ids(sort, search, filters)
+
+
+def test_a_large_table_keeps_its_order_when_a_job_fails_or_was_overtaken(
+    qtbot: QtBot,
+) -> None:
+    view = GatedMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    qtbot.addWidget(_widget(view))
+    shown = view.table.row_count
+
+    view.table.source = _FailingGatedSource()  # its first order fails, in its job
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    failed = view.table.row_count
+    source = GatedSource()
+    view.table.source = source
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    source.gate.clear()
+    view.table.sort_descending = True  # a job, then a small source answered at once
+    view.table.source = ListSource(Room, {"name": T("Room")}, [Room("Hall", 18.0)])
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.jobs.is_running)  # the job's answer, come late
+
+    assert shown > 0
+    assert failed == 0  # no order to show yet, its failure logged
+    assert view.table.row_count == 1  # the overtaken job's order dropped
+
+
+def test_a_large_table_s_bar_clears_its_filters(qtbot: QtBot) -> None:
+    view = RoomsDataMainView()
+    view.rooms.filters = {"name": "Hall", "temperature": ">10"}  # two: the bar clears them
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    box = _widget(view.rooms)
+    assert isinstance(box, QDataFilterTable)
+
+    qtbot.mouseClick(box.bar.clear, Qt.MouseButton.LeftButton)
+
+    assert view.rooms.filters == {}
+
+
+def test_a_large_table_qt_doesn_t_render_still_orders_its_rows_in_a_job(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delitem(QT_RENDERERS, "data_table")  # e.g. a backend lacking it
+    view = GatedMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    qtbot.addWidget(_widget(view))
+
+    view.table.sort_descending = True
+    ordering = view.table.is_ordering
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+
+    assert view.table.renderer is None
+    assert ordering  # in a job, as in a table shown

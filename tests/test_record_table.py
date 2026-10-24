@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import enum
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import attrs
 import pytest
 
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
-from composeui.core.view import CellWidget, Column, InvalidStateError, RecordTableView, T
+from composeui.core.view import (
+    CellWidget,
+    Column,
+    InvalidStateError,
+    RecordTableView,
+    T,
+    define_view,
+)
 from tests.tables import COLUMNS, Room, RoomsMainView
 
 if TYPE_CHECKING:
@@ -212,3 +219,27 @@ def test_a_study_with_records_that_don_t_fit_is_refused() -> None:
 def test_a_table_not_knowing_its_records_type_says_how_to_build_it() -> None:
     with pytest.raises(TypeError, match=r"RecordTableView\[Room\]"):
         _ = RecordTableView(columns=COLUMNS).record_type
+
+
+def test_a_cell_that_doesn_t_parse_outside_an_app_is_refused_saying_nothing() -> None:
+    view = RoomsMainView()  # not shown by an application: no status bar to tell
+    table = view.rooms
+    records = table.records
+
+    table.emit_cell_edited(1, 1, "warm")
+
+    assert table.records == records
+    assert view.status_bar.message == ""
+
+
+_T = TypeVar("_T")
+
+
+@define_view
+class _AnyRecordsTable(RecordTableView[_T]):
+    """A table generic in its records: still not knowing their type."""
+
+
+def test_a_generic_table_not_told_its_records_type_says_how_to_build_it() -> None:
+    with pytest.raises(TypeError, match=r"RecordTableView\[Room\]"):
+        _ = _AnyRecordsTable(columns=COLUMNS).record_type
