@@ -279,9 +279,6 @@ class ComposeDateInput(Horizontal):
         self.input.value_changed.connect(self._read_text)
         self.input.value_submitted.connect(self._show_date)
 
-    def date(self) -> datetime.date | None:
-        return self._date
-
     def set_date(self, value: datetime.date | None) -> None:
         self._date = value
         self._show_date()

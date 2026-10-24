@@ -20,7 +20,6 @@ from composeui.core import chartimage
 from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
-    NoRenderedObjectError,
     Renderer,
     RendererContainer,
     ViewLike,
@@ -123,11 +122,6 @@ if TYPE_CHECKING:
 TView = TypeVar("TView", bound=ViewLike)
 TWidget = TypeVar("TWidget", bound="Widget")
 TValue = TypeVar("TValue")
-
-
-class NoTextualRendererObjectError(Exception):
-    def __init__(self) -> None:
-        super().__init__("Renderer should be inherited by TextualRenderer")
 
 
 def _has_any_extension(filepath: Path, extensions: tuple[str, ...]) -> bool:
@@ -435,7 +429,8 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             app.push_screen(screen, functools.partial(self._answer, screen))
         elif not value and self.screen is not None:
             screen, self.screen = self.screen, None
-            if screen.is_current:
+            # current under another screen too: not only once popped, which `_answer` sees
+            if screen.is_current:  # pragma: no branch
                 screen.dismiss()  # no longer `self.screen`: `_answer` ignores it
 
     def _answer(self, screen: ComposeDialog, answer: bool | None) -> None:
@@ -501,11 +496,12 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         if self._rendered_object is None:
             super().render()
             form = self._form_view.form.renderer
-            if isinstance(form, TextualWidgetRenderer) and form.widget is not None:
-                self.form_screen = ComposeFormDialog(form.widget)
-                self.form_screen.answered.connect(self._answer_form)
-                # its form's widgets mount with it, first pushed: their state only then
-                self.form_screen.mounted.connect(self._refresh_screen)
+            assert isinstance(form, TextualWidgetRenderer)
+            assert form.widget is not None
+            self.form_screen = ComposeFormDialog(form.widget)
+            self.form_screen.answered.connect(self._answer_form)
+            # its form's widgets mount with it, first pushed: their state only then
+            self.form_screen.mounted.connect(self._refresh_screen)
 
     def _refresh_screen(self) -> None:
         _refresh_tree(self._form_view.form)
@@ -517,8 +513,9 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     def _refresh_visible(self, view: DialogView, _rendered_object: DialogView, value: bool) -> None:
         app, screen = self.app, self.form_screen
         # opened before the app runs: its mount refreshes the tree again
-        if app is None or not app.is_running or screen is None:
+        if app is None or not app.is_running:
             return
+        assert screen is not None
         if value and not screen.is_current:
             name = f"cui-{id(view)}-dialog"
             if not app.is_screen_installed(screen):
@@ -530,21 +527,19 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     def _refresh_enabled(
         self, _view: DialogView, _rendered_object: DialogView, value: bool
     ) -> None:
-        if self.form_screen is not None:
-            self.form_screen.reject_button.disabled = not value
-            self.form_screen.accept_button.disabled = not (
-                value and self._form_view.is_accept_enabled
-            )
+        assert self.form_screen is not None
+        self.form_screen.reject_button.disabled = not value
+        self.form_screen.accept_button.disabled = not (value and self._form_view.is_accept_enabled)
 
     def _refresh_title(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
-        if self.form_screen is not None:
-            self.form_screen.title_label.update(value)
-            self.form_screen.title_label.display = value != ""
+        assert self.form_screen is not None
+        self.form_screen.title_label.update(value)
+        self.form_screen.title_label.display = value != ""
 
     def _refresh_text(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
-        if self.form_screen is not None:
-            self.form_screen.text_label.update(value)
-            self.form_screen.text_label.display = value != ""
+        assert self.form_screen is not None
+        self.form_screen.text_label.update(value)
+        self.form_screen.text_label.display = value != ""
 
     def _refresh_kind(self, _view: DialogView, _rendered_object: DialogView, _value: Any) -> None:
         pass  # always OK and Cancel: a form is confirmed or not
@@ -552,20 +547,20 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
-        if self.form_screen is not None:
-            self.form_screen.accept_button.label = Content(value)
+        assert self.form_screen is not None
+        self.form_screen.accept_button.label = Content(value)
 
     def _refresh_reject_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
-        if self.form_screen is not None:
-            self.form_screen.reject_button.label = Content(value)
+        assert self.form_screen is not None
+        self.form_screen.reject_button.label = Content(value)
 
     def _refresh_is_accept_enabled(
         self, _view: DialogView, _rendered_object: DialogView, value: bool
     ) -> None:
-        if self.form_screen is not None:
-            self.form_screen.accept_button.disabled = not (value and self._view.is_enabled)
+        assert self.form_screen is not None
+        self.form_screen.accept_button.disabled = not (value and self._view.is_enabled)
 
 
 class InputViewLike(ViewLike, Protocol):
@@ -1339,8 +1334,8 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
 
     def _save_image(self, path: Path) -> None:
         """Save the whole chart's image: a terminal has no zoom."""
-        if isinstance(self._view, ChartView):
-            chartimage.save_chart_image(self._view, path)
+        assert isinstance(self._view, ChartView)
+        chartimage.save_chart_image(self._view, path)
 
 
 class MetricViewLike(ViewLike, Protocol):
@@ -1556,8 +1551,8 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     def _copy(self) -> None:
         app = self._get_app()
-        if app is not None:
-            app.copy_to_clipboard(self._view.selection_text())
+        assert app is not None
+        app.copy_to_clipboard(self._view.selection_text())
 
     def _update_search(self, text: str) -> None:
         with self.stop_refresh():
@@ -1799,8 +1794,9 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, row, column, text)
-        if self._rendered_object is not None:  # a check-all box follows its column's
-            self._refresh_checked_columns(self._view, self._rendered_object)
+        assert self._rendered_object is not None
+        # a check-all box follows its column's
+        self._refresh_checked_columns(self._view, self._rendered_object)
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
@@ -2003,49 +1999,36 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
                     # `VerticalScroll` (nothing ever appears to overflow the viewport).
                     row.styles.height = "auto"
                     rows.append(row)
-                elif (
-                    isinstance(field_row.renderer, TextualWidgetRenderer)
-                    and field_row.renderer.widget is not None
-                ):
+                else:  # a nested form
+                    assert isinstance(field_row.renderer, TextualWidgetRenderer)
+                    assert field_row.renderer.widget is not None
                     rows.append(field_row.renderer.widget)
-            if (
-                isinstance(self._view.log_view.renderer, TextualWidgetRenderer)
-                and self._view.log_view.renderer.widget is not None
-            ):
-                rows.append(self._view.log_view.renderer.widget)
+            log = self._view.log_view.renderer
+            assert isinstance(log, TextualWidgetRenderer)
+            assert log.widget is not None
+            rows.append(log.widget)
             self._rendered_object = Vertical(*rows)
             self._rendered_object.styles.height = "auto"
 
-    def _get_field_widget(self, field_row_renderer: RendererContainer[View]) -> Widget:
-        try:
-            field_renderer = field_row_renderer.get_renderer("field")
-        except KeyError as e:
-            msg = f"The field renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(field_renderer, TextualWidgetRenderer) or field_renderer.widget is None:
-            raise NoTextualRendererObjectError
+    @staticmethod
+    def _get_field_widget(field_row_renderer: RendererContainer[View]) -> Widget:
+        field_renderer = field_row_renderer.get_renderer("field")
+        assert isinstance(field_renderer, TextualWidgetRenderer)
+        assert field_renderer.widget is not None
         return field_renderer.widget
 
-    def _get_log_widget(self, field_row_renderer: RendererContainer[View]) -> Widget:
-        try:
-            log_renderer = field_row_renderer.get_renderer("log")
-        except KeyError as e:
-            msg = f"The log renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(log_renderer, TextualLogRenderer) or log_renderer.widget is None:
-            raise NoTextualRendererObjectError
+    @staticmethod
+    def _get_log_widget(field_row_renderer: RendererContainer[View]) -> Widget:
+        log_renderer = field_row_renderer.get_renderer("log")
+        assert isinstance(log_renderer, TextualLogRenderer)
+        assert log_renderer.widget is not None
         return log_renderer.widget
 
-    def _get_label_widget(self, field_row_renderer: RendererContainer[View]) -> Widget:
-        try:
-            label_renderer = field_row_renderer.get_renderer("label")
-        except KeyError as e:
-            msg = f"The label renderer is missing in the row of the form {self._view}"
-            raise ValueError(msg) from e
-        if not isinstance(label_renderer, TextualFormLabelRenderer) or (
-            label_renderer.widget is None
-        ):
-            raise NoRenderedObjectError
+    @staticmethod
+    def _get_label_widget(field_row_renderer: RendererContainer[View]) -> Widget:
+        label_renderer = field_row_renderer.get_renderer("label")
+        assert isinstance(label_renderer, TextualFormLabelRenderer)
+        assert label_renderer.widget is not None
         return label_renderer.widget
 
 
@@ -2061,7 +2044,8 @@ class TextualGroupFormRenderer(TextualFormRenderer):
     def render(self) -> None:
         is_first_render = self._rendered_object is None
         super().render()
-        if is_first_render and self._rendered_object is not None:
+        if is_first_render:
+            assert self._rendered_object is not None
             # `border_title` has no effect without an actual border to attach it to -
             # without this, every group (e.g. pipeform.py's "Main Pipe"/"Incident Pipe")
             # renders as a plain, undecorated box indistinguishable from the rest of
@@ -2070,9 +2054,8 @@ class TextualGroupFormRenderer(TextualFormRenderer):
             self._rendered_object.styles.padding = (0, 1)
 
     @staticmethod
-    def _refresh_title(view: FormView, rendered_object: Vertical, value: str) -> None:
-        if isinstance(view, GroupFormView):
-            rendered_object.border_title = Content(value)
+    def _refresh_title(_view: FormView, rendered_object: Vertical, value: str) -> None:
+        rendered_object.border_title = Content(value)
 
 
 class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
@@ -2428,25 +2411,24 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
             ]
             # on the view's tab: Textual reports the first tab shown as picked
             tabs = self._view.tabs
-            initial = (self._pane_id(tabs[self._view.current_index]) or "") if tabs else ""
+            initial = self._pane_id(tabs[self._view.current_index]) if len(tabs) > 0 else ""
             self._rendered_object = ComposeTabbedContent(*panes, initial=initial)
             self._rendered_object.picked.connect(self._update_current_index)
 
     @staticmethod
-    def _pane_id(tab: TabPage) -> str | None:
+    def _pane_id(tab: TabPage) -> str:
         """Get the id of `tab`'s pane, which the tabs tell it by."""
         renderer = tab.renderer
-        if isinstance(renderer, TextualTabPageRenderer) and renderer.widget is not None:
-            return renderer.widget.id
-        return None
+        assert isinstance(renderer, TextualTabPageRenderer)
+        assert renderer.widget is not None
+        assert renderer.widget.id is not None  # given by the tab page's renderer
+        return renderer.widget.id
 
     @staticmethod
     def _refresh_current_index(
         view: TabView, rendered_object: ComposeTabbedContent, value: int
     ) -> None:
-        pane_id = TextualTabsRenderer._pane_id(view.tabs[value])
-        if pane_id is not None:
-            rendered_object.set_active(pane_id)
+        rendered_object.set_active(TextualTabsRenderer._pane_id(view.tabs[value]))
 
     @staticmethod
     def _index(view: TabView, pane_id: str) -> int | None:
@@ -2524,11 +2506,11 @@ class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
             buttons: list[Widget] = []
             slots: list[Widget] = []
             for page in self._view.pages:
-                if isinstance(page.action.renderer, TextualActionRenderer):
-                    button = ComposeToolbarButton()
-                    button.triggered.connect(page.action.triggered.emit)
-                    page.action.renderer.button = button
-                    buttons.append(button)
+                assert isinstance(page.action.renderer, TextualActionRenderer)
+                button = ComposeToolbarButton()
+                button.triggered.connect(page.action.triggered.emit)
+                page.action.renderer.button = button
+                buttons.append(button)
                 page_widgets = (
                     [page.renderer.widget]
                     if isinstance(page.renderer, TextualPageRenderer)
@@ -2572,8 +2554,8 @@ class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
 
     def _trigger(self, action_view: ActionView) -> None:
         app = self._get_app()
-        if isinstance(app, _ComposeUIApp):
-            app.trigger(action_view)
+        assert isinstance(app, _ComposeUIApp)
+        app.trigger(action_view)
 
     @staticmethod
     def _noop(_view: ToolBar, _rendered_object: ComposeToolbar, _value: Any) -> None:
@@ -2625,8 +2607,8 @@ def _register_actions(app: _ComposeUIApp, root: View) -> None:
             if current.shortcut is not None:
                 app.bind_action(current, current.shortcut)
             # every action, a shortcut set later binding it then
-            if isinstance(current.renderer, TextualActionRenderer):
-                current.renderer.app = app
+            assert isinstance(current.renderer, TextualActionRenderer)
+            current.renderer.app = app
         views.extend(current.children_views)
 
 
@@ -2658,9 +2640,7 @@ class _ComposeUIApp(App[None]):
             self._view.close()  # its jobs canceled, as by Exit
 
     def action_trigger(self, action_id: str) -> None:
-        action_view = self.registered_actions.get(action_id)
-        if action_view is not None:
-            self.trigger(action_view)
+        self.trigger(self.registered_actions[action_id])
 
     def trigger(self, action_view: ActionView) -> None:
         """Trigger an action from its key binding or its toolbar button."""
@@ -2758,13 +2738,14 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         toolbars: list[Widget] = []
         docked: list[Widget] = []
         sidebars: list[Widget] = []
-        for child_view in self._view.children_views:
-            if not (
-                isinstance(child_view.renderer, TextualWidgetRenderer)
-                and child_view.renderer.widget is not None
-            ):
-                continue
-            widget = child_view.renderer.widget
+        # not a view no widget shows, e.g. a menu: Textual has its actions' keys instead
+        shown = [
+            (child_view, child_view.renderer.widget)
+            for child_view in self._view.children_views
+            if isinstance(child_view.renderer, TextualWidgetRenderer)
+            and child_view.renderer.widget is not None
+        ]
+        for child_view, widget in shown:
             if isinstance(child_view, StatusBar):
                 docked.append(widget)
             elif isinstance(child_view, ToolBar):
@@ -2772,8 +2753,8 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
             elif isinstance(child_view, SidebarView):
                 sidebars.append(widget)
             elif isinstance(child_view.renderer, TextualRouterRenderer):
-                if child_view.renderer.toolbar is not None:
-                    toolbars.append(child_view.renderer.toolbar)
+                assert child_view.renderer.toolbar is not None
+                toolbars.append(child_view.renderer.toolbar)
                 scrollable.append(widget)
             else:
                 scrollable.append(widget)
@@ -2796,8 +2777,8 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         self.call_on_main_thread(functools.partial(super().refresh_attribute, attr_name, value))
 
     def close(self) -> None:
-        if self._rendered_object is not None:
-            self._rendered_object.exit()
+        assert self._rendered_object is not None
+        self._rendered_object.exit()
 
     def open_file(self) -> Path | None:
         """Return an existing file selected by the user.
@@ -2806,8 +2787,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         `call_from_thread` blocks the calling thread while the modal runs on the
         app's own thread, which would deadlock if they were the same thread.
         """
-        if self._rendered_object is None:
-            raise NoTextualRendererObjectError
+        assert self._rendered_object is not None
         app = self._rendered_object
 
         async def _show() -> Path | None:
@@ -2823,8 +2803,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 
         See `open_file` for why this must be called from a worker thread.
         """
-        if self._rendered_object is None:
-            raise NoTextualRendererObjectError
+        assert self._rendered_object is not None
         app = self._rendered_object
 
         async def _show() -> Path | None:

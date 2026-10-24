@@ -122,11 +122,12 @@ class ComposeTree(Tree["TreePath"]):
         self.selected.emit(path)
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[TreePath]) -> None:
-        if event.node.data is not None:
+        # the hidden root's data is None: no event from it, as only the code expands it
+        if event.node.data is not None:  # pragma: no branch
             self.toggled.emit(event.node.data, True)  # noqa: FBT003
 
     def on_tree_node_collapsed(self, event: Tree.NodeCollapsed[TreePath]) -> None:
-        if event.node.data is not None:
+        if event.node.data is not None:  # pragma: no branch
             self.toggled.emit(event.node.data, False)  # noqa: FBT003
 
     def _branch_nodes(self) -> Iterator[TextualTreeNode[TreePath]]:

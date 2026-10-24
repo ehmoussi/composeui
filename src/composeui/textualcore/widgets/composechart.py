@@ -72,7 +72,8 @@ class ComposeChart(PlotextPlot):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "save_image":
             return chartimage.is_available()  # matplotlib draws the image
-        return super().check_action(action, parameters)
+        # Textual asks a widget about its own bindings only
+        return super().check_action(action, parameters)  # pragma: no cover
 
     def action_save_image(self) -> None:
         filters = Filters(
