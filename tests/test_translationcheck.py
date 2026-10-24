@@ -17,6 +17,7 @@ from composeui.core.translationcheck import (
     write_catalog,
 )
 from composeui.core.view import define_view
+from examples import pipecatalogue
 from examples.pipeform import PipeMainView
 from tests.translated import TranslatedMainView
 
@@ -171,3 +172,35 @@ def test_the_command_writes_the_catalog_then_checks_it(
     assert "fr.json: 8 entries added to translate" in out
     assert "fr.json: 8 missing" in out
     assert (tmp_path / "locales" / "fr.json").is_file()
+
+
+def test_a_table_s_refusals_are_text_to_translate() -> None:
+    texts = find_texts([Path(pipecatalogue.__file__)])
+
+    assert set(pipecatalogue.Pipes.refusals.values()) <= texts
+
+
+@define_view
+class _UntranslatedMainView(TranslatedMainView):
+    translations_dir = None
+
+
+def test_an_app_without_catalogs_can_t_be_checked_or_has_none_to_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="sets no translations_dir"):
+        check_main_view(_UntranslatedMainView)
+    # a directory without a catalog yet, named to the command as module:Class
+    monkeypatch.setattr(
+        sys.modules[__name__], "_EmptyMainView", _checked_main_view(tmp_path), raising=False
+    )
+
+    assert main([f"{__name__}:_EmptyMainView"]) == 0
+    assert f"no catalog in {tmp_path}" in capsys.readouterr().out
+
+
+def test_the_command_refuses_a_module_it_can_t_import(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["examples.no_such_example:MainView"])
+
+    assert "No module named 'examples.no_such_example'" in capsys.readouterr().err

@@ -193,3 +193,27 @@ def test_a_step_series_is_drawn_in_steps_its_fill_a_step_area() -> None:
     # its outline's corners: each count held until the next change, e.g. 1 from 0 to 2
     corners = {(float(x), float(y)) for x, y in area.get_paths()[0].vertices}
     assert {(0, 1), (2, 1), (2, 3), (5, 3)} <= corners
+
+
+def test_a_log_bar_chart_draws_its_bars_on_a_log_axis() -> None:
+    energy = ChartPagesMainView().router.chart.energy
+    energy.y_log = True
+
+    (axes,) = chart_figure(energy).axes
+
+    assert axes.get_yscale() == "log"
+
+
+def test_a_chart_without_series_names_none() -> None:
+    (axes,) = chart_figure(ChartView(title="Empty")).axes
+
+    assert axes.get_legend() is None
+
+
+def test_without_matplotlib_drawing_an_image_says_what_to_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("composeui.core.chartimage.is_available", lambda: False)
+
+    with pytest.raises(ImportError, match=r"composeui\[report\]"):
+        chart_figure(_pipe_chart())

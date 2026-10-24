@@ -141,7 +141,8 @@ class Jobs:
         model = None if self._model is None else self._model()
         for signal_name, signal in (("finished", job.finished), ("failed", job.failed)):
             signal.set_name(f"{name}.{signal_name}")
-            if main_view is not None:
+            # a main view's jobs start while it lives: called by its views, or the app
+            if main_view is not None:  # pragma: no branch
                 signal.set_main_view(main_view)
             if model is not None:
                 signal.set_model(model)
