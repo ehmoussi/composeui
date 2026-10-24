@@ -28,6 +28,7 @@ from qtpy.QtWidgets import (
     QComboBox,
     QDockWidget,
     QFileDialog,
+    QFormLayout,
     QGridLayout,
     QGroupBox,
     QLabel,
@@ -41,6 +42,7 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QTableView,
     QTabWidget,
@@ -55,7 +57,8 @@ from qtpy.QtWidgets import (
 from composeui.core import chartimage
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.chartcolors import SERIES_COLORS
-from composeui.core.renderer import MainRenderer, RendererContainer
+from composeui.core.registry import create_renderer
+from composeui.core.renderer import MainRenderer, NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
     DATA_TABLE_JOB_ROWS,
     DATA_TABLE_WINDOW,
@@ -75,8 +78,10 @@ from composeui.core.view import (
     LabelView,
     LineStyle,
     ListSource,
+    LogType,
     ReferenceLine,
     RendererType,
+    Router,
     SelectionMode,
     Series,
     T,
@@ -114,6 +119,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
@@ -131,6 +137,7 @@ from tests.tables import (
 from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
+from tests.unlabelled import NoteMainView
 from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
@@ -141,7 +148,7 @@ if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
 
     from composeui.core.chartimage import ImageOptions
-    from composeui.core.view import View
+    from composeui.core.view import MainView, View
 
 
 @pytest.fixture(autouse=True)
@@ -425,6 +432,10 @@ def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbo
     qtbot.keyClicks(radius_widget, "abc")
     assert radius_widget.text() != "abc"  # rejected by the QDoubleValidator
 
+    radius_widget.selectAll()
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Backspace)
+    assert view.pages.inputs.pipe_form.main_pipe.radius.value is None
+
 
 def test_a_float_input_shows_its_value_with_at_most_its_decimals(qtbot: QtBot) -> None:
     view = FloatInputView(value=3.14159)
@@ -465,6 +476,30 @@ def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot
     assert spin_box.text() == ""
     opening.minimum = 10  # Qt would show it, as it raises the 9 still held to 10
     assert (spin_box.minimum(), spin_box.text()) == (10, "")
+    qtbot.keyClicks(spin_box, "1")
+    assert opening.value is None  # on the way to a value in range, not one yet
+    qtbot.keyClicks(spin_box, "2")
+    assert opening.value == 12
+    spin_box.selectAll()
+    qtbot.keyClick(spin_box, Qt.Key.Key_Backspace)
+    assert opening.value is None
+
+
+def test_an_int_input_keeps_its_value_while_a_minus_sign_is_typed(qtbot: QtBot) -> None:
+    view = IntInputView(value=3, minimum=-5)
+    view.render(RendererType.QT)
+    spin_box = _widget(view)
+    assert isinstance(spin_box, QSpinBox)
+    qtbot.addWidget(spin_box)
+    spin_box.show()
+    spin_box.setFocus()
+    spin_box.selectAll()
+
+    qtbot.keyClicks(spin_box, "-")
+    kept = view.value
+    qtbot.keyClicks(spin_box, "2")
+
+    assert (kept, view.value) == (3, -2)
 
 
 def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) -> None:
@@ -1863,6 +1898,10 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     view.variables.editable_columns = [0]
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
+    # nor are the boxes, the header's checking none of them
+    view.variables.editable_columns = []
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=box)
+    assert [row[0] for row in view.variables.rows] == ["False", "False"]
 
 
 def test_a_table_s_cells_and_headers_look_as_the_view_says(qtbot: QtBot) -> None:
@@ -1906,6 +1945,9 @@ def test_a_table_s_cells_and_headers_look_as_the_view_says(qtbot: QtBot) -> None
     assert view.points.sort_column is None
     column = QPoint(group.x(), 3 * header.height() // 4)
     qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=column)
+    assert view.points.sort_column == 2
+    unsortable = QPoint(header.sectionViewportPosition(0) + 4, column.y())
+    qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=unsortable)
     assert view.points.sort_column == 2
     height = header.sizeHint().height()
     view.points.header_groups = []
@@ -2256,8 +2298,20 @@ def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> No
     assert chart.getPlotItem().getAxis("left").logMode
 
 
+@pytest.mark.parametrize(
+    ("picked", "saved_as"),
+    [
+        ("drop", ["drop.svg"]),  # by the filter chosen
+        ("drop.png", ["drop.png"]),  # by the name's own extension
+        ("", []),  # cancelled
+    ],
+)
 def test_save_image_saves_the_chart_as_it_shows(
-    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    picked: str,
+    saved_as: list[str],
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("matplotlib")
     view, chart = _rendered_chart(qtbot)
@@ -2268,7 +2322,7 @@ def test_save_image_saves_the_chart_as_it_shows(
     def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
         asked.append((caption, name))
         assert filters.startswith("PDF (*.pdf)")  # vector first
-        return str(tmp_path / "drop"), "SVG (*.svg)"
+        return (str(tmp_path / picked) if picked else ""), "SVG (*.svg)"
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
     saved: list[ImageOptions] = []
@@ -2285,10 +2339,11 @@ def test_save_image_saves_the_chart_as_it_shows(
     action.trigger()
 
     assert asked == [("Save Image", "Pressure Drop.pdf")]
-    assert (tmp_path / "drop.svg").read_text().startswith("<?xml")  # by the filter chosen
-    (options,) = saved
-    assert options.x_range == pytest.approx((0.5, 1.5))  # the zoom the user looks at
-    assert options.y_range == pytest.approx((0, 10))
+    assert [path.name for path in tmp_path.iterdir()] == saved_as
+    # the zoom the user looks at
+    assert [(options.x_range, options.y_range) for options in saved] == [
+        (pytest.approx((0.5, 1.5)), pytest.approx((0, 10)))
+    ] * len(saved_as)
 
 
 def test_without_matplotlib_the_chart_offers_only_its_own_export(
@@ -2847,8 +2902,17 @@ def test_a_large_table_draws_each_row_with_one_read_of_its_cells(
     assert box.table.model().index(last, 1).data() == f"{last / 2:.3f}"
 
 
+@pytest.mark.parametrize(
+    ("picked", "written"),
+    [("rooms", ["rooms.csv"]), ("rooms.CSV", ["rooms.CSV"]), ("", [])],
+    ids=["named", "with-extension", "cancelled"],
+)
 def test_a_large_table_s_button_exports_its_rows_as_csv(
-    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    picked: str,
+    written: list[str],
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     view = RoomsDataMainView()
     view.render(RendererType.QT)
@@ -2860,7 +2924,7 @@ def test_a_large_table_s_button_exports_its_rows_as_csv(
 
     def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
         asked.append((caption, name, filters))
-        return str(tmp_path / "rooms"), filters
+        return (str(tmp_path / picked) if picked else ""), filters
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
     # a button above the rows, and the table's context menu, share the action
@@ -2874,11 +2938,13 @@ def test_a_large_table_s_button_exports_its_rows_as_csv(
     qtbot.mouseClick(box.export, Qt.MouseButton.LeftButton)
 
     assert asked == [("Export CSV", "table.csv", "CSV (*.csv)")]
-    assert (tmp_path / "rooms.csv").read_text(encoding="utf-8").splitlines() == [
-        "Room,Temperature,Occupants",
-        "Kitchen,21.5,2",
-        "Bedroom,19.5,1",
-    ]
+    assert [path.name for path in tmp_path.iterdir()] == written
+    for name in written:
+        assert (tmp_path / name).read_text(encoding="utf-8").splitlines() == [
+            "Room,Temperature,Occupants",
+            "Kitchen,21.5,2",
+            "Bedroom,19.5,1",
+        ]
 
 
 def _qt_widget(view: View) -> QWidget:
@@ -2925,3 +2991,252 @@ def test_a_text_like_html_shows_as_it_is(qtbot: QtBot) -> None:
     assert isinstance(dialog, QMessageBox)
     assert dialog.textFormat() == Qt.TextFormat.PlainText
     view.warning.reject()
+
+
+def _widgets_of(view: View) -> list[object]:
+    """Get the widgets of `view` and of its children, depth first."""
+    renderer = view.renderer
+    if isinstance(renderer, RendererContainer):
+        widgets: list[object] = [part.qt_object for part in renderer.renderers]  # type: ignore[attr-defined]
+    else:
+        widgets = [getattr(renderer, "qt_object", None)]
+    for child_view in view.children_views:
+        widgets.extend(_widgets_of(child_view))
+    return widgets
+
+
+@pytest.mark.parametrize(
+    "main_view_type",
+    [
+        PipeMainView,
+        PipeCatalogueMainView,
+        ChartPagesMainView,
+        DialogsMainView,
+        GridMainView,
+        PipesMainView,
+        RecordMainView,
+        SidebarMainView,
+        SplitterMainView,
+        TabsMainView,
+        ToolBarMainView,
+        CellWidgetsMainView,
+        RoomsDataMainView,
+        HelpMainView,
+        JobsMainView,
+        BookingMainView,
+        DataFileMainView,
+        EditedPipeMainView,
+        HoursMainView,
+        WorkersMainView,
+    ],
+)
+def test_a_main_view_rendered_again_keeps_every_widget(
+    qtbot: QtBot, main_view_type: type[MainView]
+) -> None:
+    view = main_view_type()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    before = _widgets_of(view)
+
+    view.render(RendererType.QT)
+
+    after = _widgets_of(view)
+    assert [id(widget) for widget in after] == [id(widget) for widget in before]
+
+
+def test_a_view_qt_doesn_t_render_is_left_out_of_its_container(qtbot: QtBot) -> None:
+    view = PartialMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    item = LabelView()
+    view.items.item_views = [UnregisteredView(), item]
+
+    for container in (view.row, view.column, view.grid, view.splitter, view.expander, view.page):
+        assert container.skipped.renderer is None
+        assert _widget(container).isAncestorOf(_widget(container.shown))
+    assert window.isAncestorOf(_widget(view.shown))
+    assert _widget(view.items).isAncestorOf(_widget(item))
+    assert isinstance(view.action.renderer, QtActionRenderer)
+    assert view.action.renderer.qt_object is None
+    for bar in (view.menu, view.toolbar):
+        assert isinstance(bar.renderer, QtWidgetRenderer)
+        assert isinstance(bar.renderer.qt_object, QWidget)
+        assert len(bar.renderer.qt_object.actions()) == 1  # its action only
+
+
+def test_a_view_shown_before_its_widget_is_built_raises(qtbot: QtBot) -> None:
+    view = LabelView()
+    view.renderer = create_renderer(RendererType.QT, "label", view)
+
+    with pytest.raises(NoRenderedObjectError):
+        view.text = "Too early"
+    with pytest.raises(NoRenderedObjectError):
+        view.renderer.refresh()
+
+
+def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
+    view = TranslatedMainView()
+    view.render(RendererType.QT)
+    size = view.shape.size
+    combobox = _field_widget(size)
+    qtbot.addWidget(combobox)
+    seen: list[object] = []
+    size.value_changed.connect(seen.append)
+    combobox.show()
+    combobox.setFocus()
+
+    qtbot.keyClick(combobox, Qt.Key.Key_Up)
+
+    assert (size.value, seen) == (Size.SMALL, [Size.SMALL])
+
+
+@pytest.mark.parametrize(
+    ("log_type", "style"),
+    [
+        (LogType.ERROR, "QLabel { color : red; }"),
+        (LogType.WARNING, "QLabel { color : orange; }"),
+        (LogType.INFO, ""),
+    ],
+)
+def test_a_row_s_message_is_coloured_by_its_type(
+    qtbot: QtBot, log_type: LogType, style: str
+) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    name = view.pages.inputs.pipe_form.name
+    assert isinstance(name.renderer, RendererContainer)
+    log = name.renderer.get_renderer("log")
+    assert isinstance(log, QtWidgetRenderer)
+    assert isinstance(log.qt_object, QLabel)
+    qtbot.addWidget(_widget(view))
+
+    name.log_message = "Check the name"
+    name.log_type = log_type
+
+    assert (log.qt_object.text(), log.qt_object.styleSheet()) == ("Check the name", style)
+
+
+def test_a_row_without_a_label_spans_its_form(qtbot: QtBot) -> None:
+    view = NoteMainView()
+    view.render(RendererType.QT)
+    form = _widget(view.form)
+    qtbot.addWidget(_widget(view))
+    layout = form.layout()
+    assert isinstance(layout, QFormLayout)
+
+    row = layout.itemAt(0, QFormLayout.ItemRole.SpanningRole)
+
+    assert layout.itemAt(0, QFormLayout.ItemRole.LabelRole) is None
+    assert row is not None
+    assert row.widget().isAncestorOf(_field_widget(view.form.note))
+
+
+def test_a_tree_keeps_its_node_selected_when_the_user_deselects_it(qtbot: QtBot) -> None:
+    view = SiteMainView()
+    view.render(RendererType.QT)
+    site = view.site
+    tree = _widget(site)
+    assert isinstance(tree, QTreeWidget)
+    qtbot.addWidget(tree)
+    tree.show()
+    site.selected = ("Building A", "Floor 1")
+    selections: list[tuple[str, ...]] = []
+    site.selection_changed.connect(selections.append)
+    item = _tree_item(tree, "Building A", "Floor 1")
+
+    qtbot.mouseClick(
+        tree.viewport(),
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.ControlModifier,
+        tree.visualItemRect(item).center(),
+    )
+
+    assert tree.selectedItems() == [item]
+    assert (site.selected, selections) == (("Building A", "Floor 1"), [])
+
+
+def test_an_action_shows_its_icon_until_it_has_none(qtbot: QtBot, tmp_path: Path) -> None:
+    icon = tmp_path / "run.png"
+    pixmap = QPixmap(16, 16)
+    pixmap.fill(QColor("#2563eb"))
+    assert pixmap.save(str(icon))
+    view = ToolBarMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    run = view.toolbar.run
+    assert isinstance(run.renderer, QtActionRenderer)
+    action = run.renderer.qt_object
+    assert isinstance(action, QAction)
+
+    run.icon = str(icon)
+    shown = not action.icon().isNull()
+    run.icon = None
+
+    assert (shown, action.icon().isNull()) == (True, True)
+
+
+def test_exit_closes_the_window(qtbot: QtBot) -> None:
+    view = HelpMainView()
+    _add_reference_to_signals(view, None)  # `main_view` for the action, as an app does
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+
+    view.file_menu.exit_app.triggered.emit()
+
+    assert not window.isVisible()
+
+
+def test_a_router_without_pages_shows_none(qtbot: QtBot) -> None:
+    router = Router()
+    router.render(RendererType.QT)
+    stack = _widget(router)
+    qtbot.addWidget(stack)
+
+    assert isinstance(stack, QStackedWidget)
+    assert stack.count() == 0
+
+
+def test_a_window_shown_another_main_view_trades_its_toolbars_and_sidebar(
+    qtbot: QtBot,
+) -> None:
+    first = ToolBarMainView()
+    first.render(RendererType.QT)
+    window = _widget(first)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+
+    def parts() -> tuple[int, int]:
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        direct = Qt.FindChildOption.FindDirectChildrenOnly
+        return len(window.findChildren(QToolBar, "", direct)), len(
+            window.findChildren(QDockWidget, "", direct)
+        )
+
+    shown = [parts()]
+    for view in (SidebarMainView(), ToolBarMainView()):  # e.g. the changed code on a reload
+        view.renderer = QtMainRenderer(view, window)
+        view.render(RendererType.QT)
+        shown.append(parts())
+
+    # the edit toolbar and the pages' one; the pages' one and the sidebar; back again
+    assert shown == [(2, 0), (1, 1), (2, 0)]
+
+
+def test_a_file_saved_under_any_extension_keeps_the_name_typed(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = HelpMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    typed = tmp_path / "notes"
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        staticmethod(lambda *_args: (str(typed), "All files (*)")),
+    )
+
+    assert view.ask_save_filepath({"All files": ("",)}) == typed
