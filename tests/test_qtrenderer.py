@@ -19,7 +19,16 @@ from typing import TYPE_CHECKING, Any
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QDate, QEvent, QPoint, QPointF, QSize, Qt
-from qtpy.QtGui import QAction, QColor, QFont, QMouseEvent, QPalette, QPixmap, QTextDocument
+from qtpy.QtGui import (
+    QAction,
+    QColor,
+    QFont,
+    QImage,
+    QMouseEvent,
+    QPalette,
+    QPixmap,
+    QTextDocument,
+)
 from qtpy.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
@@ -3240,3 +3249,24 @@ def test_a_file_saved_under_any_extension_keeps_the_name_typed(
     )
 
     assert view.ask_save_filepath({"All files": ("",)}) == typed
+
+
+def test_a_check_all_box_follows_its_column_turning_read_only_or_plain(qtbot: QtBot) -> None:
+    view = CellWidgetsMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    model = _table(view.variables).model()
+
+    def box() -> QImage | None:
+        icon = model.headerData(0, Qt.Orientation.Horizontal, Qt.ItemDataRole.DecorationRole)
+        return None if icon is None else icon.pixmap(16, 16).toImage()
+
+    enabled = box()
+    view.variables.editable_columns = [2]
+    disabled = box()
+    view.variables.cell_widgets = {2: CellWidget.combobox(["Input", "Output"])}
+
+    assert enabled is not None
+    assert disabled is not None
+    assert disabled != enabled  # drawn disabled
+    assert box() is None  # a plain column again

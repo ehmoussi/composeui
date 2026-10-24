@@ -601,6 +601,9 @@ class QTextTableView(QTableView):
         option.state = states[is_checked]
         if is_enabled:
             option.state |= QStyle.StateFlag.State_Enabled
+        else:
+            # Fusion draws the box in the palette's colors, whatever its state
+            option.palette.setCurrentColorGroup(QPalette.ColorGroup.Disabled)
         painter = QPainter(pixmap)
         try:
             style.drawPrimitive(QStyle.PrimitiveElement.PE_IndicatorCheckBox, option, painter, self)
