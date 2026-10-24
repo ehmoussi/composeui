@@ -134,6 +134,8 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
         ("6.8.0-45-generic", "/mnt/data/app", True),  # not WSL: a Linux disk's mount
     ],
 )
+# a path resolves to a Windows one there, e.g. C:\mnt\c\...: not WSL's /mnt/c/...
+@pytest.mark.skipif(sys.platform == "win32", reason="WSL's paths are Linux paths")
 def test_only_a_windows_drive_s_files_under_wsl_are_polled(
     release: str, directory: str, has_events: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -215,7 +217,10 @@ def test_a_change_of_the_program_s_code_is_seen_but_not_of_another_file(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
     link = tmp_path / "link"
-    link.symlink_to(project)
+    try:
+        link.symlink_to(project, target_is_directory=True)
+    except OSError:  # Windows makes a link only in Developer Mode: the project itself
+        link = project
     changes = watch_changes(link)  # watching from now on
 
     for path in (app, hidden, standard, notes):
@@ -363,9 +368,9 @@ def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_cha
     assert after[3:-1] == ["7", "mine.count", "fr", "['kept']"]
 
 
-#: a Qt app logging each render and model's close, with its code's version and its process.
-#: Version 1 opens a modal dialog for a while, version 2 fails to set up its model, and
-#: version 3 closes its window once shown
+#: a Qt app logging each render and model's close, with its code's version, its process and
+#: whether a supervisor runs it. Version 1 opens a modal dialog for a while, version 2 fails
+#: to set up its model, and version 3 closes its window once shown
 _LIFECYCLE_APP = textwrap.dedent(
     """
     import os, pathlib
@@ -378,8 +383,9 @@ _LIFECYCLE_APP = textwrap.dedent(
     VERSION = 1
 
     def log(event):
+        supervised = "COMPOSEUI_RELOADED" in os.environ
         with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
-            file.write(f"{event}|{VERSION}|{os.getpid()}\\n")
+            file.write(f"{event}|{VERSION}|{os.getpid()}|{supervised}\\n")
 
     class LoggedModel(Model):
         def close(self):
@@ -433,16 +439,21 @@ def test_a_qt_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> Non
         _stop(program)
 
     events = [line.split("|") for line in log.read_text().splitlines()]
-    app = events[1][2]
+    supervisor, app = events[0][2], events[1][2]
+    # on Windows, a virtual environment's python.exe is a launcher, which runs the
+    # supervisor as its child: `program` is the launcher
+    if sys.platform != "win32":
+        assert supervisor == str(program.pid)
+    assert supervisor != app
     assert events == [
-        ["close", "1", str(program.pid)],  # the supervisor's, never shown
-        ["render", "1", app],
-        ["dialog", "1", app],
-        ["dialog closed", "1", app],  # the reload waited for it
-        ["close", "2", app],  # its setup failed: the window keeps version 1
-        ["render", "3", app],
-        ["close", "1", app],  # replaced
-        ["close", "3", app],  # the window closed
+        ["close", "1", supervisor, "False"],  # the supervisor's, never shown
+        ["render", "1", app, "True"],
+        ["dialog", "1", app, "True"],
+        ["dialog closed", "1", app, "True"],  # the reload waited for it
+        ["close", "2", app, "True"],  # its setup failed: the window keeps version 1
+        ["render", "3", app, "True"],
+        ["close", "1", app, "True"],  # replaced
+        ["close", "3", app, "True"],  # the window closed
     ]
 
 
@@ -513,6 +524,8 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
     assert second[1:] == ["7", "fr"]  # the state, and the language, the first left
 
 
+# `terminate` there ends the process at once, without a signal it could handle
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no SIGTERM")
 def test_a_supervisor_told_to_stop_stops_its_app(tmp_path: Path) -> None:
     pid_file = tmp_path / "app.pid"
     app = (
