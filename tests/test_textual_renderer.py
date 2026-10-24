@@ -2958,3 +2958,41 @@ async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
         await pilot.pause()
 
         assert (boxed, header()) == ("▣ Keep", "Keep")
+
+
+@pytest.mark.asyncio
+async def test_ctrl_q_quits_through_the_exit_action() -> None:
+    view = HelpMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    exits: list[None] = []
+    view.file_menu.exit_app.triggered.connect(lambda: exits.append(None))
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+
+    assert exits == [None]
+    assert app.return_code == 0
+
+
+@pytest.mark.asyncio
+async def test_ctrl_q_cancels_the_jobs_of_an_app_without_a_file_menu() -> None:
+    view = HelpViewerMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        job = view.jobs.start(lambda job: job.sleep(10))
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+
+    assert job.is_canceled
+    assert app.return_code == 0
