@@ -2445,7 +2445,7 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
         view: TabView, rendered_object: ComposeTabbedContent, value: int
     ) -> None:
         pane_id = TextualTabsRenderer._pane_id(view.tabs[value])
-        if pane_id is not None and rendered_object.is_attached:
+        if pane_id is not None:
             rendered_object.set_active(pane_id)
 
     @staticmethod

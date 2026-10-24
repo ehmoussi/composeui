@@ -2996,3 +2996,26 @@ async def test_ctrl_q_cancels_the_jobs_of_an_app_without_a_file_menu() -> None:
 
     assert job.is_canceled
     assert app.return_code == 0
+
+
+@pytest.mark.asyncio
+async def test_a_tab_picked_in_code_before_its_tabs_mount_shows_once_they_do() -> None:
+    view = TabsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.tabs.renderer, TextualWidgetRenderer)
+    tabbed = view.tabs.renderer.widget
+    assert isinstance(tabbed, ComposeTabbedContent)
+    assert isinstance(view.tabs.history.renderer, TextualWidgetRenderer)
+    history = view.tabs.history.renderer.widget
+    picks: list[int] = []
+    view.tabs.current_changed.connect(picks.append)
+    view.tabs.current_index = 1  # e.g. tabs in a dialog's form, its screen not shown yet
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+
+        assert tabbed.active_pane is history
+        assert (view.tabs.current_index, picks) == (1, [])
