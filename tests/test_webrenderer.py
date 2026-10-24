@@ -52,6 +52,7 @@ from composeui.core.view import (
     ActionView,
     ButtonVariant,
     ButtonView,
+    CellWidget,
     ChartKind,
     ChartView,
     DataTableView,
@@ -87,7 +88,7 @@ from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
 from composeui.webcore.page import JOBS_POLL_MS
-from composeui.webcore.session import SessionStore, WebSession
+from composeui.webcore.session import MAX_FILE_SIZE, SessionStore, WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     CHART_MAX_POINTS,
@@ -96,6 +97,7 @@ from composeui.webcore.webrenderer import (
     UnsupportedEventError,
     WebActionRenderer,
     WebChartRenderer,
+    WebFilePathInputRenderer,
     WebFloatInputRenderer,
     WebFormLabelRenderer,
     WebInputRenderer,
@@ -135,10 +137,12 @@ from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
+from tests.hours import HoursMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
+from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
@@ -800,6 +804,12 @@ def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
     assert status.text == "Can't open 'notes.txt': expected a .md or .markdown file."
     assert main_view.help.text == "# Notes"
     assert help_client.post(f"/widget/{action_id}/file").status_code == 400
+    large = b"#" * (MAX_FILE_SIZE + 1)
+    response = help_client.post(
+        f"/widget/{action_id}/file", files={"file": ("large.md", large, "text/markdown")}
+    )
+    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'large.md': the file is too large."
     # another action takes no file, and an unknown widget is none of the session's
     open_id = _widget_id(main_view.file_menu.open_file.renderer)
     files = {"file": ("notes.md", b"# Other", "text/markdown")}
@@ -1782,6 +1792,38 @@ class _Guestbook(Model):
         self.names: list[str] = []
 
 
+class _ClosedGuestbook(_Guestbook):
+    def __init__(self) -> None:
+        super().__init__()
+        self.is_closed = False
+
+    def close(self) -> None:
+        self.is_closed = True
+
+
+def test_a_session_s_model_closes_with_it() -> None:
+    models: list[_ClosedGuestbook] = []
+    views: list[HelloMainView] = []
+
+    class GuestbookApp(WebModelApplication[HelloMainView, _ClosedGuestbook]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            views.append(main_view)
+
+    def build_model() -> _ClosedGuestbook:
+        models.append(_ClosedGuestbook())
+        return models[-1]
+
+    app = GuestbookApp(build_main_view=HelloMainView, build_model=build_model)
+    with _Browser(app.create_starlette_app()) as browser:
+        browser.get("/")
+        (view,) = views
+        session_model = models[-1]
+        exit_id = _action_id(view.file_menu.exit_app)
+        browser.post(f"/widget/{exit_id}", data={"event": "triggered"})
+
+    assert session_model.is_closed
+
+
 def test_each_browser_gets_its_own_model() -> None:
     models: list[_Guestbook] = []
 
@@ -2005,15 +2047,23 @@ def test_a_request_without_a_live_session_reloads_the_page(
         posted = stale.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
         fetched = stale.get(f"/widget/{field_id}")
         uploaded = stale.post("/state", files={"file": ("s.hello", b"{}")})
+        picked = stale.post(f"/widget/{field_id}/file", files={"file": ("a.txt", b"a")})
+        polled = stale.get("/jobs")
         # a plain download link isn't htmx: it is sent to the page, which starts a session
-        downloaded = stale.get("/state", follow_redirects=False)
+        downloads = [
+            stale.get("/state", follow_redirects=False),
+            stale.post("/state/download", follow_redirects=False),
+            stale.get(f"/widget/{field_id}/image", follow_redirects=False),
+            stale.get(f"/widget/{field_id}/csv", follow_redirects=False),
+        ]
 
-    for response in (posted, fetched, uploaded):
+    for response in (posted, fetched, uploaded, picked, polled):
         assert response.status_code == 200
         assert response.headers["hx-refresh"] == "true"
         assert response.text == ""
-    assert downloaded.status_code == 303
-    assert downloaded.headers["location"] == "/"
+    for downloaded in downloads:
+        assert downloaded.status_code == 303
+        assert downloaded.headers["location"] == "/"
 
 
 def test_a_session_is_built_once_and_kept_across_reloads(app: _HelloApp) -> None:
@@ -2062,8 +2112,10 @@ def test_a_full_server_refuses_new_sessions_but_keeps_its_own() -> None:
         alice_view, bob_view = app.session_views
 
         refused = carol.get("/")
+        refused_page = carol.get("/results")  # a page's address too
 
         assert refused.status_code == 503
+        assert refused_page.status_code == 503
         assert len(app.session_views) == 2  # no main view built for it
         _type_name(alice, alice_view, "Alice")  # the live sessions still work
         assert alice_view.form.name.text == "Alice"
@@ -2443,6 +2495,9 @@ def test_a_saved_session_opens_only_under_an_id_the_server_makes(
     # e.g. a cookie signed with the key, and so trusted: still never a path elsewhere
     assert sessions.get("../outside") is None
     assert (outside / "study").exists()
+    # an id the server could have made, but saved by none: e.g. a crashed process's
+    assert sessions.get("a" * 43) is None
+    sessions.drop("a" * 43)  # e.g. by two requests at once, each told it closed
     assert app.session_views == []
 
 
@@ -2757,6 +2812,25 @@ def test_a_save_post_fires_its_action_then_downloads(
     assert len(triggered) == 1
     assert "attachment" in response.headers["content-disposition"]
     assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+
+
+@pytest.mark.parametrize("data", [{}, {"trigger": "cui-0"}], ids=["none", "not-an-action"])
+def test_a_save_post_without_its_action_only_downloads(
+    main_view: HelloMainView, client: TestClient, data: dict[str, str]
+) -> None:
+    menu = main_view.file_menu
+    saves = [_count(menu.save.triggered), _count(menu.save_as.triggered)]
+
+    response = client.post("/state/download", data=data)
+
+    assert "attachment" in response.headers["content-disposition"]
+    assert saves == [[], []]
+
+
+def test_an_open_post_without_a_file_is_refused(client: TestClient) -> None:
+    response = client.post("/state", data={"trigger": "none"})
+
+    assert (response.status_code, response.text) == (400, "No file uploaded")
 
 
 def test_a_state_link_downloads_without_firing_save(
@@ -4644,6 +4718,8 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
         ).status_code
         == 400
     )
+    infinite = chart_client.get(f"/widget/{chart_id}/image", params={"x_min": "-inf", "x_max": "1"})
+    assert infinite.status_code == 400
     assert (
         chart_client.get(f"/widget/{_widget_id(main_view.buttons.add.renderer)}/image").status_code
         == 404
@@ -5174,3 +5250,327 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
     ]
     assert "data-copy-answer" in answer
     assert _element(response.text, f"{table_id}-copied").text == "2\t0.5\n6\t1.5"
+
+
+def _web_renderers(view: View) -> Iterator[WebRenderer[Any]]:
+    """Get the web renderers of `view` and of its children, depth first."""
+    renderer = view.renderer
+    parts = renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
+    yield from (part for part in parts if isinstance(part, WebRenderer))
+    for child_view in view.children_views:
+        yield from _web_renderers(child_view)
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
+def test_every_widget_refuses_an_event_it_doesn_t_take(main_view_type: type[MainView]) -> None:
+    """Catches a renderer applying, or ignoring, an event the browser has no reason to send.
+
+    The route answers it 400: a request sent by hand, or by a page of another version.
+    """
+    main_view = main_view_type()
+    main_view.render(RendererType.WEB)
+    taken: list[str] = []
+
+    for renderer in _web_renderers(main_view):
+        try:
+            renderer.dispatch("not-an-event", {})
+        except UnsupportedEventError:
+            continue
+        taken.append(type(renderer).__name__)
+
+    assert taken == []
+
+
+def test_a_table_answers_a_stale_page_s_posts_with_itself_as_it_now_is() -> None:
+    views: list[CellWidgetsMainView] = []
+
+    class VariablesApp(WebApplication[CellWidgetsMainView]):
+        def setup_session(self, main_view: CellWidgetsMainView) -> None:
+            views.append(main_view)
+
+    app = VariablesApp(build_main_view=CellWidgetsMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        table = view.variables
+        table_id = _widget_id(table.renderer)
+        events: list[tuple[int, int, str]] = []
+        table.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
+
+        def post(event: str, **values: str) -> str:
+            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+
+        # e.g. sent by hand, or by a page showing rows, columns or a sort no longer there
+        unknown_row = post("check", row="x", column="0", checked="on")
+        same_role = post("pick", row="0", column="2", text="Input")
+        unsorted = post("sort", column="1")
+        table.editable_columns = [2]
+        read_only_check_all = post("check_all", column="0")
+
+        assert events == []
+        assert table.rows[0][:3] == ["True", "Length", "Input"]
+        assert table.sort_column is None
+        assert _find(unknown_row, table_id) is not None  # the table as it now is
+        assert _find(same_role, table_id) is None  # nothing to show again
+        assert _find(unsorted, f"{table_id}-body") is not None
+        assert _find(read_only_check_all, f"{table_id}-head") is not None
+
+
+def test_a_table_cell_picked_keeps_the_rows_the_app_answers_with() -> None:
+    views: list[CellWidgetsMainView] = []
+
+    class VariablesApp(WebApplication[CellWidgetsMainView]):
+        def setup_session(self, main_view: CellWidgetsMainView) -> None:
+            views.append(main_view)
+
+    app = VariablesApp(build_main_view=CellWidgetsMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        table = view.variables
+        table.cell_widgets = {2: CellWidget.combobox(["Input", "Output"])}  # no check-all box
+        table_id = _widget_id(table.renderer)
+        answers: list[str] = []
+
+        def answer(_row: int, _column: int, text: str) -> None:
+            if len(answers) == 0:  # the first edit only, e.g. sorted by the model
+                table.rows = [["True", "Width", text, "", ""]]
+            answers.append(text)
+
+        table.cell_edited.connect(answer)
+
+        def pick(text: str) -> str:
+            data = {"event": "pick", "row": "0", "column": "2", "text": text}
+            return str(client.post(f"/widget/{table_id}", data=data).text)
+
+        answered = pick("Output")
+        kept = pick("Input")
+
+    assert "Width" in _element(answered, table_id).text  # the app's rows
+    assert table.rows == [["True", "Width", "Input", "", ""]]
+    assert _find(kept, f"{table_id}-head") is None  # no check-all box to follow
+
+
+def test_an_edit_leaving_its_cell_as_it_was_edits_nothing(places: _Places) -> None:
+    places.post("start_edit", "0", "1")
+    places.post("edit", "0", "1", "Calm")
+
+    assert places.edited == []
+
+
+def _holds(markup: str, container_id: str, element_id: str) -> bool:
+    """Tell whether the element `container_id` of `markup` holds the element `element_id`."""
+    descendants = _element(markup, container_id).descendants
+    return any(attributes.get("id") == element_id for _tag, attributes in descendants)
+
+
+def test_a_view_the_web_doesn_t_render_is_left_out_of_its_container() -> None:
+    view = PartialMainView()
+    view.render(RendererType.WEB)  # outside any session, as a test or a script does
+    assert isinstance(view.renderer, WebMainRenderer)
+    item = LabelView(text="Item")
+    view.items.item_views = [UnregisteredView(), item]
+
+    page = view.renderer.page_html()
+
+    for container in (view.row, view.column, view.grid, view.splitter, view.expander, view.page):
+        assert container.skipped.renderer is None
+        assert _holds(page, _widget_id(container.renderer), _widget_id(container.shown.renderer))
+    assert view.form.skipped.renderer is None  # a row whose field the web doesn't register
+    assert _holds(page, _widget_id(view.form.renderer), _field_id(view.form.shown))
+    assert _holds(page, _widget_id(view.items.renderer), _widget_id(item.renderer))
+    for bar in (view.menu, view.toolbar):
+        assert _holds(page, _widget_id(bar.renderer), _widget_id(bar.shown.renderer))
+    view.items.item_views = []  # gone outside any session too
+    assert _find(view.renderer.page_html(), _widget_id(item.renderer)) is None
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
+def test_a_main_view_rendered_again_keeps_every_widget_id(main_view_type: type[MainView]) -> None:
+    view = main_view_type()
+    view.render(RendererType.WEB)
+    before = [renderer.widget_id for renderer in _web_renderers(view)]
+
+    view.render(RendererType.WEB)
+
+    assert [renderer.widget_id for renderer in _web_renderers(view)] == before
+
+
+def test_a_renderer_outside_any_session_calls_back_at_once() -> None:
+    view = HelloMainView()
+    view.render(RendererType.WEB)
+    called: list[None] = []
+
+    view.form.name.renderer.call_on_main_thread(lambda: called.append(None))  # type: ignore[union-attr]
+
+    assert called == [None]
+
+
+@define_view
+class _SeparatedMenu(Menu):
+    """A menu whose separators separate nothing at its ends, nor each other."""
+
+    first_separator: SeparatorAction = Factory(SeparatorAction)
+    first: ActionView = Factory(lambda: ActionView(text="First"))
+    separator: SeparatorAction = Factory(SeparatorAction)
+    double: SeparatorAction = Factory(SeparatorAction)
+    second: ActionView = Factory(lambda: ActionView(text="Second", is_enabled=False))
+    last_separator: SeparatorAction = Factory(SeparatorAction)
+
+
+@define_view
+class _SeparatedMainView(MainView):
+    app_title = "Separated"
+    extension = ".separated"
+
+    menu: _SeparatedMenu = Factory(_SeparatedMenu)
+
+
+def test_a_menu_shows_only_the_separators_between_items_and_its_disabled_ones_so() -> None:
+    view = _SeparatedMainView()
+    view.render(RendererType.WEB)
+    assert isinstance(view.renderer, WebMainRenderer)
+
+    page = view.renderer.page_html()
+    with collect_dirty() as dirty:
+        view.menu.is_visible = True  # the web's menus are always there, in the header
+
+    menu = _element(page, _widget_id(view.menu.renderer))
+    separators = [
+        tag for tag, attributes in menu.descendants if attributes.get("role") == "separator"
+    ]
+    assert len(separators) == 1
+    second = _element(page, _widget_id(view.menu.second.renderer))
+    assert "menu-disabled" in second.attributes.get("class", "")
+    assert any(
+        tag == "button" and "disabled" in attributes for tag, attributes in second.descendants
+    )
+    assert dirty == {}
+
+
+def test_a_tree_ignores_a_path_that_isn_t_a_list_of_names() -> None:
+    view = SiteMainView()
+    view.render(RendererType.WEB)
+    tree = view.site.renderer
+    assert isinstance(tree, WebRenderer)
+    toggles: list[object] = []
+    view.site.toggled.connect(lambda path, _is_expanded: toggles.append(path))
+
+    for posted in ('{"Building A": 1}', "[1]", "not json"):  # e.g. sent by hand
+        handle_event(tree, "toggle", {"path": posted})
+
+    assert toggles == []
+    assert view.site.expanded == [("Building A",)]
+
+
+def test_number_and_date_fields_take_a_cleared_value_and_report_a_date_once() -> None:
+    view = BookingMainView()
+    view.render(RendererType.WEB)
+    arrival = view.form.arrival
+    changes: list[datetime.date | None] = []
+    arrival.value_changed.connect(changes.append)
+    field = _part(arrival, "field")
+
+    handle_event(field, "change", {"value": "10/18/2026"})  # the date it has
+    handle_event(field, "pick", {"picked": "2026-10-18"})  # picked again in the calendar
+    handle_event(field, "change", {"value": ""})  # cleared
+    hours = HoursMainView()
+    hours.render(RendererType.WEB)
+    handle_event(_part(hours.form.opening, "field"), "change", {"value": ""})
+
+    assert changes == [None]
+    assert hours.form.opening.value is None
+
+
+def test_a_disabled_file_path_field_refuses_an_upload(tmp_path: Path) -> None:
+    view = DataFileMainView()
+    view.render(RendererType.WEB)
+    field = _part(view.form.measurements, "field")
+    assert isinstance(field, WebFilePathInputRenderer)
+    view.form.measurements.is_enabled = False
+
+    with pytest.raises(UnsupportedEventError):  # the route answers 400
+        field.pick_file(tmp_path / "data.csv")
+    assert view.form.measurements.text == ""
+
+
+def test_a_filter_bar_answers_a_stale_page_s_posts_with_itself_as_it_now_is() -> None:
+    view = SortedRoomsMainView()
+    view.render(RendererType.WEB)
+    table = view.rooms.renderer
+    assert isinstance(table, WebRenderer)
+    view.rooms.filters = {3: "true"}
+
+    added = handle_event(table, "add_filter", {"column": "1", "value": ">=20"})  # no editor
+    removed = handle_event(table, "remove_filter", {"column": "2"})  # no filter there
+    view.rooms.headers = view.rooms.headers[:2]  # its filter's column gone
+    shown = table.to_html()
+
+    assert view.rooms.filters == {3: "true"}
+    assert f"{table.widget_id}-bar" in added
+    assert f"{table.widget_id}-bar" in removed
+    assert "Heated" not in shown  # no chip for the column gone
+
+
+def test_a_large_table_with_no_row_shown_says_so() -> None:
+    view = RoomsDataMainView()
+    view.rooms.filters = {"temperature": ">30"}
+    view.render(RendererType.WEB)
+    table = view.rooms.renderer
+    assert isinstance(table, WebRenderer)
+
+    body = _element(table.to_html(), f"{table.widget_id}-rows")
+
+    assert body.text == "No rows match the filters"
+
+
+def test_a_header_button_shows_its_own_icon_and_a_disabled_page_tab_no_link(
+    tmp_path: Path,
+) -> None:
+    icon = tmp_path / "save.svg"
+    icon.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    view = PagesMainView()
+    view.file_menu.save.icon = str(icon)
+    page = view.router.pages[1]
+    page.action.is_enabled = False
+    view.render(RendererType.WEB)
+    assert isinstance(view.renderer, WebMainRenderer)
+
+    html = view.renderer.page_html()
+
+    save = _element(html, _widget_id(view.file_menu.save.renderer))
+    # its own icon, drawn in the text's color, rather than the built-in one
+    assert any("/icon/" in attributes.get("style", "") for _, attributes in save.descendants)
+    tab = _element(html, _widget_id(page.action.renderer))
+    assert (tab.tag, tab.attributes.get("aria-disabled"), "href" in tab.attributes) == (
+        "a",
+        "true",
+        False,
+    )
+
+
+def test_a_list_disabled_is_sent_whole() -> None:
+    view = PipesMainView()
+    view.render(RendererType.WEB)
+    pipes = view.pipes.renderer
+    assert isinstance(pipes, WebRenderer)
+
+    with collect_dirty() as dirty:
+        view.pipes.is_enabled = False
+
+    assert list(dirty) == [pipes.widget_id]  # with its records' views, disabled too
+
+
+def test_a_long_series_s_bucket_of_gaps_only_stays_a_gap() -> None:
+    count = 100_000
+    y = [math.sin(index / 50) for index in range(count)]
+    y[40_000:41_000] = [math.nan] * 1000  # a whole bucket, and more
+    chart = ChartView(series=[Series(name="Signal", x=range(count), y=y)])
+    chart.render(RendererType.WEB)
+    assert isinstance(chart.renderer, WebChartRenderer)
+
+    xs, ys = json.loads(chart.renderer.chart_json())["data"]
+
+    gap = [y for x, y in zip(xs, ys) if 40_000 <= x < 41_000]
+    assert gap != []
+    assert all(y is None for y in gap)

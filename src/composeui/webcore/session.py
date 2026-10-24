@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable
 from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
-from composeui.core.renderer import NoRenderedObjectError
 from composeui.core.study import has_data, open_study, save_study
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.webrenderer import (
@@ -119,8 +118,7 @@ class WebSession(RenderTarget):
     def page_html(self, reload_instance: str | None = None) -> str:
         """Get the whole page; with `reload_instance`, it reloads once its server restarts."""
         with self.lock:
-            if not isinstance(self.main_view.renderer, WebMainRenderer):
-                raise NoRenderedObjectError
+            assert isinstance(self.main_view.renderer, WebMainRenderer)  # rendered when built
             self.take_pending()  # the whole page shows them
             return self.main_view.renderer.page_html(reload_instance)
 
@@ -385,9 +383,8 @@ class SessionStore:
         return session_id, session
 
     def save_all(self) -> None:
-        """Save every live session into `saved`, as the server stops; nothing without it."""
-        if self._saved is None:
-            return
+        """Save every live session into `saved`, as a ``--reload`` server's process stops."""
+        assert self._saved is not None  # only such a server's lifespan calls it
         with self._lock:
             sessions = [
                 (session_id, session) for session_id, (session, _) in self._sessions.items()
