@@ -84,27 +84,46 @@ TAILWIND_SUFFIX := $(if $(filter windows-%,$(TAILWIND_PLATFORM)),.exe)
 TAILWIND := $(CSS_VENDOR)/tailwindcss-$(TAILWIND_VERSION)-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX)
 DAISYUI := $(CSS_VENDOR)/daisyui.mjs
 DAISYUI_THEME := $(CSS_VENDOR)/daisyui-theme.mjs
+# the SHA-256 of each download, from Tailwind's sha256sums.txt and the digests of daisyUI's
+# release assets: change them with the versions
+TAILWIND_SHA256_linux-x64 := dc61b3ac6b8c9ca874c0cc4c57b2409791a64c5540404ca5f5367360babc313a
+TAILWIND_SHA256_linux-arm64 := 55fd0b241214eff3de1e8ee4f22796662f2d2e7a49bcfca7477cfd0bac398195
+TAILWIND_SHA256_macos-x64 := 7922e0953f2110c05976e3bf58f14e643d90427575e766b7d433f5f80cbee7e1
+TAILWIND_SHA256_macos-arm64 := cdf646702987a743464dff4d9c60fd4480d1c1e73dd819a9a67f1078815dce9d
+TAILWIND_SHA256_linux-x64-musl := a04d34ceacc8f52cbe8920ad846cdeb61d3d0021dba32db0d1f77c9d9fad7a6c
+TAILWIND_SHA256_linux-arm64-musl := 71ea4be79c9de9827545682df3e040053fb535d37c71ed2cfdedf9385a0868e0
+TAILWIND_SHA256_windows-x64 := e0e260ce048014e9268f6237ff18f8ccf02cef521cbd0ae04e82c2cdf7aa3955
+TAILWIND_SHA256 := $(TAILWIND_SHA256_$(TAILWIND_PLATFORM))
+DAISYUI_SHA256 := 85819d3fe86a852237b439b13f481481aac58e562ac47694cd11c3038e994f2a
+DAISYUI_THEME_SHA256 := d92d2f488933dab757f046e81ebd4986e51e9423307798dc3545d09a15542c89
+# macOS before 15 has shasum, not sha256sum
+SHA256SUM := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo shasum -a 256)
+# download URL $(1) into file $(2), kept only when its SHA-256 is $(3)
+fetch = mkdir -p $(dir $(2)) && curl -sSfL -o $(2).tmp $(1) \
+	&& { echo "$(3)  $(2).tmp" | $(SHA256SUM) -c || { rm -f $(2).tmp; exit 1; }; } \
+	&& mv $(2).tmp $(2)
 
 $(TAILWIND):
 	$(if $(filter $(TAILWIND_PLATFORM),$(TAILWIND_PLATFORMS)),,\
 		$(error No Tailwind binary for '$(TAILWIND_PLATFORM)': pass one of \
 		$(TAILWIND_PLATFORMS) as TAILWIND_PLATFORM))
-	mkdir -p $(CSS_VENDOR)
-	curl -sSfL -o $@ https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX)
+	$(call fetch,https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)$(TAILWIND_SUFFIX),$@,$(TAILWIND_SHA256))
 	chmod +x $@
 
 $(DAISYUI):
-	mkdir -p $(CSS_VENDOR)
-	curl -sSfL -o $@ https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui.mjs
+	$(call fetch,https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui.mjs,$@,$(DAISYUI_SHA256))
 
 $(DAISYUI_THEME):
-	mkdir -p $(CSS_VENDOR)
-	curl -sSfL -o $@ https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui-theme.mjs
+	$(call fetch,https://github.com/saadeghi/daisyui/releases/download/v$(DAISYUI_VERSION)/daisyui-theme.mjs,$@,$(DAISYUI_THEME_SHA256))
 
+# the files already there are checked too: they can be from an older version, or have
+# changed since
 .PHONY: css
 css: $(TAILWIND) $(DAISYUI) $(DAISYUI_THEME)
+	@printf '%s  %s\n' $(TAILWIND_SHA256) $(TAILWIND) $(DAISYUI_SHA256) $(DAISYUI) \
+		$(DAISYUI_THEME_SHA256) $(DAISYUI_THEME) | $(SHA256SUM) -c \
+		|| { echo "Delete $(CSS_VENDOR)/ to download them again"; exit 1; }
 	$(TAILWIND) -i css/app.css -o src/composeui/webcore/static/app.css --minify
-
 .PHONY: clean
 clean:
 	rm -rf `find . -name __pycache__`
