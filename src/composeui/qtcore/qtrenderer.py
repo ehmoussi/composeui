@@ -111,7 +111,6 @@ from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
-from composeui.qtcore.widgets.qiconpath import QIconPath
 from composeui.qtcore.widgets.qmarkicon import mark_icon
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
@@ -213,14 +212,6 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         super().refresh_attribute(attr_name, value)
         self._rendered_object.blockSignals(False)  # noqa: FBT003
 
-    def update_state(self) -> None:
-        """Copy the state of the widget into the view, its visibility and enabled state too."""
-        if self._rendered_object is None:
-            raise NoRenderedObjectError
-        self._update_state(self._view, self._rendered_object)
-        self._view.is_visible = self._rendered_object.isVisible()
-        self._view.is_enabled = self._rendered_object.isEnabled()
-
     @staticmethod
     def _refresh_visible(_view: TView, renderer_object: TWidget, value: bool) -> None:
         renderer_object.setVisible(value)
@@ -281,11 +272,6 @@ class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
     @staticmethod
     def _refresh_placeholder(_view: InputViewLike, rendered_object: QLineEdit, value: str) -> None:
         rendered_object.setPlaceholderText(value)
-
-    @staticmethod
-    def _update_state(view: InputViewLike, rendered_object: QLineEdit) -> None:
-        view.text = rendered_object.text()
-        view.placeholder = rendered_object.placeholderText()
 
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
@@ -365,22 +351,6 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
         assert isinstance(validator, QDoubleValidator)
         validator.setDecimals(-1 if value is None else value)
         rendered_object.setText(view.shown_text(view.value, value))
-
-    @staticmethod
-    def _update_state(view: FloatInputViewLike, rendered_object: QLineEdit) -> None:
-        text = rendered_object.text()
-        # the text shown for the view's value may be rounded: it doesn't change the value
-        if text != view.shown_text(view.value, view.decimals):
-            view.value = float(text) if text != "" else None
-        view.placeholder = rendered_object.placeholderText()
-        validator = rendered_object.validator()
-        assert isinstance(validator, QDoubleValidator)
-        bottom = validator.bottom()
-        view.minimum = bottom if bottom != float("-inf") else None
-        top = validator.top()
-        view.maximum = top if top != float("inf") else None
-        decimals = validator.decimals()
-        view.decimals = decimals if decimals != -1 else None
 
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
@@ -471,14 +441,6 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
     ) -> None:
         rendered_object.setMaximum(_INT_MAXIMUM if value is None else value)
         QtIntInputRenderer._refresh_value(view, rendered_object, view.value)
-
-    @staticmethod
-    def _update_state(view: IntInputViewLike, rendered_object: QSpinBox) -> None:
-        view.value = rendered_object.value() if rendered_object.cleanText() != "" else None
-        view.placeholder = _line_edit(rendered_object).placeholderText()
-        minimum, maximum = rendered_object.minimum(), rendered_object.maximum()
-        view.minimum = minimum if minimum != _INT_MINIMUM else None
-        view.maximum = maximum if maximum != _INT_MAXIMUM else None
 
     def _update_value(self, value: int) -> None:
         with self.stop_refresh():
@@ -577,10 +539,6 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
     ) -> None:
         rendered_object.button.setToolTip(plain_tool_tip(value))
         rendered_object.button.setAccessibleName(value)
-
-    @staticmethod
-    def _update_state(view: DateInputViewLike, rendered_object: QDateField) -> None:
-        view.value = rendered_object.date()
 
     def _update_value(self, value: datetime.date | None) -> None:
         with self.stop_refresh():
@@ -696,11 +654,6 @@ class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathF
         rendered_object.reload_button.setToolTip(plain_tool_tip(value))
         rendered_object.reload_button.setAccessibleName(value)
 
-    @staticmethod
-    def _update_state(view: FilePathInputViewLike, rendered_object: QFilePathField) -> None:
-        view.text = rendered_object.line_edit.text()
-        view.placeholder = rendered_object.line_edit.placeholderText()
-
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
@@ -766,12 +719,6 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
         rendered_object.updateGeometry()  # the value's slot follows the widest value
         rendered_object.update()  # the value painted, even if the handle didn't move
 
-    @staticmethod
-    def _update_state(view: SliderViewLike, rendered_object: QValueSlider) -> None:
-        # only the value: the slider's range ends at the last step, short of a `maximum`
-        # that isn't a whole number of steps away
-        view.value = rendered_object.shown_value()
-
     def _update_value(self, value: int) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -799,10 +746,6 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
 
-    @staticmethod
-    def _update_state(view: LabelViewLike, rendered_object: QLabel) -> None:
-        view.text = rendered_object.text()
-
 
 class MarkdownViewLike(ViewLike, Protocol):
     text: str
@@ -826,10 +769,6 @@ class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
         rendered_object.document().setMarkdown(
             value, features.MarkdownDialectGitHub | features.MarkdownNoHTML
         )
-
-    @staticmethod
-    def _update_state(view: MarkdownViewLike, rendered_object: QTextBrowser) -> None:
-        pass  # read-only: nothing to read back
 
 
 class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
@@ -861,11 +800,6 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
         _view: FormLabelRowView, rendered_object: QFormLabel, value: str
     ) -> None:
         rendered_object.set_help_button_text(value)
-
-    @staticmethod
-    def _update_state(view: FormLabelRowView, rendered_object: QFormLabel) -> None:
-        view.label = rendered_object.text()
-        view.help = rendered_object.help()
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -903,11 +837,6 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
         _view: CheckBoxViewLike, rendered_object: QCheckBox, value: bool
     ) -> None:
         rendered_object.setChecked(value)
-
-    @staticmethod
-    def _update_state(view: CheckBoxViewLike, rendered_object: QCheckBox) -> None:
-        view.text = rendered_object.text()
-        view.is_checked = rendered_object.isChecked()
 
     def _update_checked(self, is_checked: bool) -> None:
         with self.stop_refresh():
@@ -948,10 +877,6 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
         is_danger = value is ButtonVariant.DANGER
         rendered_object.setStyleSheet("QPushButton { color: red; }" if is_danger else "")
 
-    @staticmethod
-    def _update_state(view: ButtonViewLike, rendered_object: QPushButton) -> None:
-        view.text = rendered_object.text()
-
     def _emit_clicked(self) -> None:
         self._view.clicked.emit()
 
@@ -987,10 +912,6 @@ class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar])
         # an empty range is Qt's busy bar, for a task of unknown length
         rendered_object.setRange(0, 0 if value is None else value)
         rendered_object.setValue(ProgressBarView.clamp(view.value, value))
-
-    @staticmethod
-    def _update_state(view: ProgressBarViewLike, rendered_object: QProgressBar) -> None:
-        pass  # the user can't move a progress bar; nothing to read back
 
 
 class ChartViewLike(ViewLike, Protocol):
@@ -1125,10 +1046,6 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         options = chartimage.ImageOptions(x_range=x_range, y_range=y_range)
         chartimage.save_chart_image(view, filepath, options)
 
-    @staticmethod
-    def _update_state(view: ChartViewLike, rendered_object: QChart) -> None:
-        pass  # the user only looks at a chart; nothing to read back
-
 
 class MetricViewLike(ViewLike, Protocol):
     label: str
@@ -1177,10 +1094,6 @@ class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
         else:
             sign = (delta > 0) - (delta < 0)
             rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
-
-    @staticmethod
-    def _update_state(view: MetricViewLike, rendered_object: QMetric) -> None:
-        pass  # a metric is read-only; nothing to read back
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1400,10 +1313,6 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
     def _repaint(_view: DataTableViewLike, rendered_object: QDataFilterTable, _value: Any) -> None:
         rendered_object.table.data_model.repaint()
 
-    @staticmethod
-    def _update_state(_view: DataTableViewLike, _rendered_object: QDataFilterTable) -> None:
-        """Copy nothing: the user changes nothing in the table yet."""
-
 
 class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     """A table under its filter bar; the table shows `shown_rows`, in their order.
@@ -1582,11 +1491,6 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     ) -> None:
         rendered_object.table.set_mark_text(mark, value)
 
-    @staticmethod
-    def _update_state(view: TableViewLike, rendered_object: QFilterTable) -> None:
-        shown = view.shown_rows
-        view.selected_rows = sorted(shown[row] for row in rendered_object.table.selected_rows())
-
     def _update_selected_rows(self, positions: list[int]) -> None:
         shown = self._view.shown_rows
         rows = sorted(shown[position] for position in positions)
@@ -1680,10 +1584,6 @@ class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup]
         rendered_object.set_values(values)
         rendered_object.set_value(view.value)
 
-    @staticmethod
-    def _update_state(view: ValuesViewLike[TValue], rendered_object: QRadioGroup) -> None:
-        view.value = rendered_object.value()
-
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -1725,12 +1625,6 @@ class QtComboboxRenderer(
         rendered_object.set_values(values)
         rendered_object.set_current_value(view.value)
 
-    @staticmethod
-    def _update_state(
-        view: ValuesViewLike[TValue], rendered_object: QValueComboBox[TValue]
-    ) -> None:
-        view.value = rendered_object.current_value()
-
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -1770,10 +1664,6 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
             rendered_object.setStyleSheet("QLabel { color : orange; }")
         else:
             rendered_object.setStyleSheet("")
-
-    @staticmethod
-    def _update_state(view: LogViewLike, rendered_object: QLabel) -> None:
-        view.log_message = rendered_object.text()
 
 
 class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
@@ -1852,11 +1742,6 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
         if label_object is None:
             raise NoRenderedObjectError
         return label_object
-
-    @staticmethod
-    def _update_state(view: FormView, rendered_object: QWidget) -> None:
-        if isinstance(rendered_object, QGroupBox) and isinstance(view, GroupFormView):
-            view.title = rendered_object.title()
 
 
 class QtGroupFormRenderer(QtFormRenderer):
@@ -2000,11 +1885,6 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         if self._reject_button is not None:
             self._reject_button.setText(value)
 
-    @staticmethod
-    def _update_state(view: DialogView, rendered_object: QMessageBox) -> None:
-        view.title = rendered_object.windowTitle()
-        view.text = rendered_object.text()
-
 
 class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
     """A modal dialog holding its form, shown without blocking: its answer reaches the view.
@@ -2072,10 +1952,6 @@ class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
     ) -> None:
         rendered_object.ok_button.setEnabled(value)
 
-    @staticmethod
-    def _update_state(view: FormDialogView, rendered_object: QFormDialog) -> None:
-        pass  # the form holds what the user typed; the dialog only its answer
-
 
 class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
     """A page's views in a column, laid out like the window's own."""
@@ -2090,10 +1966,6 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
                 _add_content_widget(layout, view)
             layout.addStretch()
             self.refresh()
-
-    @staticmethod
-    def _update_state(view: PageView, rendered_object: QWidget) -> None:
-        pass  # a page has no user-editable state of its own
 
 
 class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
@@ -2127,10 +1999,6 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
                 layout.addStretch(0)
             self.refresh()
 
-    @staticmethod
-    def _update_state(view: HorizontalView, rendered_object: QWidget) -> None:
-        pass  # a row has no user-editable state of its own
-
 
 class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
     """Views one above the other, at the top of the column."""
@@ -2149,10 +2017,6 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
             # height to spare, next to a taller view, goes below the views, not between them
             layout.addStretch()
             self.refresh()
-
-    @staticmethod
-    def _update_state(view: VerticalView, rendered_object: QWidget) -> None:
-        pass  # a column has no user-editable state of its own
 
 
 class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
@@ -2188,10 +2052,6 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
         # in pixels, but Qt shares any width more or less than theirs in their proportions:
         # well over any screen's, the panes' minimum widths don't skew those
         rendered_object.setSizes([size * 10_000 for size in value])
-
-    @staticmethod
-    def _update_state(view: SplitterView, rendered_object: QComposeSplitter) -> None:
-        view.sizes = view.shares_of(rendered_object.sizes())
 
     def _update_sizes(self) -> None:
         if self._rendered_object is None:
@@ -2241,11 +2101,6 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
     def _refresh_is_expanded(_view: ExpanderView, rendered_object: QExpander, value: bool) -> None:
         rendered_object.set_expanded(value)
 
-    @staticmethod
-    def _update_state(view: ExpanderView, rendered_object: QExpander) -> None:
-        view.title = rendered_object.header.text()
-        view.is_expanded = rendered_object.is_expanded()
-
     def _update_expanded(self, is_expanded: bool) -> None:
         with self.stop_refresh():
             self._view.is_expanded = is_expanded
@@ -2287,10 +2142,6 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
     @staticmethod
     def _refresh_is_expanded(_view: SidebarView, rendered_object: QSidebar, value: bool) -> None:
         rendered_object.set_expanded(value)
-
-    @staticmethod
-    def _update_state(view: SidebarView, rendered_object: QSidebar) -> None:
-        view.is_expanded = rendered_object.is_expanded()
 
     def _update_expanded(self, is_expanded: bool) -> None:
         with self.stop_refresh():
@@ -2347,10 +2198,6 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
                 widget.deleteLater()
         for index, widget in enumerate(widgets):
             layout.insertWidget(index, widget)
-
-    @staticmethod
-    def _update_state(view: ListView[Any], rendered_object: QScrollArea) -> None:
-        pass  # a list has no user-editable state of its own: its records are the model's
 
 
 class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
@@ -2449,13 +2296,6 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             if view.node(path).mark is mark:
                 item.setToolTip(1, plain_tool_tip(value))
 
-    @staticmethod
-    def _update_state(view: TreeView, rendered_object: QTreeWidget) -> None:
-        items = _tree_items(rendered_object)
-        view.expanded = [path for path, item in items if item.isExpanded()]
-        selected = [path for path, item in items if item.isSelected()]
-        view.selected = selected[0] if len(selected) > 0 else None
-
     def _update_selected(self) -> None:
         assert self._rendered_object is not None
         selected = self._rendered_object.selectedItems()
@@ -2552,19 +2392,6 @@ class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
         if tab is not None:
             tab[0].setTabEnabled(tab[1], value)
 
-    def update_state(self) -> None:
-        if self._rendered_object is None:
-            raise NoRenderedObjectError
-        tab = _tab_of(self._rendered_object)
-        if tab is not None:
-            self._view.title = tab[0].tabText(tab[1])
-            self._view.is_visible = tab[0].isTabVisible(tab[1])
-        self._view.is_enabled = self._rendered_object.isEnabled()
-
-    @staticmethod
-    def _update_state(view: TabPage, rendered_object: QWidget) -> None:
-        pass  # see `update_state`: the tab holds the page's state
-
 
 class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
     """A tab widget: the tabs in a row, the current one's views under them."""
@@ -2591,10 +2418,6 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
     @staticmethod
     def _refresh_current_index(_view: TabView, rendered_object: QTabWidget, value: int) -> None:
         rendered_object.setCurrentIndex(value)
-
-    @staticmethod
-    def _update_state(view: TabView, rendered_object: QTabWidget) -> None:
-        view.current_index = rendered_object.currentIndex()
 
     def _update_current_index(self, index: int) -> None:
         with self.stop_refresh():
@@ -2624,10 +2447,6 @@ class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
             # height to spare, next to a taller view, goes below the rows, not between them
             layout.setRowStretch(self._view.row_count, 1)
             self.refresh()
-
-    @staticmethod
-    def _update_state(view: GridView, rendered_object: QWidget) -> None:
-        pass  # a grid has no user-editable state of its own
 
 
 class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
@@ -2673,10 +2492,6 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
         slot = self._slots.get(value)
         if slot is not None:
             rendered_object.setCurrentWidget(slot)
-
-    @staticmethod
-    def _update_state(view: Router, rendered_object: QStackedWidget) -> None:
-        pass  # navigation goes through the pages' actions, never the stack itself
 
 
 class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):
@@ -2836,12 +2651,6 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
     def _refresh_minimum_height(_view: MainView, rendered_object: QMainWindow, value: int) -> None:
         rendered_object.setMinimumHeight(value)
 
-    @staticmethod
-    def _update_state(view: MainView, rendered_object: QMainWindow) -> None:
-        view.title = rendered_object.windowTitle()
-        view.minimum_width = rendered_object.minimumWidth()
-        view.minimum_height = rendered_object.minimumHeight()
-
 
 class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
     def __init__(self, view: StatusBar) -> None:
@@ -2861,10 +2670,6 @@ class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
     @staticmethod
     def _refresh_message(_view: StatusBar, rendered_object: QStatusBar, message: str) -> None:
         rendered_object.showMessage(message)
-
-    @staticmethod
-    def _update_state(view: StatusBar, rendered_object: QStatusBar) -> None:
-        view.message = rendered_object.currentMessage()
 
 
 class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
@@ -2901,20 +2706,6 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
             super().refresh_attribute(attr_name, value)
 
     @staticmethod
-    def _update_state(view: ActionView, rendered_object: QAction) -> None:
-        view.text = rendered_object.text()
-        icon = rendered_object.icon()
-        if isinstance(icon, QIconPath):
-            view.icon = icon.get_path()
-        else:
-            view.icon = None
-        view.data = rendered_object.data()
-        shortcut = rendered_object.shortcut().toString()
-        view.shortcut = None if shortcut == "" else shortcut
-        view.is_checkable = rendered_object.isCheckable()
-        view.is_checked = rendered_object.isChecked()
-
-    @staticmethod
     def _refresh_text(_view: ActionView, rendered_object: QAction, text: str) -> None:
         rendered_object.setText(text)
         rendered_object.setToolTip("")  # back to Qt's own, the text without its "&"
@@ -2925,8 +2716,7 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
         if icon is None:
             rendered_object.setIcon(QIcon())
         else:
-            icon_obj = QIconPath(icon)
-            rendered_object.setIcon(icon_obj)
+            rendered_object.setIcon(QIcon(icon))
 
     @staticmethod
     def _refresh_data(_view: ActionView, rendered_object: QAction, data: Any) -> None:
@@ -2966,9 +2756,6 @@ class QtSeparatorRenderer(QtWidgetRenderer[SeparatorAction, QAction]):
             self._rendered_object.setSeparator(True)
             self.refresh()
 
-    @staticmethod
-    def _update_state(view: SeparatorAction, rendered_object: QAction) -> None: ...
-
 
 class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
     def __init__(self, view: Menu) -> None:
@@ -2996,10 +2783,6 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
             self.refresh()
 
     @staticmethod
-    def _update_state(view: Menu, rendered_object: QMenu) -> None:
-        view.title = rendered_object.title()
-
-    @staticmethod
     def _refresh_title(_view: Menu, rendered_object: QMenu, title: str) -> None:
         rendered_object.setTitle(title)
 
@@ -3024,10 +2807,6 @@ class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
                     if action is not None:
                         self._rendered_object.addAction(action)
             self.refresh()
-
-    @staticmethod
-    def _update_state(view: ToolBar, rendered_object: QToolBar) -> None:
-        view.title = rendered_object.windowTitle()
 
     @staticmethod
     def _refresh_title(_view: ToolBar, rendered_object: QToolBar, title: str) -> None:

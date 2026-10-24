@@ -79,9 +79,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   `RENDERERS` mapping in the new backend's renderers module, and its application classes
   (built from `build_main_view=`, plus `build_model=`/`setup_model=` for the model one) as
   `APPLICATION`/`MODEL_APPLICATION`. `core/view.py` should not need changes.
-- **Renderer contract:** implement `render`, `refresh_attribute`, `_update_state` and the
+- **Renderer contract:** implement `render`, `refresh_attribute` and the
   `_refresh_dispatcher` (one handler per view attribute the renderer cares about; a missing
-  handler raises `MissingRefreshAttributeFunctionError`).
+  handler raises `MissingRefreshAttributeFunctionError`). The user's changes reach the view
+  from the widget's signals, set inside `stop_refresh()`.
 - Views are reactive: setting a view attribute pushes the change to its renderer. Don't add
   manual `update()`/`refresh()` calls.
 - `Signal.connect` injects `main_view` and `model`, and `Application.connect` also `view`, as

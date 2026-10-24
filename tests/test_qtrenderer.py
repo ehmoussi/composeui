@@ -349,11 +349,8 @@ def test_input_renderer_round_trips_typed_text(qtbot: QtBot) -> None:
     assert view.pages.inputs.pipe_form.name.text == "PipeTShape"
     assert view.pages.inputs.pipe_form.name.log_message == ""  # _check_name ran via text_edited
 
-    # `update_state` (the other direction: widget -> view) is exercised too.
+    # a change the user didn't type, e.g. a paste or a completer's, reaches the view too
     name_widget.setText("direct")
-    field_renderer = view.pages.inputs.pipe_form.name.renderer
-    assert isinstance(field_renderer, RendererContainer)
-    field_renderer.get_renderer("field").update_state()
     assert view.pages.inputs.pipe_form.name.text == "direct"
 
 

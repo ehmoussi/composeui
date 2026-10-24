@@ -48,8 +48,9 @@ class Renderer(ABC, Generic[TView, TObject]):
     """The base of a backend's renderers: one shows a view with a widget of its toolkit.
 
     `render` builds the widget. `refresh_attribute` shows a new value of a field of the view,
-    with the handler of `_refresh_dispatcher` for that field. `update_state` copies the state
-    of the widget into the view.
+    with the handler of `_refresh_dispatcher` for that field. The renderer sets the view's
+    fields from the widget's signals, inside `stop_refresh`, so the view doesn't show them
+    back.
     """
 
     def __init__(self, view: TView) -> None:
@@ -108,13 +109,6 @@ class Renderer(ABC, Generic[TView, TObject]):
             msg = f"{attr_name} is not an attribute of the view {type(self._view)}"
             raise AttributeError(msg)
 
-    def update_state(self) -> None:
-        """Copy the state of the widget into the view."""
-        if self._rendered_object is None:
-            raise NoRenderedObjectError
-        with self.stop_refresh():
-            self._update_state(self._view, self._rendered_object)
-
     @contextlib.contextmanager
     def stop_refresh(self) -> Generator[None]:
         self._is_updating_state = True
@@ -122,10 +116,6 @@ class Renderer(ABC, Generic[TView, TObject]):
             yield
         finally:
             self._is_updating_state = False
-
-    @staticmethod
-    @abstractmethod
-    def _update_state(view: TView, rendered_object: TObject) -> None: ...
 
 
 class MainRenderer(Renderer[TView, TObject]):
@@ -201,10 +191,3 @@ class RendererContainer(Generic[TView]):
         for renderer in self._renderers.values():
             if renderer.has_attr(attr_name):
                 renderer.refresh_attribute(attr_name, value)
-
-    def update_state(self) -> None:
-        """Copy the state of every widget into the view."""
-        if len(self._renderers) == 0:
-            raise NoRenderedObjectError
-        for renderer in self._renderers.values():
-            renderer.update_state()

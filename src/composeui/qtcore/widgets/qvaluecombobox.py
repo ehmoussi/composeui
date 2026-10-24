@@ -34,10 +34,6 @@ class QValueComboBox(QComboBox, Generic[TValue]):
             for text, user_data in values.items():
                 self.addItem(text, userData=user_data)
 
-    def current_value(self) -> TValue | None:
-        """Return the value associated with the currently selected item."""
-        return self.currentData(role=Qt.ItemDataRole.UserRole)
-
     @Slot(int)
     def _emit_current_value_changed(self, index: int) -> None:
         """Emit current_value_changed when currentIndexChanged is triggered."""

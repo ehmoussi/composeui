@@ -281,10 +281,6 @@ class _TextualNoopRenderer(Renderer[TNoopView, TNoopView]):
     def _noop(_view: TNoopView, _rendered_object: TNoopView, _value: Any) -> None:
         pass
 
-    @staticmethod
-    def _update_state(view: TNoopView, rendered_object: TNoopView) -> None:
-        pass  # nothing user-editable to read back
-
 
 class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
     """No widget of its own: key bindings + `Footer` entries, or toolbar buttons.
@@ -486,10 +482,6 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
         if self.screen is not None:
             self.screen.reject_button.label = Content(value)
 
-    @staticmethod
-    def _update_state(view: DialogView, rendered_object: DialogView) -> None:
-        pass  # the user only answers, through `accepted`/`rejected`
-
 
 class TextualFormDialogRenderer(TextualDialogRenderer):
     """A modal screen holding the form, installed once: pushed open, popped closed.
@@ -612,11 +604,6 @@ class TextualInputRenderer(TextualWidgetRenderer[InputViewLike, ComposeInput]):
     ) -> None:
         rendered_object.placeholder = value
 
-    @staticmethod
-    def _update_state(view: InputViewLike, rendered_object: ComposeInput) -> None:
-        view.text = rendered_object.value
-        view.placeholder = rendered_object.placeholder
-
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
@@ -699,14 +686,6 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
         ]
         rendered_object.validators.append(Number(minimum=_view.minimum, maximum=value))
 
-    @staticmethod
-    def _update_state(view: FloatInputViewLike, rendered_object: ComposeInput) -> None:
-        text = rendered_object.value
-        # the text shown for the view's value may be rounded: it doesn't change the value
-        if text != view.shown_text(view.value, view.decimals):
-            view.value = float(text) if text != "" else None
-        view.placeholder = rendered_object.placeholder
-
     def _update_text(self, text: str) -> None:
         # Textual reports the text the renderer set too: as shown for the view's value,
         # maybe rounded, it isn't the user's and leaves the value as it is.
@@ -776,12 +755,6 @@ class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInp
             v for v in rendered_object.validators if not isinstance(v, Number)
         ]
         rendered_object.validators.append(Integer(minimum=view.minimum, maximum=view.maximum))
-
-    @staticmethod
-    def _update_state(view: IntInputViewLike, rendered_object: ComposeInput) -> None:
-        text = rendered_object.value
-        view.value = int(text) if text != "" else None
-        view.placeholder = rendered_object.placeholder
 
     def _update_text(self, text: str) -> None:
         # transient invalid text while typing (e.g. "-"); ignore it
@@ -894,10 +867,6 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
     ) -> None:
         rendered_object.button.tooltip = Content(value)
 
-    @staticmethod
-    def _update_state(view: DateInputViewLike, rendered_object: ComposeDateInput) -> None:
-        view.value = rendered_object.date()
-
     def _update_value(self, value: datetime.date | None) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -984,11 +953,6 @@ class TextualFilePathInputRenderer(
     ) -> None:
         rendered_object.reload_button.tooltip = Content(value)
 
-    @staticmethod
-    def _update_state(view: FilePathInputViewLike, rendered_object: ComposeFilePathInput) -> None:
-        view.text = rendered_object.input.value
-        view.placeholder = rendered_object.input.placeholder
-
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
@@ -1056,10 +1020,6 @@ class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]
             SliderMixin.position(value, minimum, maximum, step),
         )
 
-    @staticmethod
-    def _update_state(view: SliderViewLike, rendered_object: ComposeSlider) -> None:
-        view.value = rendered_object.shown_value
-
     def _update_value(self, value: int) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -1087,10 +1047,6 @@ class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, Label]):
     def _refresh_text(_view: LabelViewLike, rendered_object: Label, value: str) -> None:
         rendered_object.update(value)
 
-    @staticmethod
-    def _update_state(view: LabelViewLike, rendered_object: Label) -> None:
-        pass  # a Label's text isn't user-editable; nothing to read back
-
 
 class MarkdownViewLike(ViewLike, Protocol):
     text: str
@@ -1110,10 +1066,6 @@ class TextualMarkdownRenderer(TextualWidgetRenderer[MarkdownViewLike, ComposeMar
         _view: MarkdownViewLike, rendered_object: ComposeMarkdown, value: str
     ) -> None:
         rendered_object.set_text(value)
-
-    @staticmethod
-    def _update_state(view: MarkdownViewLike, rendered_object: ComposeMarkdown) -> None:
-        pass  # read-only: nothing to read back
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
@@ -1148,10 +1100,6 @@ class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
         if help_text == "":
             return Content(label)
         return Content.assemble(label, "\n", (help_text, "dim"))
-
-    @staticmethod
-    def _update_state(view: FormLabelRowView, rendered_object: Label) -> None:
-        pass  # a Label's text isn't user-editable; nothing to read back
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -1188,10 +1136,6 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
         _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: bool
     ) -> None:
         rendered_object.set_checked(value)
-
-    @staticmethod
-    def _update_state(view: CheckBoxViewLike, rendered_object: ComposeCheckbox) -> None:
-        view.is_checked = rendered_object.value
 
     def _update_checked(self, is_checked: bool) -> None:
         with self.stop_refresh():
@@ -1235,10 +1179,6 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
     ) -> None:
         rendered_object.variant = _BUTTON_VARIANTS[value]
 
-    @staticmethod
-    def _update_state(view: ButtonViewLike, rendered_object: ComposeButton) -> None:
-        pass  # a button's text isn't user-editable; nothing to read back
-
 
 class ProgressBarViewLike(ViewLike, Protocol):
     value: int
@@ -1267,10 +1207,6 @@ class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, Prog
     ) -> None:
         # no total is Textual's own bar for a task of unknown length
         rendered_object.update(total=value, progress=ProgressBarView.clamp(view.value, value))
-
-    @staticmethod
-    def _update_state(view: ProgressBarViewLike, rendered_object: ProgressBar) -> None:
-        pass  # the user can't move a progress bar; nothing to read back
 
 
 class ChartViewLike(ViewLike, Protocol):
@@ -1406,10 +1342,6 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         if isinstance(self._view, ChartView):
             chartimage.save_chart_image(self._view, path)
 
-    @staticmethod
-    def _update_state(view: ChartViewLike, rendered_object: ComposeChart) -> None:
-        pass  # the user only looks at a chart; nothing to read back
-
 
 class MetricViewLike(ViewLike, Protocol):
     label: str
@@ -1461,10 +1393,6 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
         else:
             sign = (delta > 0) - (delta < 0)
             rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
-
-    @staticmethod
-    def _update_state(view: MetricViewLike, rendered_object: ComposeMetric) -> None:
-        pass  # a metric is read-only; nothing to read back
 
 
 class DataTableViewLike(ViewLike, Protocol):
@@ -1640,10 +1568,6 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
     ) -> None:
         rendered_object.table.repaint()
-
-    @staticmethod
-    def _update_state(_view: DataTableViewLike, _rendered_object: ComposeDataFilterTable) -> None:
-        """Copy nothing: the user changes nothing in the table yet."""
 
 
 class TableViewLike(ViewLike, Protocol):
@@ -1855,11 +1779,6 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
     ) -> None:
         rendered_object.table.set_header_groups(value)
 
-    @staticmethod
-    def _update_state(view: TableViewLike, rendered_object: ComposeFilterTable) -> None:
-        shown = view.shown_rows
-        view.selected_rows = sorted(shown[row] for row in rendered_object.table.selected_rows())
-
     def _update_selected_rows(self, positions: list[int]) -> None:
         shown = self._view.shown_rows
         rows = sorted(shown[position] for position in positions)
@@ -1955,12 +1874,6 @@ class TextualRadioGroupRenderer(
         rendered_object.set_values(values)
         rendered_object.call_after_refresh(rendered_object.set_value, view.value)
 
-    @staticmethod
-    def _update_state(
-        view: ValuesViewLike[TValue], rendered_object: ComposeRadioSet[TValue]
-    ) -> None:
-        view.value = rendered_object.value()
-
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
             self._view.value = value
@@ -2000,12 +1913,6 @@ class TextualComboboxRenderer(
     ) -> None:
         rendered_object.set_values(values)
         rendered_object.call_after_refresh(rendered_object.set_value, view.value)
-
-    @staticmethod
-    def _update_state(
-        view: ValuesViewLike[TValue], rendered_object: ComposeCombobox[TValue]
-    ) -> None:
-        view.value = rendered_object.current_value()
 
     def _update_value(self, value: TValue | None) -> None:
         with self.stop_refresh():
@@ -2050,10 +1957,6 @@ class TextualLogRenderer(TextualWidgetRenderer[LogViewLike, Label]):
         else:
             rendered_object.styles.color = None
 
-    @staticmethod
-    def _update_state(view: LogViewLike, rendered_object: Label) -> None:
-        pass  # a Label's text isn't user-editable; nothing to read back
-
 
 class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):
     def __init__(self, view: StatusBar) -> None:
@@ -2072,10 +1975,6 @@ class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):
     @staticmethod
     def _refresh_message(_view: StatusBar, rendered_object: Static, value: str) -> None:
         rendered_object.update(value)
-
-    @staticmethod
-    def _update_state(view: StatusBar, rendered_object: Static) -> None:
-        pass  # a Static's text isn't user-editable; nothing to read back
 
 
 class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
@@ -2142,10 +2041,6 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
             raise NoRenderedObjectError
         return label_renderer.widget
 
-    @staticmethod
-    def _update_state(view: FormView, rendered_object: Vertical) -> None:
-        pass  # a form container has no user-editable state of its own
-
 
 class TextualGroupFormRenderer(TextualFormRenderer):
     def __init__(self, view: GroupFormView) -> None:
@@ -2187,10 +2082,6 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
             self._rendered_object = Vertical(*widgets)
             self._rendered_object.styles.height = "auto"
 
-    @staticmethod
-    def _update_state(view: PageView, rendered_object: Vertical) -> None:
-        pass  # a page has no user-editable state of its own
-
 
 class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal]):
     """Views side by side, each as wide as its share of the row."""
@@ -2211,10 +2102,6 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal
             if self._view.align is Align.END:
                 self._rendered_object.styles.align_horizontal = "right"
 
-    @staticmethod
-    def _update_state(view: HorizontalView, rendered_object: Horizontal) -> None:
-        pass  # a row has no user-editable state of its own
-
 
 class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
     """Views one above the other, at the top of the column."""
@@ -2229,10 +2116,6 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
             ]
             self._rendered_object = Vertical(*widgets)
             self._rendered_object.styles.height = "auto"
-
-    @staticmethod
-    def _update_state(view: VerticalView, rendered_object: Vertical) -> None:
-        pass  # a column has no user-editable state of its own
 
 
 class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitter]):
@@ -2262,10 +2145,6 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
         _view: SplitterView, rendered_object: ComposeSplitter, value: list[int]
     ) -> None:
         rendered_object.set_sizes(value)
-
-    @staticmethod
-    def _update_state(view: SplitterView, rendered_object: ComposeSplitter) -> None:
-        view.sizes = view.shares_of(rendered_object.pane_lengths())
 
     def _update_sizes(self, lengths: list[int]) -> None:
         sizes = self._view.shares_of(lengths)
@@ -2307,10 +2186,6 @@ class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollaps
         _view: ExpanderView, rendered_object: ComposeCollapsible, value: bool
     ) -> None:
         rendered_object.set_expanded(value)
-
-    @staticmethod
-    def _update_state(view: ExpanderView, rendered_object: ComposeCollapsible) -> None:
-        view.is_expanded = not rendered_object.collapsed
 
     def _update_expanded(self, is_expanded: bool) -> None:
         with self.stop_refresh():
@@ -2357,10 +2232,6 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
         _view: SidebarView, rendered_object: ComposeSidebar, value: bool
     ) -> None:
         rendered_object.set_expanded(value)
-
-    @staticmethod
-    def _update_state(view: SidebarView, rendered_object: ComposeSidebar) -> None:
-        view.is_expanded = rendered_object.is_expanded
 
     def _update_expanded(self, is_expanded: bool) -> None:
         with self.stop_refresh():
@@ -2429,10 +2300,6 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
         await mounting
         _refresh_tree(view)
 
-    @staticmethod
-    def _update_state(view: ListView[Any], rendered_object: ComposeList) -> None:
-        pass  # a list has no user-editable state of its own: its records are the model's
-
 
 class TextualTreeRenderer(TextualWidgetRenderer[TreeView, ComposeTree]):
     def __init__(self, view: TreeView) -> None:
@@ -2471,10 +2338,6 @@ class TextualTreeRenderer(TextualWidgetRenderer[TreeView, ComposeTree]):
         _view: TreeView, rendered_object: ComposeTree, value: TreePath | None
     ) -> None:
         rendered_object.set_selected(value)
-
-    @staticmethod
-    def _update_state(view: TreeView, rendered_object: ComposeTree) -> None:
-        view.selected = rendered_object.selected_path
 
     def _update_selected(self, path: TreePath) -> None:
         with self.stop_refresh():
@@ -2540,10 +2403,6 @@ class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
     def _refresh_tab_enabled(_view: TabPage, rendered_object: TabPane, value: bool) -> None:
         rendered_object.disabled = not value  # its tab follows
 
-    @staticmethod
-    def _update_state(view: TabPage, rendered_object: TabPane) -> None:
-        view.is_enabled = not rendered_object.disabled
-
 
 class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
     """Textual's tabbed content: the tabs in a row, the current one's pane under them."""
@@ -2578,12 +2437,6 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
         pane_id = TextualTabsRenderer._pane_id(view.tabs[value])
         if pane_id is not None and rendered_object.is_attached:
             rendered_object.set_active(pane_id)
-
-    @staticmethod
-    def _update_state(view: TabView, rendered_object: ComposeTabbedContent) -> None:
-        index = TextualTabsRenderer._index(view, rendered_object.active)
-        if index is not None:
-            view.current_index = index
 
     @staticmethod
     def _index(view: TabView, pane_id: str) -> int | None:
@@ -2642,10 +2495,6 @@ class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
             self._rendered_object.styles.grid_rows = "auto"
             self._rendered_object.styles.height = "auto"
 
-    @staticmethod
-    def _update_state(view: GridView, rendered_object: Grid) -> None:
-        pass  # a grid has no user-editable state of its own
-
 
 class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
     """The pages, one shown at a time, and a toolbar of their actions docked at the top.
@@ -2688,10 +2537,6 @@ class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
     def _refresh_current_route(_view: Router, rendered_object: ContentSwitcher, value: str) -> None:
         rendered_object.current = _slot_id(value)
 
-    @staticmethod
-    def _update_state(view: Router, rendered_object: ContentSwitcher) -> None:
-        pass  # navigation goes through the pages' actions, never the switcher itself
-
 
 class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
     """A row of buttons, one per action, docked at the top by the main renderer."""
@@ -2723,10 +2568,6 @@ class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
     @staticmethod
     def _noop(_view: ToolBar, _rendered_object: ComposeToolbar, _value: Any) -> None:
         pass  # a row of buttons has no title to show
-
-    @staticmethod
-    def _update_state(view: ToolBar, rendered_object: ComposeToolbar) -> None:
-        pass  # nothing user-editable to read back
 
 
 def _slot_id(route: str) -> str:
@@ -3002,10 +2843,6 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     @staticmethod
     def _noop(_view: MainView, _rendered_object: _ComposeUIApp, _value: Any) -> None:
         pass
-
-    @staticmethod
-    def _update_state(view: MainView, rendered_object: _ComposeUIApp) -> None:
-        view.title = rendered_object.title
 
 
 #: renderer keys of the Textual backend, looked up by `composeui.core.registry.create_renderer`

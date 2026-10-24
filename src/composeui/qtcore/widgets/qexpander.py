@@ -45,9 +45,6 @@ class QExpander(QWidget):
         layout.addWidget(self.content)
         self._show_expanded(is_expanded=False)
 
-    def is_expanded(self) -> bool:
-        return self.header.isChecked()
-
     def set_expanded(self, is_expanded: bool) -> None:
         self.header.blockSignals(True)  # noqa: FBT003
         self.header.setChecked(is_expanded)
