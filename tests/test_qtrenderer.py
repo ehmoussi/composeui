@@ -635,8 +635,16 @@ def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> N
     buttons.sort(key=lambda button: button.x())
 
     assert buttons[0].x() == 0
-    # each next to the one before, not spread over the width
-    assert buttons[-1].geometry().right() < edge_widget.width() // 2
+    # each next to the one before, at its own width, not spread over the row: the stretch
+    # after them takes the rest. Not a share of the row: the text's width differs between
+    # systems' fonts.
+    layout = edge_widget.layout()
+    for before, after in zip(buttons, buttons[1:]):
+        assert after.x() == before.geometry().right() + 1 + layout.spacing()
+    assert [button.width() for button in buttons] == [
+        button.sizeHint().width() for button in buttons
+    ]
+    assert buttons[-1].geometry().right() < edge_widget.width() - 1
 
 
 def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot) -> None:
@@ -2352,11 +2360,13 @@ def test_the_chart_is_as_tall_as_its_view_says(qtbot: QtBot) -> None:
     qtbot.waitUntil(lambda: chart.height() > 250)
 
 
-def _sorted_rooms(qtbot: QtBot) -> tuple[SortedRoomsMainView, QFilterTable]:
+def _sorted_rooms(qtbot: QtBot, *, wide: bool = False) -> tuple[SortedRoomsMainView, QFilterTable]:
     view = SortedRoomsMainView()
     view.render(RendererType.QT)
     window = _widget(view)
     qtbot.addWidget(window)
+    if wide:  # the filter bar on one row whatever the system's fonts: Windows' are wider
+        window.resize(1600, window.height())
     window.show()
     qtbot.waitExposed(window)
     box = _widget(view.rooms)
@@ -2403,7 +2413,7 @@ def test_clicking_a_sortable_header_sorts_by_it_then_back_and_shows_the_order(
 
 
 def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -> None:
-    view, box = _sorted_rooms(qtbot)
+    view, box = _sorted_rooms(qtbot, wide=True)
     bar, table = box.bar, box.table
 
     qtbot.keyClicks(bar.search, "ROOM")
