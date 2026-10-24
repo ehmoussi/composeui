@@ -147,3 +147,12 @@ def test_the_measurements_show_what_the_model_can_t_compute_and_sum_those_kept_u
     assert loaded.summary.rows == [["0 of 7"], ["NaN"], ["NaN"]]
     loaded.reset_state()
     assert (loaded.measurements.cell_styles, loaded.summary.rows[0]) == ({}, ["0 of 0"])
+
+
+def test_measurements_of_a_pipe_that_can_t_be_plotted_add_nothing() -> None:
+    view = PipeChartMainView()
+    view.pipe.length.value = None
+
+    view.add_measurements()
+
+    assert view.chart.series == []

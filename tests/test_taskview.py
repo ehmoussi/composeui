@@ -154,6 +154,7 @@ def test_a_task_still_running_isn_t_run_again(qtbot: QtBot, main_view: TaskMainV
     main_view.buttons.run.clicked.emit()
 
     main_view.details.tasks.cell_clicked.emit(0, 0)
+    main_view.start()  # e.g. Ctrl+Enter, the button disabled: no second run
 
     assert main_view.status_bar.message == "Task 1 is still running"
     assert main_view.metrics.running.value == str(TASK_COUNT)
@@ -171,6 +172,25 @@ def test_a_run_waits_for_a_valid_configuration(main_view: TaskMainView) -> None:
     assert main_view.buttons.run.is_enabled
     assert "greater than the maximum" in main_view.config.log_view.log_message
     assert main_view.status_bar.message == "Fix the configuration first"
+
+
+def test_a_run_waits_for_every_duration(main_view: TaskMainView) -> None:
+    main_view.config.min_duration.value = None
+
+    main_view.buttons.run.clicked.emit()
+
+    assert main_view.details.tasks.rows == []
+    assert "Every value is needed" in main_view.config.log_view.log_message
+
+
+def test_a_task_of_a_run_loaded_from_a_study_runs_nothing(main_view: TaskMainView) -> None:
+    rows = [["1", "2.0", str(TaskStatus.SUCCEEDED.value), ""]]
+    main_view.details.tasks.rows = rows  # as a study opens: its tasks' jobs are gone
+
+    main_view.details.tasks.cell_clicked.emit(0, 0)
+
+    assert not main_view.jobs.is_running
+    assert main_view.details.tasks.rows == rows
 
 
 def test_the_failure_percentage_is_a_slider_of_whole_percents(

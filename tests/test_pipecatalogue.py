@@ -318,3 +318,9 @@ def test_an_opened_catalogue_lists_its_pipes_through_its_own_filter(
     assert _names(other) == []
     assert other.main_view.catalogue.total.text == "0 pipes, 0.0 kg"
     other.model.close()
+
+
+def test_editing_a_pipe_gone_since_opens_no_dialog(app: App) -> None:
+    app.main_view.edit_pipe("Removed meanwhile", model=app.model)
+
+    assert not app.main_view.edit_dialog.is_visible
