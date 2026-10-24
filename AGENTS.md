@@ -28,6 +28,7 @@ make translations  # each app's catalogs against the text it translates (TRANSLA
 make check   # lint + mypy + translations
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
+make web-deps  # htmx, uPlot and Cally from npm at their pinned versions and SHA-256 (commit them)
 make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs `--group docs`)
 make screenshots   # docs/images/<example>-<backend>.png for the docs and README (Chromium)
 ```

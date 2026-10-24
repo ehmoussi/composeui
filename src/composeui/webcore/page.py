@@ -53,6 +53,7 @@ $pollers
 
 #: read once: the files only change with a new version of the package
 _STATIC_URLS = {
+    # htmx 2.0.10 (https://github.com/bigskysoftware/htmx); `make web-deps` updates these files
     "htmx_url": _static_url("htmx.min.js"),
     "css_url": _static_url("app.css"),
     # a file, not inline: a policy can then allow the page's own scripts by address

@@ -11,7 +11,7 @@
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'translations', 'test',
-        'browser-test', 'docs', 'screenshots', 'css', 'clean', 'all')]
+        'browser-test', 'docs', 'screenshots', 'css', 'web-deps', 'clean', 'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
     [string[]] $Examples = @(),
@@ -49,6 +49,41 @@ $Sha256 = @{
     'daisyui.mjs'                  = '85819d3fe86a852237b439b13f481481aac58e562ac47694cd11c3038e994f2a'
     'daisyui-theme.mjs'            = 'd92d2f488933dab757f046e81ebd4986e51e9423307798dc3545d09a15542c89'
 }
+
+# the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
+# imports: committed, so the package needs no download. Change a version and its SHA-256,
+# run `.\make.ps1 web-deps css`, and commit the files.
+$Static = 'src/composeui/webcore/static'
+$HtmxVersion = '2.0.10'
+$UplotVersion = '1.6.32'
+$CallyVersion = '0.9.2'
+$WebDeps = @(
+    @{
+        Url    = "https://unpkg.com/htmx.org@$HtmxVersion/dist/htmx.min.js"
+        Path   = "$Static/htmx.min.js"
+        Sha256 = '71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de'
+    }
+    @{
+        Url    = "https://unpkg.com/uplot@$UplotVersion/dist/uPlot.iife.min.js"
+        Path   = "$Static/uPlot.iife.min.js"
+        Sha256 = '19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f'
+    }
+    @{
+        Url    = "https://unpkg.com/uplot@$UplotVersion/dist/uPlot.min.css"
+        Path   = 'css/uPlot.min.css'
+        Sha256 = 'df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04'
+    }
+    @{
+        Url    = "https://unpkg.com/cally@$CallyVersion/dist/cally.js"
+        Path   = "$Static/cally.dist.js"
+        Sha256 = '4dcba6a3b8ec63b66ff2fbfc6cf47b7dee1eb4896eac89fe7487d82e28e15870'
+    }
+    @{
+        Url    = "https://unpkg.com/cally@$CallyVersion/LICENSE"
+        Path   = "$Static/cally.LICENSE"
+        Sha256 = 'c48fd407090d6d752b0370d39db55bd750e6dfc678ee252d4c906bddf54132eb'
+    }
+)
 
 # Runs a native command and stops on a non-zero exit code, as make does.
 function Invoke-Native {
@@ -204,6 +239,23 @@ function Invoke-Css {
         '-o', 'src/composeui/webcore/static/app.css', '--minify')
 }
 
+# Cally's file has no license comment: it gets Cally's LICENSE as one
+function Invoke-WebDeps {
+    foreach ($dependency in $WebDeps) {
+        Save-Verified $dependency.Url $dependency.Path $dependency.Sha256
+    }
+    $license = [IO.File]::ReadAllText("$PSScriptRoot/$Static/cally.LICENSE").TrimEnd("`n")
+    $lines = @("/*! https://github.com/WickyNilliams/cally (v$CallyVersion), its dependency " +
+        'atomico bundled in')
+    foreach ($line in $license -split "`n") { $lines += (' * ' + $line).TrimEnd(' ') }
+    $lines += ' */'
+    $body = [IO.File]::ReadAllText("$PSScriptRoot/$Static/cally.dist.js")
+    # UTF-8 without a BOM and LF line endings, as the Makefile writes it
+    [IO.File]::WriteAllText("$PSScriptRoot/$Static/cally.js", ($lines -join "`n") + "`n" + $body,
+        (New-Object System.Text.UTF8Encoding $false))
+    Remove-Item "$Static/cally.dist.js", "$Static/cally.LICENSE" -Force
+}
+
 function Invoke-Clean {
     Get-ChildItem -Recurse -Force -Directory -Filter __pycache__ -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force
@@ -235,6 +287,7 @@ $actions = @{
     'docs'         = { Invoke-Docs }
     'screenshots'  = { Invoke-Screenshots }
     'css'          = { Invoke-Css }
+    'web-deps'     = { Invoke-WebDeps }
     'clean'        = { Invoke-Clean }
     'all'          = { Invoke-All }
 }

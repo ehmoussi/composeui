@@ -124,6 +124,33 @@ css: $(TAILWIND) $(DAISYUI) $(DAISYUI_THEME)
 		$(DAISYUI_THEME_SHA256) $(DAISYUI_THEME) | $(SHA256SUM) -c \
 		|| { echo "Delete $(CSS_VENDOR)/ to download them again"; exit 1; }
 	$(TAILWIND) -i css/app.css -o src/composeui/webcore/static/app.css --minify
+
+# the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
+# imports: committed, so the package needs no download. Change a version and its SHA-256,
+# run `make web-deps css`, and commit the files.
+STATIC := src/composeui/webcore/static
+HTMX_VERSION := 2.0.10
+UPLOT_VERSION := 1.6.32
+CALLY_VERSION := 0.9.2
+HTMX_SHA256 := 71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de
+UPLOT_SHA256 := 19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f
+UPLOT_CSS_SHA256 := df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04
+CALLY_SHA256 := 4dcba6a3b8ec63b66ff2fbfc6cf47b7dee1eb4896eac89fe7487d82e28e15870
+CALLY_LICENSE_SHA256 := c48fd407090d6d752b0370d39db55bd750e6dfc678ee252d4c906bddf54132eb
+
+# Cally's file has no license comment: it gets Cally's LICENSE as one
+.PHONY: web-deps
+web-deps:
+	$(call fetch,https://unpkg.com/htmx.org@$(HTMX_VERSION)/dist/htmx.min.js,$(STATIC)/htmx.min.js,$(HTMX_SHA256))
+	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.iife.min.js,$(STATIC)/uPlot.iife.min.js,$(UPLOT_SHA256))
+	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.min.css,css/uPlot.min.css,$(UPLOT_CSS_SHA256))
+	$(call fetch,https://unpkg.com/cally@$(CALLY_VERSION)/dist/cally.js,$(STATIC)/cally.dist.js,$(CALLY_SHA256))
+	$(call fetch,https://unpkg.com/cally@$(CALLY_VERSION)/LICENSE,$(STATIC)/cally.LICENSE,$(CALLY_LICENSE_SHA256))
+	{ echo '/*! https://github.com/WickyNilliams/cally (v$(CALLY_VERSION)), its dependency atomico bundled in'; \
+		sed -e 's/^/ * /' -e 's/ *$$//' $(STATIC)/cally.LICENSE; echo ' */'; \
+		cat $(STATIC)/cally.dist.js; } > $(STATIC)/cally.js
+	rm -f $(STATIC)/cally.dist.js $(STATIC)/cally.LICENSE
+
 .PHONY: clean
 clean:
 	rm -rf `find . -name __pycache__`
