@@ -22,7 +22,7 @@ quickstart, `docs/user-guide/` for each feature, `docs/examples-guide.md` for th
 ```bash
 make lint    # ruff format + ruff check --fix
 make mypy    # mypy on packages composeui + examples, Qt binding resolved to PySide6
-make test    # QT_QPA_PLATFORM=offscreen pytest tests with coverage (browser tests excluded)
+make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
 make check   # lint + mypy + translations
@@ -116,6 +116,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
   widgets (`qtbot` for Qt, `App.run_test()` for Textual, `httpx`/Starlette test client for web).
 - Tests for optional backends guard with `pytest.importorskip(...)`.
+- `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
+  depend on another's state or order. Without `-n`, `pytest` runs them one after another.
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.

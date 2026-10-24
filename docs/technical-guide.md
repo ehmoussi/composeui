@@ -390,7 +390,7 @@ Always run the tools through `uv run` or the `make` targets, never a global Pyth
 ```bash
 make lint          # ruff format + ruff check --fix
 make mypy          # mypy on packages composeui + examples, Qt binding resolved to PySide6
-make test          # pytest with coverage (browser tests excluded)
+make test          # pytest in parallel, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
 make check         # lint + mypy + translations
@@ -416,6 +416,9 @@ Every behavior change needs a test in `tests/`.
 - Backend tests exercise real rendered widgets: `qtbot` for Qt, `App.run_test()` for
   Textual, and the `httpx` or Starlette test client for the web.
 - Tests for an optional backend guard with `pytest.importorskip(...)`.
+- `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
+  not depend on the state or the order of another. `pytest` without `-n` runs them one
+  after another.
 - Qt tests in a headless environment (CI, WSL) need `QT_QPA_PLATFORM=offscreen`.
   `make test` sets it. To run one file or test:
 

@@ -192,8 +192,9 @@ function Invoke-Test {
     $env:COMPOSEUI_POSIX_ONLY = '# posix only'
     try {
         Invoke-Offscreen {
-            Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '--cov=src',
-                '--cov-report=term-missing:skip-covered')
+            # in parallel, a worker per CPU (pytest-xdist)
+            Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '-n', 'auto',
+                '--cov=src', '--cov-report=term-missing:skip-covered')
         }
     }
     finally { $env:COMPOSEUI_POSIX_ONLY = $previous }
