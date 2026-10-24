@@ -400,6 +400,11 @@ make docs          # build the documentation site into docs/_build/html
 make screenshots   # the screenshots of the examples guide, on every backend
 ```
 
+On Windows without `make`, run the same targets in PowerShell with `make.ps1`, such as
+`.\make.ps1 check test`. Pass `EXAMPLES` as `-Examples pipeform, batman` and
+`TAILWIND_PLATFORM` as `-TailwindPlatform`. When you change a target in the `Makefile`,
+change it in `make.ps1` too.
+
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
 `web`.
 
@@ -425,7 +430,8 @@ Every behavior change needs a test in `tests/`.
 ### Translations
 
 `make translations` checks the catalogs of each app in `TRANSLATED_MAIN_VIEWS` of the
-`Makefile`. When you translate a new app, add its main view there. See
+`Makefile`, and `make.ps1` has the same list in `$TranslatedMainViews`. When you translate a
+new app, add its main view to both. See
 [Checking the catalogs](user-guide/translation.md#checking-the-catalogs).
 
 ### Styles of the web backend
@@ -434,7 +440,6 @@ Every behavior change needs a test in `tests/`.
 the classes used in `webcore`, run `make css`, and commit the built file. `make css`
 downloads the Tailwind CLI and the daisyUI files once, into `css/vendor/`, which is not
 committed. It needs no Node or npm.
-
 ### Code style
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the

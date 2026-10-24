@@ -32,6 +32,11 @@ make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs
 make screenshots   # docs/images/<example>-<backend>.png for the docs and README (Chromium)
 ```
 
+On Windows without `make`, run the same targets in PowerShell with `make.ps1`
+(`.\make.ps1 check test`; `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform`
+for `TAILWIND_PLATFORM`). Keep it in step with the `Makefile`, including its
+`$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
+
 Run a single test file or test:
 
 ```bash
