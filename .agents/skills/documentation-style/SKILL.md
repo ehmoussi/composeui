@@ -43,6 +43,8 @@ Each document has one audience:
 | `docs/index.md` | Readers of the documentation site | The home page: one line per page of the site, and the `toctree` that orders them |
 | `docs/widgets.md` | App developers who look for a widget | The widget catalog, which the `widget-catalog` directive builds from `composeui.core.view` |
 | `docs/api/*.md` | App developers who need the exact API | One page per module, built from its docstrings by `automodule` |
+| `docs/_site/llms.txt` | Language models | The site's `llms.txt`: a summary and one link with a one-line description per page of the site, which `html_extra_path` (`docs/_site/`) copies to the site root |
+| `docs/_site/skills/composeui/SKILL.md` | Coding agents that write a ComposeUI app | The skill that users install: the rules for an app's code, a minimal app, and links to the site |
 | `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
@@ -238,6 +240,7 @@ presenting them as wording-only edits.
 5. Check contents lists, in-page links, heading anchors, and relative links between
    `README.md`, `docs/`, and `src/examples/`. When moving content, resolve relative
    paths from the new file's directory.
+   Add, rename, or remove a page in `docs/_site/llms.txt` too.
 6. For language-only changes, compare fenced code blocks and inline code with the
    original. Investigate every difference; preserve exact examples unless the task
    requires a change. Keep headings stable where practical: other sections link to them.
