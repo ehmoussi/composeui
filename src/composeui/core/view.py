@@ -355,21 +355,16 @@ def define_view(
     """Define a view class: an `attrs` class whose field changes reach its renderer.
 
     Use it as ``@define_view``, or as ``@define_view(...)`` with keyword arguments for
-    `attrs.define`. The fields are keyword-only.
+    `attrs.define`. The fields are keyword-only. Hooks of its own (``on_setattr``) run
+    after the validators, before the renderer hears the change.
     """
 
     def wrap(cls: _ClassT) -> _ClassT:
-        if "on_setattr" in kwargs:
-            if isinstance(kwargs["on_setattr"], Sequence):
-                kwargs["on_setattr"] = [*kwargs["on_setattr"], notify_renderer]
-            else:
-                kwargs["on_setattr"] = [kwargs["on_setattr"], notify_renderer]
+        options = {"kw_only": True, "slots": False, **kwargs}
+        own = options.pop("on_setattr", [])
+        hooks = list(own) if isinstance(own, Sequence) else [own]
         return attrs.define(
-            cls,
-            on_setattr=[attrs.setters.validate, notify_renderer],
-            kw_only=True,
-            slots=False,
-            **kwargs,
+            cls, on_setattr=[attrs.setters.validate, *hooks, notify_renderer], **options
         )
 
     if cls is None:
