@@ -66,6 +66,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.1.0",
     "pytest-qt>=4.5.0",
+    "pytest-xdist>=3.6.1",
     "ruff>=0.15.17",
     "textual-dev>=1.8.0",
     "watchfiles>=1.1.1",

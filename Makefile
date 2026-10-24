@@ -41,8 +41,9 @@ translations:
 check: lint mypy translations
 
 .PHONY: test
+# in parallel, a worker per CPU (pytest-xdist)
 test:
-	QT_QPA_PLATFORM=offscreen uv run pytest tests -m "not browser" --cov=src --cov-report=term-missing:skip-covered
+	QT_QPA_PLATFORM=offscreen uv run pytest tests -m "not browser" -n auto --cov=src --cov-report=term-missing:skip-covered
 
 # the web backend in headless Chromium; skipped unless Chromium is installed:
 # uv run --group browser playwright install chromium
