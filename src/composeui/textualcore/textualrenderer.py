@@ -2650,6 +2650,13 @@ class _ComposeUIApp(App[None]):
         for callback in self.mounted_callbacks:
             callback()
 
+    async def action_quit(self) -> None:
+        """Quit as the Exit action does, as Textual's Ctrl+Q has priority over its key."""
+        if self._view.has_file_menu:
+            self.trigger(self._view.file_menu.exit_app)  # what the app connected to it too
+        else:
+            self._view.close()  # its jobs canceled, as by Exit
+
     def action_trigger(self, action_id: str) -> None:
         action_view = self.registered_actions.get(action_id)
         if action_view is not None:
