@@ -1689,10 +1689,11 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                         layout.addRow(label_object, field_container)
                     else:
                         layout.addRow(field_container)
-                else:  # a nested form
+                elif isinstance(field_row, FormView):
                     assert isinstance(field_row.renderer, QtWidgetRenderer)
                     assert isinstance(field_row.renderer.qt_object, QWidget)
                     layout.addRow(field_row.renderer.qt_object)
+                # else a row whose field this backend doesn't register: left out
             log = self._view.log_view.renderer
             assert isinstance(log, QtWidgetRenderer)
             assert isinstance(log.qt_object, QWidget)
