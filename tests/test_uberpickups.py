@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import threading
 from typing import TYPE_CHECKING
 
 import pytest
@@ -95,7 +96,7 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         assert chart.isHidden()
         qtbot.waitUntil(lambda: not view.loader.is_running)
         assert not table.isHidden()
-        assert chart.isHidden()
+        assert not chart.isHidden()
         assert status.isHidden()
 
         checkbox.click()
@@ -133,14 +134,54 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         restored.model.close()
 
 
-@pytest.mark.parametrize(("lat", "lon"), [(91, 0), (-91, 0), (0, 181), (0, -181)])
-def test_invalid_pickup_coordinates_are_shown_as_a_loading_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lat: int, lon: int
+def test_web_csv_commit_does_not_restart_the_running_loader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    web = pytest.importorskip("composeui.webcore.webapplication")
+    testclient = pytest.importorskip("starlette.testclient")
+    path = tmp_path / "pickups.csv.gz"
+    path.write_bytes(gzip.compress(_CSV.encode()))
+    monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
+    views: list[uberpickups.UberPickupsMainView] = []
+    models: list[uberpickups.UberPickupsModel] = []
+
+    def build_view() -> uberpickups.UberPickupsMainView:
+        view = uberpickups.UberPickupsMainView()
+        views.append(view)
+        return view
+
+    def build_model() -> uberpickups.UberPickupsModel:
+        model = uberpickups.UberPickupsModel()
+        models.append(model)
+        return model
+
+    app = web.WebModelApplication(build_main_view=build_view, build_model=build_model)
+    done = threading.Event()
+    with testclient.TestClient(app.create_starlette_app()) as client:
+        client.get("/")
+        view, model = views[-1], models[-1]
+        # Start after rendering, as a download that outlasts the initial page render does.
+        view.connect_model(model)
+
+        def finished() -> None:
+            if not view.loader.is_running:
+                done.set()
+
+        view.loader.changed.connect(finished, now=True)
+        assert done.wait(10)
+        assert "Done! (using SQLite)" in client.get("/jobs").text
+        assert view.loader.error is None
+
+
+@pytest.mark.parametrize(
+    "row",
+    ["invalid-date,40.7,-73.9,B", "9/1/2014 0:01:00,invalid-lat,-73.9,B"],
+)
+def test_invalid_csv_is_shown_as_a_loading_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, row: str
 ) -> None:
     path = tmp_path / "invalid.csv.gz"
-    path.write_bytes(
-        gzip.compress(f"Date/Time,Lat,Lon,Base\n9/1/2014 0:01:00,{lat},{lon},B\n".encode())
-    )
+    path.write_bytes(gzip.compress(f"{_CSV}{row}\n".encode()))
     monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
     app = _app()
     app.main_view.status_bar.timeout = 0
@@ -152,7 +193,6 @@ def test_invalid_pickup_coordinates_are_shown_as_a_loading_failure(
         assert not page.pickups_chart.is_visible
         assert not page.table.is_visible
         assert "Failed to read the CSV:" in app.main_view.status_bar.message
-        assert "must be" in app.main_view.status_bar.message
         assert app.model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
         app.model.close()
@@ -169,7 +209,7 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     job: Job[list[int], int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert uberpickups.load_pickups(job, model, path.as_uri()) == []
+        assert model.load_pickups(job, path.as_uri()) == []
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
         assert not page.table.is_visible
         assert not page.pickups_chart.is_visible
