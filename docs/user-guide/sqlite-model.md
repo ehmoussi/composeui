@@ -211,7 +211,8 @@ finally:
   the type at runtime. Do not combine `date_format` and `converter`. SQLite stores dates
   and datetimes as ISO text; timezone offsets supplied by the format are preserved.
 - **Input.** `fill` accepts an iterable of text lines. Open files with `newline=""` and
-  the required encoding. The caller owns the input and handles downloads and decompression.
+  the required encoding. The caller owns that input. For URLs, use
+  [`fill_from_url` or `open_csv_url`](#csv-urls) to handle downloads and gzip decompression.
   Extra keywords, such as `delimiter` and `fieldnames`, go to `csv.DictReader`.
 - **Progress and transactions.** `fill(text, batch_size=100_000, limit=None)` yields
   cumulative submitted-row counts. All batches share one transaction. Exhaust the generator
@@ -226,3 +227,54 @@ finally:
 - **Saved data.** CSV tables are part of the SQLite study, like other tables. Reconnect
   data sources after Open or reload through the table's `changed` signal. Sources are not
   serialized with the views. Reuse restored rows instead of importing them a second time.
+
+### CSV URLs
+
+`CSVSqliteTable.fill_from_url` imports CSV from a trusted HTTP, HTTPS, or file URL.
+It detects gzip from the content, even when the URL has no `.gz` suffix. Other compression
+formats are not supported. Like `fill`, it appends rows and yields cumulative submitted-row
+counts. It does not cache downloads or skip imports when the table already contains rows.
+
+With `ReadingModel` from the preceding example, import a local `readings.csv.gz` file as
+follows. The file uses the same semicolon-separated columns:
+
+```python
+from contextlib import closing
+from pathlib import Path
+
+url = Path("readings.csv.gz").resolve().as_uri()
+model = ReadingModel()
+try:
+    with closing(model.readings.fill_from_url(url, delimiter=";", batch_size=1000)) as batches:
+        for count in batches:
+            print(f"Submitted {count} rows")
+finally:
+    model.close()
+```
+
+`encoding="utf-8"` sets the text encoding. `timeout=30.0` sets the socket timeout in seconds,
+not a deadline for the whole download. `batch_size`, `limit`, and CSV options follow `fill`.
+Exhaust the generator to commit. If iteration can stop early, use `contextlib.closing` to
+close the response and roll back the import. Nested transactions follow the same rules
+as `fill`.
+
+For CSV processing without a SQLite import, use `open_csv_url` from the same module.
+It preserves newlines for the CSV reader and closes the text stream and response on exit:
+
+```python
+import csv
+
+from composeui.core.sqlitemodel import open_csv_url
+
+with open_csv_url(url) as text:
+    print(next(csv.DictReader(text, delimiter=";")))
+```
+
+Both APIs propagate network, decompression, and decoding errors. Conversion and validation
+errors in `fill_from_url` become `RefusedError`, as with `fill`. Use these APIs only with
+trusted URLs: they do not restrict hosts, redirects, or local file access. Unsupported URL
+schemes raise `ValueError`.
+
+Run downloads in a [job](threads.md) to keep the UI responsive. The
+[Uber pickups example](../../src/examples/uberpickups.py) uses `fill_from_url` and reports
+batch counts through the job's progress signal.

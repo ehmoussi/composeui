@@ -104,6 +104,13 @@ the option for the web (extra `web`, the default).
   `table.source()` builds a `SqliteSource` with inferred field types and CSV headers.
   Use `source(headers={"field": "Label", ...})` to select, order, and label columns.
   It uses hidden SQLite row IDs; use `SqliteSource` directly for custom queries or explicit keys.
+- **Read CSV URLs without stream wrappers.** `CSVSqliteTable.fill_from_url(url, ...)`
+  imports trusted HTTP, HTTPS, or file URLs, detects gzip by content, and yields row counts.
+  It appends rows and follows `fill`'s transaction rules; use `contextlib.closing` if iteration
+  can stop early. `open_csv_url(url, encoding="utf-8", timeout=30.0)` is a context manager for
+  CSV text without importing it. Import it from `composeui.core.sqlitemodel`. Both APIs close
+  their streams and propagate I/O errors. The timeout is per socket operation, not a total
+  deadline. They do not restrict hosts, redirects, or local files: never pass untrusted URLs.
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.
