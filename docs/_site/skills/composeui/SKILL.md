@@ -101,6 +101,9 @@ the option for the web (extra `web`, the default).
   errors become `RefusedError`. `date_format` requires a date or datetime field and cannot
   accompany a custom converter. The caller owns the text stream. Rebuild table sources from
   the table's `changed` signal after Open or reload; do not import restored rows again.
+  `table.source()` builds a `SqliteSource` with inferred field types and CSV headers.
+  Use `source(headers={"field": "Label", ...})` to select, order, and label columns.
+  It uses hidden SQLite row IDs; use `SqliteSource` directly for custom queries or explicit keys.
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.

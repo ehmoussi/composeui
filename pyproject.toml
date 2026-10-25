@@ -149,6 +149,10 @@ ignore = [
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["composeui.core.sqlitemodel.csv_field"]
 
+[tool.ruff.lint.flake8-type-checking]
+# CSV schemas resolve attrs field annotations at runtime.
+runtime-evaluated-decorators = ["attrs.define"]
+
 [tool.ruff.lint.isort]
 # Every module postpones annotation evaluation (enforced by I002, added by `make lint`).
 required-imports = ["from __future__ import annotations"]

@@ -13,7 +13,7 @@ from urllib.request import urlopen
 import attrs
 
 from composeui.core.application import run
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, SqliteSource, csv_field, table
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
 from composeui.core.view import (
     ChartKind,
     ChartView,
@@ -24,7 +24,6 @@ from composeui.core.view import (
     PageView,
     PageWidth,
     Series,
-    SourceColumn,
     child,
     define_view,
 )
@@ -34,12 +33,6 @@ if TYPE_CHECKING:
 
     from composeui.core.jobs import Job
 
-COLUMNS = (
-    SourceColumn("date_time", "Date/Time", datetime),
-    SourceColumn("lat", "Latitude", float),
-    SourceColumn("lon", "Longitude", float),
-    SourceColumn("base", "Base"),
-)
 logger = logging.getLogger("COMPOSEUI")
 
 
@@ -105,7 +98,6 @@ class UberPickupsPageView(PageView):
     table: DataTableView = child(
         DataTableView,
         is_visible=False,
-        filterable_columns=[column.name for column in COLUMNS],
         export_filename="uber-raw-data-sep14.csv",
     )
     pickups_chart: ChartView = child(
@@ -183,9 +175,16 @@ class UberPickupsMainView(MainView):
         self.status_bar.show_message(self.tr("Failed to read the CSV: {error}").format(error=error))
 
     def _finish_filling(self, pickups_by_hour: list[int], model: UberPickupsModel) -> None:
-        self.page.table.source = SqliteSource(
-            model.uber_data, "SELECT rowid AS id, * FROM uber_data", id_column="id", columns=COLUMNS
+        source = model.uber_data.source(
+            headers={
+                "date_time": "Date/Time",
+                "lat": "Latitude",
+                "lon": "Longitude",
+                "base": "Base",
+            }
         )
+        self.page.table.source = source
+        self.page.table.filterable_columns = [column.name for column in source.columns]
         self.page.pickups_chart.series = [
             Series(name="Pickups", x=list(range(24)), y=pickups_by_hour)
         ]

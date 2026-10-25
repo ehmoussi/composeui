@@ -326,6 +326,11 @@ A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQL
 and filters the rows. The table reads only the ids of the rows shown, and the rows that it
 draws. So the rows never all come to Python.
 
+For a [`CSVSqliteTable`](sqlite-model.md#importing-csv-data), use `model.readings.source()`
+to infer columns and types from its row class. Pass `headers={"field": "Label", ...}` to
+select, order, and label the columns. For other tables or custom queries, declare the
+query and columns explicitly:
+
 ```python
 from composeui.core.sqlitemodel import SqliteSource
 from composeui.core.view import SourceColumn, T

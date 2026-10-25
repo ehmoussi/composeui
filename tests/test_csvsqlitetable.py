@@ -15,6 +15,7 @@ import pytest
 
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
+from composeui.core.view import Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -119,6 +120,70 @@ def test_closing_csv_progress_rolls_back_and_leaves_the_input_open(model: Readin
     assert not text.closed
     with model.readings.reading() as db:
         assert db.execute('SELECT COUNT(*) FROM "reading ""values"""').fetchone()[0] == 0
+
+
+def test_schema_source_infers_headers_types_and_reads_imported_rows(model: ReadingsModel) -> None:
+    source = model.readings.source()
+    changes: list[None] = []
+    source.changed.connect(lambda: changes.append(None))
+    assert source.count() == 0
+    list(model.readings.fill(io.StringIO(_HEADER + _FIRST + _SECOND), delimiter=";"))
+    assert changes == [None]
+    assert source.count() == 2
+    assert list(source.columns) == [
+        SourceColumn("name", "Name", str),
+        SourceColumn("value", "Value", float),
+        SourceColumn("day", "Day", datetime.date),
+        SourceColumn("moment", "Moment", datetime.datetime),
+        SourceColumn("optional", "Optional", Optional[datetime.date]),
+        SourceColumn("note", "note", str),
+        SourceColumn("computed", "computed", int),
+    ]
+    assert source.ordered_ids(Sort("value", descending=True), "", {}) == [2, 1]
+    assert source.ordered_ids(None, "", {"value": parse_filter(">2", float)}) == [2]
+    assert source.cells([1], ["day", "moment", "computed"]) == {
+        1: [
+            datetime.date(2026, 10, 25),
+            datetime.datetime.fromisoformat("2026-10-25T17:00+02:00"),
+            7,
+        ]
+    }
+
+
+def test_schema_source_selects_and_orders_fields_and_rejects_unknown_names(
+    model: ReadingsModel,
+) -> None:
+    list(model.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
+    source = model.readings.source(headers={"value": "Measurement", "name": "Station"})
+    assert list(source.columns) == [
+        SourceColumn("value", "Measurement", float),
+        SourceColumn("name", "Station", str),
+    ]
+    assert source.cells([1], ["value", "name"]) == {1: [1.5, "First; reading"]}
+    assert list(model.readings.source(headers={}).columns) == []
+    with pytest.raises(KeyError, match="missing"):
+        model.readings.source(headers={"missing": "Missing"})
+
+
+@pytest.mark.parametrize(
+    "names", [("id",), ("ROWID",), ("rowid", "_rowid_"), ("rowid", "_rowid_", "oid")]
+)
+def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[str, ...]) -> None:
+    row_type = attrs.make_class("Row", {name: attrs.field(type=int) for name in names})
+    table_type = type("Rows", (CSVSqliteTable,), {}, row_type=row_type, name="rows")
+    model = SqliteModel()
+    try:
+        rows = model.add_table(table_type)
+        if len(names) == 3:
+            with pytest.raises(ValueError, match="shadow all SQLite row-id names"):
+                rows.source()
+        else:
+            list(rows.fill([",".join(names) + "\n", ",".join("42" for _ in names) + "\n"]))
+            source = rows.source()
+            assert source.ordered_ids(None, "", {}) == [1]
+            assert source.cells([1], list(names)) == {1: [42] * len(names)}
+    finally:
+        model.close()
 
 
 @attrs.define
