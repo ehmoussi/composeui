@@ -145,3 +145,75 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`):
 
 [`src/examples/pipesweep.py`](../../src/examples/pipesweep.py) writes to its model from a job
 (`uv run python -m examples.pipesweep --backend qt`).
+
+## Importing CSV data
+
+`CSVSqliteTable` creates a table and its insertion SQL from an `attrs` row class and a
+table name. Each CSV row is converted to that class before insertion, so attrs converters,
+defaults, factories, and validators apply.
+
+```python
+from datetime import datetime
+from io import StringIO
+
+import attrs
+
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
+
+
+@attrs.define
+class Reading:
+    recorded: datetime = csv_field("Recorded", date_format="%d/%m/%Y %H:%M")
+    value: float = csv_field("Value", validator=attrs.validators.ge(0))
+    station: str = csv_field("Station", default="unknown")
+
+
+class Readings(CSVSqliteTable, row_type=Reading, name="reading"):
+    pass
+
+
+class ReadingModel(SqliteModel):
+    readings = table(Readings)
+
+
+model = ReadingModel()
+try:
+    text = StringIO("Recorded;Value\n25/10/2026 17:00;12.5\n")
+    for count in model.readings.fill(text, delimiter=";", batch_size=1000):
+        print(f"Submitted {count} rows")
+finally:
+    model.close()
+```
+
+- **Columns.** Field names become SQL column names. CSV headers match those names unless
+  `csv_field("Header")` gives another header. Plain attrs fields work too. Supported field
+  types are `str`, `int`, `bool`, `float`, `bytes`, `decimal.Decimal`, `datetime.date`, and
+  `datetime.datetime`, plus `Optional` forms. Optional fields permit SQL `NULL`; other
+  fields are `NOT NULL`. A default supplies a missing header, not an empty CSV cell.
+  Computed attrs fields (`init=False`) are stored too. No primary key or indexes are added.
+  Use SQLite's `rowid` for a row identifier, or add indexes in the table's `create` script.
+- **Conversion.** Without a converter, fields use the shared cattrs converter.
+  `csv_field` forwards attrs options such as `converter`, `validator`, `default`, and
+  `factory`. For nonstandard values, supply a converter: for example, map `"yes"` and `"no"`
+  to booleans, or use `decimal.Decimal` for decimal text. Validators run after conversion.
+- **Dates.** `date_format` uses `datetime.strptime` and returns a `date` or `datetime`
+  according to the annotation. Without a format, dates use ISO text. Static type checking
+  rejects a formatted field annotated as `float`, for example. Table declaration also checks
+  the type at runtime. Do not combine `date_format` and `converter`. SQLite stores dates
+  and datetimes as ISO text; timezone offsets supplied by the format are preserved.
+- **Input.** `fill` accepts an iterable of text lines. Open files with `newline=""` and
+  the required encoding. The caller owns the input and handles downloads and decompression.
+  Extra keywords, such as `delimiter` and `fieldnames`, go to `csv.DictReader`.
+- **Progress and transactions.** `fill(text, batch_size=100_000, limit=None)` yields
+  cumulative submitted-row counts. All batches share one transaction. Exhaust the generator
+  to commit. If iteration can stop early, use `contextlib.closing` to roll back.
+  Nested transactions follow the batch-insert rules above. `limit` caps imported rows
+  without reading another data row. The input remains open.
+- **Invalid rows.** Conversion and attrs validation errors (`ValueError` or `TypeError`)
+  become `RefusedError`, with the original exception as their cause. The whole import rolls
+  back, including earlier batches. In a UI callback, `self.refusing(...)` can show the
+  refusal. In a [job](threads.md), let it reach `job.failed` and update the UI in that
+  signal's handler. An empty or invalid schema is a declaration error, not a user refusal.
+- **Saved data.** CSV tables are part of the SQLite study, like other tables. Reconnect
+  data sources after Open or reload through the table's `changed` signal. Sources are not
+  serialized with the views. Reuse restored rows instead of importing them a second time.

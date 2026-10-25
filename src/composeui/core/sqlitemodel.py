@@ -9,6 +9,7 @@ study only changes when it's saved.
 from __future__ import annotations
 
 import contextlib
+import csv
 import datetime
 import decimal
 import functools
@@ -22,7 +23,21 @@ import time
 import weakref
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Generic,
+    NamedTuple,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    overload,
+)
+
+import attrs
 
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
@@ -40,6 +55,7 @@ from composeui.core.view import (
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping, Sequence
 
+    from attrs import AttrsInstance
     from typing_extensions import TypeAlias, Unpack
 
     #: a query's parameters: by position, or by name
@@ -172,6 +188,154 @@ class SqliteTable:
                 connection.executemany(sql, batch)
                 count += len(batch)
                 yield count
+
+
+@overload
+def csv_field(name: str, *, date_format: str, **kwargs: Any) -> datetime.datetime: ...
+
+
+@overload
+def csv_field(name: str, *, date_format: None = None, **kwargs: Any) -> Any: ...
+
+
+def csv_field(name: str, *, date_format: str | None = None, **kwargs: Any) -> Any:
+    """Declare a CSV field, with an optional strptime format for a date or datetime."""
+    if date_format is not None and kwargs.get("converter") is not None:
+        msg = "Use either date_format or converter, not both"
+        raise TypeError(msg)
+    metadata = dict(kwargs.pop("metadata", {}))
+    metadata["csv_name"] = name
+    if date_format is not None:
+        metadata["csv_date_format"] = date_format
+    return attrs.field(metadata=metadata, **kwargs)
+
+
+def _csv_structure_hook(field: attrs.Attribute[Any]) -> Callable[[Any, Any], Any] | None:
+    date_format = field.metadata.get("csv_date_format")
+    if date_format is None:
+        return None if field.converter is not None else CONVERTER.get_structure_hook(field.type)
+    args = get_args(field.type)
+    non_null = tuple(arg for arg in args if arg is not type(None))
+    nullable = len(non_null) == 1 and type(None) in args
+    field_type = non_null[0] if nullable else field.type
+    if field_type not in (datetime.date, datetime.datetime):
+        msg = f"date_format requires a date or datetime field: {field.name}"
+        raise TypeError(msg)
+
+    def structure(value: Any, _type: Any) -> datetime.date | None:
+        if value is None and nullable:
+            return None
+        parsed = datetime.datetime.strptime(value, date_format)  # noqa: DTZ007 (preserve CSV timezone semantics)
+        return parsed.date() if field_type is datetime.date else parsed
+
+    return structure
+
+
+class _CSVField(NamedTuple):
+    header: str
+    alias: str
+    field_type: Any
+    structure: Callable[[Any, Any], Any] | None
+
+
+class CSVSqliteTable(SqliteTable):
+    """A CSV table whose schema comes from an attrs row class."""
+
+    row_type: ClassVar[type[AttrsInstance]]
+    name: ClassVar[str]
+    insert: ClassVar[str] = ""
+    _column_names: ClassVar[tuple[str, ...]]
+    _csv_fields: ClassVar[tuple[_CSVField, ...]]
+
+    def __init_subclass__(
+        cls, *, row_type: type[AttrsInstance] | None = None, name: str | None = None, **kwargs: Any
+    ) -> None:
+        super().__init_subclass__(**kwargs)
+        if row_type is None and name is None:
+            return
+        if row_type is None or not name:
+            msg = "CSVSqliteTable requires an attrs row_type and a table name"
+            raise TypeError(msg)
+        attrs.resolve_types(row_type)
+        fields = attrs.fields(row_type)
+        if not fields:
+            msg = "CSV row classes must have at least one field"
+            raise TypeError(msg)
+        sql_types = {
+            str: "TEXT",
+            int: "INTEGER",
+            bool: "INTEGER",
+            float: "REAL",
+            bytes: "BLOB",
+            datetime.date: "DATE",
+            datetime.datetime: "TIMESTAMP",
+            decimal.Decimal: "REAL",
+        }
+        columns = []
+        for field in fields:
+            args = get_args(field.type)
+            non_null = tuple(arg for arg in args if arg is not type(None))
+            nullable = len(non_null) == 1 and type(None) in args
+            field_type = non_null[0] if nullable else field.type
+            if field_type not in sql_types:
+                msg = f"Unsupported CSV field type for {field.name}: {field.type}"
+                raise TypeError(msg)
+            constraint = "" if nullable else " NOT NULL"
+            columns.append(f"{_identifier(field.name)} {sql_types[field_type]}{constraint}")
+        cls.row_type = row_type
+        cls.name = name
+        cls._column_names = tuple(field.name for field in fields)
+        cls._csv_fields = tuple(
+            _CSVField(
+                header=field.metadata.get("csv_name", field.name),
+                alias=field.alias,
+                field_type=field.type,
+                structure=_csv_structure_hook(field),
+            )
+            for field in fields
+            if field.init
+        )
+        cls.create = f"CREATE TABLE {_identifier(name)} ({', '.join(columns)});"
+        names = ", ".join(_identifier(field.name) for field in fields)
+        placeholders = ", ".join("?" for _ in fields)
+        cls.insert = f"INSERT INTO {_identifier(name)} ({names}) VALUES ({placeholders})"  # noqa: S608 (quoted identifiers)
+
+    def row_parameters(self, row: dict[str, Any]) -> Parameters:
+        """Convert CSV fields through the row class and return SQL parameters."""
+        values = {}
+        try:
+            for field in self._csv_fields:
+                if field.header in row:
+                    value = row[field.header]
+                    values[field.alias] = (
+                        value
+                        if field.structure is None
+                        else field.structure(value, field.field_type)
+                    )
+            instance = self.row_type(**values)
+        except (ValueError, TypeError) as error:
+            raise RefusedError(str(error)) from error
+        return tuple(_sql_value(getattr(instance, name)) for name in self._column_names)
+
+    def fill(
+        self,
+        text: Iterable[str],
+        *,
+        batch_size: int = 100_000,
+        limit: int | None = None,
+        **csv_options: Any,
+    ) -> Generator[int]:
+        """Import CSV text and yield cumulative row counts.
+
+        Pass an open text file (with ``newline=''``) or another iterable of lines.
+        The caller owns and closes it. Extra keywords go to ``csv.DictReader``,
+        for example ``delimiter=';'`` or ``fieldnames=['name', 'value']``.
+        Exhaust the generator to commit. Use ``contextlib.closing`` when stopping
+        early to roll back rows. Nested transactions follow
+        `SqliteTable.insert_batches`'s rules.
+        """
+        rows = (self.row_parameters(row) for row in csv.DictReader(text, **csv_options))
+        yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
 
 
 #: the seconds a connection waits for another's lock before it fails: in the WAL journal,

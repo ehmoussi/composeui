@@ -146,6 +146,9 @@ ignore = [
     "S101",
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["composeui.core.sqlitemodel.csv_field"]
+
 [tool.ruff.lint.isort]
 # Every module postpones annotation evaluation (enforced by I002, added by `make lint`).
 required-imports = ["from __future__ import annotations"]
