@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
+import asyncio
 import datetime
 import math
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -2173,6 +2174,9 @@ async def test_a_language_set_once_rendered_relabels_the_widgets() -> None:
         assert str(label.widget.render()) == "Taille de la forme"
         combobox = _field_widget(size.renderer)
         assert isinstance(combobox, ComposeCombobox)
+        # Selection is restored after refresh; pause() can return before that callback.
+        await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
+        await pilot.pause()
         assert [str(prompt) for prompt, _ in combobox._options[1:]] == ["Petite", "Grande"]  # noqa: SLF001
         assert combobox.selection is Size.LARGE
         assert size.value is Size.LARGE
