@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import decimal
+import gzip
 import io
 import subprocess
 import sys
@@ -120,6 +121,44 @@ def test_closing_csv_progress_rolls_back_and_leaves_the_input_open(model: Readin
     assert not text.closed
     with model.readings.reading() as db:
         assert db.execute('SELECT COUNT(*) FROM "reading ""values"""').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_csv_url_import_forwards_csv_options_encoding_batches_and_limit(
+    model: ReadingsModel, tmp_path: Path, compressed: bool
+) -> None:
+    path = tmp_path / "data"
+    payload = (_HEADER + _FIRST.replace("First", "Café") + _SECOND).encode("latin-1")
+    path.write_bytes(gzip.compress(payload) if compressed else payload)
+    assert list(
+        model.readings.fill_from_url(
+            path.as_uri(), encoding="latin-1", delimiter=";", batch_size=1, limit=1
+        )
+    ) == [1]
+    source = model.readings.source()
+    assert source.count() == 1
+    assert source.cells([1], ["name", "value"]) == {1: ["Café; reading", 1.5]}
+
+
+@pytest.mark.parametrize("outcome", ["closed", "invalid", "truncated"])
+def test_csv_url_import_rolls_back_all_batches_on_early_close_or_failure(
+    model: ReadingsModel, tmp_path: Path, outcome: str
+) -> None:
+    path = tmp_path / "data.csv.gz"
+    second = _SECOND.replace("2.5", "-1") if outcome == "invalid" else _SECOND
+    payload = gzip.compress((_HEADER + _FIRST + second).encode())
+    path.write_bytes(payload[:-8] if outcome == "truncated" else payload)
+    changes: list[None] = []
+    model.readings.changed.connect(lambda: changes.append(None))
+    with contextlib.closing(
+        model.readings.fill_from_url(path.as_uri(), delimiter=";", batch_size=1)
+    ) as batches:
+        assert next(batches) == 1
+        if outcome != "closed":
+            with pytest.raises(RefusedError if outcome == "invalid" else EOFError):
+                list(batches)
+    assert model.readings.source().count() == 0
+    assert changes == []
 
 
 def test_schema_source_infers_headers_types_and_reads_imported_rows(model: ReadingsModel) -> None:

@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-import gzip
-import io
-import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
-from urllib.request import urlopen
 
 import attrs
 
@@ -29,11 +25,7 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
-
     from composeui.core.jobs import Job
-
-logger = logging.getLogger("COMPOSEUI")
 
 
 @attrs.define
@@ -65,18 +57,6 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
                 if hour is not None:
                     pickups[hour] = count
             return pickups
-
-    def fill_from_url(self, url: str, *, nb_rows: int | None = 10_000) -> Generator[int]:
-        """Fill the table with Uber data from the given url."""
-        with (
-            urlopen(url) as response,  # noqa: S310 (the example supplies its fixed data URL)
-            gzip.GzipFile(fileobj=response, mode="rb") as gz,
-            io.TextIOWrapper(gz, encoding="utf-8", newline="") as text,
-            contextlib.closing(self.fill(text, limit=nb_rows)) as batches,
-        ):
-            for nb_read in batches:
-                logger.info("Read %s rows from CSV", nb_read)
-                yield nb_read
 
 
 class UberPickupsModel(SqliteModel):
@@ -124,7 +104,7 @@ class UberPickupsPageView(PageView):
     def fill(self, job: Job[list[int], int], model: UberPickupsModel, url: str) -> list[int]:
         if self._has_data(model):
             return model.uber_data.pickups_by_hour()
-        with contextlib.closing(model.uber_data.fill_from_url(url, nb_rows=None)) as batches:
+        with contextlib.closing(model.uber_data.fill_from_url(url)) as batches:
             for nb_read in batches:
                 if job.is_canceled:
                     return []

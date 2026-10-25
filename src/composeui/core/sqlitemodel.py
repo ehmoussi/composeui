@@ -13,6 +13,8 @@ import csv
 import datetime
 import decimal
 import functools
+import gzip
+import io
 import itertools
 import os
 import re
@@ -36,6 +38,8 @@ from typing import (
     get_args,
     overload,
 )
+from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 import attrs
 
@@ -238,6 +242,32 @@ class _CSVField(NamedTuple):
     structure: Callable[[Any, Any], Any] | None
 
 
+@contextlib.contextmanager
+def open_csv_url(
+    url: str, *, encoding: str = "utf-8", timeout: float = 30.0
+) -> Generator[io.TextIOWrapper]:
+    """Open a trusted HTTP, HTTPS or file URL as CSV text, and close its streams on exit.
+
+    Detect gzip by its content, not its filename. Preserve CSV newlines and decode with
+    ``encoding``. ``timeout`` sets the socket timeout in seconds, not a total download
+    deadline. Network, decompression and decoding errors propagate to the caller.
+    Do not pass untrusted URLs: the helper does not restrict hosts or local file access.
+    """
+    if urlsplit(url).scheme not in {"http", "https", "file"}:
+        msg = "CSV URLs must use http, https or file"
+        raise ValueError(msg)
+    with contextlib.ExitStack() as stack:
+        response = stack.enter_context(urlopen(url, timeout=timeout))  # noqa: S310 (schemes checked above; trusted URLs only)
+        buffer = stack.enter_context(io.BufferedReader(response))
+        binary = (
+            stack.enter_context(gzip.GzipFile(fileobj=buffer, mode="rb"))
+            if buffer.peek(2).startswith(b"\x1f\x8b")
+            else buffer
+        )
+        text = stack.enter_context(io.TextIOWrapper(binary, encoding=encoding, newline=""))
+        yield text
+
+
 class CSVSqliteTable(SqliteTable):
     """A CSV table whose schema comes from an attrs row class."""
 
@@ -362,6 +392,30 @@ class CSVSqliteTable(SqliteTable):
         """
         rows = (self.row_parameters(row) for row in csv.DictReader(text, **csv_options))
         yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
+
+    def fill_from_url(
+        self,
+        url: str,
+        *,
+        encoding: str = "utf-8",
+        timeout: float = 30.0,
+        batch_size: int = 100_000,
+        limit: int | None = None,
+        **csv_options: Any,
+    ) -> Generator[int]:
+        """Import CSV from a trusted URL and yield cumulative submitted-row counts.
+
+        `open_csv_url` handles decoding, gzip and stream cleanup. Other options follow
+        `fill`. Exhaust the generator to commit; use ``contextlib.closing`` if iteration
+        can stop early, to close the streams and roll back. Existing rows are retained.
+        """
+        with (
+            open_csv_url(url, encoding=encoding, timeout=timeout) as text,
+            contextlib.closing(
+                self.fill(text, batch_size=batch_size, limit=limit, **csv_options)
+            ) as batches,
+        ):
+            yield from batches
 
 
 #: the seconds a connection waits for another's lock before it fails: in the WAL journal,
