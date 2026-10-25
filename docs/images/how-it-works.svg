@@ -2,8 +2,8 @@
   <title id="title">How ComposeUI works</title>
   <desc id="desc">The app's views and its optional model are written once in composeui.core.
     Signals connect the views and the model. A study file saves the views' state as JSON,
-    with the model's data when the model has some. A renderer of the chosen backend binds each view to a widget:
-    setting a view attribute calls refresh_attribute, and a user edit calls update_state.
+    with the model's data when the model has some. A renderer of the chosen backend binds each view to a widget.
+    Setting a view attribute calls refresh_attribute. A user edit sets view attributes inside stop_refresh.
     The backend is Qt, Textual, or the web.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -90,7 +90,8 @@
   <line class="line" x1="520" y1="168" x2="662" y2="168" marker-end="url(#arrow)"/>
   <text class="small mono" x="592" y="158" text-anchor="middle">refresh_attribute</text>
   <line class="line" x1="664" y1="224" x2="522" y2="224" marker-end="url(#arrow)"/>
-  <text class="small mono" x="592" y="244" text-anchor="middle">update_state</text>
+  <text class="small" x="592" y="244" text-anchor="middle">set view attributes</text>
+  <text class="small mono" x="592" y="260" text-anchor="middle">in stop_refresh()</text>
 
   <!-- renderer -->
   <rect class="renderer" x="666" y="140" width="140" height="112" rx="8"/>
