@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 DOCS = Path(__file__).parent.parent / "docs"
-SITE_URL = "https://ehmoussi.github.io/composeui3/"
+SITE_URL = "https://ehmoussi.github.io/composeui/"
 LINK = re.compile(r"\]\((" + re.escape(SITE_URL) + r"[^)\s]*)\)")
 
 

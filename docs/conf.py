@@ -65,7 +65,7 @@ html_theme_options = {
 
 # the guides link to the repository's files (`../src/examples/pipeform.py`), which the site
 # does not hold: those links go to the files on GitHub
-REPOSITORY_URL = "https://github.com/ehmoussi/composeui3/blob/main/"
+REPOSITORY_URL = "https://github.com/ehmoussi/composeui/blob/main/"
 _RELATIVE_LINK = re.compile(r"\]\((\.\./[^)\s]*)\)")
 
 
