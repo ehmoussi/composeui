@@ -256,6 +256,14 @@ def _csv_text(binary: io.BufferedIOBase, *, encoding: str) -> Generator[io.TextI
         yield text
 
 
+def _replay_csv_sample(sample: str, text: io.TextIOWrapper) -> Generator[str]:
+    with io.StringIO(sample, newline="") as prefix:
+        for line in prefix:
+            # A sample can end inside a physical line, including a quoted field.
+            yield line if line.endswith(("\r", "\n")) else line + text.readline()
+    yield from text
+
+
 @contextlib.contextmanager
 def open_csv_url(
     url: str, *, encoding: str = "utf-8", timeout: float = 30.0
@@ -402,11 +410,13 @@ class CSVSqliteTable(SqliteTable):
         rows = (self.row_parameters(row) for row in csv.DictReader(text, **csv_options))
         yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
 
-    def fill_from_file(
+    def fill_from_file(  # noqa: PLR0913 (keep decoding, detection and import options explicit)
         self,
         path: str | os.PathLike[str],
         *,
         encoding: str = "utf-8",
+        sniff: bool = False,
+        sniff_sample_size: int = 8192,
         batch_size: int = 100_000,
         limit: int | None = None,
         **csv_options: Any,
@@ -417,22 +427,35 @@ class CSVSqliteTable(SqliteTable):
         from the content. Own and close the file; other options follow `fill`.
         Exhaust the generator to commit, or use ``contextlib.closing`` when stopping
         early to close the file and roll back. File and decoding errors propagate.
+        Set ``sniff=True`` to detect the dialect from at most ``sniff_sample_size``
+        decoded characters (8192 by default). The size must be positive when sniffing
+        and is ignored otherwise.
+        Explicit CSV options override detection. Detection failure raises `RefusedError`.
         """
         with (
             Path(path).open("rb") as binary,
             _csv_text(binary, encoding=encoding) as text,
             contextlib.closing(
-                self.fill(text, batch_size=batch_size, limit=limit, **csv_options)
+                self._fill_stream(
+                    text,
+                    sniff=sniff,
+                    sniff_sample_size=sniff_sample_size,
+                    batch_size=batch_size,
+                    limit=limit,
+                    **csv_options,
+                )
             ) as batches,
         ):
             yield from batches
 
-    def fill_from_url(
+    def fill_from_url(  # noqa: PLR0913 (keep transport, detection and import options explicit)
         self,
         url: str,
         *,
         encoding: str = "utf-8",
         timeout: float = 30.0,
+        sniff: bool = False,
+        sniff_sample_size: int = 8192,
         batch_size: int = 100_000,
         limit: int | None = None,
         **csv_options: Any,
@@ -442,14 +465,51 @@ class CSVSqliteTable(SqliteTable):
         `open_csv_url` handles decoding, gzip and stream cleanup. Other options follow
         `fill`. Exhaust the generator to commit; use ``contextlib.closing`` if iteration
         can stop early, to close the streams and roll back. Existing rows are retained.
+        ``sniff=True`` detects the dialect as in `fill_from_file`, without seeking.
+        ``sniff_sample_size`` sets its limit in decoded characters (8192 by default).
         """
         with (
             open_csv_url(url, encoding=encoding, timeout=timeout) as text,
             contextlib.closing(
-                self.fill(text, batch_size=batch_size, limit=limit, **csv_options)
+                self._fill_stream(
+                    text,
+                    sniff=sniff,
+                    sniff_sample_size=sniff_sample_size,
+                    batch_size=batch_size,
+                    limit=limit,
+                    **csv_options,
+                )
             ) as batches,
         ):
             yield from batches
+
+    def _fill_stream(
+        self,
+        text: io.TextIOWrapper,
+        *,
+        sniff: bool,
+        sniff_sample_size: int,
+        batch_size: int,
+        limit: int | None,
+        **csv_options: Any,
+    ) -> Generator[int]:
+        lines: Iterable[str] = text
+        if sniff:
+            if sniff_sample_size <= 0:
+                msg = "sniff_sample_size must be positive"
+                raise ValueError(msg)
+            sample = text.read(sniff_sample_size)
+            try:
+                dialect = csv.Sniffer().sniff(sample)
+            except csv.Error as error:
+                msg = (
+                    "Cannot detect the CSV dialect; increase sniff_sample_size or disable sniff"
+                    " and supply explicit CSV options"
+                )
+                raise RefusedError(msg) from error
+            csv_options = {"dialect": dialect, **csv_options}
+            lines = _replay_csv_sample(sample, text)
+        yield from self.fill(lines, batch_size=batch_size, limit=limit, **csv_options)
 
 
 #: the seconds a connection waits for another's lock before it fails: in the WAL journal,

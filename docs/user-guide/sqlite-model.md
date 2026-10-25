@@ -244,7 +244,7 @@ from contextlib import closing
 model = ReadingModel()
 try:
     with closing(
-        model.readings.fill_from_file("readings.csv.gz", delimiter=";", batch_size=1000)
+        model.readings.fill_from_file("readings.csv.gz", sniff=True, batch_size=1000)
     ) as batches:
         for count in batches:
             print(f"Submitted {count} rows")
@@ -308,3 +308,24 @@ schemes raise `ValueError`.
 Run downloads in a [job](threads.md) to keep the UI responsive. The
 [Uber pickups example](../../src/examples/uberpickups.py) uses `fill_from_url` and reports
 batch counts through a [reusable loading task](threads.md#reusable-loading-tasks).
+
+### CSV dialect detection
+
+Pass `sniff=True` to `fill_from_file` or `fill_from_url` to infer the CSV dialect with
+`csv.Sniffer`. `sniff_sample_size=8192` limits the sample to that many decoded characters,
+after gzip decompression. For wide headers or long rows, increase it, for example to
+`sniff_sample_size=65536`. The size must be positive when sniffing; otherwise it is ignored.
+The sampled text is replayed for parsing, including partial lines and quoted newlines. No
+seek is required, so HTTP streams work too.
+
+Explicit CSV options, including `delimiter`, `quotechar`, and `dialect`, override detected
+settings. Without `sniff=True`, the comma-separated default and explicit options work as
+before. No header inference is performed: the first row supplies column names unless
+`fieldnames` is supplied.
+
+Detection failure raises `RefusedError` with instructions to increase the sample size or
+disable sniffing and supply explicit CSV options. A larger sample can help, but detection
+can still guess the wrong dialect. For a known format, leave sniffing off and set its
+options explicitly. Sampling reads ahead of the current batch or row limit, but only the
+requested rows are imported. Import errors and early closure retain the same rollback
+rules. An invalid sample size raises `ValueError` when sniffing is enabled.
