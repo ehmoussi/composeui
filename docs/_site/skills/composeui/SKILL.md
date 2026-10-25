@@ -80,6 +80,12 @@ the option for the web (extra `web`, the default).
   (`T` is in `composeui.core.view`).
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=`.
+- **Finish batch inserts.** `SqliteTable.insert_batches(sql, rows, batch_size=100_000,
+  limit=None)` yields cumulative submitted-row counts in one transaction. Exhaust it to
+  commit; use `contextlib.closing` to roll back if iteration stops early. Inside an outer
+  `connection()` block, the caller owns the transaction and must raise to roll it back.
+  With `db=db`, the helper uses that connection without committing, rolling back or closing
+  it. Use the table's `connection()` for change notifications.
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.

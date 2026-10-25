@@ -172,6 +172,175 @@ def test_a_block_that_raises_writes_nothing(app: App) -> None:
     assert changes == [None]
 
 
+@pytest.mark.parametrize(
+    ("size", "limit", "expected_counts"),
+    [
+        (2, None, [2, 4, 5]),
+        (2, 3, [2, 3]),
+        (2, 4, [2, 4]),
+        (2, 0, []),
+        (2, 10, [2, 4, 5]),
+        (10, None, [5]),
+    ],
+)
+@pytest.mark.parametrize("named", [False, True])
+def test_batch_inserts_read_only_the_requested_rows_and_commit_together(
+    app: App,
+    size: int,
+    limit: int | None,
+    expected_counts: list[int],
+    *,
+    named: bool,
+) -> None:
+    consumed: list[int] = []
+    changes: list[None] = []
+    app.model.runs.changed.connect(lambda: changes.append(None))
+
+    def rows() -> Iterator[Any]:
+        for radius in range(5):
+            consumed.append(radius)
+            yield {"radius": radius} if named else (radius,)
+
+    sql = (
+        "INSERT INTO run(radius) VALUES (:radius)"
+        if named
+        else "INSERT INTO run(radius) VALUES (?)"
+    )
+    counts: list[int] = []
+    for count in app.model.runs.insert_batches(sql, rows(), batch_size=size, limit=limit):
+        counts.append(count)
+        # Progress describes submitted rows, not an intermediate commit.
+        with app.model.runs.reading() as db:
+            assert db.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
+        assert changes == []
+
+    expected_rows = 5 if limit is None else min(5, limit)
+    assert counts == expected_counts
+    assert consumed == list(range(expected_rows))
+    assert app.model.runs.radii() == list(range(expected_rows))
+    assert changes == ([None] if expected_rows else [])
+
+
+@pytest.mark.parametrize(("size", "limit"), [(0, None), (-1, None), (2, -1)])
+def test_invalid_batch_options_do_not_consume_rows(app: App, size: int, limit: int | None) -> None:
+    rows = iter([(1,)])
+    with pytest.raises(ValueError, match=r"batch_size|limit"):
+        list(
+            app.model.runs.insert_batches(
+                "INSERT INTO run(radius) VALUES (?)", rows, batch_size=size, limit=limit
+            )
+        )
+    assert next(rows) == (1,)
+    assert app.model.runs.radii() == []
+
+
+def test_empty_batch_input_writes_nothing(app: App) -> None:
+    assert list(app.model.runs.insert_batches("INSERT INTO run(radius) VALUES (?)", [])) == []
+    assert app.model.runs.radii() == []
+
+
+@pytest.mark.parametrize("stop", ["close", "constraint", "input"])
+def test_incomplete_batch_inserts_roll_back_previous_batches(app: App, stop: str) -> None:
+    changes: list[None] = []
+    app.model.runs.changed.connect(lambda: changes.append(None))
+
+    def rows() -> Iterator[tuple[float | None]]:
+        yield (1.0,)
+        if stop == "input":
+            msg = "input failed"
+            raise RuntimeError(msg)
+        yield (None,)
+
+    with contextlib.closing(
+        app.model.runs.insert_batches(
+            "INSERT INTO run(radius) VALUES (?)",
+            rows(),
+            batch_size=1,
+        )
+    ) as batches:
+        assert next(batches) == 1
+        if stop == "constraint":
+            with pytest.raises(RefusedError, match="NOT NULL"):
+                next(batches)
+        elif stop == "input":
+            with pytest.raises(RuntimeError, match="input failed"):
+                next(batches)
+
+    assert app.model.runs.radii() == []
+    assert changes == []
+    app.model.runs.add(2.0)
+    assert app.model.runs.radii() == [2.0]
+    assert changes == [None]
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+@pytest.mark.parametrize("supply_db", [False, True])
+def test_batch_inserts_join_the_callers_transaction(
+    app: App,
+    *,
+    rollback: bool,
+    supply_db: bool,
+) -> None:
+    changes: list[None] = []
+    app.model.runs.changed.connect(lambda: changes.append(None))
+
+    def insert() -> None:
+        with app.model.runs.connection() as connection:
+            app.model.runs.add(10.0)
+            assert list(
+                app.model.runs.insert_batches(
+                    "INSERT INTO run(radius) VALUES (?)",
+                    [(20.0,), (30.0,)],
+                    db=connection if supply_db else None,
+                    batch_size=1,
+                )
+            ) == [1, 2]
+            with app.model.runs.reading() as db:
+                assert db.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
+            if rollback:
+                msg = "outer transaction failed"
+                raise RuntimeError(msg)
+
+    if rollback:
+        with pytest.raises(RuntimeError, match="outer transaction failed"):
+            insert()
+    else:
+        insert()
+    assert app.model.runs.radii() == ([] if rollback else [10.0, 20.0, 30.0])
+    assert changes == ([] if rollback else [None])
+
+
+@pytest.mark.parametrize("stop", ["finish", "close", "constraint"])
+def test_batch_inserts_leave_a_supplied_connection_under_caller_control(
+    app: App, stop: str
+) -> None:
+    with contextlib.closing(sqlite3.connect(":memory:")) as db:
+        db.execute("CREATE TABLE run(radius REAL NOT NULL)")
+        rows = [(1.0,), (None if stop == "constraint" else 2.0,)]
+        with contextlib.closing(
+            app.model.runs.insert_batches(
+                "INSERT INTO run(radius) VALUES (?)",
+                rows,
+                db=db,
+                batch_size=1,
+            )
+        ) as batches:
+            assert next(batches) == 1
+            if stop == "finish":
+                assert list(batches) == [2]
+            elif stop == "constraint":
+                with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
+                    next(batches)
+
+        assert db.in_transaction
+        assert db.execute("SELECT radius FROM run").fetchall() == (
+            [(1.0,), (2.0,)] if stop == "finish" else [(1.0,)]
+        )
+        db.rollback()
+        assert db.execute("SELECT radius FROM run").fetchall() == []
+    assert app.model.runs.radii() == []
+
+
 class Parts(SqliteTable):
     create = """
         CREATE TABLE part(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
