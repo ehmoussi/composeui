@@ -37,6 +37,16 @@ class PipeMainView(MainView):
   message and no traceback. Other exceptions log an error with the full traceback,
   even when a `failed` handler shows them. Use `RefusedError` for an expected refusal;
   do not wrap unexpected programming errors just to hide their tracebacks.
+- **Programming errors.** Uncaught `CalledInJobError`, `AssertionError`, `AttributeError`,
+  `NameError`, `NotImplementedError`, and `TypeError` escape the worker. Python reports
+  their tracebacks through `threading.excepthook`; they do not emit `failed` or become
+  `task.error`. Cleanup is dispatched to the main thread: the job stops counting as
+  running, and its task returns to idle and emits `changed`. Other jobs are not reset.
+  Without a toolkit, call `jobs.wait()` to process this cleanup; it does not re-raise
+  the worker's error. Dropping a job does not suppress its programming errors.
+  Classification uses exception types, not the cause of each error. `ValueError`,
+  `KeyError`, and I/O errors still follow the failure path because external data can
+  cause them. Use `RefusedError` for an expected input or business-rule refusal.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
   stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
@@ -158,7 +168,9 @@ assert main_view.status.text == "Done: 3 rows"
 - **Callbacks and types.** `changed` callbacks can ask for `main_view` and `model`. The worker's
   annotations determine the types of `result`, `progress`, and the arguments of `start`.
   Create tasks and call `start` on the main thread; a job's worker raises `CalledInJobError`
-  if it tries either operation. Task failures use the same logging rules as ordinary jobs.
+  if it tries either operation. Tasks use the same failure and programming-error rules as
+  ordinary jobs. After a programming error, `error` and `result` are `None`, `has_result`
+  is false, and the task can start a fresh run.
 - **Runtime state.** Create a task as an instance attribute in `__attrs_post_init__`, as above,
   not as a view field. It is then absent from saved view state. The same task is reused after
   New or Open; its state is cleared with the study's jobs.

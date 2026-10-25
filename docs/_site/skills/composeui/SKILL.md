@@ -78,6 +78,10 @@ the option for the web (extra `web`, the default).
   Results and failures are emitted on the main thread. Handle `job.failed` there to show
   errors and clear loading indicators. `RefusedError` logs a warning without a traceback;
   unexpected failures keep their tracebacks.
+  Uncaught `CalledInJobError`, `AssertionError`, `AttributeError`, `NameError`,
+  `NotImplementedError`, and `TypeError` escape to `threading.excepthook`, not `job.failed`
+  or `task.error`. Cleanup is dispatched to the main thread; the affected task returns
+  to idle. Do not wrap these programming errors as business refusals.
   For typed progress, annotate the worker's job as `Job[ResultT, ProgressT]`;
   `Job[ResultT]` defaults to no progress (`None`). Call `job.report_progress(value)` in the
   worker and connect `job.progress`

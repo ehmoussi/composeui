@@ -44,7 +44,7 @@ def _check_main_thread(method: str) -> None:
     """Raise `CalledInJobError` in a job's thread: `Jobs` is only changed on the main one."""
     if current_job() is not None:
         msg = (
-            f"{method} is called on the main thread, not by a job's function: call it"
+            f"{method} must be called on the main thread, not by a job's function: call it"
             " from a callback of the job's finished signal instead"
         )
         raise CalledInJobError(msg)
@@ -55,6 +55,7 @@ class Job(Generic[R, ProgressT]):
 
     The function gets its job first: it calls `sleep`, or reads `is_canceled`, to stop
     early once canceled. Its result, or what it raised, is emitted on the main thread.
+    Programming errors instead escape the worker after dispatching cleanup; see `Jobs`.
     """
 
     def __init__(self, hand_over: Callable[[Job[Any, Any], Callable[[], None]], None]) -> None:
@@ -62,7 +63,7 @@ class Job(Generic[R, ProgressT]):
         self._hand_over = hand_over
         #: the function's return value, on the main thread
         self.finished = Signal[R]()
-        #: what the function raised, on the main thread (logged too)
+        #: a non-programming exception, on the main thread (logged too; see `Jobs`)
         self.failed = Signal[Exception]()
         #: progress values reported by the worker, on the main thread
         self.progress = Signal[ProgressT]()
@@ -202,6 +203,11 @@ class Jobs:
     them. `Job.cancel` is the exception: any thread can call it. Called from a job's
     function, they raise `CalledInJobError`. To start another job, return what it needs
     instead, and start it from the callback that gets it.
+
+    Uncaught `CalledInJobError`, `AssertionError`, `AttributeError`, `NameError`,
+    `NotImplementedError` and `TypeError` escape the worker to Python's thread exception
+    handler. Cleanup is dispatched to the main thread, without emitting `failed` or
+    setting a task's `error`. The affected task returns to its idle state.
 
     New, Open and closing the app cancel the jobs running, and drop their results: the
     results belong to the study replaced.
@@ -346,6 +352,16 @@ class Jobs:
         _CURRENT.job = job  # for the thread's life: a thread of its own per job
         try:
             result = work(job, *args, **kwargs)
+        except (
+            CalledInJobError,
+            AssertionError,
+            AttributeError,
+            NameError,
+            NotImplementedError,
+            TypeError,
+        ):
+            self._on_main_thread(functools.partial(self._abort, job))
+            raise
         except Exception as error:  # the app's code: whatever it raises, the job is over
             name = getattr(work, "__name__", "job")
             if isinstance(error, RefusedError):
@@ -381,3 +397,17 @@ class Jobs:
         signal.emit(outcome)
         if not self.is_running:
             self.running_changed.emit(False)  # noqa: FBT003
+
+    def _abort(self, job: Job[Any, Any]) -> None:
+        """Clear a programming error's runtime state without emitting a business failure."""
+        if job not in self._running:
+            return
+        self._running.discard(job)
+        try:
+            for task in self._tasks:
+                if task._job is job:  # noqa: SLF001 (shared job lifecycle)
+                    task._reset()  # noqa: SLF001 (shared job lifecycle)
+                    task.changed.emit()
+        finally:
+            if not self.is_running:
+                self.running_changed.emit(False)  # noqa: FBT003
