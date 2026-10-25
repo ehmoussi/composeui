@@ -2032,6 +2032,8 @@ def test_the_filter_editor_marks_a_value_it_can_t_take_and_focuses_the_chip_it_a
     page.get_by_label("Column").select_option(label="Temperature")
     expect(value).to_have_attribute("placeholder", ">=20, 18..24")
 
+    # The swapped form must have its htmx submit handler before Enter submits it.
+    expect(page.locator(".htmx-added")).to_have_count(0)
     with _posted(page):
         value.press_sequentially("warm")
         value.press("Enter")
