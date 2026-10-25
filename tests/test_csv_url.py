@@ -11,13 +11,24 @@ from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+import attrs
 import pytest
 
 from composeui.core import sqlitemodel
-from composeui.core.sqlitemodel import open_csv_url
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, open_csv_url
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@attrs.define
+class DownloadRow:
+    name: str
+    value: float
+
+
+class DownloadRows(CSVSqliteTable, row_type=DownloadRow, name="download"):
+    pass
 
 
 @pytest.mark.parametrize("compressed", [False, True])
@@ -86,15 +97,22 @@ def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> 
             else:
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write(gzip.compress(b"name,value\r\nStation,1.5\r\n"))
+                self.wfile.write(gzip.compress(b'name;value\r\n"Station; A";1.5\r\n'))
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
+    model = SqliteModel()
     try:
         with open_csv_url(f"{url}/download?name=data", timeout=2) as text:
-            assert list(csv.DictReader(text)) == [{"name": "Station", "value": "1.5"}]
+            assert list(csv.DictReader(text, delimiter=";")) == [
+                {"name": "Station; A", "value": "1.5"}
+            ]
+        # An HTTP response cannot seek back after dialect detection.
+        rows = model.add_table(DownloadRows)
+        assert list(rows.fill_from_url(f"{url}/download", sniff=True, timeout=2)) == [1]
+        assert rows.source().cells([1], ["name", "value"]) == {1: ["Station; A", 1.5]}
         with pytest.raises(HTTPError) as caught, open_csv_url(f"{url}/missing", timeout=2):
             pytest.fail("An HTTP error must propagate")
         assert caught.value.code == 404
@@ -108,3 +126,4 @@ def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> 
         server.shutdown()
         server.server_close()
         thread.join()
+        model.close()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import datetime
 import decimal
 import gzip
@@ -183,6 +184,169 @@ def test_csv_file_and_url_import_roll_back_all_batches_on_early_close_or_failure
 def test_csv_file_import_propagates_a_missing_file(model: ReadingsModel, tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         list(model.readings.fill_from_file(tmp_path / "missing.csv"))
+
+
+@pytest.mark.parametrize("delimiter", [";", "\t", "|"])
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize("input_kind", ["file", "url"])
+def test_sniffing_replays_headers_and_quoted_rows_without_losing_data(
+    model: ReadingsModel, tmp_path: Path, delimiter: str, compressed: bool, input_kind: str
+) -> None:
+    path = tmp_path / "data"
+    text = (_HEADER + _FIRST.replace("First", "Café") + _SECOND).replace(";", delimiter)
+    payload = text.encode("latin-1")
+    path.write_bytes(gzip.compress(payload) if compressed else payload)
+    options = {"sniff": True, "encoding": "latin-1", "batch_size": 1}
+    batches = (
+        model.readings.fill_from_file(path, **options)
+        if input_kind == "file"
+        else model.readings.fill_from_url(path.as_uri(), **options)
+    )
+    assert list(batches) == [1, 2]
+    assert model.readings.source().cells([1, 2], ["name", "value"]) == {
+        1: [f"Café{delimiter} reading", 1.5],
+        2: ["Two\nlines", 2.5],
+    }
+
+
+@pytest.mark.parametrize("boundary", [0, 1, 2])
+def test_sniffing_replays_a_sample_ending_inside_a_quoted_line_or_crlf(
+    model: ReadingsModel, tmp_path: Path, boundary: int
+) -> None:
+    prefix = _HEADER + _FIRST.replace(" First; reading ", "First; reading") * 20
+    name = "x" * (8192 - len(prefix) - 1 - boundary) + "\r\nquoted; name"
+    row = f'"{name}";1.5;25/10/2026;25/10/2026 17:00+0200;26/10/2026\r\n'
+    path = tmp_path / "data.csv"
+    path.write_bytes((prefix + row + _SECOND).encode())
+    assert list(model.readings.fill_from_file(path, sniff=True, batch_size=20)) == [20, 22]
+    assert model.readings.source().cells([21, 22], ["name"]) == {
+        21: [name],
+        22: ["Two\nlines"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("quote", "options", "expected"),
+    [('"', {"quotechar": "'"}, '"Station"'), ("'", {"dialect": "excel"}, "'Station'")],
+)
+def test_sniffing_respects_explicit_options_and_headerless_input(
+    model: ReadingsModel, tmp_path: Path, quote: str, options: dict[str, Any], expected: str
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text(
+        _FIRST.replace('" First; reading "', f"{quote}Station{quote}"), encoding="utf-8"
+    )
+    assert list(
+        model.readings.fill_from_file(
+            path,
+            sniff=True,
+            delimiter=";",
+            fieldnames=["Name", "Value", "Day", "Moment", "Optional"],
+            **options,
+        )
+    ) == [1]
+    assert model.readings.source().cells([1], ["name"]) == {1: [expected]}
+
+
+@pytest.mark.parametrize("input_kind", ["file", "url"])
+def test_sniffing_failure_is_a_clear_refusal_and_keeps_existing_rows(
+    model: ReadingsModel, tmp_path: Path, input_kind: str
+) -> None:
+    list(model.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
+    path = tmp_path / "empty.csv"
+    path.write_bytes(b"")
+    batches = (
+        model.readings.fill_from_file(path, sniff=True)
+        if input_kind == "file"
+        else model.readings.fill_from_url(path.as_uri(), sniff=True)
+    )
+    with pytest.raises(RefusedError, match="Cannot detect the CSV dialect") as caught:
+        list(batches)
+    assert isinstance(caught.value.__cause__, csv.Error)
+    assert model.readings.source().count() == 1
+
+
+@pytest.mark.parametrize("outcome", ["limit", "closed", "invalid", "truncated"])
+def test_sniffing_reads_a_bounded_sample_and_preserves_streaming_rollback(
+    model: ReadingsModel, tmp_path: Path, outcome: str
+) -> None:
+    # The bad row/footer lies beyond the sniff sample, so the first batch can arrive.
+    text = _HEADER + _FIRST.replace(" First; reading ", "First; reading") * 1000
+    text += _SECOND.replace("2.5", "-1") if outcome == "invalid" else _SECOND
+    payload = gzip.compress(text.encode())
+    path = tmp_path / "data.gz"
+    path.write_bytes(payload[:-8] if outcome in ("limit", "truncated") else payload)
+    with contextlib.closing(
+        model.readings.fill_from_file(
+            path, sniff=True, batch_size=1, limit=1 if outcome == "limit" else None
+        )
+    ) as batches:
+        assert next(batches) == 1
+        if outcome == "limit":
+            assert list(batches) == []
+        elif outcome != "closed":
+            with pytest.raises(RefusedError if outcome == "invalid" else EOFError):
+                list(batches)
+    assert model.readings.source().count() == (1 if outcome == "limit" else 0)
+
+
+@pytest.mark.parametrize("input_kind", ["file", "url"])
+def test_a_larger_sniff_sample_can_read_a_wide_header(
+    model: ReadingsModel, tmp_path: Path, input_kind: str
+) -> None:
+    headers = ["x" * 9000, *(f"column_{index}" for index in range(1, 200))]
+    names = [f"column_{index}" for index in range(200)]
+    row_type = attrs.make_class(
+        "WideRow",
+        {
+            name: attrs.field(type=str, metadata={"csv_name": header})
+            for name, header in zip(names, headers)
+        },
+    )
+    table_type = type("WideRows", (CSVSqliteTable,), {}, row_type=row_type, name="wide")
+    rows = model.add_table(table_type)
+    data = [[f"row{row}_{index}" for index in range(200)] for row in (1, 2)]
+    text = io.StringIO(newline="")
+    csv.writer(text, delimiter=";").writerows([headers, *data])
+    path = tmp_path / "wide.csv.gz"
+    path.write_bytes(gzip.compress(text.getvalue().encode()))
+    importer = rows.fill_from_file if input_kind == "file" else rows.fill_from_url
+    source = path if input_kind == "file" else path.as_uri()
+    # The default sample contains only part of the first header, without a separator.
+    with pytest.raises(RefusedError):
+        list(importer(source, sniff=True))
+    assert rows.source().count() == 0
+    assert list(importer(source, sniff=True, sniff_sample_size=65536)) == [2]
+    assert rows.source().cells([1, 2], [names[0], names[-1]]) == {
+        1: ["row1_0", "row1_199"],
+        2: ["row2_0", "row2_199"],
+    }
+
+
+@pytest.mark.parametrize("input_kind", ["file", "url"])
+@pytest.mark.parametrize("sample_size", [0, -1])
+@pytest.mark.parametrize("sniff", [False, True])
+def test_sniff_sample_size_must_be_positive_only_when_detection_is_enabled(
+    model: ReadingsModel, tmp_path: Path, input_kind: str, sample_size: int, sniff: bool
+) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text(_HEADER + _FIRST, encoding="utf-8")
+    batches = (
+        model.readings.fill_from_file(
+            path, sniff=sniff, sniff_sample_size=sample_size, delimiter=";"
+        )
+        if input_kind == "file"
+        else model.readings.fill_from_url(
+            path.as_uri(), sniff=sniff, sniff_sample_size=sample_size, delimiter=";"
+        )
+    )
+    if sniff:
+        with pytest.raises(ValueError, match="sniff_sample_size must be positive"):
+            list(batches)
+        assert model.readings.source().count() == 0
+    else:
+        assert list(batches) == [1]
+        assert model.readings.source().count() == 1
 
 
 def test_schema_source_infers_headers_types_and_reads_imported_rows(model: ReadingsModel) -> None:

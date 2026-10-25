@@ -121,6 +121,12 @@ the option for the web (extra `web`, the default).
   CSV text without importing it. Import it from `composeui.core.sqlitemodel`. Both APIs close
   their streams and propagate I/O errors. The timeout is per socket operation, not a total
   deadline. They do not restrict hosts, redirects, or local files: never pass untrusted URLs.
+  File and URL imports accept `sniff=True` to infer a dialect from at most `sniff_sample_size`
+  decoded characters (8192 by default) and replay the sample without seeking. Increase the
+  sample size for wide headers or long rows; it must be positive when sniffing and is ignored
+  otherwise. Explicit CSV options override detection.
+  Sniffing is off by default, never infers headers, and raises `RefusedError` on detection
+  failure. For known formats, keep explicit options instead of relying on guesses.
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.

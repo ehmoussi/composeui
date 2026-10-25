@@ -78,6 +78,7 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
   - [Importing CSV data](user-guide/sqlite-model.md#importing-csv-data)
     - [CSV files](user-guide/sqlite-model.md#csv-files)
     - [CSV URLs](user-guide/sqlite-model.md#csv-urls)
+    - [CSV dialect detection](user-guide/sqlite-model.md#csv-dialect-detection)
 - [Translating the app](user-guide/translation.md)
   - [Checking the catalogs](user-guide/translation.md#checking-the-catalogs)
 - [Running the app](user-guide/running-the-app.md)
