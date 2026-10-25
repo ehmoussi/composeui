@@ -1541,10 +1541,11 @@ async def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drag
         assert splitter.sizes == [round(100 * width / sum(widths)) for width in widths]
         assert resizes == [splitter.sizes]  # once dropped
         await pilot.click(second)  # a click: nothing moves, nothing reported
-        await pilot.pause()
         assert len(resizes) == 1
         second.focus()  # the arrow keys move a focused border
-        await pilot.press("left", "left")
+        # Both keys can arrive before the next layout, especially on Windows.
+        with app.batch_update():
+            await pilot.press("left", "left")
         await pilot.pause()
         assert widget.pane_lengths()[2] == result + 2
         assert len(resizes) == 3

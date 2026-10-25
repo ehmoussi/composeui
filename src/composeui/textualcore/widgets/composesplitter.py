@@ -96,7 +96,7 @@ class SplitterHandle(Widget, can_focus=True):
 
     def action_move(self, cells: int, _is_vertical: Any) -> None:
         splitter = self.splitter
-        splitter.resized.emit(splitter.move_border(self, splitter.pane_lengths(), cells))
+        splitter.resized.emit(splitter.move_border(self, None, cells))
 
 
 class ComposeSplitter(Container):
@@ -128,6 +128,7 @@ class ComposeSplitter(Container):
     def __init__(self, *panes: Widget, is_vertical: bool = False) -> None:
         self.panes = list(panes)
         self.is_vertical = is_vertical
+        self._pending_lengths: list[int] | None = None
         children: list[Widget] = []
         for index, pane in enumerate(self.panes):
             if index > 0:
@@ -140,6 +141,7 @@ class ComposeSplitter(Container):
 
     def set_sizes(self, sizes: list[int]) -> None:
         """Share the splitter between the panes in proportion to `sizes`."""
+        self._pending_lengths = None
         for pane, size in zip(self.panes, sizes):
             self._set_length(pane, size)
 
@@ -152,11 +154,20 @@ class ComposeSplitter(Container):
             for pane in self.panes
         ]
 
-    def move_border(self, handle: SplitterHandle, lengths: list[int], cells: int) -> list[int]:
+    def move_border(
+        self,
+        handle: SplitterHandle,
+        lengths: list[int] | None,
+        cells: int,
+    ) -> list[int]:
         """Move `handle` by `cells` from where it was with the panes `lengths` long.
 
         Returns the panes' lengths once moved, which they take once laid out again.
+        If ``lengths`` is None, use the last move pending layout, or the current lengths.
         """
+        if lengths is None:
+            # Rapid keys must build on the last move, not the layout before it.
+            lengths = self._pending_lengths or self.pane_lengths()
         after = self._pane_after(handle)
         shown_before = [index for index in range(after) if self.panes[index].display]
         if len(shown_before) == 0:
@@ -168,6 +179,7 @@ class ComposeSplitter(Container):
         moved = list(lengths)
         moved[before] += cells
         moved[after] -= cells
+        self._pending_lengths = moved
         # in proportion to their cells: the screen's size, as it changes, shared alike
         for pane, length in zip(self.panes, moved):
             if pane.display:
@@ -194,4 +206,6 @@ class ComposeSplitter(Container):
                 if handles[index - 1].display != shows:
                     handles[index - 1].display = shows
             has_shown = has_shown or bool(pane.display)
-        return super().arrange(size, optimal)
+        arranged = super().arrange(size, optimal)
+        self._pending_lengths = None
+        return arranged
