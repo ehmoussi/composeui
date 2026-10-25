@@ -70,6 +70,21 @@ class _RadioMainView(MainView):
     radio: _StrRadioGroupView = Factory(_StrRadioGroupView)
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["2026-10-25T13:45:12.123456", "2026-10-25 13:45:12", "2026-10-25T13:45:12+05:30"],
+)
+def test_datetimes_structure_from_iso_text_or_native_values_and_round_trip(text: str) -> None:
+    expected = datetime.datetime.fromisoformat(text)
+    restored = CONVERTER.structure(text, datetime.datetime)
+    assert type(restored) is datetime.datetime
+    assert restored == expected
+    assert CONVERTER.structure(expected, datetime.datetime) == expected
+    saved = json.loads(json.dumps(CONVERTER.unstructure(restored)))
+    assert saved == expected.isoformat()
+    assert CONVERTER.structure(saved, datetime.datetime) == expected
+
+
 def test_is_omitted_type_detects_signal_renderer_and_container() -> None:
     assert _is_omitted_type(Signal[str]) is True
     assert _is_omitted_type(Optional[Union[Renderer[Any, Any], RendererContainer[Any]]]) is True

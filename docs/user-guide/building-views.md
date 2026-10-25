@@ -288,6 +288,10 @@ full view tree to JSON with `cattrs`. They skip the `Signal` and `Renderer` fiel
 automatically. On load, they update the live view tree in place, so the renderer bindings
 and signal connections survive the load.
 
+The shared `CONVERTER` supports `datetime.date` and `datetime.datetime` as ISO 8601 strings.
+Datetime conversion also accepts existing `datetime.datetime` values and preserves UTC offsets
+and microseconds. No custom hook is needed for datetime columns in a `SqliteSource`.
+
 The text that the user reads rather than enters (labels, titles, headers, button and menu
 text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's code, in its
 language, not from a study. Tag a text field of your own views the same way:

@@ -1184,9 +1184,18 @@ def _structure_date(value: Any, _type: type) -> datetime.date:
     return datetime.date.fromisoformat(str(value))
 
 
+def _structure_datetime(value: Any, _type: type) -> datetime.datetime:
+    return (
+        value
+        if isinstance(value, datetime.datetime)
+        else datetime.datetime.fromisoformat(str(value))
+    )
+
+
 # registered with their type: cattrs can't read a postponed annotation on 3.9
 CONVERTER.register_unstructure_hook(datetime.date, _unstructure_date)
 CONVERTER.register_structure_hook(datetime.date, _structure_date)
+CONVERTER.register_structure_hook(datetime.datetime, _structure_datetime)
 
 
 def is_date_format(date_format: str) -> bool:

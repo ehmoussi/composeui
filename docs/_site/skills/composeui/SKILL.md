@@ -71,8 +71,9 @@ the option for the web (extra `web`, the default).
   where `_check` returns an error message or `None`. Then read `form.check()` and
   `form.is_valid`.
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
-  `cattrs`. A new field must be serializable, or the app must leave it out of the state
-  as `Signal` and validator fields are.
+  `cattrs`. The shared `CONVERTER` handles `datetime.date` and `datetime.datetime` as ISO 8601
+  strings without custom hooks. A new field must be serializable, or the app must leave it out of
+  the state as `Signal` and validator fields are.
 - **Run slow work in jobs** (`main_view.jobs`), not in a callback: a callback blocks the UI.
   Results are emitted on the main thread.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
