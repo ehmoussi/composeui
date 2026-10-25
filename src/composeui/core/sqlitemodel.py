@@ -12,6 +12,7 @@ import contextlib
 import datetime
 import decimal
 import functools
+import itertools
 import os
 import re
 import sqlite3
@@ -37,7 +38,7 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Mapping, Sequence
+    from collections.abc import Generator, Iterable, Mapping, Sequence
 
     from typing_extensions import TypeAlias, Unpack
 
@@ -132,6 +133,45 @@ class SqliteTable:
         """Run the query `sql` and get its rows' first column, e.g. a list of names."""
         with self.connection() as db:
             return [row[0] for row in db.execute(sql, parameters)]
+
+    def insert_batches(
+        self,
+        sql: str,
+        rows: Iterable[Parameters],
+        *,
+        db: sqlite3.Connection | None = None,
+        batch_size: int = 100_000,
+        limit: int | None = None,
+    ) -> Generator[int]:
+        """Insert rows in batches and yield the cumulative number of rows submitted.
+
+        Rows are positional or named SQL parameters. Read at most ``limit`` rows, or all
+        rows if None. ``batch_size`` must be positive; ``limit`` must be nonnegative.
+        Counts describe submitted rows, not affected rows (e.g. with INSERT OR IGNORE).
+
+        Exhaust the generator to commit, or use ``contextlib.closing`` to roll back when
+        stopping early. All batches share one transaction. Inside ``connection()``, they
+        join its transaction instead: the caller must raise to roll that transaction back.
+        If ``db`` is supplied, use it without committing, rolling back or closing it.
+        Pass a connection from ``connection()`` to keep the table's change notifications.
+        """
+        if batch_size <= 0:
+            msg = "batch_size must be positive"
+            raise ValueError(msg)
+        if limit is not None and limit < 0:
+            msg = "limit must be nonnegative"
+            raise ValueError(msg)
+        iterator = iter(rows)
+        count = 0
+        with self.connection() if db is None else contextlib.nullcontext(db) as connection:
+            while limit is None or count < limit:
+                size = batch_size if limit is None else min(batch_size, limit - count)
+                batch = list(itertools.islice(iterator, size))
+                if not batch:
+                    break
+                connection.executemany(sql, batch)
+                count += len(batch)
+                yield count
 
 
 #: the seconds a connection waits for another's lock before it fails: in the WAL journal,

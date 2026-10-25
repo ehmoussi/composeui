@@ -56,6 +56,19 @@ tables (`model.runs.add(...)`).
   `cattrs` converter of the views. `fetch_column` gives the first column of a query, for
   example a list of names. `as_parameters(row)` gives the fields of an instance as the named
   parameters of a query.
+- **Batch inserts.** `insert_batches(sql, rows, batch_size=100_000, limit=None)` accepts
+  an iterable of positional or named SQL parameters. It yields the cumulative number of
+  rows submitted after each batch, including a final partial batch. Counts are not the
+  number of affected rows when SQL ignores a row. `limit` caps the rows read without
+  consuming an extra row; zero reads none. The batch size must be positive, and the limit
+  must be nonnegative or `None` (all rows).
+  Exhaust the generator to commit all batches together. If iteration can stop early, use
+  `contextlib.closing` so the open transaction rolls back. Inside an existing
+  `connection()` block, batches join that transaction; raise out of the outer block to
+  roll it back. Keep progress callbacks short: the transaction stays open between yields.
+  To reuse an open connection explicitly, pass `db=db`. The helper does not commit,
+  roll back, or close a supplied connection. Get it from the table's `connection()` to
+  keep change notifications; that outer block controls the transaction.
 - **New names.** `unique_name(db, "run", "name", "Run")` gives "Run", or else "Run 2",
   "Run 3", and so on: the first name that the column doesn't hold, whatever its case. Use it
   for a row that the user adds, then renames.
