@@ -277,4 +277,4 @@ schemes raise `ValueError`.
 
 Run downloads in a [job](threads.md) to keep the UI responsive. The
 [Uber pickups example](../../src/examples/uberpickups.py) uses `fill_from_url` and reports
-batch counts through the job's progress signal.
+batch counts through a [reusable loading task](threads.md#reusable-loading-tasks).

@@ -96,5 +96,72 @@ job.progress.connect(show_progress)
 main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their event loop.
 ```
 
-The [Uber pickups example](../../src/examples/uberpickups.py) reports CSV batch counts
-through `job.progress` and shows failures through `job.failed`.
+## Reusable loading tasks
+
+Use `main_view.jobs.task(work)` when a view repeatedly runs the same worker and shows its
+loading state. Configure the task once, then call `task.start(*args, **kwargs)` for each run.
+One `changed` signal reports starts, progress, success, failure, and resets on the main thread.
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import LabelView, MainView, child, define_view
+
+
+def count_rows(job: Job[int, int], count: int) -> int:
+    for completed in range(1, count + 1):
+        if job.is_canceled:
+            return completed - 1
+        job.report_progress(completed)
+    return count
+
+
+@define_view
+class LoadingView(MainView):
+    status: LabelView = child(LabelView, text="Ready")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.jobs.task(count_rows)
+        self.loader.changed.connect(self.show_loading)
+
+    def show_loading(self) -> None:
+        task = self.loader
+        if task.is_running:
+            self.status.text = f"Processed {task.progress or 0} rows"
+        elif task.error is not None:
+            self.status.text = f"Failed: {task.error}"
+        elif task.has_result:
+            self.status.text = f"Done: {task.result} rows"
+        else:
+            self.status.text = "Ready"
+
+
+main_view = LoadingView()
+main_view.loader.start(3)
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.status.text == "Done: 3 rows"
+```
+
+- **Read-only state.** `is_running` stays true until the outcome arrives on the main thread.
+  `progress` holds the last reported value, including after completion. `result` holds the
+  successful result; `error` holds the exception after failure. Unset values are `None`.
+  `has_result` distinguishes a successful `None` result from an idle or failed task.
+- **Starting again.** `start` clears progress, result, and error, then emits `changed` with
+  `is_running=True`. It returns `True`. While the task runs, another `start` returns `False`
+  without changing state or starting another worker. Other tasks and ordinary jobs can run
+  at the same time. A success or failure handler can start the next run.
+- **Canceling and dropping.** `task.cancel()` asks only this task's current run to stop.
+  Like `job.cancel()`, it works from any thread, and the worker still returns its outcome.
+  `jobs.cancel()` cancels all runs. New, Open, closing, and `jobs.drop()` clear every task's
+  state and emit `changed`, even for completed tasks. Old queued progress and outcomes do
+  not reach the task or overwrite a new run.
+- **Callbacks and types.** `changed` callbacks can ask for `main_view` and `model`. The worker's
+  annotations determine the types of `result`, `progress`, and the arguments of `start`.
+  Create tasks and call `start` on the main thread; a job's worker raises `CalledInJobError`
+  if it tries either operation. Task failures use the same logging rules as ordinary jobs.
+- **Runtime state.** Create a task as an instance attribute in `__attrs_post_init__`, as above,
+  not as a view field. It is then absent from saved view state. The same task is reused after
+  New or Open; its state is cleared with the study's jobs.
+
+The [Uber pickups example](../../src/examples/uberpickups.py) uses one task-state handler for
+CSV progress, loading indicators, failures, and the completed table and chart.
