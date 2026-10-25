@@ -300,6 +300,32 @@ class CSVSqliteTable(SqliteTable):
         placeholders = ", ".join("?" for _ in fields)
         cls.insert = f"INSERT INTO {_identifier(name)} ({names}) VALUES ({placeholders})"  # noqa: S608 (quoted identifiers)
 
+    def source(self, *, headers: Mapping[str, str] | None = None) -> SqliteSource:
+        """Build a source with schema-derived types and SQLite row ids.
+
+        By default, show every field under its CSV header (or its field name).
+        ``headers`` selects, orders and labels the fields to show. Raises `KeyError`
+        for an unknown field, or `ValueError` if fields shadow all SQLite row-id names.
+        Use `SqliteSource` directly for custom queries or explicit primary keys.
+        """
+        fields = attrs.fields_dict(self.row_type)
+        if headers is None:
+            headers = {
+                field.name: field.metadata.get("csv_name", field.name) for field in fields.values()
+            }
+        columns = [
+            SourceColumn(name, header, fields[name].type) for name, header in headers.items()
+        ]
+        names = {name.casefold() for name in fields}
+        row_id = next((name for name in ("rowid", "_rowid_", "oid") if name not in names), None)
+        if row_id is None:
+            msg = "CSV fields shadow all SQLite row-id names; use SqliteSource with an explicit key"
+            raise ValueError(msg)
+        # SQLite otherwise names every hidden row-id expression "rowid".
+        identifier = _identifier(row_id)
+        query = f"SELECT {identifier} AS {identifier}, * FROM {_identifier(self.name)}"  # noqa: S608 (quoted identifiers)
+        return SqliteSource(self, query, id_column=row_id, columns=columns)
+
     def row_parameters(self, row: dict[str, Any]) -> Parameters:
         """Convert CSV fields through the row class and return SQL parameters."""
         values = {}

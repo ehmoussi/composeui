@@ -181,6 +181,8 @@ try:
     text = StringIO("Recorded;Value\n25/10/2026 17:00;12.5\n")
     for count in model.readings.fill(text, delimiter=";", batch_size=1000):
         print(f"Submitted {count} rows")
+    source = model.readings.source(headers={"recorded": "Recorded at", "value": "Value"})
+    print(f"Source contains {source.count()} rows")
 finally:
     model.close()
 ```
@@ -192,6 +194,13 @@ finally:
   fields are `NOT NULL`. A default supplies a missing header, not an empty CSV cell.
   Computed attrs fields (`init=False`) are stored too. No primary key or indexes are added.
   Use SQLite's `rowid` for a row identifier, or add indexes in the table's `create` script.
+- **Table sources.** Assign `model.readings.source()` to a `DataTableView.source` to show
+  the imported rows. Field types come from the row class. Headers use `csv_field` names,
+  or field names for plain attrs fields. Pass `headers={"field": "Label", ...}` to select,
+  order, and label the columns. Unknown fields raise `KeyError`. The source uses SQLite's
+  hidden row IDs and the table's `changed` signal. If fields shadow all three SQLite row-ID
+  names (`rowid`, `_rowid_`, and `oid`, case-insensitive), creation raises `ValueError`.
+  Use [`SqliteSource`](tables.md#rows-in-sqlite) directly for custom queries or explicit keys.
 - **Conversion.** Without a converter, fields use the shared cattrs converter.
   `csv_field` forwards attrs options such as `converter`, `validator`, `default`, and
   `factory`. For nonstandard values, supply a converter: for example, map `"yes"` and `"no"`
