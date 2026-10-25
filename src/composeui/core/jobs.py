@@ -10,10 +10,10 @@ import time
 import weakref
 from typing import TYPE_CHECKING, Any, Callable, Generic
 
-from typing_extensions import Concatenate, ParamSpec, TypeVar
+from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
 from composeui.core.model import RefusedError
-from composeui.core.signal import Signal
+from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from composeui.core.model import Model
@@ -24,13 +24,14 @@ LOGGER = logging.getLogger("COMPOSEUI")
 R = TypeVar("R")
 ProgressT = TypeVar("ProgressT", default=None)
 P = ParamSpec("P")
+Ts = TypeVarTuple("Ts")
 
 #: the job a thread runs, in a job's thread (see `Jobs.start`)
 _CURRENT = threading.local()
 
 
 class CalledInJobError(RuntimeError):
-    """`Jobs.start`, `cancel` or `drop` called by a job's function, not on the main thread."""
+    """A job's function tried to start or change jobs instead of using a main-thread callback."""
 
 
 def current_job() -> Job[Any, Any] | None:
@@ -43,7 +44,7 @@ def _check_main_thread(method: str) -> None:
     """Raise `CalledInJobError` in a job's thread: `Jobs` is only changed on the main one."""
     if current_job() is not None:
         msg = (
-            f"Jobs.{method} is called on the main thread, not by a job's function: call it"
+            f"{method} is called on the main thread, not by a job's function: call it"
             " from a callback of the job's finished signal instead"
         )
         raise CalledInJobError(msg)
@@ -96,6 +97,91 @@ class Job(Generic[R, ProgressT]):
         self.call_on_main_thread(functools.partial(self.progress.emit, value))
 
 
+class Task(Generic[R, P, ProgressT]):
+    """A reusable worker with read-only loading state, built by `Jobs.task`.
+
+    `changed` emits on the main thread when a run starts, reports progress, finishes,
+    fails, or is dropped. Its callbacks can ask for ``main_view`` and ``model``.
+    Starting an already running task does nothing. Dropping the owner's jobs resets
+    the task and discards queued progress and outcomes, as with ordinary jobs.
+    """
+
+    def __init__(self, jobs: Jobs, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> None:
+        self._jobs = jobs
+        self._work = work
+        self.changed = SignalNoArgs()
+        self._job: Job[R, ProgressT] | None = None
+        self._reset()
+
+    @property
+    def is_running(self) -> bool:
+        """Get whether this task is waiting for its current run's outcome."""
+        return self._job is not None
+
+    @property
+    def progress(self) -> ProgressT | None:
+        """Get the last progress value, or None before the run reports one."""
+        return self._progress
+
+    @property
+    def result(self) -> R | None:
+        """Get the successful result, or None before success; see `has_result`."""
+        return self._result
+
+    @property
+    def error(self) -> Exception | None:
+        """Get the run's exception, or None before failure."""
+        return self._error
+
+    @property
+    def has_result(self) -> bool:
+        """Get whether the last run succeeded, including a result of None."""
+        return self._has_result
+
+    def start(self, *args: P.args, **kwargs: P.kwargs) -> bool:
+        """Start the worker with fresh state; return False if it is already running."""
+        _check_main_thread("Task.start")
+        if self.is_running:
+            return False
+        self._reset()
+        job = self._jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
+        self._job = job
+        job.progress.connect(self._report_progress)
+        job.finished.connect(self._finish)
+        job.failed.connect(self._fail)
+        self._jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        self.changed.emit()
+        return True
+
+    def cancel(self) -> None:
+        """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`."""
+        job = self._job
+        if job is not None:
+            job.cancel()
+
+    def _reset(self) -> None:
+        self._job = None
+        self._progress: ProgressT | None = None
+        self._result: R | None = None
+        self._error: Exception | None = None
+        self._has_result = False
+
+    def _report_progress(self, value: ProgressT) -> None:
+        self._progress = value
+        self.changed.emit()
+
+    def _finish(self, result: R) -> None:
+        self._job = None
+        self._result = result
+        self._has_result = True
+        self.changed.emit()
+
+    def _fail(self, error: Exception) -> None:
+        self._job = None
+        self._error = error
+        self.changed.emit()
+
+
 class Jobs:
     """The jobs of a main view (`MainView.jobs`): functions run in threads.
 
@@ -106,6 +192,10 @@ class Jobs:
     and `model` they ask for. `Job.report_progress` emits the job's `progress` signal on
     the main thread. `Job.call_on_main_thread` hands it an arbitrary callback instead.
     A `SqliteModel` hands it the `changed` signals of the job's writes.
+
+    `task` configures a reusable worker with progress, result and error state. Its
+    ``changed`` signal replaces separate progress and outcome handlers when a view
+    shows one loading state.
 
     Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback. Never call
     them from a job's function: the jobs aren't locked, as the main thread alone changes
@@ -125,6 +215,7 @@ class Jobs:
         self.running_changed.set_main_view(main_view)
         # the jobs started and not over yet: only changed on the main thread
         self._running: set[Job[Any, Any]] = set()
+        self._tasks: list[Task[Any, Any, Any]] = []
         # the results handed back while the main view isn't rendered, for `wait`
         self._results: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
 
@@ -136,6 +227,16 @@ class Jobs:
         """Give `model` to the callbacks asking for it (the app does)."""
         self._model = weakref.ref(model)
         self.running_changed.set_model(model)
+        for task in self._tasks:
+            task.changed.set_model(model)
+
+    def task(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Task[R, P, ProgressT]:
+        """Build a reusable task for `work`, without starting it; call on the main thread."""
+        _check_main_thread("Jobs.task")
+        task = Task(self, work)
+        self._bind_signal(task.changed, f"{getattr(work, '__name__', 'task')}.changed")
+        self._tasks.append(task)
+        return task
 
     def start(
         self,
@@ -149,50 +250,69 @@ class Jobs:
         thread, so no sooner than the code calling `start` is done. Raises
         `CalledInJobError` in a job's thread.
         """
-        _check_main_thread("start")
-        job: Job[R, ProgressT] = Job(self._hand_over)
-        name = getattr(work, "__name__", "job")
+        _check_main_thread("Jobs.start")
+        job = self._new_job(work)
+        self._start_job(job, work, args, kwargs)
+        return job
+
+    def _bind_signal(self, signal: Signal[Unpack[Ts]], name: str) -> None:
+        signal.set_name(name)
         main_view = self._main_view()
         model = None if self._model is None else self._model()
-        for signal_name, signal in (
-            ("finished", job.finished),
-            ("failed", job.failed),
-            ("progress", job.progress),
-        ):
-            signal.set_name(f"{name}.{signal_name}")
-            # a main view's jobs start while it lives: called by its views, or the app
-            if main_view is not None:  # pragma: no branch
-                signal.set_main_view(main_view)
-            if model is not None:
-                signal.set_model(model)
+        # Jobs and tasks are created while their main view lives.
+        if main_view is not None:  # pragma: no branch
+            signal.set_main_view(main_view)
+        if model is not None:
+            signal.set_model(model)
+
+    def _new_job(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Job[R, ProgressT]:
+        job: Job[R, ProgressT] = Job(self._hand_over)
+        name = getattr(work, "__name__", "job")
+        self._bind_signal(job.finished, f"{name}.finished")
+        self._bind_signal(job.failed, f"{name}.failed")
+        self._bind_signal(job.progress, f"{name}.progress")
+        return job
+
+    def _start_job(
+        self,
+        job: Job[R, ProgressT],
+        work: Callable[..., R],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> None:
         self._running.add(job)
         if len(self._running) == 1:
             self.running_changed.emit(True)  # noqa: FBT003
         # a daemon: closing the app doesn't wait for it
         thread = threading.Thread(target=self._run, args=(job, work, args, kwargs), daemon=True)
         thread.start()
-        return job
 
     def cancel(self) -> None:
         """Cancel every job running; each still finishes, as soon as it notices.
 
         Raises `CalledInJobError` in a job's thread: a job cancels itself with `Job.cancel`.
         """
-        _check_main_thread("cancel")
+        _check_main_thread("Jobs.cancel")
         for job in self._running:
             job.cancel()
 
     def drop(self) -> None:
         """Cancel every job running and forget it: its result won't be emitted.
 
+        Reset all tasks, including completed ones, before emitting their ``changed``.
         Raises `CalledInJobError` in a job's thread.
         """
-        _check_main_thread("drop")
+        _check_main_thread("Jobs.drop")
         self.cancel()
         was_running = self.is_running
         self._running.clear()
+        tasks = tuple(self._tasks)
+        for task in tasks:
+            task._reset()  # noqa: SLF001 (reset all tasks before notifying their callbacks)
         if was_running:
             self.running_changed.emit(False)  # noqa: FBT003
+        for task in tasks:
+            task.changed.emit()
 
     def wait(self, timeout: float = 10.0) -> None:
         """Wait for every job to be over, and emit the results here: for a main view not rendered.

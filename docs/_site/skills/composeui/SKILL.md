@@ -83,6 +83,13 @@ the option for the web (extra `web`, the default).
   worker and connect `job.progress`
   on the main thread. Reports arrive in order before the outcome, with `main_view`/`model`
   injection. Dropping a job discards queued progress too.
+- **Reuse loading state with `jobs.task(work)`.** Create a task once as an instance attribute
+  in `__attrs_post_init__`, not a saved view field. Connect `task.changed` to one main-thread
+  handler that reads `is_running`, `progress`, `result`, and `error`; `has_result` also handles
+  successful `None` results. Call `task.start(*args, **kwargs)` on the main thread. It clears
+  prior state, or returns `False` unchanged if already running. `task.cancel()` asks only its
+  current run to stop. Dropping the study's jobs resets all tasks and discards old outcomes.
+  The worker's annotations type the task's result, progress, and start arguments.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds

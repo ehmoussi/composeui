@@ -96,15 +96,18 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
         assert record.exc_info[1] is error
 
 
-@pytest.mark.parametrize("method", ["start", "cancel", "drop"])
+@pytest.mark.parametrize("method", ["start", "cancel", "drop", "task", "task.start"])
 def test_a_job_changing_the_jobs_fails(
     app: ModelApplication[MainView, _Model], method: str
 ) -> None:
     jobs = app.main_view.jobs
+    task = jobs.task(_double)
     calls = {
         "start": lambda: jobs.start(_double, 1),
         "cancel": jobs.cancel,
         "drop": jobs.drop,
+        "task": lambda: jobs.task(_double),
+        "task.start": lambda: task.start(1),
     }
 
     def change_the_jobs(job: Job[bool]) -> bool:
@@ -286,7 +289,8 @@ def test_progress_values_and_handlers_keep_the_workers_type(tmp_path: Path) -> N
     script = tmp_path / "progress_types.py"
     script.write_text(
         "from typing_extensions import assert_type\n"
-        "from composeui.core.jobs import Job\n"
+        "from typing import Optional\n"
+        "from composeui.core.jobs import Job, Task\n"
         "from composeui.core.view import MainView\n"
         "def work(job: Job[str, int]) -> str:\n"
         "    job.report_progress(1)\n"
@@ -294,6 +298,8 @@ def test_progress_values_and_handlers_keep_the_workers_type(tmp_path: Path) -> N
         "    return 'done'\n"
         "def plain(job: Job[int]) -> int:\n"
         "    return 1\n"
+        "def tracked(job: Job[str, int], value: int, /) -> str:\n"
+        "    return str(value)\n"
         "def show(value: int) -> None:\n"
         "    pass\n"
         "def wrong_handler(value: str) -> None:\n"
@@ -304,7 +310,13 @@ def test_progress_values_and_handlers_keep_the_workers_type(tmp_path: Path) -> N
         "job.progress.connect(show)\n"
         "job.progress.connect(wrong_handler)\n"
         "ordinary = view.jobs.start(plain)\n"
-        "assert_type(ordinary, Job[int])\n",
+        "assert_type(ordinary, Job[int])\n"
+        "task = view.jobs.task(tracked)\n"
+        "assert_type(task, Task[str, [int], int])\n"
+        "assert_type(task.result, Optional[str])\n"
+        "assert_type(task.progress, Optional[int])\n"
+        "task.start(1)\n"
+        "task.start('wrong type')\n",
         encoding="utf-8",
     )
     result = subprocess.run(  # noqa: S603 (mypy checks only the declarations above)
@@ -326,4 +338,160 @@ def test_progress_values_and_handlers_keep_the_workers_type(tmp_path: Path) -> N
         'to "report_progress" of "Job" has incompatible type "str"; expected "int"' in result.stdout
     )
     assert 'to "connect" of "Signal" has incompatible type' in result.stdout
-    assert "Found 2 errors in 1 file" in result.stdout
+    assert 'to "start" of "Task" has incompatible type "str"; expected "int"' in result.stdout
+    assert "Found 3 errors in 1 file" in result.stdout
+
+
+@pytest.mark.parametrize("create_before_app", [False, True])
+def test_a_task_tracks_runs_and_injects_context_on_the_main_thread(
+    *, create_before_app: bool
+) -> None:
+    view = MainView()
+    error = RefusedError("Try again")
+
+    def work(job: Job[int, int], value: int, *, fail: bool) -> int:
+        job.report_progress(value)
+        if fail:
+            raise error
+        return value * 2
+
+    task = view.jobs.task(work) if create_before_app else None
+    app = ModelApplication(build_main_view=lambda: view, build_model=_Model)
+    if task is None:
+        task = view.jobs.task(work)
+    states: list[tuple[bool, int | None, int | None, Exception | None, bool]] = []
+
+    def record(*, main_view: MainView, model: _Model) -> None:
+        assert threading.current_thread() is threading.main_thread()
+        assert main_view is view
+        assert model is app.model
+        states.append((task.is_running, task.progress, task.result, task.error, task.has_result))
+
+    task.changed.connect(record)
+    assert not task.is_running
+    assert task.result is None
+    assert task.progress is None
+    assert task.error is None
+    assert not task.has_result
+    assert task.start(3, fail=True)
+    assert not task.start(99, fail=False)
+    view.jobs.wait()
+    assert states == [
+        (True, None, None, None, False),
+        (True, 3, None, None, False),
+        (False, 3, None, error, False),
+    ]
+    assert task.start(4, fail=False)
+    view.jobs.wait()
+    assert states[-3:] == [
+        (True, None, None, None, False),
+        (True, 4, None, None, False),
+        (False, 4, 8, None, True),
+    ]
+    task.start(5, fail=True)
+    view.jobs.wait()
+    view.jobs.drop()
+    assert states[-1] == (False, None, None, None, False)
+
+
+def test_a_task_can_succeed_with_none_and_restart_from_its_changed_callback() -> None:
+    view = MainView()
+
+    def work(_job: Job[None]) -> None:
+        return None
+
+    task = view.jobs.task(work)
+    results: list[None] = []
+
+    def restart() -> None:
+        if task.has_result:
+            results.append(task.result)
+            if len(results) == 1:
+                task.start()
+
+    task.changed.connect(restart)
+    task.start()
+    view.jobs.wait()
+    assert results == [None, None]
+    assert task.has_result
+    assert not task.is_running
+
+
+def test_canceling_a_task_at_startup_leaves_other_jobs_running() -> None:
+    view = MainView()
+    task = view.jobs.task(_sleep)
+    task.cancel()  # An idle task has nothing to cancel.
+
+    def cancel_task(running: bool) -> None:
+        if running:
+            task.cancel()
+
+    view.jobs.running_changed.connect(cancel_task)
+    task.start()
+    other = view.jobs.start(_sleep)
+    assert not other.is_canceled
+    other.cancel()
+    view.jobs.wait()
+    assert task.has_result
+    assert task.result is False
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_dropping_a_task_clears_state_and_discards_queued_progress_and_outcomes(
+    *, fail: bool
+) -> None:
+    view = MainView()
+    queued = threading.Event()
+    threads: list[threading.Thread] = []
+
+    def work(job: Job[int, int], value: int, *, fail: bool) -> int:
+        threads.append(threading.current_thread())
+        job.report_progress(value)
+        queued.set()
+        if fail:
+            msg = "dropped failure"
+            raise RefusedError(msg)
+        return value
+
+    task = view.jobs.task(work)
+    states: list[tuple[bool, int | None, int | None, Exception | None]] = []
+    task.changed.connect(
+        lambda: states.append((task.is_running, task.progress, task.result, task.error))
+    )
+    task.start(1, fail=fail)
+    assert queued.wait(5)
+    threads[0].join(5)  # The old outcome is queued before replacing the study.
+    assert not threads[0].is_alive()
+    view.reset_state()
+    assert states[-1] == (False, None, None, None)
+    task.start(2, fail=False)
+    view.jobs.wait()
+    assert states == [
+        (True, None, None, None),
+        (False, None, None, None),
+        (True, None, None, None),
+        (True, 2, None, None),
+        (False, 2, 2, None),
+    ]
+    view.jobs.drop()
+    assert not task.has_result
+    assert states[-1] == (False, None, None, None)
+
+
+def test_drop_resets_all_tasks_before_a_handler_starts_another_run() -> None:
+    view = MainView()
+    first = view.jobs.task(_sleep)
+    second = view.jobs.task(_double)
+
+    def start_another() -> None:
+        if not first.is_running:
+            second.start(21)
+
+    first.changed.connect(start_another)
+    first.start()
+    view.jobs.drop()
+    view.jobs.wait()
+    assert not first.has_result
+    assert not first.is_running
+    assert second.has_result
+    assert second.result == 42

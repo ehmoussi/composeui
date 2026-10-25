@@ -66,6 +66,16 @@ class UberPickupsModel(SqliteModel):
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 
 
+def load_pickups(job: Job[list[int], int], model: UberPickupsModel, url: str) -> list[int]:
+    if not model.uber_data.fetch_column("SELECT EXISTS(SELECT 1 FROM uber_data)")[0]:
+        with contextlib.closing(model.uber_data.fill_from_url(url)) as batches:
+            for nb_read in batches:
+                if job.is_canceled:
+                    return []
+                job.report_progress(nb_read)
+    return model.uber_data.pickups_by_hour()
+
+
 @define_view
 class UberPickupsPageView(PageView):
     width = PageWidth.WIDE
@@ -94,40 +104,12 @@ class UberPickupsPageView(PageView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.source = None
-        self.show_raw_data.toggled.connect(self._display_table)
+        self.show_raw_data.toggled.connect(self.display_table)
 
-    def _display_table(self, is_checked: bool) -> None:
+    def display_table(self, is_checked: bool) -> None:
         is_data_available = self.table.source is not None
         self.table.is_visible = is_data_available and is_checked
         self.pickups_chart.is_visible = is_data_available and not is_checked
-
-    def fill(self, job: Job[list[int], int], model: UberPickupsModel, url: str) -> list[int]:
-        if self._has_data(model):
-            return model.uber_data.pickups_by_hour()
-        with contextlib.closing(model.uber_data.fill_from_url(url)) as batches:
-            for nb_read in batches:
-                if job.is_canceled:
-                    return []
-                job.report_progress(nb_read)
-        return model.uber_data.pickups_by_hour()
-
-    def _has_data(self, model: UberPickupsModel) -> bool:
-        return bool(model.uber_data.fetch_column("SELECT EXISTS(SELECT 1 FROM uber_data)")[0])
-
-    def start_reading_load_status(self) -> None:
-        self.data_load_state.text = "Loading data..."
-        self.data_load_status.text = "Loading rows from SQLite or CSV"
-        self.data_load_status.is_visible = True
-        self.table.source = None
-        self._display_table(self.show_raw_data.is_checked)
-
-    def finish_reading_load_status(self) -> None:
-        self.data_load_state.text = "Done! (using SQLite)"
-        self.data_load_status.is_visible = False
-        self._display_table(self.show_raw_data.is_checked)
-
-    def update_load_status(self, nb_read: int) -> None:
-        self.data_load_status.text = f"Read {nb_read:,} rows from CSV"
 
 
 @define_view
@@ -136,39 +118,48 @@ class UberPickupsMainView(MainView):
     extension = ".streamlit"
     page: UberPickupsPageView = child(UberPickupsPageView)
 
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.jobs.task(load_pickups)
+        self.loader.changed.connect(self._show_loading)
+
     def connect_model(self, model: UberPickupsModel) -> None:
-        model.uber_data.changed.connect(self._start_loading)
-        self._start_loading(model)
+        model.uber_data.changed.connect(self._start_loading, now=True)
 
     def _start_loading(self, model: UberPickupsModel) -> None:
-        if self.jobs.is_running:
-            return
-        self.page.start_reading_load_status()
-        job = self.jobs.start(self.page.fill, model, DATA_URL)
-        job.progress.connect(self.page.update_load_status)
-        job.finished.connect(self._finish_filling)
-        job.failed.connect(self._fail_filling)
+        self.loader.start(model, DATA_URL)
 
-    def _fail_filling(self, error: Exception) -> None:
-        self.page.data_load_state.text = "Failed to load data"
-        self.page.data_load_status.is_visible = False
-        self.status_bar.show_message(self.tr("Failed to read the CSV: {error}").format(error=error))
-
-    def _finish_filling(self, pickups_by_hour: list[int], model: UberPickupsModel) -> None:
-        source = model.uber_data.source(
-            headers={
-                "date_time": "Date/Time",
-                "lat": "Latitude",
-                "lon": "Longitude",
-                "base": "Base",
-            }
-        )
-        self.page.table.source = source
-        self.page.table.filterable_columns = [column.name for column in source.columns]
-        self.page.pickups_chart.series = [
-            Series(name="Pickups", x=list(range(24)), y=pickups_by_hour)
-        ]
-        self.page.finish_reading_load_status()
+    def _show_loading(self, model: UberPickupsModel) -> None:
+        page, loader = self.page, self.loader
+        page.data_load_status.is_visible = loader.is_running
+        if loader.result is not None:
+            source = model.uber_data.source(
+                headers={
+                    "date_time": "Date/Time",
+                    "lat": "Latitude",
+                    "lon": "Longitude",
+                    "base": "Base",
+                }
+            )
+            page.table.source = source
+            page.table.filterable_columns = [column.name for column in source.columns]
+            page.pickups_chart.series = [Series(name="Pickups", x=list(range(24)), y=loader.result)]
+            page.data_load_state.text = "Done! (using SQLite)"
+        else:
+            page.table.source = None
+            page.data_load_state.text = "Loading data..."
+            if loader.error is not None:
+                page.data_load_state.text = "Failed to load data"
+                self.status_bar.show_message(
+                    self.tr("Failed to read the CSV: {error}").format(error=loader.error)
+                )
+            elif loader.is_running:
+                page.data_load_status.text = (
+                    "Loading rows from SQLite or CSV"
+                    if loader.progress is None
+                    else f"Read {loader.progress:,} rows from CSV"
+                )
+        page.display_table(page.show_raw_data.is_checked)
 
 
 if __name__ == "__main__":

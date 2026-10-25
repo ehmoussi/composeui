@@ -122,7 +122,7 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     job: Job[list[int], int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert page.fill(job, model, path.as_uri()) == []
+        assert uberpickups.load_pickups(job, model, path.as_uri()) == []
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
         assert not page.table.is_visible
         assert not page.pickups_chart.is_visible
