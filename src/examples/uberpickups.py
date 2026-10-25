@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import gzip
 import io
 import logging
@@ -130,14 +129,14 @@ class UberPickupsPageView(PageView):
         self.table.is_visible = is_data_available and is_checked
         self.pickups_chart.is_visible = is_data_available and not is_checked
 
-    def fill(self, job: Job[list[int]], model: UberPickupsModel, url: str) -> list[int]:
+    def fill(self, job: Job[list[int], int], model: UberPickupsModel, url: str) -> list[int]:
         if self._has_data(model):
             return model.uber_data.pickups_by_hour()
         with contextlib.closing(model.uber_data.fill_from_url(url, nb_rows=None)) as batches:
             for nb_read in batches:
                 if job.is_canceled:
                     return []
-                job.call_on_main_thread(functools.partial(self._update_load_status, nb_read))
+                job.report_progress(nb_read)
         return model.uber_data.pickups_by_hour()
 
     def _has_data(self, model: UberPickupsModel) -> bool:
@@ -155,7 +154,7 @@ class UberPickupsPageView(PageView):
         self.data_load_status.is_visible = False
         self._display_table(self.show_raw_data.is_checked)
 
-    def _update_load_status(self, nb_read: int) -> None:
+    def update_load_status(self, nb_read: int) -> None:
         self.data_load_status.text = f"Read {nb_read:,} rows from CSV"
 
 
@@ -174,6 +173,7 @@ class UberPickupsMainView(MainView):
             return
         self.page.start_reading_load_status()
         job = self.jobs.start(self.page.fill, model, DATA_URL)
+        job.progress.connect(self.page.update_load_status)
         job.finished.connect(self._finish_filling)
         job.failed.connect(self._fail_filling)
 

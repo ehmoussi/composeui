@@ -78,6 +78,11 @@ the option for the web (extra `web`, the default).
   Results and failures are emitted on the main thread. Handle `job.failed` there to show
   errors and clear loading indicators. `RefusedError` logs a warning without a traceback;
   unexpected failures keep their tracebacks.
+  For typed progress, annotate the worker's job as `Job[ResultT, ProgressT]`;
+  `Job[ResultT]` defaults to no progress (`None`). Call `job.report_progress(value)` in the
+  worker and connect `job.progress`
+  on the main thread. Reports arrive in order before the outcome, with `main_view`/`model`
+  injection. Dropping a job discards queued progress too.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds

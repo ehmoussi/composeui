@@ -8,9 +8,9 @@ import queue
 import threading
 import time
 import weakref
-from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic
 
-from typing_extensions import Concatenate, ParamSpec
+from typing_extensions import Concatenate, ParamSpec, TypeVar
 
 from composeui.core.model import RefusedError
 from composeui.core.signal import Signal
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger("COMPOSEUI")
 
 R = TypeVar("R")
+ProgressT = TypeVar("ProgressT", default=None)
 P = ParamSpec("P")
 
 #: the job a thread runs, in a job's thread (see `Jobs.start`)
@@ -32,9 +33,9 @@ class CalledInJobError(RuntimeError):
     """`Jobs.start`, `cancel` or `drop` called by a job's function, not on the main thread."""
 
 
-def current_job() -> Job[Any] | None:
+def current_job() -> Job[Any, Any] | None:
     """Get the job whose function runs on this thread; None on any other thread."""
-    job: Job[Any] | None = getattr(_CURRENT, "job", None)
+    job: Job[Any, Any] | None = getattr(_CURRENT, "job", None)
     return job
 
 
@@ -48,20 +49,22 @@ def _check_main_thread(method: str) -> None:
         raise CalledInJobError(msg)
 
 
-class Job(Generic[R]):
+class Job(Generic[R, ProgressT]):
     """A function running in a thread of its own, started by `Jobs.start`.
 
     The function gets its job first: it calls `sleep`, or reads `is_canceled`, to stop
     early once canceled. Its result, or what it raised, is emitted on the main thread.
     """
 
-    def __init__(self, hand_over: Callable[[Job[Any], Callable[[], None]], None]) -> None:
+    def __init__(self, hand_over: Callable[[Job[Any, Any], Callable[[], None]], None]) -> None:
         # `Jobs._hand_over`, giving a callback to the main thread
         self._hand_over = hand_over
         #: the function's return value, on the main thread
         self.finished = Signal[R]()
         #: what the function raised, on the main thread (logged too)
         self.failed = Signal[Exception]()
+        #: progress values reported by the worker, on the main thread
+        self.progress = Signal[ProgressT]()
         self._canceled = threading.Event()
 
     @property
@@ -84,6 +87,14 @@ class Job(Generic[R]):
         """
         self._hand_over(self, callback)
 
+    def report_progress(self, value: ProgressT) -> None:
+        """Emit `progress` on the main thread, in order and before the job's outcome.
+
+        Pass a count, percentage, message, or another application-defined value.
+        Dropped jobs do not emit queued progress, as with `call_on_main_thread`.
+        """
+        self.call_on_main_thread(functools.partial(self.progress.emit, value))
+
 
 class Jobs:
     """The jobs of a main view (`MainView.jobs`): functions run in threads.
@@ -92,9 +103,9 @@ class Jobs:
     a view, because a toolkit's widgets belong to the main thread. It returns its result
     instead, and its job's `finished` emits the result on the main thread. There,
     callbacks update the views. Like the callbacks of any signal, they get the `main_view`
-    and `model` they ask for. Meanwhile, `Job.call_on_main_thread` hands the main thread a
-    callback, e.g. to move a progress bar. A `SqliteModel` hands it the `changed` signals
-    of the job's writes.
+    and `model` they ask for. `Job.report_progress` emits the job's `progress` signal on
+    the main thread. `Job.call_on_main_thread` hands it an arbitrary callback instead.
+    A `SqliteModel` hands it the `changed` signals of the job's writes.
 
     Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback. Never call
     them from a job's function: the jobs aren't locked, as the main thread alone changes
@@ -113,7 +124,7 @@ class Jobs:
         self.running_changed = Signal[bool]()
         self.running_changed.set_main_view(main_view)
         # the jobs started and not over yet: only changed on the main thread
-        self._running: set[Job[Any]] = set()
+        self._running: set[Job[Any, Any]] = set()
         # the results handed back while the main view isn't rendered, for `wait`
         self._results: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
 
@@ -127,8 +138,11 @@ class Jobs:
         self.running_changed.set_model(model)
 
     def start(
-        self, work: Callable[Concatenate[Job[R], P], R], *args: P.args, **kwargs: P.kwargs
-    ) -> Job[R]:
+        self,
+        work: Callable[Concatenate[Job[R, ProgressT], P], R],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> Job[R, ProgressT]:
         """Run ``work(job, *args, **kwargs)`` in a thread; call it on the main thread.
 
         Connect to the job's signals right away: its outcome is emitted on the main
@@ -136,11 +150,15 @@ class Jobs:
         `CalledInJobError` in a job's thread.
         """
         _check_main_thread("start")
-        job: Job[R] = Job(self._hand_over)
+        job: Job[R, ProgressT] = Job(self._hand_over)
         name = getattr(work, "__name__", "job")
         main_view = self._main_view()
         model = None if self._model is None else self._model()
-        for signal_name, signal in (("finished", job.finished), ("failed", job.failed)):
+        for signal_name, signal in (
+            ("finished", job.finished),
+            ("failed", job.failed),
+            ("progress", job.progress),
+        ):
             signal.set_name(f"{name}.{signal_name}")
             # a main view's jobs start while it lives: called by its views, or the app
             if main_view is not None:  # pragma: no branch
@@ -199,7 +217,7 @@ class Jobs:
 
     def _run(
         self,
-        job: Job[R],
+        job: Job[R, ProgressT],
         work: Callable[..., R],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
@@ -227,15 +245,15 @@ class Jobs:
         else:
             main_view.renderer.call_on_main_thread(callback)
 
-    def _hand_over(self, job: Job[Any], callback: Callable[[], None]) -> None:
+    def _hand_over(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
         self._on_main_thread(functools.partial(self._call, job, callback))
 
-    def _call(self, job: Job[Any], callback: Callable[[], None]) -> None:
+    def _call(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
         """Call a job's `callback`, on the main thread; unless the job was dropped."""
         if job in self._running:
             callback()
 
-    def _end(self, job: Job[Any], signal: Signal[Any], outcome: object) -> None:
+    def _end(self, job: Job[Any, Any], signal: Signal[Any], outcome: object) -> None:
         """Emit the outcome of a job, on the main thread; unless it was dropped."""
         if job not in self._running:
             return

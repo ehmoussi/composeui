@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import functools
 import logging
+import subprocess
+import sys
 import threading
 from typing import TYPE_CHECKING
 
@@ -16,6 +18,8 @@ from composeui.core.registry import RendererType
 from composeui.core.view import MainView
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pytestqt.qtbot import QtBot
 
     from composeui.core.jobs import Job
@@ -185,18 +189,24 @@ def test_a_job_s_callbacks_are_called_on_the_main_thread_before_its_result(
     assert calls == [("step 0", main), ("step 1", main), ("finished", main)]
 
 
+@pytest.mark.parametrize("report_progress", [False, True])
 def test_a_dropped_job_s_callbacks_are_not_called(
     app: ModelApplication[MainView, _Model],
+    *,
+    report_progress: bool,
 ) -> None:
     jobs = app.main_view.jobs
     handed_over = threading.Event()
     calls: list[str] = []
 
-    def hand_over(job: Job[None]) -> None:
-        job.call_on_main_thread(lambda: calls.append("called"))
+    def hand_over(job: Job[None, str]) -> None:
+        if report_progress:
+            job.report_progress("called")
+        else:
+            job.call_on_main_thread(lambda: calls.append("called"))
         handed_over.set()
 
-    jobs.start(hand_over)
+    jobs.start(hand_over).progress.connect(calls.append)
     assert handed_over.wait(5)
     jobs.drop()
     jobs.start(_double, 1)  # waiting for it calls what the dropped one handed over
@@ -205,19 +215,59 @@ def test_a_dropped_job_s_callbacks_are_not_called(
     assert calls == []
 
 
-def test_a_job_s_callbacks_are_called_on_the_gui_thread(qtbot: QtBot) -> None:
+@pytest.mark.parametrize("report_progress", [False, True])
+def test_a_job_s_callbacks_are_called_on_the_gui_thread(
+    qtbot: QtBot, *, report_progress: bool
+) -> None:
     pytest.importorskip("qtpy")
     main_view = MainView()
     main_view.render(RendererType.QT)
     threads: list[threading.Thread] = []
 
-    def hand_over(job: Job[None]) -> None:
-        job.call_on_main_thread(lambda: threads.append(threading.current_thread()))
+    def hand_over(job: Job[None, int]) -> None:
+        if report_progress:
+            job.report_progress(1)
+        else:
+            job.call_on_main_thread(lambda: threads.append(threading.current_thread()))
 
-    main_view.jobs.start(hand_over)
+    main_view.jobs.start(hand_over).progress.connect(
+        lambda _value: threads.append(threading.current_thread())
+    )
     qtbot.waitUntil(lambda: len(threads) == 1)
 
     assert threads == [threading.main_thread()]
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_job_progress_injects_context_and_arrives_before_the_outcome(
+    app: ModelApplication[MainView, _Model], *, fail: bool
+) -> None:
+    calls: list[tuple[int, threading.Thread, MainView, _Model]] = []
+    outcomes: list[str] = []
+
+    def work(job: Job[int, int]) -> int:
+        job.report_progress(1)
+        job.report_progress(2)
+        if fail:
+            msg = "refused"
+            raise RefusedError(msg)
+        return 2
+
+    def progress(value: int, *, main_view: MainView, model: _Model) -> None:
+        assert outcomes == []
+        calls.append((value, threading.current_thread(), main_view, model))
+
+    job = app.main_view.jobs.start(work)
+    job.progress.connect(progress)
+    job.finished.connect(lambda _result: outcomes.append("finished"))
+    job.failed.connect(lambda _error: outcomes.append("failed"))
+    app.main_view.jobs.wait()
+
+    assert calls == [
+        (1, threading.current_thread(), app.main_view, app.model),
+        (2, threading.current_thread(), app.main_view, app.model),
+    ]
+    assert outcomes == (["failed"] if fail else ["finished"])
 
 
 def test_waiting_for_a_job_running_past_its_time_says_how_many(
@@ -230,3 +280,50 @@ def test_waiting_for_a_job_running_past_its_time_says_how_many(
         jobs.wait(timeout=0.1)
     jobs.cancel()
     jobs.wait(timeout=5)
+
+
+def test_progress_values_and_handlers_keep_the_workers_type(tmp_path: Path) -> None:
+    script = tmp_path / "progress_types.py"
+    script.write_text(
+        "from typing_extensions import assert_type\n"
+        "from composeui.core.jobs import Job\n"
+        "from composeui.core.view import MainView\n"
+        "def work(job: Job[str, int]) -> str:\n"
+        "    job.report_progress(1)\n"
+        "    job.report_progress('wrong type')\n"
+        "    return 'done'\n"
+        "def plain(job: Job[int]) -> int:\n"
+        "    return 1\n"
+        "def show(value: int) -> None:\n"
+        "    pass\n"
+        "def wrong_handler(value: str) -> None:\n"
+        "    pass\n"
+        "view = MainView()\n"
+        "job = view.jobs.start(work)\n"
+        "assert_type(job, Job[str, int])\n"
+        "job.progress.connect(show)\n"
+        "job.progress.connect(wrong_handler)\n"
+        "ordinary = view.jobs.start(plain)\n"
+        "assert_type(ordinary, Job[int])\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(  # noqa: S603 (mypy checks only the declarations above)
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--follow-imports=silent",
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            str(script),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert (
+        'to "report_progress" of "Job" has incompatible type "str"; expected "int"' in result.stdout
+    )
+    assert 'to "connect" of "Signal" has incompatible type' in result.stdout
+    assert "Found 2 errors in 1 file" in result.stdout
