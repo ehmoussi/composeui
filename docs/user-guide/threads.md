@@ -46,10 +46,14 @@ class PipeMainView(MainView):
   thread changes them (`job.cancel()` works from any thread). Called from the function of a
   job, they raise `CalledInJobError`. To start another job, return what it needs, and start
   it from the callback that gets it.
-- **Progress.** The function gives the main thread a callback with
-  `job.call_on_main_thread(callback)`, for example to move a progress bar while it works.
-  The callbacks are called in order, before the job emits its outcome. When the job is
-  dropped, the callbacks that are still waiting are not called.
+- **Progress.** Connect `job.progress` to a handler, as with `job.finished` and `job.failed`.
+  Annotate the worker's job as `Job[ResultT, ProgressT]`: the second type specifies progress
+  values and handler arguments. `Job[ResultT]` defaults to `None` for jobs without progress.
+  In the worker, call `job.report_progress(value)` with a count, percentage, message, or
+  another application-defined value. The signal emits on the main thread, in report order,
+  before `finished` or `failed`. Its callbacks can ask for `main_view` and `model` too.
+  Dropped jobs do not emit progress that is still waiting. For an arbitrary UI callback,
+  use `job.call_on_main_thread(callback)`; it follows the same ordering and drop rules.
 - **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
   emits it when it changes, for example to disable a Run button.
 - **New, Open, and closing the app** cancel the running jobs and drop their results,
@@ -65,3 +69,32 @@ class PipeMainView(MainView):
 
 [`src/examples/taskview.py`](../../src/examples/taskview.py) runs 25 jobs at once, and cancels
 them.
+
+To report rows processed, connect a handler right after starting the job:
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import MainView
+
+
+def process(job: Job[int, int], count: int) -> int:
+    for completed in range(1, count + 1):
+        if job.is_canceled:
+            return completed - 1
+        # Process one row here.
+        job.report_progress(completed)
+    return count
+
+
+def show_progress(completed: int, *, main_view: MainView) -> None:
+    main_view.status_bar.show_message(f"Processed {completed} rows")
+
+
+main_view = MainView()
+job = main_view.jobs.start(process, 3)
+job.progress.connect(show_progress)
+main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their event loop.
+```
+
+The [Uber pickups example](../../src/examples/uberpickups.py) reports CSV batch counts
+through `job.progress` and shows failures through `job.failed`.
