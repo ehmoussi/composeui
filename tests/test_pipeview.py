@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,6 +11,8 @@ from examples.pipeform import EdgeType, Material, PipeMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from pytestqt.qtbot import QtBot
 
 
 @pytest.fixture
@@ -45,7 +46,7 @@ def test_display_edge_options(app: QtApplication[PipeMainView]) -> None:
     assert app.main_view.pages.inputs.pipe_form.fillet.is_visible is False
 
 
-def test_display_message_status_bar(app: QtApplication[PipeMainView]) -> None:
+def test_display_message_status_bar(app: QtApplication[PipeMainView], qtbot: QtBot) -> None:
     # change timeout to speed up the test
     timeout = 0.1
     app.main_view.status_bar.timeout = timeout
@@ -53,7 +54,7 @@ def test_display_message_status_bar(app: QtApplication[PipeMainView]) -> None:
     app.main_view.pages.inputs.pipe_form.edge_type.value = EdgeType.Chamfer
     app.main_view.pages.inputs.pipe_form.edge_type.value_changed.emit(EdgeType.Chamfer)
     assert app.main_view.status_bar.message != ""
-    time.sleep(1.1 * timeout)
+    qtbot.waitUntil(lambda: app.main_view.status_bar.message == "")
     assert app.main_view.status_bar.message == ""
 
 
