@@ -166,6 +166,7 @@ document owns what, and the checks.
 
 ## Commits
 
+- Use hyphens, not slashes (`/`), in branch names (e.g. `feat-csv-sqlite-tables`).
 - Short, imperative, capitalized subject without a trailing period (e.g. `Add combobox`).
 - The subject line is the whole message: no body, no trailers.
 - Never add AI attribution or signatures anywhere: no `Co-Authored-By` lines, no
