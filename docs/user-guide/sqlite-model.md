@@ -211,7 +211,8 @@ finally:
   the type at runtime. Do not combine `date_format` and `converter`. SQLite stores dates
   and datetimes as ISO text; timezone offsets supplied by the format are preserved.
 - **Input.** `fill` accepts an iterable of text lines. Open files with `newline=""` and
-  the required encoding. The caller owns that input. For URLs, use
+  the required encoding. The caller owns that input. For a path, use
+  [`fill_from_file`](#csv-files) to open and close the file automatically. For URLs, use
   [`fill_from_url` or `open_csv_url`](#csv-urls) to handle downloads and gzip decompression.
   Extra keywords, such as `delimiter` and `fieldnames`, go to `csv.DictReader`.
 - **Progress and transactions.** `fill(text, batch_size=100_000, limit=None)` yields
@@ -227,6 +228,35 @@ finally:
 - **Saved data.** CSV tables are part of the SQLite study, like other tables. Reconnect
   data sources after Open or reload through the table's `changed` signal. Sources are not
   serialized with the views. Reuse restored rows instead of importing them a second time.
+
+### CSV files
+
+`CSVSqliteTable.fill_from_file(path, ...)` opens a plain or gzip CSV file and imports its
+rows. Pass a path string or a `pathlib.Path`, absolute or relative to the current working
+directory. Gzip is detected from the content, not the file suffix.
+
+With `ReadingModel` from the preceding example, import a local `readings.csv.gz` file as
+follows. The file uses the same semicolon-separated columns:
+
+```python
+from contextlib import closing
+
+model = ReadingModel()
+try:
+    with closing(
+        model.readings.fill_from_file("readings.csv.gz", delimiter=";", batch_size=1000)
+    ) as batches:
+        for count in batches:
+            print(f"Submitted {count} rows")
+finally:
+    model.close()
+```
+
+`encoding="utf-8"` sets the text encoding. `batch_size`, `limit`, and CSV options follow
+`fill`. The method appends rows and yields cumulative submitted-row counts. Exhaust the
+generator to commit. If iteration can stop early, use `contextlib.closing` to close the
+file and roll back. Nested transactions follow `fill`'s rules. File, decompression, and
+decoding errors propagate; a missing file raises `FileNotFoundError`.
 
 ### CSV URLs
 

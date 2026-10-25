@@ -124,25 +124,41 @@ def test_closing_csv_progress_rolls_back_and_leaves_the_input_open(model: Readin
 
 
 @pytest.mark.parametrize("compressed", [False, True])
-def test_csv_url_import_forwards_csv_options_encoding_batches_and_limit(
-    model: ReadingsModel, tmp_path: Path, compressed: bool
+@pytest.mark.parametrize("input_kind", ["url", "path", "string"])
+def test_csv_file_and_url_import_forward_csv_options_encoding_batches_and_limit(
+    model: ReadingsModel,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compressed: bool,
+    input_kind: str,
 ) -> None:
-    path = tmp_path / "data"
+    path = tmp_path / "data # café"
     payload = (_HEADER + _FIRST.replace("First", "Café") + _SECOND).encode("latin-1")
     path.write_bytes(gzip.compress(payload) if compressed else payload)
-    assert list(
-        model.readings.fill_from_url(
+    monkeypatch.chdir(tmp_path)
+    if input_kind == "url":
+        batches = model.readings.fill_from_url(
             path.as_uri(), encoding="latin-1", delimiter=";", batch_size=1, limit=1
         )
-    ) == [1]
+    else:
+        relative = path.relative_to(tmp_path)
+        batches = model.readings.fill_from_file(
+            str(relative) if input_kind == "string" else relative,
+            encoding="latin-1",
+            delimiter=";",
+            batch_size=1,
+            limit=1,
+        )
+    assert list(batches) == [1]
     source = model.readings.source()
     assert source.count() == 1
     assert source.cells([1], ["name", "value"]) == {1: ["Café; reading", 1.5]}
 
 
 @pytest.mark.parametrize("outcome", ["closed", "invalid", "truncated"])
-def test_csv_url_import_rolls_back_all_batches_on_early_close_or_failure(
-    model: ReadingsModel, tmp_path: Path, outcome: str
+@pytest.mark.parametrize("input_kind", ["url", "file"])
+def test_csv_file_and_url_import_roll_back_all_batches_on_early_close_or_failure(
+    model: ReadingsModel, tmp_path: Path, outcome: str, input_kind: str
 ) -> None:
     path = tmp_path / "data.csv.gz"
     second = _SECOND.replace("2.5", "-1") if outcome == "invalid" else _SECOND
@@ -150,15 +166,23 @@ def test_csv_url_import_rolls_back_all_batches_on_early_close_or_failure(
     path.write_bytes(payload[:-8] if outcome == "truncated" else payload)
     changes: list[None] = []
     model.readings.changed.connect(lambda: changes.append(None))
-    with contextlib.closing(
+    batches = (
         model.readings.fill_from_url(path.as_uri(), delimiter=";", batch_size=1)
-    ) as batches:
+        if input_kind == "url"
+        else model.readings.fill_from_file(path, delimiter=";", batch_size=1)
+    )
+    with contextlib.closing(batches):
         assert next(batches) == 1
         if outcome != "closed":
             with pytest.raises(RefusedError if outcome == "invalid" else EOFError):
                 list(batches)
     assert model.readings.source().count() == 0
     assert changes == []
+
+
+def test_csv_file_import_propagates_a_missing_file(model: ReadingsModel, tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        list(model.readings.fill_from_file(tmp_path / "missing.csv"))
 
 
 def test_schema_source_infers_headers_types_and_reads_imported_rows(model: ReadingsModel) -> None:
