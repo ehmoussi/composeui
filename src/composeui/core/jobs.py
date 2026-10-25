@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
 
 from typing_extensions import Concatenate, ParamSpec
 
+from composeui.core.model import RefusedError
 from composeui.core.signal import Signal
 
 if TYPE_CHECKING:
@@ -208,7 +209,11 @@ class Jobs:
         try:
             result = work(job, *args, **kwargs)
         except Exception as error:  # the app's code: whatever it raises, the job is over
-            LOGGER.exception("The job %s failed", getattr(work, "__name__", "job"))
+            name = getattr(work, "__name__", "job")
+            if isinstance(error, RefusedError):
+                LOGGER.warning("The job %s was refused: %s", name, error)
+            else:
+                LOGGER.exception("The job %s failed", name)
             self._on_main_thread(functools.partial(self._end, job, job.failed, error))
         else:
             self._on_main_thread(functools.partial(self._end, job, job.finished, result))

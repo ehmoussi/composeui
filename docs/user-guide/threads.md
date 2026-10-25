@@ -31,7 +31,12 @@ class PipeMainView(MainView):
         self.results.stress.text = f"{stress:g} MPa"
 ```
 
-- **Failures.** The job logs what the function raises, and its `failed` signal emits it.
+- **Failures.** The job's `failed` signal emits the exception on the main thread.
+  Connect a handler to show the error and clear loading indicators there, not inside the
+  worker function. A `RefusedError` (`composeui.core.model`) logs a warning with its
+  message and no traceback. Other exceptions log an error with the full traceback,
+  even when a `failed` handler shows them. Use `RefusedError` for an expected refusal;
+  do not wrap unexpected programming errors just to hide their tracebacks.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
   stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
@@ -53,7 +58,7 @@ class PipeMainView(MainView):
   data changes. So an Open that fails still stops the jobs.
 - **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
   ask for, as for any signal.
-- **On the web,** while any job runs, the page asks the server every second for the changes
+- **On the web,** while any job runs, the page asks the server every 300 ms for the changes
   of the jobs. It stops once they are over.
 - **Tests.** When no toolkit shows a main view, its jobs emit their results when the test
   calls `main_view.jobs.wait()`, on the thread of the test.

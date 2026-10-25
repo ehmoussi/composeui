@@ -75,7 +75,9 @@ the option for the web (extra `web`, the default).
   strings without custom hooks. A new field must be serializable, or the app must leave it out of
   the state as `Signal` and validator fields are.
 - **Run slow work in jobs** (`main_view.jobs`), not in a callback: a callback blocks the UI.
-  Results are emitted on the main thread.
+  Results and failures are emitted on the main thread. Handle `job.failed` there to show
+  errors and clear loading indicators. `RefusedError` logs a warning without a traceback;
+  unexpected failures keep their tracebacks.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
@@ -86,6 +88,14 @@ the option for the web (extra `web`, the default).
   `connection()` block, the caller owns the transaction and must raise to roll it back.
   With `db=db`, the helper uses that connection without committing, rolling back or closing
   it. Use the table's `connection()` for change notifications.
+- **Import CSV through an attrs schema.** Declare
+  `class Readings(CSVSqliteTable, row_type=Reading, name="reading")` and use
+  `csv_field("Header", date_format="...", validator=...)` on the row class as needed.
+  Import these names from `composeui.core.sqlitemodel`. `fill(text, batch_size=100_000,
+  limit=None)` follows the batch-insert transaction rules. Conversion and attrs validation
+  errors become `RefusedError`. `date_format` requires a date or datetime field and cannot
+  accompany a custom converter. The caller owns the text stream. Rebuild table sources from
+  the table's `changed` signal after Open or reload; do not import restored rows again.
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.

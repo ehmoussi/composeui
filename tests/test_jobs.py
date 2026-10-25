@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import threading
 from typing import TYPE_CHECKING
 
@@ -10,7 +11,7 @@ import pytest
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import CalledInJobError
-from composeui.core.model import Model
+from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.view import MainView
 
@@ -31,11 +32,6 @@ def app() -> ModelApplication[MainView, _Model]:
 
 def _double(_job: Job[int], value: int) -> int:
     return 2 * value
-
-
-def _fail(_job: Job[int]) -> int:
-    msg = "no luck"
-    raise ValueError(msg)
 
 
 def _sleep(job: Job[bool]) -> bool:
@@ -62,21 +58,38 @@ def test_a_job_s_result_is_emitted_with_what_its_callbacks_ask_for(
     assert not jobs.is_running
 
 
-def test_what_a_job_raises_is_emitted_and_ends_it(
+@pytest.mark.parametrize("error_type", [ValueError, RefusedError])
+def test_what_a_job_raises_is_logged_emitted_and_ends_it(
     app: ModelApplication[MainView, _Model],
+    caplog: pytest.LogCaptureFixture,
+    error_type: type[Exception],
 ) -> None:
     jobs = app.main_view.jobs
     errors: list[Exception] = []
     finished: list[int] = []
-    job = jobs.start(_fail)
+    error = error_type("no luck")
+
+    def fail(_job: Job[int]) -> int:
+        raise error
+
+    job = jobs.start(fail)
     job.failed.connect(errors.append)
     job.finished.connect(finished.append)
 
     jobs.wait()
 
-    assert [str(error) for error in errors] == ["no luck"]
+    assert errors == [error]
     assert finished == []
     assert not jobs.is_running
+    (record,) = [record for record in caplog.records if record.name == "COMPOSEUI"]
+    if error_type is RefusedError:
+        assert record.levelno == logging.WARNING
+        assert record.exc_info is None
+        assert "no luck" in record.getMessage()
+    else:
+        assert record.levelno == logging.ERROR
+        assert record.exc_info is not None
+        assert record.exc_info[1] is error
 
 
 @pytest.mark.parametrize("method", ["start", "cancel", "drop"])

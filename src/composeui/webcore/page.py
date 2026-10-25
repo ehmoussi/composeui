@@ -78,7 +78,7 @@ SAVE_FORM_ID = "cui-save"
 
 
 #: milliseconds the page waits, while jobs run, before asking for what they changed
-JOBS_POLL_MS = 1000
+JOBS_POLL_MS = 300
 
 
 def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
