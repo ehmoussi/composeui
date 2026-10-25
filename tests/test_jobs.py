@@ -34,6 +34,21 @@ def app() -> ModelApplication[MainView, _Model]:
     return ModelApplication(build_main_view=MainView, build_model=_Model)
 
 
+@pytest.fixture
+def thread_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[BaseException], threading.Event]:
+    errors: list[BaseException] = []
+    surfaced = threading.Event()
+
+    def record(args: threading.ExceptHookArgs) -> None:
+        errors.append(args.exc_value)
+        surfaced.set()
+
+    monkeypatch.setattr(threading, "excepthook", record)
+    return errors, surfaced
+
+
 def _double(_job: Job[int], value: int) -> int:
     return 2 * value
 
@@ -62,7 +77,7 @@ def test_a_job_s_result_is_emitted_with_what_its_callbacks_ask_for(
     assert not jobs.is_running
 
 
-@pytest.mark.parametrize("error_type", [ValueError, RefusedError])
+@pytest.mark.parametrize("error_type", [ValueError, RefusedError, KeyError, OSError, RuntimeError])
 def test_what_a_job_raises_is_logged_emitted_and_ends_it(
     app: ModelApplication[MainView, _Model],
     caplog: pytest.LogCaptureFixture,
@@ -97,10 +112,18 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
 
 
 @pytest.mark.parametrize("method", ["start", "cancel", "drop", "task", "task.start"])
-def test_a_job_changing_the_jobs_fails(
-    app: ModelApplication[MainView, _Model], method: str
+@pytest.mark.parametrize("tracked", [False, True])
+def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
+    app: ModelApplication[MainView, _Model],
+    thread_errors: tuple[list[BaseException], threading.Event],
+    method: str,
+    *,
+    tracked: bool,
 ) -> None:
     jobs = app.main_view.jobs
+    surfaced_errors, surfaced = thread_errors
+    running: list[bool] = []
+    jobs.running_changed.connect(running.append)
     task = jobs.task(_double)
     calls = {
         "start": lambda: jobs.start(_double, 1),
@@ -115,12 +138,115 @@ def test_a_job_changing_the_jobs_fails(
         return job.is_canceled
 
     errors: list[Exception] = []
-    job = jobs.start(change_the_jobs)
-    job.failed.connect(errors.append)
+    if tracked:
+        broken = jobs.task(change_the_jobs)
+        broken.start()
+    else:
+        job = jobs.start(change_the_jobs)
+        job.failed.connect(errors.append)
+    assert surfaced.wait(5)
     jobs.wait()
 
-    assert [type(error) for error in errors] == [CalledInJobError]
-    assert not job.is_canceled  # nothing else canceled, nor started
+    assert [type(error) for error in surfaced_errors] == [CalledInJobError]
+    assert errors == []
+    assert running == [True, False]
+    assert not jobs.is_running
+    if tracked:
+        assert not broken.is_running
+        assert broken.error is None
+        assert not broken.has_result
+    else:
+        assert not job.is_canceled  # nothing else canceled, nor started
+
+
+@pytest.mark.parametrize(
+    "error_type", [AssertionError, AttributeError, NameError, NotImplementedError, TypeError]
+)
+def test_programming_errors_escape_to_the_thread_exception_handler(
+    app: ModelApplication[MainView, _Model],
+    thread_errors: tuple[list[BaseException], threading.Event],
+    error_type: type[Exception],
+) -> None:
+    error = error_type("programming mistake")
+    errors, surfaced = thread_errors
+    failures: list[Exception] = []
+    results: list[int] = []
+
+    def fail(_job: Job[int]) -> int:
+        raise error
+
+    job = app.main_view.jobs.start(fail)
+    job.failed.connect(failures.append)
+    job.finished.connect(results.append)
+    assert surfaced.wait(5)
+    app.main_view.jobs.wait()
+    assert errors == [error]
+    assert failures == []
+    assert results == []
+    assert not app.main_view.jobs.is_running
+
+
+def test_aborting_a_task_preserves_other_work_and_allows_a_fresh_run(
+    thread_errors: tuple[list[BaseException], threading.Event],
+) -> None:
+    view = MainView()
+    errors, surfaced = thread_errors
+
+    def work(job: Job[int, int], *, broken: bool) -> int:
+        job.report_progress(1)
+        if broken:
+            msg = "broken task"
+            raise TypeError(msg)
+        return 42
+
+    healthy = view.jobs.task(_sleep)
+    broken = view.jobs.task(work)
+    other_running: list[bool] = []
+
+    def stopped() -> None:
+        if not broken.is_running:
+            other_running.append(healthy.is_running)
+            healthy.cancel()
+
+    broken.changed.connect(stopped)
+    healthy.start()
+    broken.start(broken=True)
+    assert surfaced.wait(5)
+    view.jobs.wait()
+    assert other_running == [True]
+    assert len(errors) == 1
+    assert broken.progress is None
+    assert broken.result is None
+    assert broken.error is None
+    assert healthy.has_result
+    assert healthy.result is False
+    broken.start(broken=False)
+    view.jobs.wait()
+    assert broken.result == 42
+    assert broken.has_result
+
+
+def test_a_dropped_jobs_programming_error_still_surfaces_without_touching_the_new_run(
+    app: ModelApplication[MainView, _Model],
+    thread_errors: tuple[list[BaseException], threading.Event],
+) -> None:
+    release = threading.Event()
+    errors, surfaced = thread_errors
+    error = AssertionError("old job's bug")
+
+    def fail(_job: Job[int]) -> int:
+        release.wait(5)
+        raise error
+
+    app.main_view.jobs.start(fail)
+    app.main_view.jobs.drop()
+    release.set()
+    assert surfaced.wait(5)
+    results: list[int] = []
+    app.main_view.jobs.start(_double, 21).finished.connect(results.append)
+    app.main_view.jobs.wait()
+    assert errors == [error]
+    assert results == [42]
 
 
 def test_a_canceled_job_stops_sleeping_and_still_finishes(
