@@ -82,9 +82,7 @@ class UberPickupsPageView(PageView):
 
     data_load_state: LabelView = child(LabelView, text="Loading data...")
     show_raw_data: CheckBoxView = child(CheckBoxView, text="Show raw data", is_checked=False)
-    data_load_status: LabelView = child(
-        LabelView, text="Start reading rows from CSV", is_visible=True
-    )
+    data_load_status: LabelView = child(LabelView, text="Start reading rows from CSV")
     table: DataTableView = child(
         DataTableView,
         is_visible=False,
@@ -101,16 +99,6 @@ class UberPickupsPageView(PageView):
         height=400,
     )
 
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.table.source = None
-        self.show_raw_data.toggled.connect(self.display_table)
-
-    def display_table(self, is_checked: bool) -> None:
-        is_data_available = self.table.source is not None
-        self.table.is_visible = is_data_available and is_checked
-        self.pickups_chart.is_visible = is_data_available and not is_checked
-
 
 @define_view
 class UberPickupsMainView(MainView):
@@ -122,6 +110,15 @@ class UberPickupsMainView(MainView):
         super().__attrs_post_init__()
         self.loader = self.jobs.task(load_pickups)
         self.loader.changed.connect(self._show_loading)
+        self.loader.changed.connect(self._show_visibility, now=True)
+        self.page.show_raw_data.toggled.connect(self._show_visibility)
+
+    def _show_visibility(self) -> None:
+        page = self.page
+        ready, show_raw = self.loader.has_result, page.show_raw_data.is_checked
+        page.data_load_status.is_visible = self.loader.is_running
+        page.table.is_visible = ready and show_raw
+        page.pickups_chart.is_visible = ready and not show_raw
 
     def connect_model(self, model: UberPickupsModel) -> None:
         model.uber_data.changed.connect(self._start_loading, now=True)
@@ -131,7 +128,6 @@ class UberPickupsMainView(MainView):
 
     def _show_loading(self, model: UberPickupsModel) -> None:
         page, loader = self.page, self.loader
-        page.data_load_status.is_visible = loader.is_running
         if loader.result is not None:
             source = model.uber_data.source(
                 headers={
@@ -159,7 +155,6 @@ class UberPickupsMainView(MainView):
                     if loader.progress is None
                     else f"Read {loader.progress:,} rows from CSV"
                 )
-        page.display_table(page.show_raw_data.is_checked)
 
 
 if __name__ == "__main__":

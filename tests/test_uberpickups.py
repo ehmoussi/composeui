@@ -9,12 +9,15 @@ import pytest
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
+from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from examples import uberpickups
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+
+    from pytestqt.qtbot import QtBot
 
 
 App = ModelApplication[uberpickups.UberPickupsMainView, uberpickups.UberPickupsModel]
@@ -50,18 +53,62 @@ def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     assert page.data_load_state.text == "Done! (using SQLite)"
     assert page.data_load_status.text == "Read 2 rows from CSV"
     assert not page.data_load_status.is_visible
-    assert page.pickups_chart.is_visible
     assert page.pickups_chart.series[0].y == [1, *([0] * 12), 1, *([0] * 10)]
     assert page.table.source is not None
     assert page.table.source.count() == 2
-    page.show_raw_data.is_checked = True
-    page.show_raw_data.toggled.emit(page.show_raw_data.is_checked)
-    assert page.table.is_visible
-    assert not page.pickups_chart.is_visible
-    page.show_raw_data.is_checked = False
-    page.show_raw_data.toggled.emit(page.show_raw_data.is_checked)
-    assert not page.table.is_visible
-    assert page.pickups_chart.is_visible
+
+
+def test_visibility_follows_loading_and_real_checkbox_clicks(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    qt_widgets = pytest.importorskip("qtpy.QtWidgets")
+    qt_renderers = pytest.importorskip("composeui.qtcore.qtrenderer")
+    path = tmp_path / "pickups.csv.gz"
+    path.write_bytes(gzip.compress(_CSV.encode()))
+    monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
+    # Render before starting the worker so Qt receives every queued outcome.
+    app = ModelApplication(
+        build_main_view=uberpickups.UberPickupsMainView,
+        build_model=uberpickups.UberPickupsModel,
+    )
+    try:
+        app.render(RendererType.QT)
+        view, page = app.main_view, app.main_view.page
+        assert isinstance(view.renderer, qt_renderers.QtWidgetRenderer)
+        qtbot.addWidget(view.renderer.qt_object)
+        widgets = []
+        for child in (page.show_raw_data, page.table, page.pickups_chart, page.data_load_status):
+            assert isinstance(child.renderer, qt_renderers.QtWidgetRenderer)
+            widget = child.renderer.qt_object
+            assert isinstance(widget, qt_widgets.QWidget)
+            widgets.append(widget)
+        checkbox, table, chart, status = widgets
+        assert isinstance(checkbox, qt_widgets.QCheckBox)
+        checkbox.click()
+        assert table.isHidden()
+        assert chart.isHidden()
+        assert status.isHidden()
+
+        view.connect_model(app.model)
+        assert not status.isHidden()
+        assert table.isHidden()
+        assert chart.isHidden()
+        qtbot.waitUntil(lambda: not view.loader.is_running)
+        assert not table.isHidden()
+        assert chart.isHidden()
+        assert status.isHidden()
+
+        checkbox.click()
+        assert table.isHidden()
+        assert not chart.isHidden()
+        view.jobs.drop()
+        checkbox.click()
+        assert table.isHidden()
+        assert chart.isHidden()
+        assert status.isHidden()
+    finally:
+        app.main_view.jobs.drop()
+        app.model.close()
 
 
 def test_reload_reconnects_saved_rows_without_downloading_them_again(
