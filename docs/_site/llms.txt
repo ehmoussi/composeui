@@ -2,42 +2,42 @@
 
 > ComposeUI is a small MVVM layer for building UIs in Python. You write the views once, as typed `attrs` classes, and a renderer binds each view to a widget of a backend: Qt (desktop, through `qtpy`), Textual (terminal), or the web (Starlette and htmx). Signals carry the events between the views, the model, and the app. Early-stage (pre-alpha): the API is small and still moving.
 
-`composeui.core` holds the views, signals, and application, and imports no backend. A study file saves the views' state as JSON (`cattrs`). Python 3.9 and later; install from GitHub with `uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui3"`.
+`composeui.core` holds the views, signals, and application, and imports no backend. A study file saves the views' state as JSON (`cattrs`). Python 3.9 and later; install from GitHub with `uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui"`.
 
 ## Start here
 
-- [Overview](https://ehmoussi.github.io/composeui3/index.html): how the views, the optional model, signals, and renderers fit together
-- [README](https://github.com/ehmoussi/composeui3/blob/main/README.md): installation and a quickstart window
+- [Overview](https://ehmoussi.github.io/composeui/index.html): how the views, the optional model, signals, and renderers fit together
+- [README](https://github.com/ehmoussi/composeui/blob/main/README.md): installation and a quickstart window
 
 ## User guide
 
-- [User guide](https://ehmoussi.github.io/composeui3/user-guide.html): index of the pages below
-- [Core concepts](https://ehmoussi.github.io/composeui3/user-guide/core-concepts.html): how ComposeUI maps to MVVM, reactive views, signals that inject arguments
-- [Building views](https://ehmoussi.github.io/composeui3/user-guide/building-views.html): define views, lay them out, forms and validation, the main view, saving and loading state
-- [Widgets](https://ehmoussi.github.io/composeui3/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, and the other views
-- [Tables](https://ehmoussi.github.io/composeui3/user-guide/tables.html): table views and their cells
-- [Charts](https://ehmoussi.github.io/composeui3/user-guide/charts.html): chart views
-- [Organizing the window](https://ehmoussi.github.io/composeui3/user-guide/organizing-the-window.html): arranging views in the window
-- [Running the app](https://ehmoussi.github.io/composeui3/user-guide/running-the-app.html): start an app on a backend
-- [A SQLite model](https://ehmoussi.github.io/composeui3/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`
-- [Running work in threads](https://ehmoussi.github.io/composeui3/user-guide/threads.html): background jobs
-- [Translating the app](https://ehmoussi.github.io/composeui3/user-guide/translation.html): translation catalogs
-- [Using a coding agent](https://ehmoussi.github.io/composeui3/user-guide/coding-agents.html): install the ComposeUI skill for coding agents
+- [User guide](https://ehmoussi.github.io/composeui/user-guide.html): index of the pages below
+- [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): how ComposeUI maps to MVVM, reactive views, signals that inject arguments
+- [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and validation, the main view, saving and loading state
+- [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, and the other views
+- [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): table views and their cells
+- [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): chart views
+- [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): arranging views in the window
+- [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend
+- [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`
+- [Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html): background jobs
+- [Translating the app](https://ehmoussi.github.io/composeui/user-guide/translation.html): translation catalogs
+- [Using a coding agent](https://ehmoussi.github.io/composeui/user-guide/coding-agents.html): install the ComposeUI skill for coding agents
 
 ## Examples
 
-- [Examples guide](https://ehmoussi.github.io/composeui3/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Batman, Markdown viewer, web hello, Textual demo) and how to run them
+- [Examples guide](https://ehmoussi.github.io/composeui/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Batman, Markdown viewer, web hello, Textual demo) and how to run them
 
 ## Reference
 
-- [Widget catalog](https://ehmoussi.github.io/composeui3/widgets.html): every view that a backend renders
-- [API reference](https://ehmoussi.github.io/composeui3/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
+- [Widget catalog](https://ehmoussi.github.io/composeui/widgets.html): every view that a backend renders
+- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
 
 ## Contributing
 
-- [Technical guide](https://ehmoussi.github.io/composeui3/technical-guide.html): architecture, adding a widget or a backend, development commands, and checks
+- [Technical guide](https://ehmoussi.github.io/composeui/technical-guide.html): architecture, adding a widget or a backend, development commands, and checks
 
 ## Optional
 
-- [ComposeUI skill](https://ehmoussi.github.io/composeui3/skills/composeui/SKILL.md): rules for a coding agent that writes a ComposeUI app (a `SKILL.md` file)
-- [Source repository](https://github.com/ehmoussi/composeui3): code, issues, and the roadmap (`ROADMAP.md`)
+- [ComposeUI skill](https://ehmoussi.github.io/composeui/skills/composeui/SKILL.md): rules for a coding agent that writes a ComposeUI app (a `SKILL.md` file)
+- [Source repository](https://github.com/ehmoussi/composeui): code, issues, and the roadmap (`ROADMAP.md`)

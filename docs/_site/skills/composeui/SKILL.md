@@ -11,8 +11,8 @@ backend (Qt, Textual, or the web) binds each view to a widget. Signals carry eve
 the views, the model, and the app. The API is early-stage and still moving: when the
 documentation and this skill disagree, trust the documentation.
 
-Full documentation: https://ehmoussi.github.io/composeui3/ (an index for models is at
-https://ehmoussi.github.io/composeui3/llms.txt).
+Full documentation: https://ehmoussi.github.io/composeui/ (an index for models is at
+https://ehmoussi.github.io/composeui/llms.txt).
 
 ## A minimal app
 
@@ -88,9 +88,9 @@ the option for the web (extra `web`, the default).
 
 ## Where to look
 
-- Which view to use: the widget catalog, https://ehmoussi.github.io/composeui3/widgets.html
+- Which view to use: the widget catalog, https://ehmoussi.github.io/composeui/widgets.html
 - Core concepts, views, layout, forms: the user guide,
-  https://ehmoussi.github.io/composeui3/user-guide.html
+  https://ehmoussi.github.io/composeui/user-guide.html
 - Complete apps to copy from: the examples guide,
-  https://ehmoussi.github.io/composeui3/examples-guide.html
-- Exact signatures: the API reference, https://ehmoussi.github.io/composeui3/api/index.html
+  https://ehmoussi.github.io/composeui/examples-guide.html
+- Exact signatures: the API reference, https://ehmoussi.github.io/composeui/api/index.html

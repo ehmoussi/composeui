@@ -12,7 +12,7 @@ Download the file into the skills directory of your project. For Claude Code:
 ```bash
 mkdir -p .claude/skills/composeui
 curl -o .claude/skills/composeui/SKILL.md \
-  https://ehmoussi.github.io/composeui3/skills/composeui/SKILL.md
+  https://ehmoussi.github.io/composeui/skills/composeui/SKILL.md
 ```
 
 Other agents that read `.agents/skills/` need the same file in `.agents/skills/composeui/`.
@@ -22,6 +22,6 @@ The skill is for the app's code, not for ComposeUI's own: to change ComposeUI, r
 
 ## Point the agent at the documentation
 
-The site publishes an [`llms.txt`](https://ehmoussi.github.io/composeui3/llms.txt): a list of
+The site publishes an [`llms.txt`](https://ehmoussi.github.io/composeui/llms.txt): a list of
 its pages, each with a line that says what it holds. Give an agent that link when it has no
 skills, or when it needs a page of the user guide.

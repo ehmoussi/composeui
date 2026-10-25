@@ -1,7 +1,7 @@
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/_static/composeui-logo-dark.svg">
-    <img alt="ComposeUI" src="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/_static/composeui-logo-light.svg" width="268" height="64">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/_static/composeui-logo-dark.svg">
+    <img alt="ComposeUI" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/_static/composeui-logo-light.svg" width="268" height="64">
   </picture>
 </h1>
 
@@ -48,8 +48,8 @@ Requires Python >= 3.9. ComposeUI is not yet published to PyPI. Install it with
 To try ComposeUI and its example apps, clone the repository and install every extra:
 
 ```bash
-git clone https://github.com/ehmoussi/composeui3
-cd composeui3
+git clone https://github.com/ehmoussi/composeui
+cd composeui
 uv sync --all-extras
 ```
 
@@ -60,7 +60,7 @@ name, so a second `uv sync --extra tui` would remove the web and Qt backends.
 To use ComposeUI in a project of your own, add it from GitHub:
 
 ```bash
-uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui3"
+uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui"
 ```
 
 ## Quickstart
@@ -109,7 +109,7 @@ uv run python hello.py                     # a web page, the default: the web ex
 The web backend serves the page at http://127.0.0.1:8000. `run` imports only the backend
 that you choose, and leaves the rest of the command line to the app (`--help` lists it).
 
-<img alt="The quickstart on the web: a text field holds Ada, and the status bar says Hello, Ada!" src="https://raw.githubusercontent.com/ehmoussi/composeui3/main/docs/images/quickstart-web.png" width="600">
+<img alt="The quickstart on the web: a text field holds Ada, and the status bar says Hello, Ada!" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/images/quickstart-web.png" width="600">
 
 ### Next steps
 
@@ -125,7 +125,7 @@ that you choose, and leaves the rest of the command line to the app (`--help` li
 
 ## Documentation
 
-The documentation site, at https://ehmoussi.github.io/composeui3/, has the guides below, a
+The documentation site, at https://ehmoussi.github.io/composeui/, has the guides below, a
 widget catalog, and the API reference.
 
 - The [user guide](docs/user-guide.md) explains how to build an app: the views, their layout,
