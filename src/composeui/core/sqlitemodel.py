@@ -243,6 +243,20 @@ class _CSVField(NamedTuple):
 
 
 @contextlib.contextmanager
+def _csv_text(binary: io.BufferedIOBase, *, encoding: str) -> Generator[io.TextIOWrapper]:
+    """Decode a binary CSV stream, detect gzip, and close its wrappers on exit."""
+    with contextlib.ExitStack() as stack:
+        buffer = stack.enter_context(io.BufferedReader(binary))
+        stream = (
+            stack.enter_context(gzip.GzipFile(fileobj=buffer, mode="rb"))
+            if buffer.peek(2).startswith(b"\x1f\x8b")
+            else buffer
+        )
+        text = stack.enter_context(io.TextIOWrapper(stream, encoding=encoding, newline=""))
+        yield text
+
+
+@contextlib.contextmanager
 def open_csv_url(
     url: str, *, encoding: str = "utf-8", timeout: float = 30.0
 ) -> Generator[io.TextIOWrapper]:
@@ -256,15 +270,10 @@ def open_csv_url(
     if urlsplit(url).scheme not in {"http", "https", "file"}:
         msg = "CSV URLs must use http, https or file"
         raise ValueError(msg)
-    with contextlib.ExitStack() as stack:
-        response = stack.enter_context(urlopen(url, timeout=timeout))  # noqa: S310 (schemes checked above; trusted URLs only)
-        buffer = stack.enter_context(io.BufferedReader(response))
-        binary = (
-            stack.enter_context(gzip.GzipFile(fileobj=buffer, mode="rb"))
-            if buffer.peek(2).startswith(b"\x1f\x8b")
-            else buffer
-        )
-        text = stack.enter_context(io.TextIOWrapper(binary, encoding=encoding, newline=""))
+    with (
+        urlopen(url, timeout=timeout) as response,  # noqa: S310 (schemes checked above; trusted URLs only)
+        _csv_text(response, encoding=encoding) as text,
+    ):
         yield text
 
 
@@ -392,6 +401,31 @@ class CSVSqliteTable(SqliteTable):
         """
         rows = (self.row_parameters(row) for row in csv.DictReader(text, **csv_options))
         yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
+
+    def fill_from_file(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        encoding: str = "utf-8",
+        batch_size: int = 100_000,
+        limit: int | None = None,
+        **csv_options: Any,
+    ) -> Generator[int]:
+        """Import a plain or gzip CSV file and yield cumulative submitted-row counts.
+
+        Accept a path string or path-like object, relative or absolute. Detect gzip
+        from the content. Own and close the file; other options follow `fill`.
+        Exhaust the generator to commit, or use ``contextlib.closing`` when stopping
+        early to close the file and roll back. File and decoding errors propagate.
+        """
+        with (
+            Path(path).open("rb") as binary,
+            _csv_text(binary, encoding=encoding) as text,
+            contextlib.closing(
+                self.fill(text, batch_size=batch_size, limit=limit, **csv_options)
+            ) as batches,
+        ):
+            yield from batches
 
     def fill_from_url(
         self,
