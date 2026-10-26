@@ -16,7 +16,7 @@ pytest.importorskip("textual_fspicker")
 import asyncio
 import datetime
 import math
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
 from attrs import Factory
 from rich.color import Color
@@ -331,7 +331,9 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         await pilot.pause()
         month = app.screen.query_one(ComposeMonth)
         assert month.has_focus
-        title, names, *_ = month.render().plain.split("\n")
+        rendered = month.render()
+        assert isinstance(rendered, Text)
+        title, names, *_ = rendered.plain.split("\n")
         assert "octobre 2026" in title
         assert names.split() == ["lu", "ma", "me", "je", "ve", "sa", "di"]
         await pilot.press("down", "pagedown", "enter")  # a week on, then a month on
@@ -1070,6 +1072,9 @@ async def test_a_sidebar_is_a_column_left_of_the_pages_whatever_the_page() -> No
     ]
     sidebar, create, submit, progress = widgets
     assert isinstance(sidebar, ComposeSidebar)
+    assert isinstance(create, Button)
+    assert isinstance(submit, Button)
+    assert isinstance(progress, ProgressBar)
 
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
@@ -1100,6 +1105,7 @@ async def test_a_sidebar_retracts_to_a_strip_by_its_arrow_and_back() -> None:
     ]
     sidebar, create = widgets
     assert isinstance(sidebar, ComposeSidebar)
+    assert isinstance(create, Button)
     toggles: list[bool] = []
     view.sidebar.toggled.connect(toggles.append)
 
@@ -1139,21 +1145,23 @@ async def test_a_list_view_shows_a_view_per_record_as_the_records_change() -> No
     column = view.pipes.renderer.widget
     assert column is not None
 
-    def shown() -> list[str]:
+    def shown(container: Widget) -> list[str]:
         return [
-            str(child.title) for child in column.children if isinstance(child, ComposeCollapsible)
+            str(child.title)
+            for child in container.children
+            if isinstance(child, ComposeCollapsible)
         ]
 
     async with app.run_test(size=(80, 40)) as pilot:
         await pilot.pause()
-        assert shown() == ["Main line"]
+        assert shown(column) == ["Main line"]
         main_line = view.pipes.item_views[0]
         assert isinstance(main_line.renderer, TextualWidgetRenderer)
         main_line_widget = main_line.renderer.widget
 
         view.pipes.items = [Pipe("Feed", 1), *PIPES]  # built since: mounted as they come
         await pilot.pause()
-        assert shown() == ["Feed", "Main line", "Return"]
+        assert shown(column) == ["Feed", "Main line", "Return"]
         # collapsed, a line apart: a rule, then the title
         assert [child.region.height for child in column.children] == [2, 2, 2]
         assert column.children[1] is main_line_widget  # the record's own widget
@@ -1171,7 +1179,7 @@ async def test_a_list_view_shows_a_view_per_record_as_the_records_change() -> No
         assert delete is not None
         await pilot.click(delete)
         await pilot.pause()
-        assert shown() == ["Main line", "Return"]
+        assert shown(column) == ["Main line", "Return"]
         assert view.status_bar.message == "Deleted Feed"
 
 
@@ -1189,7 +1197,9 @@ async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
     panes = []
     for tab in tabs.tabs:
         assert isinstance(tab.renderer, TextualWidgetRenderer)
-        panes.append(tab.renderer.widget)
+        pane = tab.renderer.widget
+        assert isinstance(pane, TabPane)
+        panes.append(pane)
     details, history, notes = panes
     assert isinstance(history, TabPane)
     assert isinstance(notes, TabPane)
@@ -1481,6 +1491,7 @@ async def test_an_expander_shows_its_views_while_expanded_by_its_title() -> None
     expander, history_expander, edit = widgets
     assert isinstance(expander, ComposeCollapsible)
     assert isinstance(history_expander, ComposeCollapsible)
+    assert isinstance(edit, Button)
 
     async with app.run_test(size=(80, 30)) as pilot:
         await pilot.pause()
@@ -2237,6 +2248,31 @@ async def test_the_chart_draws_its_titles_and_series() -> None:
         assert "D = 50 mm" not in text
 
 
+class _PlotMonitor(Protocol):
+    label: list[str]
+    lines: list[bool]
+    x: list[list[float]]
+    y: list[list[float]]
+    xscale: list[str]
+    yscale: list[str]
+    hcoord: list[list[float]]
+    vcoord: list[list[float]]
+    hcolors: list[list[tuple[int, int, int]]]
+    color: list[list[tuple[int, int, int]]]
+    fillx: list[float | bool]
+
+
+class _PlotFigure(Protocol):
+    _active: _PlotFigure
+    monitor: _PlotMonitor
+
+
+def _plot_monitor(chart: ComposeChart) -> _PlotMonitor:
+    # textual-plotext's stubs omit the private state these rendering checks inspect.
+    figure = cast("_PlotFigure", chart.plt)
+    return figure._active.monitor  # noqa: SLF001 (plotext has no public monitor API)
+
+
 @pytest.mark.asyncio
 async def test_a_scatter_series_is_plotted_as_dots() -> None:
     view = PipeChartMainView()
@@ -2253,13 +2289,13 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
         view.add_curve()
         view.add_measurements()
         await pilot.pause()
-        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        plotted = _plot_monitor(chart)
         assert plotted.label == ["D = 50 mm", "Measured, D = 50 mm"]
         assert plotted.lines == [True, False]  # a line, then dots
         assert len(plotted.x[1]) == len(MEASUREMENTS)
         view.chart.kind = ChartKind.SCATTER
         await pilot.pause()
-        assert chart.plt._active.monitor.lines == [False, False]  # noqa: SLF001
+        assert _plot_monitor(chart).lines == [False, False]
 
 
 @pytest.mark.asyncio
@@ -2305,14 +2341,14 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
         page.energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
         page.energy.y_log = True
         await pilot.pause()
-        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        plotted = _plot_monitor(chart)
         # the scales of the axes at the bottom and left, those drawn
         assert (plotted.xscale[0], plotted.yscale[0]) == ("log", "log")
         assert list(plotted.x[0]) == [0, 1, 2]  # 1, 10 and 100, as their logs: no x of 0
         assert math.isnan(plotted.y[0][0])  # a y of -1: a gap
         text = energy.render().plain  # type: ignore[union-attr]
         assert "1000" in text  # its axis, log from 10
-        assert energy.plt._active.monitor.yscale[0] == "log"  # noqa: SLF001
+        assert _plot_monitor(energy).yscale[0] == "log"
 
 
 @pytest.mark.asyncio
@@ -2337,12 +2373,12 @@ async def test_reference_lines_are_plotted_labeled() -> None:
         text = chart.render().plain  # type: ignore[union-attr]
         assert "Max: 4.6" in text
         assert "Now" in text
-        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        plotted = _plot_monitor(chart)
         assert (plotted.hcoord[0], plotted.vcoord[0]) == ([4.6, 0.6], [2.3])
         assert plotted.hcolors[0] == [(208, 48, 48), (32, 128, 64)]  # their own colors
         assert "Mine" in energy.render().plain  # type: ignore[union-attr]
         # on the bedroom's bars: plotext draws the categories from 1
-        assert energy.plt._active.monitor.vcoord[0] == [2]  # noqa: SLF001
+        assert _plot_monitor(energy).vcoord[0] == [2]
 
 
 @pytest.mark.asyncio
@@ -2361,7 +2397,7 @@ async def test_a_step_series_is_plotted_in_steps() -> None:
         view.router.current_route = "chart"
         await pilot.pause()
         chart.render()
-        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        plotted = _plot_monitor(chart)
         # each count held until the next change
         assert list(plotted.x[0]) == [0, 2, 2, 5, 5, 6, 6]
         assert list(plotted.y[0]) == [1, 1, 3, 3, 2, 2, 4]
@@ -2440,7 +2476,7 @@ async def test_a_series_of_its_own_color_is_plotted_so_filled() -> None:
 
     async with app.run_test(size=(120, 60)) as pilot:
         await pilot.pause()
-        plotted = chart.plt._active.monitor  # what plotext was given  # noqa: SLF001
+        plotted = _plot_monitor(chart)
         assert [colors[0] for colors in plotted.color] == [(255, 215, 0)] * 2 + [(0, 0, 0)] * 2
         assert plotted.fillx == [0] * 4  # filled down to 0; an unfilled one is False
 
@@ -3270,7 +3306,10 @@ def _textual_widgets_of(view: View) -> list[object]:
     """Get the widgets of `view` and of its children, depth first."""
     renderer = view.renderer
     if isinstance(renderer, RendererContainer):
-        widgets: list[object] = [part.widget for part in renderer.renderers]  # type: ignore[attr-defined]
+        widgets: list[object] = []
+        for part in renderer.renderers:
+            assert isinstance(part, TextualWidgetRenderer)
+            widgets.append(part.widget)
     else:
         widgets = [getattr(renderer, "widget", getattr(renderer, "app", None))]
     for child_view in view.children_views:

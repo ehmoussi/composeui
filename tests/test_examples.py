@@ -56,10 +56,10 @@ def test_each_example_starts_on_the_backend_the_examples_guide_lists(
 
 def test_the_hello_app_s_age_may_be_left_empty() -> None:
     age = HelloMainView().form.age
-    age.text = "12"
+    age.value = 12.0
     age.run_validator()
 
-    age.text = ""  # cleared by the user
+    age.value = None  # cleared by the user
     age.run_validator()
 
     assert age.log_message == ""

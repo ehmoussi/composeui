@@ -174,7 +174,8 @@ class PaletteView(GroupFormView):
         super().__attrs_post_init__()
         self.title = self.tr("Palette")
         self.colors.headers = [self.tr("Colors")]
-        self.colors.rows = [[self.tr(color.value)] for color in Color] + [["#00ff00"]]
+        rows: list[list[str]] = [[self.tr(color.value)] for color in Color]
+        self.colors.rows = [*rows, ["#00ff00"]]
 
 
 def _palette_main_view(directory: Path) -> Any:

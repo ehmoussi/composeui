@@ -264,8 +264,11 @@ class _UnreadableCallback:
 def test_a_callback_whose_signature_can_t_be_read_is_called_without_arguments(
     application: type[Application[_ButtonMainView]],
 ) -> None:
-    options = {"build_model": Model} if application is ModelApplication else {}
-    app = application(build_main_view=_ButtonMainView, **options)
+    app: Application[_ButtonMainView]
+    if issubclass(application, ModelApplication):
+        app = application(build_main_view=_ButtonMainView, build_model=Model)
+    else:
+        app = application(build_main_view=_ButtonMainView)
     button = app.main_view.button
     callback = _UnreadableCallback()
     app.connect(view=button, signals=[button.clicked])(callback)

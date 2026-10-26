@@ -5,7 +5,7 @@ from __future__ import annotations
 import gzip
 import threading
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
     from pytestqt.qtbot import QtBot
 
+    from composeui.qtcore.qtrenderer import QtWidgetRenderer
+    from composeui.webcore.webrenderer import WebRenderer
+
 
 App = ModelApplication[uberpickups.UberPickupsMainView, uberpickups.UberPickupsModel]
 _CSV = (
@@ -37,7 +40,7 @@ class _VisibilityParser(HTMLParser):
         self.ids: set[str] = set()
         self.hidden_ids: set[str] = set()
 
-    def handle_starttag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         element_id = attributes.get("id")
         if element_id is not None:
@@ -84,7 +87,13 @@ def _select_hour(
     view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    slider = view.data.slider_hours.renderer.qt_object
+    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+        "composeui.qtcore.qtrenderer"
+    ).QtWidgetRenderer
+    renderer = view.data.slider_hours.renderer
+    assert isinstance(renderer, renderer_type)
+    slider = cast("QtWidgetRenderer", renderer).qt_object
+    assert slider is not None
     assert isinstance(slider, qt_widgets.QSlider)
     slider.setValue(hour)
     assert view.data.pickups_map.points == expected_points
@@ -97,7 +106,9 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    qt_renderers = pytest.importorskip("composeui.qtcore.qtrenderer")
+    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+        "composeui.qtcore.qtrenderer"
+    ).QtWidgetRenderer
     path = tmp_path / "pickups.csv.gz"
     path.write_bytes(gzip.compress(_CSV.encode()))
     monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
@@ -110,8 +121,9 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
     try:
         app.render(RendererType.QT)
         view, page = app.main_view, app.main_view
-        assert isinstance(view.renderer, qt_renderers.QtWidgetRenderer)
-        window = view.renderer.qt_object
+        renderer = view.renderer
+        assert isinstance(renderer, renderer_type)
+        window = cast("QtWidgetRenderer", renderer).qt_object
         assert isinstance(window, qt_widgets.QWidget)
         qtbot.addWidget(window)
         widgets = []
@@ -123,8 +135,9 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
             page.data_load_status,
             page.data,
         ):
-            assert isinstance(child.renderer, qt_renderers.QtWidgetRenderer)
-            widget = child.renderer.qt_object
+            renderer = child.renderer
+            assert isinstance(renderer, renderer_type)
+            widget = cast("QtWidgetRenderer", renderer).qt_object
             assert isinstance(widget, qt_widgets.QWidget)
             widgets.append(widget)
         checkbox, table, chart, map_widget, status, data = widgets
@@ -187,7 +200,9 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     web = pytest.importorskip("composeui.webcore.webapplication")
-    renderers = pytest.importorskip("composeui.webcore.webrenderer")
+    renderer_type: type[WebRenderer] = pytest.importorskip(
+        "composeui.webcore.webrenderer"
+    ).WebRenderer
     testclient = pytest.importorskip("starlette.testclient")
     path = tmp_path / "pickups.csv.gz"
     path.write_bytes(gzip.compress(_CSV.encode()))
@@ -225,8 +240,9 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
         visibility.feed(response.text)
         data = view.data
         for child in (data, data.pickups_chart, data.pickups_map):
-            assert isinstance(child.renderer, renderers.WebRenderer)
-            widget_id = child.renderer.widget_id
+            renderer = child.renderer
+            assert isinstance(renderer, renderer_type)
+            widget_id = cast("WebRenderer", renderer).widget_id
             assert widget_id in visibility.ids
             assert widget_id not in visibility.hidden_ids
         assert view.loader.error is None

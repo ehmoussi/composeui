@@ -66,7 +66,15 @@ from tests.workers import WorkersMainView
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from playwright.sync_api import BrowserContext, FloatRect, Locator, Page, Route
+    from playwright.sync_api import (
+        BrowserContext,
+        ConsoleMessage,
+        FilePayload,
+        FloatRect,
+        Locator,
+        Page,
+        Route,
+    )
     from starlette.requests import Request
 
 pytestmark = pytest.mark.browser
@@ -92,7 +100,7 @@ def _serve(app: Starlette, port: int | None = None) -> Iterator[str]:
     if port is None:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
-            port = sock.getsockname()[1]
+            port = int(sock.getsockname()[1])
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
@@ -380,17 +388,13 @@ def _no_policy_violation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     violations: list[str] = []
     new_context = Browser.new_context
 
+    def record(message: ConsoleMessage) -> None:
+        if "Content Security Policy" in message.text and "frame-ancestors" not in message.text:
+            violations.append(message.text)
+
     def checked_context(browser: Browser, **kwargs: Any) -> BrowserContext:
         context = new_context(browser, **kwargs)
-        context.on(
-            "console",
-            lambda message: (
-                violations.append(message.text)
-                if "Content Security Policy" in message.text
-                and "frame-ancestors" not in message.text
-                else None
-            ),
-        )
+        context.on("console", record)
         return context
 
     monkeypatch.setattr(Browser, "new_context", checked_context)
@@ -680,7 +684,7 @@ def chart_pages_page(browser: Browser, chart_pages_base_url: str) -> Iterator[Pa
     context.close()
 
 
-def _posted(page: Page) -> object:
+def _posted(page: Page) -> contextlib.AbstractContextManager[object]:
     """Wait for the page's next widget POST to be answered."""
     return page.expect_response(
         lambda response: response.request.method == "POST" and "/widget/" in response.url
@@ -1601,9 +1605,8 @@ def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown
     field = page.get_by_label("Measurements")
     with page.expect_file_chooser() as chooser, _posted(page):
         page.get_by_role("button", name="Choose a file").click()
-        chooser.value.set_files(
-            files=[{"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}]
-        )
+        payload: FilePayload = {"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}
+        chooser.value.set_files(files=[payload])
     expect(field).to_have_value(re.compile(r"flows\.csv$"))
     context.close()
 

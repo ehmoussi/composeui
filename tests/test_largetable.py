@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
+
+    from composeui.qtcore.qtrenderer import QtWidgetRenderer
 
 ROWS = 300
 TEMPERATURE = 2
@@ -144,15 +146,19 @@ def test_a_study_saves_the_search_without_the_readings(
 
 def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    qt_renderer = pytest.importorskip("composeui.qtcore.qtrenderer")
+    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+        "composeui.qtcore.qtrenderer"
+    ).QtWidgetRenderer
     qt_core = pytest.importorskip("qtpy.QtCore")
     QPoint, Qt = qt_core.QPoint, qt_core.Qt  # noqa: N806 (Qt's own names)
     main_view, model = LargeTableMainView(), ReadingsModel()
     main_view.render(RendererType.QT)
     main_view.connect_model(model)
     model.readings.fill(ROWS)  # in the test's thread: no job to wait for
-    assert isinstance(main_view.renderer, qt_renderer.QtWidgetRenderer)
-    window = main_view.renderer.qt_object
+    renderer = main_view.renderer
+    assert isinstance(renderer, renderer_type)
+    window = cast("QtWidgetRenderer", renderer).qt_object
+    assert window is not None
     qtbot.addWidget(window)
     table = window.findChild(qt_widgets.QTableView)
     header = table.horizontalHeader()

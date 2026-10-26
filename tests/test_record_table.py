@@ -232,7 +232,7 @@ def test_a_cell_that_doesn_t_parse_outside_an_app_is_refused_saying_nothing() ->
     assert view.status_bar.message == ""
 
 
-_T = TypeVar("_T")
+_T = TypeVar("_T", bound=attrs.AttrsInstance)
 
 
 @define_view

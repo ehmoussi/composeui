@@ -188,14 +188,14 @@ class MillionSource:
         self.read: list[int] = []
 
     def ordered_ids(
-        self, _sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> range:
         return range(self.size)
 
     def count(self) -> int:
         return self.size
 
-    def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[float]]:
+    def cells(self, ids: Sequence[int], columns: Sequence[str]) -> dict[int, list[float]]:
         self.read.extend(ids)
         return {row_id: [row_id * 2, row_id / 2] for row_id in ids if row_id < self.size}
 
@@ -250,7 +250,7 @@ class GatedSource:
         self.counted_on_main: list[bool] = []
 
     def ordered_ids(
-        self, sort: Optional[Sort], _search: str, _filters: Mapping[str, Filter]
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> range:
         self.orders.append(sort)
         size = self.size  # as a query reads the rows as they are when it starts
@@ -264,7 +264,7 @@ class GatedSource:
         self.counted_on_main.append(threading.current_thread() is threading.main_thread())
         return self.size
 
-    def cells(self, ids: Sequence[int], _columns: Sequence[str]) -> dict[int, list[int]]:
+    def cells(self, ids: Sequence[int], columns: Sequence[str]) -> dict[int, list[int]]:
         return {row_id: [row_id] for row_id in ids if row_id < self.size}
 
 

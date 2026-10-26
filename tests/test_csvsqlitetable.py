@@ -196,11 +196,12 @@ def test_sniffing_replays_headers_and_quoted_rows_without_losing_data(
     text = (_HEADER + _FIRST.replace("First", "Café") + _SECOND).replace(";", delimiter)
     payload = text.encode("latin-1")
     path.write_bytes(gzip.compress(payload) if compressed else payload)
-    options = {"sniff": True, "encoding": "latin-1", "batch_size": 1}
     batches = (
-        model.readings.fill_from_file(path, **options)
+        model.readings.fill_from_file(path, sniff=True, encoding="latin-1", batch_size=1)
         if input_kind == "file"
-        else model.readings.fill_from_url(path.as_uri(), **options)
+        else model.readings.fill_from_url(
+            path.as_uri(), sniff=True, encoding="latin-1", batch_size=1
+        )
     )
     assert list(batches) == [1, 2]
     assert model.readings.source().cells([1, 2], ["name", "value"]) == {
@@ -304,14 +305,14 @@ def test_a_larger_sniff_sample_can_read_a_wide_header(
         },
     )
     table_type = type("WideRows", (CSVSqliteTable,), {}, row_type=row_type, name="wide")
-    rows = model.add_table(table_type)
+    rows: CSVSqliteTable = model.add_table(table_type)
     data = [[f"row{row}_{index}" for index in range(200)] for row in (1, 2)]
     text = io.StringIO(newline="")
     csv.writer(text, delimiter=";").writerows([headers, *data])
     path = tmp_path / "wide.csv.gz"
     path.write_bytes(gzip.compress(text.getvalue().encode()))
     importer = rows.fill_from_file if input_kind == "file" else rows.fill_from_url
-    source = path if input_kind == "file" else path.as_uri()
+    source = str(path) if input_kind == "file" else path.as_uri()
     # The default sample contains only part of the first header, without a separator.
     with pytest.raises(RefusedError):
         list(importer(source, sniff=True))
@@ -400,7 +401,7 @@ def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[s
     table_type = type("Rows", (CSVSqliteTable,), {}, row_type=row_type, name="rows")
     model = SqliteModel()
     try:
-        rows = model.add_table(table_type)
+        rows: CSVSqliteTable = model.add_table(table_type)
         if len(names) == 3:
             with pytest.raises(ValueError, match="shadow all SQLite row-id names"):
                 rows.source()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
+
+    from composeui.qtcore.qtrenderer import QtWidgetRenderer
 
 App = ModelApplication[PipeSweepMainView, PipeSweepModel]
 
@@ -156,6 +158,9 @@ def test_a_saved_sweep_opens_with_its_runs(app: App, tmp_path: Path) -> None:
 
 def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> None:
     pytest.importorskip("qtpy")
+    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+        "composeui.qtcore.qtrenderer"
+    ).QtWidgetRenderer
     main_view = app.main_view
     main_view.render(RendererType.QT)
     threads: list[threading.Thread] = []
@@ -165,7 +170,10 @@ def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> Non
     qtbot.waitUntil(lambda: not main_view.jobs.is_running)
 
     assert main_view.runs.rows == [["20", "6"], ["30", "10"], ["40", "14"]]
-    progress_bar = main_view.progress.renderer.qt_object  # type: ignore[union-attr]
+    renderer = main_view.progress.renderer
+    assert isinstance(renderer, renderer_type)
+    progress_bar = cast("QtWidgetRenderer", renderer).qt_object
+    assert progress_bar is not None
     assert progress_bar.value() == 3
     assert set(threads) == {threading.main_thread()}
 

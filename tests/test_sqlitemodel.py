@@ -24,7 +24,7 @@ from composeui.core.view import ButtonView, InvalidStateError, MainView, TableVi
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 
     from composeui.core.jobs import Job
@@ -608,11 +608,15 @@ def test_a_database_not_made_as_a_new_one_is_refused(app: App, tmp_path: Path, s
     assert app.model.runs.radii() == [80.0]
 
 
+def _read_forever(db: sqlite3.Connection) -> None:
+    db.execute("SELECT count(*) FROM forever")
+
+
 class _SlowMigrationModel(RunsModel):
     """A model whose migration queries a view of the file, which may never end."""
 
     schema_version = 2
-    migrations = MappingProxyType({1: lambda db: db.execute("SELECT count(*) FROM forever")})
+    migrations = MappingProxyType({1: _read_forever})
     open_time_limit = 0.2
 
 
@@ -695,7 +699,7 @@ class Tags(SqliteTable):
             name TEXT NOT NULL UNIQUE CONSTRAINT named CHECK (name != '')
         );
     """
-    refusals: ClassVar[dict[str, str]] = {"named": "a tag needs a name"}
+    refusals: ClassVar[Mapping[str, str]] = {"named": "a tag needs a name"}
 
     def add(self, name: str) -> None:
         with self.connection() as db:

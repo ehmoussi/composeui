@@ -42,6 +42,7 @@ def thread_errors(
     surfaced = threading.Event()
 
     def record(args: threading.ExceptHookArgs) -> None:
+        assert args.exc_value is not None
         errors.append(args.exc_value)
         surfaced.set()
 
@@ -107,7 +108,7 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
         assert "no luck" in record.getMessage()
     else:
         assert record.levelno == logging.ERROR
-        assert record.exc_info is not None
+        assert isinstance(record.exc_info, tuple)
         assert record.exc_info[1] is error
 
 
@@ -138,6 +139,8 @@ def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
         return job.is_canceled
 
     errors: list[Exception] = []
+    broken = None
+    job = None
     if tracked:
         broken = jobs.task(change_the_jobs)
         broken.start()
@@ -151,11 +154,12 @@ def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
     assert errors == []
     assert running == [True, False]
     assert not jobs.is_running
-    if tracked:
+    if broken is not None:
         assert not broken.is_running
         assert broken.error is None
         assert not broken.has_result
     else:
+        assert job is not None
         assert not job.is_canceled  # nothing else canceled, nor started
 
 
