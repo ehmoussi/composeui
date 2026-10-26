@@ -176,7 +176,7 @@ assert main_view.status.text == "Done: 3 rows"
   New or Open; its state is cleared with the study's jobs.
 
 The [Uber pickups example](../../src/examples/uberpickups.py) uses one task-state handler for
-CSV progress, failures, and the completed table and chart. Both `task.changed` and the
-checkbox's `toggled` signal call this handler. The checkbox shows or hides the raw-data
-table without hiding the chart. The model loads the CSV and counts pickups by hour;
-the main view starts the task and displays its result.
+CSV progress, failures, and the completed chart and map. The checkbox's `toggled` signal
+uses a separate handler to show or hide the raw-data table without changing the map filter.
+The model loads the CSV and counts pickups by hour; the main view starts the task and
+displays its result. An hour slider queries the saved rows to update only the map.

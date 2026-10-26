@@ -83,5 +83,5 @@ another tile provider is not supported yet.
 - **Textual** does not render `MapView`. Other views remain available.
 
 The [Uber pickups example](../../src/examples/uberpickups.py) shows up to 10,000 sampled
-pickup locations. Its hourly chart counts all rows. Run it with
+pickup locations for the hour selected by a slider. Its hourly chart counts all rows. Run it with
 `uv run python -m examples.uberpickups --backend qt`, or `--backend web`.
