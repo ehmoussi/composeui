@@ -129,7 +129,8 @@ The documentation site, at https://ehmoussi.github.io/composeui/, has the guides
 widget catalog, and the API reference.
 
 - The [user guide](docs/user-guide.md) explains how to build an app: the views, their layout,
-  forms and their checks, the widgets, pages, tabs, dialogs, tables, charts, threads, SQLite
+  forms and their checks, the widgets, pages, tabs, dialogs, tables, charts,
+  [maps](docs/user-guide/maps.md), threads, SQLite
   models, translations, the differences between the backends, and a skill for coding agents.
 - The [examples guide](docs/examples-guide.md) says what each example app shows, and how
   to run it.

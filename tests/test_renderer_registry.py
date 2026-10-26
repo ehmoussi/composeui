@@ -38,10 +38,19 @@ def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
 
 
-def test_every_backend_registers_the_same_renderer_keys() -> None:
-    """A view rendering under one backend should render under all of them."""
-    assert set(QT_RENDERERS) == set(TEXTUAL_RENDERERS) == set(WEB_RENDERERS)
+def test_every_backend_registers_the_same_renderer_keys_except_graphical_maps() -> None:
+    """The terminal omits street maps; other views render on all three backends."""
+    assert set(QT_RENDERERS) == set(WEB_RENDERERS) == set(TEXTUAL_RENDERERS) | {"map"}
     assert "markdown" in QT_RENDERERS
+
+
+def test_loading_the_qt_backend_without_maps_does_not_load_qt_quick() -> None:
+    code = (
+        "import sys\n"
+        "import composeui.qtcore.qtrenderer\n"
+        "assert 'qtpy.QtQuickWidgets' not in sys.modules\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
 
 
 def test_create_renderer_resolves_a_key_to_the_backend_renderer() -> None:

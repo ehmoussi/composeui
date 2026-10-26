@@ -72,6 +72,10 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
   - [What each backend draws](user-guide/charts.md#what-each-backend-draws)
   - [Clicks on a chart](user-guide/charts.md#clicks-on-a-chart)
   - [Report images](user-guide/charts.md#report-images)
+- [Maps](user-guide/maps.md)
+  - [Coordinates, points, and viewport](user-guide/maps.md#coordinates-points-and-viewport)
+  - [Tiles and network access](user-guide/maps.md#tiles-and-network-access)
+  - [What each backend draws](user-guide/maps.md#what-each-backend-draws)
 - [Running work in threads](user-guide/threads.md)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
 - [A SQLite model](user-guide/sqlite-model.md)
@@ -100,6 +104,7 @@ user-guide/widgets
 user-guide/organizing-the-window
 user-guide/tables
 user-guide/charts
+user-guide/maps
 user-guide/threads
 user-guide/sqlite-model
 user-guide/translation

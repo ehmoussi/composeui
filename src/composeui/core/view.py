@@ -1607,6 +1607,55 @@ _COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 @attrs.frozen
+class MapPoint:
+    """A geographic position, in degrees of latitude then longitude.
+
+    Latitude is limited to the range of a Web Mercator street map.
+    """
+
+    latitude: float = attrs.field(
+        converter=float,
+        validator=[attrs.validators.ge(-85.05112878), attrs.validators.le(85.05112878)],
+    )
+    longitude: float = attrs.field(
+        converter=float, validator=[attrs.validators.ge(-180), attrs.validators.le(180)]
+    )
+
+
+@define_view
+class MapView(View):
+    """An interactive street map with geographic points drawn over its tiles.
+
+    Qt uses Qt Location, and the web uses deck.gl. Textual does not render this view.
+    Assign a new ``points`` list to redraw the overlay without resetting the viewport.
+    The study saves the center and zoom, but not the points or tile settings.
+    """
+
+    _renderer_key = "map"
+    MAX_ZOOM: ClassVar[int] = 19
+
+    title: str = attrs.field(default="", metadata={UI_TEXT: True})
+    center: MapPoint = attrs.field(factory=lambda: MapPoint(0, 0))
+    #: OpenStreetMap zoom levels: 0 shows the world; 19 shows individual buildings
+    zoom: float = attrs.field(
+        default=2,
+        converter=float,
+        validator=[attrs.validators.ge(0), attrs.validators.le(MAX_ZOOM)],
+    )
+    points: list[MapPoint] = attrs.field(factory=list[MapPoint], metadata={OMIT: True})
+    height: int = attrs.field(default=400, validator=attrs.validators.ge(1), metadata={OMIT: True})
+    #: False draws only the points, without any network requests for tiles
+    tiles: bool = attrs.field(default=True, metadata={OMIT: True})
+    #: identifies the native app to the tile server; the web uses the browser's identity
+    user_agent: str = attrs.field(
+        default="ComposeUI (+https://github.com/ehmoussi/composeui)", metadata={OMIT: True}
+    )
+    clicked: Signal[float, float] = attrs.Factory(Signal[float, float])
+    #: the user panned or zoomed; center and zoom already hold the new viewport
+    viewport_changed: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+
+@attrs.frozen
 class Series:
     """A curve of a `ChartView`: its points, x against y, under `name` in the legend.
 

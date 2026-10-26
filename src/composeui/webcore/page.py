@@ -35,7 +35,8 @@ $icon_link
 <script src="$htmx_url"></script>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="$css_url" rel="stylesheet" type="text/css" />
-<script src="$page_url" data-uplot="$uplot_url" data-cally="$cally_url"></script>
+<script src="$page_url" data-uplot="$uplot_url" data-cally="$cally_url"
+  data-deckgl="$deckgl_url"></script>
 </head>
 
 <body class="bg-base-200 min-h-screen">
@@ -62,6 +63,7 @@ _STATIC_URLS = {
     "uplot_url": _static_url("uPlot.iife.min.js"),
     # Cally 0.9.2 (https://github.com/WickyNilliams/cally), styled by daisyUI's `cally`
     "cally_url": _static_url("cally.js"),
+    "deckgl_url": _static_url("deckgl.min.js"),
 }
 
 

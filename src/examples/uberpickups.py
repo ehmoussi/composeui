@@ -1,4 +1,4 @@
-"""Explore Uber pickups in NYC, based on Streamlit's app tutorial."""
+"""Explore NYC pickups with hourly counts and a sampled map, based on Streamlit's tutorial."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from composeui.core.view import (
     DataTableView,
     LabelView,
     MainView,
+    MapPoint,
+    MapView,
     PageView,
     PageWidth,
     Series,
@@ -62,18 +64,36 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
                     pickups[hour] = count
             return pickups
 
+    def pickup_points(self) -> list[MapPoint]:
+        with self.connection() as db:
+            count = db.execute("SELECT COUNT(*) FROM uber_data").fetchone()[0]
+            stride = max(1, (count + 9999) // 10000)
+            rows = db.execute(
+                "SELECT lat, lon FROM uber_data WHERE (rowid - 1) % ? = 0"
+                " AND lat BETWEEN -85.05112878 AND 85.05112878"
+                " AND lon BETWEEN -180 AND 180 ORDER BY rowid LIMIT 10000",
+                (stride,),
+            )
+            return [MapPoint(lat, lon) for lat, lon in rows]
+
+
+@attrs.frozen
+class PickupData:
+    hours: list[int]
+    points: list[MapPoint]
+
 
 class UberPickupsModel(SqliteModel):
     uber_data = table(UberPickupsTable)
 
-    def load_pickups(self, job: Job[list[int], int], url: str) -> list[int]:
+    def load_pickups(self, job: Job[PickupData, int], url: str) -> PickupData:
         if not self.uber_data.has_data():
             with contextlib.closing(self.uber_data.fill_from_url(url)) as batches:
                 for nb_read in batches:
                     if job.is_canceled:
-                        return []
+                        return PickupData([], [])
                     job.report_progress(nb_read)
-        return self.uber_data.pickups_by_hour()
+        return PickupData(self.uber_data.pickups_by_hour(), self.uber_data.pickup_points())
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
@@ -99,6 +119,14 @@ class UberPickupsPageView(PageView):
         categories=[f"{hour:02d}:00" for hour in range(24)],
         height=400,
     )
+    pickups_map: MapView = child(
+        MapView,
+        title="Pickup locations (up to 10,000 sampled pickups)",
+        center=MapPoint(40.73, -73.98),
+        zoom=11,
+        is_visible=False,
+        user_agent="ComposeUI-UberPickups (+https://github.com/ehmoussi/composeui)",
+    )
 
 
 @define_view
@@ -123,8 +151,12 @@ class UberPickupsMainView(MainView):
         page.data_load_status.is_visible = loader.is_running
         page.table.is_visible = loader.has_result and page.show_raw_data.is_checked
         page.pickups_chart.is_visible = loader.has_result
+        page.pickups_map.is_visible = loader.has_result
         if loader.result is not None:
-            page.pickups_chart.series = [Series(name="Pickups", x=list(range(24)), y=loader.result)]
+            page.pickups_chart.series = [
+                Series(name="Pickups", x=list(range(24)), y=loader.result.hours)
+            ]
+            page.pickups_map.points = loader.result.points
             page.data_load_state.text = "Done! (using SQLite)"
         else:
             page.data_load_state.text = "Loading data..."
@@ -141,9 +173,13 @@ class UberPickupsMainView(MainView):
                 )
 
 
-if __name__ == "__main__":
+def main() -> None:
     run(
         UberPickupsMainView,
         build_model=UberPickupsModel,
         setup_model=UberPickupsMainView.connect_model,
     )
+
+
+if __name__ == "__main__":
+    main()

@@ -9,6 +9,7 @@ without them, these tests are skipped.
 from __future__ import annotations
 
 import contextlib
+import io
 import re
 import secrets
 import socket
@@ -47,6 +48,7 @@ from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.listview import PIPES, PipesMainView
+from tests.maps import MapMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
@@ -394,6 +396,96 @@ def _no_policy_violation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(Browser, "new_context", checked_context)
     yield
     assert violations == []
+
+
+def test_map_draws_and_keeps_the_viewport_after_swaps(browser: Browser) -> None:
+    app = WebApplication(build_main_view=MapMainView).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        errors: list[str] = []
+        requests: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on("request", lambda request: requests.append(request.url))
+        page.goto("/")
+        region = page.get_by_role("region", name="Pickup locations")
+        expect(region.locator("canvas")).to_be_visible()
+        expect(region).to_have_attribute("aria-busy", "false")
+        image = pytest.importorskip("PIL.Image")
+        pixels = image.open(io.BytesIO(region.locator("canvas").screenshot())).convert("RGB")
+        red, green, blue = pixels.getpixel((pixels.width // 2, pixels.height // 2))
+        assert blue > green > red
+        region.locator("canvas").click()
+        expect(page.get_by_text("Clicked 40.73, -73.98")).to_be_visible()
+        region.focus()
+        region.press("+")
+        expect(page.get_by_text("Zoom 12")).to_be_visible()
+        page.get_by_role("button", name="Move map").click()
+        region.locator("canvas").click()
+        expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
+        region.focus()
+        region.press("+")
+        expect(page.get_by_text("Zoom 13")).to_be_visible()
+        page.get_by_role("button", name="Clear points").click()
+        expect(page.get_by_text("Points cleared")).to_be_visible()
+        region.focus()
+        region.press("+")
+        expect(page.get_by_text("Zoom 14")).to_be_visible()
+        position = page.get_by_text(re.compile("^Zoom 14;"))
+        previous = position.inner_text()
+        bounds = region.bounding_box()
+        assert bounds is not None
+        x, y = bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        page.mouse.move(x + 60, y + 30, steps=5)
+        page.mouse.up()
+        expect(position).not_to_have_text(previous)
+        assert errors == []
+        assert all(request.startswith(url) for request in requests)
+        assert sum("/static/deckgl.min.js" in request for request in requests) == 1
+
+
+def test_map_renders_osm_tiles_with_attribution_and_an_origin_referrer(browser: Browser) -> None:
+    image = pytest.importorskip("PIL.Image")
+    tile = io.BytesIO()
+    image.new("RGB", (256, 256), (80, 160, 80)).save(tile, format="PNG")
+
+    def build_view() -> MapMainView:
+        view = MapMainView()
+        view.map.tiles = True
+        return view
+
+    app = WebApplication(build_main_view=build_view)
+    with _serve(app.create_starlette_app()) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        errors: list[str] = []
+        referrers: list[str | None] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on(
+            "console",
+            lambda message: errors.append(message.text) if message.type == "error" else None,
+        )
+
+        def serve_tile(route: Route) -> None:
+            referrers.append(route.request.headers.get("referer"))
+            assert "cookie" not in route.request.headers
+            route.fulfill(
+                content_type="image/png",
+                body=tile.getvalue(),
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        page.route("https://tile.openstreetmap.org/**", serve_tile)
+        page.goto("/")
+        region = page.get_by_role("region", name="Pickup locations")
+        expect(region).to_have_attribute("aria-busy", "false")
+        expect(page.get_by_role("link", name="© OpenStreetMap contributors")).to_be_visible()
+        assert errors == []
+        pixels = image.open(io.BytesIO(region.locator("canvas").screenshot())).convert("RGB")
+        assert pixels.getpixel((10, 10)) == (80, 160, 80)
+        assert len(referrers) > 0
+        assert set(referrers) == {url + "/"}
+        assert errors == []
 
 
 @pytest.fixture

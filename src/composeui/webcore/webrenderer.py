@@ -62,6 +62,8 @@ from composeui.core.view import (
     ListView,
     LogType,
     MainView,
+    MapPoint,
+    MapView,
     Menu,
     MetricView,
     NewAction,
@@ -1064,6 +1066,87 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+
+
+class MapViewLike(ViewLike, Protocol):
+    title: str
+    center: MapPoint
+    zoom: float
+    points: list[MapPoint]
+    height: int
+    tiles: bool
+    user_agent: str
+    clicked: Signal[float, float]
+    viewport_changed: SignalNoArgs
+
+
+class WebMapRenderer(WebRenderer[MapViewLike]):
+    _role = "map"
+    is_labelable = False
+
+    def __init__(self, view: MapViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("title", "center", "zoom", "points", "height", "tiles", "user_agent"),
+                self._mark_dirty,
+            )
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        view = self._view
+        spec = json.dumps(
+            {
+                "latitude": view.center.latitude,
+                "longitude": view.center.longitude,
+                "zoom": view.zoom,
+                "points": [[p.longitude, p.latitude] for p in view.points],
+                "tiles": view.tiles,
+                "enabled": self.is_enabled,
+            },
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        attribution = (
+            Markup(
+                '<a href="https://www.openstreetmap.org/copyright" rel="noreferrer">'
+                "© OpenStreetMap contributors</a>"
+            )
+            if view.tiles
+            else Markup()
+        )
+        return Markup(
+            '<figure {root} class="flex w-full flex-col gap-2">'
+            "<figcaption>{title}</figcaption>"
+            '<div data-map="{spec}" data-widget="{widget}" role="region"'
+            ' aria-label="{title}" tabindex="0" style="height:{height}px;position:relative;'
+            'width:100%;background:#e5e7eb"></div><small>{attribution}</small></figure>'
+        ).format(
+            root=self._root_attributes(oob=oob),
+            title=view.title,
+            spec=spec,
+            widget=self.widget_id,
+            height=view.height,
+            attribution=attribution,
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event not in ("click", "viewport") or not self.is_enabled:
+            super().dispatch(event, form)
+        try:
+            point = MapPoint(float(form.get("latitude", "")), float(form.get("longitude", "")))
+            zoom = float(form.get("zoom", "")) if event == "viewport" else self._view.zoom
+        except ValueError:
+            super().dispatch(event, form)
+        if not 0 <= zoom <= MapView.MAX_ZOOM:
+            super().dispatch(event, form)
+        if event == "click":
+            self._view.clicked.emit(point.latitude, point.longitude)
+        else:
+            with self.stop_refresh():
+                self._view.center = point
+                self._view.zoom = zoom
+            self._view.viewport_changed.emit()
 
 
 class ChartViewLike(ViewLike, Protocol):
@@ -4972,6 +5055,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
     "button": WebButtonRenderer,
     "chart": WebChartRenderer,
+    "map": WebMapRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboboxRenderer,
     "data_table": WebDataTableRenderer,

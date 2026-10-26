@@ -17,6 +17,7 @@
 - [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, and the other views
 - [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): table views and their cells
 - [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): chart views
+- [Maps](https://ehmoussi.github.io/composeui/user-guide/maps.html): geographic points on Qt Location and deck.gl maps, tile usage, viewport signals, and saved state
 - [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): arranging views in the window
 - [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend
 - [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`

@@ -89,7 +89,9 @@ edits a field, the page posts it. The response swaps in every part of the page t
 such as the status bar. It never swaps the field that the user types in.
 
 The app itself serves the styles ([daisyUI](https://daisyui.com/) on Tailwind), htmx, and
-the scripts of charts and calendars. So the app also works offline.
+the scripts of charts, calendars, and maps. These assets work offline.
+[Street-map tiles](maps.md#tiles-and-network-access) still need internet access unless
+`MapView.tiles` is `False`. An application's own data downloads also need their data source.
 
 For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhello.py)
 (`uv run python -m examples.webhello`), and `pipeform.py` with `--backend web`.

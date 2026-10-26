@@ -11,6 +11,7 @@ run them from a clone of the repository.
 - [Run an example](#run-an-example)
 - [Overview](#overview)
 - [Where to start](#where-to-start)
+- [Uber pickups](#uber-pickups)
 - [Pipe form](#pipe-form)
 - [Pipe catalogue](#pipe-catalogue)
 - [Pipe chart](#pipe-chart)
@@ -45,6 +46,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
+| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite in a job, hourly pickup counts, a sampled street map, and a raw-data table |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
@@ -70,6 +72,34 @@ Read the examples in this order. Each one adds a few features to the ones before
 The other examples each show one topic: [Batman](#batman) the look of a chart,
 [Web hello](#web-hello) an app that only the web shows, and [Textual demo](#textual-demo)
 an app in a terminal.
+
+## Uber pickups
+
+[`uberpickups.py`](../src/examples/uberpickups.py) explores Uber pickups in NYC,
+based on Streamlit's tutorial.
+
+```bash
+uv run python -m examples.uberpickups --backend qt   # or textual, or web
+```
+
+It downloads the September 2014 CSV dataset on its first load. A saved study keeps the
+SQLite rows, so reopening it does not download them again. The hourly chart counts all rows.
+The map shows at most 10,000 pickups sampled in row order, not every pickup.
+
+These screenshots use generated rows with map tiles disabled, so taking them needs no
+external service. Textual omits the map.
+
+| Qt | Textual | Web |
+| --- | --- | --- |
+| ![Uber pickups on Qt](images/uberpickups-qt.png) | ![Uber pickups on Textual](images/uberpickups-textual.png) | ![Uber pickups on the web](images/uberpickups-web.png) |
+
+It shows:
+
+- [CSV URL import](user-guide/sqlite-model.md#csv-urls) into a typed SQLite table;
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) with row-count progress;
+- a [bar chart](user-guide/charts.md#kinds-of-chart) of pickups per hour;
+- an interactive [map](user-guide/maps.md) on Qt and the web;
+- a checkbox that shows the [raw-data table](user-guide/tables.md#a-large-table).
 
 ## Pipe form
 

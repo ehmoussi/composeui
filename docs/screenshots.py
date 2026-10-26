@@ -48,6 +48,7 @@ from examples import (
     pipesweep,
     taskview,
     textual_demo,
+    uberpickups,
     webhello,
 )
 
@@ -188,6 +189,30 @@ def _textual_demo(main_view: Any, _model: Optional[Model]) -> None:
     form.shape.value_changed.emit("HEXAGON")
 
 
+def _uberpickups_setup(main_view: Any, model: Any) -> None:
+    # Generated rows and no tiles keep screenshots independent of external services.
+    with model.uber_data.connection() as db:
+        db.executemany(
+            "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
+            [
+                (
+                    f"2014-09-01T{hour:02d}:01:00",
+                    40.70 + index * 0.002,
+                    -74.02 + index * 0.002 + hour * 0.0005,
+                    "B02512",
+                )
+                for hour in range(24)
+                for index in range(10 + hour)
+            ],
+        )
+    main_view.page.pickups_map.tiles = False
+    main_view.connect_model(model)
+
+
+def _uberpickups(main_view: Any, _model: Optional[Model]) -> None:
+    main_view.jobs.wait()
+
+
 def _quickstart_main_view() -> Callable[[], MainView]:
     """Get the main view of the README's quickstart, run from the README's own code."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -234,6 +259,14 @@ def _examples() -> list[Example]:
             pipesweep.PipeSweepMainView.connect_model,
         ),
         Example("taskview", taskview.TaskMainView, _taskview),
+        Example(
+            "uberpickups",
+            uberpickups.UberPickupsMainView,
+            _uberpickups,
+            uberpickups.UberPickupsModel,
+            _uberpickups_setup,
+            window=(1200, 1200),
+        ),
         Example("batman", batman.BatmanMainView),
         Example(
             "largetable",

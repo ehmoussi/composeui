@@ -22,10 +22,11 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
-#: the app's own files only; daisyUI's stylesheet draws a few marks from `data:` images
+#: scripts stay local; maps alone fetch raster tiles from OSM, without credentials
 POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self';"
     " style-src-attr 'unsafe-inline'; img-src 'self' data:; object-src 'none';"
+    " connect-src 'self' https://tile.openstreetmap.org;"
     " base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 )
 
