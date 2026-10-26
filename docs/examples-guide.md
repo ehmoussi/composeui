@@ -89,8 +89,8 @@ The initial hour is 11. Changing the slider queries the saved rows for the map o
 the chart and raw-data table still include all hours.
 It fits those locations automatically. After the user pans or zooms, it keeps that viewport.
 
-These screenshots use generated rows with map tiles disabled, so taking them needs no
-external service. Textual omits the map.
+These screenshots use generated rows and OpenStreetMap tiles. Taking them needs a network
+connection for the street map. Textual omits the map.
 
 | Qt | Textual | Web |
 | --- | --- | --- |

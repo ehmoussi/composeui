@@ -190,7 +190,7 @@ def _textual_demo(main_view: Any, _model: Optional[Model]) -> None:
 
 
 def _uberpickups_setup(main_view: Any, model: Any) -> None:
-    # Generated rows and no tiles keep screenshots independent of external services.
+    # Generated rows avoid downloading the full CSV; street tiles still need the network.
     with model.uber_data.connection() as db:
         db.executemany(
             "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
@@ -205,7 +205,6 @@ def _uberpickups_setup(main_view: Any, model: Any) -> None:
                 for index in range(10 + hour)
             ],
         )
-    main_view.data.pickups_map.tiles = False
     main_view.connect_model(model)
 
 
@@ -318,7 +317,7 @@ def qt_screenshot(example: Example, path: Path) -> None:
     window.resize(*example.window)
     window.show()
     # a few passes: layouts settle, and pyqtgraph draws its charts once shown
-    for _ in range(10):
+    for _ in range(100 if example.name == "uberpickups" else 10):
         qt_app.processEvents()
         time.sleep(0.05)
     window.grab().save(str(path))
@@ -416,8 +415,10 @@ def web_screenshot(browser: Browser, example: Example, path: Path) -> None:
         page = context.new_page()
         page.goto(url)
         page.wait_for_load_state("networkidle")
+        if example.name == "uberpickups":
+            page.locator('[data-map][aria-busy="false"]').wait_for()
         page.wait_for_timeout(500)
-        page.screenshot(path=str(path))
+        page.screenshot(path=str(path), full_page=True)
         context.close()
 
 
