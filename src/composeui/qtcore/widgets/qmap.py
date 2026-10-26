@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Qt, QUrl
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtQuickWidgets import QQuickWidget
 from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
+from typing_extensions import override
 
 from composeui.qtcore.widgets.qplaintext import plain_label
+
+if TYPE_CHECKING:
+    from qtpy.QtGui import QResizeEvent
+
+
+class _MapCanvas(QQuickWidget):
+    resized = QtSignal()
+
+    @override
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self.resized.emit()
 
 
 class QMap(QWidget):
@@ -25,7 +38,7 @@ class QMap(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.title: QLabel = plain_label()
         layout.addWidget(self.title)
-        self.map = QQuickWidget()
+        self.map = _MapCanvas()
         self.map.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.map.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
         layout.addWidget(self.map)

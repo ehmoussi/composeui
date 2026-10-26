@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import Protocol
 
 from composeui.core.renderer import ViewLike
-from composeui.core.view import MapPoint
+from composeui.core.view import MapPoint, MapView
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qmap import QMap
 
@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 class MapViewLike(ViewLike, Protocol):
     title: str
-    center: MapPoint
-    zoom: float
+    center: MapPoint | None
+    zoom: float | None
     points: list[MapPoint]
     height: int
     tiles: bool
@@ -47,6 +47,7 @@ class QtMapRenderer(QtWidgetRenderer[MapViewLike, QMap]):
             widget = self._rendered_object = QMap(self._view.user_agent, tiles=self._view.tiles)
             widget.viewport_moved.connect(self._viewport_moved)
             widget.point_clicked.connect(self._view.clicked.emit)
+            widget.map.resized.connect(self._resize)
             self.refresh()
 
     @staticmethod
@@ -56,17 +57,37 @@ class QtMapRenderer(QtWidgetRenderer[MapViewLike, QMap]):
         widget.map.setAccessibleName(value)
 
     @staticmethod
-    def _refresh_center(_view: MapViewLike, widget: QMap, value: MapPoint) -> None:
-        widget.root.setProperty("latitude", value.latitude)
-        widget.root.setProperty("longitude", value.longitude)
+    def _refresh_center(view: MapViewLike, widget: QMap, value: MapPoint | None) -> None:
+        QtMapRenderer._fit(widget, view.points, value, view.zoom)
 
     @staticmethod
-    def _refresh_zoom(_view: MapViewLike, widget: QMap, value: float) -> None:
-        widget.root.setProperty("zoom", value)
+    def _refresh_zoom(view: MapViewLike, widget: QMap, value: float | None) -> None:
+        QtMapRenderer._fit(widget, view.points, view.center, value)
 
     @staticmethod
-    def _refresh_points(_view: MapViewLike, widget: QMap, value: list[MapPoint]) -> None:
+    def _refresh_points(view: MapViewLike, widget: QMap, value: list[MapPoint]) -> None:
         widget.root.setProperty("points", [[p.latitude, p.longitude] for p in value])
+        QtMapRenderer._fit(widget, value, view.center, view.zoom)
+
+    @staticmethod
+    def _fit(
+        widget: QMap, points: list[MapPoint], center: MapPoint | None, zoom: float | None
+    ) -> None:
+        position, span_x, span_y = MapView.point_bounds(points, center)
+        widget.root.setProperty("latitude", position.latitude)
+        widget.root.setProperty("longitude", position.longitude)
+        widget.root.setProperty(
+            "zoom",
+            zoom
+            if zoom is not None
+            else MapView.fitted_zoom(span_x, span_y, widget.map.width(), widget.map.height()),
+        )
+
+    def _resize(self) -> None:
+        widget = self._rendered_object
+        assert widget is not None
+        view = self._view
+        self._fit(widget, view.points, view.center, view.zoom)
 
     @staticmethod
     def _refresh_height(_view: MapViewLike, widget: QMap, value: int) -> None:
@@ -86,6 +107,9 @@ class QtMapRenderer(QtWidgetRenderer[MapViewLike, QMap]):
 
     def _viewport_moved(self, latitude: float, longitude: float, zoom: float) -> None:
         with self.stop_refresh():
-            self._view.center = MapPoint(latitude, longitude)
+            self._view.center = MapPoint(
+                latitude=latitude,
+                longitude=longitude,
+            )
             self._view.zoom = zoom
         self._view.viewport_changed.emit()

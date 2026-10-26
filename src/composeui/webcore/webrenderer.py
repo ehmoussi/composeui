@@ -1070,8 +1070,8 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
 
 class MapViewLike(ViewLike, Protocol):
     title: str
-    center: MapPoint
-    zoom: float
+    center: MapPoint | None
+    zoom: float | None
     points: list[MapPoint]
     height: int
     tiles: bool
@@ -1095,11 +1095,13 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
+        center, span_x, span_y = MapView.point_bounds(view.points, view.center)
         spec = json.dumps(
             {
-                "latitude": view.center.latitude,
-                "longitude": view.center.longitude,
+                "latitude": center.latitude,
+                "longitude": center.longitude,
                 "zoom": view.zoom,
+                "span": [span_x, span_y],
                 "points": [[p.longitude, p.latitude] for p in view.points],
                 "tiles": view.tiles,
                 "enabled": self.is_enabled,
@@ -1134,8 +1136,11 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
         if event not in ("click", "viewport") or not self.is_enabled:
             super().dispatch(event, form)
         try:
-            point = MapPoint(float(form.get("latitude", "")), float(form.get("longitude", "")))
-            zoom = float(form.get("zoom", "")) if event == "viewport" else self._view.zoom
+            point = MapPoint(
+                latitude=float(form.get("latitude", "")),
+                longitude=float(form.get("longitude", "")),
+            )
+            zoom = float(form.get("zoom", "")) if event == "viewport" else 0.0
         except ValueError:
             super().dispatch(event, form)
         if not 0 <= zoom <= MapView.MAX_ZOOM:
