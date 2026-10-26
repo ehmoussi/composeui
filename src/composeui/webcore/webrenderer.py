@@ -71,6 +71,7 @@ from composeui.core.view import (
     OpenFileAction,
     Orientation,
     PageView,
+    PageWidth,
     PickFileAction,
     ProgressBarView,
     Router,
@@ -4776,7 +4777,6 @@ class WebGridRenderer(WebRenderer[GridView]):
 #: only swaps the router, so CSS picks the width from the page neither hidden nor in a
 #: hidden slot
 _MAIN_WIDTHS = (
-    "max-w-3xl"
     " has-[[data-width=wide]:not([hidden],[hidden]_*)]:max-w-6xl"
     " has-[[data-width=full]:not([hidden],[hidden]_*)]:max-w-none"
 )
@@ -4965,7 +4965,15 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             '<div class="card-body gap-6 p-6">'
             "{}"
             "</div></div></main>"
-        ).format(_MAIN_WIDTHS, Markup("").join(content))
+        ).format(
+            {
+                PageWidth.NARROW: "max-w-3xl",
+                PageWidth.WIDE: "max-w-6xl",
+                PageWidth.FULL: "max-w-none",
+            }[self._view.width]
+            + _MAIN_WIDTHS,
+            Markup("").join(content),
+        )
         return get_page(
             self._view.title,
             # sticky: the menus stay at hand however long the form is

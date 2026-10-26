@@ -70,6 +70,7 @@ from composeui.core.view import (
     MarkdownView,
     Menu,
     PageView,
+    PageWidth,
     Router,
     SaveAsAction,
     SelectionMode,
@@ -335,6 +336,27 @@ def test_page_shows_the_form_and_docks_an_empty_status_bar(
     # a status line docked at the bottom, not a coloured callout showing even when empty
     assert {"fixed", "inset-x-0", "bottom-0"} <= classes
     assert "alert" not in classes
+
+
+@pytest.mark.parametrize(
+    ("width", "expected_class"),
+    [
+        (PageWidth.NARROW, "max-w-3xl"),
+        (PageWidth.WIDE, "max-w-6xl"),
+        (PageWidth.FULL, "max-w-none"),
+    ],
+)
+def test_main_view_sets_the_web_content_width_without_a_page(
+    monkeypatch: pytest.MonkeyPatch, width: PageWidth, expected_class: str
+) -> None:
+    monkeypatch.setattr(MainView, "width", width)
+    app = WebApplication(build_main_view=MainView)
+    with _Browser(app.create_starlette_app()) as client:
+        response = client.get("/")
+    assert response.status_code == 200
+    main = re.search(r'<main class="([^"]+)"', response.text)
+    assert main is not None
+    assert expected_class in main[1].split()
 
 
 def test_the_browser_never_shows_a_stale_copy_of_the_page(
