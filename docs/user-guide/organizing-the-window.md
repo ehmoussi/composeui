@@ -62,6 +62,22 @@ class ResultsPage(PageView):
 
 On Qt and Textual, the window sets the width, and `width` changes nothing.
 
+An app without pages can set `width` directly on its `MainView` subclass:
+
+```python
+from composeui.core.view import MainView, PageWidth, define_view
+
+
+@define_view
+class WideMainView(MainView):
+    width = PageWidth.WIDE
+```
+
+This sets the web content's default width, which is otherwise `PageWidth.NARROW`.
+Visible pages with `WIDE` or `FULL` can expand it. Qt and Textual ignore this setting.
+The [Uber pickups example](../../src/examples/uberpickups.py) uses a wide main view without
+a `PageView` wrapper.
+
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web puts the
 toolbar in the page header, with a web address per page.
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is an app with three pages: Inputs,

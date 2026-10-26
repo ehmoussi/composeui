@@ -891,6 +891,17 @@ class LanguageMenu(Menu):
             action.is_checked = action.data == checked
 
 
+class PageWidth(enum.Enum):
+    """How wide a page may grow, where the window doesn't set it (the web backend)."""
+
+    #: a column of fields, easy to read
+    NARROW = enum.auto()
+    #: room for side by side views, e.g. tables
+    WIDE = enum.auto()
+    #: the whole window
+    FULL = enum.auto()
+
+
 @define_view
 class MainView(View):
     """The root view of an app: its window, with the menus, the status bar and the content.
@@ -901,6 +912,9 @@ class MainView(View):
     """
 
     _renderer_key = "main"
+
+    #: the web content's default width; a subclass sets it: ``width = PageWidth.WIDE``
+    width: ClassVar[PageWidth] = PageWidth.NARROW
 
     #: the app's name, in the window's title; a subclass sets it: ``app_title = T("Pipes")``
     app_title: ClassVar[str] = ""
@@ -4870,17 +4884,6 @@ class GridView(View):
 
 #: what a page's route can be: it also names the page in a web address (``/<route>``)
 _ROUTE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
-
-
-class PageWidth(enum.Enum):
-    """How wide a page may grow, where the window doesn't set it (the web backend)."""
-
-    #: a column of fields, easy to read
-    NARROW = enum.auto()
-    #: room for side by side views, e.g. tables
-    WIDE = enum.auto()
-    #: the whole window
-    FULL = enum.auto()
 
 
 @define_view
