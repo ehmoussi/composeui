@@ -22,6 +22,7 @@ from composeui.core.view import (
     PageView,
     PageWidth,
     Series,
+    VerticalView,
     child,
     define_view,
 )
@@ -74,10 +75,10 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
                 " AND lon BETWEEN -180 AND 180 ORDER BY rowid LIMIT 10000",
                 (stride,),
             )
-            return [MapPoint(lat, lon) for lat, lon in rows]
+            return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows]
 
 
-@attrs.frozen
+@attrs.frozen(kw_only=True)
 class PickupData:
     hours: list[int]
     points: list[MapPoint]
@@ -91,12 +92,33 @@ class UberPickupsModel(SqliteModel):
             with contextlib.closing(self.uber_data.fill_from_url(url)) as batches:
                 for nb_read in batches:
                     if job.is_canceled:
-                        return PickupData([], [])
+                        return PickupData(hours=[], points=[])
                     job.report_progress(nb_read)
-        return PickupData(self.uber_data.pickups_by_hour(), self.uber_data.pickup_points())
+        return PickupData(
+            hours=self.uber_data.pickups_by_hour(),
+            points=self.uber_data.pickup_points(),
+        )
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+
+
+@define_view
+class UberPickupsDataView(VerticalView):
+    table: DataTableView = child(DataTableView, is_visible=False)
+    pickups_chart: ChartView = child(
+        ChartView,
+        title="Number of pickups by hour",
+        kind=ChartKind.BAR,
+        x_title="Hour of day",
+        y_title="Number of pickups",
+        categories=[f"{hour:02d}:00" for hour in range(24)],
+        height=400,
+    )
+    pickups_map: MapView = child(
+        MapView,
+        title="Pickup locations (up to 10,000 sampled pickups)",
+    )
 
 
 @define_view
@@ -108,25 +130,7 @@ class UberPickupsPageView(PageView):
     data_load_status: LabelView = child(
         LabelView, text="Start reading rows from CSV", is_visible=False
     )
-    table: DataTableView = child(DataTableView, is_visible=False)
-    pickups_chart: ChartView = child(
-        ChartView,
-        is_visible=False,
-        title="Number of pickups by hour",
-        kind=ChartKind.BAR,
-        x_title="Hour of day",
-        y_title="Number of pickups",
-        categories=[f"{hour:02d}:00" for hour in range(24)],
-        height=400,
-    )
-    pickups_map: MapView = child(
-        MapView,
-        title="Pickup locations (up to 10,000 sampled pickups)",
-        center=MapPoint(40.73, -73.98),
-        zoom=11,
-        is_visible=False,
-        user_agent="ComposeUI-UberPickups (+https://github.com/ehmoussi/composeui)",
-    )
+    data: UberPickupsDataView = child(UberPickupsDataView, is_visible=False)
 
 
 @define_view
@@ -136,7 +140,7 @@ class UberPickupsMainView(MainView):
     page: UberPickupsPageView = child(UberPickupsPageView)
 
     def connect_model(self, model: UberPickupsModel) -> None:
-        self.page.table.source = model.uber_data.source()
+        self.page.data.table.source = model.uber_data.source()
         self.loader = self.jobs.task(model.load_pickups)
         self.loader.changed.connect(self._show_loading)
         self.page.show_raw_data.toggled.connect(self._show_loading)
@@ -149,14 +153,13 @@ class UberPickupsMainView(MainView):
     def _show_loading(self) -> None:
         page, loader = self.page, self.loader
         page.data_load_status.is_visible = loader.is_running
-        page.table.is_visible = loader.has_result and page.show_raw_data.is_checked
-        page.pickups_chart.is_visible = loader.has_result
-        page.pickups_map.is_visible = loader.has_result
+        page.data.table.is_visible = page.show_raw_data.is_checked
+        page.data.is_visible = loader.has_result
         if loader.result is not None:
-            page.pickups_chart.series = [
+            page.data.pickups_chart.series = [
                 Series(name="Pickups", x=list(range(24)), y=loader.result.hours)
             ]
-            page.pickups_map.points = loader.result.points
+            page.data.pickups_map.points = loader.result.points
             page.data_load_state.text = "Done! (using SQLite)"
         else:
             page.data_load_state.text = "Loading data..."

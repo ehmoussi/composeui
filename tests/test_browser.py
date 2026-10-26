@@ -48,7 +48,7 @@ from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.listview import PIPES, PipesMainView
-from tests.maps import MapMainView
+from tests.maps import AutoMapMainView, MapMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
@@ -443,6 +443,63 @@ def test_map_draws_and_keeps_the_viewport_after_swaps(browser: Browser) -> None:
         assert errors == []
         assert all(request.startswith(url) for request in requests)
         assert sum("/static/deckgl.min.js" in request for request in requests) == 1
+
+
+def test_map_fits_loaded_points_and_resizes_without_pinning_the_viewport(browser: Browser) -> None:
+    image = pytest.importorskip("PIL.Image")
+    app = WebApplication(build_main_view=AutoMapMainView).create_starlette_app()
+    with (
+        _serve(app) as url,
+        browser.new_context(base_url=url, viewport={"width": 1000, "height": 800}) as context,
+    ):
+        page = context.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto("/")
+        region = page.get_by_role("region", name="Pickup locations")
+        canvas = region.locator("canvas")
+        expect(canvas).to_be_visible()
+        canvas.click()
+        expect(page.get_by_text(re.compile(r"Clicked -?0\.00, -?0\.00"))).to_be_visible()
+        page.get_by_role("button", name="Move map").click()
+        canvas.click()
+        expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
+
+        def assert_fitted() -> None:
+            pixels = image.open(io.BytesIO(canvas.screenshot())).convert("RGB")
+            colors = pixels.load()
+            dots = [
+                (x, y)
+                for y in range(pixels.height)
+                for x in range(pixels.width)
+                if colors[x, y][2] > colors[x, y][1] + 30 and colors[x, y][1] > colors[x, y][0] + 10
+            ]
+            assert dots
+            left = min(x for x, _y in dots)
+            right = pixels.width - 1 - max(x for x, _y in dots)
+            top = min(y for _x, y in dots)
+            bottom = pixels.height - 1 - max(y for _x, y in dots)
+            assert min(left, right, top, bottom) >= 28
+            assert min(left, right, top, bottom) <= 36
+
+        assert_fitted()
+        page.set_viewport_size({"width": 420, "height": 800})
+        assert_fitted()
+        canvas.click()
+        expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
+        region.focus()
+        region.press("+")
+        position = page.get_by_text(re.compile("^Zoom "))
+        expect(position).to_be_visible()
+        chosen_zoom = int(position.inner_text().split(";")[0].split()[1])
+        page.get_by_role("button", name="Clear points").click()
+        expect(page.get_by_text("Points cleared")).to_be_visible()
+        canvas.click()
+        expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
+        region.focus()
+        region.press("+")
+        expect(page.get_by_text(f"Zoom {chosen_zoom + 1};")).to_be_visible()
+        assert errors == []
 
 
 def test_map_renders_osm_tiles_with_attribution_and_an_origin_referrer(browser: Browser) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import threading
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING
 
 import pytest
@@ -28,6 +29,21 @@ _CSV = (
     "9/1/2014 0:01:00,40.7,-73.9,B02512\n"
     "9/1/2014 13:05:00,40.8,-73.8,B02512\n"
 )
+
+
+class _VisibilityParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ids: set[str] = set()
+        self.hidden_ids: set[str] = set()
+
+    def handle_starttag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        element_id = attributes.get("id")
+        if element_id is not None:
+            self.ids.add(element_id)
+            if "hidden" in attributes:
+                self.hidden_ids.add(element_id)
 
 
 def _app() -> App:
@@ -55,11 +71,14 @@ def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     assert page.data_load_state.text == "Done! (using SQLite)"
     assert page.data_load_status.text == "Read 2 rows from CSV"
     assert not page.data_load_status.is_visible
-    assert page.pickups_chart.series[0].y == [1, *([0] * 12), 1, *([0] * 10)]
-    assert page.table.source is not None
-    assert page.table.source.count() == 2
-    assert page.pickups_map.points == [MapPoint(40.7, -73.9), MapPoint(40.8, -73.8)]
-    assert page.pickups_map.is_visible
+    assert page.data.pickups_chart.series[0].y == [1, *([0] * 12), 1, *([0] * 10)]
+    assert page.data.table.source is not None
+    assert page.data.table.source.count() == 2
+    assert page.data.pickups_map.points == [
+        MapPoint(latitude=40.7, longitude=-73.9),
+        MapPoint(latitude=40.8, longitude=-73.8),
+    ]
+    assert page.data.is_visible
 
 
 def test_visibility_follows_loading_and_real_checkbox_clicks(
@@ -75,41 +94,52 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         build_main_view=uberpickups.UberPickupsMainView,
         build_model=uberpickups.UberPickupsModel,
     )
-    app.main_view.page.pickups_map.tiles = False
+    app.main_view.page.data.pickups_map.tiles = False
     try:
         app.render(RendererType.QT)
         view, page = app.main_view, app.main_view.page
         assert isinstance(view.renderer, qt_renderers.QtWidgetRenderer)
-        qtbot.addWidget(view.renderer.qt_object)
+        window = view.renderer.qt_object
+        assert isinstance(window, qt_widgets.QWidget)
+        qtbot.addWidget(window)
         widgets = []
-        for child in (page.show_raw_data, page.table, page.pickups_chart, page.data_load_status):
+        for child in (
+            page.show_raw_data,
+            page.data.table,
+            page.data.pickups_chart,
+            page.data.pickups_map,
+            page.data_load_status,
+            page.data,
+        ):
             assert isinstance(child.renderer, qt_renderers.QtWidgetRenderer)
             widget = child.renderer.qt_object
             assert isinstance(widget, qt_widgets.QWidget)
             widgets.append(widget)
-        checkbox, table, chart, status = widgets
+        checkbox, table, chart, map_widget, status, data = widgets
+
+        def assert_visibility(*, loaded: bool, raw: bool) -> None:
+            assert data.isVisibleTo(window) == loaded
+            assert chart.isVisibleTo(window) == loaded
+            assert map_widget.isVisibleTo(window) == loaded
+            assert table.isVisibleTo(window) == (loaded and raw)
+
         assert isinstance(checkbox, qt_widgets.QCheckBox)
         checkbox.click()
-        assert table.isHidden()
-        assert chart.isHidden()
+        assert_visibility(loaded=False, raw=True)
         assert status.isHidden()
 
         view.connect_model(app.model)
         assert not status.isHidden()
-        assert table.isHidden()
-        assert chart.isHidden()
+        assert_visibility(loaded=False, raw=True)
         qtbot.waitUntil(lambda: not view.loader.is_running)
-        assert not table.isHidden()
-        assert not chart.isHidden()
+        assert_visibility(loaded=True, raw=True)
         assert status.isHidden()
 
         checkbox.click()
-        assert table.isHidden()
-        assert not chart.isHidden()
+        assert_visibility(loaded=True, raw=False)
         view.jobs.drop()
         checkbox.click()
-        assert table.isHidden()
-        assert chart.isHidden()
+        assert_visibility(loaded=False, raw=True)
         assert status.isHidden()
     finally:
         app.main_view.jobs.drop()
@@ -128,10 +158,12 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         load_reloaded_state(restored.main_view, restored.model, tmp_path)
         restored.main_view.jobs.wait()
         page = restored.main_view.page
-        assert page.table.source is not None
-        assert page.table.source.count() == 2
-        assert page.pickups_chart.series[0].y == app.main_view.page.pickups_chart.series[0].y
-        assert page.pickups_chart.is_visible
+        assert page.data.table.source is not None
+        assert page.data.table.source.count() == 2
+        assert (
+            page.data.pickups_chart.series[0].y == app.main_view.page.data.pickups_chart.series[0].y
+        )
+        assert page.data.is_visible
         assert not page.data_load_status.is_visible
         assert page.data_load_state.text == "Done! (using SQLite)"
     finally:
@@ -142,6 +174,7 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     web = pytest.importorskip("composeui.webcore.webapplication")
+    renderers = pytest.importorskip("composeui.webcore.webrenderer")
     testclient = pytest.importorskip("starlette.testclient")
     path = tmp_path / "pickups.csv.gz"
     path.write_bytes(gzip.compress(_CSV.encode()))
@@ -173,7 +206,16 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
 
         view.loader.changed.connect(finished, now=True)
         assert done.wait(10)
-        assert "Done! (using SQLite)" in client.get("/jobs").text
+        response = client.get("/jobs")
+        assert "Done! (using SQLite)" in response.text
+        visibility = _VisibilityParser()
+        visibility.feed(response.text)
+        data = view.page.data
+        for child in (data, data.pickups_chart, data.pickups_map):
+            assert isinstance(child.renderer, renderers.WebRenderer)
+            widget_id = child.renderer.widget_id
+            assert widget_id in visibility.ids
+            assert widget_id not in visibility.hidden_ids
         assert view.loader.error is None
 
 
@@ -194,8 +236,7 @@ def test_invalid_csv_is_shown_as_a_loading_failure(
         page = app.main_view.page
         assert page.data_load_state.text == "Failed to load data"
         assert not page.data_load_status.is_visible
-        assert not page.pickups_chart.is_visible
-        assert not page.table.is_visible
+        assert not page.data.is_visible
         assert "Failed to read the CSV:" in app.main_view.status_bar.message
         assert app.model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
@@ -213,10 +254,9 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     job: Job[uberpickups.PickupData, int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert model.load_pickups(job, path.as_uri()) == uberpickups.PickupData([], [])
+        assert model.load_pickups(job, path.as_uri()) == uberpickups.PickupData(hours=[], points=[])
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
-        assert not page.table.is_visible
-        assert not page.pickups_chart.is_visible
+        assert not page.data.is_visible
     finally:
         model.close()
 

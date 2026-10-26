@@ -85,6 +85,7 @@ uv run python -m examples.uberpickups --backend qt   # or textual, or web
 It downloads the September 2014 CSV dataset on its first load. A saved study keeps the
 SQLite rows, so reopening it does not download them again. The hourly chart counts all rows.
 The map shows at most 10,000 pickups sampled in row order, not every pickup.
+It fits those locations automatically. After the user pans or zooms, it keeps that viewport.
 
 These screenshots use generated rows with map tiles disabled, so taking them needs no
 external service. Textual omits the map.

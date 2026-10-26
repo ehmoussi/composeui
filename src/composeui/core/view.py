@@ -1606,11 +1606,11 @@ BAR_GROUP_WIDTH = 0.8
 _COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
 
 
-@attrs.frozen
+@attrs.frozen(kw_only=True)
 class MapPoint:
-    """A geographic position, in degrees of latitude then longitude.
+    """A geographic position, given as latitude and longitude in degrees.
 
-    Latitude is limited to the range of a Web Mercator street map.
+    Both arguments are keyword-only. Latitude is limited to the range of a Web Mercator map.
     """
 
     latitude: float = attrs.field(
@@ -1627,20 +1627,25 @@ class MapView(View):
     """An interactive street map with geographic points drawn over its tiles.
 
     Qt uses Qt Location, and the web uses deck.gl. Textual does not render this view.
-    Assign a new ``points`` list to redraw the overlay without resetting the viewport.
-    The study saves the center and zoom, but not the points or tile settings.
+    With ``center=None`` and ``zoom=None``, the map fits its points and follows new data
+    and widget sizes. Each explicit value overrides its automatic value. A user pan or
+    zoom sets both values; new points then keep that viewport. Reset both to None to fit
+    again. The study saves these settings, but not the points or tile settings.
     """
 
     _renderer_key = "map"
     MAX_ZOOM: ClassVar[int] = 19
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    center: MapPoint = attrs.field(factory=lambda: MapPoint(0, 0))
-    #: OpenStreetMap zoom levels: 0 shows the world; 19 shows individual buildings
-    zoom: float = attrs.field(
-        default=2,
-        converter=float,
-        validator=[attrs.validators.ge(0), attrs.validators.le(MAX_ZOOM)],
+    #: None fits the points; otherwise the center to keep
+    center: Optional[MapPoint] = attrs.field(default=None)
+    #: None fits the points; otherwise an OpenStreetMap zoom level from 0 to 19
+    zoom: Optional[float] = attrs.field(
+        default=None,
+        converter=attrs.converters.optional(float),
+        validator=attrs.validators.optional(
+            attrs.validators.and_(attrs.validators.ge(0), attrs.validators.le(MAX_ZOOM))
+        ),
     )
     points: list[MapPoint] = attrs.field(factory=list[MapPoint], metadata={OMIT: True})
     height: int = attrs.field(default=400, validator=attrs.validators.ge(1), metadata={OMIT: True})
@@ -1653,6 +1658,67 @@ class MapView(View):
     clicked: Signal[float, float] = attrs.Factory(Signal[float, float])
     #: the user panned or zoomed; center and zoom already hold the new viewport
     viewport_changed: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+    @staticmethod
+    def point_bounds(
+        points: list[MapPoint], center: Optional[MapPoint]
+    ) -> tuple[MapPoint, float, float]:
+        """Get the center and spans as fractions of the Web Mercator world.
+
+        With no center override, use the shortest longitude arc across the date line.
+        With an override, use spans symmetric around that center.
+        """
+        if not points:
+            return center or MapPoint(latitude=0, longitude=0), 1.0, 1.0
+        xs = sorted((point.longitude + 180) / 360 % 1 for point in points)
+        ys = [
+            0.5 - math.asinh(math.tan(math.radians(point.latitude))) / (2 * math.pi)
+            for point in points
+        ]
+        if center is None:
+            # Remove the largest longitude gap so points across the date line stay together.
+            gaps = [right - left for left, right in zip(xs, [*xs[1:], xs[0] + 1])]
+            gap_index = max(range(len(gaps)), key=gaps.__getitem__)
+            span_x = 1 - gaps[gap_index]
+            middle_x = (xs[(gap_index + 1) % len(xs)] + span_x / 2) % 1
+            middle_y = (min(ys) + max(ys)) / 2
+            center = (
+                points[0]
+                if span_x == 0 and min(ys) == max(ys)
+                else MapPoint(
+                    latitude=max(
+                        -85.05112878,
+                        min(
+                            85.05112878,
+                            math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * middle_y)))),
+                        ),
+                    ),
+                    longitude=middle_x * 360 - 180,
+                )
+            )
+            return center, span_x, max(ys) - min(ys)
+        center_x = (center.longitude + 180) / 360
+        center_y = 0.5 - math.asinh(math.tan(math.radians(center.latitude))) / (2 * math.pi)
+        return (
+            center,
+            2 * max(abs((x - center_x + 0.5) % 1 - 0.5) for x in xs),
+            2 * max(abs(y - center_y) for y in ys),
+        )
+
+    @staticmethod
+    def fitted_zoom(span_x: float, span_y: float, width: int, height: int) -> float:
+        """Fit Mercator spans in pixel dimensions with 32 pixels of padding on each side.
+
+        Clamp the zoom to 0 through 19; use 12 for a single location.
+        """
+        if span_x == 0 and span_y == 0:
+            return 12.0
+        scales = [
+            max(1, size - 64) / (256 * span)
+            for span, size in ((span_x, width), (span_y, height))
+            if span > 0
+        ]
+        return max(0.0, min(float(MapView.MAX_ZOOM), math.log2(min(scales))))
 
 
 @attrs.frozen

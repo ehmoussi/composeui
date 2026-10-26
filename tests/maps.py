@@ -22,9 +22,9 @@ class MapMainView(MainView):
         MapView,
         title="Pickup locations",
         tiles=False,
-        center=MapPoint(40.73, -73.98),
+        center=MapPoint(latitude=40.73, longitude=-73.98),
         zoom=11,
-        points=[MapPoint(40.73, -73.98)],
+        points=[MapPoint(latitude=40.73, longitude=-73.98)],
     )
     result: LabelView = child(LabelView, text="No map event")
     move: ButtonView = child(ButtonView, text="Move map")
@@ -47,10 +47,21 @@ class MapMainView(MainView):
         )
 
     def _move(self) -> None:
-        self.map.center = MapPoint(48.86, 2.35)
+        self.map.center = MapPoint(latitude=48.86, longitude=2.35)
         self.map.zoom = 12
-        self.map.points = [MapPoint(48.86, 2.35)]
+        self.map.points = [MapPoint(latitude=48.86, longitude=2.35)]
 
     def _clear(self) -> None:
         self.map.points = []
         self.result.text = "Points cleared"
+
+
+@define_view
+class AutoMapMainView(MapMainView):
+    map: MapView = child(MapView, title="Pickup locations", tiles=False)
+
+    def _move(self) -> None:
+        self.map.points = [
+            MapPoint(latitude=48.85, longitude=2.34),
+            MapPoint(latitude=48.87, longitude=2.36),
+        ]

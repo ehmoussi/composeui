@@ -17,10 +17,22 @@ function mapPost(element, event, state) {
     swap: "none"
   });
 }
+function fittedMapZoom(element, span) {
+  if (span[0] === 0 && span[1] === 0) return 12;
+  var scales = [];
+  [element.clientWidth, element.clientHeight].forEach(function (size, index) {
+    if (span[index] > 0) scales.push(Math.max(1, size - 64) / (256 * span[index]));
+  });
+  return Math.max(0, Math.min(19, Math.log2(Math.min.apply(null, scales))));
+}
 function drawMap(element) {
   element.setAttribute("aria-busy", "true");
   var spec = JSON.parse(element.dataset.map);
-  var state = {latitude: spec.latitude, longitude: spec.longitude, zoom: spec.zoom - 1};
+  var autoFit = spec.zoom === null;
+  var state = {
+    latitude: spec.latitude, longitude: spec.longitude,
+    zoom: (autoFit ? fittedMapZoom(element, spec.span) : spec.zoom) - 1
+  };
   var layers = [];
   if (spec.tiles) {
     layers.push(new deck.TileLayer({
@@ -59,6 +71,10 @@ function drawMap(element) {
     },
     onViewStateChange: function (event) {
       state = event.viewState;
+      var interaction = event.interactionState || {};
+      if (!interaction.isDragging && !interaction.isPanning && !interaction.isZooming &&
+          !interaction.isRotating) return;
+      autoFit = false;
       clearTimeout(timer);
       timer = setTimeout(function () {
         if (!element.isConnected) return;
@@ -73,6 +89,12 @@ function drawMap(element) {
       });
     }
   });
+  element.mapObserver = new ResizeObserver(function () {
+    if (!autoFit || element.clientWidth === 0 || element.clientHeight === 0) return;
+    state.zoom = fittedMapZoom(element, spec.span) - 1;
+    map.setProps({initialViewState: Object.assign({minZoom: -1, maxZoom: 18}, state)});
+  });
+  element.mapObserver.observe(element);
   element.addEventListener("keydown", function (event) {
     if (!spec.enabled) return;
     var next = Object.assign({}, state);
@@ -84,6 +106,7 @@ function drawMap(element) {
     else if (event.key === "ArrowUp") next.latitude += step;
     else if (event.key === "ArrowDown") next.latitude -= step;
     else return;
+    autoFit = false;
     event.preventDefault();
     next.latitude = Math.max(-85.05112878, Math.min(85.05112878, next.latitude));
     next.longitude = ((next.longitude + 180) % 360 + 360) % 360 - 180;
@@ -96,6 +119,7 @@ function drawMap(element) {
 function syncMaps() {
   maps.forEach(function (map, element) {
     if (!element.isConnected) {
+      element.mapObserver.disconnect();
       map.finalize();
       maps.delete(element);
     }

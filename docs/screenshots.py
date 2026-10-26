@@ -205,7 +205,7 @@ def _uberpickups_setup(main_view: Any, model: Any) -> None:
                 for index in range(10 + hour)
             ],
         )
-    main_view.page.pickups_map.tiles = False
+    main_view.page.data.pickups_map.tiles = False
     main_view.connect_model(model)
 
 
