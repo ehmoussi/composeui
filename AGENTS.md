@@ -111,6 +111,13 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
 - Match the existing comment density: brief docstrings, comments explain *why*.
 
+## Permission for documentation and tests
+
+- Ask the user for explicit permission before creating, editing, moving, or deleting
+  documentation or tests.
+- Permission to implement a feature or fix a bug does not authorize documentation or test
+  changes. Ask first when those changes are needed by the rules below.
+
 ## Testing
 
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
