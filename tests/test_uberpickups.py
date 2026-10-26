@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 App = ModelApplication[uberpickups.UberPickupsMainView, uberpickups.UberPickupsModel]
 _CSV = (
     "Date/Time,Lat,Lon,Base\n"
-    "9/1/2014 0:01:00,40.7,-73.9,B02512\n"
+    "9/1/2014 11:01:00,40.7,-73.9,B02512\n"
     "9/1/2014 13:05:00,40.8,-73.8,B02512\n"
 )
 
@@ -67,18 +67,30 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[App]:
 
 def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     app.main_view.jobs.wait()
-    page = app.main_view.page
+    page = app.main_view
     assert page.data_load_state.text == "Done! (using SQLite)"
     assert page.data_load_status.text == "Read 2 rows from CSV"
     assert not page.data_load_status.is_visible
-    assert page.data.pickups_chart.series[0].y == [1, *([0] * 12), 1, *([0] * 10)]
+    assert page.data.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
     assert page.data.table.source is not None
     assert page.data.table.source.count() == 2
     assert page.data.pickups_map.points == [
         MapPoint(latitude=40.7, longitude=-73.9),
-        MapPoint(latitude=40.8, longitude=-73.8),
     ]
     assert page.data.is_visible
+
+
+def _select_hour(
+    view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
+) -> None:
+    qt_widgets = pytest.importorskip("qtpy.QtWidgets")
+    slider = view.data.slider_hours.renderer.qt_object
+    assert isinstance(slider, qt_widgets.QSlider)
+    slider.setValue(hour)
+    assert view.data.pickups_map.points == expected_points
+    assert view.data.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    assert view.data.table.source is not None
+    assert view.data.table.source.count() == 2
 
 
 def test_visibility_follows_loading_and_real_checkbox_clicks(
@@ -94,10 +106,10 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         build_main_view=uberpickups.UberPickupsMainView,
         build_model=uberpickups.UberPickupsModel,
     )
-    app.main_view.page.data.pickups_map.tiles = False
+    app.main_view.data.pickups_map.tiles = False
     try:
         app.render(RendererType.QT)
-        view, page = app.main_view, app.main_view.page
+        view, page = app.main_view, app.main_view
         assert isinstance(view.renderer, qt_renderers.QtWidgetRenderer)
         window = view.renderer.qt_object
         assert isinstance(window, qt_widgets.QWidget)
@@ -135,8 +147,11 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         assert_visibility(loaded=True, raw=True)
         assert status.isHidden()
 
+        _select_hour(page, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
         checkbox.click()
         assert_visibility(loaded=True, raw=False)
+        assert page.data.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
+        _select_hour(page, 12, [])
         view.jobs.drop()
         checkbox.click()
         assert_visibility(loaded=False, raw=True)
@@ -157,12 +172,10 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         monkeypatch.setattr(uberpickups, "DATA_URL", (tmp_path / "missing.csv.gz").as_uri())
         load_reloaded_state(restored.main_view, restored.model, tmp_path)
         restored.main_view.jobs.wait()
-        page = restored.main_view.page
+        page = restored.main_view
         assert page.data.table.source is not None
         assert page.data.table.source.count() == 2
-        assert (
-            page.data.pickups_chart.series[0].y == app.main_view.page.data.pickups_chart.series[0].y
-        )
+        assert page.data.pickups_chart.series[0].y == app.main_view.data.pickups_chart.series[0].y
         assert page.data.is_visible
         assert not page.data_load_status.is_visible
         assert page.data_load_state.text == "Done! (using SQLite)"
@@ -210,7 +223,7 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
         assert "Done! (using SQLite)" in response.text
         visibility = _VisibilityParser()
         visibility.feed(response.text)
-        data = view.page.data
+        data = view.data
         for child in (data, data.pickups_chart, data.pickups_map):
             assert isinstance(child.renderer, renderers.WebRenderer)
             widget_id = child.renderer.widget_id
@@ -233,7 +246,7 @@ def test_invalid_csv_is_shown_as_a_loading_failure(
     app.main_view.status_bar.timeout = 0
     try:
         app.main_view.jobs.wait()
-        page = app.main_view.page
+        page = app.main_view
         assert page.data_load_state.text == "Failed to load data"
         assert not page.data_load_status.is_visible
         assert not page.data.is_visible
@@ -249,14 +262,14 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     path = tmp_path / "pickups.csv.gz"
     path.write_bytes(gzip.compress(_CSV.encode()))
     model = uberpickups.UberPickupsModel()
-    page = uberpickups.UberPickupsPageView()
     # Cancel before the first yielded batch, as New/Open can do during a download.
     job: Job[uberpickups.PickupData, int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert model.load_pickups(job, path.as_uri()) == uberpickups.PickupData(hours=[], points=[])
+        assert model.load_pickups(job, path.as_uri(), 11) == uberpickups.PickupData(
+            hours=[], points=[]
+        )
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
-        assert not page.data.is_visible
     finally:
         model.close()
 
@@ -285,7 +298,7 @@ def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> Non
                     ),
                 ],
             )
-        points = model.uber_data.pickup_points()
+        points = model.uber_data.pickup_points(0)
         assert 0 < len(points) <= 10000
         assert len(set(points)) == len(points)
         assert all(40.7 <= point.latitude <= 40.71 for point in points)
