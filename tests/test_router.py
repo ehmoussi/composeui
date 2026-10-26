@@ -49,7 +49,7 @@ class _UnroutedPage(PageView):
 
 @define_view
 class _UnroutedRouter(Router):
-    page: _UnroutedPage = Factory(_UnroutedPage)
+    unrouted: _UnroutedPage = Factory(_UnroutedPage)
 
 
 @define_view
@@ -59,7 +59,7 @@ class _SlashedPage(PageView):
 
 @define_view
 class _SlashedRouter(Router):
-    page: _SlashedPage = Factory(_SlashedPage)
+    slashed: _SlashedPage = Factory(_SlashedPage)
 
 
 @define_view

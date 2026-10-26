@@ -29,7 +29,7 @@ def test_a_record_keeps_its_view_by_its_key_and_a_new_one_gets_a_view() -> None:
 
     feed, kept = pipes.item_views
     assert kept is main_line  # still expanded, its length shown in place
-    assert (kept.is_expanded, kept.length.text) == (True, "Length: 15 m")
+    assert (main_line.is_expanded, main_line.length.text) == (True, "Length: 15 m")
     assert isinstance(feed, PipeExpander)
     assert feed.title == "Feed"
     assert ret not in pipes.children_views  # gone with its record

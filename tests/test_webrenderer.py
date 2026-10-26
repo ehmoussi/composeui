@@ -631,7 +631,9 @@ def test_the_listed_main_views_show_every_web_renderer() -> None:
 def _poison(main_view: MainView) -> None:
     """Set every text of every view under `main_view` to `_HOSTILE`."""
     for view in _views(main_view):
-        for field in attrs.fields(type(view)):
+        view_type = type(view)
+        assert attrs.has(view_type)
+        for field in attrs.fields(view_type):
             value = getattr(view, field.name)
             hostile: Any
             if isinstance(view, TableView) and field.name == "search":
@@ -711,7 +713,9 @@ def test_the_web_backend_builds_its_html_with_markup() -> None:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.JoinedStr):
                 text = "".join(
-                    value.value for value in node.values if isinstance(value, ast.Constant)
+                    value.value
+                    for value in node.values
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str)
                 )
                 if any(mark in text for mark in ("<", '="', "='")):
                     found.append(f"{path.name}:{node.lineno} f-string")
@@ -1211,7 +1215,8 @@ def test_a_vertical_splitter_stacks_its_panes_with_a_horizontal_border_between()
     panes = [a for _, a in root.descendants if "data-pane" in a]
     (border,) = [a for _, a in root.descendants if a.get("role") == "separator"]
     assert [pane["style"] for pane in panes] == ["--share: 2 1 0%", "--share: 1 1 0%"]
-    assert all("overflow-auto" in pane["class"] for pane in panes)  # each scrolls on its own
+    # each scrolls on its own
+    assert all("overflow-auto" in (pane["class"] or "") for pane in panes)
     assert (border["aria-orientation"], border["aria-valuenow"]) == ("horizontal", "67")
 
     handle_event(renderer, "resize", {"lengths": "100,300"})
@@ -3201,7 +3206,7 @@ def test_a_page_on_an_address_the_backend_uses_stops_the_app_before_serving(
 
     @define_view
     class Pages(Router):
-        page: Page = Factory(Page)
+        reserved_page: Page = Factory(Page)
 
     @define_view
     class ReservedMainView(MainView):
@@ -3704,7 +3709,7 @@ def test_clicking_the_button_swaps_in_what_its_view_changed(
     button_id = _widget_id(inputs.submit.renderer)
     button = _element(page, button_id)
     assert (button.tag, button.attributes["type"], button.text) == ("button", "button", "Submit")
-    assert "btn-primary" in button.attributes["class"].split()
+    assert "btn-primary" in (button.attributes["class"] or "").split()
     inputs.name.text = "<Ada>"
 
     response = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
@@ -3717,7 +3722,7 @@ def test_clicking_the_button_swaps_in_what_its_view_changed(
     with collect_dirty() as dirty:
         inputs.submit.variant = ButtonVariant.DANGER
         swapped = _swapped(render_dirty(dirty), button_id)
-    assert "btn-error" in swapped.attributes["class"].split()
+    assert "btn-error" in (swapped.attributes["class"] or "").split()
 
     inputs.submit.is_enabled = False
     refused = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
@@ -4437,7 +4442,9 @@ def test_the_tab_and_the_header_show_the_app_s_icon_composeui_s_by_default(
     assert match is not None
     icon = client.get(match[1])
     assert icon.status_code == 200
-    assert icon.content == HelloMainView.app_icon.read_bytes()  # type: ignore[union-attr]
+    app_icon = HelloMainView.app_icon
+    assert app_icon is not None
+    assert icon.content == app_icon.read_bytes()
     assert ("img", match[1]) in [
         (tag, attributes.get("src")) for tag, attributes in _element(page, "cui-brand").descendants
     ]
@@ -4623,7 +4630,9 @@ def test_map_http_updates_events_and_tile_attribution() -> None:
         widget = _widget_id(view.map.renderer)
         figure = _element(response.text, widget)
         attributes = next(attrs for _tag, attrs in figure.descendants if "data-map" in attrs)
-        spec = json.loads(attributes["data-map"])
+        data_map = attributes["data-map"]
+        assert data_map is not None
+        spec = json.loads(data_map)
         assert spec["points"] == [[-73.98, 40.73]]
         assert spec["tiles"] is False
         assert "OpenStreetMap contributors" not in figure.text
@@ -4632,8 +4641,10 @@ def test_map_http_updates_events_and_tile_attribution() -> None:
             data={"event": "viewport", "latitude": "48.86", "longitude": "2.35", "zoom": "12"},
         )
         assert response.is_success
-        assert view.map.center.latitude == 48.86
-        assert view.map.center.longitude == 2.35
+        center = view.map.center
+        assert center is not None
+        assert center.latitude == 48.86
+        assert center.longitude == 2.35
         assert view.map.zoom == 12
         assert "Zoom 12" in response.text
         assert _find(response.text, widget) is None
@@ -5344,8 +5355,10 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
 def _web_renderers(view: View) -> Iterator[WebRenderer[Any]]:
     """Get the web renderers of `view` and of its children, depth first."""
     renderer = view.renderer
-    parts = renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
-    yield from (part for part in parts if isinstance(part, WebRenderer))
+    if isinstance(renderer, RendererContainer):
+        yield from (part for part in renderer.renderers if isinstance(part, WebRenderer))
+    elif isinstance(renderer, WebRenderer):
+        yield renderer
     for child_view in view.children_views:
         yield from _web_renderers(child_view)
 
@@ -5490,7 +5503,9 @@ def test_a_renderer_outside_any_session_calls_back_at_once() -> None:
     view.render(RendererType.WEB)
     called: list[None] = []
 
-    view.form.name.renderer.call_on_main_thread(lambda: called.append(None))  # type: ignore[union-attr]
+    renderer = view.form.name.renderer
+    assert renderer is not None
+    renderer.call_on_main_thread(lambda: called.append(None))
 
     assert called == [None]
 
@@ -5530,7 +5545,7 @@ def test_a_menu_shows_only_the_separators_between_items_and_its_disabled_ones_so
     ]
     assert len(separators) == 1
     second = _element(page, _widget_id(view.menu.second.renderer))
-    assert "menu-disabled" in second.attributes.get("class", "")
+    assert "menu-disabled" in (second.attributes.get("class") or "")
     assert any(
         tag == "button" and "disabled" in attributes for tag, attributes in second.descendants
     )
@@ -5629,7 +5644,7 @@ def test_a_header_button_shows_its_own_icon_and_a_disabled_page_tab_no_link(
 
     save = _element(html, _widget_id(view.file_menu.save.renderer))
     # its own icon, drawn in the text's color, rather than the built-in one
-    assert any("/icon/" in attributes.get("style", "") for _, attributes in save.descendants)
+    assert any("/icon/" in (attributes.get("style") or "") for _, attributes in save.descendants)
     tab = _element(html, _widget_id(page.action.renderer))
     assert (tab.tag, tab.attributes.get("aria-disabled"), "href" in tab.attributes) == (
         "a",

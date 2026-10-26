@@ -27,10 +27,14 @@ from composeui.core.view import RendererType, StatusBar  # noqa: E402
 
 @pytest.fixture(scope="module")
 def qapp() -> QApplication:
-    return QApplication.instance() or QApplication([])  # type: ignore[return-value]
+    app = QApplication.instance() or QApplication([])
+    assert isinstance(app, QApplication)
+    return app
 
 
-def test_clear_message_runs_on_the_gui_thread(qapp: QApplication) -> None:
+def test_clear_message_runs_on_the_gui_thread(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
     view = StatusBar()
     view.timeout = 0.05
     view.render(RendererType.QT)
@@ -43,7 +47,7 @@ def test_clear_message_runs_on_the_gui_thread(qapp: QApplication) -> None:
         clear_message_threads.append(threading.current_thread())
         original_clear_message()
 
-    view.clear_message = traced_clear_message  # type: ignore[method-assign]
+    monkeypatch.setattr(view, "clear_message", traced_clear_message)
 
     view.show_message("hello")
 

@@ -121,21 +121,19 @@ def test_an_id_field_keeps_the_ids_of_the_records_across_new_records() -> None:
         source.records = [ROOMS[0], ROOMS[0]]
 
 
-class _ReplacedWhileOrdering(ListSource[Room]):
-    """Rooms by name, replaced by others while they're ordered.
-
-    As the main thread may assign new records while a job orders a large table's rows.
-    """
-
-    def _text(self, record: Any, name: str) -> str:
-        if self.records == tuple(ROOMS):
-            self.records = [Room("Garage", 5.0)]
-        return super()._text(record, name)
-
-
-def test_an_order_reads_the_records_it_started_with_new_ones_assigned_meanwhile() -> None:
+def test_an_order_reads_the_records_it_started_with_new_ones_assigned_meanwhile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     headers = {"name": "Room", "temperature": "Temperature"}
-    source = _ReplacedWhileOrdering(Room, headers, ROOMS, id_field="name")
+    source = ListSource(Room, headers, ROOMS, id_field="name")
+    text = source._text  # noqa: SLF001 (replace records after the order reads its snapshot)
+
+    def replacing_text(record: Any, name: str) -> str:
+        if source.records == tuple(ROOMS):
+            source.records = [Room("Garage", 5.0)]
+        return text(record, name)
+
+    monkeypatch.setattr(source, "_text", replacing_text)
 
     ordered = source.ordered_ids(Sort("temperature"), "o", {})  # replaced as it searches
 

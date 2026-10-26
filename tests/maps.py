@@ -42,6 +42,7 @@ class MapMainView(MainView):
 
     def _moved(self) -> None:
         center = self.map.center
+        assert center is not None
         self.result.text = (
             f"Zoom {self.map.zoom:.0f}; center {center.latitude:.5f}, {center.longitude:.5f}"
         )

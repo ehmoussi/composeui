@@ -10,6 +10,8 @@ import pytest
 
 pytest.importorskip("matplotlib")
 import matplotlib as mpl
+import numpy as np
+from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
 
 from composeui.core.chartimage import (
@@ -49,7 +51,7 @@ def test_the_figure_draws_the_chart_s_series_and_labels() -> None:
     assert axes.get_xlim() == (0.5, 1.5)
     assert (axes.get_xscale(), axes.get_yscale()) == ("linear", "linear")
     # the series', not the pump's reference line, which the legend leaves out
-    lines = [line for line in axes.get_lines() if not line.get_label().startswith("_")]
+    lines = [line for line in axes.get_lines() if not str(line.get_label()).startswith("_")]
     assert all(isinstance(line, Line2D) for line in lines)
     assert [line.get_label() for line in lines] == [series.name for series in chart.series]
     model, other, measured = lines
@@ -57,7 +59,7 @@ def test_the_figure_draws_the_chart_s_series_and_labels() -> None:
     assert measured.get_linestyle() == "None"
     assert measured.get_marker() == "^"  # its own marker, the third series
     # the transitional flow's gap stays a gap
-    assert any(math.isnan(y) for y in model.get_ydata())
+    assert any(math.isnan(y) for y in np.asarray(model.get_ydata()))
     legend = axes.get_legend()
     assert legend is not None
     assert [text.get_text() for text in legend.get_texts()] == [s.name for s in chart.series]
@@ -76,8 +78,8 @@ def test_the_title_and_log_axes_are_drawn_when_asked() -> None:
     assert axes.get_title() == "Decay"
     assert (axes.get_xscale(), axes.get_yscale()) == ("log", "log")
     (line,) = axes.get_lines()
-    assert list(line.get_xdata()) == [1, 10, 100]  # no x of 0 on a log axis
-    assert math.isnan(line.get_ydata()[1])  # no y of -1 either: a gap
+    assert list(np.asarray(line.get_xdata())) == [1, 10, 100]  # no x of 0 on a log axis
+    assert math.isnan(np.asarray(line.get_ydata())[1])  # no y of -1 either: a gap
 
 
 def test_a_bar_chart_draws_a_group_of_bars_per_category() -> None:
@@ -158,7 +160,7 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
     assert oval.get_color() == "#ffd700"
     assert theme.get_color() == "#D55E00"  # Okabe and Ito's second
     (filled,) = axes.collections  # the oval's alone
-    assert mpl.colors.to_hex(filled.get_facecolor()[0]) == "#ffd700"
+    np.testing.assert_allclose(np.asarray(filled.get_facecolor()), [to_rgba("#ffd700")])
 
 
 def test_reference_lines_are_styled_labeled_and_in_range() -> None:
@@ -169,7 +171,10 @@ def test_reference_lines_are_styled_labeled_and_in_range() -> None:
     (axes,) = chart_figure(chart).axes
 
     _inlet, maximum, minimum, now = axes.get_lines()
-    assert (list(maximum.get_ydata()), list(now.get_xdata())) == ([4.6, 4.6], [2.3, 2.3])
+    assert (list(np.asarray(maximum.get_ydata())), list(np.asarray(now.get_xdata()))) == (
+        [4.6, 4.6],
+        [2.3, 2.3],
+    )
     assert maximum.get_color() == "#d03030"
     assert now.get_color() == REFERENCE_LINE_COLOR
     assert maximum.get_linestyle() == "-"  # solid, as asked
@@ -191,7 +196,7 @@ def test_a_step_series_is_drawn_in_steps_its_fill_a_step_area() -> None:
     assert running.get_drawstyle() == queued.get_drawstyle() == "steps-post"
     (area,) = axes.collections  # the running jobs', filled
     # its outline's corners: each count held until the next change, e.g. 1 from 0 to 2
-    corners = {(float(x), float(y)) for x, y in area.get_paths()[0].vertices}
+    corners = {(float(x), float(y)) for x, y in np.asarray(area.get_paths()[0].vertices)}
     assert {(0, 1), (2, 1), (2, 3), (5, 3)} <= corners
 
 

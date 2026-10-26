@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 from attrs import Factory
 
@@ -81,7 +81,7 @@ class DiscardDialog(DialogView):
 class TranslatedMainView(MainView):
     app_title = "Shapes"
     extension = ".shapes"
-    translations_dir = Path(__file__).parent / "locales"
+    translations_dir: ClassVar[Optional[Path]] = Path(__file__).parent / "locales"
 
     shape: ShapeFormView = Factory(ShapeFormView)
     confirm_remove: RemoveDialog = Factory(RemoveDialog)

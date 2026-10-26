@@ -17,6 +17,7 @@ import math
 import threading
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import pyqtgraph as pg
 import pytest
 from qtpy.QtCore import QDate, QEvent, QModelIndex, QPoint, QPointF, QSize, Qt, QUrl
@@ -44,6 +45,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -115,7 +117,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
-from composeui.qtcore.widgets.qtexttable import QTextTableView
+from composeui.qtcore.widgets.qtexttable import QCheckHeader, QTextTableView
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
 from examples.pipecatalogue import PipeCatalogueMainView
@@ -183,8 +185,8 @@ def _collect_between_tests() -> Iterator[None]:
     gc.collect()
 
 
-def _field_widget(view: object) -> QWidget:
-    renderer = view.renderer  # type: ignore[attr-defined]
+def _field_widget(view: View) -> QWidget:
+    renderer = view.renderer
     assert isinstance(renderer, RendererContainer)
     field_renderer = renderer.get_renderer("field")
     assert isinstance(field_renderer, QtWidgetRenderer)
@@ -226,8 +228,10 @@ def test_map_renders_points_and_syncs_the_viewport_and_clicks(qtbot: QtBot) -> N
     color = image.pixelColor(image.width() // 2, image.height() // 2)
     assert color.blue() > color.green() > color.red()
     qtbot.keyClick(widget.map, Qt.Key.Key_Right)
-    assert view.map.center.longitude > -73.98
-    assert view.map.center.latitude == pytest.approx(40.73)
+    center = view.map.center
+    assert center is not None
+    assert center.longitude > -73.98
+    assert center.latitude == pytest.approx(40.73)
     view.map.center = MapPoint(latitude=48.86, longitude=2.35)
     view.map.zoom = 12
     view.map.points = [MapPoint(latitude=48.86, longitude=2.35)]
@@ -532,14 +536,16 @@ def test_a_failing_pipe_check_outlines_the_fields_it_names(qtbot: QtBot) -> None
     ids=["text", "float", "int"],
 )
 def test_an_edit_is_reported_once_the_view_has_it(
-    qtbot: QtBot, view: View, read: Callable[[Any], object]
+    qtbot: QtBot,
+    view: InputView | FloatInputView | IntInputView,
+    read: Callable[[Any], object],
 ) -> None:
     """A check run on each edit (`text_edited`) reads the edited value, not the one before."""
     view.render(RendererType.QT)
     field = _widget(view)
     qtbot.addWidget(field)
     seen: list[object] = []
-    view.text_edited.connect(lambda _text: seen.append(read(view)))  # type: ignore[attr-defined]
+    view.text_edited.connect(lambda _text: seen.append(read(view)))
     field.show()
     field.setFocus()
 
@@ -816,6 +822,7 @@ def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> N
     # after them takes the rest. Not a share of the row: the text's width differs between
     # systems' fonts.
     layout = edge_widget.layout()
+    assert layout is not None
     for before, after in zip(buttons, buttons[1:]):
         assert after.x() == before.geometry().right() + 1 + layout.spacing()
     assert [button.width() for button in buttons] == [
@@ -972,7 +979,11 @@ def test_menu_renderer_builds_a_real_qmenu_with_actions_and_shortcuts(qtbot: QtB
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
 
-    menus = [action.menu() for action in window.menuBar().actions()]
+    menus = []
+    for action in window.menuBar().actions():
+        menu = action.menu()
+        assert isinstance(menu, QMenu)
+        menus.append(menu)
     assert [menu.title() for menu in menus] == ["File", "Pipe", "Language"]
     file_menu = menus[0]
     action_texts = [a.text() for a in file_menu.actions()]
@@ -1140,7 +1151,11 @@ def test_a_view_shorter_than_its_row_stays_at_the_row_s_top(qtbot: QtBot) -> Non
 
     for height in (600, 900):
         window.resize(800, height)
-        qtbot.waitUntil(lambda height=height: window.height() == height)
+
+        def resized(height: int = height) -> bool:
+            return window.height() == height
+
+        qtbot.waitUntil(resized)
         assert _widget(view.tables.tall).geometry().top() == 0
 
 
@@ -1617,7 +1632,9 @@ def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(
     qtbot.waitUntil(lambda: widget.sizes()[1] == 0)
     assert widget.handle(1).isHidden()
     splitter.sizes = [1, 2, 1]  # set while hidden: it stays so, its share for later
-    assert (widget.sizes()[1], widget.widget(1).isHidden()) == (0, True)
+    settings_widget = widget.widget(1)
+    assert settings_widget is not None
+    assert (widget.sizes()[1], settings_widget.isHidden()) == (0, True)
     assert widget.sizes()[0] == pytest.approx(widget.sizes()[2], abs=2)
     handle = widget.handle(2)
     middle = handle.rect().center()
@@ -1781,7 +1798,9 @@ def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
     assert box.isVisible()
     assert box.isModal()
     assert box.window() is not window
-    assert box.parentWidget().window() is window
+    parent = box.parentWidget()
+    assert parent is not None
+    assert parent.window() is window
     assert box.windowTitle() == "Clear the name"
     assert box.text() == "The name will be lost."
     buttons = _shown_buttons(box)
@@ -1972,7 +1991,9 @@ def test_picking_a_combobox_cell_s_option_with_the_mouse_edits_it_once(qtbot: Qt
         pos=table.visualRect(table.model().index(0, 1)).center(),
     )
     qtbot.waitUntil(lambda: table.state() is QAbstractItemView.State.EditingState)
-    popup = table.viewport().findChild(QComboBox).view()
+    editor = table.viewport().findChild(QComboBox)
+    assert editor is not None
+    popup = editor.view()
     option = popup.visualRect(popup.model().index(1, 0)).center()
     qtbot.mouseClick(popup.viewport(), Qt.MouseButton.LeftButton, pos=option)
     qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
@@ -1990,6 +2011,7 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     qtbot.waitExposed(window)
     table = _table(view.variables)
     model, header = table.model(), table.horizontalHeader()
+    assert isinstance(header, QCheckHeader)
     events: list[tuple[int, ...] | tuple[int, int, str]] = []
     view.variables.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
     view.variables.cell_clicked.connect(lambda row, column: events.append((row, column)))
@@ -2204,6 +2226,7 @@ def test_the_language_menu_relabels_the_window(qtbot: QtBot) -> None:
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     language_menu = window.menuBar().actions()[2].menu()
+    assert isinstance(language_menu, QMenu)
     english, french = language_menu.actions()
     assert (english.isChecked(), french.isChecked()) == (True, False)
 
@@ -2237,9 +2260,27 @@ def _rendered_chart(qtbot: QtBot) -> tuple[PipeChartMainView, QChart]:
     return view, chart
 
 
+def _plot_item(chart: QChart) -> pg.PlotItem:
+    plot = chart.getPlotItem()
+    assert isinstance(plot, pg.PlotItem)
+    return plot
+
+
+def _chart_scene(chart: QChart) -> pg.GraphicsScene:
+    scene = chart.scene()
+    assert isinstance(scene, pg.GraphicsScene)
+    return scene
+
+
+def _view_box(chart: QChart) -> pg.ViewBox:
+    view_box = _plot_item(chart).getViewBox()
+    assert isinstance(view_box, pg.ViewBox)
+    return view_box
+
+
 def test_the_chart_shows_its_titles_units_and_series(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    plot = chart.getPlotItem()
+    plot = _plot_item(chart)
     assert plot.titleLabel.text == "Pressure Drop"
     assert plot.getAxis("bottom").labelText == "Flow Rate"
     assert plot.getAxis("bottom").labelUnits == "L/s"
@@ -2270,7 +2311,7 @@ def test_the_chart_shows_its_titles_units_and_series(qtbot: QtBot) -> None:
 def test_new_series_keep_the_user_s_zoom(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.add_curve()
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
     view_box.setXRange(0.5, 1.0, padding=0)  # as the mouse wheel would
 
     view.pipe.diameter.value = 80
@@ -2283,11 +2324,11 @@ def test_new_series_keep_the_user_s_zoom(qtbot: QtBot) -> None:
 def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Pressure", x=[0, 1, 2], y=[10, 20, 30])]
-    qtbot.waitUntil(lambda: chart.getPlotItem().vb.viewRange()[0][1] >= 2)
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 2)
     assert chart.hover_text() == ""
 
-    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.05, 15)))
+    _chart_scene(chart).sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.05, 15)))
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     lines = chart.hover_text().splitlines()
@@ -2295,21 +2336,21 @@ def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None
     assert lines[1] == "Pressure: 20.00 kPa"  # its trailing zeros kept, as on the web
     if hasattr(QFont, "Tag"):  # digits of one width, from Qt 6.7
         assert QFont.Tag("tnum") in chart._hover.textItem.font().featureTags()  # noqa: SLF001
-    chart.scene().sigMouseMoved.emit(QPointF(-10, -10))  # off the plot
+    _chart_scene(chart).sigMouseMoved.emit(QPointF(-10, -10))  # off the plot
     qtbot.waitUntil(lambda: chart.hover_text() == "")
 
 
 def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Running", x=[0, 2, 5], y=[1, 3, 2], step=True)]
-    (running,) = chart.getPlotItem().listDataItems()
+    (running,) = _plot_item(chart).listDataItems()
 
     x, y = running.getData()
     assert (list(x), list(y)) == ([0, 2, 2, 5, 5], [1, 1, 3, 3, 2])
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 5)
     # nearer 5 than 2, but still holding 2's value
-    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(4, 2)))
+    _chart_scene(chart).sigMouseMoved.emit(view_box.mapViewToScene(QPointF(4, 2)))
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     assert chart.hover_text().splitlines()[1] == "Running: 3.000 kPa"
 
@@ -2320,7 +2361,7 @@ def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> No
 def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Pressure", x=[0, 1], y=[0, 1])]
-    (curve,) = chart.getPlotItem().listDataItems()
+    (curve,) = _plot_item(chart).listDataItems()
     assert curve.opts["pen"].color().name() == SERIES_COLORS[False][0]
     palette = chart.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
@@ -2330,14 +2371,14 @@ def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
 
     assert curve.opts["pen"].color().name() == SERIES_COLORS[True][0]
     assert chart.backgroundBrush().color().name() == "#202020"
-    assert chart.getPlotItem().getAxis("left").textPen().color().name() == "#f0f0f0"
+    assert _plot_item(chart).getAxis("left").textPen().color().name() == "#f0f0f0"
 
 
 def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.add_curve()
     view.add_measurements()
-    model, measured = chart.getPlotItem().listDataItems()
+    model, measured = _plot_item(chart).listDataItems()
 
     assert model.opts["symbol"] is None
     assert model.opts["pen"].color().name() == SERIES_COLORS[False][0]
@@ -2370,16 +2411,16 @@ def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
 
 def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot)
-    plot = chart.getPlotItem()
+    plot = _plot_item(chart)
     assert not any(isinstance(item, pg.PlotDataItem) for item in plot.items)
     heating, cooling = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
 
-    assert list(heating.opts["height"]) == [120, 80, 95]
-    assert list(cooling.opts["height"]) == [30, 45]  # none in the bedroom
+    assert list(np.asarray(heating.opts["height"])) == [120, 80, 95]
+    assert list(np.asarray(cooling.opts["height"])) == [30, 45]  # none in the bedroom
     # side by side in each category's group, centered on its index
     assert heating.opts["width"] == cooling.opts["width"] == pytest.approx(0.4)
-    assert list(heating.opts["x0"]) == pytest.approx([-0.4, 0.6, 1.6])
-    assert list(cooling.opts["x0"]) == pytest.approx([0.0, 2.0])
+    assert list(np.asarray(heating.opts["x0"])) == pytest.approx([-0.4, 0.6, 1.6])
+    assert list(np.asarray(cooling.opts["x0"])) == pytest.approx([0.0, 2.0])
     assert pg.mkBrush(heating.opts["brush"]).color().name() == SERIES_COLORS[False][0]
     assert chart.legend_names() == ["Heating", "Cooling"]
     ticks = plot.getAxis("bottom")._tickLevels  # noqa: SLF001
@@ -2393,10 +2434,10 @@ def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> N
 
 def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
     _view, chart = _chart_page_chart(qtbot)
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 2)
 
-    chart.scene().sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.1, 50)))
+    _chart_scene(chart).sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.1, 50)))
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80.00 kWh"]
@@ -2404,7 +2445,7 @@ def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
 
 def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    plot = chart.getPlotItem()
+    plot = _plot_item(chart)
     view.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
 
     view.chart.x_log = True
@@ -2414,6 +2455,8 @@ def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
     assert plot.getAxis("left").logMode
     (curve,) = (item for item in plot.items if isinstance(item, pg.PlotDataItem))
     # no x of 0 on a log axis: left out; a y of -1: a gap
+    assert curve.xData is not None
+    assert curve.yData is not None
     assert list(curve.xData) == [1, 10, 100]
     assert math.isnan(curve.yData[0])
     assert list(curve.yData[1:]) == [10, 100]
@@ -2426,7 +2469,7 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
     view.chart.x_log = True
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
     # the log range, 0 to 2: the linear one, 1 to 100, reaches 2 too
     qtbot.waitUntil(lambda: 2 <= view_box.viewRange()[0][1] < 3)
 
@@ -2444,11 +2487,12 @@ def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> No
 
     energy.y_log = True
 
-    (bars,) = (item for item in chart.getPlotItem().items if isinstance(item, pg.BarGraphItem))
-    assert list(bars.opts["x0"]) == pytest.approx([-0.4, 1.6])  # none of 0 in the bedroom
+    (bars,) = (item for item in _plot_item(chart).items if isinstance(item, pg.BarGraphItem))
+    # none of 0 in the bedroom
+    assert list(np.asarray(bars.opts["x0"])) == pytest.approx([-0.4, 1.6])
     assert bars.opts["y0"] == 1  # 10 kWh, under 50
-    assert list(bars.opts["height"]) == pytest.approx([2, math.log10(50) - 1])
-    assert chart.getPlotItem().getAxis("left").logMode
+    assert list(np.asarray(bars.opts["height"])) == pytest.approx([2, math.log10(50) - 1])
+    assert _plot_item(chart).getAxis("left").logMode
 
 
 @pytest.mark.parametrize(
@@ -2469,7 +2513,7 @@ def test_save_image_saves_the_chart_as_it_shows(
     pytest.importorskip("matplotlib")
     view, chart = _rendered_chart(qtbot)
     view.add_curve()
-    chart.getPlotItem().getViewBox().setRange(xRange=(0.5, 1.5), yRange=(0, 10), padding=0)
+    _view_box(chart).setRange(xRange=(0.5, 1.5), yRange=(0, 10), padding=0)
     asked: list[tuple[str, str]] = []
 
     def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
@@ -2486,7 +2530,8 @@ def test_save_image_saves_the_chart_as_it_shows(
         save(chart_view, path, options)
 
     monkeypatch.setattr(chartimage, "save_chart_image", save_chart_image)
-    menu = chart.getPlotItem().getViewBox().menu
+    menu = _view_box(chart).menu
+    assert isinstance(menu, QMenu)
     (action,) = (action for action in menu.actions() if action.text() == "Save Image…")
 
     action.trigger()
@@ -2506,16 +2551,18 @@ def test_without_matplotlib_the_chart_offers_only_its_own_export(
 
     _view, chart = _rendered_chart(qtbot)
 
-    texts = [action.text() for action in chart.getPlotItem().getViewBox().menu.actions()]
+    menu = _view_box(chart).menu
+    assert isinstance(menu, QMenu)
+    texts = [action.text() for action in menu.actions()]
     assert "Save Image…" not in texts
     # pyqtgraph's own, saving an image of the screen's chart
-    assert [action.text() for action in chart.scene().contextMenu] == ["Export..."]
+    assert [action.text() for action in _chart_scene(chart).contextMenu] == ["Export..."]
 
 
 def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
-    view_box = chart.getPlotItem().getViewBox()
+    view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100)
     clicks: list[tuple[float, float]] = []
     view.chart.clicked.connect(lambda x, y: clicks.append((x, y)))
@@ -2534,24 +2581,24 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
         Series(name="Oval", x=[0, 1], y=[1, 1], color="#ffd700", fill=True),
         Series(name="Theme", x=[0, 1], y=[2, 2]),
     ]
-    oval, theme = (item for item in chart.getPlotItem().items if isinstance(item, pg.PlotDataItem))
+    oval, theme = (item for item in _plot_item(chart).items if isinstance(item, pg.PlotDataItem))
 
-    assert oval.opts["pen"].color().name() == "#ffd700"
+    assert pg.mkPen(oval.opts["pen"]).color().name() == "#ffd700"
     assert (oval.opts["fillLevel"], pg.mkBrush(oval.opts["fillBrush"]).color().name()) == (
         0,
         "#ffd700",
     )
-    assert theme.opts["pen"].color().name() == SERIES_COLORS[False][1]
+    assert pg.mkPen(theme.opts["pen"]).color().name() == SERIES_COLORS[False][1]
     assert theme.opts["fillLevel"] is None
     palette = chart.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
     chart.setPalette(palette)
-    assert oval.opts["pen"].color().name() == "#ffd700"  # the same in a dark theme
+    assert pg.mkPen(oval.opts["pen"]).color().name() == "#ffd700"  # the same in a dark theme
 
 
 def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    plot = chart.getPlotItem()
+    plot = _plot_item(chart)
     view.chart.series = [Series(name="Decay", x=[1, 10], y=[3, 2])]
 
     view.chart.reference_lines = [
@@ -2568,7 +2615,8 @@ def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     assert now.pen.style() == Qt.PenStyle.DashLine  # by default
     assert now.pen.color() == chart.palette().color(QPalette.ColorRole.WindowText)
     # each shows, though past the data
-    qtbot.waitUntil(lambda: plot.vb.viewRange()[0][1] >= 100 and plot.vb.viewRange()[1][1] >= 40)
+    view_box = _view_box(chart)
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100 and view_box.viewRange()[1][1] >= 40)
     palette = chart.palette()
     palette.setColor(QPalette.ColorRole.WindowText, QColor("#f0f0f0"))
     chart.setPalette(palette)
@@ -2674,8 +2722,10 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     # a value that doesn't parse isn't added: the field says why, the editor stays
     add("Temperature", "warm")
     assert bar.is_editing()
-    assert bar.value.property("invalid")
-    assert bar.value.toolTip() == '"warm" isn\'t a number'
+    assert (bar.value.property("invalid"), bar.value.toolTip()) == (
+        True,
+        '"warm" isn\'t a number',
+    )
     assert view.rooms.filters == {}
     assert bar.value.placeholderText() == ">=20, 18..24"
     add("Temperature", ">=20")
@@ -2684,7 +2734,8 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     (chip,) = bar.chips
     # laid out in the bar after "+ Filter", the count apart at the bar's right end
     QApplication.processEvents()  # the layout's pass
-    assert chip.parentWidget().rect().contains(chip.geometry())
+    assert (parent := chip.parentWidget()) is not None
+    assert parent.rect().contains(chip.geometry())
     assert bar.add_filter.geometry().right() < chip.x()
     assert bar.count.geometry().right() == bar.rect().right()
     assert chip.open_button.accessibleName() == "Temperature: >=20"
@@ -3154,7 +3205,10 @@ def _widgets_of(view: View) -> list[object]:
     """Get the widgets of `view` and of its children, depth first."""
     renderer = view.renderer
     if isinstance(renderer, RendererContainer):
-        widgets: list[object] = [part.qt_object for part in renderer.renderers]  # type: ignore[attr-defined]
+        widgets: list[object] = []
+        for part in renderer.renderers:
+            assert isinstance(part, QtWidgetRenderer)
+            widgets.append(part.qt_object)
     else:
         widgets = [getattr(renderer, "qt_object", None)]
     for child_view in view.children_views:
@@ -3226,12 +3280,14 @@ def test_a_view_qt_doesn_t_render_is_left_out_of_its_container(qtbot: QtBot) -> 
 
 def test_a_view_shown_before_its_widget_is_built_raises(qtbot: QtBot) -> None:
     view = LabelView()
-    view.renderer = create_renderer(RendererType.QT, "label", view)
+    renderer = create_renderer(RendererType.QT, "label", view)
+    assert renderer is not None
+    view.renderer = renderer
 
     with pytest.raises(NoRenderedObjectError):
         view.text = "Too early"
     with pytest.raises(NoRenderedObjectError):
-        view.renderer.refresh()
+        renderer.refresh()
 
 
 def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
@@ -3239,6 +3295,7 @@ def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
     view.render(RendererType.QT)
     size = view.shape.size
     combobox = _field_widget(size)
+    assert isinstance(combobox, QComboBox)
     qtbot.addWidget(combobox)
     seen: list[object] = []
     size.value_changed.connect(seen.append)
@@ -3289,7 +3346,9 @@ def test_a_row_without_a_label_spans_its_form(qtbot: QtBot) -> None:
 
     assert layout.itemAt(0, QFormLayout.ItemRole.LabelRole) is None
     assert row is not None
-    assert row.widget().isAncestorOf(_field_widget(view.form.note))
+    row_widget = row.widget()
+    assert row_widget is not None
+    assert row_widget.isAncestorOf(_field_widget(view.form.note))
 
 
 def test_a_tree_keeps_its_node_selected_when_the_user_deselects_it(qtbot: QtBot) -> None:
@@ -3427,7 +3486,7 @@ def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> Non
     view, chart = _rendered_chart(qtbot)
     qtbot.waitExposed(chart.window())
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
-    view_box = chart.getPlotItem().getViewBox()
+    view_box = _view_box(chart)
     view.chart.y_log = True
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100 and view_box.viewRange()[1][1] < 3)
     clicks: list[tuple[float, float]] = []
@@ -3449,7 +3508,7 @@ def test_a_log_chart_s_shown_range_is_its_values_not_their_logs(qtbot: QtBot) ->
     view.chart.x_log = True
     view.chart.y_log = True
 
-    chart.getPlotItem().getViewBox().setRange(xRange=(0, 2), yRange=(1, 3), padding=0)
+    _view_box(chart).setRange(xRange=(0, 2), yRange=(1, 3), padding=0)
 
     assert chart.shown_range() == (pytest.approx((1, 100)), pytest.approx((10, 1000)))
 
@@ -3457,7 +3516,7 @@ def test_a_log_chart_s_shown_range_is_its_values_not_their_logs(qtbot: QtBot) ->
 def test_the_hover_leaves_out_what_isn_t_drawn_there(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot)
     energy = view.router.chart.energy
-    view_box = chart.getPlotItem().vb
+    view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 2)
 
     view_box.setRange(xRange=(-3, 5), padding=0)  # zoomed out, past the categories
@@ -3484,6 +3543,7 @@ def test_a_table_s_keys_and_edits_report_only_what_changes(qtbot: QtBot) -> None
     qtbot.waitExposed(window)
     table = _table(view.variables)
     model, header = table.model(), table.horizontalHeader()
+    assert isinstance(header, QCheckHeader)
     clicks: list[tuple[int, int]] = []
     edits: list[tuple[int, int, str]] = []
     view.variables.cell_clicked.connect(lambda row, column: clicks.append((row, column)))

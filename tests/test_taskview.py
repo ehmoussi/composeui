@@ -71,7 +71,9 @@ def test_a_run_shows_every_task_s_outcome_then_can_run_again(
     assert bar.value() == bar.maximum() == TASK_COUNT
     chart = _widget(main_view.running)
     assert isinstance(chart, QChart)
-    (curve,) = chart.getPlotItem().listDataItems()
+    plot = chart.getPlotItem()
+    assert plot is not None
+    (curve,) = plot.listDataItems()
     seconds, running = curve.getData()
     # every task running from the start, held until one ends; none at the end
     assert (running[0], running[-1]) == (TASK_COUNT, 0)

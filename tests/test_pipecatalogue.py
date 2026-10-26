@@ -239,7 +239,9 @@ def test_a_pipe_the_database_refuses_is_not_added_and_says_why(
 
 def test_a_pipe_can_t_be_installed_in_the_future(app: App) -> None:
     installed = app.main_view.add.pipe.installed
-    tomorrow = installed.maximum + datetime.timedelta(days=1)  # today's, built with it
+    maximum = installed.maximum
+    assert maximum is not None
+    tomorrow = maximum + datetime.timedelta(days=1)  # today's, built with it
 
     installed.value = tomorrow
     installed.value_changed.emit(tomorrow)  # as typing it does: only the calendar refuses it
