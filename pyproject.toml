@@ -87,6 +87,12 @@ constraint-dependencies = ["certifi>=2026.10.19"]
 module = ["pyqtgraph", "pyqtgraph.*"]
 ignore_missing_imports = true
 
+[tool.pyright]
+include = ["tests"]
+extraPaths = ["src"]
+pythonVersion = "3.9"
+defineConstant = { PYQT5 = false, PYSIDE2 = false, PYQT6 = false, PYSIDE6 = true }
+
 [tool.pytest.ini_options]
 markers = [
     "browser: drives the web backend in a real browser (Playwright); run by `make browser-test`",
