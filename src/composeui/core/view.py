@@ -892,7 +892,7 @@ class LanguageMenu(Menu):
 
 
 class PageWidth(enum.Enum):
-    """How wide a page may grow, where the window doesn't set it (the web backend)."""
+    """How wide the content of a main view or page may grow on the web."""
 
     #: a column of fields, easy to read
     NARROW = enum.auto()

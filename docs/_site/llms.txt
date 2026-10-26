@@ -27,7 +27,7 @@
 
 ## Examples
 
-- [Examples guide](https://ehmoussi.github.io/composeui/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Batman, Markdown viewer, web hello, Textual demo) and how to run them
+- [Examples guide](https://ehmoussi.github.io/composeui/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Uber pickups, Batman, Markdown viewer, web hello, Textual demo) and how to run them
 
 ## Reference
 

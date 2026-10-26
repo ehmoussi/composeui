@@ -208,6 +208,8 @@ A subclass of `MainView` is the app. Its class variables configure it:
 - **`has_file_menu = False`** leaves out the File menu, for an app without studies (see
   [The File menu and picking a file](widgets.md#the-file-menu-and-picking-a-file)).
 - **`app_icon`** is the icon of the app (see [The app's icon](#the-apps-icon)).
+- **`width`** sets the web content's default width, without a page wrapper (see
+  [Pages](organizing-the-window.md#pages)). Qt and Textual ignore it.
 - **`translations_dir`** is the directory of its catalogs (see
   [Translating the app](translation.md)).
 

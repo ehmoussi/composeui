@@ -59,7 +59,8 @@ the option for the web (extra `web`, the default).
   the class and is not state.
 - **Set web content width on the class.** Set `width = PageWidth.WIDE` or `PageWidth.FULL`
   on a `MainView` subclass without adding a `PageView` wrapper. The default is `NARROW`.
-  Visible pages with `WIDE` or `FULL` can expand it. Qt and Textual ignore `width`.
+  A visible page with `WIDE` or `FULL` overrides it; a narrow page keeps it.
+  Qt and Textual ignore `width`.
 - **A child view is a field that builds it:** `Factory(MyView)`, or
   `child(MyView, label="Name")` to set fields. Never share one instance between views.
 - **Wire a view in `__attrs_post_init__`.** Call `super().__attrs_post_init__()` first,
