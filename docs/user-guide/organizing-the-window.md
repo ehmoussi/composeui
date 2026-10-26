@@ -74,7 +74,8 @@ class WideMainView(MainView):
 ```
 
 This sets the web content's default width, which is otherwise `PageWidth.NARROW`.
-Visible pages with `WIDE` or `FULL` can expand it. Qt and Textual ignore this setting.
+A visible page with `WIDE` or `FULL` overrides this default; a narrow page keeps it.
+Qt and Textual ignore this setting.
 The [Uber pickups example](../../src/examples/uberpickups.py) uses a wide main view without
 a `PageView` wrapper.
 
