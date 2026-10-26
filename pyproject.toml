@@ -57,6 +57,10 @@ where = ["src"]
 # on the path) but is not part of the distribution
 include = ["composeui*"]
 
+[tool.setuptools.package-data]
+"composeui.qtcore" = ["widgets/*.qml"]
+"composeui.webcore" = ["static/*"]
+
 [dependency-groups]
 browser = ["playwright>=1.60.0"]
 dev = [

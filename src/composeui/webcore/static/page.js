@@ -2,6 +2,118 @@
    Its <script> element carries the addresses of uPlot and Cally, which carry
    their content's hash. */
 var PAGE_SCRIPT = document.currentScript;
+/* Maps load their renderer only when needed. Tile fetches identify the page by its
+   origin, never its path, and never carry credentials to the tile provider. */
+var maps = new Map();
+var deckLoading = false;
+function mapPost(element, event, state) {
+  state = Object.assign({}, state, {
+    latitude: Math.max(-85.05112878, Math.min(85.05112878, state.latitude)),
+    longitude: ((state.longitude + 180) % 360 + 360) % 360 - 180
+  });
+  htmx.ajax("POST", "/widget/" + element.dataset.widget, {
+    source: element,
+    values: Object.assign({event: event}, state),
+    swap: "none"
+  });
+}
+function drawMap(element) {
+  element.setAttribute("aria-busy", "true");
+  var spec = JSON.parse(element.dataset.map);
+  var state = {latitude: spec.latitude, longitude: spec.longitude, zoom: spec.zoom - 1};
+  var layers = [];
+  if (spec.tiles) {
+    layers.push(new deck.TileLayer({
+      id: "streets", data: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      tileSize: 256, minZoom: 0, maxZoom: 19,
+      maxCacheSize: 128,
+      onViewportLoad: function () { element.setAttribute("aria-busy", "false"); },
+      getTileData: function (tile) {
+        return fetch(tile.url, {signal: tile.signal, credentials: "omit", referrerPolicy: "origin"})
+          .then(function (response) {
+            if (!response.ok) throw new Error("Map tiles unavailable");
+            return response.blob();
+          }).then(function (blob) { return createImageBitmap(blob); });
+      },
+      renderSubLayers: function (props) {
+        var bounds = props.tile.boundingBox;
+        return new deck.BitmapLayer(props, {
+          data: null, image: props.data,
+          bounds: [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]]
+        });
+      }
+    }));
+  }
+  layers.push(new deck.ScatterplotLayer({
+    id: "pickups", data: spec.points, getPosition: function (point) { return point; },
+    getRadius: 3, radiusUnits: "pixels", getFillColor: [37, 99, 235, 140]
+  }));
+  var timer;
+  var map = new deck.Deck({
+    parent: element, width: "100%", height: "100%",
+    initialViewState: Object.assign({minZoom: -1, maxZoom: 18}, state),
+    controller: spec.enabled ? {dragRotate: false, touchRotate: false, keyboard: false} : false,
+    layers: layers,
+    onAfterRender: function () {
+      if (!spec.tiles) element.setAttribute("aria-busy", "false");
+    },
+    onViewStateChange: function (event) {
+      state = event.viewState;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (!element.isConnected) return;
+        mapPost(element, "viewport", {
+          latitude: state.latitude, longitude: state.longitude, zoom: state.zoom + 1
+        });
+      }, 150);
+    },
+    onClick: function (info) {
+      if (spec.enabled && info.coordinate) mapPost(element, "click", {
+        longitude: info.coordinate[0], latitude: info.coordinate[1]
+      });
+    }
+  });
+  element.addEventListener("keydown", function (event) {
+    if (!spec.enabled) return;
+    var next = Object.assign({}, state);
+    var step = 360 / Math.pow(2, state.zoom + 4);
+    if (event.key === "+" || event.key === "=") next.zoom = Math.min(18, state.zoom + 1);
+    else if (event.key === "-") next.zoom = Math.max(-1, state.zoom - 1);
+    else if (event.key === "ArrowLeft") next.longitude -= step;
+    else if (event.key === "ArrowRight") next.longitude += step;
+    else if (event.key === "ArrowUp") next.latitude += step;
+    else if (event.key === "ArrowDown") next.latitude -= step;
+    else return;
+    event.preventDefault();
+    next.latitude = Math.max(-85.05112878, Math.min(85.05112878, next.latitude));
+    next.longitude = ((next.longitude + 180) % 360 + 360) % 360 - 180;
+    state = next;
+    map.setProps({initialViewState: Object.assign({minZoom: -1, maxZoom: 18}, next)});
+    mapPost(element, "viewport", {latitude: next.latitude, longitude: next.longitude, zoom: next.zoom + 1});
+  });
+  return map;
+}
+function syncMaps() {
+  maps.forEach(function (map, element) {
+    if (!element.isConnected) {
+      map.finalize();
+      maps.delete(element);
+    }
+  });
+  if (document.querySelector("[data-map]") === null) return;
+  if (typeof deck === "undefined") {
+    if (deckLoading) return;
+    deckLoading = true;
+    var script = document.createElement("script");
+    script.src = PAGE_SCRIPT.dataset.deckgl;
+    script.onload = syncMaps;
+    document.head.appendChild(script);
+    return;
+  }
+  document.querySelectorAll("[data-map]").forEach(function (element) {
+    if (!maps.has(element) && element.clientWidth > 0) maps.set(element, drawMap(element));
+  });
+}
 /* charts (see `WebChartRenderer`): uPlot draws each `[data-chart]` element from its
    JSON. The page loads uPlot only once it shows its first chart, from a swap too. A
    chart waits to be drawn until its element has a width (one on a hidden page has
@@ -1021,6 +1133,7 @@ document.addEventListener("toggle", placeHelp, true);
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
   syncCharts();
+  syncMaps();
   loadCalendars();
   syncSidebarToggles();
   new MutationObserver(function () {
@@ -1029,6 +1142,7 @@ document.addEventListener("DOMContentLoaded", function () {
     openDialogs();
     syncPage();
     syncCharts();
+    syncMaps();
     loadCalendars();
   }).observe(document.body, {
     childList: true,

@@ -133,6 +133,9 @@ STATIC := src/composeui/webcore/static
 HTMX_VERSION := 2.0.10
 UPLOT_VERSION := 1.6.32
 CALLY_VERSION := 0.9.2
+DECKGL_VERSION := 9.2.6
+DECKGL_SHA256 := 234e0af97a691b8e5aea6c6ca9e703a7ba5206fd1f53daa9f670e41db089de2d
+DECKGL_LICENSE_SHA256 := e499a2c2ba3b9faabe91fdfddf43e329439263264b7148e5548d0ec605cce9f2
 HTMX_SHA256 := 71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de
 UPLOT_SHA256 := 19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f
 UPLOT_CSS_SHA256 := df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04
@@ -142,6 +145,8 @@ CALLY_LICENSE_SHA256 := c48fd407090d6d752b0370d39db55bd750e6dfc678ee252d4c906bdd
 # Cally's file has no license comment: it gets Cally's LICENSE as one
 .PHONY: web-deps
 web-deps:
+	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/dist.min.js,$(STATIC)/deckgl.min.js,$(DECKGL_SHA256))
+	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/LICENSE,$(STATIC)/deckgl.LICENSE,$(DECKGL_LICENSE_SHA256))
 	$(call fetch,https://unpkg.com/htmx.org@$(HTMX_VERSION)/dist/htmx.min.js,$(STATIC)/htmx.min.js,$(HTMX_SHA256))
 	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.iife.min.js,$(STATIC)/uPlot.iife.min.js,$(UPLOT_SHA256))
 	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.min.css,css/uPlot.min.css,$(UPLOT_CSS_SHA256))

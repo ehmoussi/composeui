@@ -94,6 +94,13 @@ the option for the web (extra `web`, the default).
   prior state, or returns `False` unchanged if already running. `task.cancel()` asks only its
   current run to stop. Dropping the study's jobs resets all tasks and discards old outcomes.
   The worker's annotations type the task's result, progress, and start arguments.
+- **Use `MapView` for geographic points**, not `ChartView`. `MapPoint(latitude, longitude)`
+  takes degrees, latitude first, within Web Mercator bounds. Assign a new `points` list
+  to redraw without resetting `center` and `zoom`. `clicked` emits latitude then longitude;
+  `viewport_changed` emits no arguments after updating the viewport. State saves the viewport,
+  not the points or tile settings. Rebuild points from the model after loading. Qt uses
+  Qt Location and the web uses deck.gl; Textual omits maps. Set `tiles=False` for no tile
+  requests. Identify the native app with `user_agent` and follow OpenStreetMap's tile policy.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds

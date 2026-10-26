@@ -57,7 +57,18 @@ $Static = 'src/composeui/webcore/static'
 $HtmxVersion = '2.0.10'
 $UplotVersion = '1.6.32'
 $CallyVersion = '0.9.2'
+$DeckglVersion = '9.2.6'
 $WebDeps = @(
+    @{
+        Url    = "https://unpkg.com/deck.gl@$DeckglVersion/dist.min.js"
+        Path   = "$Static/deckgl.min.js"
+        Sha256 = '234e0af97a691b8e5aea6c6ca9e703a7ba5206fd1f53daa9f670e41db089de2d'
+    }
+    @{
+        Url    = "https://unpkg.com/deck.gl@$DeckglVersion/LICENSE"
+        Path   = "$Static/deckgl.LICENSE"
+        Sha256 = 'e499a2c2ba3b9faabe91fdfddf43e329439263264b7148e5548d0ec605cce9f2'
+    }
     @{
         Url    = "https://unpkg.com/htmx.org@$HtmxVersion/dist/htmx.min.js"
         Path   = "$Static/htmx.min.js"

@@ -72,8 +72,8 @@ toolkit.
   and looks up the key. When the backend doesn't register the key, it returns `None`, and
   the view is not rendered. So a partial backend works.
 
-The three backends of this repo register the same keys:
-`test_every_backend_registers_the_same_renderer_keys` fails when one backend misses a key.
+The three backends register the same keys except for maps, which Textual omits.
+`test_every_backend_registers_the_same_renderer_keys_except_graphical_maps` checks this contract.
 
 ### Views and renderers
 
@@ -361,9 +361,9 @@ another process answers with `HX-Refresh`.
    `MODEL_APPLICATION`. They are built from `build_main_view=`, plus `build_model=` and
    `setup_model=` for the model application.
 4. Add the new backend's `RENDERERS` to
-   `test_every_backend_registers_the_same_renderer_keys` in
-   `tests/test_renderer_registry.py`. A backend of this repo registers every key, so that
-   every view renders on it. Then add tests for its renderers and its application. See
+   `test_every_backend_registers_the_same_renderer_keys_except_graphical_maps` in
+   `tests/test_renderer_registry.py`. Register each supported view; Textual omits maps.
+   Then add tests for its renderers and its application. See
    [Tests](#tests).
 5. Add the backend and its extra to the "Backends" table of the
    [user guide](user-guide/running-the-app.md#backends). In each feature section of the user guide,
@@ -396,7 +396,7 @@ make translations  # each app's catalogs against the text it translates
 make check         # lint + mypy + translations
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
-make web-deps      # download htmx, uPlot and Cally at their versions (then make css)
+make web-deps      # download htmx, uPlot, Cally and deck.gl at pinned versions (then make css)
 make docs          # build the documentation site into docs/_build/html
 make screenshots   # the screenshots of the examples guide, on every backend
 ```

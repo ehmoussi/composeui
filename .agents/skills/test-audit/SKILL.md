@@ -187,7 +187,7 @@ rule from `AGENTS.md`. Also keep:
   as `test_importing_the_core_does_not_import_any_backend_toolkit`: it fails
   when the contract changes and survives an identifier-only refactor;
 - cross-backend consistency checks derived from live data, such as
-  `test_every_backend_registers_the_same_renderer_keys` (it compares the
+  `test_every_backend_registers_the_same_renderer_keys_except_graphical_maps` (it compares the
   backends' `RENDERERS` to each other rather than to a copied list);
 - a retained test that fails on the baseline: treat it as a possible product
   bug, reproduce it, and repair the owner rather than deleting it.

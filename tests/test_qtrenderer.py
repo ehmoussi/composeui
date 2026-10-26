@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QDate, QEvent, QModelIndex, QPoint, QPointF, QSize, Qt
+from qtpy.QtCore import QDate, QEvent, QModelIndex, QPoint, QPointF, QSize, Qt, QUrl
 from qtpy.QtGui import (
     QAction,
     QColor,
@@ -90,6 +90,7 @@ from composeui.core.view import (
     LineStyle,
     ListSource,
     LogType,
+    MapPoint,
     ReferenceLine,
     RendererType,
     Router,
@@ -110,6 +111,7 @@ from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
+from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qtexttable import QTextTableView
@@ -129,6 +131,7 @@ from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
+from tests.maps import MapMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
@@ -187,6 +190,65 @@ def _field_widget(view: object) -> QWidget:
     widget = field_renderer.qt_object
     assert widget is not None
     return widget
+
+
+def test_map_renders_points_and_syncs_the_viewport_and_clicks(qtbot: QtBot) -> None:
+    view = MapMainView()
+    view.map.render(RendererType.QT)
+    assert isinstance(view.map.renderer, QtWidgetRenderer)
+    widget = view.map.renderer.qt_object
+    assert isinstance(widget, QMap)
+    qtbot.addWidget(widget)
+    widget.resize(640, 440)
+    widget.show()
+    assert not widget.map.errors()
+    assert widget.title.text() == "Pickup locations"
+    assert widget.root.property("latitude") == 40.73
+    assert widget.root.property("longitude") == -73.98
+    assert widget.root.property("zoom") == 11
+    assert widget.map.height() == 400
+
+    widget.map.setFocus()
+    widget.activateWindow()
+    qtbot.waitUntil(widget.map.hasFocus)
+    qtbot.keyClick(widget.map, Qt.Key.Key_Plus)
+    assert view.map.zoom == 12
+    assert view.result.text.startswith("Zoom 12;")
+    view.map.renderer.render()
+    assert widget.root.property("zoom") == 12
+
+    qtbot.mouseClick(widget.map, Qt.MouseButton.LeftButton, pos=widget.map.rect().center())
+    qtbot.waitUntil(lambda: view.result.text.startswith("Clicked"))
+    assert view.result.text == "Clicked 40.73, -73.98"
+    image = widget.map.grabFramebuffer()
+    assert not image.isNull()
+    color = image.pixelColor(image.width() // 2, image.height() // 2)
+    assert color.blue() > color.green() > color.red()
+    qtbot.keyClick(widget.map, Qt.Key.Key_Right)
+    assert view.map.center.longitude > -73.98
+    assert view.map.center.latitude == pytest.approx(40.73)
+    view.map.center = MapPoint(48.86, 2.35)
+    view.map.zoom = 12
+    view.map.points = [MapPoint(48.86, 2.35)]
+    assert widget.root.property("latitude") == 48.86
+    assert widget.root.property("longitude") == 2.35
+    assert widget.root.property("zoom") == 12
+    assert widget.root.property("points") == [[48.86, 2.35]]
+    view.map.title = "Paris"
+    view.map.height = 250
+    view.map.user_agent = "ComposeUI test"
+    assert widget.title.text() == "Paris"
+    assert widget.map.height() == 250
+    assert widget.root.property("latitude") == 48.86
+    assert widget.root.property("zoom") == 12
+
+
+def test_an_unloaded_qml_map_reports_a_deployment_error(qtbot: QtBot) -> None:
+    widget = QMap("ComposeUI test", tiles=False)
+    qtbot.addWidget(widget)
+    widget.map.setSource(QUrl())
+    with pytest.raises(RuntimeError, match="Cannot load the Qt Location map"):
+        _ = widget.root
 
 
 def test_label_renderer_pushes_view_state_to_the_widget(qtbot: QtBot) -> None:

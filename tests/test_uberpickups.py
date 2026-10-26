@@ -12,6 +12,7 @@ from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
+from composeui.core.view import MapPoint
 from examples import uberpickups
 
 if TYPE_CHECKING:
@@ -57,6 +58,8 @@ def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     assert page.pickups_chart.series[0].y == [1, *([0] * 12), 1, *([0] * 10)]
     assert page.table.source is not None
     assert page.table.source.count() == 2
+    assert page.pickups_map.points == [MapPoint(40.7, -73.9), MapPoint(40.8, -73.8)]
+    assert page.pickups_map.is_visible
 
 
 def test_visibility_follows_loading_and_real_checkbox_clicks(
@@ -72,6 +75,7 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         build_main_view=uberpickups.UberPickupsMainView,
         build_model=uberpickups.UberPickupsModel,
     )
+    app.main_view.page.pickups_map.tiles = False
     try:
         app.render(RendererType.QT)
         view, page = app.main_view, app.main_view.page
@@ -206,10 +210,10 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     model = uberpickups.UberPickupsModel()
     page = uberpickups.UberPickupsPageView()
     # Cancel before the first yielded batch, as New/Open can do during a download.
-    job: Job[list[int], int] = Job(lambda _job, callback: callback())
+    job: Job[uberpickups.PickupData, int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert model.load_pickups(job, path.as_uri()) == []
+        assert model.load_pickups(job, path.as_uri()) == uberpickups.PickupData([], [])
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
         assert not page.table.is_visible
         assert not page.pickups_chart.is_visible
@@ -223,5 +227,28 @@ def test_hourly_counts_ignore_rows_without_a_valid_hour() -> None:
         with model.uber_data.connection() as db:
             db.execute("INSERT INTO uber_data VALUES ('not a timestamp', 0, 0, 'B')")
         assert model.uber_data.pickups_by_hour() == [0] * 24
+    finally:
+        model.close()
+
+
+def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> None:
+    model = uberpickups.UberPickupsModel()
+    try:
+        with model.uber_data.connection() as db:
+            db.executemany(
+                "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
+                [
+                    ("2014-09-01T00:01:00", 90, 0, "B"),
+                    *(
+                        ("2014-09-01T00:01:00", 40.7 + i / 1_000_000, -73.9, "B")
+                        for i in range(10000)
+                    ),
+                ],
+            )
+        points = model.uber_data.pickup_points()
+        assert 0 < len(points) <= 10000
+        assert len(set(points)) == len(points)
+        assert all(40.7 <= point.latitude <= 40.71 for point in points)
+        assert sum(model.uber_data.pickups_by_hour()) == 10001
     finally:
         model.close()

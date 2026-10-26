@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
@@ -900,6 +901,12 @@ class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar])
         # an empty range is Qt's busy bar, for a task of unknown length
         rendered_object.setRange(0, 0 if value is None else value)
         rendered_object.setValue(ProgressBarView.clamp(view.value, value))
+
+
+def _map_renderer(view: Any) -> Renderer[Any, Any]:
+    # Qt Quick and its native libraries are needed only by applications that use maps.
+    renderer: Renderer[Any, Any] = import_module("composeui.qtcore.maprenderer").QtMapRenderer(view)
+    return renderer
 
 
 class ChartViewLike(ViewLike, Protocol):
@@ -2789,6 +2796,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
     "button": QtButtonRenderer,
     "chart": QtChartRenderer,
+    "map": _map_renderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboboxRenderer,
     "data_table": QtDataTableRenderer,

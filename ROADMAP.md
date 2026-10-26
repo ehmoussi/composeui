@@ -7,15 +7,16 @@ and test each step before moving on, and delete a step's entry once it lands.
 
 ## 1 — Widgets
 
-One widget at a time, each on Qt, Textual and the web with tests (the registry consistency
-test requires all three backends to register the same keys). Already there: input, float
+One widget at a time, with tests on each supported backend. The registry consistency
+test permits maps to omit the terminal. Already there: input, float
 input, integer input, date input, file path input (a "…" button and a reload button),
 slider, label, log, button, progress bar, metric, expander, checkbox, radio group,
 combobox, table (editable cells, sorting and filtering, widgets in cells, cell colors,
 marks, disabled cells, row spans, header groups and row headers included),
 tree (its nodes with an icon, a mark and a style), Markdown, forms, pages, tabs, resizable
 panes (a splitter), sidebar, a list of views from data, message, confirm and form dialogs,
-a large table (rows read from a source as they show; see "Large tables" below).
+a large table (rows read from a source as they show; see "Large tables" below), and
+street maps with point overlays (Qt Location on Qt, deck.gl on the web).
 
 Charts (2) have a section of their own.
 
@@ -96,8 +97,8 @@ The design:
 
 The steps. Each one is a commit of its own that `make check test` passes, with its tests
 and its documentation, and leaves the table usable as far as it goes. The registry test
-requires the same renderer keys on every backend
-(`test_every_backend_registers_the_same_renderer_keys`), so a step that adds the
+compares supported renderer keys across backends (`tests/test_renderer_registry.py`),
+so a step that adds the
 renderers adds them on Qt, Textual and the web together. Then each feature lands on the
 three backends in one step.
 
