@@ -14,7 +14,6 @@ from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from types import CodeType
     from weakref import ReferenceType
 
     from qtpy.QtCore import SignalInstance
@@ -29,6 +28,8 @@ _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%
 LOGGER.addHandler(_STREAM_HANDLER)
 
 Ts = TypeVarTuple("Ts")
+_Rest = TypeVarTuple("_Rest")
+_FirstT = TypeVar("_FirstT")
 
 _MainViewT_contra = TypeVar("_MainViewT_contra", contravariant=True)
 _ModelT_contra = TypeVar("_ModelT_contra", contravariant=True)
@@ -36,20 +37,14 @@ _MainViewT = TypeVar("_MainViewT", bound="MainView")
 
 
 class _MainViewCallback(Protocol[_MainViewT_contra, Unpack[Ts]]):
-    __code__: CodeType
-
     def __call__(self, *args: Unpack[Ts], main_view: _MainViewT_contra) -> None: ...
 
 
 class _ModelCallback(Protocol[_ModelT_contra, Unpack[Ts]]):
-    __code__: CodeType
-
     def __call__(self, *args: Unpack[Ts], model: _ModelT_contra) -> None: ...
 
 
 class _BoundCallback(Protocol[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
-    __code__: CodeType
-
     def __call__(
         self, *args: Unpack[Ts], main_view: _MainViewT_contra, model: _ModelT_contra
     ) -> None: ...
@@ -140,6 +135,13 @@ class Signal(Generic[Unpack[Ts]]):
     def connect(self, callback: _ModelCallback[Any], *, now: bool = False) -> None: ...
     @overload
     def connect(self, callback: _BoundCallback[_MainViewT, Any], *, now: bool = False) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, Unpack[_Rest]],
+        callback: Callable[[_FirstT], None],
+        *,
+        now: bool = False,
+    ) -> None: ...
     def connect(self, callback: Callable[..., None], *, now: bool = False) -> None:
         """Call `callback` on each emit, and once right away too if `now`.
 

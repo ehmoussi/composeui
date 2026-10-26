@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from composeui.core.model import Model
+    from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
     from composeui.core.view import MainView, View
 
 
@@ -93,6 +94,14 @@ class _ViewMainModelCallback(
 class _ConnectDecorator(Protocol[_ViewTD, _MainViewTD, Unpack[_TsD]]):
     @overload
     def __call__(
+        self, callback: Callable[[Unpack[_TsD]], None]
+    ) -> Callable[[Unpack[_TsD]], None]: ...
+    @overload
+    def __call__(
+        self, callback: _MainViewCallback[_MainViewTD, Unpack[_TsD]]
+    ) -> _MainViewCallback[_MainViewTD, Unpack[_TsD]]: ...
+    @overload
+    def __call__(
         self, callback: _ViewOnlyCallback[_ViewTD, Unpack[_TsD]]
     ) -> _ViewOnlyCallback[_ViewTD, Unpack[_TsD]]: ...
     @overload
@@ -102,6 +111,22 @@ class _ConnectDecorator(Protocol[_ViewTD, _MainViewTD, Unpack[_TsD]]):
 
 
 class _ConnectModelDecorator(Protocol[_ViewTD, _MainViewTD, _ModelTD, Unpack[_TsD]]):
+    @overload
+    def __call__(
+        self, callback: Callable[[Unpack[_TsD]], None]
+    ) -> Callable[[Unpack[_TsD]], None]: ...
+    @overload
+    def __call__(
+        self, callback: _MainViewCallback[_MainViewTD, Unpack[_TsD]]
+    ) -> _MainViewCallback[_MainViewTD, Unpack[_TsD]]: ...
+    @overload
+    def __call__(
+        self, callback: _ModelCallback[_ModelTD, Unpack[_TsD]]
+    ) -> _ModelCallback[_ModelTD, Unpack[_TsD]]: ...
+    @overload
+    def __call__(
+        self, callback: _BoundCallback[_MainViewTD, _ModelTD, Unpack[_TsD]]
+    ) -> _BoundCallback[_MainViewTD, _ModelTD, Unpack[_TsD]]: ...
     @overload
     def __call__(
         self, callback: _ViewOnlyCallback[_ViewTD, Unpack[_TsD]]
@@ -163,18 +188,14 @@ class Application(Generic[MainViewT]):
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]:
-        def wrapper(
-            callback: _ViewOnlyCallback[ViewT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]],
-        ) -> _ViewOnlyCallback[ViewT, Unpack[Ts]] | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]]:
+        def wrapper(callback: Callable[..., None]) -> Callable[..., None]:
             available_bounds: AvailableBounds[ViewT, MainViewT] = {
                 "view": view,
                 "main_view": self._main_view,
             }
             requested_bounds = self._requested_kwargs(callback, tuple(available_bounds))
-            raw = cast("Callable[..., None]", callback)
             bound = functools.partial(
-                raw, **{k: v for k, v in available_bounds.items() if k in requested_bounds}
+                callback, **{k: v for k, v in available_bounds.items() if k in requested_bounds}
             )
             new_callback = cast("Callable[[Unpack[Ts]], None]", bound)
             for s in signals:
@@ -269,24 +290,15 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]:
-        def wrapper(
-            callback: _ViewOnlyCallback[ViewT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]],
-        ) -> (
-            _ViewOnlyCallback[ViewT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, MainViewT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, ModelT, Unpack[Ts]]
-            | _ViewMainCallback[ViewT, MainViewT, ModelT, Unpack[Ts]]
-        ):
+        def wrapper(callback: Callable[..., None]) -> Callable[..., None]:
             available_bounds: AvailableModelBounds[ViewT, MainViewT, ModelT] = {
                 "view": view,
                 "main_view": self._main_view,
                 "model": self._model,
             }
             requested_bounds = self._requested_kwargs(callback, tuple(available_bounds))
-            raw = cast("Callable[..., None]", callback)
             bound = functools.partial(
-                raw, **{k: v for k, v in available_bounds.items() if k in requested_bounds}
+                callback, **{k: v for k, v in available_bounds.items() if k in requested_bounds}
             )
             new_callback = cast("Callable[[Unpack[Ts]], None]", bound)
             for s in signals:
