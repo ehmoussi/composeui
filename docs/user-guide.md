@@ -17,6 +17,7 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
   - [How ComposeUI maps to MVVM](user-guide/core-concepts.md#how-composeui-maps-to-mvvm)
   - [Views are reactive](user-guide/core-concepts.md#views-are-reactive)
   - [Signals inject arguments](user-guide/core-concepts.md#signals-inject-arguments)
+  - [Computed fields](user-guide/core-concepts.md#computed-fields)
 - [Building views](user-guide/building-views.md)
   - [Define a view](user-guide/building-views.md#define-a-view)
   - [`child` or `Factory`](user-guide/building-views.md#child-or-factory)

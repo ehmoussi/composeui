@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, overload
 
 from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 
+from composeui.core.reactivity import batch_updates, notify_signal, untracked
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from types import CodeType
@@ -158,8 +160,10 @@ class Signal(Generic[Unpack[Ts]]):
         self._qt_signal.connect(self._log_signal)
 
     def emit(self, *args: Unpack[Ts]) -> None:
-        for callback in self._callbacks:
-            callback(*args)
+        with batch_updates(), untracked():
+            for callback in self._callbacks:
+                callback(*args)
+            notify_signal(self)
 
     def _log_signal(self, *args: Unpack[Ts]) -> None:
         log_msgs = ["EMIT SIGNAL %s"]

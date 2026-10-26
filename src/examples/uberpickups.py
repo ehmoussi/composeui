@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import attrs
 
 from composeui.core.application import run
+from composeui.core.reactivity import reactive
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
 from composeui.core.view import (
     ChartKind,
@@ -110,19 +111,29 @@ class UberPickupsMainView(MainView):
     def connect_model(self, model: UberPickupsModel) -> None:
         self.page.table.source = model.uber_data.source()
         self.loader = self.jobs.task(model.load_pickups)
-        self.loader.changed.connect(self._show_loading)
-        self.page.show_raw_data.toggled.connect(self._show_loading)
+        self.loader.changed.connect(self._show_outcome)
+        self.activate_reactions()
         model.uber_data.changed.connect(self._start_loading, now=True)
 
     def _start_loading(self) -> None:
         if not self.loader.is_running:
             self.loader.start(DATA_URL)
 
+    @reactive
     def _show_loading(self) -> None:
         page, loader = self.page, self.loader
         page.data_load_status.is_visible = loader.is_running
-        page.table.is_visible = loader.has_result and page.show_raw_data.is_checked
         page.pickups_chart.is_visible = loader.has_result
+        page.table.is_visible = loader.has_result and page.show_raw_data.is_checked
+        if loader.is_running:
+            page.data_load_status.text = (
+                "Loading rows from SQLite or CSV"
+                if loader.progress is None
+                else f"Read {loader.progress:,} rows from CSV"
+            )
+
+    def _show_outcome(self) -> None:
+        page, loader = self.page, self.loader
         if loader.result is not None:
             page.pickups_chart.series = [Series(name="Pickups", x=list(range(24)), y=loader.result)]
             page.data_load_state.text = "Done! (using SQLite)"
@@ -132,12 +143,6 @@ class UberPickupsMainView(MainView):
                 page.data_load_state.text = "Failed to load data"
                 self.status_bar.show_message(
                     self.tr("Failed to read the CSV: {error}").format(error=loader.error)
-                )
-            elif loader.is_running:
-                page.data_load_status.text = (
-                    "Loading rows from SQLite or CSV"
-                    if loader.progress is None
-                    else f"Read {loader.progress:,} rows from CSV"
                 )
 
 

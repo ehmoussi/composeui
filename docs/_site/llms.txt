@@ -12,7 +12,7 @@
 ## User guide
 
 - [User guide](https://ehmoussi.github.io/composeui/user-guide.html): index of the pages below
-- [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): how ComposeUI maps to MVVM, reactive views, signals that inject arguments
+- [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): how ComposeUI maps to MVVM, reactive views, signals that inject arguments, computed fields with automatic dependencies
 - [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and validation, the main view, saving and loading state
 - [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, and the other views
 - [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): table views and their cells
@@ -32,6 +32,7 @@
 
 - [Widget catalog](https://ehmoussi.github.io/composeui/widgets.html): every view that a backend renders
 - [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
+- [Reactivity API](https://ehmoussi.github.io/composeui/api/reactivity.html): reactive methods, batched updates and cycle errors
 
 ## Contributing
 

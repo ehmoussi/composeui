@@ -175,8 +175,10 @@ assert main_view.status.text == "Done: 3 rows"
   not as a view field. It is then absent from saved view state. The same task is reused after
   New or Open; its state is cleared with the study's jobs.
 
-The [Uber pickups example](../../src/examples/uberpickups.py) uses one task-state handler for
-CSV progress, failures, and the completed table and chart. Both `task.changed` and the
-checkbox's `toggled` signal call this handler. The checkbox shows or hides the raw-data
-table without hiding the chart. The model loads the CSV and counts pickups by hour;
-the main view starts the task and displays its result.
+The [Uber pickups example](../../src/examples/uberpickups.py) uses
+[a reactive method](core-concepts.md#computed-fields) for progress text and visibility.
+Its reads of task state and the checkbox's `is_checked` field become dependencies.
+A separate `task.changed` callback handles failures and builds the completed chart.
+The checkbox shows or hides the raw-data table without hiding the chart. The model
+loads the CSV and counts pickups by hour; the main view starts the task and displays
+its result. Reactions activate after model setup creates the task.

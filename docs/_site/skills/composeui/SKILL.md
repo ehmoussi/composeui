@@ -62,6 +62,12 @@ the option for the web (extra `web`, the default).
 - **Wire a view in `__attrs_post_init__`.** Call `super().__attrs_post_init__()` first,
   then set values and connect signals.
 - **Views are reactive.** Set an attribute (`view.text = "..."`) and the renderer shows it.
+  For derived UI state, mark a synchronous method with `composeui.core.reactivity.reactive`.
+  Call `activate_reactions()` after its inputs exist, at the end of initialization or
+  model setup. View fields, task state and `jobs.is_running` reads become dependencies;
+  assignments rerun the method without signals. Use `batch_updates()` for related writes.
+  Collection mutations and SQL reads are not tracked. Keep actions and dialogs in explicit
+  callbacks. Reactions are runtime state; use `stop_reactions()` to disconnect them.
   Never call `update()` or `refresh()`, and never touch a widget: the app's code does not
   see the toolkit.
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and

@@ -51,6 +51,15 @@ from typing_extensions import ParamSpec, Unpack, dataclass_transform
 from composeui.core import study
 from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
+from composeui.core.reactivity import (
+    activate,
+    batch_updates,
+    field_source,
+    read_field,
+    refresh_tree,
+    stop,
+    untracked,
+)
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
@@ -186,6 +195,7 @@ _RECORD_TABLE_SETUP = (
 )
 
 
+@batch_updates()
 def _apply_state(view: View, data: dict[str, Any]) -> None:
     """Update a live view tree in place from previously saved state.
 
@@ -232,8 +242,10 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
                 # a sort or a filter on a column the table no longer sorts or filters
                 value = current_view.loadable(f.name, value)
             setattr(current_view, f.name, value)
+    refresh_tree(view)
 
 
+@batch_updates()
 def _reset_state(view: View, initial: View) -> None:
     """Set a live view tree back to `initial`'s state, in place.
 
@@ -271,6 +283,7 @@ def _reset_state(view: View, initial: View) -> None:
         ):
             current_view.values = initial_view.values
             current_view.value = initial_view.value
+    refresh_tree(view)
 
 
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
@@ -363,9 +376,26 @@ def define_view(
         options = {"kw_only": True, "slots": False, **kwargs}
         own = options.pop("on_setattr", [])
         hooks = list(own) if isinstance(own, Sequence) else [own]
-        return attrs.define(
+        defined = attrs.define(
             cls, on_setattr=[attrs.setters.validate, *hooks, notify_renderer], **options
         )
+        set_attribute = cast("Callable[[Any, str, Any], None]", defined.__setattr__)
+
+        def observed_setattr(instance: Any, name: str, value: Any) -> None:
+            source = field_source(instance, name)
+            with batch_updates(), untracked():
+                old = getattr(instance, name, None) if source is not None else None
+                set_attribute(instance, name, value)
+                if source is not None:
+                    new = getattr(instance, name)
+                    if old is not new and (
+                        not isinstance(old, (str, int, float, bool, type(None), enum.Enum))
+                        or old != new
+                    ):
+                        source.changed()
+
+        type.__setattr__(defined, "__setattr__", observed_setattr)
+        return defined
 
     if cls is None:
         return wrap
@@ -425,6 +455,23 @@ class View:
             if isinstance(signal, Signal):
                 signal.set_name(f"{type(self).__name__}.{f.name}")
         self.retranslate()
+
+    def __getattribute__(self, name: str) -> Any:
+        value = object.__getattribute__(self, name)
+        read_field(self, name)
+        return value
+
+    def activate_reactions(self) -> None:
+        """Start this view's `reactive` methods after all their inputs exist.
+
+        Run each once to discover dependencies. Repeated activation does nothing.
+        Activate children separately, after their own initialization or model setup.
+        """
+        activate(self)
+
+    def stop_reactions(self) -> None:
+        """Disconnect this view's reactions; activate them again to restart."""
+        stop(self)
 
     def tr(self, text: str) -> TranslatedText:
         """Translate `text`, as written in the code, into the main view's language.

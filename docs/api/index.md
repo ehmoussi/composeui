@@ -10,6 +10,7 @@ The [architecture](../technical-guide.md#architecture) explains how the parts fi
 
 view
 signal
+reactivity
 application
 model
 sqlitemodel

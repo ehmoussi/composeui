@@ -96,6 +96,8 @@ It shows:
 
 - [forms](user-guide/building-views.md#forms-and-their-fields) with labelled rows: text, float
   inputs, a checkbox, radio groups, and a combobox;
+- [computed fields](user-guide/core-concepts.md#computed-fields) that enable the insulation
+  thickness and show the options for the selected edge type;
 - validation on a row, such as the name, and across rows, such as a main pipe that must
   fit the incident pipe;
 - three [pages](user-guide/organizing-the-window.md#pages): Inputs, Results (a read-only table of
@@ -223,6 +225,8 @@ It shows:
   the sweep after the current run.
 - a form that checks the sweep before it starts, such as a wall thinner than the minimum
   radius;
+- [computed fields](user-guide/core-concepts.md#computed-fields) that disable the form and
+  Run button, and enable Cancel, while jobs run;
 - a [progress bar](user-guide/widgets.md#progress-bar) of the runs written, and two
   [tabs](user-guide/organizing-the-window.md#tabs): a [line chart](user-guide/charts.md) of the
   runs, and a table of them;

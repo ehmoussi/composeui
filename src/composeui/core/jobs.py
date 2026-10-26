@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
 from composeui.core.model import RefusedError
+from composeui.core.reactivity import track_signal
 from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
@@ -117,26 +118,31 @@ class Task(Generic[R, P, ProgressT]):
     @property
     def is_running(self) -> bool:
         """Get whether this task is waiting for its current run's outcome."""
+        track_signal(self.changed)
         return self._job is not None
 
     @property
     def progress(self) -> ProgressT | None:
         """Get the last progress value, or None before the run reports one."""
+        track_signal(self.changed)
         return self._progress
 
     @property
     def result(self) -> R | None:
         """Get the successful result, or None before success; see `has_result`."""
+        track_signal(self.changed)
         return self._result
 
     @property
     def error(self) -> Exception | None:
         """Get the run's exception, or None before failure."""
+        track_signal(self.changed)
         return self._error
 
     @property
     def has_result(self) -> bool:
         """Get whether the last run succeeded, including a result of None."""
+        track_signal(self.changed)
         return self._has_result
 
     def start(self, *args: P.args, **kwargs: P.kwargs) -> bool:
@@ -227,6 +233,7 @@ class Jobs:
 
     @property
     def is_running(self) -> bool:
+        track_signal(self.running_changed)
         return len(self._running) > 0
 
     def set_model(self, model: Model) -> None:

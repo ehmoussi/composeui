@@ -19,6 +19,7 @@ import attrs
 from attrs import Factory
 
 from composeui.core.application import run
+from composeui.core.reactivity import reactive
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
 from composeui.core.view import (
     Align,
@@ -234,7 +235,13 @@ class PipeSweepMainView(MainView):
         # the callbacks get the model through their `model` parameter
         self.buttons.run.clicked.connect(self.start)
         self.buttons.cancel.clicked.connect(self.jobs.cancel)
-        self.jobs.running_changed.connect(self._show_running)
+        self.activate_reactions()
+
+    @reactive
+    def _show_running(self) -> None:
+        self.form.is_enabled = not self.jobs.is_running
+        self.buttons.run.is_enabled = not self.jobs.is_running
+        self.buttons.cancel.is_enabled = self.jobs.is_running
 
     def start(self, model: PipeSweepModel) -> None:
         """Start a sweep, replacing the runs of the last one."""
@@ -269,11 +276,6 @@ class PipeSweepMainView(MainView):
         total = self.progress.maximum
         message = self.tr("Swept {count} of {total} radii")
         self.status_bar.show_message(message.format(count=count, total=total))
-
-    def _show_running(self, is_running: bool) -> None:
-        self.form.is_enabled = not is_running
-        self.buttons.run.is_enabled = not is_running
-        self.buttons.cancel.is_enabled = is_running
 
     def connect_model(self, model: PipeSweepModel) -> None:
         """Keep the views showing the database's runs, whichever thread writes them."""

@@ -8,6 +8,7 @@ from pathlib import Path
 from attrs import Factory
 
 from composeui.core.application import run
+from composeui.core.reactivity import reactive
 from composeui.core.view import (
     ActionView,
     DialogKind,
@@ -155,8 +156,6 @@ class PipeFormView(FormView):
         self.incident_pipe.title = self.tr("Incident Pipe")
         # Insulation: its thickness only matters for an insulated pipe
         self.insulation_thickness.value = 10.0
-        self.insulated.toggled.connect(self._enable_insulation_thickness)
-        self._enable_insulation_thickness(self.insulated.is_checked)
         # Main Pipe
         self.main_pipe.radius.value = 50.0
         # two independent cross-field checks, combined into one shared `log_view`
@@ -175,10 +174,18 @@ class PipeFormView(FormView):
             rows=(self.incident_pipe.radius, self.main_pipe.radius),
         )
         # Edge Type
-        self.edge_type.value_changed.connect(self._display_edge_options)
-        self._display_edge_options(self.edge_type.value)
         # Fillet
         self.fillet.radius.value = 20.0
+        self.activate_reactions()
+
+    @reactive
+    def _enable_insulation_thickness(self) -> None:
+        self.insulation_thickness.is_enabled = self.insulated.is_checked
+
+    @reactive
+    def _display_edge_options(self) -> None:
+        self.chamfer.is_visible = self.edge_type.value == EdgeType.Chamfer
+        self.fillet.is_visible = self.edge_type.value == EdgeType.Fillet
 
     def _check_main_pipe_fits_incident(self) -> str | None:
         main_radius = self.main_pipe.radius.value
@@ -209,20 +216,6 @@ class PipeFormView(FormView):
             )
             return message.format(incident_radius=incident_radius, main_radius=main_radius)
         return None
-
-    def _enable_insulation_thickness(self, is_insulated: bool) -> None:
-        self.insulation_thickness.is_enabled = is_insulated
-
-    def _display_edge_options(self, edge_type: EdgeType | None) -> None:
-        if edge_type == EdgeType.Chamfer:
-            self.chamfer.is_visible = True
-            self.fillet.is_visible = False
-        elif edge_type == EdgeType.Fillet:
-            self.chamfer.is_visible = False
-            self.fillet.is_visible = True
-        else:
-            self.chamfer.is_visible = False
-            self.fillet.is_visible = False
 
 
 @define_view
