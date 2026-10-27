@@ -1,4 +1,4 @@
-"""A large table's source of a dataframe's rows: pandas, Polars, PyArrow or a lazy frame.
+"""A dataframe's rows in a large table, a chart or a map: pandas, Polars, PyArrow, lazy...
 
 `narwhals` (the ``dataframe`` extra) reads each library's frame through one API, so the
 library sorts and filters the rows with its own expressions, never row by row in Python.
@@ -12,7 +12,15 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 import narwhals as nw
 
 from composeui.core.signal import SignalNoArgs
-from composeui.core.view import ColumnKind, FilterOperator, SourceColumn, column_kind
+from composeui.core.view import (
+    MAP_LATITUDE_LIMIT,
+    ColumnKind,
+    FilterOperator,
+    MapPoint,
+    Series,
+    SourceColumn,
+    column_kind,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Mapping, Sequence
@@ -216,6 +224,34 @@ class DataFrameSource:
             compared = _comparison(cell, operator, value)
         # an empty cell fails, though pandas' NaN differs from any value
         return ~cell.is_null() & compared
+
+
+def series_of(frame: IntoFrame, x: str, y: str, *, name: Optional[str] = None) -> Series:
+    """Make a chart's series of a frame's columns `x` and `y`, under `name`, else `y`.
+
+    The rows missing either value are left out, in the frame's order otherwise.
+    """
+    rows = _collected(nw.from_native(frame).select(x, y).drop_nulls())
+    return Series(
+        y if name is None else name, rows.get_column(x).to_list(), rows.get_column(y).to_list()
+    )
+
+
+def points_of(frame: IntoFrame, latitude: str, longitude: str) -> list[MapPoint]:
+    """Get a map's points of a frame's columns `latitude` and `longitude`, in degrees.
+
+    The rows missing either value, or out of a Web Mercator map (see `MapPoint`), are left out.
+    """
+    rows = _collected(
+        nw.from_native(frame)
+        .select(latitude, longitude)
+        .drop_nulls()
+        .filter(
+            nw.col(latitude).is_between(-MAP_LATITUDE_LIMIT, MAP_LATITUDE_LIMIT),
+            nw.col(longitude).is_between(-180, 180),
+        )
+    )
+    return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows.iter_rows()]
 
 
 def _text(name: str) -> nw.Expr:

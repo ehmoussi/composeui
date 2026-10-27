@@ -159,6 +159,8 @@ class UberPickupsMainView(MainView):
         self.data.table.source = model.uber_data.source()
         self.loader = self.jobs.task(model.load_pickups)
         self.loader.changed.connect(self._show_loading)
+        self.loader.finished.connect(self._show_pickups)
+        self.loader.failed.connect(self._show_failure)
         self.show_raw_data.toggled.connect(self._show_raw_data)
         model.uber_data.changed.connect(self._start_loading, now=True)
 
@@ -170,29 +172,28 @@ class UberPickupsMainView(MainView):
         self.data.table.is_visible = self.show_raw_data.is_checked
 
     def _show_loading(self) -> None:
+        # a run starting or reading rows, or New and Open dropping its pickups
         loader = self.loader
         self.data_load_status.is_visible = loader.is_running
         self.data.table.is_visible = self.show_raw_data.is_checked
         self.data.is_visible = loader.has_result
-        if loader.result is not None:
-            self.data.pickups_chart.series = [
-                Series(name="Pickups", x=list(range(24)), y=loader.result.hours)
-            ]
-            self.data.pickups_map.points = loader.result.points
-            self.data_load_state.text = "Done! (using SQLite)"
-        else:
+        if not loader.has_result and loader.error is None:
             self.data_load_state.text = "Loading data..."
-            if loader.error is not None:
-                self.data_load_state.text = "Failed to load data"
-                self.status_bar.show_message(
-                    self.tr("Failed to read the CSV: {error}").format(error=loader.error)
-                )
-            elif loader.is_running:
-                self.data_load_status.text = (
-                    "Loading rows from SQLite or CSV"
-                    if loader.progress is None
-                    else f"Read {loader.progress:,} rows from CSV"
-                )
+        if loader.is_running:
+            self.data_load_status.text = (
+                "Loading rows from SQLite or CSV"
+                if loader.progress is None
+                else f"Read {loader.progress:,} rows from CSV"
+            )
+
+    def _show_pickups(self, result: PickupData) -> None:
+        self.data.pickups_chart.series = [Series.bars("Pickups", result.hours)]
+        self.data.pickups_map.points = result.points
+        self.data_load_state.text = "Done! (using SQLite)"
+
+    def _show_failure(self, error: Exception) -> None:
+        self.data_load_state.text = "Failed to load data"
+        self.status_bar.show_message(self.tr("Failed to read the CSV: {error}").format(error=error))
 
 
 def main() -> None:

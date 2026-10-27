@@ -14,11 +14,13 @@ pytest.importorskip("pandas")
 import pandas as pd
 import polars as pl
 
-from composeui.core.dataframesource import DataFrameSource
-from composeui.core.view import ListSource, Sort, parse_filter
+from composeui.core.dataframesource import DataFrameSource, points_of, series_of
+from composeui.core.view import ListSource, MapPoint, Sort, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Hashable
+
+    from narwhals.typing import IntoFrame
 
     from composeui.core.view import TableSource
 
@@ -199,3 +201,26 @@ def test_a_dataframe_source_is_a_table_source(source: DataFrameSource) -> None:
         datetime.datetime,
         bool,
     ]
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas"])
+def test_a_series_reads_two_columns_leaving_out_the_rows_missing_a_value(library: str) -> None:
+    columns = {"hour": [0, 1, 2, 3], "pickups": [5.0, None, 7.0, 2.5]}
+    frame = pl.DataFrame(columns) if library == "polars" else pd.DataFrame(columns)
+
+    series = series_of(frame, "hour", "pickups")
+
+    assert (series.name, series.x, series.y) == ("pickups", [0, 2, 3], [5.0, 7.0, 2.5])
+    assert series_of(frame, "hour", "pickups", name="Pickups").name == "Pickups"
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "lazy"])
+def test_map_points_leave_out_the_rows_missing_a_value_or_off_the_map(library: str) -> None:
+    columns = {"lat": [40.7, None, 90.0, 40.8, 40.9], "lon": [-73.9, -73.8, 0.0, 200.0, None]}
+    frames: dict[str, Callable[[], IntoFrame]] = {
+        "polars": lambda: pl.DataFrame(columns),
+        "pandas": lambda: pd.DataFrame(columns),
+        "lazy": lambda: pl.LazyFrame(columns),
+    }
+
+    assert points_of(frames[library](), "lat", "lon") == [MapPoint(latitude=40.7, longitude=-73.9)]

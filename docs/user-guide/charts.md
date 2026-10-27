@@ -39,6 +39,13 @@ energy: ChartView = child(
 )
 ```
 
+`Series.bars("Heating", [120, 80, 95])` makes the same series: a bar per value, in the
+categories in order.
+
+With the `dataframe` extra, `series_of(frame, x, y)` from `composeui.core.dataframesource`
+makes a series of two columns of a pandas, Polars, or PyArrow frame. It leaves out the rows
+missing a value. Its `name` is the y column's, or the `name` that you give.
+
 ## Log axes
 
 `x_log` and `y_log` make an axis a log axis. A log axis leaves out what it can't show: the
