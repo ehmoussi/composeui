@@ -22,6 +22,10 @@ quickstart, `docs/user-guide/` for each feature, `docs/examples-guide.md` for th
 ```bash
 make lint    # ruff format + ruff check --fix
 make mypy    # mypy on packages composeui + examples, Qt binding resolved to PySide6
+make typecheck  # mypy, Pyright, Pyrefly and ty on tests; installs checker/import dependencies
+make mypy-tests  # mypy on tests only (make mypy still checks source and examples)
+make pyright pyrefly ty  # individual test checkers
+make zuban   # optional test checker; currently reports known incompatibilities
 make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
@@ -37,6 +41,11 @@ On Windows without `make`, run the same targets in PowerShell with `make.ps1`
 (`.\make.ps1 check test`; `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform`
 for `TAILWIND_PLATFORM`). Keep it in step with the `Makefile`, including its
 `$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
+
+`make typecheck` leaves the source mypy check separate. The checker targets install the
+`typecheck` and `browser` groups and all extras so every test import resolves; Chromium is
+not needed. The same targets are available in `make.ps1`. Zuban is excluded from the
+aggregate target and retains its nonzero exit status when diagnostics remain.
 
 Run a single test file or test:
 
@@ -136,6 +145,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`, and the tests
   on Windows (`.\make.ps1 translations test`, Python 3.9 and 3.14). A change of
   the documentation only (`docs/`, Markdown files) runs only the docs build and its lint.
+  Separate CI jobs run the four test checkers on Python 3.9. Zuban runs in an additional
+  non-blocking job while its known incompatibilities remain.
 
 ## Documentation
 
