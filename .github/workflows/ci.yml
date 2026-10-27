@@ -54,7 +54,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --locked --group dev --all-extras
+      - run: uv sync --locked --group dev --group browser --all-extras
       # `make lint` rewrites files; CI only verifies them
       - run: uv run ruff format --check
       - run: uv run ruff check
@@ -72,8 +72,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: mypy-tests
-            experimental: false
           - target: pyright
             experimental: false
           - target: pyrefly

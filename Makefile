@@ -15,10 +15,11 @@ lint: format check_fix
 	
 .PHONY: mypy
 mypy:
-	uv run mypy \
+	uv run --locked --group browser --all-extras mypy \
 		--config-file pyproject.toml \
 		--package composeui \
 		--package examples \
+		--package tests \
 		--always-false=PYQT5 \
 		--always-false=PYSIDE2 \
 		--always-false=PYQT6 \
@@ -28,11 +29,8 @@ mypy:
 # Tests import every backend and Playwright; static checks need their packages, not Chromium.
 TYPECHECK_RUN = uv run --locked --group typecheck --group browser --all-extras
 
-.PHONY: typecheck mypy-tests pyright pyrefly ty zuban
-typecheck: mypy-tests pyright pyrefly ty
-
-mypy-tests:
-	$(TYPECHECK_RUN) mypy
+.PHONY: typecheck pyright pyrefly ty zuban
+typecheck: mypy pyright pyrefly ty
 
 pyright:
 	$(TYPECHECK_RUN) pyright
@@ -45,7 +43,7 @@ ty:
 
 # Keep its nonzero exit visible locally; CI runs Zuban as a non-blocking job.
 zuban:
-	$(TYPECHECK_RUN) zuban mypy
+	$(TYPECHECK_RUN) zuban mypy tests
 
 # the main views of the apps with catalogs, as module:Class
 TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView \
