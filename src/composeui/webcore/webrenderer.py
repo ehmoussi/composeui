@@ -2908,7 +2908,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
         )
 
 
-class WebComboboxRenderer(_WebValuesRenderer[TValue]):
+class WebComboBoxRenderer(_WebValuesRenderer[TValue]):
     _role = "combobox"
 
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -5073,7 +5073,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "chart": WebChartRenderer,
     "map": WebMapRenderer,
     "checkbox": WebCheckBoxRenderer,
-    "combobox": WebComboboxRenderer,
+    "combobox": WebComboBoxRenderer,
     "data_table": WebDataTableRenderer,
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,

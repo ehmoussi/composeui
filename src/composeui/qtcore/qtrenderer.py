@@ -1593,7 +1593,7 @@ class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup]
             self._view.value = value
 
 
-class QtComboboxRenderer(
+class QtComboBoxRenderer(
     QtWidgetRenderer[ValuesViewLike[TValue], QValueComboBox[TValue]], Generic[TValue]
 ):
     _invalid_style = "QComboBox { border: 1px solid red; }"
@@ -2805,7 +2805,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": QtChartRenderer,
     "map": _map_renderer,
     "checkbox": QtCheckBoxRenderer,
-    "combobox": QtComboboxRenderer,
+    "combobox": QtComboBoxRenderer,
     "data_table": QtDataTableRenderer,
     "date_input": QtDateInputRenderer,
     "file_path_input": QtFilePathInputRenderer,

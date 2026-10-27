@@ -36,7 +36,7 @@ from composeui.core.view import (
     ExpanderView,
     FormView,
     HorizontalView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LabelRowDateInputView,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -256,7 +256,7 @@ class NameRowView(LabelRowInputView):
 
 
 @define_view
-class MaterialRowView(LabelRowComboboxView[Material]):
+class MaterialRowView(LabelRowComboBoxView[Material]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Material"
@@ -312,7 +312,7 @@ class PipeFormView(FormView):
 
 
 @define_view
-class MaterialFilterRowView(LabelRowComboboxView[str]):
+class MaterialFilterRowView(LabelRowComboBoxView[str]):
     """A material to show, by name, or every material ("")."""
 
     def __attrs_post_init__(self) -> None:

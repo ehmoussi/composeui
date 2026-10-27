@@ -95,7 +95,7 @@ __all__ = [
     "CheckBoxMixin",
     "CheckBoxView",
     "Column",
-    "ComboboxView",
+    "ComboBoxView",
     "DataTableView",
     "DateInputMixin",
     "DateInputView",
@@ -129,7 +129,7 @@ __all__ = [
     "IntInputView",
     "LabelMixin",
     "LabelRowCheckBoxView",
-    "LabelRowComboboxView",
+    "LabelRowComboBoxView",
     "LabelRowDateInputView",
     "LabelRowFilePathInputView",
     "LabelRowFloatInputView",
@@ -163,7 +163,7 @@ __all__ = [
     "ReferenceLine",
     "Router",
     "RowCheckBoxView",
-    "RowComboboxView",
+    "RowComboBoxView",
     "RowDateInputView",
     "RowFilePathInputView",
     "RowFloatInputView",
@@ -4461,7 +4461,7 @@ class RadioGroupView(ValuesGroupMixin[TValue], View):
 
 
 @define_view
-class ComboboxView(ValuesGroupMixin[TValue], View):
+class ComboBoxView(ValuesGroupMixin[TValue], View):
     """A drop-down list, for one choice among `values`."""
 
     _renderer_key = "combobox"
@@ -4648,14 +4648,14 @@ class LabelRowRadioGroupView(FormLabelRowView, ValuesGroupMixin[TValue]):
 
 
 @define_view
-class RowComboboxView(FormRowView, ValuesGroupMixin[TValue]):
+class RowComboBoxView(FormRowView, ValuesGroupMixin[TValue]):
     """A row of a form with a drop-down list, without a label."""
 
     _field_renderer_key = "combobox"
 
 
 @define_view
-class LabelRowComboboxView(FormLabelRowView, ValuesGroupMixin[TValue]):
+class LabelRowComboBoxView(FormLabelRowView, ValuesGroupMixin[TValue]):
     """A row of a form with a label and a drop-down list."""
 
     _field_renderer_key = "combobox"

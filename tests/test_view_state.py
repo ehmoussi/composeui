@@ -22,7 +22,7 @@ from composeui.core.view import (
     ActionView,
     ChartKind,
     ChartView,
-    ComboboxView,
+    ComboBoxView,
     FloatInputMixin,
     InputView,
     InvalidStateError,
@@ -461,21 +461,21 @@ class _Edge(enum.Enum):
 
 
 @define_view
-class _EdgeComboboxView(ComboboxView[_Edge]):
+class _EdgeComboBoxView(ComboBoxView[_Edge]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Round": _Edge.ROUND, "Sharp": _Edge.SHARP}
 
 
 @define_view
-class _SizeComboboxView(ComboboxView[float]):
+class _SizeComboBoxView(ComboBoxView[float]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Small": 0.5, "Large": 2.0}
 
 
 def test_a_choice_is_saved_by_a_key_its_label_in_another_language_still_loads() -> None:
-    edge, size = _EdgeComboboxView(), _SizeComboboxView()
+    edge, size = _EdgeComboBoxView(), _SizeComboBoxView()
     edge.value, size.value = _Edge.SHARP, 2.0
     # an enum by its member's name, anything else by its position
     assert (edge.serialize_value(), size.serialize_value()) == ("SHARP", "1")
@@ -490,7 +490,7 @@ def test_a_choice_is_saved_by_a_key_its_label_in_another_language_still_loads() 
 
 def test_a_choice_saved_by_its_label_still_loads() -> None:
     """Older state files saved a choice by its label."""
-    edge = _EdgeComboboxView()
+    edge = _EdgeComboBoxView()
 
     assert edge.deserialize_value("Sharp") is _Edge.SHARP
 

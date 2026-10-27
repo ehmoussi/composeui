@@ -79,7 +79,7 @@ from composeui.textualcore.textualrenderer import (
 )
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
-from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composecombobox import ComposeComboBox
 from composeui.textualcore.widgets.composedatatable import (
     ComposeDataFilterTable,
     ComposeDataTable,
@@ -1292,7 +1292,7 @@ async def test_a_form_dialog_s_form_gets_its_state_once_its_screen_shows() -> No
     app = view.renderer.app
     assert app is not None
     material = _field_widget(view.edit_dialog.form.material.renderer)
-    assert isinstance(material, ComposeCombobox)
+    assert isinstance(material, ComposeComboBox)
 
     async with app.run_test(size=(120, 40)) as pilot:  # the app starts, its dialog closed
         await pilot.pause()
@@ -2165,7 +2165,7 @@ async def test_a_combobox_emits_its_value_when_the_user_picks_it_not_when_code_s
         assert seen == []
 
         combobox = _field_widget(material.renderer)
-        assert isinstance(combobox, ComposeCombobox)
+        assert isinstance(combobox, ComposeComboBox)
         combobox.value = Material.Steel  # what picking an option does
         await pilot.pause()
         assert seen == [Material.Steel]
@@ -2198,7 +2198,7 @@ async def test_a_language_set_once_rendered_relabels_the_widgets() -> None:
         assert isinstance(label.widget, Label)
         assert str(label.widget.render()) == "Taille de la forme"
         combobox = _field_widget(size.renderer)
-        assert isinstance(combobox, ComposeCombobox)
+        assert isinstance(combobox, ComposeComboBox)
         # Selection is restored after refresh; pause() can return before that callback.
         await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
         await pilot.pause()
@@ -3629,7 +3629,7 @@ async def test_a_combobox_without_a_value_shows_none() -> None:
     view = TranslatedMainView()
     app = _app_of(view)
     combobox = _field_widget(view.shape.size.renderer)
-    assert isinstance(combobox, ComposeCombobox)
+    assert isinstance(combobox, ComposeComboBox)
 
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()

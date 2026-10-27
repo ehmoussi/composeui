@@ -15,7 +15,7 @@ from composeui.core.view import (
     FormView,
     HorizontalView,
     LabelRowCheckBoxView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LabelRowFloatInputView,
     LabelRowInputView,
     MainView,
@@ -44,8 +44,8 @@ class NameRow(LabelRowInputView):
 class PipeForm(FormView):
     name: NameRow = child(NameRow, label="Name")
     radius: LabelRowFloatInputView = child(LabelRowFloatInputView, label="Radius", minimum=0)
-    material: LabelRowComboboxView[Material] = child(
-        LabelRowComboboxView,
+    material: LabelRowComboBoxView[Material] = child(
+        LabelRowComboBoxView,
         label="Material",
         values={material.value: material for material in Material},
         value=Material.STEEL,
@@ -149,7 +149,7 @@ The fields:
 | `FilePathInputView` | `text`, and `path` (see [File path input](widgets.md#file-path-input)) | Types or picks a file |
 | `CheckBoxView` | `is_checked`, with its `text` beside the box | Checks or unchecks the box (`toggled`) |
 | `RadioGroupView` | `value`, one of `values` | Picks one of a few choices |
-| `ComboboxView` | `value`, one of `values` | Picks one choice in a drop-down list |
+| `ComboBoxView` | `value`, one of `values` | Picks one choice in a drop-down list |
 | `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](widgets.md#slider)) | Drags a handle |
 
 Each field has its row views too, for example `RowFloatInputView` and

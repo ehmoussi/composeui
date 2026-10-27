@@ -11,7 +11,7 @@ from attrs import Factory
 from composeui.core.view import (
     DialogView,
     GroupFormView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LabelRowInputView,
     MainView,
     define_view,
@@ -24,7 +24,7 @@ class Size(enum.Enum):
 
 
 @define_view
-class SizeRowView(LabelRowComboboxView[Size]):
+class SizeRowView(LabelRowComboBoxView[Size]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.value = Size.LARGE
