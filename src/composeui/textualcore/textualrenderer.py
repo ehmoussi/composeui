@@ -35,7 +35,6 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
-    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -66,6 +65,7 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
+    TypedFormDialogView,
     VerticalView,
     View,
     date_hint,
@@ -478,7 +478,10 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             self.screen.reject_button.label = Content(value)
 
 
-class TextualFormDialogRenderer(TextualDialogRenderer):
+TForm = TypeVar("TForm", bound=FormView)
+
+
+class TextualFormDialogRenderer(TextualDialogRenderer, Generic[TForm]):
     """A modal screen holding the form, installed once: pushed open, popped closed.
 
     The form's widgets are built once, so its screen is too, unlike a message's. OK is
@@ -486,7 +489,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     the answer, so OK on a form refusing it leaves the screen up.
     """
 
-    def __init__(self, view: FormDialogView) -> None:
+    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
         super().__init__(view)
         self._form_view = view
         self.form_screen: ComposeFormDialog | None = None

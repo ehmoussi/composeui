@@ -10,7 +10,6 @@ from attrs import Factory
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
-    FormDialogView,
     FormView,
     GroupFormView,
     LabelView,
@@ -21,6 +20,7 @@ from composeui.core.view import (
     RowInputView,
     TableView,
     TreeView,
+    TypedFormDialogView,
     define_view,
     parse_date,
 )
@@ -148,7 +148,7 @@ class _OuterForm(FormView):
 
 
 @define_view
-class _NameDialog(FormDialogView):
+class _NameDialog(TypedFormDialogView[_OuterForm]):
     form: _OuterForm = Factory(_OuterForm)
 
 

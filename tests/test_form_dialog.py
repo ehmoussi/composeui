@@ -5,10 +5,33 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
+from composeui.core.view import FormDialogView, FormView, TypedFormDialogView
 from tests.formdialog import EditPipeDialog, PipeMainView
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+
+@pytest.mark.parametrize(
+    "build_dialog", [FormDialogView, lambda: TypedFormDialogView(form=FormView())]
+)
+def test_default_and_explicit_empty_forms_accept_and_emit_the_answer(
+    build_dialog: Callable[[], TypedFormDialogView[FormView]],
+) -> None:
+    dialog = build_dialog()
+    answers: list[bool] = []
+    dialog.accepted.connect(lambda: answers.append(True))
+    dialog.open()
+    assert dialog.is_visible
+    assert dialog.is_accept_enabled
+
+    dialog.accept()
+
+    assert not dialog.is_visible
+    assert answers == [True]
 
 
 def test_ok_can_be_pressed_only_while_every_check_shown_passes() -> None:

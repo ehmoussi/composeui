@@ -52,7 +52,6 @@ from composeui.core.view import (
     DialogView,
     ExitAppAction,
     ExpanderView,
-    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -87,6 +86,7 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
+    TypedFormDialogView,
     VerticalView,
     View,
     as_pattern,
@@ -3857,7 +3857,10 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             answer()
 
 
-class WebFormDialogRenderer(WebDialogRenderer):
+TForm = TypeVar("TForm", bound=FormView)
+
+
+class WebFormDialogRenderer(WebDialogRenderer, Generic[TForm]):
     """A modal `<dialog>` holding its form, then Cancel and OK.
 
     OK is disabled while a check of the form fails, and only it swaps when that changes:
@@ -3869,7 +3872,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
 
     _role = "form_dialog"
 
-    def __init__(self, view: FormDialogView) -> None:
+    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
         super().__init__(view)
         self._form_view = view
         #: whether more than OK changed since the dialog was last sent: then it swaps whole

@@ -413,20 +413,37 @@ Dimensions in the Pipe menu asks for a confirmation first.
 
 ### Form dialogs
 
-A `FormDialogView` holds a form with OK and Cancel, for example to edit a record from its
-Edit button. A subclass gives its form as its `form` field. Its `text` shows above the form:
+A form dialog holds a form with OK and Cancel, for example to edit a record from its
+Edit button. Its `text` shows above the form. `FormDialogView()` provides an empty `FormView`
+by default. For a specific form type, use `TypedFormDialogView[PipeForm]`:
 
 ```python
 from attrs import Factory
 
-from composeui.core.view import FormDialogView, define_view
+from composeui.core.view import (
+    FormView, LabelRowInputView, TypedFormDialogView, child, define_view,
+)
 
 
 @define_view
-class EditPipeDialog(FormDialogView):
-    form: PipeForm = Factory(PipeForm)  # a FormView, with its checks
+class PipeForm(FormView):
+    name: LabelRowInputView = child(LabelRowInputView, label="Name")
+
+
+@define_view
+class EditPipeDialog(TypedFormDialogView[PipeForm]):
+    form: PipeForm = Factory(PipeForm)
+
+
+dialog = EditPipeDialog()
+dialog.form.name.text = "Main pipe"
 ```
 
+- `TypedFormDialogView` requires `form=...` unless a subclass supplies its typed default,
+  as above. Type checkers reject a different form type in the constructor or an assignment.
+  Existing `FormDialogView` subclasses still work at runtime. For a narrower `form`
+  annotation, change their base to `TypedFormDialogView[YourForm]`.
+- Both classes use the same renderers and behavior. Dialogs are not saved with study data.
 - The user can't press OK while a check of the form fails. `is_accept_enabled` follows the
   checks as they run.
 - Accepting runs every check first, even a check that the user hasn't triggered yet. The

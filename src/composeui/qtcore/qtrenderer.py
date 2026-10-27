@@ -70,7 +70,6 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
-    FormDialogView,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -98,6 +97,7 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
+    TypedFormDialogView,
     VerticalView,
     View,
     date_hint,
@@ -1871,14 +1871,17 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         self._reject_button.setText(value)
 
 
-class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
+TForm = TypeVar("TForm", bound=FormView)
+
+
+class QtFormDialogRenderer(QtWidgetRenderer[TypedFormDialogView[TForm], QFormDialog]):
     """A modal dialog holding its form, shown without blocking: its answer reaches the view.
 
     OK is disabled while a check of the form fails; the view closes the dialog once it
     accepts the answer, so OK on a form refusing it leaves the dialog open.
     """
 
-    def __init__(self, view: FormDialogView) -> None:
+    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -1907,34 +1910,38 @@ class QtFormDialogRenderer(QtWidgetRenderer[FormDialogView, QFormDialog]):
 
     @staticmethod
     def _refresh_dialog_title(
-        _view: FormDialogView, rendered_object: QFormDialog, value: str
+        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.setWindowTitle(value)
 
     @staticmethod
-    def _refresh_text(_view: FormDialogView, rendered_object: QFormDialog, value: str) -> None:
+    def _refresh_text(
+        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
+    ) -> None:
         rendered_object.text.setText(value)
         rendered_object.text.setVisible(value != "")
 
     @staticmethod
-    def _refresh_kind(_view: FormDialogView, _rendered_object: QFormDialog, _value: Any) -> None:
+    def _refresh_kind(
+        _view: TypedFormDialogView[TForm], _rendered_object: QFormDialog, _value: Any
+    ) -> None:
         pass  # always OK and Cancel: a form is confirmed or not
 
     @staticmethod
     def _refresh_accept_text(
-        _view: FormDialogView, rendered_object: QFormDialog, value: str
+        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.ok_button.setText(value)
 
     @staticmethod
     def _refresh_reject_text(
-        _view: FormDialogView, rendered_object: QFormDialog, value: str
+        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.cancel_button.setText(value)
 
     @staticmethod
     def _refresh_is_accept_enabled(
-        _view: FormDialogView, rendered_object: QFormDialog, value: bool
+        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: bool
     ) -> None:
         rendered_object.ok_button.setEnabled(value)
 

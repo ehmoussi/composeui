@@ -14,7 +14,8 @@ slider, label, log, button, progress bar, metric, expander, checkbox, radio grou
 combobox, table (editable cells, sorting and filtering, widgets in cells, cell colors,
 marks, disabled cells, row spans, header groups and row headers included),
 tree (its nodes with an icon, a mark and a style), Markdown, forms, pages, tabs, resizable
-panes (a splitter), sidebar, a list of views from data, message, confirm and form dialogs,
+panes (a splitter), sidebar, a list of views from data, message, confirm and form dialogs
+(including typed form dialogs),
 a large table (rows read from a source as they show; see "Large tables" below), and
 street maps with point overlays (Qt Location on Qt, deck.gl on the web).
 

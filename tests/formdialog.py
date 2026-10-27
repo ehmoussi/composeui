@@ -6,12 +6,12 @@ import attrs
 
 from composeui.core.view import (
     ButtonView,
-    FormDialogView,
     FormView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelView,
     MainView,
+    TypedFormDialogView,
     child,
     define_view,
 )
@@ -36,7 +36,7 @@ class PipeForm(FormView):
 
 
 @define_view
-class EditPipeDialog(FormDialogView):
+class EditPipeDialog(TypedFormDialogView[PipeForm]):
     form: PipeForm = attrs.Factory(PipeForm)
 
     def __attrs_post_init__(self) -> None:
