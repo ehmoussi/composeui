@@ -35,6 +35,8 @@ __all__ = ["DataFrameSource", "points_of", "series_of"]
 ROW_ID = "__composeui_id"
 _EMPTY_KEY = "__composeui_empty"
 _SORT_KEY = "__composeui_key"
+#: the rows' ids in `cells`, apart from the id column that a column may show too
+_CELL_ID_KEY = "__composeui_cell_id"
 
 _TEXT_OPERATORS = (
     FilterOperator.CONTAINS,
@@ -189,7 +191,9 @@ class DataFrameSource:
     def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
         names = [self._column(name).name for name in columns]
         rows = _collected(
-            self._frame.filter(nw.col(self._id).is_in(list(ids))).select(self._id, *names)
+            self._frame.filter(nw.col(self._id).is_in(list(ids))).select(
+                nw.col(self._id).alias(_CELL_ID_KEY), *names
+            )
         )
         return {
             _python_value(row[0]): [_python_value(value) for value in row[1:]]

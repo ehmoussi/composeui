@@ -6,6 +6,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A large table of a `DataFrameSource` whose `id_column` is also one of its columns shows its
+  rows. Its cells failed to read on Polars.
+
 ## [0.1.0] - 2026-10-27
 
 The first release on PyPI.
