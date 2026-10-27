@@ -319,3 +319,39 @@ chart. Saving, opening, and New leave the rest alone:
   [large table](tables.md#a-large-table), and the views of a
   [list of views](organizing-the-window.md#a-list-of-views), which belong to the model.
 - **The language** shown, which the main view or `--language` sets.
+
+### Versions of the state
+
+A study file holds the state of the views, and two versions: the version of ComposeUI's
+file format, and the app's `state_version`, 1 by default. Open refuses a file from a newer
+ComposeUI or from a newer version of the app, and the status bar says why.
+
+An older file opens as it is. A field that the file has and the views no longer have is
+skipped, and a field that the file doesn't have keeps its value. So a new field needs no new
+version. A renamed or moved field loses its value: then raise `state_version`, and override
+`MainView.migrate_state`. It gets the state of an older file, as a `dict`, and the version
+that saved it. It returns the state as the views save it now:
+
+```python
+from typing import Any
+
+from attrs import Factory
+
+from composeui.core.view import InputView, MainView, define_view
+
+
+@define_view
+class PipeMainView(MainView):
+    extension = ".pipe"
+    state_version = 2  # version 1 named this field `name`
+
+    label: InputView = Factory(InputView)
+
+    def migrate_state(self, data: Any, version: int) -> Any:
+        if version < 2:
+            data["label"] = data.pop("name")
+        return data
+```
+
+When the upgrade fails, for example on a key that the file doesn't have, Open refuses the
+file. A file saved before ComposeUI wrote the versions opens as version 1.

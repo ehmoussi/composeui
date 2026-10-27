@@ -98,6 +98,10 @@ GRID_POSITION = "grid_position"
 #: Field metadata key for text the user reads rather than enters (labels, titles...): it
 #: belongs to the app's code and language, not to a study, so it's never saved or loaded
 UI_TEXT = "ui_text"
+#: the version of how a study file holds the views' state, written in it as
+#: ``{"composeui": {"format": ...}, "app": {"version": ...}, "views": ...}``. A file
+#: without them is from before, and holds the views' state alone.
+STATE_FORMAT = 1
 #: what applying structurally wrong state can raise (from cattrs or a field's own
 #: conversion, e.g. ``float("abc")``)
 _BAD_STATE_ERRORS = (
@@ -108,6 +112,11 @@ _BAD_STATE_ERRORS = (
     cattrs.BaseValidationError,
     cattrs.StructureHandlerNotFoundError,
 )
+
+
+def _is_version(value: Any) -> bool:
+    """Tell whether a study file's version is one: a positive integer, not a bool."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
 def _is_omitted_type(tp: Any) -> bool:
@@ -926,6 +935,9 @@ class MainView(View):
     #: whether the window has `file_menu`, the studies' New, Open, Save, Save As and Exit;
     #: an app without studies, e.g. a viewer, sets it to False and leaves it out
     has_file_menu: ClassVar[bool] = True
+    #: the version of the app's state, saved with it: a subclass raises it when a change of
+    #: its views would lose an older study's state, and upgrades the state in `migrate_state`
+    state_version: ClassVar[int] = 1
     #: `app_title`, in the main view's language
     title: str = attrs.field(
         default=attrs.Factory(lambda self: self.app_title, takes_self=True),
@@ -1031,11 +1043,64 @@ class MainView(View):
             except ValueError as error:  # also covers bytes that aren't text
                 msg = f"it isn't a valid {self.extension} file"
                 raise InvalidStateError(msg) from error
-        self.load_state_data(data)
+        self.load_state_data(self.state_data_from_file(data))
         self.state_filepath = filepath
 
+    def file_data(self) -> dict[str, Any]:
+        """Get what a study file holds: the views' state (`state_data`) and its versions."""
+        return {
+            "composeui": {"format": STATE_FORMAT},
+            "app": {"version": self.state_version},
+            "views": self.state_data(),
+        }
+
+    def state_data_from_file(self, data: Any) -> Any:
+        """Get the views' state from what a study file holds (`file_data`), upgraded.
+
+        A state of an older `state_version` goes through `migrate_state`. Raises
+        `InvalidStateError` for a file of a newer ComposeUI or app, or not one at all.
+        """
+        invalid = f"it isn't a valid {self.extension} file"
+        if not isinstance(data, dict):
+            raise InvalidStateError(invalid)
+        if "composeui" not in data:
+            # saved before the versions were: the first of each
+            state_format, version, views = 1, 1, data
+        else:
+            try:
+                state_format = data["composeui"]["format"]
+                version = data["app"]["version"]
+                views = data["views"]
+            except (KeyError, TypeError) as error:
+                raise InvalidStateError(invalid) from error
+        if not _is_version(state_format) or not _is_version(version):
+            raise InvalidStateError(invalid)
+        if state_format > STATE_FORMAT:
+            msg = "it was saved by a newer version of ComposeUI"
+            raise InvalidStateError(msg)
+        if version > self.state_version:
+            msg = "it was saved by a newer version of this application"
+            raise InvalidStateError(msg)
+        if version == self.state_version:
+            return views
+        try:
+            return self.migrate_state(views, version)
+        except _BAD_STATE_ERRORS as error:
+            msg = "it doesn't match this application"
+            raise InvalidStateError(msg) from error
+
+    def migrate_state(self, data: Any, version: int) -> Any:
+        """Upgrade a state saved by an older `state_version` of the app, `version`.
+
+        Return the state as `state_data` gets it now. The app overrides it when it raises
+        `state_version`, e.g. to move a renamed field's value to its new name. Without an
+        override, the state loads as it is: the fields it no longer has are skipped.
+        """
+        del version
+        return data
+
     def load_state_data(self, data: Any) -> None:
-        """Load state, as `save_state` writes it once parsed from json.
+        """Load state, as `state_data` gets it: a study file's from `state_data_from_file`.
 
         Raises `InvalidStateError`, leaving this view unchanged, when the data doesn't fit
         it (see `check_state_data`).
@@ -1075,9 +1140,9 @@ class MainView(View):
         _retranslate(self, self._tr)
 
     def save_state(self, filepath: Path) -> None:
-        """Save the current state into a json file."""
+        """Save the current state into a json file, with its versions (`file_data`)."""
         with filepath.open("w") as f:
-            json.dump(self.state_data(), f)
+            json.dump(self.file_data(), f)
         self.state_filepath = filepath
 
     def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:

@@ -79,7 +79,8 @@ the option for the web (extra `web`, the default).
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
   `cattrs`, which handles `datetime.date` and `datetime.datetime` as ISO 8601 text. A new
   field must be serializable, or carry the `OMIT` metadata. Text that the code sets, not
-  the user, carries `UI_TEXT`.
+  the user, carries `UI_TEXT`. To rename or move a field, raise the main view's
+  `state_version`, and upgrade an older study in `migrate_state`.
   See https://ehmoussi.github.io/composeui/user-guide/building-views.html#saving-and-loading-state
 - **Run slow work in jobs** (`main_view.jobs.start(work, *args)`), not in a callback: a
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,

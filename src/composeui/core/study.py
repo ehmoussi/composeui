@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
-#: the views' state inside a study's archive
+#: the views' state inside a study's archive, with its versions (`MainView.file_data`)
 VIEWS_NAME = "views.json"
 #: what reading a damaged archive can raise
 _BAD_ARCHIVE_ERRORS = (zipfile.BadZipFile, zlib.error, EOFError)
@@ -57,7 +57,7 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
             data_path = Path(directory, model.data_name)
             model.save_data(data_path)
             with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr(VIEWS_NAME, json.dumps(main_view.state_data()))
+                archive.writestr(VIEWS_NAME, json.dumps(main_view.file_data()))
                 archive.write(data_path, model.data_name)
         partial.replace(path)
     finally:
@@ -102,6 +102,7 @@ def open_study(
                     data = json.loads(member.read(views.file_size))
             except ValueError as error:  # also covers bytes that aren't text
                 raise InvalidStateError(invalid) from error
+            data = main_view.state_data_from_file(data)
             main_view.check_state_data(data)
             # before the model's data is replaced: a job writing to it would write into the
             # study opened (see `Jobs`), so it stops once its open fails too
