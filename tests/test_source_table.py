@@ -15,15 +15,15 @@ from attrs import Factory
 
 from composeui.core.application import Application
 from composeui.core.view import (
-    DATA_TABLE_CACHE,
-    DATA_TABLE_WINDOW,
-    DataTableByPosition,
-    DataTableView,
+    SOURCE_TABLE_CACHE,
+    SOURCE_TABLE_WINDOW,
     FilterError,
     ListSource,
     MainView,
     SelectionMode,
     SourceColumn,
+    SourceTableByPosition,
+    SourceTableView,
     child,
     define_view,
 )
@@ -83,21 +83,21 @@ def source() -> CountingSource:
 
 
 @pytest.fixture
-def table(source: CountingSource) -> DataTableView:
-    return DataTableView(source=source)
+def table(source: CountingSource) -> SourceTableView:
+    return SourceTableView(source=source)
 
 
 def test_rows_read_the_windows_of_the_rows_asked_once(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     assert (table.row_count, source.orders) == (1000, 1)
     assert table.headers == ["Name", "Value", "Kind", "Note"]
 
     assert [row_id for row_id, _cells in table.rows(0, 50)] == list(range(50))
-    assert source.read == [list(range(DATA_TABLE_WINDOW))]
+    assert source.read == [list(range(SOURCE_TABLE_WINDOW))]
     # half of it read already: only the next window
     assert len(table.rows(150, 250)) == 100
-    assert source.read[1:] == [list(range(DATA_TABLE_WINDOW, 2 * DATA_TABLE_WINDOW))]
+    assert source.read[1:] == [list(range(SOURCE_TABLE_WINDOW, 2 * SOURCE_TABLE_WINDOW))]
     table.rows(0, 50)
     assert len(source.read) == 2
     assert table.rows(990, 2000)[-1][0] == 999
@@ -105,41 +105,41 @@ def test_rows_read_the_windows_of_the_rows_asked_once(
 
 
 def test_the_rows_read_first_go_once_more_rows_are_read_than_the_cache_keeps() -> None:
-    source = CountingSource(_samples(2 * DATA_TABLE_CACHE))
-    table = DataTableView(source=source)
+    source = CountingSource(_samples(2 * SOURCE_TABLE_CACHE))
+    table = SourceTableView(source=source)
     table.rows(0, 1)
     # the next rows, as many as the cache keeps: the first window goes
-    table.rows(DATA_TABLE_WINDOW, DATA_TABLE_WINDOW + DATA_TABLE_CACHE)
+    table.rows(SOURCE_TABLE_WINDOW, SOURCE_TABLE_WINDOW + SOURCE_TABLE_CACHE)
     assert len(source.read) == 2
 
     table.rows(0, 1)
-    assert source.read[2:] == [list(range(DATA_TABLE_WINDOW))]
+    assert source.read[2:] == [list(range(SOURCE_TABLE_WINDOW))]
 
 
 def test_the_rows_asked_stay_while_the_rows_they_need_more_of_are_read() -> None:
-    source = CountingSource(_samples(6 * DATA_TABLE_WINDOW))
-    table = DataTableView(source=source)
+    source = CountingSource(_samples(6 * SOURCE_TABLE_WINDOW))
+    table = SourceTableView(source=source)
     table.rows(0, 1)  # the first window: the oldest one kept
     for window in range(2, 6):  # as many rows as the cache keeps
-        table.rows(window * DATA_TABLE_WINDOW, window * DATA_TABLE_WINDOW + 1)
+        table.rows(window * SOURCE_TABLE_WINDOW, window * SOURCE_TABLE_WINDOW + 1)
 
     # rows of the oldest window kept, and of the next one, not read yet
-    end = DATA_TABLE_WINDOW + 50
-    rows = table.rows(DATA_TABLE_WINDOW - 50, end)
+    end = SOURCE_TABLE_WINDOW + 50
+    rows = table.rows(SOURCE_TABLE_WINDOW - 50, end)
 
     assert all(cells[0] != "" for _row_id, cells in rows)
 
 
 def test_rows_known_by_text_ids_read_as_rows_known_by_numbers() -> None:
     samples = ListSource(Sample, {"value": "Value"}, _samples(3), id_field="name")
-    table = DataTableView(source=samples, sort_column="value", sort_descending=True)
+    table = SourceTableView(source=samples, sort_column="value", sort_descending=True)
 
     assert table.rows(0, 2) == [("s0002", ["0.5"]), ("s0001", ["0.25"])]
 
 
 def test_rows_format_each_column_s_values(source: CountingSource) -> None:
     source.records = [Sample("a", 1.25, Kind.GAUGE, None), Sample("b", 2.0, note=0.5)]
-    table = DataTableView(source=source, column_formats={"value": ".1f", "note": ".0%"})
+    table = SourceTableView(source=source, column_formats={"value": ".1f", "note": ".0%"})
 
     assert table.rows(0, 2) == [(0, ["a", "1.2", "gauge", ""]), (1, ["b", "2.0", "probe", "50%"])]
     table.column_formats = {"name": ".1f"}  # a format for numbers: the text as it is
@@ -147,7 +147,7 @@ def test_rows_format_each_column_s_values(source: CountingSource) -> None:
 
 
 def test_the_sort_the_search_and_the_filters_read_the_order_again(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     table.rows(0, 10)
 
@@ -165,7 +165,7 @@ def test_the_sort_the_search_and_the_filters_read_the_order_again(
 
 
 def test_a_header_s_clicks_sort_ascending_descending_then_as_the_source_gives(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     table.sort_by("kind")
     assert (table.sort_column, table.sort_descending) == ("kind", False)
@@ -179,12 +179,12 @@ def test_a_header_s_clicks_sort_ascending_descending_then_as_the_source_gives(
     table.sort_by("value")
     assert (table.sort_column, table.sort_descending, table.ids(0, 2)) == (None, False, [0, 1])
 
-    with pytest.raises(ValueError, match="sort by DataTableView's column 'mass'"):
+    with pytest.raises(ValueError, match="sort by SourceTableView's column 'mass'"):
         table.sort_by("mass")
 
 
 def test_the_filter_bar_reads_its_count_chips_errors_and_hints_by_column_name(
-    table: DataTableView,
+    table: SourceTableView,
 ) -> None:
     assert table.count_text == ""  # every row shown
     table.filters = {"value": ">=249.5", "name": "/s09[89]/"}
@@ -196,14 +196,14 @@ def test_the_filter_bar_reads_its_count_chips_errors_and_hints_by_column_name(
     assert table.filter_takes_pattern("name")
     assert not table.filter_takes_pattern("value")
     assert table.filter_placeholder("value") == ">=20, 18..24"
-    with pytest.raises(ValueError, match="filter DataTableView's column 'mass'"):
+    with pytest.raises(ValueError, match="filter SourceTableView's column 'mass'"):
         table.filter_error("mass", "1")
 
 
-def test_the_settings_name_the_source_s_columns(table: DataTableView) -> None:
-    with pytest.raises(ValueError, match="sort by DataTableView's column 'mass'"):
+def test_the_settings_name_the_source_s_columns(table: SourceTableView) -> None:
+    with pytest.raises(ValueError, match="sort by SourceTableView's column 'mass'"):
         table.sort_column = "mass"
-    with pytest.raises(ValueError, match="filter DataTableView's column 'mass'"):
+    with pytest.raises(ValueError, match="filter SourceTableView's column 'mass'"):
         table.filters = {"mass": ">1"}
     with pytest.raises(FilterError):
         table.filters = {"value": ">heavy"}
@@ -211,7 +211,7 @@ def test_the_settings_name_the_source_s_columns(table: DataTableView) -> None:
 
 
 def test_the_source_s_change_reads_the_order_and_the_rows_again(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     table.rows(0, 10)
 
@@ -225,7 +225,7 @@ def test_the_source_s_change_reads_the_order_and_the_rows_again(
 def test_a_source_s_change_orders_its_table_once_and_keeps_no_table_alive(
     source: CountingSource,
 ) -> None:
-    table = DataTableView(source=source)
+    table = SourceTableView(source=source)
     table.source = source  # again, e.g. as a study opens
     orders = source.orders
 
@@ -242,7 +242,7 @@ def test_a_source_s_change_orders_its_table_once_and_keeps_no_table_alive(
 
 
 def test_a_row_gone_from_the_source_shows_empty_cells_until_its_change(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     # gone without a change: as a source read while another thread deletes its rows
     source._set_records(_samples(5))  # noqa: SLF001
@@ -250,7 +250,7 @@ def test_a_row_gone_from_the_source_shows_empty_cells_until_its_change(
     assert table.rows(4, 6) == [(4, ["s0004", "1.0", "probe", ""]), (5, ["", "", "", ""])]
 
 
-def test_a_new_order_drops_the_selected_rows_it_hides(table: DataTableView) -> None:
+def test_a_new_order_drops_the_selected_rows_it_hides(table: SourceTableView) -> None:
     emitted: list[list[Any]] = []
     table.selection_changed.connect(emitted.append)
     table.selection_mode = SelectionMode.MULTIPLE
@@ -271,7 +271,7 @@ def test_a_new_order_drops_the_selected_rows_it_hides(table: DataTableView) -> N
 
 
 def test_the_user_s_clicks_select_a_row_or_toggle_rows_saying_so(
-    table: DataTableView,
+    table: SourceTableView,
 ) -> None:
     emitted: list[list[Any]] = []
     table.selection_changed.connect(emitted.append)
@@ -292,7 +292,7 @@ def test_the_user_s_clicks_select_a_row_or_toggle_rows_saying_so(
     assert len(emitted) == 4
 
 
-def test_a_shift_click_adds_the_rows_from_the_one_selected_last(table: DataTableView) -> None:
+def test_a_shift_click_adds_the_rows_from_the_one_selected_last(table: SourceTableView) -> None:
     table.selection_mode = SelectionMode.MULTIPLE
     table.selected_ids = [500]
     table.extend_to(3)  # none selected by the user yet: a click
@@ -312,7 +312,7 @@ def test_a_shift_click_adds_the_rows_from_the_one_selected_last(table: DataTable
 
 
 def test_ctrl_c_copies_the_selected_rows_as_shown_tab_separated(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     assert table.selection_text() == ""
     source.records = [
@@ -334,13 +334,13 @@ def test_ctrl_c_copies_the_selected_rows_as_shown_tab_separated(
 
 
 def test_an_export_gives_the_rows_shown_as_csv_their_values_in_full(
-    table: DataTableView, source: CountingSource, tmp_path: Path
+    table: SourceTableView, source: CountingSource, tmp_path: Path
 ) -> None:
     source.records = [
         Sample('a, "b"', 1.25, Kind.GAUGE, None),
         Sample("multi\nline", 2.0, note=0.1),
         Sample("hidden", 3.0),
-        *_samples(DATA_TABLE_WINDOW + 1),
+        *_samples(SOURCE_TABLE_WINDOW + 1),
     ]
     table.column_formats = {"value": ".1f"}
     table.filters = {"name": "!hidden"}
@@ -363,11 +363,11 @@ def test_an_export_gives_the_rows_shown_as_csv_their_values_in_full(
         '"a, ""b""",1.25,gauge,',  # quoted; not as `column_formats` shows it
         "s0005,1.25,probe,",
     ]
-    assert len(lines) == 1 + DATA_TABLE_WINDOW + 3 + 1  # the line break quoted too
+    assert len(lines) == 1 + SOURCE_TABLE_WINDOW + 3 + 1  # the line break quoted too
     assert len(set(lines)) == len(lines)  # each row once
-    assert lines[-1] == f"s{DATA_TABLE_WINDOW:04d},{DATA_TABLE_WINDOW / 4},probe,"
+    assert lines[-1] == f"s{SOURCE_TABLE_WINDOW:04d},{SOURCE_TABLE_WINDOW / 4},probe,"
     assert '"multi\nline",2.0,probe,0.1' in "\n".join(lines)
-    assert all(len(ids) <= DATA_TABLE_WINDOW for ids in source.read[reads:])
+    assert all(len(ids) <= SOURCE_TABLE_WINDOW for ids in source.read[reads:])
 
     table.export_csv(tmp_path / "rows.csv")  # not in an app: written at once
     assert (tmp_path / "rows.csv").read_text(encoding="utf-8").startswith("Name,Value,")
@@ -385,7 +385,7 @@ def test_an_export_that_fails_partway_leaves_no_file(tmp_path: Path) -> None:
                 raise RuntimeError(msg)
             return super().cells(ids, columns)
 
-    table = DataTableView(source=Failing(_samples(2 * DATA_TABLE_WINDOW)))
+    table = SourceTableView(source=Failing(_samples(2 * SOURCE_TABLE_WINDOW)))
     path = tmp_path / "rows.csv"
 
     with pytest.raises(RuntimeError, match="closed database"):
@@ -398,17 +398,17 @@ def test_a_new_source_drops_the_settings_of_columns_it_does_not_have(
     source: CountingSource,
 ) -> None:
     # set before any source, which takes any column: an app's, or a study's
-    table = DataTableView(filters={"gone": ">3", "value": ">1"}, sort_column="gone")
+    table = SourceTableView(filters={"gone": ">3", "value": ">1"}, sort_column="gone")
 
     table.source = source
 
     assert (table.filters, table.sort_column) == ({"value": ">1"}, None)
-    by_position = DataTableByPosition(table)
+    by_position = SourceTableByPosition(table)
     by_position.add_filter(0, "s00")  # as the bar's Add: the other filters stay
     assert table.filters == {"value": ">1", "name": "s00"}
 
 
-def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) -> None:
+def test_a_double_click_activates_the_row_at_its_position(table: SourceTableView) -> None:
     activated: list[Any] = []
     table.row_activated.connect(activated.append)
     table.sort_column, table.sort_descending = "value", True
@@ -420,7 +420,7 @@ def test_a_double_click_activates_the_row_at_its_position(table: DataTableView) 
 
 
 def test_a_new_source_s_rows_replace_the_old_one_s(
-    table: DataTableView, source: CountingSource
+    table: SourceTableView, source: CountingSource
 ) -> None:
     table.rows(0, 10)
     other = CountingSource(_samples(3))
@@ -436,7 +436,7 @@ def test_a_new_source_s_rows_replace_the_old_one_s(
 
 def test_a_million_rows_keep_their_ids_alone_and_read_a_window() -> None:
     source = MillionSource()
-    table = DataTableView()
+    table = SourceTableView()
     tracemalloc.start()
     try:
         table.source = source
@@ -450,12 +450,12 @@ def test_a_million_rows_keep_their_ids_alone_and_read_a_window() -> None:
         (500_010, ["1000020", "250005.0"]),
         (500_011, ["1000022", "250005.5"]),
     ]
-    assert len(source.read) == DATA_TABLE_WINDOW
+    assert len(source.read) == SOURCE_TABLE_WINDOW
 
 
 @define_view
 class SamplesMainView(MainView):
-    samples: DataTableView = child(DataTableView, selection_mode=SelectionMode.MULTIPLE)
+    samples: SourceTableView = child(SourceTableView, selection_mode=SelectionMode.MULTIPLE)
 
 
 def test_a_study_saves_the_settings_and_the_selection_never_the_rows(tmp_path: Path) -> None:
@@ -479,7 +479,7 @@ def test_a_study_saves_the_settings_and_the_selection_never_the_rows(tmp_path: P
 def test_a_table_without_a_source_exports_no_row(tmp_path: Path) -> None:
     path = tmp_path / "rows.csv"
 
-    DataTableView().export_csv(path)
+    SourceTableView().export_csv(path)
 
     assert path.read_text(encoding="utf-8") == ""
 
@@ -498,7 +498,7 @@ class _NarrowedSource(CountingSource):
 
 def test_a_filter_on_a_column_the_source_no_longer_has_filters_nothing() -> None:
     source = _NarrowedSource(_samples(10))
-    table = DataTableView(source=source)
+    table = SourceTableView(source=source)
     table.filters = {"value": ">1"}
     filtered = table.row_count
 
@@ -513,7 +513,7 @@ class _ExportMainView(MainView):
     app_title = "Export"
     extension = ".export"
 
-    samples: DataTableView = Factory(DataTableView)
+    samples: SourceTableView = Factory(SourceTableView)
 
 
 class _GatedCellsSource(CountingSource):
@@ -531,7 +531,7 @@ class _GatedCellsSource(CountingSource):
 
 def test_an_export_canceled_partway_leaves_no_file(tmp_path: Path) -> None:
     view = Application(build_main_view=_ExportMainView).main_view
-    source = _GatedCellsSource(_samples(2 * DATA_TABLE_WINDOW))
+    source = _GatedCellsSource(_samples(2 * SOURCE_TABLE_WINDOW))
     view.samples.source = source
     path = tmp_path / "rows.csv"
 

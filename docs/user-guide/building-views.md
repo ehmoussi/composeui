@@ -200,7 +200,7 @@ Larger views have sections of their own:
 - `SidebarView` for a [sidebar](organizing-the-window.md#sidebar).
 - `ListView` for [a list of views](organizing-the-window.md#a-list-of-views), and `Menu` for
   [menus](organizing-the-window.md#menus).
-- `TableView`, `RecordTableView`, and `DataTableView` for [tables](tables.md).
+- `TableView`, `RecordTableView`, and `SourceTableView` for [tables](tables.md).
 - `ChartView` for [charts](charts.md), and `MapView` for [maps](maps.md).
 
 ## The main view

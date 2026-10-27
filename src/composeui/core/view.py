@@ -77,10 +77,10 @@ if TYPE_CHECKING:
 __all__ = [
     "CHECKED_TEXTS",
     "CONVERTER",
-    "DATA_TABLE_JOB_ROWS",
     "GRID_POSITION",
     "OMIT",
     "SEARCH_DELAY_MS",
+    "SOURCE_TABLE_JOB_ROWS",
     "STRETCH",
     "UI_TEXT",
     "ActionView",
@@ -96,7 +96,6 @@ __all__ = [
     "CheckBoxView",
     "Column",
     "ComboBoxView",
-    "DataTableView",
     "DateInputMixin",
     "DateInputView",
     "DialogKind",
@@ -179,6 +178,7 @@ __all__ = [
     "SliderView",
     "Sort",
     "SourceColumn",
+    "SourceTableView",
     "SplitterView",
     "StatusBar",
     "T",
@@ -3540,18 +3540,18 @@ class ListSource(Generic[RecordT]):
 
 
 #: the text of a large table: what the web says without rows, and its export's action
-DATA_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows"), "export": T("Export CSV")}
+SOURCE_TABLE_TEXTS: Mapping[str, str] = {"empty": T("No rows"), "export": T("Export CSV")}
 
-#: the rows a `DataTableView` reads from its source at once, from a multiple of it on
-DATA_TABLE_WINDOW = 200
-#: the rows whose values a `DataTableView` keeps, the ones read last
-DATA_TABLE_CACHE = 1_000
-#: the rows from which a `DataTableView` orders its source's in a job, on Qt and Textual
-DATA_TABLE_JOB_ROWS = 100_000
+#: the rows a `SourceTableView` reads from its source at once, from a multiple of it on
+SOURCE_TABLE_WINDOW = 200
+#: the rows whose values a `SourceTableView` keeps, the ones read last
+SOURCE_TABLE_CACHE = 1_000
+#: the rows from which a `SourceTableView` orders its source's in a job, on Qt and Textual
+SOURCE_TABLE_JOB_ROWS = 100_000
 
 
 def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> None:
-    """Write a large table's CSV, as `DataTableView.csv_chunks` gives it, in a job or not.
+    """Write a large table's CSV, as `SourceTableView.csv_chunks` gives it, in a job or not.
 
     A job canceled (New, Open, closing the app) stops. Stopped, or failed (e.g. a cell the
     source can't read, a full disk), it leaves no part of the file: none that looks whole.
@@ -3612,7 +3612,7 @@ def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
 
 
 @define_view
-class DataTableView(View):
+class SourceTableView(View):
     """A large table, whose rows a source keeps and the table reads a window at a time.
 
     `source` (a `TableSource`) sorts, searches and filters the rows. For each
@@ -3620,9 +3620,9 @@ class DataTableView(View):
     the ids of the rows shown, in order, and keeps only these ids (in an `array` when
     they are integers). `rows` gives the cells of the rows at some positions, formatted
     as `column_formats` says. It reads them from the source by windows of
-    `DATA_TABLE_WINDOW` rows, and keeps the values of the last `DATA_TABLE_CACHE` rows.
+    `SOURCE_TABLE_WINDOW` rows, and keeps the values of the last `SOURCE_TABLE_CACHE` rows.
     The source's `changed` makes it read the order and the cells again. A source of
-    `DATA_TABLE_JOB_ROWS` rows or more orders them in a job on Qt and Textual
+    `SOURCE_TABLE_JOB_ROWS` rows or more orders them in a job on Qt and Textual
     (`is_ordering`), and `ordered` emits once the rows have their new order.
 
     The columns are the source's, by name: `sort_column`, the keys of `filters` and of
@@ -3648,7 +3648,7 @@ class DataTableView(View):
     filters as chips. It counts the rows shown while some are hidden (`count_text`).
     """
 
-    _renderer_key = "data_table"
+    _renderer_key = "source_table"
 
     def _check_sort_column(self, _attribute: attrs.Attribute[Any], column: Optional[str]) -> None:
         if column is not None:
@@ -3725,9 +3725,9 @@ class DataTableView(View):
     )
     #: the format of each column's values, by column name (e.g. ``".6g"``): `format`'s
     column_formats: dict[str, str] = attrs.field(factory=dict[str, str])
-    #: the text the web shows (see `DATA_TABLE_TEXTS`)
+    #: the text the web shows (see `SOURCE_TABLE_TEXTS`)
     texts: dict[str, str] = attrs.field(
-        factory=lambda: dict(DATA_TABLE_TEXTS), metadata={UI_TEXT: True}
+        factory=lambda: dict(SOURCE_TABLE_TEXTS), metadata={UI_TEXT: True}
     )
     #: the text of the filter bar, by what it's for (see `FILTER_TEXTS`)
     filter_texts: dict[str, str] = attrs.field(
@@ -3895,8 +3895,8 @@ class DataTableView(View):
         columns = self.source.columns
         names = [column.name for column in columns]
         lines: list[str] = []
-        for start in range(0, len(ids), DATA_TABLE_WINDOW):
-            window = ids[start : start + DATA_TABLE_WINDOW]
+        for start in range(0, len(ids), SOURCE_TABLE_WINDOW):
+            window = ids[start : start + SOURCE_TABLE_WINDOW]
             values = self.source.cells(window, names)
             for row_id in window:
                 cells = self._cells(columns, values.get(row_id, ()))
@@ -3922,10 +3922,10 @@ class DataTableView(View):
             writer = csv.writer(buffer)
             writer.writerow(headers)
             yield buffer.getvalue()
-            for start in range(0, len(order), DATA_TABLE_WINDOW):
+            for start in range(0, len(order), SOURCE_TABLE_WINDOW):
                 buffer.seek(0)
                 buffer.truncate()
-                window = order[start : start + DATA_TABLE_WINDOW]
+                window = order[start : start + SOURCE_TABLE_WINDOW]
                 values = source.cells(window, names)
                 writer.writerows(
                     [_cell_text(value) for value in values.get(row_id, [None] * len(names))]
@@ -4027,14 +4027,14 @@ class DataTableView(View):
 
     def _read_windows(self, source: TableSource[Any], start: int, stop: int) -> None:
         """Read the values of the windows of rows from `start` to `stop` into the cache."""
-        first = start - start % DATA_TABLE_WINDOW
-        last = min(-(-stop // DATA_TABLE_WINDOW) * DATA_TABLE_WINDOW, len(self._order))
+        first = start - start % SOURCE_TABLE_WINDOW
+        last = min(-(-stop // SOURCE_TABLE_WINDOW) * SOURCE_TABLE_WINDOW, len(self._order))
         ids = [row_id for row_id in self._order[first:last] if row_id not in self._cache]
         values = source.cells(ids, [column.name for column in source.columns])
         for row_id in ids:
             # a row gone: its cells are empty until the source says it changed
             self._cache[row_id] = values.get(row_id, ())
-        while len(self._cache) > max(DATA_TABLE_CACHE, last - first):
+        while len(self._cache) > max(SOURCE_TABLE_CACHE, last - first):
             self._cache.popitem(last=False)
 
     def _cells(self, columns: Sequence[SourceColumn], values: Sequence[Any]) -> list[str]:
@@ -4085,7 +4085,7 @@ class DataTableView(View):
     def _read_order(self) -> None:
         """Ask the source for the ids of the rows shown, in their order, then show them.
 
-        A source of `DATA_TABLE_JOB_ROWS` rows or more, in an app whose window the main
+        A source of `SOURCE_TABLE_JOB_ROWS` rows or more, in an app whose window the main
         thread draws (Qt, Textual), orders them in a job, the app staying responsive
         meanwhile (`is_ordering`). One job at a time: the settings changed while it runs
         order the rows again once it's over, its order dropped.
@@ -4114,7 +4114,7 @@ class DataTableView(View):
     def _ordering_jobs(self) -> Optional[Jobs]:
         """Get the jobs to order the rows in, or None to order them on the main thread."""
         main_view = None if self._main_view is None else self._main_view()
-        if main_view is None or self._total < DATA_TABLE_JOB_ROWS:
+        if main_view is None or self._total < SOURCE_TABLE_JOB_ROWS:
             return None
         renderer = main_view.renderer
         if not isinstance(renderer, MainRenderer) or not renderer.draws_on_main_thread:
@@ -4209,8 +4209,8 @@ class DataTableView(View):
         return column
 
 
-class DataTableLike(Protocol):
-    """What `DataTableByPosition` reads and sets of a `DataTableView`."""
+class SourceTableLike(Protocol):
+    """What `SourceTableByPosition` reads and sets of a `SourceTableView`."""
 
     search: str
     filters: dict[str, str]
@@ -4235,15 +4235,15 @@ class DataTableLike(Protocol):
     def extend_to(self, position: int) -> None: ...
 
 
-class DataTableByPosition:
+class SourceTableByPosition:
     """A large table as a backend's widgets know it: its columns by their positions.
 
-    A `DataTableView` knows its columns by name, and the widgets (a header, a filter bar,
+    A `SourceTableView` knows its columns by name, and the widgets (a header, a filter bar,
     as a `TableView`'s) by position in its source. The renderers of every backend read
     and set the view through it, so the names map to positions in one place.
     """
 
-    def __init__(self, view: DataTableLike) -> None:
+    def __init__(self, view: SourceTableLike) -> None:
         self._view = view
 
     @property

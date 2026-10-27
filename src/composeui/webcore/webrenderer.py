@@ -47,7 +47,6 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
-    DataTableByPosition,
     DialogKind,
     DialogView,
     ExitAppAction,
@@ -80,6 +79,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SourceTableByPosition,
     SplitterView,
     StatusBar,
     TabPage,
@@ -128,11 +128,11 @@ _RENDER_TARGET: ContextVar[RenderTarget | None] = ContextVar(
 
 _ID_PATTERN = re.compile(r'\sid="([^"]+)"')
 #: the rows of a large table the page draws at once, around those scrolled to
-DATA_TABLE_WINDOW_ROWS = 100
+SOURCE_TABLE_WINDOW_ROWS = 100
 #: the rows of a large table that the scroll bar's height can stand for at most, 2.25rem
 #: each: past them, a scroll position maps to a row by its ratio, as browsers cap an
 #: element's height (about 33M pixels in Chrome, 17M in Firefox)
-DATA_TABLE_SCROLLED_ROWS = 400_000
+SOURCE_TABLE_SCROLLED_ROWS = 400_000
 #: seconds a status bar waits past its message's timeout before fetching itself again
 _AUTO_CLEAR_MARGIN = 0.25
 
@@ -2468,7 +2468,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
 TValue = TypeVar("TValue")
 
 
-class DataTableViewLike(ViewLike, Protocol):
+class SourceTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
     sort_column: str | None
     sort_descending: bool
@@ -2502,35 +2502,35 @@ class DataTableViewLike(ViewLike, Protocol):
     export_filename: str
 
 
-class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
+class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     """A large table, scrolled in a frame: the page draws only the rows around the view.
 
-    The frame holds the headers, a window of `DATA_TABLE_WINDOW_ROWS` rows, and two filler
+    The frame holds the headers, a window of `SOURCE_TABLE_WINDOW_ROWS` rows, and two filler
     rows that give the scroll bar the height of every row. When the user stops scrolling
     outside the window, `page.js` posts the first row shown (`scroll`), and only the
     `<tbody>` comes back, the scroll position kept, that row still under the headers.
-    Past `DATA_TABLE_SCROLLED_ROWS` rows, the fillers stop growing: a filler's height
+    Past `SOURCE_TABLE_SCROLLED_ROWS` rows, the fillers stop growing: a filler's height
     stands for more rows than as many drawn ones (`_fillers`).
     Each row starts with its position, from 1, and tells screen readers where it is
     (`aria-rowindex` of `aria-rowcount`).
 
     A new order of the rows (a sort, a search, a filter, the source changed) swaps the
     whole frame, scrolled to the top. A header is a button sorting by its column
-    (`DataTableView.sort_by`), keeping the focus as it comes back (`autofocus`). A click
+    (`SourceTableView.sort_by`), keeping the focus as it comes back (`autofocus`). A click
     on a row, or Enter on it, selects it (`select_at`): only the rows come back, the row
     keeping the focus. The web neither extends a selection nor activates a row. While a
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
     above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
-    text (`DataTableView.selection_text`) comes back in a hidden element, which the page
+    text (`SourceTableView.selection_text`) comes back in a hidden element, which the page
     writes to the clipboard. A link above the frame downloads the rows shown as CSV
     (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
     """
 
-    _role = "data_table"
+    _role = "source_table"
 
-    def __init__(self, view: DataTableViewLike) -> None:
+    def __init__(self, view: SourceTableViewLike) -> None:
         super().__init__(view)
-        self._by_position = DataTableByPosition(view)
+        self._by_position = SourceTableByPosition(view)
         #: the position of the window's first row
         self._start = 0
         #: the filler's height above the window, in rows' heights, where the page scrolled
@@ -2571,7 +2571,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
     def _count_text(self) -> str:
         return self._view.count_text
 
-    def _reorder(self, _view: DataTableViewLike, _rendered_object: str, _value: Any) -> None:
+    def _reorder(self, _view: SourceTableViewLike, _rendered_object: str, _value: Any) -> None:
         """Show a new order of the rows from its first: the frame comes back to the top."""
         self._start, self._before = 0, None
         self._mark_parts("frame", "count")
@@ -2642,8 +2642,8 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         shown = form.get("start", "")
         if not shown.isdigit():
             return
-        last_start = max(self._view.row_count - DATA_TABLE_WINDOW_ROWS, 0)
-        start = min(max(int(shown) - DATA_TABLE_WINDOW_ROWS // 5, 0), last_start)
+        last_start = max(self._view.row_count - SOURCE_TABLE_WINDOW_ROWS, 0)
+        start = min(max(int(shown) - SOURCE_TABLE_WINDOW_ROWS // 5, 0), last_start)
         try:
             offset = float(form.get("offset", ""))
         except ValueError:
@@ -2682,7 +2682,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
 
     def _scale(self) -> float:
         """Get the rows each row's height of the scroll bar stands for: 1 up to the cap."""
-        return max(self._view.row_count / DATA_TABLE_SCROLLED_ROWS, 1.0)
+        return max(self._view.row_count / SOURCE_TABLE_SCROLLED_ROWS, 1.0)
 
     def _header_html(self, name: str, header: str, *, is_focused: bool) -> Markup:
         """Render a column's header: a button sorting by the column, its order after it."""
@@ -2775,7 +2775,7 @@ class WebDataTableRenderer(WebFilterBarRenderer[DataTableViewLike]):
         """
         view = self._view
         start = min(self._start, max(view.row_count - 1, 0))
-        rows = view.rows(start, start + DATA_TABLE_WINDOW_ROWS)
+        rows = view.rows(start, start + SOURCE_TABLE_WINDOW_ROWS)
         width = len(view.headers) + 1
         if len(rows) == 0:
             empty = view.filter_texts.get("no_match", "") if view.count_text else ""
@@ -5074,7 +5074,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "map": WebMapRenderer,
     "checkbox": WebCheckBoxRenderer,
     "combobox": WebComboBoxRenderer,
-    "data_table": WebDataTableRenderer,
+    "source_table": WebSourceTableRenderer,
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
     "dialog": WebDialogRenderer,

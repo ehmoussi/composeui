@@ -10,17 +10,17 @@ from attrs import Factory
 
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
-    DATA_TABLE_JOB_ROWS,
+    SOURCE_TABLE_JOB_ROWS,
     CellStyle,
     CellWidget,
     Column,
-    DataTableView,
     HeaderGroup,
     ListSource,
     MainView,
     NodeMark,
     RecordTableView,
     SourceColumn,
+    SourceTableView,
     T,
     TableView,
     child,
@@ -205,7 +205,7 @@ class MillionRowsMainView(MainView):
     app_title = "Million"
     extension = ".million"
 
-    table: DataTableView = child(DataTableView, column_formats={"half": ".1f"})
+    table: SourceTableView = child(SourceTableView, column_formats={"half": ".1f"})
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -219,7 +219,7 @@ class RoomsDataMainView(MainView):
     app_title = "Rooms"
     extension = ".rooms"
 
-    rooms: DataTableView = child(DataTableView, filterable_columns=["name", "temperature"])
+    rooms: SourceTableView = child(SourceTableView, filterable_columns=["name", "temperature"])
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -242,7 +242,7 @@ class GatedSource:
 
     def __init__(self) -> None:
         self.changed = SignalNoArgs()
-        self.size = DATA_TABLE_JOB_ROWS
+        self.size = SOURCE_TABLE_JOB_ROWS
         self.gate = threading.Event()
         self.gate.set()
         self.orders: list[Optional[Sort]] = []
@@ -273,7 +273,7 @@ class GatedMainView(MainView):
     app_title = "Gated"
     extension = ".gated"
 
-    table: DataTableView = child(DataTableView)
+    table: SourceTableView = child(SourceTableView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()

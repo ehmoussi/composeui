@@ -332,7 +332,7 @@ On the web:
 
 It shows:
 
-- a [large table](user-guide/tables.md#a-large-table): a `DataTableView` on a
+- a [large table](user-guide/tables.md#a-large-table): a `SourceTableView` on a
   [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) of the readings. SQLite sorts and
   filters them, indexed by the columns that sort; each backend draws the rows on screen alone, and
   reads them as the user scrolls. Python keeps the shown rows' ids, never the readings.

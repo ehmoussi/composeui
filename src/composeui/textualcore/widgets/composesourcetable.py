@@ -34,8 +34,8 @@ def _is_csv(path: Path) -> bool:
     return path.suffix.lower() == ".csv"
 
 
-class DataTableLike(Protocol):
-    """What the widget reads from a `DataTableView`."""
+class SourceTableLike(Protocol):
+    """What the widget reads from a `SourceTableView`."""
 
     @property
     def headers(self) -> list[str]: ...
@@ -45,7 +45,7 @@ class DataTableLike(Protocol):
     def is_selected(self, row_id: Any) -> bool: ...
 
 
-class ComposeDataTable(ScrollView, can_focus=True):
+class ComposeSourceTable(ScrollView, can_focus=True):
     """A large table: its headers on its first line, then a line per row, as scrolled.
 
     Textual asks for the lines it draws (`render_line`), and the view reads their rows
@@ -85,7 +85,7 @@ class ComposeDataTable(ScrollView, can_focus=True):
         "data-table--selected",
     }
     DEFAULT_CSS = """
-    ComposeDataTable {
+    ComposeSourceTable {
         height: 1fr;
         min-height: 5;
         overflow-x: hidden;
@@ -106,7 +106,7 @@ class ComposeDataTable(ScrollView, can_focus=True):
     }
     """
 
-    def __init__(self, table: DataTableLike) -> None:
+    def __init__(self, table: SourceTableLike) -> None:
         super().__init__()
         self._table = table
         self._sort: tuple[int, bool] | None = None
@@ -274,11 +274,11 @@ class ComposeDataFilterTable(Vertical):
     }
     """
 
-    def __init__(self, table: DataTableLike) -> None:
+    def __init__(self, table: SourceTableLike) -> None:
         super().__init__()
         self.bar = ComposeFilterBar()
         self.bar.display = False
-        self.table = ComposeDataTable(table)
+        self.table = ComposeSourceTable(table)
         self.empty = Static("", classes="empty", markup=False)
         self.empty.display = False
 

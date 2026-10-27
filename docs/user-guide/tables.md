@@ -203,15 +203,15 @@ looks.
 
 ## A large table
 
-A `DataTableView` shows the rows of a source, such as a million results of a study. It
+A `SourceTableView` shows the rows of a source, such as a million results of a study. It
 never reads all the rows. It reads only the rows that it shows, a window at a time. A
 `TableView` keeps every row as text, which suits a small table that the user edits.
 
 ```python
-from composeui.core.view import DataTableView, ListSource, T, child
+from composeui.core.view import ListSource, SourceTableView, T, child
 
-readings: DataTableView = child(
-    DataTableView,
+readings: SourceTableView = child(
+    SourceTableView,
     column_formats={"temperature": ".2f"},
     filterable_columns=["sensor", "temperature"],
 )
@@ -259,7 +259,7 @@ rows shown. Integer ids go in an `array`, at 8 bytes each. `ordered` emits once 
 have their new order. For example, its callback shows `row_count` of `total`. `total` is
 the number of the source's rows, before the search and the filters.
 
-A source of 100,000 rows or more (`DATA_TABLE_JOB_ROWS`) orders its rows in a
+A source of 100,000 rows or more (`SOURCE_TABLE_JOB_ROWS`) orders its rows in a
 [job](threads.md) on Qt and Textual, so that the window stays
 responsive:
 

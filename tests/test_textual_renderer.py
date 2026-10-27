@@ -46,14 +46,13 @@ from composeui.core.application import ModelApplication, _add_reference_to_signa
 from composeui.core.registry import create_renderer
 from composeui.core.renderer import NoRenderedObjectError, Renderer, RendererContainer
 from composeui.core.view import (
-    DATA_TABLE_WINDOW,
     SEARCH_DELAY_MS,
+    SOURCE_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     CellStyle,
     CellWidget,
     ChartKind,
-    DataTableView,
     DialogKind,
     EditRefusedError,
     LabelView,
@@ -64,6 +63,7 @@ from composeui.core.view import (
     RendererType,
     SelectionMode,
     Series,
+    SourceTableView,
     T,
     TabPage,
     TabView,
@@ -80,10 +80,6 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
-from composeui.textualcore.widgets.composedatatable import (
-    ComposeDataFilterTable,
-    ComposeDataTable,
-)
 from composeui.textualcore.widgets.composedateinput import (
     ComposeCalendar,
     ComposeDateInput,
@@ -102,6 +98,10 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composesourcetable import (
+    ComposeDataFilterTable,
+    ComposeSourceTable,
+)
 from composeui.textualcore.widgets.composesplitter import ComposeSplitter, SplitterHandle
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetable import (
@@ -2726,7 +2726,7 @@ async def test_a_large_table_draws_the_lines_on_screen_reading_only_their_window
     assert isinstance(source, MillionSource)
 
     async with app.run_test(size=(80, 30)) as pilot:
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
         assert table.virtual_size.height == 1_000_001  # the headers' line, then the rows'
         assert table.render_line(0).text.split() == ["Value", "Half"]
         assert table.render_line(2).text.split() == ["2", "2", "0.5"]
@@ -2734,7 +2734,7 @@ async def test_a_large_table_draws_the_lines_on_screen_reading_only_their_window
         await pilot.pause()
         assert table.render_line(1).text.split() == ["500,001", "1000000", "250000.0"]
         assert table.render_line(0).text.split() == ["Value", "Half"]  # still on top
-        assert len(source.read) < 10 * DATA_TABLE_WINDOW
+        assert len(source.read) < 10 * SOURCE_TABLE_WINDOW
 
         source.size = 3
         source.changed.emit()
@@ -2751,16 +2751,16 @@ async def test_a_large_table_s_header_clicks_sort_by_its_column_marking_the_orde
     assert app is not None
 
     async with app.run_test(size=(80, 30)) as pilot:
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
         # the positions take "1,000,000 ", the two columns share the 70 cells left
         half = (len("1,000,000 ") + 35 + 2, 0)
-        await pilot.click(ComposeDataTable, offset=half)
+        await pilot.click(ComposeSourceTable, offset=half)
         assert (view.table.sort_column, view.table.sort_descending) == ("half", False)
         assert table.render_line(0).text.split() == ["Value", "Half", "▲"]
-        await pilot.click(ComposeDataTable, offset=half)
+        await pilot.click(ComposeSourceTable, offset=half)
         assert table.render_line(0).text.split() == ["Value", "Half", "▼"]
-        await pilot.click(ComposeDataTable, offset=(3, 0))  # over the positions: nothing
-        await pilot.click(ComposeDataTable, offset=(15, 2))  # on a row: nothing
+        await pilot.click(ComposeSourceTable, offset=(3, 0))  # over the positions: nothing
+        await pilot.click(ComposeSourceTable, offset=(15, 2))  # on a row: nothing
         assert view.table.sort_column == "half"
 
 
@@ -2776,15 +2776,15 @@ async def test_a_large_table_s_cursor_and_clicks_select_its_rows_and_activate_on
     view.table.row_activated.connect(activated.append)
 
     async with app.run_test(size=(80, 30)) as pilot:
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
         table.focus()
         await pilot.press("down", "down", "space", "down", "down", "shift+space", "enter")
         assert view.table.selected_ids == [2, 3, 4]
         assert activated == [4]
 
-        await pilot.click(ComposeDataTable, offset=(15, 1))  # the first row's line
-        await pilot.click(ComposeDataTable, offset=(15, 3))  # the selected third: off
-        await pilot.double_click(ComposeDataTable, offset=(15, 7))
+        await pilot.click(ComposeSourceTable, offset=(15, 1))  # the first row's line
+        await pilot.click(ComposeSourceTable, offset=(15, 3))  # the selected third: off
+        await pilot.double_click(ComposeSourceTable, offset=(15, 7))
         assert view.table.selected_ids == [3, 4, 0, 6]
         assert activated == [4, 6]
 
@@ -2844,7 +2844,7 @@ async def test_ctrl_c_copies_a_large_table_s_selected_rows_to_the_clipboard() ->
     assert app is not None
 
     async with app.run_test(size=(80, 30)) as pilot:
-        app.query_one(ComposeDataTable).focus()
+        app.query_one(ComposeSourceTable).focus()
         await pilot.press("down", "space", "down", "down", "space", "ctrl+c")
         await pilot.pause()
         # the value, then its half
@@ -2863,7 +2863,7 @@ async def test_a_large_source_s_rows_show_loading_while_a_job_orders_them() -> N
     assert isinstance(source, GatedSource)
 
     async with app.run_test(size=(80, 30)) as pilot:
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
         source.gate.clear()
         view.table.sort_by("value")
         view.table.sort_by("value")  # descending, while the job orders
@@ -2892,7 +2892,7 @@ async def test_a_large_table_s_cell_shows_on_its_row_s_line_its_breaks_as_spaces
 
     async with app.run_test(size=(80, 30)) as pilot:
         await pilot.pause()
-        line = app.query_one(ComposeDataTable).render_line(1).text
+        line = app.query_one(ComposeSourceTable).render_line(1).text
 
     assert "Hall way B" in line
     assert line.split() == ["1", "Hall", "way", "B", "18.0"]
@@ -2912,7 +2912,7 @@ async def test_a_large_table_s_key_exports_its_rows_as_csv(
     assert app is not None
 
     async with app.run_test(size=(80, 30)) as pilot:
-        app.query_one(ComposeDataTable).focus()
+        app.query_one(ComposeSourceTable).focus()
         await pilot.pause()
         footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
         assert "Export CSV" in footer
@@ -3551,11 +3551,11 @@ async def test_a_large_table_without_rows_answers_no_key_or_click() -> None:
 
     # 81 columns: the rows' numbers' 2, then 26 a header, one left over past the last
     async with app.run_test(size=(81, 30)) as pilot:
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
         table.focus()
         await pilot.press("space", "enter")
-        await pilot.click(ComposeDataTable, offset=(15, 1))
-        await pilot.click(ComposeDataTable, offset=(80, 0))
+        await pilot.click(ComposeSourceTable, offset=(15, 1))
+        await pilot.click(ComposeSourceTable, offset=(80, 0))
         await pilot.pause()
 
         assert (view.rooms.selected_ids, activated, view.rooms.sort_column) == ([], [], None)
@@ -3566,7 +3566,7 @@ class _EmptyDataMainView(MainView):
     app_title = "Empty"
     extension = ".empty"
 
-    table: DataTableView = Factory(DataTableView)  # no source: no column
+    table: SourceTableView = Factory(SourceTableView)  # no source: no column
 
 
 @pytest.mark.asyncio
@@ -3575,7 +3575,7 @@ async def test_a_large_table_without_columns_draws_its_lines_empty() -> None:
 
     async with app.run_test(size=(80, 20)) as pilot:
         await pilot.pause()
-        table = app.query_one(ComposeDataTable)
+        table = app.query_one(ComposeSourceTable)
 
         assert table.render_line(0).text.strip() == ""
 

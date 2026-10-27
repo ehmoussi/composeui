@@ -1,4 +1,4 @@
-"""Tests of the example largetable: readings in SQLite, shown by a `DataTableView`."""
+"""Tests of the example largetable: readings in SQLite, shown by a `SourceTableView`."""
 
 from __future__ import annotations
 

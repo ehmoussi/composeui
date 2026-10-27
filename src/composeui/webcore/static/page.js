@@ -1072,7 +1072,7 @@ function placeHelp(event) {
     help.style.setProperty("--arrow-x", rect.left + rect.width / 2 - left + "px");
   }
 }
-/* a large table draws the rows around the view alone (see `WebDataTableRenderer`): once
+/* a large table draws the rows around the view alone (see `WebSourceTableRenderer`): once
    the user stops scrolling its frame outside them, post the row under the headers and
    how far down the rows it is, in rows' heights, which the frame's hidden fields take.
    A filler stands for its rows, scaled past the rows the scroll bar's height stands for:
