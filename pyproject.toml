@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "composeui"
-description = "A framework-agnostic MVVM layer for building desktop UIs, with a Qt renderer"
+description = "A framework-agnostic MVVM layer for Python UIs: one app for Qt, Textual and the web"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -36,6 +36,13 @@ dependencies = [
     "typing-extensions>=4.15.0",
 ]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/ehmoussi/composeui"
+Documentation = "https://ehmoussi.github.io/composeui/"
+Source = "https://github.com/ehmoussi/composeui"
+Issues = "https://github.com/ehmoussi/composeui/issues"
+Changelog = "https://github.com/ehmoussi/composeui/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 pyside6 = ["pyqtgraph>=0.13.7", "pyside6>=6.10.3"]
