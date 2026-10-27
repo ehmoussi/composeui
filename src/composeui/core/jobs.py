@@ -102,7 +102,8 @@ class Task(Generic[R, P, ProgressT]):
     """A reusable worker with read-only loading state, built by `Jobs.task`.
 
     `changed` emits on the main thread when a run starts, reports progress, finishes,
-    fails, or is dropped. Its callbacks can ask for ``main_view`` and ``model``.
+    fails, or is dropped. After it, `finished` emits a run's result, and `failed` its
+    exception, as a `Job`'s do. Their callbacks can ask for ``main_view`` and ``model``.
     Starting an already running task does nothing. Dropping the owner's jobs resets
     the task and discards queued progress and outcomes, as with ordinary jobs.
     """
@@ -111,6 +112,10 @@ class Task(Generic[R, P, ProgressT]):
         self._jobs = jobs
         self._work = work
         self.changed = SignalNoArgs()
+        #: the result of a run that succeeded, on the main thread
+        self.finished = Signal[R]()
+        #: the exception of a run that failed, on the main thread
+        self.failed = Signal[Exception]()
         self._job: Job[R, ProgressT] | None = None
         self._reset()
 
@@ -176,11 +181,13 @@ class Task(Generic[R, P, ProgressT]):
         self._result = result
         self._has_result = True
         self.changed.emit()
+        self.finished.emit(result)
 
     def _fail(self, error: Exception) -> None:
         self._job = None
         self._error = error
         self.changed.emit()
+        self.failed.emit(error)
 
 
 class Jobs:
@@ -195,8 +202,8 @@ class Jobs:
     A `SqliteModel` hands it the `changed` signals of the job's writes.
 
     `task` configures a reusable worker with progress, result and error state. Its
-    ``changed`` signal replaces separate progress and outcome handlers when a view
-    shows one loading state.
+    ``changed`` signal shows the loading state, and its ``finished`` and ``failed``
+    signals the outcome of each run.
 
     Call `start`, `cancel` and `drop` on the main thread, e.g. from a callback. Never call
     them from a job's function: the jobs aren't locked, as the main thread alone changes
@@ -234,13 +241,17 @@ class Jobs:
         self._model = weakref.ref(model)
         self.running_changed.set_model(model)
         for task in self._tasks:
-            task.changed.set_model(model)
+            for signal in (task.changed, task.finished, task.failed):
+                signal.set_model(model)
 
     def task(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Task[R, P, ProgressT]:
         """Build a reusable task for `work`, without starting it; call on the main thread."""
         _check_main_thread("Jobs.task")
         task = Task(self, work)
-        self._bind_signal(task.changed, f"{getattr(work, '__name__', 'task')}.changed")
+        name = getattr(work, "__name__", "task")
+        self._bind_signal(task.changed, f"{name}.changed")
+        self._bind_signal(task.finished, f"{name}.finished")
+        self._bind_signal(task.failed, f"{name}.failed")
         self._tasks.append(task)
         return task
 

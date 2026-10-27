@@ -102,7 +102,8 @@ connection for the street map. Textual omits the map.
 It shows:
 
 - [CSV URL import](user-guide/sqlite-model.md#csv-urls) into a typed SQLite table;
-- a [loading task](user-guide/threads.md#reusable-loading-tasks) with row-count progress;
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) with row-count progress,
+  and a callback for its result and one for its error;
 - a [bar chart](user-guide/charts.md#kinds-of-chart) of pickups per hour;
 - an interactive [map](user-guide/maps.md) on Qt and the web, filtered by an hour slider;
 - a [wide main view](user-guide/organizing-the-window.md#pages) without a page wrapper;

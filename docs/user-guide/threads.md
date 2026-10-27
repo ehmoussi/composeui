@@ -111,6 +111,8 @@ main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their ev
 Use `main_view.jobs.task(work)` when a view repeatedly runs the same worker and shows its
 loading state. Configure the task once, then call `task.start(*args, **kwargs)` for each run.
 One `changed` signal reports starts, progress, success, failure, and resets on the main thread.
+After it, `finished` emits the result of a run that succeeds, and `failed` the exception of a
+run that fails, as the signals of a job do.
 
 ```python
 from composeui.core.jobs import Job
@@ -132,18 +134,19 @@ class LoadingView(MainView):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loader = self.jobs.task(count_rows)
-        self.loader.changed.connect(self.show_loading)
+        self.loader.changed.connect(self.show_progress)
+        self.loader.finished.connect(self.show_rows)
+        self.loader.failed.connect(self.show_error)
 
-    def show_loading(self) -> None:
-        task = self.loader
-        if task.is_running:
-            self.status.text = f"Processed {task.progress or 0} rows"
-        elif task.error is not None:
-            self.status.text = f"Failed: {task.error}"
-        elif task.has_result:
-            self.status.text = f"Done: {task.result} rows"
-        else:
-            self.status.text = "Ready"
+    def show_progress(self) -> None:
+        if self.loader.is_running:
+            self.status.text = f"Processed {self.loader.progress or 0} rows"
+
+    def show_rows(self, rows: int) -> None:
+        self.status.text = f"Done: {rows} rows"
+
+    def show_error(self, error: Exception) -> None:
+        self.status.text = f"Failed: {error}"
 
 
 main_view = LoadingView()
@@ -165,7 +168,11 @@ assert main_view.status.text == "Done: 3 rows"
   `jobs.cancel()` cancels all runs. New, Open, closing, and `jobs.drop()` clear every task's
   state and emit `changed`, even for completed tasks. Old queued progress and outcomes do
   not reach the task or overwrite a new run.
-- **Callbacks and types.** `changed` callbacks can ask for `main_view` and `model`. The worker's
+- **One callback per outcome.** Connect `finished` to show a result, and `failed` to show an
+  error. Their callbacks get the result or the exception, so they read no state. `changed`
+  then only shows that a run is going on. New, Open, and `jobs.drop()` emit neither.
+- **Callbacks and types.** `changed`, `finished`, and `failed` callbacks can ask for
+  `main_view` and `model`. The worker's
   annotations determine the types of `result`, `progress`, and the arguments of `start`.
   Create tasks and call `start` on the main thread; a job's worker raises `CalledInJobError`
   if it tries either operation. Tasks use the same failure and programming-error rules as
