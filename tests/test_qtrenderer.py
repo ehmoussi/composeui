@@ -130,6 +130,7 @@ from tests.charts import ChartPagesMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.filters import FiltersMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -3786,3 +3787,23 @@ def test_a_large_table_qt_doesn_t_render_still_orders_its_rows_in_a_job(
 
     assert view.table.renderer is None
     assert ordering  # in a job, as in a table shown
+
+
+def test_a_none_choice_is_shown_selected_and_picked_back(qtbot: QtBot) -> None:
+    view = FiltersMainView()
+    view.render(RendererType.QT)
+    region, shown = view.form.region, view.form.shown
+    combobox, radios = _field_widget(region), _field_widget(shown)
+    assert isinstance(combobox, QComboBox)
+    qtbot.addWidget(combobox)
+    qtbot.addWidget(radios)
+    picked: list[object] = []
+    region.value_changed.connect(picked.append)
+
+    assert combobox.currentText() == "All regions"
+    assert [b.text() for b in radios.findChildren(QRadioButton) if b.isChecked()] == ["All regions"]
+    region.value = "south"
+    assert combobox.currentText() == "South"
+    combobox.setCurrentIndex(0)  # what the user's pick does
+
+    assert (region.value, picked) == (None, [None])

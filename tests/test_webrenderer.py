@@ -135,6 +135,7 @@ from tests.charts import ChartPagesMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.filters import FiltersMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
@@ -5711,3 +5712,33 @@ def test_a_long_series_s_bucket_of_gaps_only_stays_a_gap() -> None:
     gap = [y for x, y in zip(xs, ys) if 40_000 <= x < 41_000]
     assert gap != []
     assert all(y is None for y in gap)
+
+
+def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
+    views: list[FiltersMainView] = []
+
+    class FiltersApp(WebApplication[FiltersMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=FiltersMainView)
+
+        def setup_session(self, main_view: FiltersMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(FiltersApp().create_starlette_app()) as client:
+        page = client.get("/").text
+        (main_view,) = views
+        region, shown = main_view.form.region, main_view.form.shown
+        region_id = _field_id(region)
+        combobox = _element(page, region_id)
+        options = [
+            attributes["value"] for tag, attributes in combobox.descendants if tag == "option"
+        ]
+
+        # no empty option: "All regions" is a choice, and the one selected
+        assert options == ["0", "north", "south"]
+        assert _selected(combobox) == ["0"]
+        assert _selected(_element(page, _field_id(shown))) == ["0"]
+        region.value = "south"
+        client.post(f"/widget/{region_id}", data={region_id: "0", "event": "change"})
+
+    assert region.value is None

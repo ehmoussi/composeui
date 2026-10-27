@@ -52,6 +52,7 @@ from examples.pipechart import PipeChartMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.datafiles import DataFileMainView
+from tests.filters import FiltersMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -936,3 +937,19 @@ def test_loaded_lets_the_app_give_again_what_new_and_open_leave_out(tmp_path: Pa
 
     assert other.main_view.threshold.value == 4
     assert _sensors(other.main_view) == ["b", "c"]
+
+
+def test_a_none_choice_is_selected_saved_and_loaded_as_any_other(tmp_path: Path) -> None:
+    view = FiltersMainView()
+    region = view.form.region
+    # None is one of the values: the "All regions" choice, by its position, not nothing
+    assert region.serialize_value() == "0"
+    assert region.deserialize_value("0") is None
+    path = tmp_path / "all.filters"
+    view.save_state(path)
+    region.value = "south"
+
+    view.load_state(path)
+
+    assert region.value is None
+    assert region.serialize_value() == "0"

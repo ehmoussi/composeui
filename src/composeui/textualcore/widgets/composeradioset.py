@@ -43,7 +43,8 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
 
     def set_value(self, value: Optional[TValue]) -> None:
         for button, candidate in zip(self.query(RadioButton), self._values.values()):
-            if value is not None and value == candidate and not button.value:
+            # None presses its button only when it's one of the values
+            if value == candidate and not button.value:
                 button.value = True
 
     def value(self) -> TValue:

@@ -34,6 +34,7 @@ from textual.widgets import (
     Label,
     Markdown,
     ProgressBar,
+    Select,
     Static,
     TabPane,
 )
@@ -125,6 +126,7 @@ from tests.charts import ChartPagesMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
+from tests.filters import FiltersMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -3953,3 +3955,38 @@ async def test_f2_on_a_row_whose_editable_cells_are_disabled_opens_nothing() -> 
         await pilot.pause()
 
         assert not isinstance(app.screen, (ComposeOptionPicker, ComposeRowEditor))
+
+
+@pytest.mark.asyncio
+async def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
+    view = FiltersMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    region, shown = view.form.region, view.form.shown
+    picked: list[object] = []
+    region.value_changed.connect(picked.append)
+
+    async with app.run_test() as pilot:
+        combobox = _field_widget(region.renderer)
+        radios = _field_widget(shown.renderer)
+        assert isinstance(combobox, ComposeComboBox)
+        assert isinstance(radios, ComposeRadioSet)
+        await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
+        await pilot.pause()
+        assert combobox.value is None  # the "All regions" option, not Select.NULL
+        assert radios.pressed_index == 0
+        region.value = "south"
+        await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
+        await pilot.pause()
+
+        combobox.value = None  # what picking "All regions" does
+        await pilot.pause()
+        assert (region.value, picked) == (None, [None])
+
+        region.values = {"North": "north"}  # no None among them: None selects nothing again
+        await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
+        await pilot.pause()
+
+        assert combobox.value is Select.NULL

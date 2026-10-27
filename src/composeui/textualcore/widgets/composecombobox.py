@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 from textual.content import Content
 from textual.widgets import Select
@@ -36,16 +36,18 @@ class ComposeComboBox(Select[TValue], Generic[TValue]):
 
     def set_values(self, values: dict[str, TValue]) -> None:
         """Rebuild the select for a new set of options."""
+        self._values = dict(values)
         # set in code, not chosen by the user: `value_changed` isn't emitted
         with self.prevent(Select.Changed):
             self.set_options(_options(values))
 
     def set_value(self, value: TValue | None) -> None:
         with self.prevent(Select.Changed):
-            if value is None:
+            # None selects nothing, unless it's one of the options, such as a filter's "All"
+            if value is None and None not in self._values.values():
                 self.value = Select.NULL
             else:
-                self.value = value
+                self.value = cast("TValue", value)  # None only as one of the options
 
     def current_value(self) -> TValue | None:
         return self.selection

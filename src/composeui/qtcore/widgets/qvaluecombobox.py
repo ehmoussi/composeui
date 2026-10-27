@@ -20,12 +20,10 @@ class QValueComboBox(QComboBox, Generic[TValue]):
         self.currentIndexChanged.connect(self._emit_current_value_changed)
 
     def set_current_value(self, value: TValue | None) -> None:
-        """Select the item associated with the given value."""
-        if value is None:
-            self.setCurrentIndex(-1)
-        else:
-            index = self.findData(value)
-            self.setCurrentIndex(index)
+        """Select the item of `value`: none for None, unless None is one of the items."""
+        # not `findData`, which finds no item holding None
+        index = next((i for i in range(self.count()) if self.itemData(i) == value), -1)
+        self.setCurrentIndex(index)
 
     def set_values(self, values: dict[str, TValue]) -> None:
         """Replace all items with the given label-to-value mapping."""

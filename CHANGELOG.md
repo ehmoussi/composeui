@@ -17,6 +17,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 - A large table of a `DataFrameSource` whose `id_column` is also one of its columns shows its
   rows. Its cells failed to read on Polars.
+- A choice whose value is `None`, such as `{"All regions": None, "North": "north"}`, shows
+  as selected when `value` is `None`, and its study saves it as that choice. A combobox
+  showed nothing selected instead, on each backend.
 
 ## [0.1.0] - 2026-10-27
 
