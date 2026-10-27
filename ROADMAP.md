@@ -131,13 +131,9 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 4 — Adoption
 
-1. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt, a
-   plain `uvicorn` deployment note for the web. Document it as a "Deploy the app" section
-   of the user guide's "Running the app", once each recipe has been tried:
-   - **The web:** one process (the sessions live in its memory) behind a reverse proxy,
-     with an nginx or Caddy example that keeps `Host`, `Origin`, `Referer` and
-     `Sec-Fetch-Site` as the browser sent them (the origin check needs them), and what a
-     restart loses.
+1. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt. The
+   web is in (the user guide's "Deploy behind nginx"). Document each in the user guide's
+   "Running the app", once its recipe has been tried:
    - **Qt:** a PyInstaller build, with what a map needs (`map.qml`, the Qt Location and
      Qt Positioning QML modules, the location plugins; now in the user guide's "Maps").
    - **Textual:** the app as a script or a console entry point.

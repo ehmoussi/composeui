@@ -101,6 +101,7 @@ not in the package: run them from a clone of the repository (see
   - [Web backend](user-guide/running-the-app.md#web-backend)
     - [How the web differs from a window](user-guide/running-the-app.md#how-the-web-differs-from-a-window)
     - [Serve the app to other users](user-guide/running-the-app.md#serve-the-app-to-other-users)
+    - [Deploy behind nginx](user-guide/running-the-app.md#deploy-behind-nginx)
 - [Testing your app](user-guide/testing.md)
   - [Test the views](user-guide/testing.md#test-the-views)
   - [Test a form](user-guide/testing.md#test-a-form)
