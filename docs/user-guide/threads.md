@@ -31,34 +31,18 @@ class PipeMainView(MainView):
         self.results.stress.text = f"{stress:g} MPa"
 ```
 
-- **Failures.** When the function raises, the job's `failed` signal emits the exception on
-  the main thread. Connect a callback to it to show the error, and to clear what shows
-  that the work runs. Do not do it in the function of the job.
-  - A `RefusedError` (`composeui.core.model`) logs a warning with its message, without a
-    traceback. Raise it for an expected refusal, for example of bad input or of a rule of
-    the app.
-  - Another exception logs an error with its traceback, even when a `failed` callback
-    shows it. Do not turn an unexpected error into a `RefusedError` to hide its traceback.
-  - A `ValueError`, a `KeyError`, or an I/O error follows this path too, because external
-    data can cause it.
-- **Programming errors.** An uncaught `CalledInJobError`, `AssertionError`,
-  `AttributeError`, `NameError`, `NotImplementedError`, or `TypeError` leaves the function
-  of the job. The job chooses by the type of the exception, not by its cause.
-  - Python reports its traceback through `threading.excepthook`. `failed` does not emit
-    it, and a [task](#reusable-loading-tasks) does not keep it as its `error`.
-  - The job still stops on the main thread: it no longer counts as running, and its task,
-    if any, goes back to idle and emits `changed`. The other jobs go on.
-  - Without a toolkit, `jobs.wait()` runs this clean-up. It does not raise the error again.
-  - A dropped job reports its programming errors too.
-- **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
-  stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
-  `job.sleep(seconds)`, which returns False once the job is canceled. The function still
-  finishes, and `finished` emits what it returned.
-- **On the main thread only.** Call `jobs.start`, `jobs.cancel`, and `jobs.drop` from a
-  callback, never from the function of a job. The jobs aren't locked, because only the main
-  thread changes them (`job.cancel()` works from any thread). Called from the function of a
-  job, they raise `CalledInJobError`. To start another job, return what it needs, and start
-  it from the callback that gets it.
+- **Errors.** When the function raises, the `failed` signal of its job emits the exception
+  on the main thread, where a callback shows it (see [Failures](#how-jobs-behave)).
+- **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
+  ask for, as for any signal.
+- **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
+  emits it when it changes, for example to disable a Run button.
+
+[`src/examples/taskview.py`](../../src/examples/taskview.py) runs 25 jobs at once, and cancels
+them.
+
+## Progress and canceling
+
 - **Progress.** In the function, `job.report_progress(value)` reports a value of your
   choice, such as a count, a percentage, or a message. `job.progress` emits each value on
   the main thread, in the order of the reports, before `finished` or `failed`. Connect it
@@ -69,22 +53,10 @@ class PipeMainView(MainView):
   - A dropped job emits none of the values that still wait.
   - `job.call_on_main_thread(callback)` runs any other callback on the main thread, in the
     same order and with the same rule for a dropped job.
-- **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
-  emits it when it changes, for example to disable a Run button.
-- **New, Open, and closing the app** cancel the running jobs and drop their results,
-  because the results belong to the study replaced. Closing doesn't wait for the jobs either.
-  Open drops the jobs once the views' state in the file is checked, before the model's
-  data changes. So an Open that fails still stops the jobs.
-- **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
-  ask for, as for any signal.
-- **On the web,** while any job runs, the page asks the server every 300 ms for the changes
-  of the jobs. It stops once they are over.
-- **Tests.** When no toolkit shows a main view, its jobs emit their results when the test
-  calls `main_view.jobs.wait()`, on the thread of the test (see
-  [Test the jobs](testing.md#test-the-jobs)).
-
-[`src/examples/taskview.py`](../../src/examples/taskview.py) runs 25 jobs at once, and cancels
-them.
+- **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
+  stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
+  `job.sleep(seconds)`, which returns False once the job is canceled. The function still
+  finishes, and `finished` emits what it returned.
 
 To report rows processed, connect a handler right after starting the job:
 
@@ -185,9 +157,9 @@ assert main_view.status.text == "Done: 3 rows"
   `progress`, and the arguments of `start`.
 - **The main thread.** Create a task and call its `start` on the main thread. From the
   function of a job, both raise `CalledInJobError`.
-- **Errors.** A task follows the rules of a job for failures and programming errors. After
-  a programming error, `error` and `result` are `None`, `has_result` is false, and the task
-  can start a new run.
+- **Errors.** A task follows the [rules of a job](#how-jobs-behave) for failures and
+  programming errors. After a programming error, `error` and `result` are `None`,
+  `has_result` is false, and the task can start a new run.
 - **Not study data.** Create the task in `__attrs_post_init__`, as an attribute of the
   instance, not as a view field. The study then does not save it. New and Open keep the
   same task, and clear its state with the jobs of the study.
@@ -195,3 +167,41 @@ assert main_view.status.text == "Done: 3 rows"
 The [Uber pickups example](../../src/examples/uberpickups.py) imports its CSV file in a
 loading task. It shows the progress in a `changed` callback, the chart and the map in a
 `finished` callback, and the error in a `failed` callback.
+
+## How jobs behave
+
+These rules hold for every job, and for the jobs of a task.
+
+- **On the main thread only.** Call `jobs.start`, `jobs.cancel`, and `jobs.drop` from a
+  callback, never from the function of a job. The jobs aren't locked, because only the main
+  thread changes them (`job.cancel()` works from any thread). Called from the function of a
+  job, they raise `CalledInJobError`. To start another job, return what it needs, and start
+  it from the callback that gets it.
+- **Failures.** When the function raises, the job's `failed` signal emits the exception on
+  the main thread. Connect a callback to it to show the error, and to clear what shows
+  that the work runs. Do not do it in the function of the job.
+  - A `RefusedError` (`composeui.core.model`) logs a warning with its message, without a
+    traceback. Raise it for an expected refusal, for example of bad input or of a rule of
+    the app.
+  - Another exception logs an error with its traceback, even when a `failed` callback
+    shows it. Do not turn an unexpected error into a `RefusedError` to hide its traceback.
+  - A `ValueError`, a `KeyError`, or an I/O error follows this path too, because external
+    data can cause it.
+- **Programming errors.** An uncaught `CalledInJobError`, `AssertionError`,
+  `AttributeError`, `NameError`, `NotImplementedError`, or `TypeError` leaves the function
+  of the job. The job chooses by the type of the exception, not by its cause.
+  - Python reports its traceback through `threading.excepthook`. `failed` does not emit
+    it, and a [task](#reusable-loading-tasks) does not keep it as its `error`.
+  - The job still stops on the main thread: it no longer counts as running, and its task,
+    if any, goes back to idle and emits `changed`. The other jobs go on.
+  - Without a toolkit, `jobs.wait()` runs this clean-up. It does not raise the error again.
+  - A dropped job reports its programming errors too.
+- **New, Open, and closing the app** cancel the running jobs and drop their results,
+  because the results belong to the study replaced. Closing doesn't wait for the jobs either.
+  Open drops the jobs once the views' state in the file is checked, before the model's
+  data changes. So an Open that fails still stops the jobs.
+- **On the web,** while any job runs, the page asks the server every 300 ms for the changes
+  of the jobs. It stops once they are over.
+- **Tests.** When no toolkit shows a main view, its jobs emit their results when the test
+  calls `main_view.jobs.wait()`, on the thread of the test (see
+  [Test the jobs](testing.md#test-the-jobs)).

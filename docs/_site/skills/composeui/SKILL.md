@@ -86,7 +86,8 @@ the option for the web (extra `web`, the default).
   `setup_model=`. Batch inserts and CSV imports (`insert_batches`, `CSVSqliteTable`,
   `fill`, `fill_from_file`, `fill_from_url`) commit once their generator is read to the
   end. Pass only trusted URLs.
-  See https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html
+  See https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html and
+  https://ehmoussi.github.io/composeui/user-guide/csv-import.html
 - **Show many rows in a `DataTableView`,** on a `ListSource`, a `SqliteSource`
   (`table.source()` for a CSV table), or a `DataFrameSource` (the `dataframe` extra). Assign
   a source's new `frame` on the main thread.
