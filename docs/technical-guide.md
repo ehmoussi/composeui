@@ -390,6 +390,10 @@ Always run the tools through `uv run` or the `make` targets, never a global Pyth
 ```bash
 make lint          # ruff format + ruff check --fix
 make mypy          # mypy on packages composeui + examples, Qt binding resolved to PySide6
+make typecheck     # mypy, Pyright, Pyrefly and ty on tests; installs their dependencies
+make mypy-tests    # mypy on tests only
+make pyright pyrefly ty  # individual test checkers
+make zuban         # optional test checker; currently reports known incompatibilities
 make test          # pytest in parallel, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
@@ -405,6 +409,12 @@ On Windows without `make`, run the same targets in PowerShell with `make.ps1`, s
 `.\make.ps1 check test`. Pass `EXAMPLES` as `-Examples pipeform, batman` and
 `TAILWIND_PLATFORM` as `-TailwindPlatform`. When you change a target in the `Makefile`,
 change it in `make.ps1` too.
+
+`make typecheck` leaves the source mypy check separate. The checker targets install the
+`typecheck` and `browser` groups and all extras so every test import resolves; Chromium is
+not needed. Use an individual target to run one checker, or `.\make.ps1 typecheck` on Windows.
+Zuban is excluded from the aggregate target. `make zuban` retains its nonzero exit status
+when diagnostics remain.
 
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
 `web`.
@@ -529,6 +539,11 @@ uv sync --group dev --group docs --all-extras
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
 `make browser-test` and `make docs` on Python 3.13. On Windows, it runs
 `.\make.ps1 translations test` on Python 3.9 and 3.14. Run `make check test` before you commit.
+
+Separate jobs run `make mypy-tests`, `make pyright`, `make pyrefly`, and `make ty` on
+Python 3.9, matching the test checker configuration. A failure fails the workflow. An additional
+`make zuban` job is non-blocking while its known incompatibilities remain. Run
+`make typecheck` locally to run the four blocking test checks.
 
 A change of the documentation only, in `docs/` and the Markdown files, runs only the `docs`
 job. That job also lints the Python files of `docs/`.

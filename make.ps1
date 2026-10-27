@@ -10,7 +10,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
-    [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'translations', 'test',
+    [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
+        'mypy-tests', 'pyright', 'pyrefly', 'ty', 'zuban', 'translations', 'test',
         'browser-test', 'docs', 'screenshots', 'css', 'web-deps', 'clean', 'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
@@ -181,6 +182,20 @@ function Invoke-Mypy {
     )
 }
 
+# Tests import every backend and Playwright; static checks do not need Chromium.
+function Invoke-TypeChecker {
+    param([string[]] $Arguments)
+    Invoke-Native uv (@('run', '--locked', '--group', 'typecheck', '--group', 'browser',
+        '--all-extras') + $Arguments)
+}
+
+function Invoke-Typecheck {
+    Invoke-TypeChecker -Arguments @('mypy')
+    Invoke-TypeChecker -Arguments @('pyright')
+    Invoke-TypeChecker -Arguments @('pyrefly', 'check')
+    Invoke-TypeChecker -Arguments @('ty', 'check')
+}
+
 # every catalog against the text its app translates; each app reported before failing
 function Invoke-Translations {
     $failed = $false
@@ -299,6 +314,12 @@ $actions = @{
     'check_fix'    = { Invoke-CheckFix }
     'lint'         = { Invoke-Lint }
     'mypy'         = { Invoke-Mypy }
+    'typecheck'    = { Invoke-Typecheck }
+    'mypy-tests'   = { Invoke-TypeChecker -Arguments @('mypy') }
+    'pyright'      = { Invoke-TypeChecker -Arguments @('pyright') }
+    'pyrefly'      = { Invoke-TypeChecker -Arguments @('pyrefly', 'check') }
+    'ty'           = { Invoke-TypeChecker -Arguments @('ty', 'check') }
+    'zuban'        = { Invoke-TypeChecker -Arguments @('zuban', 'mypy') }
     'translations' = { Invoke-Translations }
     'test'         = { Invoke-Test }
     'browser-test' = { Invoke-BrowserTest }
