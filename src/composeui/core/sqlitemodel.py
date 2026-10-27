@@ -80,7 +80,7 @@ __all__ = [
     "unique_name",
 ]
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 SqliteTableT = TypeVar("SqliteTableT", bound="SqliteTable")
 
 
@@ -153,12 +153,12 @@ class SqliteTable:
         with self._model.reading() as db:
             yield db
 
-    def fetch(self, cls: type[T], sql: str, parameters: Parameters = ()) -> list[T]:
+    def fetch(self, cls: type[_T], sql: str, parameters: Parameters = ()) -> list[_T]:
         """Run the query `sql` and get its rows as `cls` instances (an `attrs` class)."""
         with self.connection() as db:
             return [CONVERTER.structure(dict(row), cls) for row in db.execute(sql, parameters)]
 
-    def fetch_one(self, cls: type[T], sql: str, parameters: Parameters = ()) -> T | None:
+    def fetch_one(self, cls: type[_T], sql: str, parameters: Parameters = ()) -> _T | None:
         """Run the query `sql` and get its first row as a `cls` instance; None if none."""
         with self.connection() as db:
             row = db.execute(sql, parameters).fetchone()
