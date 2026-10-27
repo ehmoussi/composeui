@@ -54,7 +54,8 @@ class PipeList(ListView[Pipe]):
 
     def _delete(self, name: str, main_view: PipesMainView) -> None:
         """Remove the pipe `name`; the main view tells it, as the record's own view is gone."""
-        self.items = [pipe for pipe in self.items if pipe.name != name]
+        remaining = [pipe for pipe in self.items if pipe.name != name]
+        self.items = remaining
         main_view.status_bar.show_message(f"Deleted {name}")
 
 

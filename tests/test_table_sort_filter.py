@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import attrs
 import pytest
@@ -266,7 +266,7 @@ def test_a_column_no_longer_sortable_or_filterable_drops_its_sort_and_filters() 
 def test_values_of_another_type_sort_by_their_text_and_match_no_comparison() -> None:
     table = SortedRoomsMainView().rooms
     # e.g. a column whose type changed since its records were made
-    table.records = [Room("Hall", 18), Room("Attic", "warm"), Room("Bedroom", 9)]  # type: ignore[arg-type]
+    table.records = [Room("Hall", 18), Room("Attic", cast("float", "warm")), Room("Bedroom", 9)]
 
     table.sort_by(TEMPERATURE)
     by_text = [table.records[row].name for row in table.shown_rows]

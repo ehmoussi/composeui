@@ -304,8 +304,12 @@ def test_a_larger_sniff_sample_can_read_a_wide_header(
             for name, header in zip(names, headers)
         },
     )
-    table_type = type("WideRows", (CSVSqliteTable,), {}, row_type=row_type, name="wide")
-    rows: CSVSqliteTable = model.add_table(table_type)
+    assert attrs.has(row_type)
+
+    class WideRows(CSVSqliteTable, row_type=row_type, name="wide"):
+        pass
+
+    rows = model.add_table(WideRows)
     data = [[f"row{row}_{index}" for index in range(200)] for row in (1, 2)]
     text = io.StringIO(newline="")
     csv.writer(text, delimiter=";").writerows([headers, *data])
@@ -398,10 +402,14 @@ def test_schema_source_selects_and_orders_fields_and_rejects_unknown_names(
 )
 def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[str, ...]) -> None:
     row_type = attrs.make_class("Row", {name: attrs.field(type=int) for name in names})
-    table_type = type("Rows", (CSVSqliteTable,), {}, row_type=row_type, name="rows")
+    assert attrs.has(row_type)
+
+    class Rows(CSVSqliteTable, row_type=row_type, name="rows"):
+        pass
+
     model = SqliteModel()
     try:
-        rows: CSVSqliteTable = model.add_table(table_type)
+        rows = model.add_table(Rows)
         if len(names) == 3:
             with pytest.raises(ValueError, match="shadow all SQLite row-id names"):
                 rows.source()
