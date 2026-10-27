@@ -554,7 +554,8 @@ uv sync --group dev --group docs --all-extras
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`. It runs
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
 `make browser-test` and `make docs` on Python 3.13. On Windows, it runs
-`.\make.ps1 translations test` on Python 3.9 and 3.14. Run `make check test` before you commit.
+`.\make.ps1 translations test`, and on macOS `make translations test`, on Python 3.9 and
+3.14. Run `make check test` before you commit.
 
 The existing mypy matrix checks source, examples and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
