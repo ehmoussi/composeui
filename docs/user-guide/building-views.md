@@ -323,14 +323,28 @@ chart. Saving, opening, and New leave the rest alone:
 ### Versions of the state
 
 A study file holds the state of the views, and two versions: the version of ComposeUI's
-file format, and the app's `state_version`, 1 by default. Open refuses a file from a newer
-ComposeUI or from a newer version of the app, and the status bar says why.
+file format, and the app's `state_version`, 1 by default.
 
-An older file opens as it is. A field that the file has and the views no longer have is
-skipped, and a field that the file doesn't have keeps its value. So a new field needs no new
-version. A renamed or moved field loses its value: then raise `state_version`, and override
-`MainView.migrate_state`. It gets the state of an older file, as a `dict`, and the version
-that saved it. It returns the state as the views save it now:
+A file opens in any version of the app while the views can read its fields. When it has a
+field that the views don't have, the views skip that field. When it doesn't have a field of
+the views, that field keeps its value. So most changes need no new version:
+
+- **No new version** for a new field, or a field that you remove. Older and newer versions
+  of the app open each other's files.
+- **A new version** for a renamed or moved field, or a field whose value changes its form.
+  Without it, an older file loses the field's value with no message, or Open refuses the
+  file.
+
+Raise `state_version` only for a change of the second kind. A raised version has two
+effects:
+
+- **Older versions of the app refuse the new files,** and the status bar says why. An older
+  version can't read the changed field. It would show the study without that value, and a
+  Save would then lose the value for good. Open also refuses a file of a newer ComposeUI
+  file format.
+- **The new version upgrades the older files** in `MainView.migrate_state`, which you
+  override. It gets the state of an older file, as a `dict`, and the version that saved it.
+  It returns the state as the views save it now:
 
 ```python
 from typing import Any
