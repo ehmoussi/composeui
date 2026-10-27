@@ -6,6 +6,7 @@ import csv
 import gzip
 import socket
 import threading
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError
@@ -81,8 +82,8 @@ def test_csv_url_closes_the_response_when_decoding_or_stream_setup_fails(
 
 @pytest.mark.parametrize("url", ["ftp://example.org/data.csv", "data:text/csv,name", "data.csv"])
 def test_csv_url_rejects_unsupported_schemes(url: str) -> None:
-    with pytest.raises(ValueError, match="must use http, https or file"), open_csv_url(url):
-        pytest.fail("An unsupported URL must not open")
+    with ExitStack() as resources, pytest.raises(ValueError, match="must use http, https or file"):
+        resources.enter_context(open_csv_url(url))
 
 
 def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> None:
@@ -113,14 +114,14 @@ def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> 
         rows = model.add_table(DownloadRows)
         assert list(rows.fill_from_url(f"{url}/download", sniff=True, timeout=2)) == [1]
         assert rows.source().cells([1], ["name", "value"]) == {1: ["Station; A", 1.5]}
-        with pytest.raises(HTTPError) as caught, open_csv_url(f"{url}/missing", timeout=2):
-            pytest.fail("An HTTP error must propagate")
+        with ExitStack() as resources, pytest.raises(HTTPError) as caught:
+            resources.enter_context(open_csv_url(f"{url}/missing", timeout=2))
         assert caught.value.code == 404
         with (
+            ExitStack() as resources,
             pytest.raises((TimeoutError, socket.timeout)),
-            open_csv_url(f"{url}/slow", timeout=0.1),
         ):
-            pytest.fail("A socket timeout must propagate")
+            resources.enter_context(open_csv_url(f"{url}/slow", timeout=0.1))
     finally:
         release.set()
         server.shutdown()

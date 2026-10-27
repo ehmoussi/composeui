@@ -108,7 +108,9 @@ def _serve(app: Starlette, port: int | None = None) -> Generator[str, None, None
     deadline = time.monotonic() + 10
     while not server.started:
         if time.monotonic() > deadline:
-            pytest.fail("the server didn't start")
+            # ty misbinds pytest's decorated helpers; the public exception keeps the outcome.
+            reason = "the server didn't start"
+            raise pytest.fail.Exception(reason)
         time.sleep(0.01)
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
@@ -373,7 +375,8 @@ def browser() -> Iterator[Browser]:
         try:
             browser = playwright.chromium.launch()
         except Error as error:
-            pytest.skip(f"no Chromium for Playwright: {error.message.splitlines()[0]}")
+            reason = f"no Chromium for Playwright: {error.message.splitlines()[0]}"
+            raise pytest.skip.Exception(reason) from error
         yield browser
         browser.close()
 
