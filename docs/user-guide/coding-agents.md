@@ -18,7 +18,10 @@ curl -o .claude/skills/composeui/SKILL.md \
 Other agents that read `.agents/skills/` need the same file in `.agents/skills/composeui/`.
 
 The site publishes the skill of the `main` branch, which changes with the API. Run the same
-command again to update your copy, for example when you update ComposeUI.
+command again to update your copy, for example when you update ComposeUI. The skill names
+the version of ComposeUI that it describes, and the agent compares it with the installed
+one: when ComposeUI is newer, the agent reads the current skill, and tells you to update
+your copy.
 
 The skill is for the app's code, not for ComposeUI's own: to change ComposeUI, read the
 [technical guide](../technical-guide.md) and `AGENTS.md`.

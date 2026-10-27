@@ -184,7 +184,9 @@ document owns what, and the checks.
   pages link to them, and anchors work down to `###` only.
 - **Keep the skill in step.** `docs/_site/skills/composeui/SKILL.md` is what users install for their
   agents. When a rule of the API changes (a name, a signal argument, the state rules), change
-  it too.
+  it too. Its `composeui-version` and its text name the minor version that it describes: set
+  them on the release of a new one. `tests/test_docs.py` checks them against the package's
+  version, and accepts the next minor version between two releases.
 - **Keep the two copies in step.** Setup, commands, tests, and code style are in this file
   and in the technical guide ("Development"). Change both.
 - **Keep user docs for users.** Internal design decisions go in `ROADMAP.md` or in a code

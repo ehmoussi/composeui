@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from packaging.version import Version
+
+import composeui
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -30,6 +33,8 @@ PAGES = [
     *sorted((DOCS / "user-guide").glob("*.md")),
     DOCS / "_site" / "skills" / "composeui" / "SKILL.md",
 ]
+#: the skill that users install for their agents
+SKILL = DOCS / "_site" / "skills" / "composeui" / "SKILL.md"
 #: a fenced Python block, also one indented in a list item
 FENCE = re.compile(
     r"^(?P<indent> *)```python\n(?P<code>.*?)^(?P=indent)```$", re.MULTILINE | re.DOTALL
@@ -163,3 +168,22 @@ def test_each_link_of_the_readme_to_the_project_has_a_target() -> None:
         if not target.is_file() or (anchor and anchor not in anchors):
             missing.append(link)
     assert missing == []
+
+
+def _described_versions(version: str) -> set[str]:
+    """Give the minor versions that the skill may describe, for the package's `version`."""
+    package = Version(version)
+    major, minor = package.release[:2]
+    if not package.is_devrelease:
+        return {f"{major}.{minor}"}
+    # between two releases, the skill may describe the next one already
+    return {f"{major}.{minor}", f"{major}.{minor + 1}", f"{major + 1}.0"}
+
+
+def test_the_skill_names_the_version_of_composeui_it_describes() -> None:
+    # an agent compares it with the installed version, to tell that its copy is old
+    text = SKILL.read_text(encoding="utf-8")
+    (described,) = re.findall(r'^  composeui-version: "(.+)"$', text, re.MULTILINE)
+    assert described in _described_versions(composeui.__version__)
+    assert f"for ComposeUI {described}." in text
+    assert f"newer than {described} " in text

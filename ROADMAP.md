@@ -141,10 +141,8 @@ signals emitted on the main thread (`examples/pipesweep.py`).
    - **Qt:** a PyInstaller build, with what a map needs (`map.qml`, the Qt Location and
      Qt Positioning QML modules, the location plugins; now in the user guide's "Maps").
    - **Textual:** the app as a script or a console entry point.
-2. **A PyPI release**, with the version tag and the date of its entry in `CHANGELOG.md`.
-   Then give the agent skill (`docs/_site/skills/composeui/SKILL.md`) the version it
-   describes, checked by a test against the package's version, so an agent can tell that
-   its copy is old.
+2. **A PyPI release**, with the version tag, the date of its entry in `CHANGELOG.md`, and
+   the agent skill's `composeui-version`.
 
 ## 5 — Later, when needed
 
