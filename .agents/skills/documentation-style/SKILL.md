@@ -115,7 +115,8 @@ in CI too. The technical guide ("Documentation site") explains it for contributo
   Do not put Markdown or MyST syntax in a docstring.
 - **The widget catalog builds itself.** It lists each public view of
   `composeui.core.view` with a `_renderer_key`, or a `_field_renderer_key` for a form row,
-  and the first paragraph of the view's own docstring. A new view needs no change to
+  the first paragraph of the view's own docstring, and whether each backend's `RENDERERS`
+  has its key. A new view needs no change to
   `docs/widgets.md`. Give it a class docstring whose first paragraph says what it shows,
   in one sentence, else its row is empty.
 

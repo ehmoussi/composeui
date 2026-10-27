@@ -1,10 +1,12 @@
 """The `widget-catalog` directive: a table of the views of `composeui.core.view`.
 
-Built from the views' renderer keys, so a new view enters the catalog without editing it.
+Built from the views' renderer keys and the backends' ``RENDERERS``, so a new view, or a
+backend that renders it, enters the catalog without editing it.
 """
 
 from __future__ import annotations
 
+import importlib
 import inspect
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -12,6 +14,7 @@ from docutils.parsers.rst import directives
 from sphinx.util.docutils import SphinxDirective
 
 from composeui.core import view as view_module
+from composeui.core.registry import RendererType
 
 if TYPE_CHECKING:
     from docutils import nodes
@@ -41,6 +44,14 @@ def _catalog(key_attribute: str) -> list[tuple[str, str, str]]:
     return rows
 
 
+def _registered_keys() -> dict[RendererType, set[str]]:
+    """Give the renderer keys that each backend registers."""
+    return {
+        renderer_type: set(importlib.import_module(renderer_type.value.renderers).RENDERERS)
+        for renderer_type in RendererType
+    }
+
+
 class WidgetCatalog(SphinxDirective):
     option_spec: ClassVar[dict[str, Any]] = {
         "kind": lambda argument: directives.choice(argument, list(_KEY_ATTRIBUTES)),
@@ -48,11 +59,17 @@ class WidgetCatalog(SphinxDirective):
 
     def run(self) -> list[nodes.Node]:
         key_column = "Field renderer" if self.options["kind"] == "form-rows" else "Renderer"
+        registered = _registered_keys()
+        backends = "".join(f" {renderer_type.name.title()} |" for renderer_type in registered)
         # the directive is used in MyST pages, which parse nested text as Markdown
-        lines = [f"| View | {key_column} | What it shows |", "| --- | --- | --- |"]
+        lines = [
+            f"| View | {key_column} |{backends} What it shows |",
+            "| --- | --- |" + " :-: |" * len(registered) + " --- |",
+        ]
         for name, key, summary in _catalog(_KEY_ATTRIBUTES[self.options["kind"]]):
             text = " ".join(summary.split()).replace("|", "\\|")
-            lines.append(f"| {{py:class}}`~composeui.core.view.{name}` | `{key}` | {text} |")
+            shown = "".join(f" {'✓' if key in keys else '—'} |" for keys in registered.values())
+            lines.append(f"| {{py:class}}`~composeui.core.view.{name}` | `{key}` |{shown} {text} |")
         return self.parse_text_to_nodes("\n".join(lines))  # type: ignore[no-any-return]
 
 

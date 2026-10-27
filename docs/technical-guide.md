@@ -521,9 +521,15 @@ uv sync --group dev --group docs --all-extras
   `composeui.core`, add its page and its entry in `docs/api/index.md`.
 - **The widget catalog is built from the views.** The `widget-catalog` directive
   (`docs/_ext/widgetcatalog.py`) lists each view of `composeui.core.view` that has a
-  `_renderer_key`, with the first paragraph of its docstring. A new widget is in the
-  catalog without a change to `docs/widgets.md`.
+  `_renderer_key`, with the first paragraph of its docstring. A column per backend says
+  whether its `RENDERERS` has the key. A new widget, or a new backend, is in the catalog
+  without a change to `docs/widgets.md`.
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
+- **`make test` checks the examples and the navigation** (`tests/test_docs.py`). Each name
+  that a Python block of the README, the guides, or the skill imports from `composeui` must
+  exist. A block that defines every name it uses must run, in a scratch directory.
+  `docs/user-guide.md` must list the `##` and `###` headings of the guide's pages, and the
+  README's relative links must lead to files.
 - **The screenshots of the examples are taken by a script.** `make screenshots` runs
   `docs/screenshots.py`, which writes `docs/images/<example>-<backend>.png` for Qt,
   Textual, and the web, in the light theme. The script sets each example up first, for

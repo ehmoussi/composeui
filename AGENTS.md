@@ -166,7 +166,8 @@ document owns what, and the checks.
   examples guide. Introduce a name before an example uses it, or link to its section. When
   the quickstart changes, run `make screenshots EXAMPLES=quickstart`.
 - **Run every code example that you change.** Check each name against `composeui.core`, and
-  run the example with `uv run python` in a scratch directory.
+  run the example with `uv run python` in a scratch directory. `tests/test_docs.py` checks
+  the imports of every example, and runs each example that defines every name it uses.
 - **Keep the navigation in step.** `docs/_site/llms.txt` has one entry per page of the site: add,
   rename, or remove it with the page. `docs/user-guide.md` lists the pages of
   `docs/user-guide/` and their `##` and `###` headings. The contents list of the examples
