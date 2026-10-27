@@ -29,6 +29,7 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
     - [The app's icon](user-guide/building-views.md#the-apps-icon)
     - [Command-line options of your own](user-guide/building-views.md#command-line-options-of-your-own)
   - [Saving and loading state](user-guide/building-views.md#saving-and-loading-state)
+    - [Versions of the state](user-guide/building-views.md#versions-of-the-state)
 - [Widgets](user-guide/widgets.md)
   - [Label](user-guide/widgets.md#label)
   - [Buttons](user-guide/widgets.md#buttons)

@@ -189,7 +189,7 @@ def test_a_study_saves_and_loads_the_records_by_their_type(tmp_path: Path) -> No
     path = tmp_path / "study.rooms"
     main_view.save_state(path)
     # the records alone: the rows show them
-    saved = json.loads(path.read_text())["rooms"]
+    saved = json.loads(path.read_text())["views"]["rooms"]
     assert saved["records"] == [
         {"name": "Attic", "temperature": 12.5, "occupants": 1, "is_heated": False}
     ]

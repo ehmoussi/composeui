@@ -44,7 +44,7 @@ def test_map_state_restores_the_viewport_but_not_data_or_tile_settings(
     original.map.height = 500
     path = tmp_path / "map.json"
     original.save_state(path)
-    saved = json.loads(path.read_text())
+    saved = json.loads(path.read_text())["views"]
     assert "points" not in saved["map"]
     restored = MapMainView()
     restored.load_state(path)

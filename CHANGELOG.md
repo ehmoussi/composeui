@@ -19,7 +19,9 @@ The first release on PyPI.
 - Layouts, a status bar, menus, toolbars, inputs, forms and their checks, pages, tabs,
   resizable panes, a sidebar, dialogs, tables, large tables, trees, Markdown, charts, and
   street maps (Qt and the web).
-- The state of the views saved to a study file and loaded from it.
+- The state of the views saved to a study file and loaded from it. The file holds the
+  version of its format and the app's `state_version`, and `migrate_state` upgrades an
+  older one.
 - Threads, SQLite models, CSV imports, translations, and tests of an app that need no backend.
 - A skill for coding agents that write a ComposeUI app.
 - `composeui.__version__`, the version of the installed package.

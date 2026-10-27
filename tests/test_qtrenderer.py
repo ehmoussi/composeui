@@ -1076,7 +1076,7 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     saved_path = target.with_suffix(".pipe")
     assert saved_path.exists()
     assert view.file_view.filepath == saved_path
-    data = json.loads(saved_path.read_text())
+    data = json.loads(saved_path.read_text())["views"]
     assert data["pages"]["inputs"]["pipe_form"]["name"]["text"] == "saved_name"
 
 

@@ -2575,7 +2575,7 @@ def test_saving_downloads_the_session_state(main_view: HelloMainView, client: Te
         'attachment; filename="hello-composeui.hello"'
     )
     assert response.headers["cache-control"] == "no-store"
-    assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+    assert json.loads(response.text)["views"]["form"]["name"]["text"] == "Bob"
 
 
 def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
@@ -2840,7 +2840,7 @@ def test_a_save_post_fires_its_action_then_downloads(
 
     assert len(triggered) == 1
     assert "attachment" in response.headers["content-disposition"]
-    assert json.loads(response.text)["form"]["name"]["text"] == "Bob"
+    assert json.loads(response.text)["views"]["form"]["name"]["text"] == "Bob"
 
 
 @pytest.mark.parametrize("data", [{}, {"trigger": "cui-0"}], ids=["none", "not-an-action"])

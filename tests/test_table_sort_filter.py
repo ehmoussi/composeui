@@ -240,7 +240,7 @@ def test_a_study_reopens_sorted_and_filtered_dropping_what_its_columns_no_longer
     assert _names(other) == ["kitchen", "Bedroom"]
 
     # a filter its column no longer parses, and a column gone, are dropped, not refused
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text())["views"]
     data["rooms"]["filters"] = {str(TEMPERATURE): ">warm", "9": "x", str(NAME): "en"}
     data["rooms"]["sort_column"] = 9
     other.load_state_data(data)

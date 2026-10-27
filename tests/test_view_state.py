@@ -18,6 +18,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    STATE_FORMAT,
     ActionView,
     ChartKind,
     ChartView,
@@ -293,7 +294,7 @@ def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     assert any(math.isnan(drop) for drop in back.y)
     assert str(back.y) == str(saved.y)
     # the app's text, not the study's
-    assert "title" not in json.loads(path.read_text())["results"]["chart_tab"]["chart"]
+    assert "title" not in json.loads(path.read_text())["views"]["results"]["chart_tab"]["chart"]
 
 
 def test_a_tree_knows_its_nodes_by_path_and_keeps_those_new_nodes_still_hold() -> None:
@@ -389,7 +390,7 @@ def test_a_date_input_follows_the_language_and_its_study_keeps_its_dates(tmp_pat
     arrival.value = datetime.date(2027, 3, 4)
     path = tmp_path / "study.booking"
     view.save_state(path)
-    saved = json.loads(path.read_text())["form"]["arrival"]
+    saved = json.loads(path.read_text())["views"]["form"]["arrival"]
     assert (saved["value"], saved["minimum"]) == ("2027-03-04", "2026-10-01")
     assert "date_format" not in saved  # the language's, not the study's
 
@@ -407,7 +408,7 @@ def test_a_study_keeps_a_file_path_but_not_the_file_types_the_app_offers(tmp_pat
     measurements.extensions = {"Any": ("",)}
     path = tmp_path / "study.measurements"
     view.save_state(path)
-    saved = json.loads(path.read_text())["form"]["measurements"]
+    saved = json.loads(path.read_text())["views"]["form"]["measurements"]
     assert (saved["text"], saved["has_reload"]) == (" /data/flows.csv ", True)
     assert "extensions" not in saved  # the app's, not the study's
 
@@ -563,6 +564,110 @@ class _StudyMainView(MainView):
         self.note.text = "initial note"
 
 
+@define_view
+class _NextStudyMainView(_StudyMainView):
+    """`_StudyMainView` at a new `state_version`, with no change of its state to upgrade."""
+
+    state_version = 2
+
+
+@define_view
+class _RemarkStudyMainView(MainView):
+    """The next version of `_StudyMainView`'s state: its `note` renamed `remark`."""
+
+    extension = ".study"
+    state_version = 2
+
+    remark: InputView = Factory(InputView)
+
+    def migrate_state(self, data: Any, version: int) -> Any:
+        if version < 2:
+            data["remark"] = data.pop("note")
+        return data
+
+
+def test_a_study_file_holds_its_versions_and_an_older_one_is_upgraded(tmp_path: Path) -> None:
+    view = _StudyMainView()
+    view.note.text = "kept"
+    filepath = tmp_path / "old.study"
+    view.save_state(filepath)
+
+    data = json.loads(filepath.read_text())
+    assert (data["composeui"], data["app"]) == ({"format": STATE_FORMAT}, {"version": 1})
+    remark = _RemarkStudyMainView()
+    remark.load_state(filepath)
+    assert remark.remark.text == "kept"
+    # without `migrate_state`, the state loads as it is
+    unchanged = _NextStudyMainView()
+    unchanged.load_state(filepath)
+    assert unchanged.note.text == "kept"
+
+
+def test_a_study_file_from_before_the_versions_opens_as_their_first(tmp_path: Path) -> None:
+    filepath = tmp_path / "unversioned.study"
+    filepath.write_text('{"note": {"text": "from before"}}')
+
+    view = _RemarkStudyMainView()
+    view.load_state(filepath)
+
+    assert view.remark.text == "from before"
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"app": {"version": 2}}, "saved by a newer version of this application"),
+        ({"composeui": {"format": STATE_FORMAT + 1}}, "saved by a newer version of ComposeUI"),
+        ({"app": {"version": 0}}, r"isn't a valid \.study file"),
+        ({"app": {"version": "1"}}, r"isn't a valid \.study file"),
+        ({"composeui": {"format": True}}, r"isn't a valid \.study file"),
+        ({"composeui": 1}, r"isn't a valid \.study file"),
+        ({"app": None}, r"isn't a valid \.study file"),
+    ],
+)
+def test_a_study_file_of_a_newer_or_unknown_version_is_refused(
+    tmp_path: Path, change: dict[str, Any], message: str
+) -> None:
+    view = _StudyMainView()
+    filepath = tmp_path / "other.study"
+    view.save_state(filepath)
+    data = json.loads(filepath.read_text())
+    data["views"]["note"]["text"] = "not loaded"
+    filepath.write_text(json.dumps({**data, **change}))
+
+    with pytest.raises(InvalidStateError, match=message):
+        view.load_state(filepath)
+
+    assert view.note.text == "initial note"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "[]",
+        '{"composeui": {"format": 1}, "app": {"version": 1}}',
+        '{"composeui": {"format": 1}, "app": {"version": 1}, "views": []}',
+    ],
+)
+def test_a_study_file_without_the_views_state_is_refused(tmp_path: Path, content: str) -> None:
+    filepath = tmp_path / "other.study"
+    filepath.write_text(content)
+
+    with pytest.raises(InvalidStateError, match=r"isn't a valid \.study file"):
+        _StudyMainView().load_state(filepath)
+
+
+def test_a_study_file_its_upgrade_cannot_read_is_refused(tmp_path: Path) -> None:
+    filepath = tmp_path / "old.study"
+    filepath.write_text('{"composeui": {"format": 1}, "app": {"version": 1}, "views": {}}')
+    view = _RemarkStudyMainView()
+
+    with pytest.raises(InvalidStateError, match="doesn't match this application"):
+        view.load_state(filepath)  # `migrate_state` finds no `note` to rename
+
+    assert view.state_filepath is None
+
+
 def test_reset_state_brings_back_a_newly_built_main_view_in_place() -> None:
     view = _StudyMainView()
     radio, note = view.radio, view.note
@@ -646,12 +751,13 @@ def test_ui_text_is_neither_saved_nor_loaded(tmp_path: Path) -> None:
     view.save_state(filepath)
 
     data = json.loads(filepath.read_text())
-    assert "text" not in data["heading"]
-    assert "title" not in data["file_menu"]
-    assert "text" not in data["file_menu"]["new"]
+    views = data["views"]
+    assert "text" not in views["heading"]
+    assert "title" not in views["file_menu"]
+    assert "text" not in views["file_menu"]["new"]
     # a file saved before UI text was left out, e.g. in another language
-    data["heading"]["text"] = "Remarques"
-    data["note"]["text"] = "a note"
+    views["heading"]["text"] = "Remarques"
+    views["note"]["text"] = "a note"
     filepath.write_text(json.dumps(data))
     view.load_state(filepath)
 
