@@ -147,6 +147,8 @@ qt_log_ignore = [
     "Note that Qt no longer ships fonts",
     "QFont::setPointSizeF",
     "This plugin does not support",
+    # macOS: how long Qt took to look up a font family, a timing note
+    "Populating font family aliases",
 ]
 
 [tool.coverage.run]
