@@ -17,8 +17,9 @@ each browser its own session.
 Without `--backend`, the `COMPOSEUI_BACKEND` environment variable picks the backend. An
 app can change its default with `run(MainViewClass, default_backend=RendererType.QT)`.
 
-`run` imports only the backend that you choose. It leaves the rest of the command line to
-the app (`--help` lists it). To always start one backend, build its application yourself,
+`run` imports only the backend that you choose. Without the extra of that backend, `run`
+stops, and says which extra to install, for example `pip install "composeui[web]"`. `run`
+leaves the rest of the command line to the app (`--help` lists it). To always start one backend, build its application yourself,
 for example `QtApplication(build_main_view=HelloMainView).run()`.
 
 Every application takes a function that builds the main view, because on the web every

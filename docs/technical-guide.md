@@ -60,12 +60,14 @@ toolkit.
 
 `composeui.core.registry` maps renderer keys to the renderers of each backend:
 
-- Each `RendererType` member is a backend. Its value is a `Backend`, which holds two dotted
-  module paths:
-  - `renderers`: the module that exposes the `RENDERERS` mapping,
+- Each `RendererType` member is a backend. Its value is a `Backend`, which holds:
+  - `renderers`: the dotted path of the module that exposes the `RENDERERS` mapping,
     `dict[str, Callable[[Any], Renderer]]`;
-  - `applications`: the module that exposes `APPLICATION` and `MODEL_APPLICATION`, the
-    application classes that `core.application.run` starts.
+  - `applications`: the dotted path of the module that exposes `APPLICATION` and
+    `MODEL_APPLICATION`, the application classes that `core.application.run` starts;
+  - `extra` and `packages`: the extra of the package that installs the backend's
+    dependencies, and their top-level modules. When the backend's import fails and one of
+    these modules is missing, `run` stops and names the extra.
 - A view names its renderer with its `_renderer_key` class variable, for example
   `"label"`.
 - `create_renderer(renderer_type, key, view)` imports the renderers module of the backend
@@ -355,7 +357,7 @@ another process answers with `HX-Refresh`.
 ## Add a backend
 
 1. Add one `RendererType` member in `core/registry.py`, with the `Backend` paths of the new
-   modules.
+   modules, and the extra in `pyproject.toml` that installs its dependencies.
 2. In the renderers module of the new backend, add a `RENDERERS` mapping.
 3. In its application module, add its application classes as `APPLICATION` and
    `MODEL_APPLICATION`. They are built from `build_main_view=`, plus `build_model=` and

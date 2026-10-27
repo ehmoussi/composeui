@@ -78,13 +78,15 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - **Backend registration:** each `RendererType` member's value is a `Backend`: the dotted
   paths of the backend's renderers module, exposing a
   `RENDERERS: dict[str, Callable[[Any], Renderer]]` mapping, and of its application module,
-  exposing `APPLICATION` and `MODEL_APPLICATION` (what `core.application.run` starts). A
-  view picks its renderer by its `_renderer_key` class variable. A backend that doesn't
+  exposing `APPLICATION` and `MODEL_APPLICATION` (what `core.application.run` starts),
+  plus the extra that installs its dependencies and their top-level modules (`run` names
+  the extra when one is missing). A view picks its renderer by its `_renderer_key` class variable. A backend that doesn't
   register a key simply doesn't render that view (returns `None`), so partial backends are
   fine.
 - **Adding a widget:** define the view in `core/view.py` (set `_renderer_key`), then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
-- **Adding a backend:** add one `RendererType` member in `core/registry.py`, one
+- **Adding a backend:** add one `RendererType` member in `core/registry.py` (with its extra
+  in `pyproject.toml`), one
   `RENDERERS` mapping in the new backend's renderers module, and its application classes
   (built from `build_main_view=`, plus `build_model=`/`setup_model=` for the model one) as
   `APPLICATION`/`MODEL_APPLICATION`. `core/view.py` should not need changes.

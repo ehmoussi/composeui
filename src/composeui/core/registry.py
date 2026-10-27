@@ -1,8 +1,8 @@
 """Map abstract renderer keys to each backend's concrete renderer classes.
 
-Adding a backend means adding one `RendererType` member here, one ``RENDERERS`` mapping in
-the backend's renderers module, and ``APPLICATION``/``MODEL_APPLICATION`` in its
-application module.
+Adding a backend means adding one `RendererType` member here, with its extra, one
+``RENDERERS`` mapping in the backend's renderers module, and
+``APPLICATION``/``MODEL_APPLICATION`` in its application module.
 """
 
 from __future__ import annotations
@@ -24,16 +24,33 @@ class Backend(NamedTuple):
     renderers: str
     #: exposes ``APPLICATION`` and ``MODEL_APPLICATION``, the backend's application classes
     applications: str
+    #: the package's extra that installs what the backend imports, e.g. ``"web"``
+    extra: str
+    #: the top-level modules the extra installs: `run` names those missing
+    packages: tuple[str, ...]
 
 
 class RendererType(enum.Enum):
     """A renderer backend, identified by its modules."""
 
-    QT = Backend("composeui.qtcore.qtrenderer", "composeui.qtcore.qtapplication")
-    TEXTUAL = Backend(
-        "composeui.textualcore.textualrenderer", "composeui.textualcore.textualapplication"
+    QT = Backend(
+        "composeui.qtcore.qtrenderer",
+        "composeui.qtcore.qtapplication",
+        "pyside6",
+        ("PySide6", "pyqtgraph"),
     )
-    WEB = Backend("composeui.webcore.webrenderer", "composeui.webcore.webapplication")
+    TEXTUAL = Backend(
+        "composeui.textualcore.textualrenderer",
+        "composeui.textualcore.textualapplication",
+        "tui",
+        ("textual", "textual_fspicker", "textual_plotext"),
+    )
+    WEB = Backend(
+        "composeui.webcore.webrenderer",
+        "composeui.webcore.webapplication",
+        "web",
+        ("itsdangerous", "markdown_it", "markupsafe", "python_multipart", "starlette", "uvicorn"),
+    )
 
 
 def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Renderer[Any, Any] | None:

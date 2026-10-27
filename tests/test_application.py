@@ -132,6 +132,39 @@ def test_run_without_backend_starts_the_one_its_environment_names(
     assert type(app) is applications[backend]
 
 
+def test_run_without_its_backend_s_extra_names_the_extra(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    applications = pytest.importorskip(RendererType.WEB.value.applications).__name__
+    # imported again, as in an environment without the extra
+    monkeypatch.delitem(sys.modules, applications)
+    monkeypatch.setitem(sys.modules, "uvicorn", None)
+    monkeypatch.setattr("sys.argv", ["count", "--backend", "web"])
+    monkeypatch.delenv(BACKEND_VARIABLE, raising=False)
+
+    with pytest.raises(SystemExit) as stopped:
+        run(_CountMainView)
+
+    assert stopped.value.code == 2
+    assert 'needs uvicorn, from the web extra: pip install "composeui[web]"' in (
+        capsys.readouterr().err
+    )
+
+
+def test_run_shows_an_import_error_of_a_backend_whose_extra_is_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    applications = pytest.importorskip(RendererType.WEB.value.applications).__name__
+    monkeypatch.delitem(sys.modules, applications)
+    # e.g. a bug in the backend's own code
+    monkeypatch.setitem(sys.modules, "composeui.webcore.session", None)
+    monkeypatch.setattr("sys.argv", ["count", "--backend", "web"])
+    monkeypatch.delenv(BACKEND_VARIABLE, raising=False)
+
+    with pytest.raises(ImportError, match=r"composeui\.webcore\.session"):
+        run(_CountMainView)
+
+
 def test_an_app_s_own_options_apply_once_its_study_is_open(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
