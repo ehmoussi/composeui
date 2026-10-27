@@ -32,6 +32,7 @@ from textual.widgets import (
     Footer,
     Input,
     Label,
+    Markdown,
     ProgressBar,
     Static,
     TabPane,
@@ -159,6 +160,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from textual.app import App
+    from textual.message import Message
     from textual.pilot import Pilot
     from textual.widget import Widget
 
@@ -1718,21 +1720,33 @@ async def test_the_markdown_shows_its_text_formatted() -> None:
     markdown = view.help.renderer.widget
     assert isinstance(markdown, ComposeMarkdown)
 
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert _shown_blocks(markdown) == [
-            ("MarkdownH1", "# Help\n"),
-            ("MarkdownBulletList", "- Open a study\n- Run it\n"),
-        ]
+    expected = [
+        ("MarkdownH1", "# Help\n"),
+        ("MarkdownBulletList", "- Open a study\n- Run it\n"),
+    ]
+    rendered = asyncio.Event()
+
+    def document_updated(message: Message) -> None:
+        if (
+            isinstance(message, Markdown.TableOfContentsUpdated)
+            and message.markdown is markdown
+            and _shown_blocks(markdown) == expected
+        ):
+            rendered.set()
+
+    async with app.run_test(message_hook=document_updated):
+        await asyncio.wait_for(rendered.wait(), timeout=5)
+        assert _shown_blocks(markdown) == expected
         # set twice in a row: only the last text shows, once
-        view.help.text = "## Results"
-        view.help.text = "## Results\n\nAll done."
-        await pilot.pause()
-        await pilot.pause()
-        assert _shown_blocks(markdown) == [
+        expected = [
             ("MarkdownH2", "## Results\n"),
             ("MarkdownParagraph", "All done."),
         ]
+        rendered.clear()
+        view.help.text = "## Results"
+        view.help.text = "## Results\n\nAll done."
+        await asyncio.wait_for(rendered.wait(), timeout=5)
+        assert _shown_blocks(markdown) == expected
 
 
 @pytest.mark.asyncio
