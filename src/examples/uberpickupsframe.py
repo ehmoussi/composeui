@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-import attrs
 import polars as pl
 
 from composeui.core.application import run
@@ -30,20 +29,13 @@ from composeui.core.view import (
 if TYPE_CHECKING:
     from composeui.core.jobs import Job
 
-SCHEMA = {"date_time": pl.Datetime, "lat": pl.Float64, "lon": pl.Float64, "base": pl.String}
-HEADERS = {"date_time": "Date/Time", "lat": "Lat", "lon": "Lon", "base": "Base"}
-
 
 def read_pickups(url: str) -> pl.DataFrame:
-    return (
-        pl.read_csv(url)
-        .rename({header: name for name, header in HEADERS.items()})
-        .with_columns(pl.col("date_time").str.to_datetime("%m/%d/%Y %H:%M:%S"))
-    )
+    return pl.read_csv(url).with_columns(pl.col("Date/Time").str.to_datetime("%m/%d/%Y %H:%M:%S"))
 
 
 def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
-    counts = frame.group_by(pl.col("date_time").dt.hour().alias("hour")).len()
+    counts = frame.group_by(pl.col("Date/Time").dt.hour().alias("hour")).len()
     pickups = [0] * 24
     for hour, count in counts.iter_rows():
         if hour is not None:
@@ -52,41 +44,25 @@ def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
 
 
 def pickup_points(frame: pl.DataFrame, at_hour: int) -> list[MapPoint]:
-    at = frame.filter(pl.col("date_time").dt.hour() == at_hour)
+    at = frame.filter(pl.col("Date/Time").dt.hour() == at_hour)
     stride = max(1, (at.height + 9999) // 10000)
     rows = (
         at.gather_every(stride)
-        .filter(pl.col("lat").is_between(-85.05112878, 85.05112878))
-        .filter(pl.col("lon").is_between(-180, 180))
+        .filter(pl.col("Lat").is_between(-85.05112878, 85.05112878))
+        .filter(pl.col("Lon").is_between(-180, 180))
         .head(10000)
-        .select("lat", "lon")
+        .select("Lat", "Lon")
     )
     return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows.iter_rows()]
 
 
-@attrs.frozen(kw_only=True)
-class PickupData:
-    frame: pl.DataFrame
-    hours: list[int]
-    points: list[MapPoint]
-
-
 class UberPickupsFrameModel(Model):
     def __init__(self) -> None:
-        self.pickups = DataFrameSource(pl.DataFrame(schema=SCHEMA), HEADERS)
+        #: the pickups, once read; set on the main thread
+        self.frame = pl.DataFrame()
 
-    @property
-    def frame(self) -> pl.DataFrame:
-        return cast("pl.DataFrame", self.pickups.frame)
-
-    def load_pickups(self, job: Job[PickupData, int], url: str, at_hour: int) -> PickupData:
-        # the frame reaches the source on the main thread, which its `changed` updates
-        frame = read_pickups(url)
-        if job.is_canceled:
-            return PickupData(frame=frame, hours=[], points=[])
-        return PickupData(
-            frame=frame, hours=pickups_by_hour(frame), points=pickup_points(frame, at_hour)
-        )
+    def load_pickups(self, _job: Job[pl.DataFrame, int], url: str) -> pl.DataFrame:
+        return read_pickups(url)
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
@@ -130,27 +106,26 @@ class UberPickupsFrameMainView(MainView):
     data: UberPickupsDataView = child(UberPickupsDataView, is_visible=False)
 
     def connect_model(self, model: UberPickupsFrameModel) -> None:
-        self.pickups = model.pickups
-        self.data.table.source = model.pickups
         self.loader = self.jobs.task(model.load_pickups)
         self.loader.changed.connect(self._show_loading)
         self.show_raw_data.toggled.connect(self._show_raw_data)
-        self.loader.start(DATA_URL, self.data.slider_hours.value)
+        self.loader.start(DATA_URL)
 
     def _show_raw_data(self) -> None:
         self.data.table.is_visible = self.show_raw_data.is_checked
 
-    def _show_loading(self) -> None:
+    def _show_loading(self, model: UberPickupsFrameModel) -> None:
         loader = self.loader
         self.data_load_status.is_visible = loader.is_running
         self.data.table.is_visible = self.show_raw_data.is_checked
         self.data.is_visible = loader.has_result
         if loader.result is not None:
-            self.pickups.frame = loader.result.frame
+            model.frame = loader.result
+            self.data.table.source = DataFrameSource(model.frame)
             self.data.pickups_chart.series = [
-                Series(name="Pickups", x=list(range(24)), y=loader.result.hours)
+                Series(name="Pickups", x=list(range(24)), y=pickups_by_hour(model.frame))
             ]
-            self.data.pickups_map.points = loader.result.points
+            self.data.pickups_map.points = pickup_points(model.frame, self.data.slider_hours.value)
             self.data_load_state.text = "Done! (using Polars)"
         else:
             self.data_load_state.text = "Loading data..."

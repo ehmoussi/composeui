@@ -118,8 +118,8 @@ uv run python -m examples.uberpickupsframe --backend qt   # or textual, or web
 ```
 
 It needs the `dataframe` extra and Polars. It reads the CSV dataset in a job each time it
-starts: a study keeps no rows. Polars counts the pickups by hour, and samples the map's
-pickups for the slider's hour.
+starts: a study keeps no rows. The table shows the CSV's own columns. Polars counts the
+pickups by hour, and samples the map's pickups for the slider's hour.
 
 These screenshots use generated rows and OpenStreetMap tiles. Taking them needs a network
 connection for the street map. Textual omits the map.
@@ -133,8 +133,8 @@ It shows:
 - a [large table](user-guide/tables.md#a-large-table) on a
   [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
   and filters a million pickups;
-- a [job](user-guide/threads.md) whose result gives the source its new frame, on the
-  main thread;
+- a [job](user-guide/threads.md) that reads the CSV alone: its result, a frame, becomes the
+  table's source on the main thread;
 - the same chart, map, and checkbox as [Uber pickups](#uber-pickups).
 
 ## Pipe form
