@@ -12,6 +12,7 @@ run them from a clone of the repository.
 - [Overview](#overview)
 - [Where to start](#where-to-start)
 - [Uber pickups](#uber-pickups)
+- [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe)
 - [Pipe form](#pipe-form)
 - [Pipe catalogue](#pipe-catalogue)
 - [Pipe chart](#pipe-chart)
@@ -47,6 +48,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
 | [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite in a job, hourly pickup counts, an hour-filtered street map, and a raw-data table |
+| [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
@@ -70,8 +72,9 @@ Read the examples in this order. Each one adds a few features to the ones before
 6. [Pipe sweep](#pipe-sweep): a job that writes to a SQLite model.
 
 The other examples each show one topic: [Batman](#batman) the look of a chart,
-[Web hello](#web-hello) an app that only the web shows, and [Textual demo](#textual-demo)
-an app in a terminal.
+[Uber pickups on a dataframe](#uber-pickups-on-a-dataframe) a dataframe in a large table,
+a chart, and a map, [Web hello](#web-hello) an app that only the web shows, and
+[Textual demo](#textual-demo) an app in a terminal.
 
 ## Uber pickups
 
@@ -104,6 +107,35 @@ It shows:
 - an interactive [map](user-guide/maps.md) on Qt and the web, filtered by an hour slider;
 - a [wide main view](user-guide/organizing-the-window.md#pages) without a page wrapper;
 - a checkbox that shows the [raw-data table](user-guide/tables.md#a-large-table).
+
+## Uber pickups on a dataframe
+
+[`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) is the
+[Uber pickups](#uber-pickups) app, its rows in a Polars frame instead of SQLite.
+
+```bash
+uv run python -m examples.uberpickupsframe --backend qt   # or textual, or web
+```
+
+It needs the `dataframe` extra and Polars. It reads the CSV dataset in a job each time it
+starts: a study keeps no rows. Polars counts the pickups by hour, and samples the map's
+pickups for the slider's hour.
+
+These screenshots use generated rows and OpenStreetMap tiles. Taking them needs a network
+connection for the street map. Textual omits the map.
+
+| Qt | Textual | Web |
+| --- | --- | --- |
+| ![Uber pickups on a dataframe on Qt](images/uberpickupsframe-qt.png) | ![Uber pickups on a dataframe on Textual](images/uberpickupsframe-textual.png) | ![Uber pickups on a dataframe on the web](images/uberpickupsframe-web.png) |
+
+It shows:
+
+- a [large table](user-guide/tables.md#a-large-table) on a
+  [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
+  and filters a million pickups;
+- a [job](user-guide/threads.md) whose result gives the source its new frame, on the
+  main thread;
+- the same chart, map, and checkbox as [Uber pickups](#uber-pickups).
 
 ## Pipe form
 

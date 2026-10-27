@@ -137,6 +137,10 @@ the option for the web (extra `web`, the default).
   `table.source()` builds a `SqliteSource` with inferred field types and CSV headers.
   Use `source(headers={"field": "Label", ...})` to select, order, and label columns.
   It uses hidden SQLite row IDs; use `SqliteSource` directly for custom queries or explicit keys.
+- **Show a dataframe in a large table.** With the `dataframe` extra,
+  `DataFrameSource(frame, {"column": "Label", ...})` from `composeui.core.dataframesource`
+  takes a pandas, Polars, or PyArrow frame; a lazy frame needs `id_column=`. Assign
+  `source.frame = new_frame` on the main thread (e.g. from a job's result), not in the job.
 - **Read CSV files and URLs without stream wrappers.**
   `CSVSqliteTable.fill_from_file(path, ...)` accepts a path string or `pathlib.Path`,
   opens plain or gzip CSV, and closes the file. Relative paths use the working directory.

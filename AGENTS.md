@@ -12,7 +12,7 @@ quickstart, `docs/user-guide/` for each feature, `docs/examples-guide.md` for th
 - Install everything needed for development:
 
   ```bash
-  uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, reload
+  uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, reload, dataframe
   ```
 
 - Always run tools through `uv run` (or the `make` targets below), never a global Python.

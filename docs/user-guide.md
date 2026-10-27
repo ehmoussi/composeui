@@ -64,6 +64,7 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
     - [Order a large table](user-guide/tables.md#order-a-large-table)
     - [Cells, selection, copy, and export](user-guide/tables.md#cells-selection-copy-and-export)
     - [Rows in SQLite](user-guide/tables.md#rows-in-sqlite)
+    - [Rows in a dataframe](user-guide/tables.md#rows-in-a-dataframe)
 - [Charts](user-guide/charts.md)
   - [Kinds of chart](user-guide/charts.md#kinds-of-chart)
   - [Log axes](user-guide/charts.md#log-axes)

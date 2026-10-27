@@ -27,12 +27,12 @@
 
 ## Examples
 
-- [Examples guide](https://ehmoussi.github.io/composeui/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Uber pickups, Batman, Markdown viewer, web hello, Textual demo) and how to run them
+- [Examples guide](https://ehmoussi.github.io/composeui/examples-guide.html): the example apps (pipe form, catalogue, chart, sweep, task view, large table, Uber pickups, Uber pickups on a dataframe, Batman, Markdown viewer, web hello, Textual demo) and how to run them
 
 ## Reference
 
 - [Widget catalog](https://ehmoussi.github.io/composeui/widgets.html): every view that a backend renders
-- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
+- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, dataframesource, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
 
 ## Contributing
 

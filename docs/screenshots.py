@@ -23,6 +23,7 @@ import random
 import re
 import socket
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -49,6 +50,7 @@ from examples import (
     taskview,
     textual_demo,
     uberpickups,
+    uberpickupsframe,
     webhello,
 )
 
@@ -208,6 +210,20 @@ def _uberpickups_setup(main_view: Any, model: Any) -> None:
     main_view.connect_model(model)
 
 
+def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
+    # the same generated rows as `_uberpickups_setup`, in a CSV the app reads
+    lines = ["Date/Time,Lat,Lon,Base"] + [
+        f"9/1/2014 {hour}:01:00,{40.70 + index * 0.002},"
+        f"{-74.02 + index * 0.002 + hour * 0.0005},B02512"
+        for hour in range(24)
+        for index in range(10 + hour)
+    ]
+    path = Path(tempfile.mkdtemp()) / "pickups.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    uberpickupsframe.DATA_URL = str(path)
+    main_view.connect_model(model)
+
+
 def _uberpickups(main_view: Any, _model: Optional[Model]) -> None:
     main_view.jobs.wait()
 
@@ -264,6 +280,14 @@ def _examples() -> list[Example]:
             _uberpickups,
             uberpickups.UberPickupsModel,
             _uberpickups_setup,
+            window=(1200, 1200),
+        ),
+        Example(
+            "uberpickupsframe",
+            uberpickupsframe.UberPickupsFrameMainView,
+            _uberpickups,
+            uberpickupsframe.UberPickupsFrameModel,
+            _uberpickupsframe_setup,
             window=(1200, 1200),
         ),
         Example("batman", batman.BatmanMainView),

@@ -380,7 +380,7 @@ ComposeUI uses [uv](https://docs.astral.sh/uv/) and Python 3.9 or later. `.pytho
 pins 3.9. Install every backend, because the tests cover Qt, Textual, and the web:
 
 ```bash
-uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, reload
+uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, reload, dataframe
 ```
 
 Always run the tools through `uv run` or the `make` targets, never a global Python.

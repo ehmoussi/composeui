@@ -43,6 +43,7 @@ Requires Python >= 3.9. ComposeUI is not yet published to PyPI. Install it with
 | `pyside6` | PySide6 | The Qt backend, a desktop window |
 | `tui` | Textual | The Textual backend, a terminal |
 | `report` | matplotlib | The report images of charts |
+| `dataframe` | narwhals | A large table of a pandas, Polars, or PyArrow frame |
 | `reload` | watchfiles | A faster `--reload` in development |
 
 To try ComposeUI and its example apps, clone the repository and install every extra:

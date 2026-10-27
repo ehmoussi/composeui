@@ -50,6 +50,7 @@ web = [
 ]
 report = ["matplotlib>=3.9"]
 reload = ["watchfiles>=1.1.1"]
+dataframe = ["narwhals>=2.21.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -66,6 +67,9 @@ browser = ["playwright>=1.60.0"]
 dev = [
     "httpx>=0.28.1",
     "mypy>=1.19.1",
+    "pandas>=2.3.3",
+    "pandas-stubs>=2.2.2.240807",
+    "polars>=1.36.1",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.1.0",
