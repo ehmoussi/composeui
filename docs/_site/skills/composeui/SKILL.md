@@ -14,6 +14,12 @@ documentation and this skill disagree, trust the documentation.
 Full documentation: https://ehmoussi.github.io/composeui/ (an index for models is at
 https://ehmoussi.github.io/composeui/llms.txt).
 
+This file is a copy. The current skill is at
+https://ehmoussi.github.io/composeui/skills/composeui/SKILL.md, published with the
+documentation of the `main` branch. When a name of this file is not in the installed
+`composeui`, the copy is older than the code: read the current skill, and tell the user to
+download it again.
+
 ## A minimal app
 
 ```python
