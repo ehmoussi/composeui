@@ -163,8 +163,9 @@ These are open, not oversights to fix silently. Raise them when a change touches
 
 - **Behind a reverse proxy,** the origin check compares with the `Host` the proxy forwards.
   OWASP prefers a configured expected origin, and trusts `X-Forwarded-Host` only from
-  known proxies. The user guide asks a proxy to keep `Host`, `Origin`, `Referer` and
-  `Sec-Fetch-*`.
+  known proxies. The user guide's "Deploy behind nginx" gives a tried configuration that
+  keeps `Host` (with its port), `Origin`, `Referer` and `Sec-Fetch-*`, and forwards the
+  scheme (`X-Forwarded-Proto`, trusted by uvicorn from `FORWARDED_ALLOW_IPS`).
 - **No HTTPS, HSTS, or `__Host-` cookie prefix.** The app serves plain HTTP on
   `127.0.0.1` by default. OWASP lists HTTPS and HSTS as requirements of the Fetch Metadata
   approach for a deployed app, and `__Host-` needs `Secure`.

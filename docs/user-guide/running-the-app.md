@@ -146,7 +146,9 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 Read this section before other people use the app, on a network or behind a reverse proxy.
 
 - **Single process only.** The sessions live in the memory of one server process. A restart
-  starts them all over.
+  starts them all over: the server signs the session cookie with a key that it makes when
+  it starts, so after a restart each browser gets a new, empty session, and the work that
+  its user didn't save is lost.
 - **Sessions have limits.** The server drops a session after an hour without use
   (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
   full, a new browser gets an error (503) until a session ends, and the open sessions keep
@@ -169,3 +171,57 @@ Read this section before other people use the app, on a network or behind a reve
 - **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
   browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
   addresses of the app are not sent to other sites.
+
+### Deploy behind nginx
+
+The app serves plain HTTP. To give other users the app over HTTPS, put it behind a reverse
+proxy such as [nginx](https://nginx.org/), which holds the certificate. Run the app as one
+process, on its default address `127.0.0.1:8000`, so that only the proxy reaches it:
+
+```bash
+python app.py --backend web
+```
+
+Keep the process running with your service manager, for example a systemd service. Then
+give nginx a `server` block such as this one:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name app.example.org;
+    ssl_certificate /etc/ssl/app.example.org.pem;
+    ssl_certificate_key /etc/ssl/app.example.org.key;
+
+    client_max_body_size 6m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+}
+```
+
+Each line keeps a part of the app working:
+
+- **`proxy_set_header Host $http_host`** gives the app the address that the browser used,
+  with its port. Without it, nginx sends `127.0.0.1:8000`. With `$host`, the port is lost.
+  In both cases, the server refuses the actions of a browser that sends only an `Origin`
+  header (403), because the origin doesn't match the address that the app sees. Browsers
+  send `Sec-Fetch-Site` only over HTTPS and to `localhost`, so on plain HTTP this applies
+  to every action.
+- **`proxy_set_header X-Forwarded-Proto $scheme`** tells the app that the browser used
+  HTTPS. The server reads it only from the addresses in the `FORWARDED_ALLOW_IPS`
+  environment variable, `127.0.0.1` by default. If nginx runs on another machine, set this
+  variable to its address.
+- **`client_max_body_size 6m`** lets a study or a file of up to 5 MB through. nginx's own
+  limit is 1 MB: above it, nginx refuses Open and the file inputs (413) before the app
+  sees the request.
+- **`Strict-Transport-Security`** makes the browser use HTTPS for the site from then on. The
+  session cookie has no `Secure` flag, so serve the app over HTTPS only. Redirect plain
+  HTTP to HTTPS in a `server` block of its own.
+
+nginx passes the `Origin`, `Referer`, and `Sec-Fetch-*` headers on as the browser sent
+them. Don't remove them: the server needs them to accept the app's own requests.
