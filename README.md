@@ -152,6 +152,7 @@ widget catalog, and the API reference.
 - The [technical guide](docs/technical-guide.md) explains how ComposeUI works inside, and
   how to develop it: the architecture, how to add a widget or a backend, the tests, and the
   checks.
+- [`CHANGELOG.md`](CHANGELOG.md) lists the changes of each release.
 - [`ROADMAP.md`](ROADMAP.md) lists the work that is left.
 
 ## License
