@@ -158,14 +158,14 @@ from io import StringIO
 
 import attrs
 
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 
 
-@attrs.define
+@define_csv_row
 class Reading:
-    recorded: datetime = csv_field("Recorded", date_format="%d/%m/%Y %H:%M")
-    value: float = csv_field("Value", validator=attrs.validators.ge(0))
-    station: str = csv_field("Station", default="unknown")
+    recorded: datetime = csv_field(name="Recorded", date_format="%d/%m/%Y %H:%M")
+    value: float = csv_field(name="Value", validator=attrs.validators.ge(0))
+    station: str = csv_field(name="Station", default="unknown")
 
 
 class Readings(CSVSqliteTable, row_type=Reading, name="reading"):
@@ -187,6 +187,21 @@ finally:
     model.close()
 ```
 
+- **Typed schemas.** `@define_csv_row` applies `attrs.define` with its default options.
+  It tells type checkers that `csv_field` declares a field, not a default value.
+  Use `name="Header"` when supplying the CSV header; this also works with Pyrefly's
+  field-specifier analysis. Existing `@attrs.define` schemas and positional headers still
+  work at runtime. To check these schemas with mypy, enable the optional plugin:
+
+  ```toml
+  [tool.mypy]
+  plugins = ["composeui.mypy"]
+  ```
+
+  Install mypy separately; ComposeUI does not import it when the app runs.
+  The plugin registers CSV fields with mypy's attrs integration and resolves built-in
+  method converters such as `str.strip`. Constructor checks preserve converter input types,
+  defaults, factories, aliases, and fields excluded with `init=False`.
 - **Columns.** Field names become SQL column names. CSV headers match those names unless
   `csv_field("Header")` gives another header. Plain attrs fields work too. Supported field
   types are `str`, `int`, `bool`, `float`, `bytes`, `decimal.Decimal`, `datetime.date`, and
@@ -206,9 +221,10 @@ finally:
   `factory`. For nonstandard values, supply a converter: for example, map `"yes"` and `"no"`
   to booleans, or use `decimal.Decimal` for decimal text. Validators run after conversion.
 - **Dates.** `date_format` uses `datetime.strptime` and returns a `date` or `datetime`
-  according to the annotation. Without a format, dates use ISO text. Static type checking
+  according to the annotation. Without a format, dates use ISO text. The mypy integration
   rejects a formatted field annotated as `float`, for example. Table declaration also checks
-  the type at runtime. Do not combine `date_format` and `converter`. SQLite stores dates
+  the type at runtime, including when a checker does not detect the mismatch.
+  Do not combine `date_format` and `converter`. SQLite stores dates
   and datetimes as ISO text; timezone offsets supplied by the format are preserved.
 - **Input.** `fill` accepts an iterable of text lines. Open files with `newline=""` and
   the required encoding. The caller owns that input. For a path, use

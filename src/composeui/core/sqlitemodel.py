@@ -32,6 +32,7 @@ from typing import (
     ClassVar,
     Generic,
     NamedTuple,
+    Optional,
     TypeVar,
     Union,
     cast,
@@ -42,6 +43,7 @@ from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 import attrs
+from typing_extensions import dataclass_transform
 
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
@@ -195,11 +197,33 @@ class SqliteTable:
 
 
 @overload
-def csv_field(name: str, *, date_format: str, **kwargs: Any) -> datetime.datetime: ...
+def csv_field(
+    name: str,
+    *,
+    date_format: str,
+    default: Any = attrs.NOTHING,
+    factory: Optional[Callable[[], Any]] = None,
+    converter: Any = None,
+    init: bool = True,
+    alias: Optional[str] = None,
+    kw_only: bool = False,
+    **kwargs: Any,
+) -> datetime.datetime: ...
 
 
 @overload
-def csv_field(name: str, *, date_format: None = None, **kwargs: Any) -> Any: ...
+def csv_field(
+    name: str,
+    *,
+    date_format: None = None,
+    default: Any = attrs.NOTHING,
+    factory: Optional[Callable[[], Any]] = None,
+    converter: Any = None,
+    init: bool = True,
+    alias: Optional[str] = None,
+    kw_only: bool = False,
+    **kwargs: Any,
+) -> Any: ...
 
 
 def csv_field(name: str, *, date_format: str | None = None, **kwargs: Any) -> Any:
@@ -212,6 +236,19 @@ def csv_field(name: str, *, date_format: str | None = None, **kwargs: Any) -> An
     if date_format is not None:
         metadata["csv_date_format"] = date_format
     return attrs.field(metadata=metadata, **kwargs)
+
+
+_RowClassT = TypeVar("_RowClassT", bound=type)
+
+
+@dataclass_transform(field_specifiers=(attrs.field, csv_field))
+def define_csv_row(cls: _RowClassT) -> _RowClassT:
+    """Define an attrs row class with typed CSV field specifiers.
+
+    Use ``@define_csv_row`` instead of ``@attrs.define`` when fields use `csv_field`.
+    For mypy, enable the ``composeui.mypy`` plugin.
+    """
+    return cast("_RowClassT", attrs.define(cls))
 
 
 def _csv_structure_hook(field: attrs.Attribute[Any]) -> Callable[[Any, Any], Any] | None:

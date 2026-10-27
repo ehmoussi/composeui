@@ -16,7 +16,7 @@ import attrs
 import pytest
 
 from composeui.core.model import RefusedError
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 from composeui.core.view import Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@attrs.define
+@define_csv_row
 class Reading:
-    name: str = csv_field("Name", converter=str.strip)
+    name: str = csv_field(name="Name", converter=str.strip)
     value: float = csv_field("Value", validator=attrs.validators.ge(0))
     day: datetime.date = csv_field("Day", date_format="%d/%m/%Y")
     moment: datetime.datetime = csv_field("Moment", date_format="%d/%m/%Y %H:%M%z")
@@ -414,10 +414,10 @@ def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[s
         model.close()
 
 
-@attrs.define
+@define_csv_row
 class ScalarRow:
     name: str = csv_field(
-        "Name",
+        name="Name",
         metadata={"minimum_length": 2},
         validator=lambda _i, a, v: attrs.validators.min_len(a.metadata["minimum_length"])(_i, a, v),
     )

@@ -64,7 +64,7 @@ from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from playwright.sync_api import (
         BrowserContext,
@@ -95,7 +95,7 @@ class _BrowserHelloApp(HelloApp):
 
 
 @contextlib.contextmanager
-def _serve(app: Starlette, port: int | None = None) -> Iterator[str]:
+def _serve(app: Starlette, port: int | None = None) -> Generator[str, None, None]:
     """Serve `app` on `port`, else a free one, while the block runs; yield its base url."""
     if port is None:
         with socket.socket() as sock:

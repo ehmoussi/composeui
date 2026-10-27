@@ -76,22 +76,51 @@ dev = [
     "watchfiles>=1.1.1",
 ]
 docs = ["furo>=2024.8.6", "myst-parser>=3.0.1", "sphinx>=7.4.7"]
+typecheck = [
+    "mypy>=1.19.1",
+    "pyrefly>=1.4.0",
+    "pyright>=1.1.414",
+    "ty>=0.0.92",
+    "zuban>=0.10.1",
+]
 
 
 [tool.uv]
 constraint-dependencies = ["certifi>=2026.10.19"]
 
 
+[tool.mypy]
+plugins = ["composeui.mypy"]
+files = ["tests"]
+always_false = ["PYQT5", "PYSIDE2", "PYQT6"]
+always_true = ["PYSIDE6"]
+
 [[tool.mypy.overrides]]
 # pyqtgraph ships no type hints: the chart widget is typed at its edges
 module = ["pyqtgraph", "pyqtgraph.*"]
 ignore_missing_imports = true
+
+[tool.pyrefly]
+project-includes = ["tests/**/*.py"]
+search-path = ["src", "."]
+python-version = "3.9"
+preset = "default"
 
 [tool.pyright]
 include = ["tests"]
 extraPaths = ["src"]
 pythonVersion = "3.9"
 defineConstant = { PYQT5 = false, PYSIDE2 = false, PYQT6 = false, PYSIDE6 = true }
+
+[tool.ty.environment]
+python-version = "3.9"
+extra-paths = ["src"]
+
+[tool.ty.src]
+include = ["tests"]
+
+[tool.zuban]
+mode = "mypy"
 
 [tool.pytest.ini_options]
 markers = [
@@ -161,7 +190,7 @@ extend-immutable-calls = ["composeui.core.sqlitemodel.csv_field"]
 
 [tool.ruff.lint.flake8-type-checking]
 # CSV schemas resolve attrs field annotations at runtime.
-runtime-evaluated-decorators = ["attrs.define"]
+runtime-evaluated-decorators = ["attrs.define", "composeui.core.sqlitemodel.define_csv_row"]
 
 [tool.ruff.lint.isort]
 # Every module postpones annotation evaluation (enforced by I002, added by `make lint`).

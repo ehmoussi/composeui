@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import attrs
 
 from composeui.core.application import run
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, table
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 from composeui.core.view import (
     ChartKind,
     ChartView,
@@ -31,16 +31,18 @@ if TYPE_CHECKING:
     from composeui.core.jobs import Job
 
 
-@attrs.define
+@define_csv_row
 class UberPickup:
-    date_time: datetime = csv_field("Date/Time", date_format="%m/%d/%Y %H:%M:%S")
+    date_time: datetime = csv_field(name="Date/Time", date_format="%m/%d/%Y %H:%M:%S")
     lat: float = csv_field(
-        "Lat", validator=attrs.validators.and_(attrs.validators.ge(-90), attrs.validators.le(90))
+        name="Lat",
+        validator=attrs.validators.and_(attrs.validators.ge(-90), attrs.validators.le(90)),
     )
     lon: float = csv_field(
-        "Lon", validator=attrs.validators.and_(attrs.validators.ge(-180), attrs.validators.le(180))
+        name="Lon",
+        validator=attrs.validators.and_(attrs.validators.ge(-180), attrs.validators.le(180)),
     )
-    base: str = csv_field("Base")
+    base: str = csv_field(name="Base")
 
 
 class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
