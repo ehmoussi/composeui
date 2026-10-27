@@ -37,7 +37,7 @@ class RendererType(enum.Enum):
         "composeui.qtcore.qtrenderer",
         "composeui.qtcore.qtapplication",
         "pyside6",
-        ("PySide6", "pyqtgraph"),
+        ("PySide6", "pyqtgraph", "qtpy"),
     )
     TEXTUAL = Backend(
         "composeui.textualcore.textualrenderer",

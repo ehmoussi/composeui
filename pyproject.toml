@@ -32,7 +32,6 @@ classifiers = [
 dependencies = [
     "attrs>=26.1.0",
     "cattrs>=25.3.0",
-    "qtpy>=2.4.3",
     "typing-extensions>=4.15.0",
 ]
 dynamic = ["version"]
@@ -45,7 +44,7 @@ Issues = "https://github.com/ehmoussi/composeui/issues"
 Changelog = "https://github.com/ehmoussi/composeui/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-pyside6 = ["pyqtgraph>=0.13.7", "pyside6>=6.10.3"]
+pyside6 = ["pyqtgraph>=0.13.7", "pyside6>=6.10.3", "qtpy>=2.4.3"]
 tui = ["textual>=8.2.8", "textual-fspicker>=0.6.0", "textual-plotext>=1.0.1"]
 web = [
     "itsdangerous>=2.2.0",
