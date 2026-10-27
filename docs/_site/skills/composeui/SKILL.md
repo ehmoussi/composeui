@@ -1,6 +1,8 @@
 ---
 name: composeui
 description: "Use when writing or changing an app built with ComposeUI, the Python MVVM layer whose views are typed attrs classes that a Qt, Textual or web renderer shows: when the code imports composeui, defines a MainView, a FormView or another view with @define_view, connects a Signal, or starts an app with run(). Holds the rules that keep such an app correct on every backend, a minimal app, and where the documentation is."
+metadata:
+  composeui-version: "0.1"
 ---
 
 # ComposeUI
@@ -14,11 +16,12 @@ documentation and this skill disagree, trust the documentation.
 Full documentation: https://ehmoussi.github.io/composeui/ (an index for models is at
 https://ehmoussi.github.io/composeui/llms.txt).
 
-This file is a copy. The current skill is at
+This file is a copy, for ComposeUI 0.1. The current skill is at
 https://ehmoussi.github.io/composeui/skills/composeui/SKILL.md, published with the
-documentation of the `main` branch. When a name of this file is not in the installed
-`composeui`, the copy is older than the code: read the current skill, and tell the user to
-download it again.
+documentation of the `main` branch. `python -c "import composeui; print(composeui.__version__)"`
+gives the installed version. When it is newer than 0.1 (its first two numbers), or a name of
+this file is not in the installed `composeui`, the copy is older than the code: read the
+current skill, and tell the user to download it again.
 
 ## A minimal app
 
