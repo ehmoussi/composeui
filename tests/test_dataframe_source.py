@@ -136,6 +136,16 @@ def test_cells_give_python_values_by_id_and_leave_out_the_ids_gone(
     assert source.count() == len(READINGS)
 
 
+@pytest.mark.parametrize("library", ["polars", "pandas"])
+def test_cells_show_the_id_column_when_it_is_one_of_the_columns(library: str) -> None:
+    columns = {"order": [10, 11, 12], "amount": [1.5, 2.5, 3.5]}
+    frame = pl.DataFrame(columns) if library == "polars" else pd.DataFrame(columns)
+    source = DataFrameSource(frame, {"order": "Order", "amount": "Amount"}, id_column="order")
+
+    assert source.cells([12, 10], ["order", "amount"]) == {12: [12, 3.5], 10: [10, 1.5]}
+    assert source.cells([11], ["amount", "order"]) == {11: [2.5, 11]}
+
+
 def test_the_columns_types_come_from_the_frame_s_schema() -> None:
     frame = pl.DataFrame(
         {
