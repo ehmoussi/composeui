@@ -26,8 +26,8 @@ run them from a clone of the repository.
 
 ## Run an example
 
-Install the extras of the backends that you want (see the [README](../README.md#installation)).
-Then run an example as a module:
+Clone the repository, and install in it the extras of the backends that you want (see the
+[README](../README.md#installation)). Then run an example as a module:
 
 ```bash
 uv run python -m examples.pipeform --backend qt

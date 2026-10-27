@@ -11,6 +11,10 @@ part of an app that a feature needs. A class name with a comment, such as
 `study: StudyTree = attrs.Factory(StudyTree)  # a TreeView`, stands for a view of your app of that
 kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of your app.
 
+A command such as `uv run python -m examples.pipeform` runs an example app. The examples are
+not in the package: run them from a clone of the repository (see
+[Run an example](examples-guide.md#run-an-example)).
+
 ## Pages of this guide
 
 - [Core concepts](user-guide/core-concepts.md)
