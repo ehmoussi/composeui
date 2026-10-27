@@ -13,6 +13,7 @@ signal
 application
 model
 sqlitemodel
+dataframesource
 study
 jobs
 reload

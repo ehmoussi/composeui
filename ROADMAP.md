@@ -127,15 +127,19 @@ view isn't generic over its ids' type: it saves them as JSON values (e.g. intege
 protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
 its fields, and the source needs the filters of `view.py`.
 
-1. **A numpy source**, in an optional extra: columns as arrays, a stable `argsort` for
-   the order, a boolean mask per filter, and the row's index as its id. Tests: the same
-   cases as `ListSource`, skipped without numpy (`pytest.importorskip`).
-2. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
+`DataFrameSource` (in `core/dataframesource.py`, the `dataframe` extra) gives it a
+dataframe's rows through narwhals: pandas, Polars, PyArrow, or a lazy frame with an
+`id_column`. The frame's library sorts and filters; `uberpickupsframe.py` shows it on a
+Polars frame. It stands for the numpy source once planned: an app wraps its arrays in a
+frame. A numpy source of numeric columns alone could come back if an app has arrays and no
+dataframe library.
+
+1. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
    with `CONVERTER`, and a `RefusedError` refuses it, as in a `RecordTableView`. A
    `SqliteSource` calls the app's own queries, so that `refusals` gives the user its
    message.
-3. **The user moves rows**, in `TableView` and in the large table: move up and move down
+2. **The user moves rows**, in `TableView` and in the large table: move up and move down
    actions on the view on each backend, then drag and drop on Qt.
    - For a `SqliteTable`, keep the order in a table of positions, as
       [composeui-table](https://github.com/ehmoussi/composeui-table) does

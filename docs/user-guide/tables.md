@@ -221,10 +221,12 @@ main_view.readings.source = ListSource(
 )
 ```
 
-The source is a `TableSource`. Two sources come with ComposeUI:
+The source is a `TableSource`. Three sources come with ComposeUI:
 
 - **A `ListSource`** keeps `attrs` records in memory, for rows that the app has already.
 - **A `SqliteSource`** reads the rows from SQLite (see [Rows in SQLite](#rows-in-sqlite)).
+- **A `DataFrameSource`** reads the rows of a pandas, Polars, or PyArrow frame (see
+  [Rows in a dataframe](#rows-in-a-dataframe)).
 
 A source of your own gives:
 
@@ -371,3 +373,41 @@ main_view.readings.source = SqliteSource(
 
 [`largetable.py`](../../src/examples/largetable.py) writes its readings into SQLite in a job,
 then shows them this way.
+
+### Rows in a dataframe
+
+A `DataFrameSource` gives a large table the rows of a dataframe. The frame's library sorts
+and filters the rows with its own expressions, never row by row in Python. It needs the
+`dataframe` extra, which installs [narwhals](https://narwhals-dev.github.io/narwhals/).
+Narwhals reads the frames of pandas, Polars, PyArrow, and other libraries through one API.
+
+```python
+import polars as pl
+
+from composeui.core.dataframesource import DataFrameSource
+
+frame = pl.read_csv("readings.csv")
+main_view.readings.source = DataFrameSource(
+    frame, {"sensor": "Sensor", "temperature": "Temperature"}
+)
+```
+
+- **The headers select, order, and label the columns.** Without them, the table shows every
+  column under its name. The types of the columns come from the frame's schema: a number, a
+  date, or a boolean sorts and filters as one, any other column as text.
+- **A row's id is its position in the frame,** or the value of its `id_column` when the
+  source has one. A lazy frame, such as a Polars `LazyFrame`, needs an `id_column`: its
+  rows have no position of their own. The source then reads only the columns it needs.
+- **Assign a new `frame` to change the rows.** The source emits `changed`, and the table
+  reads the rows again. Assign it on the main thread, for example from a job's result.
+- **The cells are Python values.** A missing value of pandas (`NaN`, `NaT`, or `NA`) is
+  `None`, and a numpy value is the Python value it holds.
+- **The search and the filters ignore the case of a text,** as for a `ListSource`, with
+  two differences:
+  - They compare the text in lower case, which isn't Python's `casefold`: "strasse"
+    doesn't find "Straße".
+  - A `/regex/` filter is in the syntax of the frame's library: Rust's `regex` for Polars,
+    Python's `re` for pandas.
+
+[`uberpickupsframe.py`](../../src/examples/uberpickupsframe.py) shows a million pickups of a
+Polars frame this way.
