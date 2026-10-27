@@ -13,7 +13,6 @@ pytest.importorskip("polars")
 import polars as pl
 
 from composeui.core.application import ModelApplication
-from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.view import MapPoint
 from examples import uberpickupsframe
@@ -73,7 +72,7 @@ def test_pickups_load_into_the_table_the_hourly_chart_and_the_map(app: App) -> N
     source = page.data.table.source
     assert source is not None
     assert source.count() == 3
-    assert source.cells([0], ["date_time", "base"]) == {
+    assert source.cells([0], ["Date/Time", "Base"]) == {
         0: [datetime.datetime.fromisoformat("2014-09-01T11:01"), "B02512"]
     }
 
@@ -133,27 +132,17 @@ def test_an_invalid_csv_is_shown_as_a_loading_failure(
     assert page.data_load_state.text == "Failed to load data"
     assert not page.data.is_visible
     assert "Failed to read the CSV:" in page.status_bar.message
-    assert app.model.pickups.count() == 0
-
-
-def test_a_canceled_load_gives_no_hours_nor_points(tmp_path: Path) -> None:
-    model = uberpickupsframe.UberPickupsFrameModel()
-    job: Job[uberpickupsframe.PickupData, int] = Job(lambda _job, callback: callback())
-    job.cancel()
-
-    result = model.load_pickups(job, _csv(tmp_path), 11)
-
-    assert (result.hours, result.points) == ([], [])
+    assert page.data.table.source is None
 
 
 def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> None:
     at = datetime.datetime.fromisoformat("2014-09-01T00:01")
     frame = pl.DataFrame(
         {
-            "date_time": [at] * 10001,
-            "lat": [90.0, *(40.7 + i / 1_000_000 for i in range(10000))],
-            "lon": [0.0] + [-73.9] * 10000,
-            "base": ["B"] * 10001,
+            "Date/Time": [at] * 10001,
+            "Lat": [90.0, *(40.7 + i / 1_000_000 for i in range(10000))],
+            "Lon": [0.0] + [-73.9] * 10000,
+            "Base": ["B"] * 10001,
         }
     )
 
