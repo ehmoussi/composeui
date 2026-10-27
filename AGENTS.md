@@ -165,7 +165,8 @@ document owns what, and the checks.
 - **Change the docs in the commit that changes the behavior.** A change that users see gets
   a line under "Unreleased" in `CHANGELOG.md`. A new view gets a section
   in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. In
-  `ROADMAP.md`, add it to "Already there" and remove its entry. A new example gets its
+  `ROADMAP.md`, remove its entry, and add it to "Where ComposeUI stands" when it is a new
+  capability. A new example gets its
   section, its overview row, its contents entry, and its screenshots in
   `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/`
   and the docstrings for it, and fix every place.
