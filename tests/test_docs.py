@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).parent.parent
 DOCS = ROOT / "docs"
+#: where the README links to the site and to the other files of the repository
+SITE_URL = "https://ehmoussi.github.io/composeui/"
+REPOSITORY_URL = "https://github.com/ehmoussi/composeui/blob/main/"
 #: the pages that an app developer copies code from
 PAGES = [
     ROOT / "README.md",
@@ -124,8 +127,22 @@ def test_the_user_guide_lists_the_sections_of_its_pages() -> None:
     assert listed == sections
 
 
-def test_each_relative_link_of_the_readme_is_a_file() -> None:
-    # Sphinx checks the links of `docs/`, but the README is read on GitHub and PyPI only
-    links = re.findall(r"\]\(([^)#\s]+)", (ROOT / "README.md").read_text(encoding="utf-8"))
-    missing = [link for link in links if "://" not in link and not (ROOT / link).exists()]
-    assert not missing
+def test_each_link_of_the_readme_to_the_project_has_a_target() -> None:
+    # Sphinx checks the links of `docs/`, but not the README's. PyPI shows the README too, where
+    # a relative link is broken: a page of `docs/` is linked on the site, another file on GitHub.
+    links = re.findall(r"\]\(([^)\s]+)\)", (ROOT / "README.md").read_text(encoding="utf-8"))
+    assert [link for link in links if "://" not in link] == []
+    missing = []
+    for link in links:
+        url, _, anchor = link.partition("#")
+        if url.startswith(SITE_URL):
+            target = DOCS / re.sub(r"\.html$", ".md", url[len(SITE_URL) :])
+        elif url.startswith(REPOSITORY_URL):
+            target = ROOT / url[len(REPOSITORY_URL) :]
+        else:
+            continue
+        text = target.read_text(encoding="utf-8") if target.is_file() else ""
+        anchors = {_anchor(heading) for heading in re.findall(r"^#{1,3} (.+)$", text, re.MULTILINE)}
+        if not target.is_file() or (anchor and anchor not in anchors):
+            missing.append(link)
+    assert missing == []

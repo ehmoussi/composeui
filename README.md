@@ -8,8 +8,8 @@
 A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as typed
 [`attrs`](https://www.attrs.org/) classes. They hold the state of the UI, but no toolkit code: in
 MVVM terms, they are the view-models
-([how ComposeUI maps to MVVM](docs/user-guide/core-concepts.md#how-composeui-maps-to-mvvm)). A
-`Renderer` binds each view to a toolkit widget, which plays the View role of MVVM:
+([how ComposeUI maps to MVVM](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html#how-composeui-maps-to-mvvm)).
+A `Renderer` binds each view to a toolkit widget, which plays the View role of MVVM:
 
 - a desktop window with [Qt](https://pypi.org/project/QtPy/), through `qtpy`;
 - a terminal with [Textual](https://textual.textualize.io/);
@@ -37,14 +37,15 @@ MVVM terms, they are the view-models
 - **Choose ComposeUI** when one app must show as a desktop window, in a terminal, and in a
   browser, or may move from one to another later. It also suits an app whose state must be
   typed, saved as a file, and tested without a UI
-  ([Testing your app](docs/user-guide/testing.md)).
+  ([Testing your app](https://ehmoussi.github.io/composeui/user-guide/testing.html)).
 - **Compared with Streamlit,** the views are explicit classes that keep their state, and
   nothing runs the script again on each change. The same app also runs as a desktop
   window or in a terminal.
 - **Compared with Qt, Textual, or a web framework alone,** the app gives up the widgets
   that only one toolkit has, and keeps one code base for the three.
 - **Not yet** for an app that needs a stable API, or a widget that is still missing, such
-  as a context menu or a wizard (see [`ROADMAP.md`](ROADMAP.md)).
+  as a context menu or a wizard (see
+  [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md)).
 
 ## Installation
 
@@ -128,14 +129,16 @@ that you choose, and leaves the rest of the command line to the app (`--help` li
 
 ### Next steps
 
-1. Read the [core concepts](docs/user-guide/core-concepts.md) of the user guide: views,
-   signals, the model, and studies.
+1. Read the [core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html)
+   of the user guide: views, signals, the model, and studies.
 2. Build a form with its layout and its checks, in
-   [Building views](docs/user-guide/building-views.md).
+   [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html).
 3. Run the example apps, in the order of the
-   [examples guide](docs/examples-guide.md#where-to-start). The first,
-   [`src/examples/pipeform.py`](src/examples/pipeform.py), has forms, radio groups, a check
-   box, a read-only table, checks, and a File menu that saves and opens:
+   [examples guide](https://ehmoussi.github.io/composeui/examples-guide.html#where-to-start).
+   The first,
+   [`src/examples/pipeform.py`](https://github.com/ehmoussi/composeui/blob/main/src/examples/pipeform.py),
+   has forms, radio groups, a check box, a read-only table, checks, and a File menu that
+   saves and opens:
    `uv run python -m examples.pipeform --backend qt`, or `textual`, or `web`.
 
 ## Documentation
@@ -143,18 +146,20 @@ that you choose, and leaves the rest of the command line to the app (`--help` li
 The documentation site, at https://ehmoussi.github.io/composeui/, has the guides below, a
 widget catalog, and the API reference.
 
-- The [user guide](docs/user-guide.md) explains how to build an app: the views, their layout, forms
-  and their checks, the widgets, pages, tabs, dialogs, tables, charts,
-  [maps](docs/user-guide/maps.md), threads, SQLite models, CSV imports, translations, the
-  differences between the backends, testing an app, and a skill for coding agents.
-- The [examples guide](docs/examples-guide.md) says what each example app shows, and how
-  to run it.
-- The [technical guide](docs/technical-guide.md) explains how ComposeUI works inside, and
-  how to develop it: the architecture, how to add a widget or a backend, the tests, and the
-  checks.
-- [`CHANGELOG.md`](CHANGELOG.md) lists the changes of each release.
-- [`ROADMAP.md`](ROADMAP.md) lists the work that is left.
+- The [user guide](https://ehmoussi.github.io/composeui/user-guide.html) explains how to build an app: the
+  views, their layout, forms and their checks, the widgets, pages, tabs, dialogs, tables,
+  charts, [maps](https://ehmoussi.github.io/composeui/user-guide/maps.html), threads, SQLite models, CSV
+  imports, translations, the differences between the backends, testing an app, and a skill
+  for coding agents.
+- The [examples guide](https://ehmoussi.github.io/composeui/examples-guide.html) says what each example app
+  shows, and how to run it.
+- The [technical guide](https://ehmoussi.github.io/composeui/technical-guide.html) explains how ComposeUI
+  works inside, and how to develop it: the architecture, how to add a widget or a backend,
+  the tests, and the checks.
+- [`CHANGELOG.md`](https://github.com/ehmoussi/composeui/blob/main/CHANGELOG.md) lists the changes of each
+  release.
+- [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md) lists the work that is left.
 
 ## License
 
-MIT, see [`LICENSE`](LICENSE).
+MIT, see [`LICENSE`](https://github.com/ehmoussi/composeui/blob/main/LICENSE).
