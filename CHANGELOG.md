@@ -22,6 +22,7 @@ The first release on PyPI.
 - The state of the views saved to a study file and loaded from it.
 - Threads, SQLite models, CSV imports, translations, and tests of an app that need no backend.
 - A skill for coding agents that write a ComposeUI app.
+- `composeui.__version__`, the version of the installed package.
 
 [Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/ehmoussi/composeui/releases/tag/v0.1.0
