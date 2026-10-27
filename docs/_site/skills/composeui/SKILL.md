@@ -110,6 +110,11 @@ the option for the web (extra `web`, the default).
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.
   Define the views at module level.
+- **Test the views without a backend.** Build the app with `Application(build_main_view=...)`
+  (or `ModelApplication`) from `composeui.core.application`, not the main view alone, so
+  that callbacks get `main_view` and `model`. Set a field, emit its signal, and check the
+  fields; call `main_view.jobs.wait()` for the jobs' results.
+  See https://ehmoussi.github.io/composeui/user-guide/testing.html
 - **Run a code example before you answer with it.** The API moves: check each name against
   `composeui.core.view` or the widget catalog before you use it.
 
