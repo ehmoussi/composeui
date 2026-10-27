@@ -4366,7 +4366,9 @@ TValue = TypeVar("TValue")
 class ValuesGroupMixin(Generic[TValue]):
     """The fields of one choice among `values`: the choices by label, and the `value` selected.
 
-    `value` is None, or one of `values`; new `values` without it clear it.
+    `value` is None, or one of `values`; new `values` without it clear it. None selects
+    nothing, unless None is one of `values`, such as a filter's "All": then it selects that
+    choice, shown and saved as any other.
     """
 
     def _check_value(self, _attribute: attrs.Attribute[Any], value: Optional[TValue]) -> None:
@@ -4426,14 +4428,18 @@ class ValuesGroupMixin(Generic[TValue]):
         ]
 
     def serialize_value(self) -> Optional[str]:
-        """Serialize `value` as its key: its label could be in another language on load."""
-        if self.value is None:
-            return None
-        # one of `values`, as its validator keeps it
+        """Serialize `value` as its key: its label could be in another language on load.
+
+        None for nothing selected: a None `value` that isn't one of `values`.
+        """
+        # one of `values`, as its validator keeps it, unless it's None
         return next(
-            self._value_key(index, candidate)
-            for index, candidate in enumerate(self.values.values())
-            if candidate == self.value
+            (
+                self._value_key(index, candidate)
+                for index, candidate in enumerate(self.values.values())
+                if candidate == self.value
+            ),
+            None,
         )
 
     def deserialize_value(self, key: Optional[str]) -> Optional[TValue]:
