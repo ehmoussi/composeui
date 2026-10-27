@@ -2178,6 +2178,39 @@ def test_a_state_file_opens_in_every_new_session(
     assert all('value="Bob"' in page for page in pages)
 
 
+@pytest.mark.parametrize("with_study", [False, True])
+def test_each_new_session_emits_loaded_once_with_or_without_a_study(
+    with_study: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    argv = ["webhello"]
+    if with_study:
+        study = HelloMainView()
+        study.form.name.text = "Bob"
+        state_file = tmp_path / "study.hello"
+        study.save_state(state_file)
+        argv += ["-f", str(state_file)]
+    monkeypatch.setattr("sys.argv", argv)
+    served: list[Starlette] = []
+    monkeypatch.setattr(
+        "composeui.webcore.webapplication.uvicorn.run",
+        lambda app, **_: served.append(app),
+    )
+    names: list[str] = []
+
+    class LoadedApp(_HelloApp):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            super().setup_session(main_view)
+            main_view.loaded.connect(lambda: names.append(main_view.form.name.text))
+
+    app = LoadedApp()
+    app.run()
+
+    with _Browser(served[0]) as alice, _Browser(served[0]) as bob:
+        alice.get("/")
+        bob.get("/")
+    assert names == (["Bob", "Bob"] if with_study else ["", ""])  # once per session
+
+
 def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
     views: list[PipeCatalogueMainView] = []
 

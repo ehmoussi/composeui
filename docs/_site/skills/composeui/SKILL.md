@@ -84,7 +84,10 @@ the option for the web (extra `web`, the default).
   field must be serializable, or carry the `OMIT` metadata. Text that the code sets, not
   the user, carries `UI_TEXT`. A new or removed field needs no new version. To rename or
   move a field, raise the main view's `state_version`, and upgrade an older study in
-  `migrate_state`. Older versions of the app then refuse the new studies.
+  `migrate_state`. Older versions of the app then refuse the new studies. A load sets the
+  fields without emitting their signals: connect `MainView.loaded`, emitted as the app
+  starts and after New and Open, to give again what a study doesn't hold, such as a large
+  table's source.
   See https://ehmoussi.github.io/composeui/user-guide/building-views.html#saving-and-loading-state
 - **Run slow work in jobs** (`main_view.jobs.start(work, *args)`), not in a callback: a
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,

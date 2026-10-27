@@ -6,6 +6,13 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `MainView.loaded`, a signal emitted once the views and the model's data are in place: as
+  the app starts, with the study of `-f` or a new one, and after New and Open. An app gives
+  again there what a study doesn't hold, such as the source of a large table, which a load
+  left as it was.
+
 ### Fixed
 
 - A large table of a `DataFrameSource` whose `id_column` is also one of its columns shows its

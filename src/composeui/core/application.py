@@ -224,7 +224,9 @@ class Application(Generic[MainViewT]):
         if self._args.language is not None:
             self.main_view.set_language(self._args.language)
         if self._args.f is not None:
-            open_study(self.main_view, self._study_model(), self._args.f)
+            open_study(self.main_view, self._study_model(), self._args.f)  # emits `loaded`
+        else:
+            self.main_view.loaded.emit()  # the study the app starts with is in place too
         self.main_view.apply_arguments(self._args)
 
     def _study_model(self) -> Model | None:

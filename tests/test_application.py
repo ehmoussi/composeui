@@ -179,6 +179,25 @@ def test_an_app_s_own_options_apply_once_its_study_is_open(
     assert (app.main_view.count_then, app.main_view.start) == (7, 3)
 
 
+@pytest.mark.parametrize("with_study", [False, True])
+def test_an_app_emits_loaded_once_as_it_starts_with_or_without_a_study(
+    with_study: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    argv = ["start"]
+    if with_study:
+        state_file = tmp_path / "a.start"
+        _StartMainView(start=7).save_state(state_file)
+        argv += ["-f", str(state_file)]
+    monkeypatch.setattr("sys.argv", argv)
+    app = Application(build_main_view=_StartMainView)
+    starts: list[int] = []
+    app.main_view.loaded.connect(lambda: starts.append(app.main_view.start))
+
+    app.run()
+
+    assert starts == [7 if with_study else 0]  # once, with the study in place
+
+
 def test_an_app_s_own_options_are_in_its_help(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

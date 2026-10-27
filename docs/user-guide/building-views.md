@@ -320,6 +320,44 @@ chart. Saving, opening, and New leave the rest alone:
   [list of views](organizing-the-window.md#a-list-of-views), which belong to the model.
 - **The language** shown, which the main view or `--language` sets.
 
+The main view emits `loaded` once the views and the model's data are in place: once as the
+app starts, after its setup, with the study that `-f FILE` opens or with a new one, then
+after each New and Open. On the web, each session emits it as it starts. Connect `loaded` to
+give again what a study doesn't hold, from the fields that it does hold, such as a filter:
+
+```python
+from composeui.core.view import (
+    ListSource,
+    MainView,
+    SliderView,
+    SourceTableView,
+    child,
+    define_view,
+)
+
+
+@define_view
+class ReadingsMainView(MainView):
+    extension = ".readings"
+
+    threshold: SliderView = child(SliderView, maximum=10)
+    above: SourceTableView = child(SourceTableView)  # the readings above the threshold
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loaded.connect(self._show_above)
+
+    def _show_above(self, *, model: ReadingsModel) -> None:
+        records = [r for r in model.readings if r.value > self.threshold.value]
+        self.above.source = ListSource(Reading, {"sensor": "Sensor"}, records)
+```
+
+A load sets the fields without emitting their signals, such as the slider's `value_changed`,
+so a callback connected only to those doesn't run. On New and Open, a model reacts in
+`Model.loaded`, which runs first, so a callback of `loaded` reads the data of the study.
+The app's own command-line options apply after `loaded` (see
+[Command-line options of your own](#command-line-options-of-your-own)).
+
 ### Versions of the state
 
 A study file holds the state of the views, and two versions: the version of ComposeUI's

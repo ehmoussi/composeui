@@ -60,7 +60,10 @@ class Model:
         """
 
     def loaded(self) -> None:
-        """React once New or Open has put both the views and the data in place."""
+        """React once New or Open has put both the views and the data in place.
+
+        `MainView.loaded` is emitted next, so the views' callbacks read the data in place.
+        """
 
     def close(self) -> None:
         """Release what the data holds (files, connections); the app is done with it."""
