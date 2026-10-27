@@ -194,6 +194,11 @@ def test_a_series_has_one_y_per_x() -> None:
         Series(name="Pressure", x=[0, 1], y=[2])
 
 
+def test_a_bar_series_puts_each_value_in_its_chart_s_category_in_order() -> None:
+    series = Series.bars("Pickups", (count for count in [3, 0, 5]))  # any iterable
+    assert (series.name, series.x, series.y) == ("Pickups", [0.0, 1.0, 2.0], [3.0, 0.0, 5.0])
+
+
 def test_a_series_is_drawn_as_its_chart_unless_it_says_otherwise() -> None:
     line = Series(name="Model", x=[0], y=[0])
     dots = Series(name="Measured", x=[0], y=[0], kind=ChartKind.SCATTER)

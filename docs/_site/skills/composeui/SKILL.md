@@ -99,6 +99,10 @@ the option for the web (extra `web`, the default).
   prior state, or returns `False` unchanged if already running. `task.cancel()` asks only its
   current run to stop. Dropping the study's jobs resets all tasks and discards old outcomes.
   The worker's annotations type the task's result, progress, and start arguments.
+- **Build a bar chart's series with `Series.bars(name, values)`**: a bar per value, in the
+  chart's `categories` in order. With the `dataframe` extra, `series_of(frame, x, y)` and
+  `points_of(frame, latitude, longitude)` from `composeui.core.dataframesource` read a
+  series or a map's points from a frame's columns, leaving out the rows missing a value.
 - **Use `MapView` for geographic points**, not `ChartView`. `MapPoint(latitude=..., longitude=...)`
   takes degrees as keyword arguments within Web Mercator bounds. `center=None` and `zoom=None`
   fit points automatically, including data loaded later. Each explicit value overrides its

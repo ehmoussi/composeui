@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from composeui.core.application import run
-from composeui.core.dataframesource import DataFrameSource
+from composeui.core.dataframesource import DataFrameSource, points_of
 from composeui.core.model import Model
 from composeui.core.view import (
     ChartKind,
@@ -35,25 +35,14 @@ def read_pickups(url: str) -> pl.DataFrame:
 
 
 def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
-    counts = frame.group_by(pl.col("Date/Time").dt.hour().alias("hour")).len()
-    pickups = [0] * 24
-    for hour, count in counts.iter_rows():
-        if hour is not None:
-            pickups[hour] = count
-    return pickups
+    counts = dict(frame.get_column("Date/Time").dt.hour().drop_nulls().value_counts().iter_rows())
+    return [counts.get(hour, 0) for hour in range(24)]
 
 
 def pickup_points(frame: pl.DataFrame, at_hour: int) -> list[MapPoint]:
     at = frame.filter(pl.col("Date/Time").dt.hour() == at_hour)
-    stride = max(1, (at.height + 9999) // 10000)
-    rows = (
-        at.gather_every(stride)
-        .filter(pl.col("Lat").is_between(-85.05112878, 85.05112878))
-        .filter(pl.col("Lon").is_between(-180, 180))
-        .head(10000)
-        .select("Lat", "Lon")
-    )
-    return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows.iter_rows()]
+    # at most 10,000 pickups, spread over the hour
+    return points_of(at.gather_every(max(1, (at.height + 9999) // 10000)), "Lat", "Lon")
 
 
 class UberPickupsFrameModel(Model):
@@ -108,32 +97,31 @@ class UberPickupsFrameMainView(MainView):
     def connect_model(self, model: UberPickupsFrameModel) -> None:
         self.loader = self.jobs.task(model.load_pickups)
         self.loader.changed.connect(self._show_loading)
+        self.loader.finished.connect(self._show_pickups)
+        self.loader.failed.connect(self._show_failure)
         self.show_raw_data.toggled.connect(self._show_raw_data)
         self.loader.start(DATA_URL)
 
     def _show_raw_data(self) -> None:
         self.data.table.is_visible = self.show_raw_data.is_checked
 
-    def _show_loading(self, model: UberPickupsFrameModel) -> None:
-        loader = self.loader
-        self.data_load_status.is_visible = loader.is_running
-        self.data.table.is_visible = self.show_raw_data.is_checked
-        self.data.is_visible = loader.has_result
-        if loader.result is not None:
-            model.frame = loader.result
-            self.data.table.source = DataFrameSource(model.frame)
-            self.data.pickups_chart.series = [
-                Series(name="Pickups", x=list(range(24)), y=pickups_by_hour(model.frame))
-            ]
-            self.data.pickups_map.points = pickup_points(model.frame, self.data.slider_hours.value)
-            self.data_load_state.text = "Done! (using Polars)"
-        else:
+    def _show_loading(self) -> None:
+        # a run starting, or New and Open dropping its pickups
+        self.data_load_status.is_visible = self.loader.is_running
+        self.data.is_visible = self.loader.has_result
+        if not self.loader.has_result and self.loader.error is None:
             self.data_load_state.text = "Loading data..."
-            if loader.error is not None:
-                self.data_load_state.text = "Failed to load data"
-                self.status_bar.show_message(
-                    self.tr("Failed to read the CSV: {error}").format(error=loader.error)
-                )
+
+    def _show_pickups(self, frame: pl.DataFrame, model: UberPickupsFrameModel) -> None:
+        model.frame = frame
+        self.data.table.source = DataFrameSource(frame)
+        self.data.pickups_chart.series = [Series.bars("Pickups", pickups_by_hour(frame))]
+        self.data.pickups_map.points = pickup_points(frame, self.data.slider_hours.value)
+        self.data_load_state.text = "Done! (using Polars)"
+
+    def _show_failure(self, error: Exception) -> None:
+        self.data_load_state.text = "Failed to load data"
+        self.status_bar.show_message(self.tr("Failed to read the CSV: {error}").format(error=error))
 
 
 def main() -> None:

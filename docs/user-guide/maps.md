@@ -28,6 +28,10 @@ class PickupsMainView(MainView):
 - **Coordinates.** `MapPoint(latitude=..., longitude=...)` takes degrees as keyword arguments.
   Longitude must be between -180 and 180. Latitude must be between -85.05112878 and
   85.05112878, the range of a Web Mercator map. Non-finite coordinates are refused.
+- **Points of a dataframe.** With the `dataframe` extra, `points_of(frame, latitude,
+  longitude)` from `composeui.core.dataframesource` gives the points of two columns of a
+  pandas, Polars, or PyArrow frame. It leaves out the rows missing a coordinate, or out of
+  the map's range.
 - **Automatic fitting.** `center` and `zoom` default to `None`. The map fits the points
   with 32 pixels of padding on each side and fits again when points or the widget size change.
   Points across the date line fit together. With no points, the map shows the world around

@@ -1620,6 +1620,10 @@ BAR_GROUP_WIDTH = 0.8
 _COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
 
 
+#: the latitude of a Web Mercator map's edges, north and south, in degrees
+MAP_LATITUDE_LIMIT = 85.05112878
+
+
 @attrs.frozen(kw_only=True)
 class MapPoint:
     """A geographic position, given as latitude and longitude in degrees.
@@ -1629,7 +1633,10 @@ class MapPoint:
 
     latitude: float = attrs.field(
         converter=float,
-        validator=[attrs.validators.ge(-85.05112878), attrs.validators.le(85.05112878)],
+        validator=[
+            attrs.validators.ge(-MAP_LATITUDE_LIMIT),
+            attrs.validators.le(MAP_LATITUDE_LIMIT),
+        ],
     )
     longitude: float = attrs.field(
         converter=float, validator=[attrs.validators.ge(-180), attrs.validators.le(180)]
@@ -1701,9 +1708,9 @@ class MapView(View):
                 if span_x == 0 and min(ys) == max(ys)
                 else MapPoint(
                     latitude=max(
-                        -85.05112878,
+                        -MAP_LATITUDE_LIMIT,
                         min(
-                            85.05112878,
+                            MAP_LATITUDE_LIMIT,
                             math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * middle_y)))),
                         ),
                     ),
@@ -1771,6 +1778,12 @@ class Series:
     #: whether its line holds each value until the next point, in steps, e.g. the jobs
     #: running over time; with `fill`, a step area. Dots are drawn as they are
     step: bool = False
+
+    @classmethod
+    def bars(cls, name: str, values: Iterable[float]) -> Series:
+        """Make a `BAR` chart's series: a bar per value, in its chart's `categories` in order."""
+        heights = list(values)
+        return cls(name, list(range(len(heights))), heights)
 
 
 class LineStyle(enum.Enum):

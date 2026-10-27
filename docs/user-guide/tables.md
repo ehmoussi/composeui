@@ -409,5 +409,8 @@ main_view.readings.source = DataFrameSource(
   - A `/regex/` filter is in the syntax of the frame's library: Rust's `regex` for Polars,
     Python's `re` for pandas.
 
+The same module reads a chart's series ([`series_of`](charts.md#kinds-of-chart)) and a map's
+points ([`points_of`](maps.md#coordinates-points-and-viewport)) from a frame's columns.
+
 [`uberpickupsframe.py`](../../src/examples/uberpickupsframe.py) shows a million pickups of a
 Polars frame this way.

@@ -136,7 +136,9 @@ It shows:
   and filters a million pickups;
 - a [job](user-guide/threads.md) that reads the CSV alone: its result, a frame, becomes the
   table's source on the main thread;
-- the same chart, map, and checkbox as [Uber pickups](#uber-pickups).
+- the same chart, map, and checkbox as [Uber pickups](#uber-pickups): the chart's series made
+  with [`Series.bars`](user-guide/charts.md#kinds-of-chart), the map's points read from the
+  frame with [`points_of`](user-guide/maps.md#coordinates-points-and-viewport).
 
 ## Pipe form
 
