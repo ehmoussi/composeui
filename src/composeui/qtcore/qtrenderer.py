@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import sys
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
@@ -1791,6 +1792,19 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         layout.addLayout(inset, 1 if expands else 0)
 
 
+#: macOS shows no title on a message box (Apple's guidelines): its bold text is the title there,
+#: and its informative text the message
+_TITLE_AS_TEXT = sys.platform == "darwin"
+
+
+def _show_dialog_text(box: QMessageBox, title: str, text: str) -> None:
+    """Show a dialog's title and text, the title as the bold text where it has no title."""
+    title_as_text = _TITLE_AS_TEXT and title != ""
+    box.setWindowTitle(title)  # macOS ignores it
+    box.setText(title if title_as_text else text)
+    box.setInformativeText(text if title_as_text else "")
+
+
 class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
     """A modal message box, shown without blocking: its answer reaches the view later."""
 
@@ -1804,7 +1818,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
             {
                 "is_visible": self._refresh_dialog_visible,
                 "title": self._refresh_dialog_title,
-                "text": self._refresh_text,
+                "text": self._refresh_dialog_text,
                 "kind": self._refresh_kind,
                 "accept_text": self._refresh_accept_text,
                 "reject_text": self._refresh_reject_text,
@@ -1843,12 +1857,13 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         rendered_object.setVisible(value)
 
     @staticmethod
-    def _refresh_dialog_title(_view: DialogView, rendered_object: QMessageBox, value: str) -> None:
-        rendered_object.setWindowTitle(value)
+    def _refresh_dialog_title(view: DialogView, rendered_object: QMessageBox, value: str) -> None:
+        # the view's field still holds the previous value: it's set once the refresh is over
+        _show_dialog_text(rendered_object, value, view.text)
 
     @staticmethod
-    def _refresh_text(_view: DialogView, rendered_object: QMessageBox, value: str) -> None:
-        rendered_object.setText(value)
+    def _refresh_dialog_text(view: DialogView, rendered_object: QMessageBox, value: str) -> None:
+        _show_dialog_text(rendered_object, view.title, value)
 
     def _refresh_kind(
         self, _view: DialogView, rendered_object: QMessageBox, value: DialogKind

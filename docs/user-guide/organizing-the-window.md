@@ -409,7 +409,8 @@ which has only one answer.
 A dialog is not study data: saving, opening, and New leave it alone.
 
 Qt shows a `QMessageBox`, Textual a modal screen, and the web a modal `<dialog>`, wherever
-the view is in the tree. In [`src/examples/pipeform.py`](../../src/examples/pipeform.py), Reset
+the view is in the tree. On macOS, a message box has no title: Qt shows the `title` as its
+bold text, and the `text` under it. In [`src/examples/pipeform.py`](../../src/examples/pipeform.py), Reset
 Dimensions in the Pipe menu asks for a confirmation first.
 
 ### Form dialogs

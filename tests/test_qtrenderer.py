@@ -14,6 +14,7 @@ import datetime
 import gc
 import json
 import math
+import sys
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -1801,13 +1802,19 @@ def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
     parent = box.parentWidget()
     assert parent is not None
     assert parent.window() is window
-    assert box.windowTitle() == "Clear the name"
-    assert box.text() == "The name will be lost."
+    # macOS shows no title on a message box: its bold text is the title there
+    shown = (
+        (box.text(), box.informativeText())
+        if sys.platform == "darwin"
+        else (box.windowTitle(), box.text())
+    )
+    assert shown == ("Clear the name", "The name will be lost.")
     buttons = _shown_buttons(box)
     assert list(buttons) == ["Clear", "Cancel"]
 
     qtbot.keyClick(box, Qt.Key.Key_Escape)
-    assert not box.isVisible()
+    # macOS clicks the Escape button with an animation, later
+    qtbot.waitUntil(lambda: not box.isVisible())
     assert not view.confirm_clear.is_visible
     assert view.name.text == "Ada"
 
@@ -1822,6 +1829,19 @@ def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
     assert view.name.text == ""
 
 
+def test_a_dialog_s_title_is_its_bold_text_where_a_message_box_has_no_title(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("composeui.qtcore.qtrenderer._TITLE_AS_TEXT", True)  # as on macOS
+    view, _window, box = _dialog_window(qtbot)
+
+    view.confirm_clear.open()
+    assert (box.text(), box.informativeText()) == ("Clear the name", "The name will be lost.")
+
+    view.confirm_clear.title = ""  # then the message is the bold text
+    assert (box.text(), box.informativeText()) == ("The name will be lost.", "")
+
+
 def test_a_message_has_one_button_and_escape_or_closing_accepts_it(qtbot: QtBot) -> None:
     view, _window, box = _dialog_window(qtbot)
     dialog = view.confirm_clear
@@ -1830,7 +1850,7 @@ def test_a_message_has_one_button_and_escape_or_closing_accepts_it(qtbot: QtBot)
     dialog.open()
     assert list(_shown_buttons(box)) == ["Clear"]
     qtbot.keyClick(box, Qt.Key.Key_Escape)
-    assert view.name.text == ""
+    qtbot.waitUntil(lambda: view.name.text == "")  # at once, or after macOS's animation
 
     view.name.text = "Ada"
     dialog.open()
