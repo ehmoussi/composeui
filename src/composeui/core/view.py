@@ -1086,6 +1086,10 @@ class MainView(View):
     file_view: FileView = attrs.field(factory=FileView, metadata={OMIT: True})
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
+    #: emitted once the views and the model's data are in place: as the app starts, with the
+    #: study of ``-f`` or a new one, and after New and Open (after `Model.loaded`). The app
+    #: gives again then what a study doesn't hold, such as the source of a large table
+    loaded: SignalNoArgs = attrs.Factory(SignalNoArgs)
     #: functions run in threads, their results given back on the main thread
     jobs: Jobs = attrs.field(
         default=attrs.Factory(Jobs, takes_self=True),

@@ -45,6 +45,7 @@ def new_study(main_view: MainView, model: Model | None) -> None:
     if model is not None:
         model.new()
         model.loaded()
+    main_view.loaded.emit()
 
 
 def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
@@ -80,6 +81,7 @@ def open_study(
         main_view.load_state(path)
         if model is not None:
             model.loaded()
+        main_view.loaded.emit()
         return
     invalid = f"it isn't a valid {main_view.extension} file"
     try:
@@ -119,3 +121,4 @@ def open_study(
     main_view.load_state_data(data)
     main_view.state_filepath = path
     model.loaded()
+    main_view.loaded.emit()

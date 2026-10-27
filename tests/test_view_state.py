@@ -10,10 +10,12 @@ import math
 from pathlib import Path
 from typing import Any, Optional, Union
 
+import attrs
 import pytest
 from attrs import Factory, evolve
 
-from composeui.core.application import _add_reference_to_signals
+from composeui.core.application import ModelApplication, _add_reference_to_signals
+from composeui.core.model import Model
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
@@ -27,6 +29,7 @@ from composeui.core.view import (
     InputView,
     InvalidStateError,
     LabelView,
+    ListSource,
     MainView,
     MetricView,
     ProgressBarView,
@@ -35,9 +38,11 @@ from composeui.core.view import (
     SelectionMode,
     Series,
     SliderView,
+    SourceTableView,
     TreeNode,
     TreeView,
     _is_omitted_type,
+    child,
     define_view,
     format_date,
     parse_date,
@@ -870,3 +875,64 @@ def test_load_state_restores_a_table_selection_with_its_rows(tmp_path: Path) -> 
     assert loaded.tables.wide.selection_mode is SelectionMode.MULTIPLE
     assert loaded.tables.wide.rows == [["A"], ["B"], ["C"]]
     assert loaded.tables.wide.selected_rows == [0, 2]
+
+
+@attrs.frozen
+class Reading:
+    sensor: str
+    value: int
+
+
+class ReadingsModel(Model):
+    def __init__(self) -> None:
+        self.readings: list[Reading] = []
+
+    def new(self) -> None:
+        self.readings = [Reading("a", 1), Reading("b", 5), Reading("c", 9)]
+
+    def loaded(self) -> None:
+        if not self.readings:  # an opened study's: the data the model would read from it
+            self.new()
+
+
+@define_view
+class ReadingsMainView(MainView):
+    extension = ".readings"
+
+    threshold: SliderView = child(SliderView, maximum=10)
+    #: the readings above the threshold: its source is never saved, the app gives it again
+    above: SourceTableView = Factory(SourceTableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loaded.connect(self._show_above)
+
+    def _show_above(self, *, model: ReadingsModel) -> None:
+        records = [r for r in model.readings if r.value > self.threshold.value]
+        self.above.source = ListSource(Reading, {"sensor": "Sensor"}, records)
+
+
+def _sensors(view: ReadingsMainView) -> list[object]:
+    source = view.above.source
+    assert source is not None
+    ids = source.ordered_ids(None, "", {})
+    return [cells[0] for cells in source.cells(ids, ["sensor"]).values()]
+
+
+def test_loaded_lets_the_app_give_again_what_new_and_open_leave_out(tmp_path: Path) -> None:
+    app = ModelApplication(build_main_view=ReadingsMainView, build_model=ReadingsModel)
+    view = app.main_view
+    view.file_menu.new.triggered.emit()
+    assert _sensors(view) == ["a", "b", "c"]  # after the model's data is in place
+    view.threshold.value = 4
+    view.file_view.filepath = tmp_path / "high.readings"
+    view.file_menu.save.triggered.emit()
+    view.file_menu.new.triggered.emit()
+    assert _sensors(view) == ["a", "b", "c"]
+
+    other = ModelApplication(build_main_view=ReadingsMainView, build_model=ReadingsModel)
+    other.main_view.file_view.filepath = tmp_path / "high.readings"
+    other.main_view.file_menu.open_file.triggered.emit()
+
+    assert other.main_view.threshold.value == 4
+    assert _sensors(other.main_view) == ["b", "c"]
