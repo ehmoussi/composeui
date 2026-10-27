@@ -45,6 +45,7 @@ Each document has one audience:
 | `docs/api/*.md` | App developers who need the exact API | One page per module, built from its docstrings by `automodule` |
 | `docs/_site/llms.txt` | Language models | The site's `llms.txt`: a summary and one link with a one-line description per page of the site, which `html_extra_path` (`docs/_site/`) copies to the site root |
 | `docs/_site/skills/composeui/SKILL.md` | Coding agents that write a ComposeUI app | The skill that users install: the rules for an app's code, a minimal app, and links to the site |
+| `CHANGELOG.md` | Users who upgrade | The changes that users see, one section per release, with "Unreleased" at the top |
 | `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |

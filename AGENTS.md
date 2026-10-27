@@ -155,7 +155,8 @@ Load the `documentation-style` skill before you write or review documentation: `
 `docs/`, docstrings, `ROADMAP.md`, this file, or a skill. It holds the writing rules, which
 document owns what, and the checks.
 
-- **Change the docs in the commit that changes the behavior.** A new view gets a section
+- **Change the docs in the commit that changes the behavior.** A change that users see gets
+  a line under "Unreleased" in `CHANGELOG.md`. A new view gets a section
   in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. In
   `ROADMAP.md`, add it to "Already there" and remove its entry. A new example gets its
   section, its overview row, its contents entry, and its screenshots in
