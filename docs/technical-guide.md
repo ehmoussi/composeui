@@ -31,6 +31,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [Code style](#code-style)
   - [Documentation site](#documentation-site)
   - [Continuous integration](#continuous-integration)
+  - [Release](#release)
 
 ## Project layout
 
@@ -568,3 +569,40 @@ job. That job also lints the Python files of `docs/`.
 
 On a push to `main`, the `pages` job publishes the site that `make docs` built to GitHub
 Pages, at https://ehmoussi.github.io/composeui/. A pull request only builds the site.
+
+### Release
+
+`.github/workflows/release.yml` publishes the package to PyPI with
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/): PyPI trusts the workflow,
+so the repository stores no token.
+
+Once, on [PyPI](https://pypi.org/manage/account/publishing/) and on
+[TestPyPI](https://test.pypi.org/manage/account/publishing/), add a publisher for the
+project `composeui`: the owner `ehmoussi`, the repository `composeui`, the workflow
+`release.yml`, and the environment `pypi` (`testpypi` on TestPyPI). In the repository's
+settings, add the two environments.
+
+To release a version, for example 0.2.0:
+
+1. Try it on TestPyPI: in the repository's Actions, run the Release workflow on `main`. It
+   publishes a development version, such as `0.2.dev12`. Install it in a new environment,
+   its dependencies from PyPI, and run the quickstart:
+
+   ```bash
+   pip install --index-url https://test.pypi.org/simple/ \
+     --extra-index-url https://pypi.org/simple/ "composeui[web]==0.2.dev12"
+   ```
+2. On `main`, give the version's entry in `CHANGELOG.md` its date
+   (`## [0.2.0] - 2026-11-02`), and set the `composeui-version` of the agent skill and its
+   text to the minor version (`0.2`).
+3. Tag the commit, and push the tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+The tag runs the tests again, then builds the package. Before it publishes, the workflow
+checks that the build's version is the tag's, and that `CHANGELOG.md` has a dated entry for
+it; the tests check the skill's version. Then it publishes to PyPI, and creates the tag's
+GitHub release, with the changelog entry as its notes and the built files.
