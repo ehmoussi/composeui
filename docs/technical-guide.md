@@ -351,9 +351,9 @@ another process answers with `HX-Refresh`.
 
 3. Add tests for each backend that exercise the real rendered widgets. See
    [Tests](#tests).
-4. Document the widget in the [user guide](user-guide.md), and update the list of widgets
-   at the top of [`ROADMAP.md`](../ROADMAP.md). When an example app uses the widget,
-   update the [examples guide](examples-guide.md) too.
+4. Document the widget in the [user guide](user-guide.md), and delete its entry in
+   [`ROADMAP.md`](../ROADMAP.md). When an example app uses the widget, update the
+   [examples guide](examples-guide.md) too.
 
 ## Add a backend
 

@@ -46,7 +46,7 @@ Each document has one audience:
 | `docs/_site/llms.txt` | Language models | The site's `llms.txt`: a summary and one link with a one-line description per page of the site, which `html_extra_path` (`docs/_site/`) copies to the site root |
 | `docs/_site/skills/composeui/SKILL.md` | Coding agents that write a ComposeUI app | The skill that users install: the rules for an app's code, a minimal app, and links to the site |
 | `CHANGELOG.md` | Users who upgrade | The changes that users see, one section per release, with "Unreleased" at the top |
-| `ROADMAP.md` | Maintainers | Work left to do, and the design notes for the web backend |
+| `ROADMAP.md` | Maintainers | The goal, where ComposeUI stands, the milestones, the work left to do, and the design notes for the web backend |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
 
@@ -140,9 +140,9 @@ Use only names that exist in `composeui.core`. A comment such as `# a TreeView` 
 stand for an application view that the example does not define.
 
 When the feature is a new widget, the widget catalog lists it from its class docstring.
-Also update the list of widgets
-("Already there: ...") at the top of `ROADMAP.md`, and delete its roadmap entry.
-`ROADMAP.md` keeps only the work that is left. Keep the list of pages in
+Delete its entry in `ROADMAP.md`, which keeps only the work that is left. When the feature
+adds a capability, also update the table in "Where ComposeUI stands" at the top of
+`ROADMAP.md`. Keep the list of pages in
 `docs/user-guide.md` in step with the `##` and `###` headings of the pages.
 
 ## Document an example app
