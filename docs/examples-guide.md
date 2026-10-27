@@ -380,7 +380,7 @@ On the web:
 
 It shows:
 
-- a [CSV URL](user-guide/sqlite-model.md#csv-urls) imported into a typed SQLite table. The
+- a [CSV URL](user-guide/csv-import.md#csv-urls) imported into a typed SQLite table. The
   app downloads the CSV file when it first starts. A saved study keeps the rows, so the
   app does not download them again when the study opens.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a

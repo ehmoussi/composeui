@@ -65,10 +65,9 @@ On the web:
 
 To build an app:
 
-- The [user guide](user-guide.md) explains how to build an app: the views, their layout,
-  forms and their checks, the widgets, pages, tabs, dialogs, tables, charts, maps, threads,
-  SQLite models, translations, what each backend shows, how to test an app, and how to use a coding
-  agent.
+- The [user guide](user-guide.md) explains how to build an app: the views, their layout, forms and
+  their checks, the widgets, pages, tabs, dialogs, tables, charts, maps, threads, SQLite models, CSV
+  imports, translations, what each backend shows, how to test an app, and how to use a coding agent.
 - The [examples guide](examples-guide.md) says what each example app shows, and how to run
   it.
 - The [widget catalog](widgets.md) lists every view that a backend renders.

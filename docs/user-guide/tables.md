@@ -329,7 +329,7 @@ A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQL
 and filters the rows. The table reads only the ids of the rows shown, and the rows that it
 draws. So the rows never all come to Python.
 
-A [`CSVSqliteTable`](sqlite-model.md#importing-csv-data) gives its own source:
+A [`CSVSqliteTable`](csv-import.md#a-csv-table) gives its own source:
 `model.readings.source()` takes the columns and their types from the row class. For
 another table, or a query of your own, give the query and its columns:
 

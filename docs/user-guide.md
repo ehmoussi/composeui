@@ -79,12 +79,15 @@ kind. A record type, such as `Run` or `Pipe`, stands for an `attrs` class of you
   - [Tiles and network access](user-guide/maps.md#tiles-and-network-access)
   - [What each backend draws](user-guide/maps.md#what-each-backend-draws)
 - [Running work in threads](user-guide/threads.md)
+  - [Progress and canceling](user-guide/threads.md#progress-and-canceling)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
+  - [How jobs behave](user-guide/threads.md#how-jobs-behave)
 - [A SQLite model](user-guide/sqlite-model.md)
-  - [Importing CSV data](user-guide/sqlite-model.md#importing-csv-data)
-    - [CSV files](user-guide/sqlite-model.md#csv-files)
-    - [CSV URLs](user-guide/sqlite-model.md#csv-urls)
-    - [CSV dialect detection](user-guide/sqlite-model.md#csv-dialect-detection)
+- [Importing CSV data](user-guide/csv-import.md)
+  - [A CSV table](user-guide/csv-import.md#a-csv-table)
+  - [CSV files](user-guide/csv-import.md#csv-files)
+  - [CSV URLs](user-guide/csv-import.md#csv-urls)
+  - [CSV dialect detection](user-guide/csv-import.md#csv-dialect-detection)
 - [Translating the app](user-guide/translation.md)
   - [Checking the catalogs](user-guide/translation.md#checking-the-catalogs)
 - [Running the app](user-guide/running-the-app.md)
@@ -115,6 +118,7 @@ user-guide/charts
 user-guide/maps
 user-guide/threads
 user-guide/sqlite-model
+user-guide/csv-import
 user-guide/translation
 user-guide/running-the-app
 user-guide/testing
