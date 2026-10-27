@@ -9,7 +9,7 @@ from __future__ import annotations
 from composeui.core.view import (
     ButtonView,
     CheckBoxView,
-    ComboboxView,
+    ComboBoxView,
     DialogView,
     FormView,
     LabelRowInputView,
@@ -35,7 +35,7 @@ class MarkupMainView(MainView):
     note: LabelView = child(LabelView, text=MARKUP)
     run: ButtonView = child(ButtonView, text=MARKUP)
     keep: CheckBoxView = child(CheckBoxView, text=MARKUP)
-    size: ComboboxView[int] = child(ComboboxView, values={MARKUP: 1}, value=1)
+    size: ComboBoxView[int] = child(ComboBoxView, values={MARKUP: 1}, value=1)
     form: NameForm = child(NameForm)
     help: MarkdownView = child(MarkdownView, text=MARKUP)
     notes: TableView = child(TableView, headers=[MARKUP], rows=[[MARKUP]], filterable_columns=[0])

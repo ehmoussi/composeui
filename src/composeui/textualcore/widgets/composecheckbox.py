@@ -5,7 +5,7 @@ from textual.widgets import Checkbox
 from composeui.core.signal import Signal
 
 
-class ComposeCheckbox(Checkbox):
+class ComposeCheckBox(Checkbox):
     """A `Checkbox` re-exposing the user's toggles as a plain composeui `Signal`.
 
     Textual posts `Checkbox.Changed` for any change of `value`, set in code too;
@@ -15,7 +15,7 @@ class ComposeCheckbox(Checkbox):
 
     # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`)
     DEFAULT_CSS = """
-    ComposeCheckbox.-row-invalid {
+    ComposeCheckBox.-row-invalid {
         border: tall $error 60%;
         &:focus {
             border: tall $error;

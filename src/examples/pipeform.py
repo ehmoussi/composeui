@@ -15,7 +15,7 @@ from composeui.core.view import (
     FormView,
     GroupFormView,
     LabelRowCheckBoxView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -83,7 +83,7 @@ class Material(enum.Enum):
 
 
 @define_view
-class MaterialView(LabelRowComboboxView[Material]):
+class MaterialView(LabelRowComboBoxView[Material]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Material")

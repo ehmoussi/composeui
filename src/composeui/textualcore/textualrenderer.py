@@ -73,9 +73,9 @@ from composeui.core.view import (
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composechart import ComposeChart
-from composeui.textualcore.widgets.composecheckbox import ComposeCheckbox
+from composeui.textualcore.widgets.composecheckbox import ComposeCheckBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
-from composeui.textualcore.widgets.composecombobox import ComposeCombobox
+from composeui.textualcore.widgets.composecombobox import ComposeComboBox
 from composeui.textualcore.widgets.composedatatable import ComposeDataFilterTable
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
@@ -1106,7 +1106,7 @@ class CheckBoxViewLike(ViewLike, Protocol):
     toggled: Signal[bool]
 
 
-class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeCheckbox]):
+class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeCheckBox]):
     _marks_invalid = True
 
     def __init__(self, view: CheckBoxViewLike) -> None:
@@ -1120,18 +1120,18 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeCheckbox()
+            self._rendered_object = ComposeCheckBox()
             self._rendered_object.toggled.connect(self._update_checked)
 
     @staticmethod
     def _refresh_text(
-        _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: str
+        _view: CheckBoxViewLike, rendered_object: ComposeCheckBox, value: str
     ) -> None:
         rendered_object.label = Content(value)
 
     @staticmethod
     def _refresh_is_checked(
-        _view: CheckBoxViewLike, rendered_object: ComposeCheckbox, value: bool
+        _view: CheckBoxViewLike, rendered_object: ComposeCheckBox, value: bool
     ) -> None:
         rendered_object.set_checked(value)
 
@@ -1886,8 +1886,8 @@ class TextualRadioGroupRenderer(
         self._view.value_changed.emit(value)
 
 
-class TextualComboboxRenderer(
-    TextualWidgetRenderer[ValuesViewLike[TValue], ComposeCombobox[TValue]], Generic[TValue]
+class TextualComboBoxRenderer(
+    TextualWidgetRenderer[ValuesViewLike[TValue], ComposeComboBox[TValue]], Generic[TValue]
 ):
     _marks_invalid = True
 
@@ -1902,19 +1902,19 @@ class TextualComboboxRenderer(
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeCombobox(self._view.values)
+            self._rendered_object = ComposeComboBox(self._view.values)
             self._rendered_object.value_changed.connect(self._update_value)
 
     @staticmethod
     def _refresh_value(
-        _view: ValuesViewLike[TValue], rendered_object: ComposeCombobox[TValue], value: Any
+        _view: ValuesViewLike[TValue], rendered_object: ComposeComboBox[TValue], value: Any
     ) -> None:
         rendered_object.call_after_refresh(rendered_object.set_value, value)
 
     @staticmethod
     def _refresh_values(
         view: ValuesViewLike[TValue],
-        rendered_object: ComposeCombobox[TValue],
+        rendered_object: ComposeComboBox[TValue],
         values: dict[str, Any],
     ) -> None:
         rendered_object.set_values(values)
@@ -2851,7 +2851,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "button": TextualButtonRenderer,
     "chart": TextualChartRenderer,
     "checkbox": TextualCheckBoxRenderer,
-    "combobox": TextualComboboxRenderer,
+    "combobox": TextualComboBoxRenderer,
     "data_table": TextualDataTableRenderer,
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,

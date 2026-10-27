@@ -6,7 +6,7 @@ from attrs import Factory
 
 from composeui.core.view import (
     FormView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowRadioGroupView,
@@ -71,7 +71,7 @@ class Colour(enum.Enum):
 
 
 @define_view
-class ColourRowView(LabelRowComboboxView[Colour]):
+class ColourRowView(LabelRowComboBoxView[Colour]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Favourite colour"

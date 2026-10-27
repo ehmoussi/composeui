@@ -15,16 +15,16 @@ def _options(values: dict[str, TValue]) -> list[tuple[Content, TValue]]:
     return [(Content(label), value) for label, value in values.items()]
 
 
-class ComposeCombobox(Select[TValue], Generic[TValue]):
+class ComposeComboBox(Select[TValue], Generic[TValue]):
     """A combobox built from a `{label: value}` mapping."""
 
     # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`): the border
     # is the current option's
     DEFAULT_CSS = """
-    ComposeCombobox.-row-invalid > SelectCurrent {
+    ComposeComboBox.-row-invalid > SelectCurrent {
         border: tall $error 60%;
     }
-    ComposeCombobox.-row-invalid:focus > SelectCurrent {
+    ComposeComboBox.-row-invalid:focus > SelectCurrent {
         border: tall $error;
     }
     """

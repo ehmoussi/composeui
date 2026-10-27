@@ -18,7 +18,7 @@ from composeui.core.view import (
     CellWidget,
     Column,
     GroupFormView,
-    LabelRowComboboxView,
+    LabelRowComboBoxView,
     LanguageMenu,
     MainView,
     PageView,
@@ -157,7 +157,7 @@ class Color(enum.Enum):
 
 
 @define_view
-class ColorRowView(LabelRowComboboxView[Color]):
+class ColorRowView(LabelRowComboBoxView[Color]):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Color")
