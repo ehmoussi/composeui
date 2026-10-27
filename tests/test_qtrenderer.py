@@ -3594,7 +3594,7 @@ def test_a_disabled_cell_is_drawn_disabled(qtbot: QtBot) -> None:
         return table.viewport().grab(button).toImage()
 
     enabled = drawn()
-    view.variables.cell_styles = {(0, 3): CellStyle(is_disabled=True)}
+    view.variables.cell_styles = {(0, 3): CellStyle(is_enabled=False)}
 
     assert drawn() != enabled
 

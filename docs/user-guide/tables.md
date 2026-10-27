@@ -149,14 +149,14 @@ table.cell_styles = {
     (0, 0): CellStyle(row_span=2),
     (1, 2): CellStyle(background="#dc2626"),
     (1, 3): CellStyle(background="#fde68a", mark=NodeMark.WARNING),
-    (1, 1): CellStyle(is_disabled=True),
+    (1, 1): CellStyle(is_enabled=False),
 }
 ```
 
 - **`background`** is a color as `#rrggbb`, the same in every theme. The text on it is black
   or white, whichever reads better (`text_color`).
-- **`is_disabled`** grays the cell. The user never edits it, even in an editable column, and
-  its widget is disabled. `check_all` leaves it as it is, and `column_checked` ignores it.
+- **`is_enabled`**, `True` by default, as for a view. `False` grays the cell. The user never
+  edits it, even in an editable column, and its widget is disabled. `check_all` leaves it as it is, and `column_checked` ignores it.
 - **`mark`** shows a `NodeMark` before the text: done, warning, or error. `done_text`,
   `warning_text`, and `error_text` name it, as a tooltip (Qt, the web) and for screen
   readers (the web).

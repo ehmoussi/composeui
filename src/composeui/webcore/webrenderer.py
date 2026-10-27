@@ -2187,11 +2187,11 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         """Render a cell: its mark, then its text, widget or field, as `style` says."""
         widget = self._view.cell_widgets.get(column)
         if widget is not None and column < len(self._view.headers):
-            content = self._widget_html(row, column, text, widget, is_disabled=style.is_disabled)
+            content = self._widget_html(row, column, text, widget, is_disabled=not style.is_enabled)
             # a disabled widget is grayed already
-            look = self._look(attrs.evolve(style, is_disabled=False))
+            look = self._look(attrs.evolve(style, is_enabled=True))
             return Markup("<td{}>{}</td>").format(look, self._marked(style, content))
-        if column not in self._editable_columns() or not self.is_enabled or style.is_disabled:
+        if column not in self._editable_columns() or not self.is_enabled or not style.is_enabled:
             return Markup("<td{}>{}</td>").format(self._look(style), self._marked(style, text))
 
         def post(event: str) -> Markup:
@@ -2227,7 +2227,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     @staticmethod
     def _look(style: CellStyle, classes: str = "") -> Markup:
         """Get the attributes giving a cell its colors, grayed if disabled, and its rows' span."""
-        if style.is_disabled:
+        if not style.is_enabled:
             classes = f"{classes} opacity-50".strip()
         attributes = Markup(' class="{}"').format(classes) if classes else Markup()
         if style.background is not None:
@@ -2370,7 +2370,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             or int(row) not in self._view.shown_rows
             or not column.isdigit()
             or int(column) not in self._editable_columns()
-            or self._view.cell_style(int(row), int(column)).is_disabled
+            or not self._view.cell_style(int(row), int(column)).is_enabled
         ):
             return  # a cell a stale page still shows
         cell = (int(row), int(column))
@@ -2406,7 +2406,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         is_edit = widget.kind in (CellKind.CHECK_BOX, CellKind.COMBOBOX)
         if is_edit and int(column) not in self._view.editable_columns:
             return None
-        if self._view.cell_style(int(row), int(column)).is_disabled:
+        if not self._view.cell_style(int(row), int(column)).is_enabled:
             return None
         return int(row), int(column)
 

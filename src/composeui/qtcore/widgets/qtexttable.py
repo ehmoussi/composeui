@@ -179,7 +179,7 @@ class QTextTableModel(QAbstractTableModel):
         if (
             not index.isValid()
             or index.column() not in self.editable_columns
-            or self.style(index.row(), index.column()).is_disabled
+            or not self.style(index.row(), index.column()).is_enabled
         ):
             return flags
         kind = self.kind(index.column())
@@ -251,7 +251,7 @@ class QCellDelegate(QStyledItemDelegate):
         )
 
     def _is_disabled(self, index: _Index) -> bool:
-        return self._model.style(index.row(), index.column()).is_disabled
+        return not self._model.style(index.row(), index.column()).is_enabled
 
     def initStyleOption(self, option: QStyleOptionViewItem, index: _Index) -> None:  # noqa: N802
         super().initStyleOption(option, index)
@@ -557,7 +557,7 @@ class QTextTableView(QTableView):
         if (
             event.key() == Qt.Key.Key_Space
             and kind in (CellKind.BUTTON, CellKind.LINK)
-            and not self._model.style(index.row(), index.column()).is_disabled
+            and self._model.style(index.row(), index.column()).is_enabled
         ):
             self.cell_clicked.emit(index.row(), index.column())
             return

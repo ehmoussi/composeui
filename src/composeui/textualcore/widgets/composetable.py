@@ -257,7 +257,7 @@ class ComposeTable(DataTable[Text]):
         if style.mark is not None:
             glyph, mark_style = MARKS[style.mark]
             content = Text.assemble((glyph, mark_style), " ", content)
-        if style.is_disabled:
+        if not style.is_enabled:
             content.stylize("dim")
         if style.background is not None:
             content.stylize(f"{style.text_color} on {style.background}")
@@ -335,7 +335,7 @@ class ComposeTable(DataTable[Text]):
             self._toggle(row)
         column = event.style.meta.get("column", -1) - (1 if self._is_multiple else 0)
         kind = self._kind(column)
-        if self._style(row, column).is_disabled:
+        if not self._style(row, column).is_enabled:
             return
         if kind in (CellKind.BUTTON, CellKind.LINK) and event.chain == 1:
             self.cell_clicked.emit(row, column)
@@ -382,7 +382,7 @@ class ComposeTable(DataTable[Text]):
             for column in set(self.editable_columns)
             if 0 <= column < len(self._headers)
             and self._kind(column) is kind
-            and (row is None or not self._style(row, column).is_disabled)
+            and (row is None or self._style(row, column).is_enabled)
         )
 
     def _set_cell(self, row: int, column: int, text: str) -> None:
