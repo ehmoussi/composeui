@@ -43,13 +43,19 @@ MVVM terms, they are the view-models
   window or in a terminal.
 - **Compared with Qt, Textual, or a web framework alone,** the app gives up the widgets
   that only one toolkit has, and keeps one code base for the three.
-- **Not yet** for an app that needs a stable API or a PyPI release, or a widget that is
-  still missing, such as a context menu or a wizard (see [`ROADMAP.md`](ROADMAP.md)).
+- **Not yet** for an app that needs a stable API, or a widget that is still missing, such
+  as a context menu or a wizard (see [`ROADMAP.md`](ROADMAP.md)).
 
 ## Installation
 
-Requires Python >= 3.9. ComposeUI is not yet published to PyPI. Install it with
-[uv](https://docs.astral.sh/uv/), with the extras of the backends that you want:
+Requires Python >= 3.9. Install ComposeUI from PyPI with the extras of the backends that you
+want, for example the web and Qt backends:
+
+```bash
+uv add "composeui[web,pyside6]"     # or: pip install "composeui[web,pyside6]"
+```
+
+Each extra adds a backend or a feature:
 
 | Extra | Installs | For |
 | --- | --- | --- |
@@ -71,12 +77,6 @@ uv sync --all-extras
 To choose extras, give them all in one command, for example
 `uv sync --extra web --extra pyside6`. Each `uv sync` removes the extras that it does not
 name, so a second `uv sync --extra tui` would remove the web and Qt backends.
-
-To use ComposeUI in a project of your own, add it from GitHub:
-
-```bash
-uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui"
-```
 
 ## Quickstart
 

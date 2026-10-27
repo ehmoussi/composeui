@@ -2,7 +2,7 @@
 
 > ComposeUI is a small MVVM layer for building UIs in Python. You write the views once, as typed `attrs` classes, and a renderer binds each view to a widget of a backend: Qt (desktop, through `qtpy`), Textual (terminal), or the web (Starlette and htmx). Signals carry the events between the views, the model, and the app. Early-stage (pre-alpha): the API is small and still moving.
 
-`composeui.core` holds the views, signals, and application, and imports no backend. A study file saves the views' state as JSON (`cattrs`). Python 3.9 and later; install from GitHub with `uv add "composeui[web,pyside6] @ git+https://github.com/ehmoussi/composeui"`.
+`composeui.core` holds the views, signals, and application, and imports no backend. A study file saves the views' state as JSON (`cattrs`). Python 3.9 and later; install from PyPI with `pip install "composeui[web,pyside6]"`.
 
 ## Start here
 
