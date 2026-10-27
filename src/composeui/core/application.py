@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import functools
 import importlib
+import importlib.util
 import inspect
 import logging
 import os
@@ -327,8 +328,9 @@ def run(
     Without ``--backend``, on the one `BACKEND_VARIABLE` names, else on `default_backend`.
     The rest of the command line goes to the backend's app (``-f``, ``--language``,
     ``--port``, ``--help``...). Only that backend is imported, so the others' extras
-    needn't be installed. With `build_model`, the app has
-    a model, wired to its main view by `setup_model`: once, or per session on the web.
+    needn't be installed; without its own, it stops and names the extra. With `build_model`,
+    the app has a model, wired to its main view by `setup_model`: once, or per session on the
+    web.
     """
     if build_model is None and setup_model is not None:
         msg = "setup_model needs a model: pass build_model too"
@@ -344,7 +346,18 @@ def run(
     # inherits its environment, and so the backend
     sys.argv = [sys.argv[0], *rest]
     os.environ[BACKEND_VARIABLE] = args.backend
-    module = importlib.import_module(backends[args.backend].value.applications)
+    backend = backends[args.backend].value
+    try:
+        module = importlib.import_module(backend.applications)
+    except ImportError:
+        # only the extra not installed: another import error is a bug, shown as it is
+        missing = [name for name in backend.packages if importlib.util.find_spec(name) is None]
+        if not missing:
+            raise
+        parser.error(
+            f"the {args.backend} backend needs {', '.join(missing)}, from the "
+            f'{backend.extra} extra: pip install "composeui[{backend.extra}]"'
+        )
     app: Application[MainViewT]
     if build_model is None:
         app = module.APPLICATION(build_main_view=build_main_view)
