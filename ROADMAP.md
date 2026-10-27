@@ -137,8 +137,8 @@ signals emitted on the main thread (`examples/pipesweep.py`).
    - **Qt:** a PyInstaller build, with what a map needs (`map.qml`, the Qt Location and
      Qt Positioning QML modules, the location plugins; now in the user guide's "Maps").
    - **Textual:** the app as a script or a console entry point.
-2. **A PyPI release**, with the version tag, the date of its entry in `CHANGELOG.md`, and
-   the agent skill's `composeui-version`.
+2. **The first PyPI release**, 0.1.0, as the technical guide's "Release" says: Trusted
+   Publishing set up once, a dry run on TestPyPI, then the tag.
 
 ## 5 — Later, when needed
 
