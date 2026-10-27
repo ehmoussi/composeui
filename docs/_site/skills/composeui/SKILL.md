@@ -111,6 +111,10 @@ the option for the web (extra `web`, the default).
   Follow OpenStreetMap's tile policy.
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
+- **Type specialized form dialogs.** Subclass `TypedFormDialogView[YourForm]` and declare
+  `form: YourForm = attrs.Factory(YourForm)`, or pass the form when constructing the dialog.
+  `FormDialogView()` keeps its default empty `FormView`. Both use the same validation,
+  signals, and renderers; dialogs are not saved as study data.
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=`.
 - **Finish batch inserts.** `SqliteTable.insert_batches(sql, rows, batch_size=100_000,

@@ -4564,11 +4564,14 @@ class GroupFormView(FormView):
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
 
 
+FormT = TypeVar("FormT", bound=FormView)
+
+
 @define_view
-class FormDialogView(DialogView):
+class TypedFormDialogView(DialogView, Generic[FormT]):
     """A modal holding a form, e.g. editing a record from its Edit button, with OK and Cancel.
 
-    A subclass gives its form as its `form` field, and its `text` shows above it. OK can't
+    Pass a form, or give a subclass its typed ``form`` default. Its `text` shows above it. OK can't
     be pressed while a check of the form fails (`is_accept_enabled`). Accepting runs every
     check first, even one the user hasn't triggered yet, and the dialog stays open while
     one fails. The answer comes through `accepted` or `rejected`. The form keeps its
@@ -4577,7 +4580,7 @@ class FormDialogView(DialogView):
 
     _renderer_key = "form_dialog"
 
-    form: FormView = attrs.Factory(FormView)
+    form: FormT = attrs.field()
     #: whether OK can be pressed: no check shown fails on the form
     is_accept_enabled: bool = attrs.field(default=True)
 
@@ -4613,6 +4616,17 @@ class FormDialogView(DialogView):
 
     def _follow_form(self) -> None:
         self.is_accept_enabled = self.form.is_valid
+
+
+@define_view
+class FormDialogView(TypedFormDialogView[FormView]):
+    """A form dialog with a default empty `FormView`, with OK and Cancel.
+
+    Use `TypedFormDialogView` to declare a subclass with a more specific form type.
+    Both classes use the same validation, signals, and renderers.
+    """
+
+    form: FormView = attrs.Factory(FormView)
 
 
 class Align(enum.Enum):

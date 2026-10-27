@@ -34,7 +34,6 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
-    FormDialogView,
     FormView,
     HorizontalView,
     LabelRowComboboxView,
@@ -50,6 +49,7 @@ from composeui.core.view import (
     SplitterView,
     TreeNode,
     TreeView,
+    TypedFormDialogView,
     View,
     child,
     define_view,
@@ -470,7 +470,7 @@ class AddPipeSidebar(SidebarView):
 
 
 @define_view
-class EditPipeDialog(FormDialogView):
+class EditPipeDialog(TypedFormDialogView[PipeFormView]):
     """A pipe's values, to change: OK saves them, once its form's checks pass."""
 
     form: PipeFormView = Factory(PipeFormView)
