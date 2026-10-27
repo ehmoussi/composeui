@@ -12,7 +12,7 @@ authors = [
     { name = "El Hadi Moussi", email = "50993404+ehmoussi@users.noreply.github.com" },
 ]
 requires-python = ">=3.9"
-keywords = ["mvvm", "gui", "qt", "pyside6", "attrs", "cattrs", "reactive"]
+keywords = ["mvvm", "gui", "qt", "pyside6", "textual", "tui", "web", "htmx", "attrs", "cattrs", "reactive"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -24,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Environment :: Console",
+    "Environment :: Web Environment",
     "Environment :: X11 Applications :: Qt",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Software Development :: User Interfaces",
