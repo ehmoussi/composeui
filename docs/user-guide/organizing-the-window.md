@@ -43,6 +43,13 @@ same with `pages.navigate("results")`, and reacts to it through `pages.route_cha
 
 The page shown is navigation, not study data: saving, opening, and New leave it alone.
 
+Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web puts the
+toolbar in the page header, with a web address per page.
+[`src/examples/pipeform.py`](../../src/examples/pipeform.py) is an app with three pages: Inputs,
+Results, and Help.
+
+### Page width
+
 On the web, the page shown sets how wide the content grows. A subclass sets its `width`, a
 `PageWidth`:
 
@@ -60,9 +67,7 @@ class ResultsPage(PageView):
     width = PageWidth.WIDE
 ```
 
-On Qt and Textual, the window sets the width, and `width` changes nothing.
-
-An app without pages can set `width` directly on its `MainView` subclass:
+An app without pages sets `width` on its `MainView` subclass:
 
 ```python
 from composeui.core.view import MainView, PageWidth, define_view
@@ -73,16 +78,11 @@ class WideMainView(MainView):
     width = PageWidth.WIDE
 ```
 
-This sets the web content's default width, which is otherwise `PageWidth.NARROW`.
-A visible page with `WIDE` or `FULL` overrides this default; a narrow page keeps it.
-Qt and Textual ignore this setting.
-The [Uber pickups example](../../src/examples/uberpickups.py) uses a wide main view without
-a `PageView` wrapper.
+The `width` of the main view is the default of its pages, `NARROW` unless it sets one. A
+page shown with `WIDE` or `FULL` replaces this default, and a `NARROW` page keeps it. The
+[Uber pickups example](../../src/examples/uberpickups.py) has a wide main view without pages.
 
-Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web puts the
-toolbar in the page header, with a web address per page.
-[`src/examples/pipeform.py`](../../src/examples/pipeform.py) is an app with three pages: Inputs,
-Results, and Help.
+On Qt and Textual, the window sets the width, and `width` changes nothing.
 
 ## Tabs
 
@@ -321,8 +321,9 @@ class AppMainView(MainView):
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top, above the
 buttons of a router. The web puts its buttons in the page header, before the menus.
 
-The `icon` of an action is the path of an image file. Qt and the web show it (see
-[Web backend](running-the-app.md#web-backend)). A terminal shows the text. The app's code sets an
+The `icon` of an action is the path of an image file. Qt and the web show it, and a
+terminal shows the text. On the web, an SVG icon takes the color of the text (see
+[How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The app's code sets an
 icon, so an icon is not study data: it is never saved, loaded, or reset.
 
 ## Sidebar
@@ -414,8 +415,8 @@ Dimensions in the Pipe menu asks for a confirmation first.
 ### Form dialogs
 
 A form dialog holds a form with OK and Cancel, for example to edit a record from its
-Edit button. Its `text` shows above the form. `FormDialogView()` provides an empty `FormView`
-by default. For a specific form type, use `TypedFormDialogView[PipeForm]`:
+Edit button. Its `text` shows above the form. A `FormDialogView` holds an empty `FormView`
+by default. For a form of your own, subclass `TypedFormDialogView[PipeForm]`:
 
 ```python
 from attrs import Factory
@@ -439,19 +440,19 @@ dialog = EditPipeDialog()
 dialog.form.name.text = "Main pipe"
 ```
 
-- `TypedFormDialogView` requires `form=...` unless a subclass supplies its typed default,
-  as above. Type checkers reject a different form type in the constructor or an assignment.
-  Existing `FormDialogView` subclasses still work at runtime. For a narrower `form`
-  annotation, change their base to `TypedFormDialogView[YourForm]`.
-- Both classes use the same renderers and behavior. Dialogs are not saved with study data.
-- The user can't press OK while a check of the form fails. `is_accept_enabled` follows the
-  checks as they run.
-- Accepting runs every check first, even a check that the user hasn't triggered yet. The
-  dialog stays open while a check fails. `FormView.check` runs all the checks, and
-  `is_valid` tells whether they pass.
-- The answer comes through `accepted` or `rejected`.
-- The form keeps its values. The app reads them once the user accepts, or fills them before
-  `open()`.
+- **The form's type.** A `TypedFormDialogView` needs `form=...`, unless its subclass gives
+  a default, as above. A type checker then refuses a form of another type, in the
+  constructor or in an assignment. A subclass of `FormDialogView` with its own `form`
+  works too, but a type checker reads its `form` as a `FormView`.
+- **The same dialog.** Both classes have the same renderers and the same behavior.
+- **OK follows the checks.** The user can't press OK while a check of the form fails.
+  `is_accept_enabled` follows the checks as they run.
+- **OK runs every check.** Accepting runs every check first, even a check that the user
+  hasn't triggered yet. The dialog stays open while a check fails. `FormView.check` runs
+  all the checks, and `is_valid` tells whether they pass.
+- **The answer** comes through `accepted` or `rejected`.
+- **The form keeps its values.** The app reads them once the user accepts, or fills them
+  before `open()`.
 
 In [`src/examples/pipecatalogue.py`](../../src/examples/pipecatalogue.py), the Edit button of
 each pipe changes the pipe in a form dialog.

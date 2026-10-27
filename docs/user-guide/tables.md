@@ -6,7 +6,8 @@ its rows from a source.
 ## A table of records
 
 A `TableView` shows text that the app formats itself. A `RecordTableView` shows `attrs`
-records, such as the records that `fetch` returns, with a column per field:
+records, with a column per field, such as the records that the `fetch` of a
+[SQLite model](sqlite-model.md) returns:
 
 ```python
 from composeui.core.view import Column, RecordTableView, T, child
@@ -241,7 +242,7 @@ A source of your own gives:
 When the app sets a new source, the view drops the sort and the filters on the columns that
 the new source doesn't have.
 
-### Order a large table
+### Sorting and filtering a large table
 
 These settings of the view name the columns of the source:
 
@@ -328,10 +329,9 @@ A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQL
 and filters the rows. The table reads only the ids of the rows shown, and the rows that it
 draws. So the rows never all come to Python.
 
-For a [`CSVSqliteTable`](sqlite-model.md#importing-csv-data), use `model.readings.source()`
-to infer columns and types from its row class. Pass `headers={"field": "Label", ...}` to
-select, order, and label the columns. For other tables or custom queries, declare the
-query and columns explicitly:
+A [`CSVSqliteTable`](sqlite-model.md#importing-csv-data) gives its own source:
+`model.readings.source()` takes the columns and their types from the row class. For
+another table, or a query of your own, give the query and its columns:
 
 ```python
 from composeui.core.sqlitemodel import SqliteSource
@@ -349,7 +349,8 @@ main_view.readings.source = SqliteSource(
 ```
 
 - **`columns` lists the columns of the query that the table shows,** with their types.
-  They sort and filter as the columns of a `ListSource` do. Only these columns sort and
+  A `datetime.date` or `datetime.datetime` column needs no `cattrs` hook of its own. The
+  columns sort and filter as the columns of a `ListSource` do. Only these columns sort and
   filter, because SQLite takes no column name as a parameter. The values of the filters
   are parameters. Without a sort, the rows come in the order of their ids.
 - **The `changed` signal of the table reads the rows again,** for example after a job

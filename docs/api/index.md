@@ -18,6 +18,7 @@ study
 jobs
 reload
 translation
+translationcheck
 renderer
 registry
 chartimage

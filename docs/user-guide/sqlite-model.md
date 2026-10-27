@@ -56,19 +56,23 @@ tables (`model.runs.add(...)`).
   `cattrs` converter of the views. `fetch_column` gives the first column of a query, for
   example a list of names. `as_parameters(row)` gives the fields of an instance as the named
   parameters of a query.
-- **Batch inserts.** `insert_batches(sql, rows, batch_size=100_000, limit=None)` accepts
-  an iterable of positional or named SQL parameters. It yields the cumulative number of
-  rows submitted after each batch, including a final partial batch. Counts are not the
-  number of affected rows when SQL ignores a row. `limit` caps the rows read without
-  consuming an extra row; zero reads none. The batch size must be positive, and the limit
-  must be nonnegative or `None` (all rows).
-  Exhaust the generator to commit all batches together. If iteration can stop early, use
-  `contextlib.closing` so the open transaction rolls back. Inside an existing
-  `connection()` block, batches join that transaction; raise out of the outer block to
-  roll it back. Keep progress callbacks short: the transaction stays open between yields.
-  To reuse an open connection explicitly, pass `db=db`. The helper does not commit,
-  roll back, or close a supplied connection. Get it from the table's `connection()` to
-  keep change notifications; that outer block controls the transaction.
+- **Batch inserts.** `insert_batches(sql, rows, batch_size=100_000, limit=None)` inserts
+  `rows`, an iterable of the positional or named parameters of `sql`, a batch at a time.
+  - It is a generator. After each batch, it yields the number of rows sent so far, the last
+    batch included. When the SQL ignores a row, this is not the number of rows inserted.
+  - `limit` sets the number of rows to read, and reads no row past it. A `limit` of 0 reads
+    none, and `None` reads all of them. `batch_size` is positive, and `limit` is not
+    negative.
+  - All the batches are one transaction. Read the generator to the end to commit them.
+    When the loop can stop early, wrap the generator in `contextlib.closing`: closing it
+    rolls the transaction back.
+  - The transaction stays open between two batches, so keep the loop's own work short, for
+    example a progress report.
+  - Inside a `connection()` block, the batches join its transaction. The block commits
+    them, and an exception out of it rolls them back.
+  - `db=db` inserts on a connection that you give. The generator then never commits, rolls
+    back, or closes it. Take it from the table's `connection()`, so that the table emits
+    `changed`.
 - **New names.** `unique_name(db, "run", "name", "Run")` gives "Run", or else "Run 2",
   "Run 3", and so on: the first name that the column doesn't hold, whatever its case. Use it
   for a row that the user adds, then renames.
@@ -148,9 +152,9 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`):
 
 ## Importing CSV data
 
-`CSVSqliteTable` creates a table and its insertion SQL from an `attrs` row class and a
-table name. Each CSV row is converted to that class before insertion, so attrs converters,
-defaults, factories, and validators apply.
+A `CSVSqliteTable` imports CSV data into a table of the model. An `attrs` row class gives
+the table its columns: the table converts each CSV row into the class before it inserts
+it. So the converters, defaults, factories, and validators of the class apply.
 
 ```python
 from datetime import datetime
@@ -187,77 +191,80 @@ finally:
     model.close()
 ```
 
-- **Typed schemas.** `@define_csv_row` applies `attrs.define` with its default options.
-  It tells type checkers that `csv_field` declares a field, not a default value.
-  Use `name="Header"` when supplying the CSV header; this also works with Pyrefly's
-  field-specifier analysis. Existing `@attrs.define` schemas and positional headers still
-  work at runtime. To check these schemas with mypy, enable the optional plugin:
+- **The row class.** `@define_csv_row` applies `attrs.define` with its default options. It
+  also tells type checkers that `csv_field` declares a field, not a default value.
+  `csv_field(name="Header")` gives the CSV header of the field. A row class with
+  `@attrs.define` also works when the app runs, but a type checker then reads each
+  `csv_field` as a default value.
+- **Type checks with mypy.** Turn on the plugin of ComposeUI:
 
   ```toml
   [tool.mypy]
   plugins = ["composeui.mypy"]
   ```
 
-  Install mypy separately; ComposeUI does not import it when the app runs.
-  The plugin registers CSV fields with mypy's attrs integration and resolves built-in
-  method converters such as `str.strip`. Constructor checks preserve converter input types,
-  defaults, factories, aliases, and fields excluded with `init=False`.
-- **Columns.** Field names become SQL column names. CSV headers match those names unless
-  `csv_field("Header")` gives another header. Plain attrs fields work too. Supported field
-  types are `str`, `int`, `bool`, `float`, `bytes`, `decimal.Decimal`, `datetime.date`, and
-  `datetime.datetime`, plus `Optional` forms. Optional fields permit SQL `NULL`; other
-  fields are `NOT NULL`. A default supplies a missing header, not an empty CSV cell.
-  Computed attrs fields (`init=False`) are stored too. No primary key or indexes are added.
-  Use SQLite's `rowid` for a row identifier, or add indexes in the table's `create` script.
-- **Table sources.** Assign `model.readings.source()` to a `DataTableView.source` to show
-  the imported rows. Field types come from the row class. Headers use `csv_field` names,
-  or field names for plain attrs fields. Pass `headers={"field": "Label", ...}` to select,
-  order, and label the columns. Unknown fields raise `KeyError`. The source uses SQLite's
-  hidden row IDs and the table's `changed` signal. If fields shadow all three SQLite row-ID
-  names (`rowid`, `_rowid_`, and `oid`, case-insensitive), creation raises `ValueError`.
-  Use [`SqliteSource`](tables.md#rows-in-sqlite) directly for custom queries or explicit keys.
-- **Conversion.** Without a converter, fields use the shared cattrs converter.
-  `csv_field` forwards attrs options such as `converter`, `validator`, `default`, and
-  `factory`. For nonstandard values, supply a converter: for example, map `"yes"` and `"no"`
-  to booleans, or use `decimal.Decimal` for decimal text. Validators run after conversion.
-- **Dates.** `date_format` uses `datetime.strptime` and returns a `date` or `datetime`
-  according to the annotation. Without a format, dates use ISO text. The mypy integration
-  rejects a formatted field annotated as `float`, for example. Table declaration also checks
-  the type at runtime, including when a checker does not detect the mismatch.
-  Do not combine `date_format` and `converter`. SQLite stores dates
-  and datetimes as ISO text; timezone offsets supplied by the format are preserved.
-- **Input.** `fill` accepts an iterable of text lines. Open files with `newline=""` and
-  the required encoding. The caller owns that input. For a path, use
-  [`fill_from_file`](#csv-files) to open and close the file automatically. For URLs, use
-  [`fill_from_url` or `open_csv_url`](#csv-urls) to handle downloads and gzip decompression.
-  Extra keywords, such as `delimiter` and `fieldnames`, go to `csv.DictReader`.
-- **Progress and transactions.** `fill(text, batch_size=100_000, limit=None)` yields
-  cumulative submitted-row counts. All batches share one transaction. Exhaust the generator
-  to commit. If iteration can stop early, use `contextlib.closing` to roll back.
-  Nested transactions follow the batch-insert rules above. `limit` caps imported rows
-  without reading another data row. The input remains open.
-- **Invalid rows.** Conversion and attrs validation errors (`ValueError` or `TypeError`)
-  become `RefusedError`, with the original exception as their cause. The whole import rolls
-  back, including earlier batches. In a UI callback, `self.refusing(...)` can show the
-  refusal. In a [job](threads.md), let it reach `job.failed` and update the UI in that
-  signal's handler. An empty or invalid schema is a declaration error, not a user refusal.
-- **Saved data.** CSV tables are part of the SQLite study, like other tables. Reconnect
-  data sources after Open or reload through the table's `changed` signal. Sources are not
-  serialized with the views. Reuse restored rows instead of importing them a second time.
+  Install mypy yourself: ComposeUI does not import it when the app runs. The plugin gives
+  mypy the CSV fields, as attrs fields, and the types of converters such as `str.strip`.
+  So mypy checks the arguments of the class as attrs builds them: with their converters,
+  defaults, factories, aliases, and `init=False` fields.
+- **Columns.** Each field is a column of the same name. The CSV header of a column is its
+  `csv_field` name, else its field name: plain `attrs` fields work too.
+  - The types of the fields are `str`, `int`, `bool`, `float`, `bytes`, `decimal.Decimal`,
+    `datetime.date`, and `datetime.datetime`, or an `Optional` of one of them.
+  - An `Optional` field accepts SQL `NULL`. The other fields are `NOT NULL`.
+  - A default fills a column that the CSV data doesn't have, not an empty cell.
+  - A computed field (`init=False`) is stored too.
+  - The table has no primary key and no index. Use SQLite's `rowid` to identify a row, and
+    add the indexes in the table's `create` script.
+- **A source for a large table.** `model.readings.source()` gives a
+  [`SqliteSource`](tables.md#rows-in-sqlite) of the rows, for a `DataTableView`.
+  - The types of its columns come from the row class, and their headers are the CSV
+    headers.
+  - `headers={"field": "Label", ...}` selects, orders, and labels the columns. An unknown
+    field raises `KeyError`.
+  - The source identifies the rows by SQLite's hidden row id, and follows the table's
+    `changed` signal. When the fields take all three names of the row id (`rowid`,
+    `_rowid_`, and `oid`, in any case), `source()` raises `ValueError`.
+  - For a query of your own, or a key of your own, build a `SqliteSource` yourself.
+- **Conversion.** A field without a converter goes through the `cattrs` converter of the
+  views. `csv_field` passes the options of `attrs`, such as `converter`, `validator`,
+  `default`, and `factory`. Give a converter for other values, for example to turn "yes" and
+  "no" into booleans. The validators run after the conversion.
+- **Dates.** `date_format` reads the text with `datetime.strptime`. The field gets a `date`
+  or a `datetime`, as its annotation says. Without a format, the text is ISO 8601.
+  - A field with a `date_format` must be a `date` or a `datetime`. The mypy plugin refuses
+    another type, and the table refuses it when Python defines it.
+  - A field has a `date_format` or a `converter`, not both.
+  - SQLite keeps the dates as ISO 8601 text. A time zone offset that the format reads is
+    kept.
+- **Input.** `fill` reads an iterable of lines of text, which you open and close. Open a
+  file with `newline=""` and its encoding. To import a file, use
+  [`fill_from_file`](#csv-files), which opens and closes it. To import a URL, use
+  [`fill_from_url`](#csv-urls). The other keyword arguments, such as `delimiter` and
+  `fieldnames`, go to `csv.DictReader`.
+- **Progress and transactions.** `fill(text, batch_size=100_000, limit=None)` follows the
+  rules of [`insert_batches`](#a-sqlite-model): it yields the rows sent so far, and commits
+  all the batches together once the loop reads it to the end. `limit` sets the number of
+  rows to import. `fill` does not close the input.
+- **Invalid rows.** An error of conversion or of validation (`ValueError` or `TypeError`)
+  becomes a `RefusedError`, caused by the original error. The whole import rolls back,
+  with the batches before it. In a callback, `self.refusing(...)` shows the refusal. In a
+  [job](threads.md), let it reach `job.failed`, and show it in the callback of that signal.
+  An empty or wrong row class is an error of the code, not a refusal.
+- **Studies.** A CSV table is part of the study, like the other tables. After Open or a
+  reload, build the sources again from the table's `changed` signal: the study does not
+  save them with the views. Use the rows that the study holds: do not import them again.
 
 ### CSV files
 
-`CSVSqliteTable.fill_from_file(path, ...)` opens a plain or gzip CSV file and imports its
-rows. Pass a path string or a `pathlib.Path`, absolute or relative to the current working
-directory. Gzip is detected from the content, not the file suffix.
-
-With `ReadingModel` from the preceding example, import a local `readings.csv.gz` file as
-follows. The file uses the same semicolon-separated columns:
+`fill_from_file(path, ...)` imports a CSV file, plain or gzip. The path is a string or a
+`pathlib.Path`, absolute or from the current directory. The method tells a gzip file by
+its content, not by its suffix:
 
 ```python
 from contextlib import closing
 
-model = ReadingModel()
+model = ReadingModel()  # the model of the previous example
 try:
     with closing(
         model.readings.fill_from_file("readings.csv.gz", sniff=True, batch_size=1000)
@@ -268,28 +275,24 @@ finally:
     model.close()
 ```
 
-`encoding="utf-8"` sets the text encoding. `batch_size`, `limit`, and CSV options follow
-`fill`. The method appends rows and yields cumulative submitted-row counts. Exhaust the
-generator to commit. If iteration can stop early, use `contextlib.closing` to close the
-file and roll back. Nested transactions follow `fill`'s rules. File, decompression, and
-decoding errors propagate; a missing file raises `FileNotFoundError`.
+- `encoding="utf-8"` sets the encoding of the text. `batch_size`, `limit`, and the CSV
+  options are those of `fill`.
+- The method adds the rows to the table, and follows the transaction rules of `fill`.
+  Closing it early closes the file, and rolls the import back.
+- An error of the file, of the decompression, or of the decoding goes to the caller. A
+  missing file raises `FileNotFoundError`.
 
 ### CSV URLs
 
-`CSVSqliteTable.fill_from_url` imports CSV from a trusted HTTP, HTTPS, or file URL.
-It detects gzip from the content, even when the URL has no `.gz` suffix. Other compression
-formats are not supported. Like `fill`, it appends rows and yields cumulative submitted-row
-counts. It does not cache downloads or skip imports when the table already contains rows.
-
-With `ReadingModel` from the preceding example, import a local `readings.csv.gz` file as
-follows. The file uses the same semicolon-separated columns:
+`fill_from_url(url, ...)` imports CSV data from an HTTP, HTTPS, or file URL. It tells gzip
+data by its content, also without a `.gz` suffix. It reads no other compression:
 
 ```python
 from contextlib import closing
 from pathlib import Path
 
-url = Path("readings.csv.gz").resolve().as_uri()
-model = ReadingModel()
+model = ReadingModel()  # the model of the first example
+url = Path("readings.csv.gz").resolve().as_uri()  # or an https:// URL
 try:
     with closing(model.readings.fill_from_url(url, delimiter=";", batch_size=1000)) as batches:
         for count in batches:
@@ -298,14 +301,17 @@ finally:
     model.close()
 ```
 
-`encoding="utf-8"` sets the text encoding. `timeout=30.0` sets the socket timeout in seconds,
-not a deadline for the whole download. `batch_size`, `limit`, and CSV options follow `fill`.
-Exhaust the generator to commit. If iteration can stop early, use `contextlib.closing` to
-close the response and roll back the import. Nested transactions follow the same rules
-as `fill`.
+- `encoding="utf-8"` sets the encoding of the text. `timeout=30.0` is the time, in seconds,
+  that each read of the socket waits, not the time of the whole download. `batch_size`,
+  `limit`, and the CSV options are those of `fill`.
+- The method adds the rows to the table, and follows the transaction rules of `fill`.
+  Closing it early closes the response, and rolls the import back.
+- It keeps no copy of the download, and imports the rows again into a table that already
+  has them.
 
-For CSV processing without a SQLite import, use `open_csv_url` from the same module.
-It preserves newlines for the CSV reader and closes the text stream and response on exit:
+To read CSV data from a URL without importing it, use `open_csv_url` from the same module.
+It keeps the newlines for the CSV reader, and closes the text and the response at the end
+of the block:
 
 ```python
 import csv
@@ -316,32 +322,36 @@ with open_csv_url(url) as text:
     print(next(csv.DictReader(text, delimiter=";")))
 ```
 
-Both APIs propagate network, decompression, and decoding errors. Conversion and validation
-errors in `fill_from_url` become `RefusedError`, as with `fill`. Use these APIs only with
-trusted URLs: they do not restrict hosts, redirects, or local file access. Unsupported URL
-schemes raise `ValueError`.
+- An error of the network, of the decompression, or of the decoding goes to the caller. An
+  error of conversion or of validation in `fill_from_url` becomes a `RefusedError`, as in
+  `fill`. A URL of another scheme raises `ValueError`.
+- **Give these functions trusted URLs only.** They accept every host, follow redirects, and
+  read local files.
 
-Run downloads in a [job](threads.md) to keep the UI responsive. The
-[Uber pickups example](../../src/examples/uberpickups.py) uses `fill_from_url` and reports
-batch counts through a [reusable loading task](threads.md#reusable-loading-tasks).
+A download takes time: run it in a [job](threads.md). The
+[Uber pickups example](../../src/examples/uberpickups.py) imports its CSV with
+`fill_from_url`, and shows the count of rows in a
+[reusable loading task](threads.md#reusable-loading-tasks).
 
 ### CSV dialect detection
 
-Pass `sniff=True` to `fill_from_file` or `fill_from_url` to infer the CSV dialect with
-`csv.Sniffer`. `sniff_sample_size=8192` limits the sample to that many decoded characters,
-after gzip decompression. For wide headers or long rows, increase it, for example to
-`sniff_sample_size=65536`. The size must be positive when sniffing; otherwise it is ignored.
-The sampled text is replayed for parsing, including partial lines and quoted newlines. No
-seek is required, so HTTP streams work too.
+`sniff=True` makes `fill_from_file` and `fill_from_url` find the CSV dialect, such as the
+delimiter, with `csv.Sniffer`.
 
-Explicit CSV options, including `delimiter`, `quotechar`, and `dialect`, override detected
-settings. Without `sniff=True`, the comma-separated default and explicit options work as
-before. No header inference is performed: the first row supplies column names unless
-`fieldnames` is supplied.
-
-Detection failure raises `RefusedError` with instructions to increase the sample size or
-disable sniffing and supply explicit CSV options. A larger sample can help, but detection
-can still guess the wrong dialect. For a known format, leave sniffing off and set its
-options explicitly. Sampling reads ahead of the current batch or row limit, but only the
-requested rows are imported. Import errors and early closure retain the same rollback
-rules. An invalid sample size raises `ValueError` when sniffing is enabled.
+- **The sample.** `sniff_sample_size=8192` is the number of characters that the sniffer
+  reads, after the decompression and the decoding. For long headers or rows, give a larger
+  sample, for example `sniff_sample_size=65536`. With `sniff=True`, a size that is not
+  positive raises `ValueError`. Without it, the size is ignored.
+- **No seek.** The import reads the sample again from memory, with its partial lines and
+  its quoted newlines. So an HTTP stream works too. The sample can read past the rows of a
+  batch or of `limit`, but the import keeps only the rows asked for.
+- **Your options win.** `delimiter`, `quotechar`, and `dialect` replace what the sniffer
+  finds. Without `sniff=True`, the import reads commas, or the options that you give.
+- **The header.** The sniffer does not guess whether the first row is a header: the first
+  row names the columns, unless you give `fieldnames`.
+- **When it fails.** When the sniffer finds no dialect, the import raises a `RefusedError`.
+  Its message says to give a larger sample, or to turn sniffing off and give the CSV
+  options. A larger sample can help, but the sniffer can still guess wrong. For a known
+  format, leave sniffing off and give its options.
+- **Errors.** An import with sniffing rolls back as one without: on an error, or when the
+  loop stops early.

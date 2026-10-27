@@ -5,7 +5,7 @@ A `ChartView` plots results, for example a quantity against time or a swept dime
 each) and a `name` for the legend. A NaN leaves a gap in its curve.
 
 ```python
-from composeui.core.view import ChartView, LineStyle, ReferenceLine, Series, child
+from composeui.core.view import ChartView, Series, child
 
 chart: ChartView = child(
     ChartView, title="Pressure Drop", x_title="Flow Rate", x_unit="L/s", y_unit="kPa"
@@ -60,6 +60,8 @@ chart doesn't draw a point at an x of 0 or less, and a y of 0 or less leaves a g
   the index of a category.
 
 ```python
+from composeui.core.view import LineStyle, ReferenceLine
+
 chart.reference_lines = [
     ReferenceLine(40, "Max: 40", style=LineStyle.SOLID),
     ReferenceLine(now, "Now", vertical=True),
@@ -95,14 +97,14 @@ height to the backend.
 
 ## What each backend draws
 
-- Qt draws the chart with [pyqtgraph](https://www.pyqtgraph.org/) (in the `pyside6` extra).
+- **Qt** draws the chart with [pyqtgraph](https://www.pyqtgraph.org/) (in the `pyside6` extra).
   The mouse zooms and pans. When the user hovers over the chart, it shows the value of each
   series at the cursor.
-- The web draws the chart with [uPlot](https://github.com/leeoniya/uPlot). The page loads
+- **The web** draws the chart with [uPlot](https://github.com/leeoniya/uPlot). The page loads
   uPlot once it shows a chart. A drag across the chart zooms, and a double click zooms back
   out. The legend shows the values at the cursor. Before the server sends a long series, it
   thins the series to the extremes of each bucket of its points.
-- Textual draws the chart with `textual-plotext` (in the `tui` extra), without zoom or hover.
+- **Textual** draws the chart with `textual-plotext` (in the `tui` extra), without zoom or hover.
 
 A new `series` list keeps the user's zoom.
 

@@ -198,6 +198,10 @@ Larger views have sections of their own:
 - `ToolBar` for a [toolbar](organizing-the-window.md#toolbars).
 - `DialogView` for [dialogs](organizing-the-window.md#dialogs).
 - `SidebarView` for a [sidebar](organizing-the-window.md#sidebar).
+- `ListView` for [a list of views](organizing-the-window.md#a-list-of-views), and `Menu` for
+  [menus](organizing-the-window.md#menus).
+- `TableView`, `RecordTableView`, and `DataTableView` for [tables](tables.md).
+- `ChartView` for [charts](charts.md), and `MapView` for [maps](maps.md).
 
 ## The main view
 
@@ -208,8 +212,8 @@ A subclass of `MainView` is the app. Its class variables configure it:
 - **`has_file_menu = False`** leaves out the File menu, for an app without studies (see
   [The File menu and picking a file](widgets.md#the-file-menu-and-picking-a-file)).
 - **`app_icon`** is the icon of the app (see [The app's icon](#the-apps-icon)).
-- **`width`** sets the web content's default width, without a page wrapper (see
-  [Pages](organizing-the-window.md#pages)). Qt and Textual ignore it.
+- **`width`** sets the default width of the web content, also in an app without pages
+  (see [Page width](organizing-the-window.md#page-width)). Qt and Textual ignore it.
 - **`translations_dir`** is the directory of its catalogs (see
   [Translating the app](translation.md)).
 
@@ -285,14 +289,13 @@ main view. `-f FILE` on the command line opens a study at the start. Without a m
 study holds the state of the views. A model can add its data to the study (see
 [A SQLite model](sqlite-model.md)).
 
-`MainView.save_state(path)` and `MainView.load_state(path)` serialize and deserialize the
-full view tree to JSON with `cattrs`. They skip the `Signal` and `Renderer` fields
-automatically. On load, they update the live view tree in place, so the renderer bindings
-and signal connections survive the load.
+`MainView.save_state(path)` writes the state of the whole view tree as JSON, with `cattrs`,
+and `MainView.load_state(path)` reads it back. They skip the `Signal` and `Renderer` fields.
+A load changes the views in place, so the renderers and the signal connections stay.
 
-The shared `CONVERTER` supports `datetime.date` and `datetime.datetime` as ISO 8601 strings.
-Datetime conversion also accepts existing `datetime.datetime` values and preserves UTC offsets
-and microseconds. No custom hook is needed for datetime columns in a `SqliteSource`.
+The `CONVERTER` of the views writes a `datetime.date` or a `datetime.datetime` as ISO 8601
+text. A datetime keeps its UTC offset and its microseconds. A field of these types needs no
+hook of its own.
 
 The text that the user reads rather than enters (labels, titles, headers, button and menu
 text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's code, in its
