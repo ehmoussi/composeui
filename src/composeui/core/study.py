@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
+__all__ = ["open_study", "save_study"]
+
 #: the views' state inside a study's archive, with its versions (`MainView.file_data`)
 VIEWS_NAME = "views.json"
 #: what reading a damaged archive can raise

@@ -72,16 +72,33 @@ COMPLETE_EXAMPLES = [
 ]
 
 
-@pytest.mark.parametrize("code", EXAMPLES)
-def test_each_name_that_an_example_imports_from_composeui_exists(code: str) -> None:
-    missing = [
+#: the example apps too: users copy from them as from the guides
+IMPORTING_EXAMPLES = [
+    *EXAMPLES,
+    *(
+        pytest.param(path.read_text(encoding="utf-8"), id=path.relative_to(ROOT).as_posix())
+        for path in sorted((ROOT / "src" / "examples").glob("*.py"))
+    ),
+]
+
+
+def _is_public(module_name: str, name: str) -> bool:
+    """Tell whether a module gives `name` to apps: in its `__all__`, if it has one."""
+    module = importlib.import_module(module_name)
+    public = getattr(module, "__all__", None)
+    return hasattr(module, name) if public is None else name in public
+
+
+@pytest.mark.parametrize("code", IMPORTING_EXAMPLES)
+def test_each_name_that_an_example_imports_from_composeui_is_public(code: str) -> None:
+    hidden = [
         f"{node.module}.{alias.name}"
         for node in ast.walk(ast.parse(code))
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("composeui")
         for alias in node.names
-        if not hasattr(importlib.import_module(node.module or ""), alias.name)
+        if not _is_public(node.module or "", alias.name)
     ]
-    assert not missing
+    assert not hidden
 
 
 @pytest.mark.parametrize("code", COMPLETE_EXAMPLES)

@@ -37,6 +37,21 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
+__all__ = [
+    "acknowledge_changes",
+    "can_reload_in_place",
+    "has_change_events",
+    "is_reloaded",
+    "keep_rerun",
+    "load_reloaded_state",
+    "program_command",
+    "rerun_program",
+    "run_reloading",
+    "save_reloaded_state",
+    "take_changes",
+    "watch_changes",
+]
+
 LOGGER = logging.getLogger("COMPOSEUI")
 
 #: environment variable set in the child process, so it runs the app, not another

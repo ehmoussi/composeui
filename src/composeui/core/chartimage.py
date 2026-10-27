@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
+__all__ = ["ImageOptions", "chart_figure", "save_chart_image"]
+
 
 #: the formats of an image, by its file's suffix: vector ones, then PNG, a raster
 FORMATS = ("pdf", "svg", "eps", "png")

@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
     from typing_extensions import Self
 
+__all__ = ["T", "TranslatedText", "translator"]
+
 #: translates a text as written in the code into a language
 Translate = Callable[[str], str]
 

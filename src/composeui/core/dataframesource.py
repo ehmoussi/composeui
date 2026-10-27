@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
     from composeui.core.view import Filter, Sort
 
+__all__ = ["DataFrameSource", "points_of", "series_of"]
+
 #: the column of the rows' ids added to a frame without an `id_column`
 ROW_ID = "__composeui_id"
 _EMPTY_KEY = "__composeui_empty"

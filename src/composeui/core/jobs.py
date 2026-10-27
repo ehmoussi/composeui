@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
+__all__ = ["CalledInJobError", "Job", "Jobs", "Task"]
+
 LOGGER = logging.getLogger("COMPOSEUI")
 
 R = TypeVar("R")

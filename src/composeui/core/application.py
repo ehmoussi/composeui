@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
     from composeui.core.view import MainView, View
 
+__all__ = ["Application", "ModelApplication", "run"]
+
 
 LOGGER = logging.getLogger("COMPOSEUI")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
