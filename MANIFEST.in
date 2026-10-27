@@ -1,0 +1,7 @@
+# The sdist builds the package and runs its tests. The screenshots of the docs, the lock
+# file and the agents' and CI's files stay in the repository.
+prune docs/images
+prune .agents
+prune .claude
+prune .github
+exclude uv.lock
