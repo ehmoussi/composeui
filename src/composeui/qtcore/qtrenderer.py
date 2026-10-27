@@ -66,7 +66,6 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
-    DataTableByPosition,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -91,6 +90,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SourceTableByPosition,
     SplitterView,
     StatusBar,
     TabPage,
@@ -105,7 +105,6 @@ from composeui.core.view import (
     walk_tree,
 )
 from composeui.qtcore.widgets.qchart import QChart
-from composeui.qtcore.widgets.qdatatable import QDataFilterTable
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -117,6 +116,7 @@ from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
+from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
@@ -1125,7 +1125,7 @@ class TableViewLike(ViewLike, Protocol):
     def filter_chip(self, column: int) -> str: ...
 
 
-class DataTableViewLike(ViewLike, Protocol):
+class SourceTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
     sort_column: str | None
@@ -1158,22 +1158,22 @@ class DataTableViewLike(ViewLike, Protocol):
     def export_csv(self, path: Path) -> None: ...
 
 
-class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable]):
+class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTable]):
     """A large table: Qt asks the view for the rows it draws, as the user scrolls.
 
-    A click on a header sorts by its column (`DataTableView.sort_by`). A click on a row
+    A click on a header sorts by its column (`SourceTableView.sort_by`). A click on a row
     selects it (`select_at`), Shift extending the selection (`extend_to`), and a double
     click activates it (`activate_at`).
 
     Its filter bar (`QTableFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
-    Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`).
+    Ctrl+C copies the selected rows to the clipboard (`SourceTableView.selection_text`).
     Export CSV, above the rows and in their context menu, asks where to write the rows
     (`export_csv`). While a job orders the rows (`is_ordering`), the cursor over them is
     busy.
     """
 
-    def __init__(self, view: DataTableViewLike) -> None:
+    def __init__(self, view: SourceTableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -1201,7 +1201,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         if self._rendered_object is None:
             self._rendered_object = QDataFilterTable(self._view)
             table, bar = self._rendered_object.table, self._rendered_object.bar
-            columns = DataTableByPosition(self._view)
+            columns = SourceTableByPosition(self._view)
             table.header_clicked.connect(columns.sort_by)
             table.row_clicked.connect(
                 lambda position, is_extended: columns.select(position, is_extended=is_extended)
@@ -1224,7 +1224,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
 
     @classmethod
     def _refresh_source(
-        cls, view: DataTableViewLike, rendered_object: QDataFilterTable, value: Any
+        cls, view: SourceTableViewLike, rendered_object: QDataFilterTable, value: Any
     ) -> None:
         """Show the new source's columns in the bar, then its rows."""
         cls._refresh_filterable_columns(view, rendered_object, view.filterable_columns)
@@ -1232,25 +1232,25 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
         cls._reset(view, rendered_object, value)
 
     @staticmethod
-    def _reset(view: DataTableViewLike, rendered_object: QDataFilterTable, _value: Any) -> None:
+    def _reset(view: SourceTableViewLike, rendered_object: QDataFilterTable, _value: Any) -> None:
         """Show a new order of the rows: the sort indicator, the count, and no row if none."""
         table = rendered_object.table
         table.data_model.reset()
-        sort = DataTableByPosition(view).sort
+        sort = SourceTableByPosition(view).sort
         table.set_sort_indicator(sort)
         rendered_object.bar.set_count(view.count_text)
         rendered_object.empty.setVisible(view.row_count == 0 and view.count_text != "")
 
     @staticmethod
     def _refresh_texts(
-        _view: DataTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
+        _view: SourceTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
     ) -> None:
         # "empty": the web's; here the headers stay, over no row
         rendered_object.table.export_action.setText(f"{value.get('export', '')}…")
 
     @staticmethod
     def _refresh_is_ordering(
-        _view: DataTableViewLike, rendered_object: QDataFilterTable, value: bool
+        _view: SourceTableViewLike, rendered_object: QDataFilterTable, value: bool
     ) -> None:
         rows = rendered_object.table.viewport()
         if value:
@@ -1273,7 +1273,7 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
 
     @staticmethod
     def _refresh_filter_texts(
-        view: DataTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
+        view: SourceTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
     ) -> None:
         rendered_object.bar.set_texts(value)
         rendered_object.bar.set_count(view.count_text)
@@ -1281,30 +1281,32 @@ class QtDataTableRenderer(QtWidgetRenderer[DataTableViewLike, QDataFilterTable])
 
     @staticmethod
     def _refresh_filterable_columns(
-        view: DataTableViewLike, rendered_object: QDataFilterTable, value: list[str]
+        view: SourceTableViewLike, rendered_object: QDataFilterTable, value: list[str]
     ) -> None:
-        columns = DataTableByPosition(view).bar_columns(value)
+        columns = SourceTableByPosition(view).bar_columns(value)
         rendered_object.bar.set_columns(columns)
         rendered_object.bar.setVisible(len(columns) > 0)
 
     @staticmethod
     def _refresh_search(
-        _view: DataTableViewLike, rendered_object: QDataFilterTable, value: str
+        _view: SourceTableViewLike, rendered_object: QDataFilterTable, value: str
     ) -> None:
         rendered_object.bar.set_search(value)
 
     @staticmethod
     def _refresh_filters(
-        view: DataTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
+        view: SourceTableViewLike, rendered_object: QDataFilterTable, value: dict[str, str]
     ) -> None:
-        rendered_object.bar.set_filters(DataTableByPosition(view).chips(value))
+        rendered_object.bar.set_filters(SourceTableByPosition(view).chips(value))
 
     def _update_search(self, text: str) -> None:
         with self.stop_refresh():
             self._view.search = text
 
     @staticmethod
-    def _repaint(_view: DataTableViewLike, rendered_object: QDataFilterTable, _value: Any) -> None:
+    def _repaint(
+        _view: SourceTableViewLike, rendered_object: QDataFilterTable, _value: Any
+    ) -> None:
         rendered_object.table.data_model.repaint()
 
 
@@ -2806,7 +2808,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "map": _map_renderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboBoxRenderer,
-    "data_table": QtDataTableRenderer,
+    "source_table": QtSourceTableRenderer,
     "date_input": QtDateInputRenderer,
     "file_path_input": QtFilePathInputRenderer,
     "dialog": QtDialogRenderer,

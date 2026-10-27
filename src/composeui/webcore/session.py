@@ -28,9 +28,9 @@ from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
     WebChartRenderer,
-    WebDataTableRenderer,
     WebFilePathInputRenderer,
     WebMainRenderer,
+    WebSourceTableRenderer,
     collect_dirty,
     handle_event,
     page_path,
@@ -286,12 +286,12 @@ class WebSession(RenderTarget):
 
         None if it isn't one.
 
-        The rows shown at the call (`DataTableView.csv_chunks`), each piece read under the
+        The rows shown at the call (`SourceTableView.csv_chunks`), each piece read under the
         session's lock: the session's other requests go on between two pieces.
         """
         with self.lock:
             renderer = self.renderers.get(widget_id)
-            if not isinstance(renderer, WebDataTableRenderer):
+            if not isinstance(renderer, WebSourceTableRenderer):
                 return None
             filename, chunks = renderer.csv_file()
 

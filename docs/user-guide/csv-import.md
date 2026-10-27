@@ -70,7 +70,7 @@ finally:
   - The table has no primary key and no index. Use SQLite's `rowid` to identify a row, and
     add the indexes in the table's `create` script.
 - **A source for a large table.** `model.readings.source()` gives a
-  [`SqliteSource`](tables.md#rows-in-sqlite) of the rows, for a `DataTableView`.
+  [`SqliteSource`](tables.md#rows-in-sqlite) of the rows, for a `SourceTableView`.
   - The types of its columns come from the row class, and their headers are the CSV
     headers.
   - `headers={"field": "Label", ...}` selects, orders, and labels the columns. An unknown

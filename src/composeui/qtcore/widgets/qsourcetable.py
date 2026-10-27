@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 _Index = Union[QModelIndex, QPersistentModelIndex]
 
 
-class DataTableLike(Protocol):
-    """What the model reads from a `DataTableView`."""
+class SourceTableLike(Protocol):
+    """What the model reads from a `SourceTableView`."""
 
     @property
     def headers(self) -> list[str]: ...
@@ -44,7 +44,7 @@ class DataTableLike(Protocol):
     def is_selected(self, row_id: Any) -> bool: ...
 
 
-class QDataTableModel(QAbstractTableModel):
+class QSourceTableModel(QAbstractTableModel):
     """The rows of a large table, read from its view as Qt draws them, never all at once.
 
     Qt asks for the cells it draws, and the view reads them from its source a window at
@@ -56,7 +56,7 @@ class QDataTableModel(QAbstractTableModel):
     so the view formats each row drawn once, not once a cell and a role.
     """
 
-    def __init__(self, table: DataTableLike, parent: Optional[QObject] = None) -> None:
+    def __init__(self, table: SourceTableLike, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
         self._table = table
         #: the row read last: its position, its id and its cells
@@ -110,7 +110,7 @@ class QDataTableModel(QAbstractTableModel):
         return f"{section + 1:,}"
 
 
-class QDataTableView(QTableView):
+class QSourceTableView(QTableView):
     """A large table: as tall as its place, its rows scrolled, each row of the same height.
 
     The rows all have the height of a line of text, so the scroll bar's place gives the
@@ -131,10 +131,10 @@ class QDataTableView(QTableView):
     copy_requested = Signal()
     export_requested = Signal()
 
-    def __init__(self, table: DataTableLike) -> None:
+    def __init__(self, table: SourceTableLike) -> None:
         super().__init__()
         self._sort: Optional[tuple[int, bool]] = None
-        self.data_model = QDataTableModel(table, self)
+        self.data_model = QSourceTableModel(table, self)
         self.setModel(self.data_model)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         rows = self.verticalHeader()
@@ -196,10 +196,10 @@ class QDataFilterTable(QWidget):
     every row, `empty` says so under the headers.
     """
 
-    def __init__(self, table: DataTableLike) -> None:
+    def __init__(self, table: SourceTableLike) -> None:
         super().__init__()
         self.bar = QTableFilterBar()
-        self.table = QDataTableView(table)
+        self.table = QSourceTableView(table)
         self.export = QToolButton()
         self.export.setDefaultAction(self.table.export_action)
         self.export.setAutoRaise(True)

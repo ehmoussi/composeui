@@ -72,16 +72,15 @@ from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.registry import create_renderer
 from composeui.core.renderer import MainRenderer, NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
-    DATA_TABLE_JOB_ROWS,
-    DATA_TABLE_WINDOW,
     SEARCH_DELAY_MS,
+    SOURCE_TABLE_JOB_ROWS,
+    SOURCE_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     CellStyle,
     CellWidget,
     ChartKind,
     ChartView,
-    DataTableView,
     DialogKind,
     EditRefusedError,
     FloatInputView,
@@ -99,6 +98,7 @@ from composeui.core.view import (
     Router,
     SelectionMode,
     Series,
+    SourceTableView,
     T,
     TableView,
     TreeNode,
@@ -107,7 +107,6 @@ from composeui.core.view import (
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
-from composeui.qtcore.widgets.qdatatable import QDataFilterTable
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -117,6 +116,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
+from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qtexttable import QCheckHeader, QTextTableView
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
@@ -2850,7 +2850,7 @@ def test_a_large_table_draws_the_rows_on_screen_reading_only_their_windows(
     qtbot.waitUntil(lambda: 500_000 in source.read)
     assert model.headerData(500_000, Qt.Orientation.Vertical) == "500,001"
     # the rows drawn, by windows: never the million
-    assert len(source.read) < 10 * DATA_TABLE_WINDOW
+    assert len(source.read) < 10 * SOURCE_TABLE_WINDOW
 
     source.size = 3
     source.changed.emit()
@@ -3043,10 +3043,10 @@ def test_a_large_source_s_rows_are_ordered_in_a_job_the_old_order_shown_meanwhil
     # running job's order dropped
     source.gate.clear()
     view.table.sort_descending = True
-    source.size = DATA_TABLE_JOB_ROWS - 1
+    source.size = SOURCE_TABLE_JOB_ROWS - 1
     source.counted_on_main.clear()
     source.changed.emit()
-    assert view.table.row_count == DATA_TABLE_JOB_ROWS  # the old order meanwhile
+    assert view.table.row_count == SOURCE_TABLE_JOB_ROWS  # the old order meanwhile
     source.gate.set()
     qtbot.waitUntil(lambda: not view.table.is_ordering)
     assert (model.rowCount(), view.table.total) == (source.size, source.size)
@@ -3084,13 +3084,13 @@ def test_a_large_table_draws_each_row_with_one_read_of_its_cells(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     read: list[int] = []
-    rows = DataTableView.rows
+    rows = SourceTableView.rows
 
-    def counted(table: DataTableView, start: int, stop: int) -> list[tuple[Any, list[str]]]:
+    def counted(table: SourceTableView, start: int, stop: int) -> list[tuple[Any, list[str]]]:
         read.append(start)
         return rows(table, start, stop)
 
-    monkeypatch.setattr(DataTableView, "rows", counted)
+    monkeypatch.setattr(SourceTableView, "rows", counted)
     view = MillionRowsMainView()
     view.render(RendererType.QT)
     window = _widget(view)
@@ -3754,7 +3754,7 @@ def test_a_large_table_s_bar_clears_its_filters(qtbot: QtBot) -> None:
 def test_a_large_table_qt_doesn_t_render_still_orders_its_rows_in_a_job(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delitem(QT_RENDERERS, "data_table")  # e.g. a backend lacking it
+    monkeypatch.delitem(QT_RENDERERS, "source_table")  # e.g. a backend lacking it
     view = GatedMainView()
     view.render(RendererType.QT)
     _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs

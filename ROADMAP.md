@@ -57,7 +57,7 @@ classes appear (a test fails otherwise).
 
 ### Large tables
 
-`DataTableView` is in (user guide, "A large table"): a read-only table that reads only the
+`SourceTableView` is in (user guide, "A large table"): a read-only table that reads only the
 rows it shows from a `TableSource` (`ListSource`, `SqliteSource`, `DataFrameSource`), on
 Qt, Textual and the web. The view holds the order (the shown rows' ids, in an `array`), the
 selection by id, and the settings that the study saves, never the data. `largetable.py`
@@ -191,12 +191,12 @@ The user guide's "Web backend" section covers what users see.
   fragment as an OOB swap (`render_dirty`). Controls use `hx-swap="none"` and the sender
   is never swapped back, so typing is never interrupted; the one exception is a float
   field left with unparsable text, swapped back to the view's value.
-- **A large table's frame.** `WebDataTableRenderer` draws a window of rows between two
+- **A large table's frame.** `WebSourceTableRenderer` draws a window of rows between two
   filler rows (`style` heights, which the policy allows) that give the scroll bar every
   row's height. `page.js` posts the first row shown once the scroll stops outside the
   window, and only the `<tbody>` comes back (in a `<template>`, as a table's parts), so
   the scroll position stays. Browsers cap an element's height: past
-  `DATA_TABLE_SCROLLED_ROWS`, a filler's row height stands for more than one row. The
+  `SOURCE_TABLE_SCROLLED_ROWS`, a filler's row height stands for more than one row. The
   page maps the scroll position through the fillers as drawn, and posts the row under the
   headers with its offset; the server sizes the filler above the new window so that row
   stays there, the frame's height kept. A new order swaps the whole frame, back at the

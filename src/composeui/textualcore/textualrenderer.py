@@ -31,7 +31,6 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
-    DataTableByPosition,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -59,6 +58,7 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
+    SourceTableByPosition,
     SplitterView,
     StatusBar,
     TabPage,
@@ -76,7 +76,6 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
-from composeui.textualcore.widgets.composedatatable import ComposeDataFilterTable
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
@@ -89,6 +88,7 @@ from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composesourcetable import ComposeDataFilterTable
 from composeui.textualcore.widgets.composesplitter import ComposeSplitter
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetoolbar import (
@@ -1393,7 +1393,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
             rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
 
 
-class DataTableViewLike(ViewLike, Protocol):
+class SourceTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
     sort_column: str | None
@@ -1426,21 +1426,23 @@ class DataTableViewLike(ViewLike, Protocol):
     def export_csv(self, path: Path) -> None: ...
 
 
-class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeDataFilterTable]):
+class TextualSourceTableRenderer(
+    TextualWidgetRenderer[SourceTableViewLike, ComposeDataFilterTable]
+):
     """A large table: Textual asks the view for the lines it draws, as the user scrolls.
 
-    A click on a header sorts by its column (`DataTableView.sort_by`). A click on a row,
+    A click on a header sorts by its column (`SourceTableView.sort_by`). A click on a row,
     or Space on the cursor's, selects it (`select_at`), Shift extending the selection
     (`extend_to`); a double click or Enter activates it (`activate_at`).
 
     Its filter bar (`ComposeFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
-    Ctrl+C copies the selected rows to the clipboard (`DataTableView.selection_text`),
+    Ctrl+C copies the selected rows to the clipboard (`SourceTableView.selection_text`),
     through the terminal. Its key `e` asks where to write the rows as CSV (`export_csv`).
     While a job orders the rows (`is_ordering`), Textual's loading indicator covers them.
     """
 
-    def __init__(self, view: DataTableViewLike) -> None:
+    def __init__(self, view: SourceTableViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -1467,7 +1469,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
         if self._rendered_object is None:
             self._rendered_object = ComposeDataFilterTable(self._view)
             table, bar = self._rendered_object.table, self._rendered_object.bar
-            columns = DataTableByPosition(self._view)
+            columns = SourceTableByPosition(self._view)
             table.header_clicked.connect(columns.sort_by)
             table.row_clicked.connect(
                 lambda position, is_extended: columns.select(position, is_extended=is_extended)
@@ -1487,7 +1489,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     @classmethod
     def _refresh_source(
-        cls, view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: Any
+        cls, view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: Any
     ) -> None:
         """Show the new source's columns in the bar, then its rows."""
         cls._refresh_filterable_columns(view, rendered_object, view.filterable_columns)
@@ -1496,10 +1498,10 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     @staticmethod
     def _reset(
-        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
+        view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
     ) -> None:
         """Show a new order of the rows: the sort mark, the count, and no row if none."""
-        sort = DataTableByPosition(view).sort
+        sort = SourceTableByPosition(view).sort
         rendered_object.table.set_sort(sort)
         rendered_object.table.reset()
         rendered_object.bar.set_count(view.count_text)
@@ -1507,26 +1509,26 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     @staticmethod
     def _refresh_export_filename(
-        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: str
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: str
     ) -> None:
         rendered_object.table.export_filename = value
 
     @staticmethod
     def _refresh_is_ordering(
-        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: bool
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: bool
     ) -> None:
         rendered_object.table.loading = value
 
     @staticmethod
     def _refresh_texts(
-        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
     ) -> None:
         # "empty": the web's; here the headers stay, over no row
         rendered_object.table.set_export_text(value.get("export", ""))
 
     @staticmethod
     def _refresh_filter_texts(
-        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+        view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
     ) -> None:
         rendered_object.bar.set_texts(value)
         rendered_object.bar.set_count(view.count_text)
@@ -1534,23 +1536,23 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     @staticmethod
     def _refresh_filterable_columns(
-        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: list[str]
+        view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: list[str]
     ) -> None:
-        columns = DataTableByPosition(view).bar_columns(value)
+        columns = SourceTableByPosition(view).bar_columns(value)
         rendered_object.bar.set_columns(columns)
         rendered_object.bar.display = len(columns) > 0
 
     @staticmethod
     def _refresh_search(
-        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: str
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: str
     ) -> None:
         rendered_object.bar.set_search(value)
 
     @staticmethod
     def _refresh_filters(
-        view: DataTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
+        view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: dict[str, str]
     ) -> None:
-        rendered_object.bar.set_filters(DataTableByPosition(view).chips(value))
+        rendered_object.bar.set_filters(SourceTableByPosition(view).chips(value))
 
     def _copy(self) -> None:
         app = self._get_app()
@@ -1563,7 +1565,7 @@ class TextualDataTableRenderer(TextualWidgetRenderer[DataTableViewLike, ComposeD
 
     @staticmethod
     def _repaint(
-        _view: DataTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, _value: Any
     ) -> None:
         rendered_object.table.repaint()
 
@@ -2852,7 +2854,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "chart": TextualChartRenderer,
     "checkbox": TextualCheckBoxRenderer,
     "combobox": TextualComboBoxRenderer,
-    "data_table": TextualDataTableRenderer,
+    "source_table": TextualSourceTableRenderer,
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
     "dialog": TextualDialogRenderer,

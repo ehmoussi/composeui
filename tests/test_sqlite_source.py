@@ -15,7 +15,7 @@ import pytest
 
 from composeui.core import sqlitemodel
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, as_parameters
-from composeui.core.view import DataTableView, ListSource, Sort, SourceColumn, parse_filter
+from composeui.core.view import ListSource, Sort, SourceColumn, SourceTableView, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Iterator, Sequence
@@ -199,7 +199,7 @@ def test_a_column_the_source_does_not_declare_is_refused(sql: SqliteSource) -> N
 def test_a_large_table_reads_the_rows_again_once_its_table_changes(
     model: PlacesModel, sql: SqliteSource
 ) -> None:
-    table = DataTableView(source=sql, sort_column="depth", sort_descending=True)
+    table = SourceTableView(source=sql, sort_column="depth", sort_descending=True)
     assert table.rows(0, 1) == [(1, ["Lake", "12.5", "2024-01-31", "lake"])]
 
     model.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))
@@ -229,7 +229,7 @@ def test_the_rows_stay_in_sqlite_python_reading_only_the_ids_and_the_window(
         id_column="id",
         columns=[SourceColumn("name", "Name"), SourceColumn("depth", "Depth", float)],
     )
-    table = DataTableView(source=source, sort_column="depth")
+    table = SourceTableView(source=source, sort_column="depth")
     table.rows(10_000, 10_010)
     assert table.row_count == 20_000 + len(PLACES)
     assert reads == ["200 rows"]
@@ -303,7 +303,7 @@ def test_reads_reuse_a_connection_and_see_each_write_committed(
         return connect(database, *args, **kwargs)
 
     monkeypatch.setattr(sqlite3, "connect", counted)
-    table = DataTableView(source=sql)
+    table = SourceTableView(source=sql)
     for start in range(len(PLACES)):  # as many reads as a table's windows
         table.rows(start, start + 1)
         table.source = None

@@ -13,7 +13,6 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     CheckBoxView,
-    DataTableView,
     LabelView,
     MainView,
     MapPoint,
@@ -21,6 +20,7 @@ from composeui.core.view import (
     PageWidth,
     Series,
     SliderView,
+    SourceTableView,
     VerticalView,
     child,
     define_view,
@@ -59,7 +59,7 @@ DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw
 
 @define_view
 class UberPickupsDataView(VerticalView):
-    table: DataTableView = child(DataTableView, is_visible=False)
+    table: SourceTableView = child(SourceTableView, is_visible=False)
     pickups_chart: ChartView = child(
         ChartView,
         title="Number of pickups by hour",

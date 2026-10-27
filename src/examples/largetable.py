@@ -1,7 +1,7 @@
 """A large table: `python -m examples.largetable --backend qt` (or `textual`, or `web`).
 
 A million sensor readings (``--rows`` sets how many) in a SQLite model, shown by a
-`DataTableView` through a `SqliteSource`: SQLite sorts and filters them, and the table
+`SourceTableView` through a `SqliteSource`: SQLite sorts and filters them, and the table
 reads only the rows it shows, as the user scrolls. Python holds the shown rows' ids, never
 the readings. A click on a header sorts them, and the table's bar searches and filters
 them, in a job on Qt and Textual: the window stays responsive. The label says how many
@@ -24,11 +24,11 @@ from composeui.core.registry import RendererType
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, table
 from composeui.core.view import (
     OMIT,
-    DataTableView,
     LabelView,
     MainView,
     SelectionMode,
     SourceColumn,
+    SourceTableView,
     child,
     define_view,
 )
@@ -159,8 +159,8 @@ class LargeTableMainView(MainView):
     extension = ".largetable"
 
     info: LabelView = child(LabelView)
-    table: DataTableView = child(
-        DataTableView,
+    table: SourceTableView = child(
+        SourceTableView,
         column_formats={"temperature": ".2f", "pressure": ".2f"},
         selection_mode=SelectionMode.MULTIPLE,
         filterable_columns=[column.name for column in COLUMNS],

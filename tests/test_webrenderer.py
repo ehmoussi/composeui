@@ -48,14 +48,13 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.study import save_study
 from composeui.core.view import (
-    DATA_TABLE_WINDOW,
+    SOURCE_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     ButtonView,
     CellWidget,
     ChartKind,
     ChartView,
-    DataTableView,
     DialogView,
     EditRefusedError,
     LabelRowFloatInputView,
@@ -76,6 +75,7 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     Series,
+    SourceTableView,
     StatusBar,
     TableView,
     TreeNode,
@@ -564,7 +564,7 @@ class _Note:
 class _NotesMainView(MainView):
     """A large table whose header, cell, search and filter are hostile text."""
 
-    notes: DataTableView = child(DataTableView, filterable_columns=["text"])
+    notes: SourceTableView = child(SourceTableView, filterable_columns=["text"])
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -5161,7 +5161,7 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
     assert '<td class="whitespace-nowrap">1000000</td>' in scrolled
     assert scroll("500000") == ""  # drawn already
     assert scroll("first") == ""
-    assert len(source.read) <= 3 * DATA_TABLE_WINDOW
+    assert len(source.read) <= 3 * SOURCE_TABLE_WINDOW
     # the row scrolled to stays where it was: 20 rows of the window above it, the filler
     # above them up to it, the frame's height kept
     scrolled = scroll("600000", offset="240100.5")
