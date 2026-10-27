@@ -498,6 +498,16 @@ def test_a_task_tracks_runs_and_injects_context_on_the_main_thread(
         states.append((task.is_running, task.progress, task.result, task.error, task.has_result))
 
     task.changed.connect(record)
+    # each outcome after `changed`, by the count of its states then
+    outcomes: list[tuple[int, object]] = []
+
+    def finished(result: int, *, main_view: MainView, model: _Model) -> None:
+        assert main_view is view
+        assert model is app.model
+        outcomes.append((len(states), result))
+
+    task.finished.connect(finished)
+    task.failed.connect(lambda failure: outcomes.append((len(states), failure)))
     assert not task.is_running
     assert task.result is None
     assert task.progress is None
@@ -522,6 +532,8 @@ def test_a_task_tracks_runs_and_injects_context_on_the_main_thread(
     view.jobs.wait()
     view.jobs.drop()
     assert states[-1] == (False, None, None, None, False)
+    # dropping emits no outcome
+    assert outcomes == [(3, error), (6, 8), (9, error)]
 
 
 def test_a_task_can_succeed_with_none_and_restart_from_its_changed_callback() -> None:

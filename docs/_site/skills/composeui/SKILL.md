@@ -92,9 +92,10 @@ the option for the web (extra `web`, the default).
   on the main thread. Reports arrive in order before the outcome, with `main_view`/`model`
   injection. Dropping a job discards queued progress too.
 - **Reuse loading state with `jobs.task(work)`.** Create a task once as an instance attribute
-  in `__attrs_post_init__`, not a saved view field. Connect `task.changed` to one main-thread
-  handler that reads `is_running`, `progress`, `result`, and `error`; `has_result` also handles
-  successful `None` results. Call `task.start(*args, **kwargs)` on the main thread. It clears
+  in `__attrs_post_init__`, not a saved view field. Connect `task.changed` to a main-thread
+  handler that reads `is_running` and `progress`, and `task.finished(result)` and
+  `task.failed(error)` to show the outcome; `result`, `error`, and `has_result` (which also
+  handles successful `None` results) stay readable. Call `task.start(*args, **kwargs)` on the main thread. It clears
   prior state, or returns `False` unchanged if already running. `task.cancel()` asks only its
   current run to stop. Dropping the study's jobs resets all tasks and discards old outcomes.
   The worker's annotations type the task's result, progress, and start arguments.
