@@ -148,6 +148,18 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 5 — Later, when needed
 
+- **Qt: PyQt6 as a second binding**, a `pyqt6` extra, once an app asks for it. `qtpy`
+  already selects it (`QT_API=pyqt6`). With PyQt6 6.11, the Qt tests fail where:
+  - the map can't load: PyQt6's wheels don't ship the Qt Location QML module, so maps stay
+    PySide6 only, which the user guide's "Maps" must say;
+  - the message, confirmation and form dialogs, and a dialog shown again at once, time out
+    or answer wrongly;
+  - a click on a radio button doesn't reach its view.
+
+  Then a CI job runs the Qt tests on PyQt6, and mypy checks both bindings (`always_true`
+  is PySide6 only today). The extra says that PyQt6 is GPL or commercial, where PySide6 is
+  LGPL. Not the Qt 5 bindings (PyQt5, PySide2): Qt 5 is past its end of life, and the code
+  uses Qt 6, its Qt Location too.
 - **Web: keep sessions across restarts.** `--reload` already keeps them, in a scratch
   directory, with a signing key that lives as long as the server. A deployed app needs a
   lasting store (a directory, or Redis) and a fixed signing key from the environment, and
