@@ -1,5 +1,8 @@
 # Core concepts
 
+A ComposeUI app is made of views, signals, an optional model, and studies, which a backend
+shows:
+
 | Concept | Role |
 | --- | --- |
 | View (`composeui.core.view`) | A typed `attrs` class that holds the state of a part of the UI, such as `InputView`, `FormView`, or `TableView`. You compose views by nesting view fields in other views. See [Building views](building-views.md). |

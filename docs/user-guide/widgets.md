@@ -1,11 +1,12 @@
 # Widgets
 
 This page covers the small views: a label, a button, the inputs that need more than the
-[table of fields](building-views.md#forms-and-their-fields), and the views that show a result. The
-larger views have sections of their own: [tables](tables.md#a-table-of-records),
-[charts](charts.md), [dialogs](organizing-the-window.md#dialogs), and the views that organize the
-window, from [pages](organizing-the-window.md#pages) to the
-[sidebar](organizing-the-window.md#sidebar). The [widget catalog](../widgets.md) lists every view.
+[table of fields](building-views.md#forms-and-their-fields), and the views that show a result.
+The larger views have sections of their own: [tables](tables.md#a-table-of-records),
+[charts](charts.md), [maps](maps.md), [dialogs](organizing-the-window.md#dialogs), and the
+views that organize the window, from [pages](organizing-the-window.md#pages) to the
+[sidebar](organizing-the-window.md#sidebar). The [widget catalog](../widgets.md) lists every
+view.
 
 ## Label
 
@@ -123,10 +124,15 @@ workers. The number goes from `minimum` to `maximum` by `step`. The handle stops
 step. The value shows beside the track, so the row is no taller than the other rows.
 `value_changed` reports the user's moves.
 
+Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
+move, and the web a range input.
+
 ## Progress bar
 
 A `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`.
 While `maximum` is `None`, the bar shows only that the task runs.
+
+Qt shows a `QProgressBar`, Textual a `ProgressBar`, and the web a `<progress>` bar.
 
 [`src/examples/taskview.py`](../../src/examples/taskview.py) follows tasks that run in
 [threads](threads.md) with a progress bar
@@ -139,6 +145,8 @@ It shows its `label` and its `value` in large type. A badge shows the change sin
 point: `delta` is the change, and `delta_text` says the point, for example "since
 yesterday". The sign of the change sets the color of the badge. To show a row of metrics,
 put them in a `HorizontalView`.
+
+Qt and Textual show the value in bold, and the web as a daisyUI stat.
 
 ## Log message
 
@@ -166,6 +174,9 @@ An `ExpanderView` is a collapsible section, for example the details of a record 
 Edit and Delete buttons. The view fields of a subclass are its content, one above the
 other. They show only while `is_expanded` is true. The user clicks the `title` to expand
 or collapse the section (`toggled`).
+
+Qt shows a header button with an arrow, Textual a `Collapsible`, and the web a `<details>`
+element.
 
 ## Tree
 

@@ -2,7 +2,7 @@
 
 The example apps in [`src/examples/`](../src/examples/) show ComposeUI's features in
 complete apps. This guide says what each example shows, and how to run it. Each section
-has a screenshot of the example on Qt, Textual, and the web. The
+has a screenshot of the example on each backend that shows it. The
 [user guide](user-guide.md) explains each feature. The examples are not in the wheel:
 run them from a clone of the repository.
 
@@ -11,16 +11,16 @@ run them from a clone of the repository.
 - [Run an example](#run-an-example)
 - [Overview](#overview)
 - [Where to start](#where-to-start)
+- [Pipe form](#pipe-form)
+- [Markdown viewer](#markdown-viewer)
+- [Task view](#task-view)
+- [Pipe chart](#pipe-chart)
+- [Pipe catalogue](#pipe-catalogue)
+- [Pipe sweep](#pipe-sweep)
+- [Large table](#large-table)
 - [Uber pickups](#uber-pickups)
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe)
-- [Pipe form](#pipe-form)
-- [Pipe catalogue](#pipe-catalogue)
-- [Pipe chart](#pipe-chart)
-- [Pipe sweep](#pipe-sweep)
-- [Task view](#task-view)
-- [Large table](#large-table)
 - [Batman](#batman)
-- [Markdown viewer](#markdown-viewer)
 - [Web hello](#web-hello)
 - [Textual demo](#textual-demo)
 
@@ -43,15 +43,15 @@ options, such as `--language` and `-f FILE`.
 | Example | Default backend | Shows |
 | --- | --- | --- |
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
-| [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
-| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
-| [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
-| [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
-| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite in a job, hourly pickup counts, an hour-filtered street map, and a raw-data table |
-| [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
-| [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
-| [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
+| [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
+| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
+| [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
+| [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
+| [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
+| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, a bar chart, a street map filtered by a slider, a large table |
+| [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
+| [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
 | [`textual_demo.py`](../src/examples/textual_demo.py) | textual | A small form in a terminal |
 
@@ -71,74 +71,15 @@ Read the examples in this order. Each one adds a few features to the ones before
 5. [Pipe catalogue](#pipe-catalogue): a SQLite model, with the views that follow it.
 6. [Pipe sweep](#pipe-sweep): a job that writes to a SQLite model.
 
-The other examples each show one topic: [Batman](#batman) the look of a chart,
-[Uber pickups on a dataframe](#uber-pickups-on-a-dataframe) a dataframe in a large table,
-a chart, and a map, [Web hello](#web-hello) an app that only the web shows, and
-[Textual demo](#textual-demo) an app in a terminal.
+The other examples each show one topic:
 
-## Uber pickups
-
-[`uberpickups.py`](../src/examples/uberpickups.py) explores Uber pickups in NYC,
-based on Streamlit's tutorial.
-
-```bash
-uv run python -m examples.uberpickups --backend qt   # or textual, or web
-```
-
-It downloads the September 2014 CSV dataset on its first load. A saved study keeps the
-SQLite rows, so reopening it does not download them again. The hourly chart counts all rows.
-The map shows at most 10,000 pickups sampled in row order for the slider's selected hour.
-The initial hour is 11. Changing the slider queries the saved rows for the map only;
-the chart and raw-data table still include all hours.
-It fits those locations automatically. After the user pans or zooms, it keeps that viewport.
-
-These screenshots use generated rows and OpenStreetMap tiles. Taking them needs a network
-connection for the street map. Textual omits the map.
-
-| Qt | Textual | Web |
-| --- | --- | --- |
-| ![Uber pickups on Qt](images/uberpickups-qt.png) | ![Uber pickups on Textual](images/uberpickups-textual.png) | ![Uber pickups on the web](images/uberpickups-web.png) |
-
-It shows:
-
-- [CSV URL import](user-guide/sqlite-model.md#csv-urls) into a typed SQLite table;
-- a [loading task](user-guide/threads.md#reusable-loading-tasks) with row-count progress,
-  and a callback for its result and one for its error;
-- a [bar chart](user-guide/charts.md#kinds-of-chart) of pickups per hour;
-- an interactive [map](user-guide/maps.md) on Qt and the web, filtered by an hour slider;
-- a [wide main view](user-guide/organizing-the-window.md#pages) without a page wrapper;
-- a checkbox that shows the [raw-data table](user-guide/tables.md#a-large-table).
-
-## Uber pickups on a dataframe
-
-[`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) is the
-[Uber pickups](#uber-pickups) app, its rows in a Polars frame instead of SQLite.
-
-```bash
-uv run python -m examples.uberpickupsframe --backend qt   # or textual, or web
-```
-
-It needs the `dataframe` extra and Polars. It reads the CSV dataset in a job each time it
-starts: a study keeps no rows. The table shows the CSV's own columns. Polars counts the
-pickups by hour, and samples the map's pickups for the slider's hour.
-
-These screenshots use generated rows and OpenStreetMap tiles. Taking them needs a network
-connection for the street map. Textual omits the map.
-
-| Qt | Textual | Web |
-| --- | --- | --- |
-| ![Uber pickups on a dataframe on Qt](images/uberpickupsframe-qt.png) | ![Uber pickups on a dataframe on Textual](images/uberpickupsframe-textual.png) | ![Uber pickups on a dataframe on the web](images/uberpickupsframe-web.png) |
-
-It shows:
-
-- a [large table](user-guide/tables.md#a-large-table) on a
-  [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
-  and filters a million pickups;
-- a [job](user-guide/threads.md) that reads the CSV alone: its result, a frame, becomes the
-  table's source on the main thread;
-- the same chart, map, and checkbox as [Uber pickups](#uber-pickups): the chart's series made
-  with [`Series.bars`](user-guide/charts.md#kinds-of-chart), the map's points read from the
-  frame with [`points_of`](user-guide/maps.md#coordinates-points-and-viewport).
+- [Large table](#large-table): a million rows of SQLite in a large table.
+- [Uber pickups](#uber-pickups): a CSV download in a loading task, a bar chart, and a map.
+- [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe): the same app on a
+  dataframe, in a large table.
+- [Batman](#batman): the look of a chart, and clicks on it.
+- [Web hello](#web-hello): an app that only the web shows.
+- [Textual demo](#textual-demo): an app in a terminal.
 
 ## Pipe form
 
@@ -146,7 +87,7 @@ It shows:
 and an incident pipe.
 
 ```bash
-uv run python -m examples.pipeform --backend qt   # or textual, or web
+uv run python -m examples.pipeform   # web; or --backend qt, or textual
 ```
 
 On Qt:
@@ -175,46 +116,73 @@ It shows:
 - a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
 
-## Pipe catalogue
+## Markdown viewer
 
-[`pipecatalogue.py`](../src/examples/pipecatalogue.py) is a catalogue of pipes, kept in a
-SQLite database.
+[`markdownviewer.py`](../src/examples/markdownviewer.py) shows a Markdown file.
 
 ```bash
-uv run python -m examples.pipecatalogue --backend qt   # or textual, or web
+uv run python -m examples.markdownviewer --markdown README.md --backend qt
 ```
 
 On Qt:
 
-![The pipe catalogue on Qt](images/pipecatalogue-qt.png)
+![The Markdown viewer on Qt](images/markdownviewer-qt.png)
 
 On Textual:
 
-![The pipe catalogue on Textual](images/pipecatalogue-textual.png)
+![The Markdown viewer on Textual](images/markdownviewer-textual.png)
 
 On the web:
 
-![The pipe catalogue on the web](images/pipecatalogue-web.png)
+![The Markdown viewer on the web](images/markdownviewer-web.png)
 
 It shows:
 
-- a [SQLite model](user-guide/sqlite-model.md): the pipes are rows of the
-  model's database, not view state. The database checks every pipe added or changed: a name,
-  positive dimensions, and a wall thinner than the radius. A SQL view computes the mass of each pipe
-  from its material.
-- a [sidebar](user-guide/organizing-the-window.md#sidebar) with a form that adds a pipe;
-- a [list of views](user-guide/organizing-the-window.md#a-list-of-views): an
-  [expander](user-guide/widgets.md#expander) per pipe, with its Edit and Delete buttons. A query
-  filters the list by material, radius, and installation date.
-- a [tree](user-guide/widgets.md#tree) of the pipes by material, beside the list, in
-  [resizable panes](user-guide/organizing-the-window.md#resizable-panes). The materials are bold. A
-  pipe has a done mark when its installation date is known, and a warning mark until then. When the
-  user selects a pipe in the tree, its expander expands.
-- a [form dialog](user-guide/organizing-the-window.md#form-dialogs) that edits a pipe;
-- a [date input](user-guide/widgets.md#date-input) for the installation date of a pipe;
-- studies saved as a `.pipes` file with the views and the database. A study saved before
-  pipes had an installation date gets the column, empty, when it opens, through a
-  migration (`PipeCatalogueModel.migrations`).
+- a [Markdown view](user-guide/widgets.md#markdown);
+- an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):
+  `--markdown`, beside the options of the backend;
+- a [file path input](user-guide/widgets.md#file-path-input) at the top: the user types the path of
+  a file, or picks the file with the "…" button. On the web, the browser uploads it. The
+  reload button reads the file again, for example after the user edits it.
+- an app without studies: `has_file_menu = False` leaves out the File menu.
+
+## Task view
+
+[`taskview.py`](../src/examples/taskview.py) runs 25 tasks side by side in threads.
+
+```bash
+uv run python -m examples.taskview   # web; or --backend qt, or textual
+```
+
+On Qt:
+
+![The task view on Qt](images/taskview-qt.png)
+
+On Textual:
+
+![The task view on Textual](images/taskview-textual.png)
+
+On the web:
+
+![The task view on the web](images/taskview-web.png)
+
+It shows:
+
+- [jobs](user-guide/threads.md): each task is a function that
+  runs in a thread and never touches a view. Its job emits the status of the task on the main
+  thread, where the views show it. A button cancels the jobs.
+- a configuration form with an [integer input](user-guide/widgets.md#integer-input) and a
+  [slider](user-guide/widgets.md#slider);
+- a [progress bar](user-guide/widgets.md#progress-bar) of the tasks done;
+- [metrics](user-guide/widgets.md#metric) that count the tasks. Once a run is over, they show how
+  each count changed since the last run.
+- a [step chart](user-guide/charts.md#colors-fill-steps-and-height) of the tasks running over the
+  time of the run;
+- an [expander](user-guide/widgets.md#expander) with the table of the tasks, which collapses to
+  leave only the metrics and the chart;
+- [widgets in cells](user-guide/tables.md#widgets-in-cells): the Retry button of a task
+  runs it again. The error of a failed task is a link that opens a dialog with its details.
+- a [French translation](user-guide/translation.md) and a Language menu.
 
 ## Pipe chart
 
@@ -262,6 +230,47 @@ It shows:
   curve. A check box shows or hides the curve, and the box in the header shows or hides them all. A
   combobox draws the curve as a line, in steps, or as dots.
 
+## Pipe catalogue
+
+[`pipecatalogue.py`](../src/examples/pipecatalogue.py) is a catalogue of pipes, kept in a
+SQLite database.
+
+```bash
+uv run python -m examples.pipecatalogue   # web; or --backend qt, or textual
+```
+
+On Qt:
+
+![The pipe catalogue on Qt](images/pipecatalogue-qt.png)
+
+On Textual:
+
+![The pipe catalogue on Textual](images/pipecatalogue-textual.png)
+
+On the web:
+
+![The pipe catalogue on the web](images/pipecatalogue-web.png)
+
+It shows:
+
+- a [SQLite model](user-guide/sqlite-model.md): the pipes are rows of the
+  model's database, not view state. The database checks every pipe added or changed: a name,
+  positive dimensions, and a wall thinner than the radius. A SQL view computes the mass of each pipe
+  from its material.
+- a [sidebar](user-guide/organizing-the-window.md#sidebar) with a form that adds a pipe;
+- a [list of views](user-guide/organizing-the-window.md#a-list-of-views): an
+  [expander](user-guide/widgets.md#expander) per pipe, with its Edit and Delete buttons. A query
+  filters the list by material, radius, and installation date.
+- a [tree](user-guide/widgets.md#tree) of the pipes by material, beside the list, in
+  [resizable panes](user-guide/organizing-the-window.md#resizable-panes). The materials are bold. A
+  pipe has a done mark when its installation date is known, and a warning mark until then. When the
+  user selects a pipe in the tree, its expander expands.
+- a [form dialog](user-guide/organizing-the-window.md#form-dialogs) that edits a pipe;
+- a [date input](user-guide/widgets.md#date-input) for the installation date of a pipe;
+- studies saved as a `.pipes` file with the views and the database. A study saved before
+  pipes had an installation date gets the column, empty, when it opens, through a
+  migration (`PipeCatalogueModel.migrations`).
+
 ## Pipe sweep
 
 [`pipesweep.py`](../src/examples/pipesweep.py) sweeps the outer radius of a pipe under
@@ -298,44 +307,6 @@ It shows:
 - the File menu, which saves and opens the runs with the views as a `.sweep` file;
 - a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
-
-## Task view
-
-[`taskview.py`](../src/examples/taskview.py) runs 25 tasks side by side in threads.
-
-```bash
-uv run python -m examples.taskview   # web; or --backend qt, or textual
-```
-
-On Qt:
-
-![The task view on Qt](images/taskview-qt.png)
-
-On Textual:
-
-![The task view on Textual](images/taskview-textual.png)
-
-On the web:
-
-![The task view on the web](images/taskview-web.png)
-
-It shows:
-
-- [jobs](user-guide/threads.md): each task is a function that
-  runs in a thread and never touches a view. Its job emits the status of the task on the main
-  thread, where the views show it. A button cancels the jobs.
-- a configuration form with an [integer input](user-guide/widgets.md#integer-input) and a
-  [slider](user-guide/widgets.md#slider);
-- a [progress bar](user-guide/widgets.md#progress-bar) of the tasks done;
-- [metrics](user-guide/widgets.md#metric) that count the tasks. Once a run is over, they show how
-  each count changed since the last run.
-- a [step chart](user-guide/charts.md#colors-fill-steps-and-height) of the tasks running over the
-  time of the run;
-- an [expander](user-guide/widgets.md#expander) with the table of the tasks, which collapses to
-  leave only the metrics and the chart;
-- [widgets in cells](user-guide/tables.md#widgets-in-cells): the Retry button of a task
-  runs it again. The error of a failed task is a link that opens a dialog with its details.
-- a [French translation](user-guide/translation.md) and a Language menu.
 
 ## Large table
 
@@ -383,6 +354,89 @@ It shows:
 - a study that saves the readings with the model, and the table's settings with the views.
   Opened with `-f`, it shows its own readings: none are made up.
 
+## Uber pickups
+
+[`uberpickups.py`](../src/examples/uberpickups.py) explores the Uber pickups of September 2014
+in New York City, after Streamlit's tutorial.
+
+```bash
+uv run python -m examples.uberpickups   # web; or --backend qt, or textual
+```
+
+These screenshots use made-up rows. The street map needs a network connection for its
+tiles. Textual shows no map.
+
+On Qt:
+
+![Uber pickups on Qt](images/uberpickups-qt.png)
+
+On Textual:
+
+![Uber pickups on Textual](images/uberpickups-textual.png)
+
+On the web:
+
+![Uber pickups on the web](images/uberpickups-web.png)
+
+It shows:
+
+- a [CSV URL](user-guide/sqlite-model.md#csv-urls) imported into a typed SQLite table. The
+  app downloads the CSV file when it first starts. A saved study keeps the rows, so the
+  app does not download them again when the study opens.
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a
+  job. Its `changed` callback shows the count of rows read. Its `finished` callback shows
+  the chart and the map, and its `failed` callback shows the error.
+- a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups per hour, which counts
+  all the rows;
+- a [map](user-guide/maps.md) of the pickups of the hour that a
+  [slider](user-guide/widgets.md#slider) picks, 11 at the start, on Qt and the web. The map
+  shows at most 10,000 of them, sampled in the order of the rows. A move of the slider
+  queries the saved rows again for the map only. The map fits the pickups, and keeps the
+  viewport once the user pans or zooms.
+- a [wide main view](user-guide/organizing-the-window.md#page-width) without pages;
+- a check box that shows or hides the raw data in a
+  [large table](user-guide/tables.md#a-large-table), with the rows of all the hours. Its
+  `toggled` signal has a callback of its own, which leaves the map alone.
+
+## Uber pickups on a dataframe
+
+[`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) is the
+[Uber pickups](#uber-pickups) app, with its rows in a Polars frame instead of SQLite.
+
+```bash
+uv run python -m examples.uberpickupsframe   # web; or --backend qt, or textual
+```
+
+It needs the `dataframe` extra and Polars. It reads the CSV file in a job each time that it
+starts, because a study keeps no rows. The table shows the CSV's own columns. Polars counts
+the pickups by hour, and samples the pickups of the slider's hour for the map.
+
+These screenshots use made-up rows. The street map needs a network connection for its
+tiles. Textual shows no map.
+
+On Qt:
+
+![Uber pickups on a dataframe on Qt](images/uberpickupsframe-qt.png)
+
+On Textual:
+
+![Uber pickups on a dataframe on Textual](images/uberpickupsframe-textual.png)
+
+On the web:
+
+![Uber pickups on a dataframe on the web](images/uberpickupsframe-web.png)
+
+It shows:
+
+- a [large table](user-guide/tables.md#a-large-table) on a
+  [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
+  and filters a million pickups;
+- a [job](user-guide/threads.md) that only reads the CSV file. Its result, a frame, becomes
+  the table's source on the main thread.
+- the chart, the map, and the check box of [Uber pickups](#uber-pickups). The chart's
+  series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and the map's
+  points from the frame, with [`points_of`](user-guide/maps.md#coordinates-points-and-viewport).
+
 ## Batman
 
 [`batman.py`](../src/examples/batman.py) draws the Batman logo on a chart.
@@ -410,36 +464,6 @@ It shows:
 - [clicks on a chart](user-guide/charts.md#clicks-on-a-chart): `clicked` emits the point, and the
   view says whether it is on the bat. Textual draws the logo too, but a terminal has no
   pointer to click it with.
-
-## Markdown viewer
-
-[`markdownviewer.py`](../src/examples/markdownviewer.py) shows a Markdown file.
-
-```bash
-uv run python -m examples.markdownviewer --markdown README.md --backend qt
-```
-
-On Qt:
-
-![The Markdown viewer on Qt](images/markdownviewer-qt.png)
-
-On Textual:
-
-![The Markdown viewer on Textual](images/markdownviewer-textual.png)
-
-On the web:
-
-![The Markdown viewer on the web](images/markdownviewer-web.png)
-
-It shows:
-
-- a [Markdown view](user-guide/widgets.md#markdown);
-- an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):
-  `--markdown`, beside the options of the backend;
-- a [file path input](user-guide/widgets.md#file-path-input) at the top: the user types the path of
-  a file, or picks the file with the "…" button. On the web, the browser uploads it. The
-  reload button reads the file again, for example after the user edits it.
-- an app without studies: `has_file_menu = False` leaves out the File menu.
 
 ## Web hello
 

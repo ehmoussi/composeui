@@ -3,7 +3,7 @@
 This catalog lists each view that a backend renders, in the order of `composeui.core.view`.
 Each name links to its [API reference](api/view.md). The
 [user guide](user-guide/widgets.md) shows how to use them. Qt, Textual, and the web render
-every view of this catalog.
+every view of this catalog, except `MapView`, which Textual does not render.
 
 ## Views
 

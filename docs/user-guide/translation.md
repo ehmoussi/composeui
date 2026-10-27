@@ -19,8 +19,9 @@ from composeui.core.view import GroupFormView, MainView, T, child, define_view
 
 @define_view
 class PipeDimensionView(GroupFormView):
-    # `child` builds a view field's view with these fields, one per view
-    radius: DimensionInputView = child(DimensionInputView, label=T("Radius"))
+    radius: DimensionInputView = child(  # a LabelRowFloatInputView
+        DimensionInputView, label=T("Radius")
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()

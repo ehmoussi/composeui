@@ -63,6 +63,7 @@ _STATIC_URLS = {
     "uplot_url": _static_url("uPlot.iife.min.js"),
     # Cally 0.9.2 (https://github.com/WickyNilliams/cally), styled by daisyUI's `cally`
     "cally_url": _static_url("cally.js"),
+    # deck.gl 9.2.6 (https://github.com/visgl/deck.gl), its license in deckgl.LICENSE
     "deckgl_url": _static_url("deckgl.min.js"),
 }
 

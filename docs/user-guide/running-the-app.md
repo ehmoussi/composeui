@@ -137,7 +137,7 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   Material icon. PNG, JPEG, GIF, WebP, and ICO files show as they are.
 - **No push from the server.** The page changes in response to the user's own actions, with two
   exceptions. A status bar message clears itself after its timeout. While
-  [jobs](threads.md) run, the page asks every second for the
+  [jobs](threads.md) run, the page asks every 300 ms for the
   changes from their results.
 
 ### Serve the app to other users

@@ -12,17 +12,17 @@
 ## User guide
 
 - [User guide](https://ehmoussi.github.io/composeui/user-guide.html): index of the pages below
-- [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): how ComposeUI maps to MVVM, reactive views, signals that inject arguments
+- [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): views, signals, the model, studies, and the backends, and how ComposeUI maps to MVVM
 - [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and validation, the main view, saving and loading state
-- [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, and the other views
-- [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): table views and their cells
-- [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): chart views
+- [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, metrics, expanders, trees, Markdown, and the File menu
+- [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): pages, tabs, resizable panes, a list of views, menus, toolbars, a sidebar, and dialogs
+- [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): a table of records with sorting, filtering, and widgets in cells; a large table read from a list, SQLite, or a dataframe
+- [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): line, scatter, step, and bar charts, log axes, reference lines, clicks, and report images
 - [Maps](https://ehmoussi.github.io/composeui/user-guide/maps.html): geographic points on Qt Location and deck.gl maps, tile usage, viewport signals, and saved state
-- [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): arranging views in the window
-- [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend
-- [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`
-- [Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html): background jobs
-- [Translating the app](https://ehmoussi.github.io/composeui/user-guide/translation.html): translation catalogs
+- [Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html): jobs, their progress and failures, and reusable loading tasks
+- [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`, and import CSV data
+- [Translating the app](https://ehmoussi.github.io/composeui/user-guide/translation.html): translation catalogs, and checking them
+- [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend, reload it on a change, and serve it on the web
 - [Using a coding agent](https://ehmoussi.github.io/composeui/user-guide/coding-agents.html): install the ComposeUI skill for coding agents
 
 ## Examples
@@ -32,7 +32,7 @@
 ## Reference
 
 - [Widget catalog](https://ehmoussi.github.io/composeui/widgets.html): every view that a backend renders
-- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, dataframesource, study, translation, jobs, renderer, registry, reload, chartimage) and the backends
+- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, dataframesource, study, translation, translationcheck, jobs, renderer, registry, reload, chartimage) and the backends
 
 ## Contributing
 

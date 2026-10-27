@@ -58,7 +58,7 @@ On the web:
    (see [Installation](../README.md#installation) in the README).
 2. Write a first app with the [Quickstart](../README.md#quickstart) of the README.
 3. Read the [core concepts](user-guide/core-concepts.md) of the user guide: views,
-   signals, the model, and the app.
+   signals, the model, and studies.
 4. Run the [example apps](examples-guide.md#run-an-example), and read their code.
 
 ## Find your way
@@ -66,8 +66,8 @@ On the web:
 To build an app:
 
 - The [user guide](user-guide.md) explains how to build an app: the views, their layout,
-  forms and their checks, the widgets, pages, tabs, dialogs, tables, charts, threads, SQLite
-  models, translations, what each backend shows, and how to use a coding agent.
+  forms and their checks, the widgets, pages, tabs, dialogs, tables, charts, maps, threads,
+  SQLite models, translations, what each backend shows, and how to use a coding agent.
 - The [examples guide](examples-guide.md) says what each example app shows, and how to run
   it.
 - The [widget catalog](widgets.md) lists every view that a backend renders.

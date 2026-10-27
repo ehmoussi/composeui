@@ -1,14 +1,14 @@
 # Roadmap
 
-What's left to do on ComposeUI. It merges the earlier plans and the library review
-(`NEXT_PLAN.md`, `PAGES_PLAN.md`, `WEB_BACKEND_PLAN.md`, `REVIEW.md`); everything they
-listed as done is gone from here, and lives in the code, the docs and `git log`. Build
-and test each step before moving on, and delete a step's entry once it lands.
+What's left to do on ComposeUI. What is done is gone from here, and lives in the code, the
+docs and `git log`. Build and test each step before moving on, and delete a step's entry
+once it lands.
 
 ## 1 — Widgets
 
-One widget at a time, with tests on each supported backend. The registry consistency
-test permits maps to omit the terminal. Already there: input, float
+One widget at a time, with tests on each backend. Only maps may leave out a backend
+(Textual), which the registry test checks. Already there: horizontal, vertical and grid
+layouts, a status bar, menus, toolbars, input, float
 input, integer input, date input, file path input (a "…" button and a reload button),
 slider, label, log, button, progress bar, metric, expander, checkbox, radio group,
 combobox, table (editable cells, sorting and filtering, widgets in cells, cell colors,
@@ -57,82 +57,13 @@ classes appear (a test fails otherwise).
 
 ### Large tables
 
-A scientific app's results can have millions of rows. `TableView` holds them all as
-formatted text, and doesn't scale to that (measured on 1M rows of 10 cells, and on the web
-on 100k rows):
-
-- **Memory.** About 800 MB, each cell a Python `str`.
-- **Time.** Building the rows takes 12 s. Each sort takes 1.3 s and each search 0.5 s.
-- **The web.** It writes a `<tr>` per shown row, and swaps the whole `<tbody>` on a sort
-  or a filter: 6 s and 27 MB of HTML for 100k rows.
-- **Saved state.** `rows` is saved with the study, so a study would hold the whole
-  result as JSON.
-
-Qt already draws only the rows on screen (`QTextTableView` is on a `QAbstractTableModel`).
-Textual's `DataTable` draws only the visible lines, but keeps every row.
-
-Add a read-only table backed by a data source, on the three backends. Keep `TableView`
-for the small tables that the user edits (an analysis' parameters, a list of load cases).
-
-The design:
-
-- **Everything but the drawing is in `core`.** Sorting, searching, filtering, selection,
-  the cache and the cells' formats are computed once, so they behave the same on each
-  backend. A renderer only turns its scroll position into a range of rows.
-- **The source does the work on the data.** It sorts and filters with SQL or numpy, never
-  row by row in Python, and no backend reads every row.
-- **The view holds the order, not the data.** For each sort, search and set of filters,
-  the view asks the source once for the shown rows' ids, in order, and keeps them in an
-  `array` (8 MB for 1M integer ids). A position then gives its row's id at once:
-  scrolling to any position, a range selection (Shift+click) and the count need no query.
-  The cells are read by id, a window of rows at a time.
-- **Rows are selected by id, not by index**, so the selection stays on its rows when the
-  data or the order changes. An id that is gone drops from the selection.
-- **The filters are those of `TableView`.** The user types the same text, `parse_filter`
-  parses it into a `Filter`, and the source turns each `Filter` into its own query (a
-  `WHERE` clause, a numpy mask). A source that can't apply an operator says so, and the
-  filter bar marks the filter invalid.
-- **Saved state** holds the settings (the sort, the search, the filters) and
-  `selected_ids`, never the data or the source. The app gives the view its source again
-  after loading, as it builds its model.
-
-The steps. Each one is a commit of its own that `make check test` passes, with its tests
-and its documentation, and leaves the table usable as far as it goes. The registry test
-compares supported renderer keys across backends (`tests/test_renderer_registry.py`),
-so a step that adds the
-renderers adds them on Qt, Textual and the web together. Then each feature lands on the
-three backends in one step.
-
-`TableSource`, the protocol of a source of rows, is in `core/view.py`, with `Sort`,
-`SourceColumn` and `ListSource` (a source of `attrs` records in memory). So is the view,
-`DataTableView` (working name), which Qt (`QDataTableView`), Textual (`ComposeDataTable`,
-on `ScrollView` and `render_line`) and the web (a scrolled frame, see its design note
-below) show. A click on a header sorts by its column (`sort_by`), each
-backend showing the order. A click on a row selects it (`select_at`), Shift extending the
-selection on Qt and Textual (`extend_to`), and a double click or Enter activates it there
-(`activate_at`). While `filterable_columns` names columns, `TableView`'s filter bar shows
-above the rows (the web's bar is `WebFilterBarRenderer`, shared by both tables).
-A `SqliteSource` (in `core/sqlitemodel.py`) gives it a query's rows, which SQLite sorts and
-filters; `largetable.py` shows a million readings in SQLite with it. Ctrl+C copies the
-selected rows as tab-separated text (`selection_text`), through the page's clipboard on
-the web. Export CSV writes the rows shown (`csv_chunks`, a window at a time): in a job
-to a file the user picks on Qt and Textual (`export_csv`), streamed by `GET
-/widget/{id}/csv` on the web, a plain link since it only reads. A source of
-`DATA_TABLE_JOB_ROWS` rows or more orders them in a job on Qt and Textual (one at a time,
-once more for settings changed meanwhile, again after New or Open drop it); the web orders
-them in the request's thread, as a job's result would wait for the page's next poll.
-`SqliteSource` reads on read-only connections of its own (`SqliteModel.reading`), in WAL
-mode: neither the order, the cells nor a job's write waits for another. The
-view isn't generic over its ids' type: it saves them as JSON values (e.g. integers or text). The
-protocol is in `view.py`, not a module of its own: the view needs it when `attrs` resolves
-its fields, and the source needs the filters of `view.py`.
-
-`DataFrameSource` (in `core/dataframesource.py`, the `dataframe` extra) gives it a
-dataframe's rows through narwhals: pandas, Polars, PyArrow, or a lazy frame with an
-`id_column`. The frame's library sorts and filters; `uberpickupsframe.py` shows it on a
-Polars frame. It stands for the numpy source once planned: an app wraps its arrays in a
-frame. A numpy source of numeric columns alone could come back if an app has arrays and no
-dataframe library.
+`DataTableView` is in (user guide, "A large table"): a read-only table that reads only the
+rows it shows from a `TableSource` (`ListSource`, `SqliteSource`, `DataFrameSource`), on
+Qt, Textual and the web. The view holds the order (the shown rows' ids, in an `array`), the
+selection by id, and the settings that the study saves, never the data. `largetable.py`
+shows it on SQLite, and `uberpickupsframe.py` on a Polars frame. A numpy source of numeric
+columns alone could come back if an app has arrays and no dataframe library. Left, each
+step on the three backends together (the registry test compares their renderer keys):
 
 1. **Edit**, if an app needs it: `update`, `insert` and `remove` on the source, as
    optional methods, and editable columns. An edit is parsed into the column's type
@@ -200,11 +131,9 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 ## 4 — Adoption
 
-1. **Publish the documentation site** (`make docs`, Sphinx + MyST) on GitHub Pages or Read
-   the Docs, and link to it from `README.md`.
-2. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt, a
+1. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt, a
    plain `uvicorn` deployment note for the web.
-3. **`CHANGELOG.md`, semantic versions and a PyPI release.**
+2. **`CHANGELOG.md`, semantic versions and a PyPI release.**
 
 ## 5 — Later, when needed
 
@@ -214,7 +143,7 @@ signals emitted on the main thread (`examples/pipesweep.py`).
   raises multi-process serving (sessions live in one process's memory today).
 - **Web: type-check `static/page.js`.** Add `// @ts-check` and JSDoc types, checked by
   `tsc --noEmit --allowJs` as a CI-only step; start with uPlot's chart options. Only worth
-  it once the script passes about 2000 lines (958 today) or several people edit it: it
+  it once the script passes about 2000 lines (1175 today) or several people edit it: it
   brings Node into CI, and it can't check the `data-*` attributes and custom events it
   shares with `webrenderer.py`, which the browser tests cover.
 - **Web: raw HTML in Markdown.** The web shows raw HTML in a `MarkdownView` as text

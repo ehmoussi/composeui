@@ -31,22 +31,25 @@ class PipeMainView(MainView):
         self.results.stress.text = f"{stress:g} MPa"
 ```
 
-- **Failures.** The job's `failed` signal emits the exception on the main thread.
-  Connect a handler to show the error and clear loading indicators there, not inside the
-  worker function. A `RefusedError` (`composeui.core.model`) logs a warning with its
-  message and no traceback. Other exceptions log an error with the full traceback,
-  even when a `failed` handler shows them. Use `RefusedError` for an expected refusal;
-  do not wrap unexpected programming errors just to hide their tracebacks.
-- **Programming errors.** Uncaught `CalledInJobError`, `AssertionError`, `AttributeError`,
-  `NameError`, `NotImplementedError`, and `TypeError` escape the worker. Python reports
-  their tracebacks through `threading.excepthook`; they do not emit `failed` or become
-  `task.error`. Cleanup is dispatched to the main thread: the job stops counting as
-  running, and its task returns to idle and emits `changed`. Other jobs are not reset.
-  Without a toolkit, call `jobs.wait()` to process this cleanup; it does not re-raise
-  the worker's error. Dropping a job does not suppress its programming errors.
-  Classification uses exception types, not the cause of each error. `ValueError`,
-  `KeyError`, and I/O errors still follow the failure path because external data can
-  cause them. Use `RefusedError` for an expected input or business-rule refusal.
+- **Failures.** When the function raises, the job's `failed` signal emits the exception on
+  the main thread. Connect a callback to it to show the error, and to clear what shows
+  that the work runs. Do not do it in the function of the job.
+  - A `RefusedError` (`composeui.core.model`) logs a warning with its message, without a
+    traceback. Raise it for an expected refusal, for example of bad input or of a rule of
+    the app.
+  - Another exception logs an error with its traceback, even when a `failed` callback
+    shows it. Do not turn an unexpected error into a `RefusedError` to hide its traceback.
+  - A `ValueError`, a `KeyError`, or an I/O error follows this path too, because external
+    data can cause it.
+- **Programming errors.** An uncaught `CalledInJobError`, `AssertionError`,
+  `AttributeError`, `NameError`, `NotImplementedError`, or `TypeError` leaves the function
+  of the job. The job chooses by the type of the exception, not by its cause.
+  - Python reports its traceback through `threading.excepthook`. `failed` does not emit
+    it, and a [task](#reusable-loading-tasks) does not keep it as its `error`.
+  - The job still stops on the main thread: it no longer counts as running, and its task,
+    if any, goes back to idle and emits `changed`. The other jobs go on.
+  - Without a toolkit, `jobs.wait()` runs this clean-up. It does not raise the error again.
+  - A dropped job reports its programming errors too.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
   stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
@@ -56,14 +59,16 @@ class PipeMainView(MainView):
   thread changes them (`job.cancel()` works from any thread). Called from the function of a
   job, they raise `CalledInJobError`. To start another job, return what it needs, and start
   it from the callback that gets it.
-- **Progress.** Connect `job.progress` to a handler, as with `job.finished` and `job.failed`.
-  Annotate the worker's job as `Job[ResultT, ProgressT]`: the second type specifies progress
-  values and handler arguments. `Job[ResultT]` defaults to `None` for jobs without progress.
-  In the worker, call `job.report_progress(value)` with a count, percentage, message, or
-  another application-defined value. The signal emits on the main thread, in report order,
-  before `finished` or `failed`. Its callbacks can ask for `main_view` and `model` too.
-  Dropped jobs do not emit progress that is still waiting. For an arbitrary UI callback,
-  use `job.call_on_main_thread(callback)`; it follows the same ordering and drop rules.
+- **Progress.** In the function, `job.report_progress(value)` reports a value of your
+  choice, such as a count, a percentage, or a message. `job.progress` emits each value on
+  the main thread, in the order of the reports, before `finished` or `failed`. Connect it
+  as `finished` and `failed` are. Its callbacks can ask for `main_view` and `model` too.
+  - Annotate the function's job as `Job[ResultT, ProgressT]`: the second type is the type
+    of the values, and of the callbacks' argument. `Job[ResultT]` is a job without
+    progress, its `ProgressT` `None`.
+  - A dropped job emits none of the values that still wait.
+  - `job.call_on_main_thread(callback)` runs any other callback on the main thread, in the
+    same order and with the same rule for a dropped job.
 - **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
   emits it when it changes, for example to disable a Run button.
 - **New, Open, and closing the app** cancel the running jobs and drop their results,
@@ -155,36 +160,37 @@ main_view.jobs.wait()  # Only for a main view with no toolkit.
 assert main_view.status.text == "Done: 3 rows"
 ```
 
-- **Read-only state.** `is_running` stays true until the outcome arrives on the main thread.
-  `progress` holds the last reported value, including after completion. `result` holds the
-  successful result; `error` holds the exception after failure. Unset values are `None`.
-  `has_result` distinguishes a successful `None` result from an idle or failed task.
-- **Starting again.** `start` clears progress, result, and error, then emits `changed` with
-  `is_running=True`. It returns `True`. While the task runs, another `start` returns `False`
-  without changing state or starting another worker. Other tasks and ordinary jobs can run
-  at the same time. A success or failure handler can start the next run.
-- **Canceling and dropping.** `task.cancel()` asks only this task's current run to stop.
-  Like `job.cancel()`, it works from any thread, and the worker still returns its outcome.
-  `jobs.cancel()` cancels all runs. New, Open, closing, and `jobs.drop()` clear every task's
-  state and emit `changed`, even for completed tasks. Old queued progress and outcomes do
-  not reach the task or overwrite a new run.
+- **Its state.** These attributes are read-only.
+  - `is_running` stays true until the outcome of the run comes to the main thread.
+  - `progress` holds the last value reported, also once the run is over.
+  - `result` holds the result of a run that succeeded, and `error` the exception of a run
+    that failed. `progress`, `result`, and `error` are `None` while they have no value.
+  - `has_result` tells a run that succeeded with a result of `None` from an idle task or a
+    task that failed.
+- **Start again.** `start` clears `progress`, `result`, and `error`, emits `changed` with
+  `is_running` true, and returns `True`. While the task runs, another `start` returns
+  `False`: it changes nothing and starts no function. Other tasks and jobs can run at the
+  same time. A `finished` or `failed` callback can start the next run.
+- **Cancel and drop.** `task.cancel()` asks only the current run of this task to stop. As
+  `job.cancel()`, it works from any thread, and the function still returns its outcome.
+  `jobs.cancel()` cancels every run. New, Open, closing the app, and `jobs.drop()` clear
+  the state of every task and emit `changed`, also for a task that is over. The progress
+  and the outcome of a dropped run never reach the task, so they can't overwrite a new run.
 - **One callback per outcome.** Connect `finished` to show a result, and `failed` to show an
   error. Their callbacks get the result or the exception, so they read no state. `changed`
   then only shows that a run is going on. New, Open, and `jobs.drop()` emit neither.
-- **Callbacks and types.** `changed`, `finished`, and `failed` callbacks can ask for
-  `main_view` and `model`. The worker's
-  annotations determine the types of `result`, `progress`, and the arguments of `start`.
-  Create tasks and call `start` on the main thread; a job's worker raises `CalledInJobError`
-  if it tries either operation. Tasks use the same failure and programming-error rules as
-  ordinary jobs. After a programming error, `error` and `result` are `None`, `has_result`
-  is false, and the task can start a fresh run.
-- **Runtime state.** Create a task as an instance attribute in `__attrs_post_init__`, as above,
-  not as a view field. It is then absent from saved view state. The same task is reused after
-  New or Open; its state is cleared with the study's jobs.
+- **Callbacks and types.** The callbacks of `changed`, `finished`, and `failed` can ask for
+  `main_view` and `model`. The annotations of the function give the types of `result`,
+  `progress`, and the arguments of `start`.
+- **The main thread.** Create a task and call its `start` on the main thread. From the
+  function of a job, both raise `CalledInJobError`.
+- **Errors.** A task follows the rules of a job for failures and programming errors. After
+  a programming error, `error` and `result` are `None`, `has_result` is false, and the task
+  can start a new run.
+- **Not study data.** Create the task in `__attrs_post_init__`, as an attribute of the
+  instance, not as a view field. The study then does not save it. New and Open keep the
+  same task, and clear its state with the jobs of the study.
 
-The [Uber pickups example](../../src/examples/uberpickups.py) shows the CSV's progress in a
-`changed` callback, the chart and the map in a `finished` callback, and the error in a
-`failed` callback. The checkbox's `toggled` signal uses a separate handler to show or hide
-the raw-data table without changing the map filter.
-The model loads the CSV and counts pickups by hour; the main view starts the task and
-displays its result. An hour slider queries the saved rows to update only the map.
+The [Uber pickups example](../../src/examples/uberpickups.py) imports its CSV file in a
+loading task. It shows the progress in a `changed` callback, the chart and the map in a
+`finished` callback, and the error in a `failed` callback.

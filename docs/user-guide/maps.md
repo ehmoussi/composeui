@@ -1,8 +1,8 @@
 # Maps
 
-A `MapView` shows geographic points over an interactive street map. Use it for pickup
-locations or other measurements with latitude and longitude. Use `ChartView` for plots
-with numeric axes.
+A `MapView` shows geographic points over a street map that the user pans and zooms, for
+example the places of pickups or of measurements. For a plot on numeric axes, use a
+[`ChartView`](charts.md).
 
 ```python
 from composeui.core.view import MainView, MapPoint, MapView, child, define_view
@@ -25,67 +25,73 @@ class PickupsMainView(MainView):
 
 ## Coordinates, points, and viewport
 
-- **Coordinates.** `MapPoint(latitude=..., longitude=...)` takes degrees as keyword arguments.
-  Longitude must be between -180 and 180. Latitude must be between -85.05112878 and
-  85.05112878, the range of a Web Mercator map. Non-finite coordinates are refused.
+- **Coordinates.** `MapPoint(latitude=..., longitude=...)` takes degrees, as keyword
+  arguments. The longitude goes from -180 to 180. The latitude goes from -85.05112878 to
+  85.05112878, the range of a Web Mercator map. A point out of range, or with a coordinate
+  that is not finite, raises an error.
 - **Points of a dataframe.** With the `dataframe` extra, `points_of(frame, latitude,
   longitude)` from `composeui.core.dataframesource` gives the points of two columns of a
-  pandas, Polars, or PyArrow frame. It leaves out the rows missing a coordinate, or out of
-  the map's range.
-- **Automatic fitting.** `center` and `zoom` default to `None`. The map fits the points
-  with 32 pixels of padding on each side and fits again when points or the widget size change.
-  Points across the date line fit together. With no points, the map shows the world around
-  latitude 0 and longitude 0. A single location uses zoom 12.
-- **Overrides.** Set `center` to a `MapPoint` to fix the center, or set `zoom` to fix the
-  zoom level. Each override is independent: the other value can still fit automatically.
-  Zoom takes OpenStreetMap levels from 0 to 19. Qt can raise the minimum zoom to fill its
-  widget, so zoom limits or a very small widget can prevent a full fit.
-- **Points.** Assign a new `points` list to redraw the blue dots. After the user pans or
-  zooms, the view holds the chosen center and zoom. New points and resizing then keep that
-  viewport. Set both `center` and `zoom` back to `None` to restore automatic fitting.
-  The view does not limit the list; applications must bound large datasets.
+  pandas, Polars, or PyArrow frame. It leaves out the rows that miss a coordinate, or that
+  are out of the map's range.
+- **Points.** Assign a new `points` list to draw the blue dots again. The view does not
+  limit the number of points: the app keeps a large dataset to a size that the map can show.
+- **Automatic fit.** `center` and `zoom` are `None` by default. The map then fits the
+  points, with 32 pixels of padding on each side. It fits again when the points or the size
+  of the map change. Points on both sides of the date line fit together. Without points,
+  the map shows the world around latitude 0 and longitude 0. A single point shows at zoom
+  12.
+- **Your own center or zoom.** Set `center` to a `MapPoint` to fix the center, or set `zoom`
+  to fix the zoom. Each one is independent: the other one still fits the points. The zoom
+  goes from 0 to 19, the levels of OpenStreetMap. Qt can raise the minimum zoom to fill
+  its widget, so a zoom limit or a very small map can stop the points from all fitting.
+- **The user's viewport.** After the user pans or zooms, `center` and `zoom` hold the
+  user's viewport. New points and a new size then keep it. To fit the points again, set
+  both `center` and `zoom` to `None`.
 - **Height.** `height` is in pixels, 400 by default.
-- **Interaction.** Drag to pan and use the mouse wheel to zoom. Focus the map and use
-  arrow keys to pan, or `+` and `-` to zoom.
-- **Signals.** `clicked` emits latitude then longitude. `viewport_changed` emits no
-  arguments after a user action updates `center` and `zoom`. Programmatic changes do not
-  emit either signal. Automatic fitting leaves the view's automatic values as `None`;
-  it does not emit a signal or turn them into overrides.
-- **State.** The study saves `center` and `zoom`. It does not save `points`, `height`,
-  `tiles`, `user_agent`, or the title. Saved `None` values restore automatic fitting.
-  Rebuild points from the model after loading a study; automatic fitting follows the new data.
+- **Pan and zoom.** The user drags to pan and turns the mouse wheel to zoom. On a map that
+  has the focus, the arrow keys pan, and `+` and `-` zoom.
+- **Signals.** `clicked` emits the latitude, then the longitude. `viewport_changed` emits
+  no arguments, after a pan or a zoom of the user sets `center` and `zoom`. When code sets
+  them, neither signal emits. The automatic fit emits no signal either, and leaves
+  `center` and `zoom` at `None`.
+- **State.** The study saves `center` and `zoom`, and a saved `None` fits the points again.
+  The study does not save `points`, `height`, `tiles`, `user_agent`, or the title. After
+  a study opens, build the points again from the model: the automatic fit follows them.
 
 ## Tiles and network access
 
-The first implementation uses OpenStreetMap's standard raster tiles at
-`https://tile.openstreetmap.org/{z}/{x}/{y}.png`. No API key is needed. Tiles need internet
-access. Set `tiles=False` to draw only the points, without tile requests.
+The map draws the streets from the standard raster tiles of OpenStreetMap,
+`https://tile.openstreetmap.org/{z}/{x}/{y}.png`. They need no API key, but they need
+internet access. Set `tiles=False` to draw only the points, with no tile requests.
 
-Follow the [OpenStreetMap tile usage policy](https://operations.osmfoundation.org/policies/tiles/):
+Follow the [tile usage policy of OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/):
 
-- Keep the visible **© OpenStreetMap contributors** attribution.
-- `user_agent` is optional and defaults to ComposeUI's identifier and project URL.
-  Override it to identify your own native application and provide a contact URL.
-  On the web, the browser identifies itself and sends the page's origin as its referrer.
-- Respect HTTP caching. Neither backend offers bulk downloading or offline prefetching.
-- Do not rely on the public tile server for guaranteed availability or unrestricted traffic.
+- **Keep the attribution.** The map shows **© OpenStreetMap contributors**.
+- **Identify the app.** `user_agent` is optional. By default, it gives the name and the
+  project address of ComposeUI. On Qt, set it to the name of your app and an address to
+  contact you. On the web, the browser sends its own identity, and the page's origin as its
+  referrer.
+- **Keep the HTTP caching.** Neither backend downloads tiles in bulk or ahead of use.
+- **Don't count on the public server.** It does not promise to be available, or to accept
+  all traffic.
 
-The tile provider receives the client's IP address and the requested map area. Pickup
-coordinates are drawn locally, not uploaded to the provider. An offline street map or
-another tile provider is not supported yet.
+The tile server receives the IP address of the user and the area of the map that it
+shows. The points are drawn on the user's machine, and are never sent to the tile server.
+ComposeUI has no offline street map yet, and no other tile server.
 
 ## What each backend draws
 
-- **Qt** embeds the Qt Location QML plugin in `QQuickWidget`. PySide6 includes the plugin;
-  no extra mapping dependency, browser engine, or QWebEngine is needed. One canvas draws
-  the points rather than one QML item per point. Include `map.qml`, the Qt Location and
-  Qt Positioning QML modules, and the location plugins when packaging an executable.
-- **The web** loads the bundled deck.gl 9.2.6 script when the page first shows a map.
-  A raster tile layer supplies streets, and a GPU-rendered scatterplot draws points.
-  The browser needs WebGL2. Changing points rebuilds the map, fitting automatic values
-  or keeping the viewport that the user chose.
-- **Textual** does not render `MapView`. Other views remain available.
+- **Qt** shows the Qt Location QML plugin in a `QQuickWidget`. PySide6 includes the
+  plugin: no other mapping package, browser engine, or QWebEngine is needed. One canvas
+  draws all the points, not a QML item per point. When you package the app as an
+  executable, include `map.qml`, the Qt Location and Qt Positioning QML modules, and the
+  location plugins.
+- **The web** loads [deck.gl](https://deck.gl/), which ComposeUI serves itself, when the
+  page first shows a map. A raster tile layer draws the streets, and a scatterplot layer
+  draws the points on the GPU. The browser needs WebGL2. New points build the map again:
+  it fits the points, or keeps the viewport of the user.
+- **Textual** does not show a `MapView`. The other views of the app still show.
 
-The [Uber pickups example](../../src/examples/uberpickups.py) shows up to 10,000 sampled
-pickup locations for the hour selected by a slider. Its hourly chart counts all rows. Run it with
-`uv run python -m examples.uberpickups --backend qt`, or `--backend web`.
+The [Uber pickups example](../../src/examples/uberpickups.py) shows up to 10,000 pickups
+for the hour that a slider picks (`uv run python -m examples.uberpickups --backend qt`, or
+`web`).
