@@ -7,6 +7,8 @@ import builtins
 import importlib
 import re
 import runpy
+import subprocess
+import sys
 import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -83,11 +85,23 @@ def test_each_name_that_an_example_imports_from_composeui_exists(code: str) -> N
 def test_each_complete_example_runs(
     code: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # not as `__main__`: an app's `run` would start its backend
     monkeypatch.chdir(tmp_path)
-    example = tmp_path / "example.py"
-    example.write_text(code, encoding="utf-8")
-    runpy.run_path(str(example), run_name="doc_example")
+    tests = [
+        node
+        for node in ast.parse(code).body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+    ]
+    if tests:
+        # an example of a test runs as pytest runs it, with its fixtures
+        example = tmp_path / "test_example.py"
+        example.write_text(code, encoding="utf-8")
+        command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(example)]
+        subprocess.run(command, check=True)  # noqa: S603
+    else:
+        # not as `__main__`: an app's `run` would start its backend
+        example = tmp_path / "example.py"
+        example.write_text(code, encoding="utf-8")
+        runpy.run_path(str(example), run_name="doc_example")
 
 
 def _anchor(heading: str) -> str:

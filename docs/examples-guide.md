@@ -55,8 +55,8 @@ options, such as `--language` and `-f FILE`.
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
 | [`textual_demo.py`](../src/examples/textual_demo.py) | textual | A small form in a terminal |
 
-The tests in [`tests/`](../tests/) also run these examples. When you change an example,
-run its tests.
+The tests in [`tests/`](../tests/) also run these examples, as
+[Testing your app](user-guide/testing.md) shows. When you change an example, run its tests.
 
 ## Where to start
 

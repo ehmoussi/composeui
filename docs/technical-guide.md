@@ -527,7 +527,8 @@ uv sync --group dev --group docs --all-extras
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
 - **`make test` checks the examples and the navigation** (`tests/test_docs.py`). Each name
   that a Python block of the README, the guides, or the skill imports from `composeui` must
-  exist. A block that defines every name it uses must run, in a scratch directory.
+  exist. A block that defines every name it uses must run, in a scratch directory, and a
+  block that defines `test_` functions must pass under pytest.
   `docs/user-guide.md` must list the `##` and `###` headings of the guide's pages, and the
   README's relative links must lead to files.
 - **The screenshots of the examples are taken by a script.** `make screenshots` runs

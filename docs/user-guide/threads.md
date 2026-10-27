@@ -80,7 +80,8 @@ class PipeMainView(MainView):
 - **On the web,** while any job runs, the page asks the server every 300 ms for the changes
   of the jobs. It stops once they are over.
 - **Tests.** When no toolkit shows a main view, its jobs emit their results when the test
-  calls `main_view.jobs.wait()`, on the thread of the test.
+  calls `main_view.jobs.wait()`, on the thread of the test (see
+  [Test the jobs](testing.md#test-the-jobs)).
 
 [`src/examples/taskview.py`](../../src/examples/taskview.py) runs 25 jobs at once, and cancels
 them.
