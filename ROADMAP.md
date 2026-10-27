@@ -133,7 +133,9 @@ signals emitted on the main thread (`examples/pipesweep.py`).
 
 1. **Packaging story** for apps built on ComposeUI: PyInstaller or briefcase for Qt, a
    plain `uvicorn` deployment note for the web.
-2. **`CHANGELOG.md`, semantic versions and a PyPI release.**
+2. **`CHANGELOG.md`, semantic versions and a PyPI release.** Then give the agent skill
+   (`docs/_site/skills/composeui/SKILL.md`) the version it describes, checked by a test
+   against the package's version, so an agent can tell that its copy is old.
 
 ## 5 — Later, when needed
 
