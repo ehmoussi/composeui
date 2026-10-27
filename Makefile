@@ -161,15 +161,21 @@ UPLOT_SHA256 := 19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f
 UPLOT_CSS_SHA256 := df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04
 CALLY_SHA256 := 4dcba6a3b8ec63b66ff2fbfc6cf47b7dee1eb4896eac89fe7487d82e28e15870
 CALLY_LICENSE_SHA256 := c48fd407090d6d752b0370d39db55bd750e6dfc678ee252d4c906bddf54132eb
+UPLOT_LICENSE_SHA256 := 8f989229699b4fe2f1a0432d0e9edc338a8a911e250e2d1b01ecd770a5f5b1bd
+# daisyUI's classes are built into app.css (`make css`); its license ships beside it
+DAISYUI_LICENSE_SHA256 := 8709e3ac65c84637c422dc8082b893d9997fce093751c77b2f1983bf29dbf9ea
 
-# Cally's file has no license comment: it gets Cally's LICENSE as one
+# Cally's file has no license comment: it gets Cally's LICENSE as one; uPlot's has only its
+# address, and its LICENSE goes beside it
 .PHONY: web-deps
 web-deps:
 	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/dist.min.js,$(STATIC)/deckgl.min.js,$(DECKGL_SHA256))
 	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/LICENSE,$(STATIC)/deckgl.LICENSE,$(DECKGL_LICENSE_SHA256))
 	$(call fetch,https://unpkg.com/htmx.org@$(HTMX_VERSION)/dist/htmx.min.js,$(STATIC)/htmx.min.js,$(HTMX_SHA256))
 	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.iife.min.js,$(STATIC)/uPlot.iife.min.js,$(UPLOT_SHA256))
+	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/LICENSE,$(STATIC)/uPlot.LICENSE,$(UPLOT_LICENSE_SHA256))
 	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.min.css,css/uPlot.min.css,$(UPLOT_CSS_SHA256))
+	$(call fetch,https://unpkg.com/daisyui@$(DAISYUI_VERSION)/LICENSE,$(STATIC)/daisyui.LICENSE,$(DAISYUI_LICENSE_SHA256))
 	$(call fetch,https://unpkg.com/cally@$(CALLY_VERSION)/dist/cally.js,$(STATIC)/cally.dist.js,$(CALLY_SHA256))
 	$(call fetch,https://unpkg.com/cally@$(CALLY_VERSION)/LICENSE,$(STATIC)/cally.LICENSE,$(CALLY_LICENSE_SHA256))
 	{ echo '/*! https://github.com/WickyNilliams/cally (v$(CALLY_VERSION)), its dependency atomico bundled in'; \

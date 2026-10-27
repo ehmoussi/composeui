@@ -462,14 +462,16 @@ the classes used in `webcore`, run `make css`, and commit the built file. `make 
 downloads the Tailwind CLI and the daisyUI files once, into `css/vendor/`, which is not
 committed. It needs no Node or npm. It checks the SHA-256 of each file against the one in the
 `Makefile` and `make.ps1`, and fails when they differ. When you change `TAILWIND_VERSION` or
-`DAISYUI_VERSION`, change the SHA-256 values in both files, and delete `css/vendor/`.
+`DAISYUI_VERSION`, change the SHA-256 values in both files, and delete `css/vendor/`. A new
+daisyUI version also needs `make web-deps`, which downloads its license.
 
 The page's scripts are committed in `webcore/static/`: htmx, uPlot, Cally, and deck.gl.
 uPlot's stylesheet, `css/uPlot.min.css`, is committed too. The package then needs no
 download, and the page works offline. `make web-deps` downloads these files from npm at the
 versions in the `Makefile`, and checks their SHA-256. It adds Cally's license to `cally.js`
-as a comment, and keeps deck.gl's license beside its script, in `deckgl.LICENSE`. To update
-one of them:
+as a comment. It keeps the licenses of deck.gl and uPlot beside their scripts, in
+`deckgl.LICENSE` and `uPlot.LICENSE`, and daisyUI's beside `app.css`, in `daisyui.LICENSE`.
+To update one of them:
 
 1. Change its version and its SHA-256 in the `Makefile` and in `make.ps1`.
 2. Change its version in the comments of `webcore/page.py`.

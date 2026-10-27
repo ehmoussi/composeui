@@ -56,10 +56,12 @@ $pollers
 _STATIC_URLS = {
     # htmx 2.0.10 (https://github.com/bigskysoftware/htmx); `make web-deps` updates these files
     "htmx_url": _static_url("htmx.min.js"),
+    # Tailwind and daisyUI 5.7.47 classes, daisyUI's license in daisyui.LICENSE
     "css_url": _static_url("app.css"),
     # a file, not inline: a policy can then allow the page's own scripts by address
     "page_url": _static_url("page.js"),
-    # uPlot 1.6.32 (https://github.com/leeoniya/uPlot), its stylesheet in css/uPlot.min.css
+    # uPlot 1.6.32 (https://github.com/leeoniya/uPlot), its stylesheet in css/uPlot.min.css,
+    # its license in uPlot.LICENSE
     "uplot_url": _static_url("uPlot.iife.min.js"),
     # Cally 0.9.2 (https://github.com/WickyNilliams/cally), styled by daisyUI's `cally`
     "cally_url": _static_url("cally.js"),

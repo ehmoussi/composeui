@@ -81,9 +81,20 @@ $WebDeps = @(
         Sha256 = '19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f'
     }
     @{
+        Url    = "https://unpkg.com/uplot@$UplotVersion/LICENSE"
+        Path   = "$Static/uPlot.LICENSE"
+        Sha256 = '8f989229699b4fe2f1a0432d0e9edc338a8a911e250e2d1b01ecd770a5f5b1bd'
+    }
+    @{
         Url    = "https://unpkg.com/uplot@$UplotVersion/dist/uPlot.min.css"
         Path   = 'css/uPlot.min.css'
         Sha256 = 'df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04'
+    }
+    # daisyUI's classes are built into app.css (css); its license ships beside it
+    @{
+        Url    = "https://unpkg.com/daisyui@$DaisyuiVersion/LICENSE"
+        Path   = "$Static/daisyui.LICENSE"
+        Sha256 = '8709e3ac65c84637c422dc8082b893d9997fce093751c77b2f1983bf29dbf9ea'
     }
     @{
         Url    = "https://unpkg.com/cally@$CallyVersion/dist/cally.js"
@@ -273,7 +284,8 @@ function Invoke-Css {
         '-o', 'src/composeui/webcore/static/app.css', '--minify')
 }
 
-# Cally's file has no license comment: it gets Cally's LICENSE as one
+# Cally's file has no license comment: it gets Cally's LICENSE as one; uPlot's has only its
+# address, and its LICENSE goes beside it
 function Invoke-WebDeps {
     foreach ($dependency in $WebDeps) {
         Save-Verified $dependency.Url $dependency.Path $dependency.Sha256
