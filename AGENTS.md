@@ -118,6 +118,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
   escapes every value (see the `web-security` skill).
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
+- The public API is the `__all__` of each `composeui.core` module: the API reference shows
+  only it, and `tests/test_docs.py` checks that the docs and examples import nothing else.
+  Add a name that apps use to it. The other names, also those the backends import, can
+  change in any release.
 - Match the existing comment density: brief docstrings, comments explain *why*.
 
 ## Permission for documentation and tests

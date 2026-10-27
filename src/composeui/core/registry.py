@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 if TYPE_CHECKING:
     from composeui.core.renderer import Renderer
 
+__all__ = ["Backend", "RendererType", "create_renderer"]
+
 
 class Backend(NamedTuple):
     """A backend's modules, by dotted path: none is imported until the backend is used."""

@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 
     from composeui.core.view import MainView, View
 
+__all__ = ["CatalogReport", "check_main_view", "main", "placeholders"]
+
 
 @attrs.define
 class CatalogReport:

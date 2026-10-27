@@ -67,6 +67,19 @@ if TYPE_CHECKING:
     #: a query's parameters: by position, or by name
     Parameters: TypeAlias = Union[Sequence[Any], Mapping[str, Any]]
 
+__all__ = [
+    "CSVSqliteTable",
+    "SqliteModel",
+    "SqliteSource",
+    "SqliteTable",
+    "as_parameters",
+    "csv_field",
+    "define_csv_row",
+    "open_csv_url",
+    "table",
+    "unique_name",
+]
+
 T = TypeVar("T")
 SqliteTableT = TypeVar("SqliteTableT", bound="SqliteTable")
 

@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
+__all__ = ["Signal"]
+
 
 LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
