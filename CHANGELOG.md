@@ -6,7 +6,7 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-27
 
 The first release on PyPI.
 
