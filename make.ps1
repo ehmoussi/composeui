@@ -11,7 +11,7 @@
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
-        'mypy-tests', 'pyright', 'pyrefly', 'ty', 'zuban', 'translations', 'test',
+        'pyright', 'pyrefly', 'ty', 'zuban', 'translations', 'test',
         'browser-test', 'docs', 'screenshots', 'css', 'web-deps', 'clean', 'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
@@ -170,10 +170,11 @@ function Invoke-Lint {
 
 function Invoke-Mypy {
     Invoke-Native uv @(
-        'run', 'mypy',
+        'run', '--locked', '--group', 'browser', '--all-extras', 'mypy',
         '--config-file', 'pyproject.toml',
         '--package', 'composeui',
         '--package', 'examples',
+        '--package', 'tests',
         '--always-false=PYQT5',
         '--always-false=PYSIDE2',
         '--always-false=PYQT6',
@@ -190,7 +191,7 @@ function Invoke-TypeChecker {
 }
 
 function Invoke-Typecheck {
-    Invoke-TypeChecker -Arguments @('mypy')
+    Invoke-Mypy
     Invoke-TypeChecker -Arguments @('pyright')
     Invoke-TypeChecker -Arguments @('pyrefly', 'check')
     Invoke-TypeChecker -Arguments @('ty', 'check')
@@ -315,11 +316,10 @@ $actions = @{
     'lint'         = { Invoke-Lint }
     'mypy'         = { Invoke-Mypy }
     'typecheck'    = { Invoke-Typecheck }
-    'mypy-tests'   = { Invoke-TypeChecker -Arguments @('mypy') }
     'pyright'      = { Invoke-TypeChecker -Arguments @('pyright') }
     'pyrefly'      = { Invoke-TypeChecker -Arguments @('pyrefly', 'check') }
     'ty'           = { Invoke-TypeChecker -Arguments @('ty', 'check') }
-    'zuban'        = { Invoke-TypeChecker -Arguments @('zuban', 'mypy') }
+    'zuban'        = { Invoke-TypeChecker -Arguments @('zuban', 'mypy', 'tests') }
     'translations' = { Invoke-Translations }
     'test'         = { Invoke-Test }
     'browser-test' = { Invoke-BrowserTest }

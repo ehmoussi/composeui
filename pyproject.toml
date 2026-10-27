@@ -91,7 +91,7 @@ constraint-dependencies = ["certifi>=2026.10.19"]
 
 [tool.mypy]
 plugins = ["composeui.mypy"]
-files = ["tests"]
+files = ["src/composeui", "src/examples", "tests"]
 always_false = ["PYQT5", "PYSIDE2", "PYQT6"]
 always_true = ["PYSIDE6"]
 
