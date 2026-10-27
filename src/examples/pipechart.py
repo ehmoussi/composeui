@@ -377,7 +377,7 @@ class PipeChartMainView(MainView):
             if math.isnan(record.computed):
                 styles[index, computed] = CellStyle(background=NAN_COLOR)
                 styles[index, deviation] = CellStyle(background=NAN_COLOR)
-                styles[index, kept] = CellStyle(is_disabled=True)
+                styles[index, kept] = CellStyle(is_enabled=False)
             elif abs(record.deviation) > DEVIATION_WARNING:
                 styles[index, deviation] = CellStyle(
                     background=WARNING_COLOR, mark=NodeMark.WARNING

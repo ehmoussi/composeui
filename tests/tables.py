@@ -166,8 +166,8 @@ class StyledTablesMainView(MainView):
             (1, 2): CellStyle(background="#dc2626"),
             (1, 3): CellStyle(background="#dc2626"),
             (2, 3): CellStyle(background="#fde68a", mark=NodeMark.WARNING),
-            (1, 1): CellStyle(is_disabled=True),
-            (1, 4): CellStyle(is_disabled=True),
+            (1, 1): CellStyle(is_enabled=False),
+            (1, 4): CellStyle(is_enabled=False),
         }
         self.numbers.headers = ["Value"]
         self.numbers.row_headers = ["Number of calls", "Time (s)"]

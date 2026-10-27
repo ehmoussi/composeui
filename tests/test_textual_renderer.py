@@ -3512,7 +3512,7 @@ async def test_a_date_input_s_calendar_keeps_off_the_days_before_its_minimum() -
 @pytest.mark.asyncio
 async def test_a_table_s_picker_closes_on_escape_and_a_disabled_box_ignores_space() -> None:
     view = CellWidgetsMainView()
-    view.variables.cell_styles = {(0, 0): CellStyle(is_disabled=True)}
+    view.variables.cell_styles = {(0, 0): CellStyle(is_enabled=False)}
     app = _app_of(view)
     box = _widget(view.variables)
     assert isinstance(box, ComposeFilterTable)
@@ -3940,7 +3940,7 @@ async def test_a_tab_picked_in_tabs_within_tabs_is_theirs_only() -> None:
 @pytest.mark.asyncio
 async def test_f2_on_a_row_whose_editable_cells_are_disabled_opens_nothing() -> None:
     view = CellWidgetsMainView()
-    view.variables.cell_styles = {(0, 2): CellStyle(is_disabled=True)}  # its role
+    view.variables.cell_styles = {(0, 2): CellStyle(is_enabled=False)}  # its role
     app = _app_of(view)
 
     async with app.run_test(size=(120, 40)) as pilot:

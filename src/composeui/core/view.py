@@ -2529,8 +2529,8 @@ class CellStyle:
     #: its color, as #rrggbb, the same in every theme, e.g. red for NaN; its text is
     #: black or white, whichever reads on it (`text_color`)
     background: Optional[str] = attrs.field(default=None, validator=[_check_background])
-    #: grayed, and never edited, even in an editable column: its widget is disabled
-    is_disabled: bool = False
+    #: False: grayed, and never edited, even in an editable column: its widget is disabled
+    is_enabled: bool = True
     #: a mark before its text, e.g. a warning, named by the table's `mark_text`
     mark: Optional[NodeMark] = None
     #: how many rows it covers, its own and those under it, which show nothing in its
@@ -2967,7 +2967,7 @@ class TableMixin:
 
     def is_cell_editable(self, row: int, column: int) -> bool:
         """Tell whether the user edits a cell: in `editable_columns`, and not disabled."""
-        return column in self.editable_columns and not self.cell_style(row, column).is_disabled
+        return column in self.editable_columns and self.cell_style(row, column).is_enabled
 
     def header_group(self, column: int) -> Optional[HeaderGroup]:
         """Get the group of `header_groups` over `column`, if any."""
@@ -3007,7 +3007,7 @@ class TableMixin:
         checked = {
             self.is_checked(row, column)
             for row in self.shown_rows
-            if not self.cell_style(row, column).is_disabled
+            if self.cell_style(row, column).is_enabled
         }
         return None if len(checked) > 1 else checked == {True}
 
@@ -3022,7 +3022,7 @@ class TableMixin:
             if (
                 row >= len(self.rows)
                 or self.is_checked(row, column) == is_checked
-                or self.cell_style(row, column).is_disabled
+                or not self.cell_style(row, column).is_enabled
             ):
                 continue
             rows = self.rows
