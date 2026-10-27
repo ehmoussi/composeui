@@ -121,7 +121,10 @@ the option for the web (extra `web`, the default).
   it. Use the table's `connection()` for change notifications.
 - **Import CSV through an attrs schema.** Declare
   `class Readings(CSVSqliteTable, row_type=Reading, name="reading")` and use
-  `csv_field("Header", date_format="...", validator=...)` on the row class as needed.
+  `csv_field(name="Header", date_format="...", validator=...)` on the row class as needed.
+  Use `@define_csv_row` for typed schemas; it applies `attrs.define` with its default options.
+  For mypy, set `plugins = ["composeui.mypy"]` under `[tool.mypy]`.
+  Existing `@attrs.define` schemas remain valid at runtime.
   Import these names from `composeui.core.sqlitemodel`. `fill(text, batch_size=100_000,
   limit=None)` follows the batch-insert transaction rules. Conversion and attrs validation
   errors become `RefusedError`. `date_format` requires a date or datetime field and cannot
