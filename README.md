@@ -32,6 +32,20 @@ MVVM terms, they are the view-models
   parameter names of a callback. They inject `view`, `main_view`, or `model` when the
   callback asks for them. So callbacks stay short, without manual lookups.
 
+## When to use it
+
+- **Choose ComposeUI** when one app must show as a desktop window, in a terminal, and in a
+  browser, or may move from one to another later. It also suits an app whose state must be
+  typed, saved as a file, and tested without a UI
+  ([Testing your app](docs/user-guide/testing.md)).
+- **Compared with Streamlit,** the views are explicit classes that keep their state, and
+  nothing runs the script again on each change. The same app also runs as a desktop
+  window or in a terminal.
+- **Compared with Qt, Textual, or a web framework alone,** the app gives up the widgets
+  that only one toolkit has, and keeps one code base for the three.
+- **Not yet** for an app that needs a stable API or a PyPI release, or a widget that is
+  still missing, such as a context menu or a wizard (see [`ROADMAP.md`](ROADMAP.md)).
+
 ## Installation
 
 Requires Python >= 3.9. ComposeUI is not yet published to PyPI. Install it with
