@@ -122,6 +122,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.14"]
+    env:
+      # uv's own Python, as on the other systems: the runner's Python 3.9 is Xcode's, whose
+      # SQLite (Apple's) keeps a WAL's files and refuses to write its schema
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
