@@ -145,6 +145,10 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 
 Read this section before other people use the app, on a network or behind a reverse proxy.
 
+- **No login.** The app has no users or passwords: anyone who reaches its address uses it.
+  Before you give it an address that other people can reach, restrict the access in front
+  of it, for example with a password in the reverse proxy (see
+  [Deploy behind nginx](#deploy-behind-nginx)).
 - **Single process only.** The sessions live in the memory of one server process. A restart
   starts them all over: the server signs the session cookie with a key that it makes when
   it starts, so after a restart each browser gets a new, empty session, and the work that
@@ -225,3 +229,20 @@ Each line keeps a part of the app working:
 
 nginx passes the `Origin`, `Referer`, and `Sec-Fetch-*` headers on as the browser sent
 them. Don't remove them: the server needs them to accept the app's own requests.
+
+The app has no login. To ask for a password, add these lines to the `location` block:
+
+```nginx
+        auth_basic "Pipes";
+        auth_basic_user_file /etc/nginx/app.htpasswd;
+```
+
+Then add a user to the file. `openssl` asks for the user's password:
+
+```bash
+printf "ada:%s\n" "$(openssl passwd -apr1)" >> /etc/nginx/app.htpasswd
+```
+
+nginx then asks for a user and a password before the first page, and the browser sends
+them with each of the app's requests. Each user still gets their own session in each
+browser: the app doesn't know which user is logged in.
