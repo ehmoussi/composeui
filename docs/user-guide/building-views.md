@@ -163,9 +163,9 @@ on Qt, it lines up their labels, and its [checks](#check-a-form) compare their v
 - **The text fields** emit `text_edited` on each change that the user makes, and
   `editing_finished` when the user is done with the field, for example on Enter.
 - **A check box** shows other views only while it is checked, with `shows`:
-  `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again on
-  each `toggled`. A change of `is_checked` in code, such as a study that opens, emits no
-  `toggled`: set the views' `is_visible` there too.
+  `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again
+  each time the box changes: as the user clicks it, as code sets `is_checked`, and as a
+  study opens or New starts one.
 - **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
   is `None` or one of `values`. `value_changed` reports the user's choice. A `None` value
   selects nothing, unless `None` is one of `values`: then it selects that choice, such as

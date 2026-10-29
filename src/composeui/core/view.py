@@ -374,6 +374,20 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
             setattr(current_view, f.name, value)
 
 
+def _show_checked(view: View) -> None:
+    """Show the views of each check box under `view` as the box is: a study's done loading.
+
+    Their own visibility, a state too, may have been loaded after their box's.
+    """
+    views = deque([view])
+    while len(views) > 0:
+        current = views.popleft()
+        if isinstance(current, CheckBoxMixin):
+            for shown in current.shown_views:
+                shown.is_visible = current.is_checked
+        views.extend(current.children_views)
+
+
 def _reset_state(view: View, initial: View) -> None:
     """Set a live view tree back to `initial`'s state, in place.
 
@@ -1243,6 +1257,7 @@ class MainView(View):
         self.check_state_data(data)
         self.jobs.drop()  # working for the study replaced
         _apply_state(self, data)
+        _show_checked(self)
 
     def check_state_data(self, data: Any) -> None:
         """Raise `InvalidStateError` if `load_state_data` can't load `data`.
@@ -1271,6 +1286,7 @@ class MainView(View):
         """
         self.jobs.drop()  # working for the study replaced
         _reset_state(self, type(self)())
+        _show_checked(self)
         # the new view's text is as written in the code
         _retranslate(self, self._tr)
 
@@ -1707,20 +1723,36 @@ class MarkdownView(MarkdownMixin, View):
 class CheckBoxMixin:
     """The fields of a check box: its `text`, its state and `toggled`."""
 
+    def _show_checked(self, _attribute: attrs.Attribute[Any], is_checked: bool) -> bool:
+        for view in self._shown:
+            view.is_visible = is_checked
+        return is_checked
+
     #: shown next to the box
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
-    is_checked: bool = attrs.field(default=False)
+    # its own hooks: the class's would else run, but not these
+    is_checked: bool = attrs.field(default=False, on_setattr=[_show_checked, notify_renderer])
     #: the user checked or unchecked the box; not emitted when `is_checked` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
+    #: the views shown only while the box is checked (see `shows`)
+    _shown: list[View] = attrs.field(
+        factory=list[View], init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    @property
+    def shown_views(self) -> list[View]:
+        """Get the views shown only while the box is checked (see `shows`)."""
+        return list(self._shown)
 
     def shows(self, *views: View) -> None:
-        """Show `views` only while the box is checked, from now on, e.g. an optional part."""
+        """Show `views` only while the box is checked, from now on, e.g. an optional part.
 
-        def follow() -> None:
-            for view in views:
-                view.is_visible = self.is_checked
-
-        self.toggled.connect(follow, now=True)
+        They follow the box however it changes: as the user clicks it, as code sets
+        `is_checked`, and as a study opens or New starts one.
+        """
+        self._shown.extend(views)
+        for view in views:
+            view.is_visible = self.is_checked
 
 
 @define_view
