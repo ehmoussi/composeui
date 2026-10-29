@@ -16,6 +16,7 @@ pytest.importorskip("textual_fspicker")
 import asyncio
 import datetime
 import math
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
 from attrs import Factory
@@ -41,6 +42,7 @@ from textual.widgets import (
 from textual.widgets._select import SelectCurrent
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
+from textual_fspicker.parts import DirectoryNavigation
 
 from composeui.core import chartimage
 from composeui.core.application import ModelApplication, _add_reference_to_signals
@@ -142,6 +144,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
+from tests.studyfiles import StudyFileMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -163,8 +166,6 @@ from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from textual.app import App
     from textual.message import Message
     from textual.pilot import Pilot
@@ -3842,6 +3843,30 @@ async def test_a_file_path_s_picker_opens_here_on_a_path_typed_halfway_and_cance
         assert opened == ["Screen", "FileOpen"]
         assert (picked, field.input.value) == ([], "nowhere/da")
         assert field.input.has_focus
+
+
+@pytest.mark.asyncio
+async def test_a_file_path_s_picker_opens_in_its_first_server_root_and_can_leave_it(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "studies").mkdir()
+    view = StudyFileMainView()
+    view.study.server_roots = (tmp_path / "studies", tmp_path)
+    app = _app_of(view)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        field = _field_widget(view.study.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+        await pilot.click(field.browse_button)
+        await pilot.pause()
+        location = app.screen.query_one(DirectoryNavigation).location
+        app.screen.dismiss(tmp_path / "elsewhere.py")  # as the picker's Open does
+        await pilot.pause()
+
+    assert Path(location) == tmp_path / "studies"
+    # the app's own machine: a file outside the roots is the field's path too
+    assert view.study.path == tmp_path / "elsewhere.py"
 
 
 @pytest.mark.asyncio

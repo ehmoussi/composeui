@@ -104,7 +104,8 @@ class DataForm(FormView):
 - `browse_text` and `reload_text` name the two buttons in a tooltip and for a screen
   reader. The catalogs translate them.
 
-The state saves `text` and `has_reload`, but not `extensions`, which the app sets.
+The state saves `text` and `has_reload`, but not `extensions` or `server_roots`, which the app
+sets.
 
 What the "…" button opens:
 
@@ -112,10 +113,68 @@ What the "…" button opens:
 - Textual shows the file picker of textual-fspicker, in the directory of the field's path.
 - The web shows the browser's file picker. The browser cannot give the page a path, so it
   uploads the file. The session keeps a copy, and the field shows the path of that copy. The
-  session deletes the copy when the field gets its next upload, or when the session ends.
+  session deletes the copy when the field gets its next upload, or when the session ends. With
+  `server_roots`, the web lists the server's files instead (see
+  [Files on the server](#files-on-the-server)).
 
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) opens a Markdown file
 with a file path input, and reads the file again when the user presses reload.
+
+### Files on the server
+
+On the web, the "…" button uploads a copy of the file. A copy is not always what the app
+needs: a study file can refer to other files beside it, or the files are on the server
+already. Give the field `server_roots`, the folders whose files the web lists:
+
+```python
+from pathlib import Path
+from typing import Optional
+
+from composeui.core.view import FormView, LabelRowFilePathInputView, child, define_view
+
+STUDIES = Path.home() / "studies"
+
+
+@define_view
+class StudyForm(FormView):
+    study: LabelRowFilePathInputView = child(
+        LabelRowFilePathInputView,
+        label="Study",
+        extensions={"Code_Aster": (".export",)},
+        server_roots=(STUDIES,),
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.study.set_validator(self._check_study, self.study.text_edited)
+
+    def _check_study(self) -> Optional[str]:
+        # `path` is None for a path typed outside the roots
+        if self.study.text != "" and self.study.path is None:
+            return f"Pick a study in {STUDIES}."
+        return None
+```
+
+- **What the web lists.** The "…" button opens a dialog with the folders and the files of
+  `extensions` in a folder, starting in the folder of the field's file, else in the only
+  root. A folder's item shows its files, and "Parent folder" goes up, as far as a root. With
+  several roots, the dialog starts with the list of the roots.
+- **Only the roots.** The dialog shows nothing outside the roots. It leaves out hidden items,
+  whose name starts with a dot, and items that a symbolic link leads out of the roots to. A
+  root that doesn't exist is left out. A folder of more than 2,000 items is listed only in
+  part: the dialog asks the user to type the file's path.
+- **The path picked.** A file's item puts the file's path on the server in the field, and
+  `path_picked` emits it. The web copies nothing, so the files beside it stay beside it.
+- **A typed path.** The user can still type any path of the server. On the web, `path` is
+  `None` for a path outside the roots, symbolic links followed. Read `path`, not `text`, and
+  show why it is `None`, as `_check_study` does above.
+- **Qt and Textual** open their dialogs in the first root while the field is empty. The user
+  can leave the roots: the app runs on the user's own machine.
+- **The texts** of the dialog are `parent_folder_text`, `cancel_text`, `unreadable_folder_text`
+  and `partial_folder_text`. The catalogs translate them.
+
+Every user of a web app sees the names of the folders and files in the roots. Give only the
+folders that every user may see.
 
 ## Slider
 

@@ -98,6 +98,13 @@ from composeui.core.view import (
 )
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
+from composeui.webcore.serverfiles import (
+    has_extension,
+    is_within,
+    item_path,
+    list_folder,
+    resolve_roots,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Iterator, Mapping
@@ -737,11 +744,20 @@ def _file_types(extensions: dict[str, tuple[str, ...]]) -> list[str]:
 
 class FilePathInputViewLike(InputViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    server_roots: tuple[Path, ...]
     has_reload: bool
     browse_text: str
     reload_text: str
+    parent_folder_text: str
+    cancel_text: str
+    unreadable_folder_text: str
+    partial_folder_text: str
     path_picked: Signal[Path]
     reload_clicked: SignalNoArgs
+    _keeps_to_roots: bool
+
+    @property
+    def path(self) -> Path | None: ...
 
 
 class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
@@ -753,6 +769,13 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
     the session keeps a copy (see `WebSession.pick_file`), whose path the field then
     shows. The root is a `<div>` holding them, so a row's label names the field with
     `aria-labelledby`.
+
+    With `server_roots`, the button instead opens a `<dialog>` in the root listing the
+    files of a folder of the server (see `serverfiles.py`): a folder's item shows its
+    files, and a file's puts its path in the field. Only the server knows the folder
+    shown: the page names an item by its name in it. Opened or closed, only the dialog
+    swaps, and moving between folders only its list: the dialog open, and the button
+    that opened it, stay the same elements, so closing it gives that button the focus.
     """
 
     _role = "file_path_input"
@@ -762,17 +785,66 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             dict.fromkeys(
-                ("text", "placeholder", "extensions", "has_reload", "browse_text", "reload_text"),
+                (
+                    "text",
+                    "placeholder",
+                    "extensions",
+                    "server_roots",
+                    "has_reload",
+                    "browse_text",
+                    "reload_text",
+                    "parent_folder_text",
+                    "cancel_text",
+                    "unreadable_folder_text",
+                    "partial_folder_text",
+                ),
                 self._mark_dirty,
             )
         )
+        # the user can type any path of the server: `path` then keeps to the roots too
+        view._keeps_to_roots = True  # noqa: SLF001
+        #: whether the list of the server's files shows
+        self._is_browsing = False
+        #: the folder it lists, resolved; None for the list of the roots
+        self._folder: Path | None = None
+        #: what changed since last sent: "field" (all of it), "dialog" or "list"
+        self._swaps: set[str] = set()
+
+    def _mark_dirty(self, view: FilePathInputViewLike, rendered_object: str, value: Any) -> None:
+        self._mark_part("field")
+
+    def _mark_part(self, part: str) -> None:
+        self._swaps.add(part)
+        super()._mark_dirty(self._view, "", None)
 
     def to_html(self, *, oob: bool = False) -> Markup:
+        swaps, self._swaps = self._swaps, set()
+        if oob and swaps and "field" not in swaps:
+            return self._files_html(oob=True) if "dialog" in swaps else self._list_html(oob=True)
         view = self._view
         disabled = "" if self.is_enabled else " disabled"
         browse, reload = view.browse_text, view.reload_text
         types = ",".join(self.file_types)
         accept = Markup(' accept="{}"').format(types) if types else ""
+        if view.server_roots:
+            browse_button = Markup(
+                '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
+                ' aria-label="{browse}" title="{browse}" hx-post="/widget/{widget_id}"'
+                """ hx-vals='{{"event": "browse"}}' hx-swap="none"{disabled}>…</button>"""
+            ).format(widget_id=self.widget_id, browse=browse, disabled=disabled)
+            picker = self._files_html(oob=False)
+        else:
+            browse_button = Markup(
+                '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
+                ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
+            ).format(widget_id=self.widget_id, browse=browse, disabled=disabled)
+            # emptied once sent: picking the same file again is a change too
+            picker = Markup(
+                '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+                ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
+                ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
+                ' data-clear-after-post autocomplete="off"{disabled}>'
+            ).format(accept=accept, widget_id=self.widget_id, disabled=disabled)
         reload_button = (
             Markup(
                 '<button id="{widget_id}-reload" type="button" class="btn btn-square"'
@@ -796,14 +868,7 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
-            '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
-            ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
-            # emptied once sent: picking the same file again is a change too
-            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
-            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
-            ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
-            ' data-clear-after-post autocomplete="off"'
-            "{disabled}>{reload_button}</div>"
+            "{browse_button}{picker}{reload_button}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
@@ -811,18 +876,177 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             text=self._text(),
             placeholder=view.placeholder,
             disabled=disabled,
-            browse=browse,
-            accept=accept,
+            browse_button=browse_button,
+            picker=picker,
             reload_button=reload_button,
         )
 
+    def _files_html(self, *, oob: bool) -> Markup:
+        """Get the `<dialog>` listing the server's files, hidden while closed."""
+        is_open = self._is_browsing and self.is_enabled
+        title_id = f"{self.widget_id}-files-title"
+        return Markup(
+            '<dialog id="{widget_id}-files" class="modal" data-dialog{hidden}{swap}'
+            ' aria-labelledby="{title_id}" hx-post="/widget/{widget_id}" hx-trigger="cancel"'
+            """ hx-vals='{{"event": "browse-close"}}' hx-swap="none">"""
+            '<div class="modal-box flex flex-col gap-3">'
+            '<h2 id="{title_id}" class="text-lg font-bold">{title}</h2>{items}'
+            '<div class="modal-action"><button type="button" class="btn"'
+            ' hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "browse-close"}}' data-close-dialog>{cancel}</button>"""
+            "</div></div></dialog>"
+        ).format(
+            widget_id=self.widget_id,
+            hidden="" if is_open else " hidden",
+            swap=Markup(' hx-swap-oob="true"') if oob else "",
+            title_id=title_id,
+            title=self._view.browse_text,
+            items=self._list_html(oob=False) if is_open else Markup(),
+            cancel=self._view.cancel_text,
+        )
+
+    def _list_html(self, *, oob: bool) -> Markup:
+        """Get the dialog's list: the roots, or a folder's path, its folders and its files."""
+        view = self._view
+        roots = resolve_roots(view.server_roots)
+        folder = self._folder
+        message = ""
+        items: list[Markup] = []
+        if folder is None:
+            items = [
+                self._item_html("browse-root", str(index), str(root), "folder", is_first=index == 0)
+                for index, root in enumerate(roots)
+            ]
+        else:
+            if folder not in roots or len(roots) > 1:
+                items.append(
+                    self._item_html(
+                        "browse-parent", "", view.parent_folder_text, "parent", is_first=True
+                    )
+                )
+            has_parent = len(items) > 0
+            try:
+                listing = list_folder(folder, roots, tuple(self.file_types))
+            except OSError:
+                message = view.unreadable_folder_text
+            else:
+                items.extend(
+                    self._item_html(
+                        "browse-folder" if item.is_folder else "browse-file",
+                        item.name,
+                        item.name,
+                        "folder" if item.is_folder else "file",
+                        is_first=index == 0 and not has_parent,
+                    )
+                    for index, item in enumerate(listing.items)
+                )
+                if listing.is_partial:
+                    message = view.partial_folder_text
+        return Markup(
+            '<div id="{widget_id}-files-list" class="flex flex-col gap-3"{swap}>'
+            '<p class="break-all font-mono text-sm">{folder}</p>{message}'
+            '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul></div>'
+        ).format(
+            widget_id=self.widget_id,
+            swap=Markup(' hx-swap-oob="true"') if oob else "",
+            folder="" if folder is None else str(folder),
+            message=(
+                Markup('<p role="status" class="text-sm text-warning">{}</p>').format(message)
+                if message
+                else ""
+            ),
+            items=Markup("").join(items),
+        )
+
+    def _item_html(self, event: str, name: str, text: str, icon: str, *, is_first: bool) -> Markup:
+        # a file's closes the dialog first, as a dialog's answer does; a folder's swaps the
+        # list, and the first item of the new one takes the focus: the one clicked is gone
+        closes = " data-close-dialog" if event == "browse-file" else ""
+        return Markup(
+            '<li><button type="button" hx-post="/widget/{widget_id}"'
+            """ hx-vals='{values}'{closes}{autofocus}>{icon}"""
+            '<span class="break-all">{text}</span></button></li>'
+        ).format(
+            widget_id=self.widget_id,
+            values=json.dumps({"event": event, "name": name}),
+            closes=closes,
+            autofocus=" autofocus" if is_first else "",
+            icon=_icon(icon),
+            text=text,
+        )
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        if event != "reload":
+        if event.startswith("browse"):
+            self._browse(event, form.get("name", ""))
+        elif event != "reload":
             super().dispatch(event, form)
         elif not self.is_enabled or not self._view.has_reload:
             raise UnsupportedEventError(self, event)
         else:
             self._view.reload_clicked.emit()
+
+    def _browse(self, event: str, name: str) -> None:
+        """Open, move or close the list of the server's files, or pick a file of it.
+
+        An item that is no longer there, or never was, shows the list again.
+        """
+        moves = {
+            "browse": self._open_files,
+            "browse-close": self._close_files,
+            "browse-root": self._show_root,
+            "browse-parent": self._show_parent,
+            "browse-folder": self._show_folder,
+            "browse-file": self._pick_server_file,
+        }
+        move = moves.get(event)
+        is_open = self._is_browsing or event == "browse"
+        if move is None or not is_open or not self.is_enabled or not self._view.server_roots:
+            raise UnsupportedEventError(self, event)
+        roots = resolve_roots(self._view.server_roots)
+        if self._folder is not None and not is_within(self._folder, roots):
+            self._folder = None  # the roots changed since
+        was_open = self._is_browsing
+        move(name, roots)
+        # opened or closed: the dialog; else only its list, the dialog left open
+        self._mark_part("list" if was_open == self._is_browsing else "dialog")
+
+    def _open_files(self, _name: str, roots: list[Path]) -> None:
+        """Show the list in the folder of the field's file, else in the only root."""
+        self._is_browsing = True
+        self._folder = roots[0] if len(roots) == 1 else None
+        path = self._view.path
+        if path is not None:
+            file = item_path(path.parent, path.name, roots)
+            if file is not None:
+                self._folder = file.parent
+
+    def _close_files(self, _name: str, _roots: list[Path]) -> None:
+        self._is_browsing = False
+
+    def _show_root(self, name: str, roots: list[Path]) -> None:
+        if name.isdigit() and int(name) < len(roots):
+            self._folder = roots[int(name)]
+
+    def _show_parent(self, _name: str, roots: list[Path]) -> None:
+        folder = self._folder
+        if folder is not None and folder not in roots:
+            self._folder = folder.parent
+        elif len(roots) > 1:
+            self._folder = None  # the list of the roots
+
+    def _show_folder(self, name: str, roots: list[Path]) -> None:
+        path = None if self._folder is None else item_path(self._folder, name, roots)
+        if path is not None and path.is_dir():
+            self._folder = path
+
+    def _pick_server_file(self, name: str, roots: list[Path]) -> None:
+        folder = self._folder
+        path = None if folder is None else item_path(folder, name, roots)
+        if folder is None or path is None or not path.is_file():
+            return
+        if has_extension(name, tuple(self.file_types)):
+            self._is_browsing = False
+            self._show_path(folder / name)
 
     @property
     def file_types(self) -> list[str]:
@@ -836,6 +1060,9 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
         """
         if not self.is_enabled:
             raise UnsupportedEventError(self, "file")
+        self._show_path(path)
+
+    def _show_path(self, path: Path) -> None:
         text = str(path)
         # swapped back: the field shows the path, though its picker sent the request
         self._view.text = text
@@ -3375,6 +3602,15 @@ _ICONS: Final[dict[str, str]] = {
             '<rect x="3" y="4" width="18" height="18" rx="2"/>'
             '<path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
         )
+    ),
+    "parent": Markup('<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>'),
+    "folder": Markup(
+        '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0'
+        ' 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>'
+    ),
+    "file": Markup(
+        '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>'
+        '<path d="M14 2v4a2 2 0 0 0 2 2h4"/>'
     ),
     "reload": Markup(
         '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'

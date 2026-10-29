@@ -53,6 +53,7 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
+from tests.studyfiles import StudyFileMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -292,6 +293,13 @@ def bookings_base_url() -> Iterator[str]:
 def data_files_base_url() -> Iterator[str]:
     """Serve an app with a file path field, for the whole module."""
     with _serve(WebApplication(build_main_view=DataFileMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def study_files_base_url() -> Iterator[str]:
+    """Serve an app with a file path field listing the server's files, for the whole module."""
+    with _serve(WebApplication(build_main_view=StudyFileMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -1679,6 +1687,42 @@ def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown
         payload: FilePayload = {"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}
         chooser.value.set_files(files=[payload])
     expect(field).to_have_value(re.compile(r"flows\.csv$"))
+    context.close()
+
+
+def test_a_file_of_the_server_is_picked_in_the_list_its_folders_open_in_place(
+    browser: Browser, study_files_base_url: str
+) -> None:
+    context = browser.new_context(base_url=study_files_base_url)
+    page = context.new_page()
+    page.goto("/")
+    field = page.get_by_label("Study")
+    browse = page.get_by_role("button", name="Choose a file")
+    with _posted(page):
+        browse.click()
+    files = page.get_by_role("dialog", name="Choose a file")
+    expect(files).to_be_visible()
+
+    # a folder shows its files in the dialog, swapped open again, the focus in it
+    with _posted(page):
+        files.get_by_role("button", name="locales").click()
+    parent = files.get_by_role("button", name="Parent folder")
+    expect(parent).to_be_visible()
+    expect(files.locator(":focus")).to_have_count(1)
+    with _posted(page):
+        parent.click()
+    with _posted(page):
+        files.get_by_role("button", name="studyfiles.py").click()
+
+    expect(files).to_have_count(0)
+    expect(field).to_have_value(re.compile(r"studyfiles\.py$"))
+    expect(browse).to_be_focused()  # back where it was
+    with _posted(page):
+        browse.click()
+    expect(files).to_be_visible()
+    with _posted(page):
+        page.keyboard.press("Escape")
+    expect(files).to_have_count(0)
     context.close()
 
 

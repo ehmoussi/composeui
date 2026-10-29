@@ -79,6 +79,11 @@ the option for the web (extra `web`, the default).
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
   where `_check` returns an error message or `None`. Then call `form.check()` and read
   `form.is_valid`.
+- **Pick a file on the server with `server_roots`** when the app needs the file where it is,
+  not a copy: on the web, a file path field otherwise uploads a copy. The web lists only
+  the files in those folders, and `path` is `None` for a path typed outside them: read
+  `path`, not `text`. Give only folders that every user of the app may see.
+  See https://ehmoussi.github.io/composeui/user-guide/widgets.html#files-on-the-server
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
   `cattrs`, which handles `datetime.date` and `datetime.datetime` as ISO 8601 text. A new
   field must be serializable, or carry the `OMIT` metadata. Text that the code sets, not

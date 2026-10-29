@@ -1546,6 +1546,17 @@ class DateInputView(DateInputMixin, View):
     _renderer_key = "date_input"
 
 
+def is_within_roots(path: Path, roots: Iterable[Path]) -> bool:
+    """Whether `path` is one of `roots`, or inside one, once resolved (``~``, ``..``, links)."""
+    try:
+        resolved = path.expanduser().resolve()
+        resolved_roots = [root.expanduser().resolve() for root in roots]
+    # a loop of links raises RuntimeError before 3.13, a NUL character ValueError
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return any(resolved == root or root in resolved.parents for root in resolved_roots)
+
+
 @define_view
 class FilePathInputMixin(InputMixin):
     """A file's path, typed in the field or picked with the "…" button beside it.
@@ -1553,8 +1564,10 @@ class FilePathInputMixin(InputMixin):
     `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
     button opens the toolkit's file dialog. On the web, the browser's picker uploads the
     file. The field then holds the path of the session's copy, kept until the session
-    ends. With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to
-    read the file again once it changed.
+    ends. With `server_roots`, the web's button instead lists the files on the server in
+    those folders, and the field holds the path of the file picked there, not a copy.
+    With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to read
+    the file again once it changed.
     """
 
     #: the file types the dialog offers, by name: ``{"CSV": (".csv",)}``; on the web, a
@@ -1562,20 +1575,51 @@ class FilePathInputMixin(InputMixin):
     extensions: dict[str, tuple[str, ...]] = attrs.field(
         factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
     )
+    #: the folders of the server whose files the web's "…" lists, and nothing outside
+    #: them; none to upload a file instead. On Qt and Textual, the dialog opens in the
+    #: first one while the field is empty, and the user can leave it.
+    server_roots: tuple[Path, ...] = attrs.field(default=(), metadata={OMIT: True})
     has_reload: bool = attrs.field(default=False)
     #: the names of the "…" and reload buttons, as a tooltip and a screen reader show them
     browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
     reload_text: str = attrs.field(default=T("Reload"), metadata={UI_TEXT: True})
+    #: the texts of the web's list of the files in `server_roots`
+    parent_folder_text: str = attrs.field(default=T("Parent folder"), metadata={UI_TEXT: True})
+    cancel_text: str = attrs.field(default=T("Cancel"), metadata={UI_TEXT: True})
+    unreadable_folder_text: str = attrs.field(
+        default=T("This folder can't be read."), metadata={UI_TEXT: True}
+    )
+    partial_folder_text: str = attrs.field(
+        default=T("This folder holds too many items to list them all: type the file's path."),
+        metadata={UI_TEXT: True},
+    )
     #: the user picked a file with the "…" button, its path now in the field; a typed
     #: path is reported as any text is (`text_edited`, `editing_finished`)
     path_picked: Signal[Path] = attrs.Factory(Signal[Path])
     reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+    #: whether `path` keeps to `server_roots`: set by the web, which lists only their files
+    _keeps_to_roots: bool = attrs.field(
+        default=False, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     @property
     def path(self) -> Optional[Path]:
-        """Get the path the field holds, None while it's empty."""
+        """Get the path the field holds, None while it's empty.
+
+        On the web, with `server_roots`, None too for a path typed outside them, symbolic
+        links followed: the user can type any path of the server.
+        """
         text = self.text.strip()
-        return None if text == "" else Path(text)
+        if text == "":
+            return None
+        path = Path(text)
+        if (
+            self._keeps_to_roots
+            and self.server_roots
+            and not is_within_roots(path, self.server_roots)
+        ):
+            return None
+        return path
 
 
 @define_view
