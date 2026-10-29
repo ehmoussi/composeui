@@ -25,6 +25,13 @@ Write them with the rules of "Write clear technical English" and
   code.
 - **Keep the markup of the site.** "Keep the documentation site building" says what a
   docstring must keep for Sphinx.
+- **Write for the API's users, not its maintainers.** The API reference shows every
+  public docstring. Leave out roadmap identifiers (N01), a prototype status, and "it can
+  change in any release": the whole API can before 1.0, as the README says. Put them in
+  `ROADMAP.md` or in a code comment.
+- **Keep it true as the code changes.** When code moves out of a module, or a function
+  becomes a method, read the module's and the class's docstrings again. A summary that
+  names "the helpers" must still match what the module holds.
 
 Code comments are out of scope. Follow the code style in `AGENTS.md` for them: comments
 explain *why*.
@@ -47,7 +54,7 @@ Each document has one audience:
 | `docs/_site/skills/composeui/SKILL.md` | Coding agents that write a ComposeUI app | The skill that users install: the rules for an app's code, a minimal app, and links to the site |
 | `CHANGELOG.md` | Users who upgrade | The changes that users see, one section per release, with "Unreleased" at the top |
 | `ROADMAP.md` | Maintainers | The goal, where ComposeUI stands, the milestones, the work left to do, and the design notes for the web backend |
-| `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits |
+| `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits, pull requests |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
 
 `README.md` is also the package's long description on PyPI (`readme` in
