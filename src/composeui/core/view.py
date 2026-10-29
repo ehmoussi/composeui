@@ -1292,6 +1292,12 @@ class MainView(View):
             self.file_view.filepath = self.renderer.save_file()
         return self.file_view.filepath
 
+    def render(self, renderer_type: RendererType) -> None:
+        super().render(renderer_type)
+        if self.renderer is not None:
+            # the jobs started before, e.g. by `setup_model`, show their results now
+            self.jobs.hand_over_to(self.renderer)
+
     def close(self) -> None:
         self.jobs.drop()
         if isinstance(self.renderer, MainRenderer):
