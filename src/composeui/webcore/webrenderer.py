@@ -3239,8 +3239,9 @@ class WebFormRenderer(WebRenderer[FormView]):
 
     def _fieldset(self, *, oob: bool, classes: str, legend: str) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
-        # a row whose field this backend doesn't support: empty
-        rows = Markup("").join(_view_html(row) for row in self._view.field_rows)
+        # its rows and its other views, e.g. a table; a view this backend doesn't support:
+        # empty
+        rows = Markup("").join(_view_html(view) for view in self._view.content_views)
         return Markup(
             "<fieldset {root_attributes}"
             ' class="{classes}"{disabled}>{legend}{rows}{fragment}</fieldset>'

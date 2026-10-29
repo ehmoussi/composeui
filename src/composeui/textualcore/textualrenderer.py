@@ -2013,17 +2013,13 @@ def _widget_of(view: View) -> Widget | None:
 class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
     def render(self) -> None:
         if self._rendered_object is None:
-            rows: list[Widget] = []
-            for field_row in self._view.field_rows:
-                if isinstance(field_row, FormRowView) and isinstance(
-                    field_row.renderer, RendererContainer
-                ):
-                    rows.append(self.row_widget(field_row, field_row.renderer))
-                elif isinstance(field_row, FormView):
-                    assert isinstance(field_row.renderer, TextualWidgetRenderer)
-                    assert field_row.renderer.widget is not None
-                    rows.append(field_row.renderer.widget)
-                # else a row whose field this backend doesn't register: left out
+            # its rows and its other views, e.g. a table; a view this backend doesn't
+            # register is left out
+            rows = [
+                widget
+                for view in self._view.content_views
+                if (widget := _widget_of(view)) is not None
+            ]
             log = self._view.log_view.renderer
             assert isinstance(log, TextualWidgetRenderer)
             assert log.widget is not None

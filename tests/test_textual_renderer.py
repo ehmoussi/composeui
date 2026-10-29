@@ -127,6 +127,7 @@ from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
+from tests.folderform import StudyMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -1328,6 +1329,35 @@ async def test_a_form_dialog_s_ok_follows_its_form_s_checks() -> None:
         await pilot.pause()
         assert app.screen is not screen
         assert view.pipe.text == "Return, 12 m"
+
+
+@pytest.mark.asyncio
+async def test_a_form_shows_its_other_views_between_its_rows_in_their_order() -> None:
+    view = StudyMainView()
+    app = _app_of(view)
+    form = view.open_dialog.form
+    folder = _field_widget(form.folder.renderer)
+    assert isinstance(folder, Input)
+    buttons, up = _widget(form.buttons), _widget(form.buttons.up)
+    box = _widget(form.entries)
+    assert isinstance(box, ComposeFilterTable)
+
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(_widget(view.open))
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeFormDialog)
+        assert folder in screen.walk_children()
+        # the folder's row, then the buttons and the table, above the form's message
+        assert list(_widget(form).children)[:3] == [folder.parent, buttons, box]
+
+        await pilot.click(up)
+        await pilot.pause()
+
+        assert app.screen is screen  # a button of its form leaves it open
+        assert folder.value == "/studies"
+        assert str(box.table.get_cell_at(Coordinate(0, 0))) == "beam"
 
 
 @pytest.mark.asyncio
