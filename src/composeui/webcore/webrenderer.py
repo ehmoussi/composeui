@@ -1292,6 +1292,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "color": series.color,
                     "fill": series.fill,
                     "step": series.step,
+                    # its hovered values shown as integers, e.g. counts
+                    "whole": ChartView.is_whole(series.y),
                 }
                 for series in view.series
             ],

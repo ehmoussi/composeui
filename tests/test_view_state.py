@@ -256,6 +256,13 @@ def test_a_step_line_holds_each_value_until_the_next_point() -> None:
     assert math.isnan(gap)
 
 
+def test_a_series_of_whole_numbers_tells_its_values_are_counts() -> None:
+    assert ChartView.is_whole([3.0, 0.0, -45280.0, math.nan])  # a gap aside
+    assert not ChartView.is_whole([3.0, 0.5])
+    assert not ChartView.is_whole([math.inf])
+    assert not ChartView.is_whole([1e16])  # its digits no longer tell which number
+
+
 def test_a_series_color_is_given_as_rrggbb() -> None:
     assert Series(name="Oval", x=[0], y=[0], color="#FFD700", fill=True).color == "#FFD700"
     for color in ("yellow", "#ffd70", "ffd700"):

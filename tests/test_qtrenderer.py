@@ -2344,7 +2344,7 @@ def test_new_series_keep_the_user_s_zoom(qtbot: QtBot) -> None:
 
 def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Pressure", x=[0, 1, 2], y=[10, 20, 30])]
+    view.chart.series = [Series(name="Pressure", x=[0, 1, 2], y=[10, 20, 30.5])]
     view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 2)
     assert chart.hover_text() == ""
@@ -2373,7 +2373,7 @@ def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> No
     # nearer 5 than 2, but still holding 2's value
     _chart_scene(chart).sigMouseMoved.emit(view_box.mapViewToScene(QPointF(4, 2)))
     qtbot.waitUntil(lambda: chart.hover_text() != "")
-    assert chart.hover_text().splitlines()[1] == "Running: 3.000 kPa"
+    assert chart.hover_text().splitlines()[1] == "Running: 3 kPa"  # a count, as it is
 
     view.chart.kind = ChartKind.SCATTER  # dots: as they are
     assert len(running.getData()[0]) == 3
@@ -2461,7 +2461,8 @@ def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
     _chart_scene(chart).sigMouseMoved.emit(view_box.mapViewToScene(QPointF(1.1, 50)))
 
     qtbot.waitUntil(lambda: chart.hover_text() != "")
-    assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80.00 kWh"]
+    # whole numbers, as they are: not 80.00, nor 4.528e+04 for a count of 45280
+    assert chart.hover_text().splitlines() == ["Bedroom", "Heating: 80 kWh"]
 
 
 def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
@@ -2498,7 +2499,7 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     # the range, still settling on the log axis, time to move under the cursor
     chart.show_hover(view_box.mapViewToScene(QPointF(1.02, 2)))  # x = 10^1.02
 
-    assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2.000 kPa"]
+    assert chart.hover_text().splitlines() == ["10.47 L/s", "Decay: 2 kPa"]
 
 
 def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> None:
@@ -3551,7 +3552,7 @@ def test_the_hover_leaves_out_what_isn_t_drawn_there(qtbot: QtBot) -> None:
     chart.show_hover(view_box.mapViewToScene(QPointF(1, 20)))
 
     assert past == ""
-    assert chart.hover_text().splitlines()[1:] == ["Heating: 20.00 kWh"]
+    assert chart.hover_text().splitlines()[1:] == ["Heating: 20 kWh"]
 
 
 def test_a_table_s_keys_and_edits_report_only_what_changes(qtbot: QtBot) -> None:

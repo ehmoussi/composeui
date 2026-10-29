@@ -168,11 +168,12 @@ function resolveColor(element, color) {
 /* the theme's colors, ordered so neighbours differ in hue: primary and secondary alike
    are blue to violet */
 var SERIES_COLORS = ["primary", "warning", "accent", "secondary", "success", "info", "error"];
-function chartValue(unit) {
+function chartValue(unit, whole) {
   return function (chart, value) {
     if (value === null || value === undefined) return "-";
-    // its trailing zeros kept: as many digits wherever the cursor is
-    return value.toPrecision(4) + (unit === "" ? "" : " " + unit);
+    // a count as it is; else its trailing zeros kept: as many digits wherever the cursor is
+    var text = whole ? value.toFixed(0) : value.toPrecision(4);
+    return text + (unit === "" ? "" : " " + unit);
   };
 }
 function chartOptions(element, spec, width) {
@@ -194,7 +195,7 @@ function chartOptions(element, spec, width) {
     var color = series.color || resolveColor(
       element, "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")"
     );
-    var options = { label: series.name, stroke: color, value: chartValue(spec.y.unit) };
+    var options = { label: series.name, stroke: color, value: chartValue(spec.y.unit, series.whole) };
     if (series.kind === "bar") {
       // its bar in each category's group, by its left edge: offsets from the server
       function lefts(chart) {

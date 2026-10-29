@@ -4582,9 +4582,23 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     # uPlot's columns, the x shared; no NaN in JSON: a gap is null
     assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
     assert spec["series"] == [
-        # the theme's colors, no fill; the temperature in steps
-        {"name": "Pressure", "kind": "line", "color": None, "fill": False, "step": False},
-        {"name": "Temperature", "kind": "line", "color": None, "fill": False, "step": True},
+        # the theme's colors, no fill; the temperature in steps, and in whole degrees
+        {
+            "name": "Pressure",
+            "kind": "line",
+            "color": None,
+            "fill": False,
+            "step": False,
+            "whole": False,
+        },
+        {
+            "name": "Temperature",
+            "kind": "line",
+            "color": None,
+            "fill": False,
+            "step": True,
+            "whole": True,
+        },
     ]
     plot = _element(markup, f"{_widget_id(chart.renderer)}-plot")
     assert plot.attributes["role"] == "img"
@@ -4652,7 +4666,14 @@ def test_a_new_series_list_swaps_the_figure(
     assert figure.tag == "figure"
     spec = _chart_spec(response.text, main_view.chart)
     assert spec["series"] == [
-        {"name": "D = 50 mm", "kind": "line", "color": None, "fill": False, "step": False}
+        {
+            "name": "D = 50 mm",
+            "kind": "line",
+            "color": None,
+            "fill": False,
+            "step": False,
+            "whole": False,
+        }
     ]
 
 
@@ -4760,6 +4781,7 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
             "color": None,
             "fill": False,
             "step": False,
+            "whole": True,
             "offset": pytest.approx(-0.2),
             "width": 0.4,
         },
@@ -4769,6 +4791,8 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
             "color": None,
             "fill": False,
             "step": False,
+            # its gap aside
+            "whole": True,
             "offset": pytest.approx(0.2),
             "width": 0.4,
         },

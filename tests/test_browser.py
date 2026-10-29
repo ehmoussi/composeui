@@ -1946,7 +1946,7 @@ def test_a_bar_chart_draws_its_bars_by_category(chart_pages_page: Page) -> None:
 
     legend = energy.locator(".u-legend")
     expect(legend).to_contain_text("Bedroom")
-    expect(legend).to_contain_text("80.00 kWh")
+    expect(legend).to_contain_text("80 kWh")  # a whole number, as it is: not 80.00
 
 
 def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
@@ -2015,8 +2015,13 @@ def test_a_step_series_holds_each_value_until_the_next_point(chart_pages_page: P
 
     # the values held at 4.8 h, rather than those of the points nearest it, at 5 h
     legend = jobs.locator(".u-legend")
-    expect(legend.locator(".u-series").filter(has_text="Running")).to_contain_text("3.000")
-    expect(legend.locator(".u-series").filter(has_text="Queued")).to_contain_text("1.000")
+    # a count, as it is; a series not all whole keeps its trailing zeros
+    expect(legend.locator(".u-series").filter(has_text="Running").locator(".u-value")).to_have_text(
+        "3"
+    )
+    expect(legend.locator(".u-series").filter(has_text="Queued").locator(".u-value")).to_have_text(
+        "1.000"
+    )
 
 
 def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:
