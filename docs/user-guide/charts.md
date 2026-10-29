@@ -42,6 +42,16 @@ energy: ChartView = child(
 `Series.bars("Heating", [120, 80, 95])` makes the same series: a bar per value, in the
 categories in order.
 
+`bar_chart`, from `composeui.core.dashboard`, gives a view field a bar chart. It takes the
+chart's `title` and `categories`, and optionally its `x_title`, `y_title`, and `height`:
+
+```python
+from composeui.core.dashboard import bar_chart
+from composeui.core.view import ChartView
+
+energy: ChartView = bar_chart("Energy", ["Kitchen", "Bedroom", "Office"], y_title="Energy")
+```
+
 With the `dataframe` extra, `series_of(frame, x, y)` from `composeui.core.dataframesource`
 makes a series of two columns of a pandas, Polars, or PyArrow frame. It leaves out the rows
 missing a value. Its `name` is the y column's, or the `name` that you give.

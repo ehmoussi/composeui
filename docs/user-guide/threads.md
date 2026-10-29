@@ -164,9 +164,59 @@ assert main_view.status.text == "Done: 3 rows"
   instance, not as a view field. The study then does not save it. New and Open keep the
   same task, and clear its state with the jobs of the study.
 
+### Show a task's state
+
+`task.show_state(status, views=...)` shows the state of the task in `status`, a
+`LabelView`, and shows `views` only once the task has a result. It replaces a `changed`
+callback that shows the loading and the error:
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import ChartView, LabelView, MainView, child, define_view
+
+
+def read_rows(_job: Job[int], count: int) -> int:
+    return count
+
+
+@define_view
+class RowsView(MainView):
+    status: LabelView = child(LabelView)
+    chart: ChartView = child(ChartView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.jobs.task(read_rows)
+        self.loader.show_state(
+            self.status, views=[self.chart], failed_text="Can't read the rows: {error}"
+        )
+
+
+main_view = RowsView()
+assert main_view.status.text == "Loading..."
+assert not main_view.chart.is_visible
+main_view.loader.start(3)
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert not main_view.status.is_visible
+assert main_view.chart.is_visible
+```
+
+- **Its texts.** `status` shows `loading_text`, then `progress_text` once the run reports
+  progress, or `failed_text` after a failure. By default, they are "Loading...",
+  "Loading... ({progress})", and "Failed: {error}". `{progress}` and `{error}` take the
+  task's `progress` and `error`, with a format if you give one, such as `{progress:,}`.
+- **Translated.** The label translates the texts into the main view's language. ComposeUI's
+  catalogs hold the default texts, and the app's catalogs hold the texts that it gives.
+- **From now on.** It shows the state at once, also before the first run: `status` shows
+  `loading_text`, and `views` are hidden. New, Open, and `jobs.drop()` clear the result:
+  `views` hide again until the next run has a result.
+- **With the other signals.** Connect `finished` to give the views their data. `changed`,
+  `finished`, and `failed` keep their other callbacks.
+
 The [Uber pickups example](../../src/examples/uberpickups.py) imports its CSV file in a
-loading task. It shows the progress in a `changed` callback, the chart and the map in a
-`finished` callback, and the error in a `failed` callback.
+loading task. `show_state` shows the count of rows read or the error in a status line, and
+the chart and the map once the task has a result. Its `finished` callback gives them their
+data.
 
 ## How jobs behave
 

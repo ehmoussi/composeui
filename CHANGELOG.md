@@ -12,6 +12,11 @@ The notable changes of each release of ComposeUI. The format follows
   the app starts, with the study of `-f` or a new one, and after New and Open. An app gives
   again there what a study doesn't hold, such as the source of a large table, which a load
   left as it was.
+- `composeui.core.dashboard`, for shorter dashboard code: `DashboardView`, a wide main view
+  without the File menu, and `bar_chart`, a bar chart as a view field's default.
+- `Task.show_state`, which shows a task's loading, progress, or error in a label, and other
+  views only once the task has a result.
+- `CheckBoxMixin.shows`, which shows other views only while the box is checked.
 
 ### Fixed
 

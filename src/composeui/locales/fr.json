@@ -69,5 +69,8 @@
   "No rows": "Aucune ligne",
   "Export CSV": "Exporter en CSV",
   "Exported {count} rows to {name}.": "{count} lignes exportées dans {name}.",
-  "Can't export to {name}: {error}.": "Impossible d'exporter dans {name} : {error}."
+  "Can't export to {name}: {error}.": "Impossible d'exporter dans {name} : {error}.",
+  "Loading...": "Chargement...",
+  "Loading... ({progress})": "Chargement... ({progress})",
+  "Failed: {error}": "Échec : {error}"
 }

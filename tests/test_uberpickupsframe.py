@@ -14,6 +14,7 @@ import polars as pl
 
 from composeui.core.application import ModelApplication
 from composeui.core.registry import RendererType
+from composeui.core.renderer import RendererContainer
 from composeui.core.view import MapPoint
 from examples import uberpickupsframe
 
@@ -27,9 +28,7 @@ if TYPE_CHECKING:
     from composeui.qtcore.qtrenderer import QtWidgetRenderer
 
 
-App = ModelApplication[
-    uberpickupsframe.UberPickupsFrameMainView, uberpickupsframe.UberPickupsFrameModel
-]
+App = ModelApplication[uberpickupsframe.UberPickupsMainView, uberpickupsframe.UberPickupsModel]
 # a pickup without a date counts in no hour, but shows in the table
 _CSV = (
     "Date/Time,Lat,Lon,Base\n"
@@ -47,9 +46,9 @@ def _csv(tmp_path: Path, text: str = _CSV) -> str:
 
 def _app() -> App:
     return App(
-        build_main_view=uberpickupsframe.UberPickupsFrameMainView,
-        build_model=uberpickupsframe.UberPickupsFrameModel,
-        setup_model=uberpickupsframe.UberPickupsFrameMainView.connect_model,
+        build_main_view=uberpickupsframe.UberPickupsMainView,
+        build_model=uberpickupsframe.UberPickupsModel,
+        setup_model=uberpickupsframe.UberPickupsMainView.connect_model,
     )
 
 
@@ -64,12 +63,12 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[App]:
 def test_pickups_load_into_the_table_the_hourly_chart_and_the_map(app: App) -> None:
     app.main_view.jobs.wait()
     page = app.main_view
-    assert page.data_load_state.text == "Done! (using Polars)"
-    assert not page.data_load_status.is_visible
-    assert page.data.is_visible
-    assert page.data.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
-    assert page.data.pickups_map.points == [MapPoint(latitude=40.7, longitude=-73.9)]
-    source = page.data.table.source
+    assert not page.status.is_visible
+    assert page.pickups_chart.is_visible
+    assert page.pickups_map.is_visible
+    assert page.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    assert page.pickups_map.points == [MapPoint(latitude=40.7, longitude=-73.9)]
+    source = page.table.source
     assert source is not None
     assert source.count() == 3
     assert source.cells([0], ["Date/Time", "Base"]) == {
@@ -80,15 +79,26 @@ def test_pickups_load_into_the_table_the_hourly_chart_and_the_map(app: App) -> N
 WidgetT = TypeVar("WidgetT")
 
 
-def _qt_widget(view: View, widget_type: type[WidgetT]) -> WidgetT:
-    """Get the Qt widget that shows `view`, checked to be a `widget_type`."""
+def _qt_object(renderer: object, widget_type: type[WidgetT]) -> WidgetT:
+    """Get the Qt widget of `renderer`, checked to be a `widget_type`."""
     renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
-    assert isinstance(view.renderer, renderer_type)
-    widget = cast("QtWidgetRenderer", view.renderer).qt_object
+    assert isinstance(renderer, renderer_type)
+    widget = cast("QtWidgetRenderer", renderer).qt_object
     assert isinstance(widget, widget_type)
     return widget
+
+
+def _qt_widget(view: View, widget_type: type[WidgetT]) -> WidgetT:
+    """Get the Qt widget that shows `view`, checked to be a `widget_type`."""
+    return _qt_object(view.renderer, widget_type)
+
+
+def _qt_field(row: View, widget_type: type[WidgetT]) -> WidgetT:
+    """Get the Qt widget of the form row `row`'s field, checked to be a `widget_type`."""
+    assert isinstance(row.renderer, RendererContainer)
+    return _qt_object(row.renderer.get_renderer("field"), widget_type)
 
 
 def test_the_raw_data_checkbox_and_the_hour_slider_drive_the_table_and_map(
@@ -96,26 +106,26 @@ def test_the_raw_data_checkbox_and_the_hour_slider_drive_the_table_and_map(
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
     monkeypatch.setattr(uberpickupsframe, "DATA_URL", _csv(tmp_path))
-    app = ModelApplication(
-        build_main_view=uberpickupsframe.UberPickupsFrameMainView,
-        build_model=uberpickupsframe.UberPickupsFrameModel,
-    )
+    app = _app()
     view = app.main_view
-    view.data.pickups_map.tiles = False
+    view.pickups_map.tiles = False
     try:
         app.render(RendererType.QT)
         qtbot.addWidget(_qt_widget(view, qt_widgets.QWidget))
-        view.connect_model(app.model)
-        qtbot.waitUntil(lambda: not view.loader.is_running)
+        qtbot.waitUntil(lambda: view.pickups_chart.is_visible)
 
-        checkbox = _qt_widget(view.show_raw_data, qt_widgets.QCheckBox)
-        assert not view.data.table.is_visible
+        window = _qt_widget(view, qt_widgets.QWidget)
+        checkbox = _qt_field(view.sidebar.filters.show_raw_data, qt_widgets.QCheckBox)
+        slider = _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)
+        # the filters show in the sidebar, beside the content
+        assert checkbox.isVisibleTo(window)
+        assert slider.isVisibleTo(window)
+        assert not view.table.is_visible
         checkbox.click()
-        assert view.data.table.is_visible
+        assert view.table.is_visible
 
-        slider = _qt_widget(view.data.slider_hours, qt_widgets.QSlider)
         slider.setValue(13)
-        assert view.data.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
+        assert view.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
     finally:
         view.jobs.drop()
 
@@ -126,13 +136,13 @@ def test_an_invalid_csv_is_shown_as_a_loading_failure(
     path = _csv(tmp_path, f"{_CSV}invalid-date,40.7,-73.9,B\n")
     monkeypatch.setattr(uberpickupsframe, "DATA_URL", path)
     app = _app()
-    app.main_view.status_bar.timeout = 0
     app.main_view.jobs.wait()
     page = app.main_view
-    assert page.data_load_state.text == "Failed to load data"
-    assert not page.data.is_visible
-    assert "Failed to read the CSV:" in page.status_bar.message
-    assert page.data.table.source is None
+    assert page.status.is_visible
+    assert page.status.text.startswith("Failed to read the CSV:")
+    assert not page.pickups_chart.is_visible
+    assert not page.pickups_map.is_visible
+    assert page.table.source is None
 
 
 def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> None:

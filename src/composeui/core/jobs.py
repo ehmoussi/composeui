@@ -14,11 +14,14 @@ from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unp
 
 from composeui.core.model import RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.translation import T
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from composeui.core.model import Model
     from composeui.core.renderer import Renderer, RendererContainer
-    from composeui.core.view import MainView
+    from composeui.core.view import LabelView, MainView, View
 
 __all__ = ["CalledInJobError", "Job", "Jobs", "Task"]
 
@@ -167,6 +170,36 @@ class Task(Generic[R, P, ProgressT]):
         job = self._job
         if job is not None:
             job.cancel()
+
+    def show_state(
+        self,
+        status: LabelView,
+        *,
+        views: Iterable[View] = (),
+        loading_text: str = T("Loading..."),
+        progress_text: str = T("Loading... ({progress})"),
+        failed_text: str = T("Failed: {error}"),
+    ) -> None:
+        """Show this task's state in `status`, and `views` only once it has a result, from now on.
+
+        `status` shows while there is no result: `loading_text`, `progress_text` once the run
+        reports progress, or `failed_text` after a failure. New and Open drop the result: the
+        views hide again, until the next run's.
+        """
+        views = list(views)
+
+        def follow() -> None:
+            status.is_visible = not self.has_result
+            for view in views:
+                view.is_visible = self.has_result
+            if self.error is not None:
+                status.text = status.tr(failed_text).format(error=self.error)
+            elif self.progress is not None:
+                status.text = status.tr(progress_text).format(progress=self.progress)
+            else:
+                status.text = status.tr(loading_text)
+
+        self.changed.connect(follow, now=True)
 
     def _reset(self) -> None:
         self._job = None
