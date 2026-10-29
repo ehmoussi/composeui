@@ -5,7 +5,7 @@ from __future__ import annotations
 import gzip
 import threading
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 import pytest
 
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
-    from qtpy.QtWidgets import QWidget
 
     from composeui.core.view import View
     from composeui.qtcore.qtrenderer import QtWidgetRenderer
@@ -86,29 +85,31 @@ def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     assert page.pickups_map.is_visible
 
 
-def _qt_object(renderer: object) -> QWidget:
-    qt_widgets = pytest.importorskip("qtpy.QtWidgets")
+WidgetT = TypeVar("WidgetT")
+
+
+def _qt_object(renderer: object, widget_type: type[WidgetT]) -> WidgetT:
+    """Get the Qt widget of `renderer`, checked to be a `widget_type`."""
     renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
     assert isinstance(renderer, renderer_type)
     widget = cast("QtWidgetRenderer", renderer).qt_object
-    assert isinstance(widget, qt_widgets.QWidget)
+    assert isinstance(widget, widget_type)
     return widget
 
 
-def _qt_field(row: View) -> QWidget:
-    """Get the Qt widget of the form row `row`'s field."""
+def _qt_field(row: View, widget_type: type[WidgetT]) -> WidgetT:
+    """Get the Qt widget of the form row `row`'s field, checked to be a `widget_type`."""
     assert isinstance(row.renderer, RendererContainer)
-    return _qt_object(row.renderer.get_renderer("field"))
+    return _qt_object(row.renderer.get_renderer("field"), widget_type)
 
 
 def _select_hour(
     view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    slider = _qt_field(view.sidebar.filters.hour)
-    assert isinstance(slider, qt_widgets.QSlider)
+    slider = _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)
     slider.setValue(hour)
     assert view.pickups_map.points == expected_points
     assert view.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
@@ -129,16 +130,16 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
     try:
         # the loader started with the app, before it renders: its outcome still shows
         app.render(RendererType.QT)
-        window = _qt_object(view.renderer)
+        window = _qt_object(view.renderer, qt_widgets.QWidget)
         qtbot.addWidget(window)
-        checkbox = _qt_field(view.sidebar.filters.show_raw_data)
+        checkbox = _qt_field(view.sidebar.filters.show_raw_data, qt_widgets.QCheckBox)
         table, chart, map_widget, status = (
-            _qt_object(child.renderer)
+            _qt_object(child.renderer, qt_widgets.QWidget)
             for child in (view.table, view.pickups_chart, view.pickups_map, view.status)
         )
         # the filters show in the sidebar, beside the content
         assert checkbox.isVisibleTo(window)
-        assert _qt_field(view.sidebar.filters.hour).isVisibleTo(window)
+        assert _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider).isVisibleTo(window)
 
         def assert_visibility(*, loaded: bool, raw: bool) -> None:
             assert chart.isVisibleTo(window) == loaded
@@ -149,7 +150,6 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         qtbot.waitUntil(lambda: not view.loader.is_running)
         assert_visibility(loaded=True, raw=False)
 
-        assert isinstance(checkbox, qt_widgets.QCheckBox)
         checkbox.click()
         assert_visibility(loaded=True, raw=True)
         _select_hour(view, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
