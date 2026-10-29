@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 #: the headers of a post: its page's id, made as the page loads, and its number there, from 1
 PAGE_HEADER = "X-ComposeUI-Page"
 POST_HEADER = "X-ComposeUI-Post"
+#: the same, as the fields of a form the page submits itself, such as Save's: no headers
+PAGE_FIELD = "page"
+POST_FIELD = "post"
 #: seconds a post waits for the one before it, which may never come: e.g. aborted
 ORDER_TIMEOUT = 2.0
 #: the pages a session keeps the order of; past them, the one used least recently is
@@ -73,6 +76,12 @@ class PostOrder:
         self._next[page] = number
         if len(self._next) > MAX_PAGES:
             self._next.popitem(last=False)
+
+
+def form_order(form: Mapping[str, object]) -> dict[str, str]:
+    """Get the headers of a post submitted as a form, from its fields (see `PAGE_FIELD`)."""
+    fields = {PAGE_HEADER: form.get(PAGE_FIELD), POST_HEADER: form.get(POST_FIELD)}
+    return {name: value for name, value in fields.items() if isinstance(value, str)}
 
 
 def _post(headers: Mapping[str, str]) -> tuple[str, int] | None:

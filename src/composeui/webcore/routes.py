@@ -16,6 +16,7 @@ from starlette.responses import (
 
 from composeui.core import chartimage
 from composeui.webcore.icons import icon_path
+from composeui.webcore.order import form_order
 from composeui.webcore.session import MAX_FILE_SIZE, MAX_STATE_SIZE
 from composeui.webcore.webrenderer import UnsupportedEventError
 
@@ -261,10 +262,13 @@ async def state_save(request: Request) -> Response:
     session = _session(request)
     if session is None:
         return RedirectResponse("/", status_code=303)
-    trigger = (await request.form()).get("trigger")
-    if isinstance(trigger, str):
-        await run_in_threadpool(session.trigger_action, trigger)
-    return _state_file(session)
+    form = await request.form()
+    trigger = form.get("trigger")
+    # after the page's posts sent before it, e.g. a field's value as Save took the focus
+    async with session.post_order.turn(form_order(form)):
+        if isinstance(trigger, str):
+            await run_in_threadpool(session.trigger_action, trigger)
+        return _state_file(session)
 
 
 def _state_file(session: WebSession) -> Response:

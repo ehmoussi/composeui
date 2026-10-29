@@ -45,7 +45,9 @@ $content
 </div>
 $page_marker
 $pollers
-<form id="$save_form" method="post" action="/state/download" hidden></form>
+<form id="$save_form" method="post" action="/state/download" hidden>
+<input type="hidden" name="page" autocomplete="off">
+<input type="hidden" name="post" autocomplete="off"></form>
 </body>
 
 </html>
@@ -78,7 +80,8 @@ def page_marker(language: str, title: str, *, oob: bool = False) -> Markup:
     )
 
 
-#: id of the form Save and Save As post, their button naming the action (`trigger`)
+#: id of the form Save and Save As post, their button naming the action (`trigger`); the
+#: page sets its `page` and `post` fields, its order among the page's posts (`order.py`)
 SAVE_FORM_ID = "cui-save"
 
 
