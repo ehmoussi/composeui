@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import weakref
 from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
@@ -1985,6 +1986,30 @@ class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):
         rendered_object.update(value)
 
 
+#: the widgets of the form rows shown outside a form, by their rows' renderers: built once,
+#: as a widget has one parent, and gone with the row
+_ROW_WIDGETS: weakref.WeakKeyDictionary[RendererContainer[Any], Widget] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _widget_of(view: View) -> Widget | None:
+    """Get the widget showing `view` in a layout; a form row's anywhere, as a form shows it.
+
+    None when this backend doesn't render `view`.
+    """
+    renderer = view.renderer
+    if isinstance(view, FormRowView) and isinstance(renderer, RendererContainer):
+        widget = _ROW_WIDGETS.get(renderer)
+        if widget is None:
+            widget = TextualFormRenderer.row_widget(view, renderer)
+            _ROW_WIDGETS[renderer] = widget
+        return widget
+    if isinstance(renderer, TextualWidgetRenderer):
+        return renderer.widget
+    return None
+
+
 class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
     def render(self) -> None:
         if self._rendered_object is None:
@@ -1993,17 +2018,7 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
                 if isinstance(field_row, FormRowView) and isinstance(
                     field_row.renderer, RendererContainer
                 ):
-                    row_widgets: list[Widget] = []
-                    if isinstance(field_row, FormLabelRowView):
-                        row_widgets.append(self._get_label_widget(field_row.renderer))
-                    row_widgets.append(self._get_field_widget(field_row.renderer))
-                    row_widgets.append(self._get_log_widget(field_row.renderer))
-                    row = Vertical(*row_widgets)
-                    # `Vertical`'s default `height: 1fr` stretches to fill its parent
-                    # instead of sizing to its content, which quietly defeats
-                    # `VerticalScroll` (nothing ever appears to overflow the viewport).
-                    row.styles.height = "auto"
-                    rows.append(row)
+                    rows.append(self.row_widget(field_row, field_row.renderer))
                 elif isinstance(field_row, FormView):
                     assert isinstance(field_row.renderer, TextualWidgetRenderer)
                     assert field_row.renderer.widget is not None
@@ -2015,6 +2030,21 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
             rows.append(log.widget)
             self._rendered_object = Vertical(*rows)
             self._rendered_object.styles.height = "auto"
+
+    @classmethod
+    def row_widget(cls, row: FormRowView, row_renderer: RendererContainer[View]) -> Widget:
+        """Get a new widget showing `row`: its label, above its field and its message."""
+        row_widgets: list[Widget] = []
+        if isinstance(row, FormLabelRowView):
+            row_widgets.append(cls._get_label_widget(row_renderer))
+        row_widgets.append(cls._get_field_widget(row_renderer))
+        row_widgets.append(cls._get_log_widget(row_renderer))
+        widget = Vertical(*row_widgets)
+        # `Vertical`'s default `height: 1fr` stretches to fill its parent
+        # instead of sizing to its content, which quietly defeats
+        # `VerticalScroll` (nothing ever appears to overflow the viewport).
+        widget.styles.height = "auto"
+        return widget
 
     @staticmethod
     def _get_field_widget(field_row_renderer: RendererContainer[View]) -> Widget:
@@ -2070,10 +2100,9 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
-                view.renderer.widget
+                widget
                 for view in self._view.content_views
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                if (widget := _widget_of(view)) is not None
             ]
             self._rendered_object = Vertical(*widgets)
             self._rendered_object.styles.height = "auto"
@@ -2086,13 +2115,11 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal
         if self._rendered_object is None:
             widgets: list[Widget] = []
             for view, stretch in self._view.stretched_views:
-                if (
-                    isinstance(view.renderer, TextualWidgetRenderer)
-                    and view.renderer.widget is not None
-                ):
+                widget = _widget_of(view)
+                if widget is not None:
                     # no share: as wide as its content
-                    view.renderer.widget.styles.width = f"{stretch}fr" if stretch > 0 else "auto"
-                    widgets.append(view.renderer.widget)
+                    widget.styles.width = f"{stretch}fr" if stretch > 0 else "auto"
+                    widgets.append(widget)
             self._rendered_object = Horizontal(*widgets)
             self._rendered_object.styles.height = "auto"
             if self._view.align is Align.END:
@@ -2105,10 +2132,9 @@ class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
-                view.renderer.widget
+                widget
                 for view in self._view.children_views
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                if (widget := _widget_of(view)) is not None
             ]
             self._rendered_object = Vertical(*widgets)
             self._rendered_object.styles.height = "auto"
@@ -2126,10 +2152,7 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
     def render(self) -> None:
         if self._rendered_object is None:
             panes = [
-                view.renderer.widget
-                for view in self._view.panes
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                widget for view in self._view.panes if (widget := _widget_of(view)) is not None
             ]
             self._rendered_object = ComposeSplitter(
                 *panes, is_vertical=self._view.orientation is Orientation.VERTICAL
@@ -2163,10 +2186,9 @@ class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollaps
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
-                view.renderer.widget
+                widget
                 for view in self._view.children_views
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                if (widget := _widget_of(view)) is not None
             ]
             self._rendered_object = ComposeCollapsible(*widgets)
             self._rendered_object.toggled.connect(self._update_expanded)
@@ -2205,10 +2227,9 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
-                view.renderer.widget
+                widget
                 for view in self._view.children_views
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                if (widget := _widget_of(view)) is not None
             ]
             self._rendered_object = ComposeSidebar(*widgets)
             self._rendered_object.toggled.connect(self._update_expanded)
@@ -2258,11 +2279,9 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
         for view in views:
             if view.renderer is None:
                 view.render(RendererType.TEXTUAL)
-            if (
-                isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
-            ):
-                widgets.append(view.renderer.widget)
+            widget = _widget_of(view)
+            if widget is not None:
+                widgets.append(widget)
         return widgets
 
     @staticmethod
@@ -2362,10 +2381,9 @@ class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
-                view.renderer.widget
+                widget
                 for view in self._view.children_views
-                if isinstance(view.renderer, TextualWidgetRenderer)
-                and view.renderer.widget is not None
+                if (widget := _widget_of(view)) is not None
             ]
             # an id: the tabs tell their panes by it
             self._rendered_object = TabPane(
@@ -2473,16 +2491,11 @@ class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
                     view, position = at_cell.get((row, column), (None, GridPosition(row, column)))
                     taken.update(position.cells)
                     cell = Container()
-                    if (
-                        view is not None
-                        and isinstance(view.renderer, TextualWidgetRenderer)
-                        and view.renderer.widget is not None
-                    ):
+                    widget = None if view is None else _widget_of(view)
+                    if view is not None and widget is not None:
                         # with no share of a row, as wide as its content
-                        view.renderer.widget.styles.width = (
-                            "1fr" if view.default_stretch > 0 else "auto"
-                        )
-                        cell = Container(view.renderer.widget)
+                        widget.styles.width = "1fr" if view.default_stretch > 0 else "auto"
+                        cell = Container(widget)
                     cell.styles.row_span = position.row_span
                     cell.styles.column_span = position.column_span
                     cell.styles.height = "auto"
@@ -2746,10 +2759,9 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         sidebars: list[Widget] = []
         # not a view no widget shows, e.g. a menu: Textual has its actions' keys instead
         shown = [
-            (child_view, child_view.renderer.widget)
+            (child_view, widget)
             for child_view in self._view.children_views
-            if isinstance(child_view.renderer, TextualWidgetRenderer)
-            and child_view.renderer.widget is not None
+            if (widget := _widget_of(child_view)) is not None
         ]
         for child_view, widget in shown:
             if isinstance(child_view, StatusBar):

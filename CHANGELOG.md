@@ -31,6 +31,9 @@ The notable changes of each release of ComposeUI. The format follows
 - A chart shows the hovered values of a series of whole numbers, such as counts, as
   integers: `45280`, not `4.528e+04`, and `12`, not `12.00`. Qt and the web showed 4
   significant digits for every series. A series with other values still shows 4.
+- A form row in another view than a `FormView`, such as a `LabelRowSliderView` in a
+  sidebar, shows its label, its field, and its message, as a form shows them. No backend
+  showed it, and nothing said why.
 
 ## [0.1.0] - 2026-10-27
 

@@ -136,6 +136,7 @@ from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
+from tests.lonerows import LoneRowsMainView
 from tests.maps import MapMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
@@ -901,6 +902,48 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     table.setFocus()
     qtbot.keyClick(table, Qt.Key.Key_F2)  # the edit key
     assert table.state() is not QAbstractItemView.State.EditingState
+
+
+def _qt_part(row: Any, part: str) -> QWidget:
+    """Get the widget of one of a form row's parts: "label", "field" or "log"."""
+    assert isinstance(row.renderer, RendererContainer)
+    renderer = row.renderer.get_renderer(part)
+    assert isinstance(renderer, QtWidgetRenderer)
+    assert isinstance(renderer.qt_object, QWidget)
+    return renderer.qt_object
+
+
+def test_a_form_row_outside_a_form_shows_as_a_form_shows_it(qtbot: QtBot) -> None:
+    view = LoneRowsMainView()
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    hour, name, note = view.sidebar.hour, view.column.name, view.note
+
+    # in the sidebar's dock, a column, and the main view itself: each part, as in a form
+    for row, parts in ((hour, ["label", "field"]), (name, ["label", "field"]), (note, ["field"])):
+        for part in parts:
+            widget = _qt_part(row, part)
+            # in the window: a widget never added is "visible" to it too
+            assert window.isAncestorOf(widget)
+            assert widget.isVisibleTo(window)
+    label = _qt_part(name, "label")
+    assert isinstance(label, QFormLabel)
+    name.label = "Full name"
+    assert label.text_label.text() == "Full name"
+    name.is_visible = False
+    assert not _qt_part(name, "field").isVisibleTo(window)
+    # a list's rows: one record more keeps the first one's row, its text with it
+    view.names.items = ["First"]
+    (first,) = view.names.item_views
+    first_field = _qt_part(first, "field")
+    view.names.items = ["First", "Second"]
+    assert view.names.item_views[0] is first
+    assert _qt_part(first, "field") is first_field
+    for item_view in view.names.item_views:
+        assert window.isAncestorOf(_qt_part(item_view, "label"))
 
 
 def test_the_help_button_beside_a_row_label_shows_the_help_when_clicked(qtbot: QtBot) -> None:

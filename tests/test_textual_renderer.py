@@ -132,6 +132,7 @@ from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
+from tests.lonerows import LoneRowsMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
@@ -536,6 +537,55 @@ async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
         await pilot.press(*clear, *"50", "tab")
         await pilot.pause()
         assert marked() == [False, False, False, False]
+
+
+def _textual_part(row: Any, part: str) -> Widget:
+    """Get the widget of one of a form row's parts: "label", "field" or "log"."""
+    assert isinstance(row.renderer, RendererContainer)
+    renderer = row.renderer.get_renderer(part)
+    assert isinstance(renderer, TextualWidgetRenderer)
+    assert renderer.widget is not None
+    return renderer.widget
+
+
+@pytest.mark.asyncio
+async def test_a_form_row_outside_a_form_shows_as_a_form_shows_it() -> None:
+    view = LoneRowsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    hour, name, note = view.sidebar.hour, view.column.name, view.note
+    label = _textual_part(name, "label")
+    assert isinstance(label, Label)
+
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        # in the sidebar, a column, and the main view itself: each part, as in a form
+        for row, parts in (
+            (hour, ["label", "field"]),
+            (name, ["label", "field"]),
+            (note, ["field"]),
+        ):
+            for part in parts:
+                widget = _textual_part(row, part)
+                assert widget.is_mounted
+                assert widget.region.area > 0
+
+        name.label = "Full name"
+        await pilot.pause()
+        assert str(label.render()) == "Full name"
+        # a list's rows: one record more keeps the first one's row, its text with it
+        view.names.items = ["First"]
+        await pilot.pause()
+        (first,) = view.names.item_views
+        first_field = _textual_part(first, "field")
+        view.names.items = ["First", "Second"]
+        await pilot.pause()
+        assert view.names.item_views[0] is first
+        assert _textual_part(first, "field") is first_field
+        for item_view in view.names.item_views:
+            assert _textual_part(item_view, "label").is_mounted
 
 
 @pytest.mark.asyncio

@@ -141,6 +141,7 @@ from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
+from tests.lonerows import LoneRowsMainView
 from tests.maps import MapMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
@@ -602,6 +603,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     TabsMainView,
     ToolBarMainView,
     WorkersMainView,
+    LoneRowsMainView,
     GridMainView,
     HorizontalMainView,
     VerticalMainView,
@@ -740,6 +742,28 @@ class _ScriptFinder(HTMLParser):
             is_filter = name == "hx-trigger" and "[" in (value or "")  # evaluated by htmx
             if name.startswith(("on", "hx-on")) or is_code or is_filter:
                 self.found.append(f"<{tag} {name}={value!r}>")
+
+
+def test_a_form_row_outside_a_form_shows_as_a_form_shows_it() -> None:
+    main_view = LoneRowsMainView()
+    main_view.render(RendererType.WEB)
+    assert isinstance(main_view.renderer, WebMainRenderer)
+    hour, name, note = main_view.sidebar.hour, main_view.column.name, main_view.note
+
+    page = main_view.renderer.page_html()
+
+    # in a sidebar, a column, and the main view itself: each part, as in a form
+    for row, parts in ((hour, ["label", "field"]), (name, ["label", "field"]), (note, ["field"])):
+        for part in parts:
+            assert _part(row, part).widget_id in page
+    label, log = _part(name, "label"), _part(name, "log")
+    with collect_dirty() as dirty:
+        name.label = "Full name"
+        name.log_message = "A name is needed."
+    # each part swapped in on its own, as in a form
+    assert set(dirty) == {label.widget_id, log.widget_id}
+    assert "Full name" in label.to_html()
+    assert "A name is needed." in log.to_html()
 
 
 @pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)

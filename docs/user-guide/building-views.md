@@ -156,6 +156,10 @@ Each field has its row views too, for example `RowFloatInputView` and
 `LabelRowFloatInputView`, or `LabelRowDateInputView` for a date. The
 [widget catalog](../widgets.md#form-rows) lists every row view.
 
+A row shows in any view, such as a `SidebarView` or a `VerticalView`, as a form shows it:
+its label, its field, and its message. A `FormView` adds what concerns its rows together:
+on Qt, it lines up their labels, and its [checks](#check-a-form) compare their values.
+
 - **The text fields** emit `text_edited` on each change that the user makes, and
   `editing_finished` when the user is done with the field, for example on Enter.
 - **A check box** shows other views only while it is checked, with `shows`:
