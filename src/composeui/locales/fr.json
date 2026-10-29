@@ -67,6 +67,7 @@
   "Choose a file": "Choisir un fichier",
   "Reload": "Recharger",
   "Parent folder": "Dossier parent",
+  "Can't take {path}: it isn't in the folders this column lists.": "Impossible de prendre {path} : il n'est pas dans les dossiers que liste cette colonne.",
   "This folder can't be read.": "Ce dossier ne peut pas être lu.",
   "This folder holds too many items to list them all: type the file's path.": "Ce dossier contient trop d'éléments pour tous les lister : tapez le chemin du fichier.",
   "No rows": "Aucune ligne",

@@ -455,7 +455,8 @@ class ComposeTable(DataTable[Text]):
                 self._set_cell(row, column, str(picked))
 
         rows = self._rows
-        self.app.push_screen(file_picker(text, widget.extensions, widget.text), apply)
+        start = widget.server_roots[0] if widget.server_roots else None
+        self.app.push_screen(file_picker(text, widget.extensions, widget.text, start), apply)
 
     def _edit(self, row: int, focused: int) -> None:
         assert row < len(self._rows)  # see `_toggle_check`

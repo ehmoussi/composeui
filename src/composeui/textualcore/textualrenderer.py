@@ -1648,6 +1648,8 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
                 "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
                 "cell_widgets": self._refresh_cell_widgets,
+                # the web's list of the server's files only
+                "file_texts": lambda _view, _rendered_object, _value: None,
                 "cell_styles": self._refresh_looks,
                 "header_groups": self._refresh_header_groups,
                 "row_headers": self._refresh_looks,

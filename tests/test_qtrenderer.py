@@ -147,7 +147,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -2229,6 +2229,36 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     view.variables.editable_columns = []
     qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=box)
     assert [row[0] for row in view.variables.rows] == ["False", "False"]
+
+
+def test_a_table_s_file_path_dialog_opens_in_its_first_server_root_and_can_leave_it(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = StudyFilesTableMainView()
+    view.inputs.cell_widgets = {1: CellWidget.file_path(server_roots=(tmp_path / "studies",))}
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.inputs)
+    asked: list[str] = []
+
+    def ask(*args: object) -> tuple[str, str]:
+        asked.append(str(args[2]))
+        return str(tmp_path / "elsewhere.export"), ""
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
+    cell = table.visualRect(table.model().index(0, 1))
+
+    qtbot.mouseClick(
+        table.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(cell.right() - 4, cell.center().y())
+    )
+
+    assert asked == [str(tmp_path / "studies")]
+    # the app's own machine: a file outside the roots is the cell's path too
+    assert view.inputs.rows[0] == ["Mesh", str(tmp_path / "elsewhere.export")]
 
 
 def test_a_table_s_file_path_is_picked_in_qt_s_dialog_or_typed(

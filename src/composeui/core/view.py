@@ -2586,6 +2586,10 @@ def _to_texts(texts: Iterable[str]) -> tuple[str, ...]:
     return tuple(texts)
 
 
+def _to_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
+    return tuple(paths)
+
+
 @attrs.frozen
 class CellWidget:
     """A widget in each cell of a table's column, by `TableMixin.cell_widgets`.
@@ -2598,7 +2602,9 @@ class CellWidget:
     A file path cell is typed in, and its "…" button picks a file, as `FilePathInputView`'s
     does: the toolkit's file dialog on Qt and Textual, an upload on the web, whose copy the
     session keeps while a cell holds its path. `cell_edited` then emits the file's path.
-    Its button is enabled only in an editable column.
+    Its button is enabled only in an editable column. With `server_roots`, the web lists
+    the server's files in them instead, and refuses a path typed outside them: the cell
+    keeps its text, and the status bar says why.
     """
 
     kind: CellKind
@@ -2613,6 +2619,10 @@ class CellWidget:
     extensions: dict[str, tuple[str, ...]] = attrs.field(
         factory=dict[str, tuple[str, ...]], hash=False
     )
+    #: the folders of the server whose files a file path's "…" lists on the web, rather
+    #: than uploading a copy; on Qt and Textual, the dialog opens in the first one while
+    #: the cell is empty, and the user can leave it (see `FilePathInputMixin.server_roots`)
+    server_roots: tuple[Path, ...] = attrs.field(default=(), converter=_to_paths)
 
     def translated(self, translate: Translate) -> CellWidget:
         """Get it with a button's text translated again, if it's `TranslatedText`."""
@@ -2640,8 +2650,14 @@ class CellWidget:
         cls,
         extensions: Optional[dict[str, tuple[str, ...]]] = None,
         text: str = T("Choose a file"),
+        server_roots: Iterable[Path] = (),
     ) -> CellWidget:
-        return cls(CellKind.FILE_PATH, text=text, extensions=dict(extensions or {}))
+        return cls(
+            CellKind.FILE_PATH,
+            text=text,
+            extensions=dict(extensions or {}),
+            server_roots=_to_paths(server_roots),
+        )
 
 
 #: the brightness above which a background takes black text, else white
@@ -2728,6 +2744,15 @@ FILTER_TEXTS: Mapping[str, str] = {
     "chip": T("{header}: {filter}"),
     "chip_pattern": T("{header} matches {filter}"),
     "pattern": T("Regular expression"),
+}
+
+#: the texts of the web's list of the server's files, for a table's file path cells
+FILE_TEXTS: Mapping[str, str] = {
+    "parent_folder": T("Parent folder"),
+    "cancel": T("Cancel"),
+    "unreadable_folder": T("This folder can't be read."),
+    "partial_folder": T("This folder holds too many items to list them all: type the file's path."),
+    "outside_roots": T("Can't take {path}: it isn't in the folders this column lists."),
 }
 
 _ItemT = TypeVar("_ItemT")
@@ -3025,6 +3050,11 @@ class TableMixin:
     #: the widget in each cell of a column, by column: the app's setup, not study data
     cell_widgets: dict[int, CellWidget] = attrs.field(
         factory=dict[int, CellWidget], metadata={OMIT: True}
+    )
+    #: the texts of the web's list of the server's files, for a file path cell with
+    #: `server_roots`, by what they're for (see `FILE_TEXTS`)
+    file_texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(FILE_TEXTS), metadata={UI_TEXT: True}
     )
     #: the user clicked a button or a link cell: its row and its column
     cell_clicked: Signal[int, int] = attrs.Factory(Signal[int, int])
