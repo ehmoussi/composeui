@@ -10,6 +10,7 @@ runs the program again in a new child process, which opens the study.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib
 import importlib.abc
 import importlib.util
@@ -401,11 +402,15 @@ def run_reloading(
     # a supervisor told to stop, e.g. by `kill`, stops its app too, which would else go on
     previous_handler = signal.signal(signal.SIGTERM, _exit)
     child: subprocess.Popen[bytes] | None = None
+    # the content of each file changed, as last run: a system may report one write twice,
+    # e.g. macOS, which would else run the same code twice
+    contents: dict[Path, bytes | None] = {}
     try:
         with tempfile.TemporaryDirectory(prefix="composeui-reload-") as state_directory:
             env = {**os.environ, RELOADED_VARIABLE: state_directory}
             child = subprocess.Popen(command, env=env)  # noqa: S603
-            for changed in changes:
+            for batch in changes:
+                changed = _new_contents(batch, contents, is_running=child is not None)
                 if len(changed) > 0:
                     in_place = _reload_in_place(child, changed, Path(state_directory))
                     if not in_place:
@@ -430,6 +435,31 @@ def run_reloading(
             changes.close()
         signal.signal(signal.SIGTERM, previous_handler)
     return 0
+
+
+def _new_contents(
+    batch: set[Path], contents: dict[Path, bytes | None], *, is_running: bool
+) -> set[Path]:
+    """Get the files of `batch` changed since the app ran them, and keep their contents.
+
+    An app that exited runs again on any change, even one that leaves a file as it was.
+    """
+    digests = {path: _digest(path) for path in batch}
+    changed = {
+        path
+        for path, digest in digests.items()
+        if not is_running or path not in contents or contents[path] != digest
+    }
+    contents.update(digests)
+    return changed
+
+
+def _digest(path: Path) -> bytes | None:
+    """Get a digest of `path`'s content, None once it is removed."""
+    try:
+        return hashlib.sha256(path.read_bytes()).digest()
+    except OSError:
+        return None
 
 
 def _exit(signum: int, _frame: FrameType | None) -> None:

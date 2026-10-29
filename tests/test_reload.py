@@ -97,7 +97,13 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
             time.sleep(0.05)
         """
     )
-    changed = {tmp_path / "app.py"}
+    app = tmp_path / "app.py"
+    versions = iter(range(1, 100))
+
+    def changed() -> set[Path]:
+        """Change the app's code, as a user saving it does."""
+        app.write_text(f"VERSION = {next(versions)}\n")
+        return {app}
 
     def runs() -> list[str]:
         return log.read_text().splitlines() if log.exists() else []
@@ -105,23 +111,26 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
     def changes() -> Iterator[set[Path]]:
         _wait_for(lambda: runs() == ["start"])
         yield set()  # nothing changed: the app keeps running
-        yield changed
+        yield changed()
         _wait_for(lambda: runs() == ["start", "reloaded"])  # the same app runs on
+        # the same write told again, as macOS can: the app already runs that code
+        yield {app}
         mode.write_text("slow")
-        yield changed
+        yield changed()
         _wait_for(lambda: runs() == ["start", "reloaded", "reloaded"])  # waited for
         mode.write_text("exit")
-        yield changed
+        yield changed()
         _wait_for(lambda: runs().count("start") == 2)  # a new app, as the app exited
         mode.write_text("1")
-        yield changed
+        yield changed()
         deadline = time.monotonic() + _TIMEOUT
         while "waiting for a change" not in caplog.text:  # the failed app isn't run again
             assert time.monotonic() < deadline, "timed out"
             yield set()
         assert runs().count("start") == 3
         mode.write_text("0")
-        yield changed
+        # saved again unchanged: an app that exited runs again on any change
+        yield {app}
         while True:  # until the app exits by itself, without an error
             yield set()
 

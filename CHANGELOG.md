@@ -34,6 +34,8 @@ The notable changes of each release of ComposeUI. The format follows
 - A form row in another view than a `FormView`, such as a `LabelRowSliderView` in a
   sidebar, shows its label, its field, and its message, as a form shows them. No backend
   showed it, and nothing said why.
+- With reload on, a file saved once runs its code once on macOS too. The system can report
+  one save twice, and the app then reloaded twice.
 
 ## [0.1.0] - 2026-10-27
 
