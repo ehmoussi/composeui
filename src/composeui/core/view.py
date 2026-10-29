@@ -2525,6 +2525,8 @@ class CellKind(enum.Enum):
     BUTTON = enum.auto()
     #: the cell's text as a link
     LINK = enum.auto()
+    #: a file's path, then a "…" button picking one (see `CellWidget.file_path`)
+    FILE_PATH = enum.auto()
 
 
 #: a check box cell's text, by whether it's checked, as `str` writes a boolean
@@ -2543,15 +2545,25 @@ class CellWidget:
     Then `cell_edited` emits the new text, as for a typed edit; a check box's text comes
     from `CHECKED_TEXTS`. Else they only show the cell's text. A button and a link emit
     `cell_clicked`, and the user never types in their cells.
+
+    A file path cell is typed in, and its "…" button picks a file, as `FilePathInputView`'s
+    does: the toolkit's file dialog on Qt and Textual, an upload on the web, whose copy the
+    session keeps while a cell holds its path. `cell_edited` then emits the file's path.
+    Its button is enabled only in an editable column.
     """
 
     kind: CellKind
     #: a combobox's choices, the texts its cells take
     options: tuple[str, ...] = attrs.field(default=(), converter=_to_texts)
-    #: a button's text
+    #: a button's text; a file path button's name, as a tooltip and a screen reader show it
     text: str = "\u2026"
     #: whether a check box column's header has a box checking or unchecking every shown row
     check_all: bool = False
+    #: the file types a file path's dialog offers, by name: ``{"CSV": (".csv",)}``; on the
+    #: web, a file of another type is refused
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], hash=False
+    )
 
     def translated(self, translate: Translate) -> CellWidget:
         """Get it with a button's text translated again, if it's `TranslatedText`."""
@@ -2573,6 +2585,14 @@ class CellWidget:
     @classmethod
     def link(cls) -> CellWidget:
         return cls(CellKind.LINK)
+
+    @classmethod
+    def file_path(
+        cls,
+        extensions: Optional[dict[str, tuple[str, ...]]] = None,
+        text: str = T("Choose a file"),
+    ) -> CellWidget:
+        return cls(CellKind.FILE_PATH, text=text, extensions=dict(extensions or {}))
 
 
 #: the brightness above which a background takes black text, else white
@@ -2775,9 +2795,9 @@ class TableMixin:
     and the rows stay as they are, e.g. when the model refused the new text and changed
     nothing. A `RefusedError` caught by `View.refusing` in the callback does the same.
 
-    A column of `cell_widgets` shows a widget in each cell (see `CellWidget`). A check box
-    or a combobox edits the cell. A button or a link emits `cell_clicked` with its row and
-    column. A check box column's header can check or uncheck every shown row
+    A column of `cell_widgets` shows a widget in each cell (see `CellWidget`). A check box,
+    a combobox or a file path edits the cell. A button or a link emits `cell_clicked` with
+    its row and column. A check box column's header can check or uncheck every shown row
     (`check_all`), and each change is emitted as the user's edit.
 
     The user sorts the rows by a column of `sortable_columns` (`sort_column`, ascending

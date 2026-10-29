@@ -142,6 +142,7 @@ from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
+    DataFilesTableMainView,
     EditableTableMainView,
     GatedMainView,
     GatedSource,
@@ -2170,6 +2171,59 @@ async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() 
             (1, 3),
             (0, 4),
         ]
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_file_path_is_picked_in_the_file_picker_or_typed(tmp_path: Path) -> None:
+    (tmp_path / "flows.csv").write_text("1,2", encoding="utf-8")
+    view = DataFilesTableMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.inputs.renderer, TextualWidgetRenderer)
+    box = view.inputs.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+    edits: list[tuple[int, int, str]] = []
+    view.inputs.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        # the offset of the path's column
+        x = next(iter(table.columns.values())).get_render_width(table) + 1
+        assert [str(cell) for cell in table.get_row_at(0)] == ["Flows", " [\u2026]"]
+        # a click opens the picker, the cell taking the file picked; Escape picks none
+        await pilot.click(table, offset=(x, 1))
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+        await pilot.press("escape")
+        await pilot.pause()
+        assert (len(app.screen_stack), edits) == (1, [])
+        await pilot.click(table, offset=(x, 1))
+        await pilot.pause()
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(tmp_path / "flows.csv")
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(4):
+            await pilot.pause()
+        assert len(app.screen_stack) == 1
+        assert view.inputs.rows[0] == ["Flows", str(tmp_path / "flows.csv")]
+        # or F2's editor types it
+        await pilot.click(table, offset=(1, 2))
+        await pilot.press("f2")
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeRowEditor)
+        await pilot.press(*"/data/levels.csv", "enter")
+        await pilot.pause()
+        assert edits == [(0, 1, str(tmp_path / "flows.csv")), (1, 1, "/data/levels.csv")]
+        # not editable, a click opens nothing
+        view.inputs.editable_columns = []
+        await pilot.click(table, offset=(x, 1))
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
 
 
 @pytest.mark.asyncio

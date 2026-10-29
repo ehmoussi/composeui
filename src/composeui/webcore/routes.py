@@ -150,7 +150,7 @@ def _widget_response(
 
 
 async def widget_file(request: Request) -> Response:
-    """Hand an uploaded file to a `PickFileAction`; respond as `widget_event` does."""
+    """Hand an uploaded file to its action, path field or cell; respond as `widget_event` does."""
     session = _session(request)
     if session is None:
         return Response(headers=_RELOAD)
@@ -161,10 +161,12 @@ async def widget_file(request: Request) -> Response:
     # one byte over the limit is enough to know the file is too large
     content = await upload.read(MAX_FILE_SIZE + 1)
     widget_id = request.path_params["widget_id"]
+    # a table's cell names its row and column
+    fields = {key: value for key, value in form.items() if isinstance(value, str)}
     try:
         async with session.post_order.turn(request.headers):
             result = await run_in_threadpool(
-                session.pick_file, widget_id, upload.filename or "", content
+                session.pick_file, widget_id, upload.filename or "", content, fields
             )
     except UnsupportedEventError as e:
         return PlainTextResponse(str(e), status_code=400)

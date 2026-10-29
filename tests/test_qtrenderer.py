@@ -147,6 +147,7 @@ from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
+    DataFilesTableMainView,
     EditableTableMainView,
     GatedMainView,
     GatedSource,
@@ -2143,6 +2144,67 @@ def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks(qtbot: Q
     view.variables.editable_columns = []
     qtbot.mouseClick(header.viewport(), Qt.MouseButton.LeftButton, pos=box)
     assert [row[0] for row in view.variables.rows] == ["False", "False"]
+
+
+def test_a_table_s_file_path_is_picked_in_qt_s_dialog_or_typed(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = DataFilesTableMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.inputs)
+    model = table.model()
+    edits: list[tuple[int, int, str]] = []
+    view.inputs.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+    asked: list[tuple[str, str, str]] = []
+    answer = ("", "")
+
+    def ask(*args: object) -> tuple[str, str]:
+        asked.append((str(args[1]), str(args[2]), str(args[3])))
+        return answer
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
+
+    def click_button(row: int) -> None:
+        cell = table.visualRect(model.index(row, 1))
+        position = QPoint(cell.right() - 4, cell.center().y())
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+
+    click_button(0)  # cancelled
+    assert (asked, edits) == ([("Choose a file", "", "CSV (*.csv)")], [])
+    answer = (str(tmp_path / "flows.csv"), "CSV (*.csv)")
+    click_button(0)
+    assert view.inputs.rows[0] == ["Flows", answer[0]]
+    assert model.index(0, 1).data() == answer[0]
+    # Space on the current cell opens the dialog too, in the directory of its path
+    table.setCurrentIndex(model.index(0, 1))
+    answer = (str(tmp_path / "levels.csv"), "CSV (*.csv)")
+    qtbot.keyClick(table, Qt.Key.Key_Space)
+    assert asked[-1][1] == str(tmp_path)
+    # or the path is typed
+    table.setCurrentIndex(model.index(1, 1))
+    qtbot.keyClick(table, Qt.Key.Key_F2)
+    editor = table.focusWidget()
+    assert isinstance(editor, QLineEdit)
+    qtbot.keyClicks(editor, "/data/levels.csv")
+    qtbot.keyClick(editor, Qt.Key.Key_Return)
+    # Qt commits the text and closes the editor in a queued call
+    qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
+    assert edits == [
+        (0, 1, str(tmp_path / "flows.csv")),
+        (0, 1, str(tmp_path / "levels.csv")),
+        (1, 1, "/data/levels.csv"),
+    ]
+    # not editable, the button opens nothing
+    view.inputs.editable_columns = []
+    click_button(1)
+    table.setCurrentIndex(model.index(1, 1))
+    qtbot.keyClick(table, Qt.Key.Key_Space)
+    assert len(asked) == 3
 
 
 def test_a_table_s_cells_and_headers_look_as_the_view_says(qtbot: QtBot) -> None:
