@@ -1549,7 +1549,11 @@ class DateInputView(DateInputMixin, View):
 def is_within_roots(path: Path, roots: Iterable[Path]) -> bool:
     """Whether `path` is one of `roots`, or inside one, once resolved (``~``, ``..``, links)."""
     try:
-        resolved = path.expanduser().resolve()
+        try:
+            # strict: a loop of links, or a NUL character, raises on every Python and OS
+            resolved = path.expanduser().resolve(strict=True)
+        except FileNotFoundError:  # a file still to come: the links above it followed
+            resolved = path.expanduser().resolve()
         resolved_roots = [root.expanduser().resolve() for root in roots]
     # a loop of links raises RuntimeError before 3.13, a NUL character ValueError
     except (OSError, RuntimeError, ValueError):
