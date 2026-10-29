@@ -1895,6 +1895,29 @@ def test_the_chart_script_loads_only_once_a_chart_shows(page: Page, chart_pages_
     expect(figure.locator(".u-legend")).to_contain_text("Inlet")
 
 
+def test_a_click_sees_the_value_typed_before_it_though_it_reaches_the_server_first(
+    chart_page: Page,
+) -> None:
+    # the field's post, sent as the click takes the focus, held on its way to the server
+    chart_page.add_init_script(
+        "const send = XMLHttpRequest.prototype.send;"
+        "XMLHttpRequest.prototype.send = function (body) {"
+        "  if (typeof body === 'string' && body.includes('80')) {"
+        "    setTimeout(() => send.call(this, body), 500);"
+        "  } else {"
+        "    send.call(this, body);"
+        "  }"
+        "};"
+    )
+    chart_page.goto("/")
+
+    chart_page.get_by_label("Diameter (mm)").fill("80")
+    chart_page.get_by_role("button", name="Add Curve").click()
+
+    # handled after the field's post, which left first: the curve of the new diameter
+    expect(chart_page.locator(".u-legend")).to_contain_text("D = 80 mm")
+
+
 def test_a_swapped_chart_is_destroyed_and_keeps_the_zoom(chart_page: Page) -> None:
     chart_page.goto("/")
     add = chart_page.get_by_role("button", name="Add Curve")

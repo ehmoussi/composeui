@@ -23,6 +23,7 @@ from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
+from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.webrenderer import (
     RenderTarget,
@@ -68,6 +69,8 @@ class WebSession(RenderTarget):
         self.model = model
         #: where the file path fields' uploads are kept, made by the first one
         self._uploads: Path | None = None
+        #: the order of each page's posts, which the routes handle in it
+        self.post_order = PostOrder()
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
 

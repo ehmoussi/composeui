@@ -657,6 +657,15 @@ The user guide's "Web backend" section covers what users see.
   parsing of the whole answer to a table's rules, mangling the fragments after them.
   An invalid filter value swaps only its message, which `syncInvalidFields` marks the
   field by.
+- **Order.** The server handles a page's posts in the order the page sends them
+  (`order.py`): a field's value, posted as a click on a button blurs the field, can else
+  reach it after the click. `page.js` sets a page id and a number on each post in
+  `htmx:beforeSend`, and the routes await its turn on the event loop, no thread held, at
+  most `ORDER_TIMEOUT` (2 s) for a post that never comes. Scroll windows
+  (`hx-sync="this:replace"`) carry none: one replaced may never be sent. A session keeps
+  the order of `MAX_PAGES` (32) pages. Holding the posts back in `page.js` fails instead:
+  htmx drops a held request whose element a swap has since replaced, and gives no promise
+  to wait on for a trigger's request.
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's
   lock and keeps what it changed in the session's `pending`, sent with the next event's
   response or fetch (a full page drops them). While the main view's jobs run, the page's

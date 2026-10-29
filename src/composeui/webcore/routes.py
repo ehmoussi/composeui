@@ -124,8 +124,10 @@ async def widget_event(request: Request) -> Response:
     event = fields.pop("event", "")
     widget_id = request.path_params["widget_id"]
     try:
-        # view callbacks are plain sync code: keep them off the event loop
-        result = await run_in_threadpool(session.handle_event, widget_id, event, fields)
+        # in the order the page sent its posts, waiting for its turn off any thread
+        async with session.post_order.turn(request.headers):
+            # view callbacks are plain sync code: keep them off the event loop
+            result = await run_in_threadpool(session.handle_event, widget_id, event, fields)
     except UnsupportedEventError as e:
         return PlainTextResponse(str(e), status_code=400)
     if result is None:
@@ -159,9 +161,10 @@ async def widget_file(request: Request) -> Response:
     content = await upload.read(MAX_FILE_SIZE + 1)
     widget_id = request.path_params["widget_id"]
     try:
-        result = await run_in_threadpool(
-            session.pick_file, widget_id, upload.filename or "", content
-        )
+        async with session.post_order.turn(request.headers):
+            result = await run_in_threadpool(
+                session.pick_file, widget_id, upload.filename or "", content
+            )
     except UnsupportedEventError as e:
         return PlainTextResponse(str(e), status_code=400)
     if result is None:
@@ -284,12 +287,13 @@ async def state_upload(request: Request) -> Response:
     if not isinstance(upload, UploadFile):
         return PlainTextResponse("No file uploaded", status_code=400)
     trigger = form.get("trigger")
-    if isinstance(trigger, str):
-        # e.g. Open's own `triggered`, before the file is loaded
-        await run_in_threadpool(session.trigger_action, trigger)
     # one byte over the limit is enough to know the file is too large
     content = await upload.read(MAX_STATE_SIZE + 1)
-    status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
+    async with session.post_order.turn(request.headers):
+        if isinstance(trigger, str):
+            # e.g. Open's own `triggered`, before the file is loaded
+            await run_in_threadpool(session.trigger_action, trigger)
+        status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
     if status_bar is None:
         return Response(headers=_RELOAD)
     return HTMLResponse(status_bar, headers=_NO_STORE)
