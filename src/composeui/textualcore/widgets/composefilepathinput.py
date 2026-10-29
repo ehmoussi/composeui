@@ -16,13 +16,16 @@ def _has_any_extension(path: Path, extensions: tuple[str, ...]) -> bool:
     return any(path.name.endswith(extension) for extension in extensions)
 
 
-def file_picker(text: str, extensions: dict[str, tuple[str, ...]], title: str) -> FileOpen:
+def file_picker(
+    text: str, extensions: dict[str, tuple[str, ...]], title: str, start: Path | None = None
+) -> FileOpen:
     """Get a picker of the files of `extensions`, opening in the directory of `text`'s path.
 
-    In the current directory if `text` is empty, or no directory's path.
+    In `start` if `text` is empty, else in the current directory, as for no directory's
+    path.
     """
     text = text.strip()
-    location = Path(text).parent if text != "" else Path()
+    location = Path(text).parent if text != "" else (start or Path())
     if not location.is_dir():  # e.g. a path typed halfway
         location = Path()
     filters = Filters(
@@ -38,8 +41,9 @@ class ComposeFilePathInput(Horizontal):
     """A field typing a file's path, then a "…" button picking one, and a reload button.
 
     The picker is textual-fspicker's, a screen of its own, opening in the directory of
-    the field's path, if any; `path_picked` reports the file picked, once the field shows
-    it. The reload button only reports its presses, and shows with `has_reload`.
+    the field's path, if any, else in `start_folder`; `path_picked` reports the file
+    picked, once the field shows it. The reload button only reports its presses, and shows
+    with `has_reload`.
     """
 
     DEFAULT_CSS = """
@@ -71,12 +75,16 @@ class ComposeFilePathInput(Horizontal):
         self.extensions: dict[str, tuple[str, ...]] = {}
         #: the picker's title, the view's `browse_text`
         self.picker_title = ""
+        #: where the picker opens while the field is empty, the view's first server root
+        self.start_folder: Path | None = None
         self.path_picked: Signal[Path] = Signal()
         self.reload_pressed = SignalNoArgs()
 
     def open_picker(self) -> None:
-        """Show the file picker in the directory of the field's path, else the current one."""
-        picker = file_picker(self.input.value, self.extensions, self.picker_title)
+        """Show the file picker in the directory of the field's path, else `start_folder`."""
+        picker = file_picker(
+            self.input.value, self.extensions, self.picker_title, self.start_folder
+        )
         self.app.push_screen(picker, self._pick)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

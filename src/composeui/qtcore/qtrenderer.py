@@ -548,6 +548,7 @@ def _file_filters(extensions: dict[str, tuple[str, ...]]) -> str:
 
 class FilePathInputViewLike(InputViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    server_roots: tuple[Path, ...]
     has_reload: bool
     browse_text: str
     reload_text: str
@@ -561,7 +562,8 @@ class FilePathInputViewLike(InputViewLike, Protocol):
 class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathField]):
     """A field typing a file's path, then a "…" button opening Qt's file dialog.
 
-    The dialog opens in the directory of the field's path, if any.
+    The dialog opens in the directory of the field's path, if any, else in the first of the
+    view's `server_roots`.
     """
 
     _invalid_style = "QLineEdit { border: 1px solid red; }"
@@ -576,7 +578,19 @@ class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathF
                 "browse_text": self._refresh_browse_text,
                 "reload_text": self._refresh_reload_text,
                 # read by the dialog each time it opens
-                "extensions": lambda _view, _rendered_object, _value: None,
+                **dict.fromkeys(
+                    ("extensions", "server_roots"), lambda _view, _rendered_object, _value: None
+                ),
+                # the web's list of the server's files only
+                **dict.fromkeys(
+                    (
+                        "parent_folder_text",
+                        "cancel_text",
+                        "unreadable_folder_text",
+                        "partial_folder_text",
+                    ),
+                    lambda _view, _rendered_object, _value: None,
+                ),
             }
         )
 
@@ -597,8 +611,9 @@ class QtFilePathInputRenderer(QtWidgetRenderer[FilePathInputViewLike, QFilePathF
     def browse(self) -> None:
         """Pick a file in Qt's dialog, its path then the field's; nothing if cancelled."""
         assert self._rendered_object is not None
-        path = self._view.path
-        directory = "" if path is None else str(path.parent)
+        path, roots = self._view.path, self._view.server_roots
+        start = path.parent if path is not None else (roots[0] if roots else None)
+        directory = "" if start is None else str(start)
         picked, _selected_filter = QFileDialog.getOpenFileName(
             self._rendered_object,
             self._view.browse_text,

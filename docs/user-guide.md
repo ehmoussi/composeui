@@ -42,6 +42,7 @@ not in the package: run them from a clone of the repository (see
   - [Integer input](user-guide/widgets.md#integer-input)
   - [Date input](user-guide/widgets.md#date-input)
   - [File path input](user-guide/widgets.md#file-path-input)
+    - [Files on the server](user-guide/widgets.md#files-on-the-server)
   - [Slider](user-guide/widgets.md#slider)
   - [Progress bar](user-guide/widgets.md#progress-bar)
   - [Metric](user-guide/widgets.md#metric)

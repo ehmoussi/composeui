@@ -872,8 +872,18 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
         self._view.text_edited.emit(text)
 
 
+#: the texts of the web's list of the server's files, which Textual doesn't show
+_SERVER_LIST_TEXTS = (
+    "parent_folder_text",
+    "cancel_text",
+    "unreadable_folder_text",
+    "partial_folder_text",
+)
+
+
 class FilePathInputViewLike(InputViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    server_roots: tuple[Path, ...]
     has_reload: bool
     browse_text: str
     reload_text: str
@@ -898,6 +908,9 @@ class TextualFilePathInputRenderer(
                 "has_reload": self._refresh_has_reload,
                 "browse_text": self._refresh_browse_text,
                 "reload_text": self._refresh_reload_text,
+                "server_roots": self._refresh_server_roots,
+                # the web's list of the server's files only
+                **dict.fromkeys(_SERVER_LIST_TEXTS, lambda _view, _widget, _value: None),
             }
         )
 
@@ -947,6 +960,14 @@ class TextualFilePathInputRenderer(
         _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
         rendered_object.reload_button.tooltip = Content(value)
+
+    @staticmethod
+    def _refresh_server_roots(
+        _view: FilePathInputViewLike,
+        rendered_object: ComposeFilePathInput,
+        value: tuple[Path, ...],
+    ) -> None:
+        rendered_object.start_folder = value[0] if value else None
 
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():

@@ -22,6 +22,10 @@ The notable changes of each release of ComposeUI. The format follows
 - `ContentDialogView`, a dialog holding any view with OK and Cancel, such as a table to pick
   a file from. The app enables OK with `is_accept_enabled`, and a subclass can keep the
   dialog open on OK by overriding `accept`.
+- `FilePathInputMixin.server_roots`, the folders of the server whose files the web's "…"
+  button lists, instead of uploading a copy. The field holds the path of the file on the
+  server. A typed path outside the roots gives `path` `None` on the web. Qt and Textual open
+  their dialogs in the first root.
 
 ### Fixed
 

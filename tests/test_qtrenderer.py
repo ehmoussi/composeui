@@ -147,6 +147,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
+from tests.studyfiles import StudyFileMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -749,6 +750,30 @@ def test_a_file_path_is_typed_or_picked_in_qt_s_dialog_and_reloaded(
     assert len(reloads) == 1
     measurements.has_reload = False
     assert not field.reload_button.isVisible()
+
+
+def test_a_file_path_s_dialog_opens_in_its_first_server_root_and_can_leave_it(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = StudyFileMainView()
+    view.study.server_roots = (tmp_path / "studies", tmp_path)
+    view.render(RendererType.QT)
+    field = _field_widget(view.study)
+    assert isinstance(field, QFilePathField)
+    qtbot.addWidget(field)
+    asked: list[str] = []
+
+    def ask(*args: object) -> tuple[str, str]:
+        asked.append(str(args[2]))
+        return str(tmp_path / "elsewhere.py"), ""
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
+
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+
+    assert asked == [str(tmp_path / "studies")]
+    # the app's own machine: a file outside the roots is the field's path too
+    assert view.study.path == tmp_path / "elsewhere.py"
 
 
 def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:

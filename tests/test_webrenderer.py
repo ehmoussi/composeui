@@ -57,6 +57,7 @@ from composeui.core.view import (
     ChartView,
     DialogView,
     EditRefusedError,
+    FilePathInputMixin,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowIntInputView,
@@ -85,6 +86,7 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
+from composeui.webcore import serverfiles
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
@@ -151,6 +153,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
+from tests.studyfiles import StudyFileMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -710,6 +713,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     CellWidgetsMainView,
     DataFilesTableMainView,
     StyledTablesMainView,
+    StudyFileMainView,
     _NotesMainView,
 ]
 
@@ -761,14 +765,17 @@ def _poison(main_view: MainView) -> None:
 def _states(main_view: MainView) -> Iterator[str]:
     """Bring `main_view` to each state that shows other text, naming it once there.
 
-    As first shown; then with what only shows on demand: dialogs, a cell's field, a
-    table's search, its filter editor, and the error or chip of each column filtered.
+    As first shown; then with what only shows on demand: dialogs, a list of the server's
+    files, a cell's field, a table's search, its filter editor, and the error or chip of
+    each column filtered.
     """
     yield "as first shown"
     tables: list[tuple[TableView, WebTableRenderer]] = []
     for view in _views(main_view):
         if isinstance(view, DialogView):
             view.open()
+        if isinstance(view, FilePathInputMixin) and view.server_roots:
+            _part(view, "field").dispatch("browse", {})
         renderer = view.renderer
         if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
             tables.append((view, renderer))
@@ -776,7 +783,7 @@ def _states(main_view: MainView) -> Iterator[str]:
                 if view.rows and column not in view.cell_widgets:
                     renderer.dispatch("start_edit", {"row": "0", "column": str(column)})
                     break
-    yield "dialogs open, a cell edited"
+    yield "dialogs open, a cell edited, the server's files listed"
     for view, renderer in tables:
         view.search = _HOSTILE  # last: it hides every row
         for column in view.filterable_columns:
@@ -1216,6 +1223,225 @@ def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends()
     assert len(reloads) == 1
     session.close()
     assert not picked[-1][0].exists()
+
+
+def _server_files(main_view: StudyFileMainView, root: Path) -> WebRenderer[Any]:
+    """Render `main_view` with its study's files in `root`, its `.export` files; its field."""
+    main_view.study.extensions = {"Code_Aster": (".export",)}
+    main_view.study.server_roots = (root,)
+    main_view.render(RendererType.WEB)
+    return _part(main_view.study, "field")
+
+
+def _listed(markup: str, field: WebRenderer[Any]) -> list[tuple[str, str]]:
+    """Get the items the field's list of the server's files shows: (event, name)."""
+    items = _element(markup, f"{field.widget_id}-files-list")
+    values = [json.loads(a["hx-vals"] or "") for tag, a in items.descendants if tag == "button"]
+    return [(value["event"], value["name"]) for value in values]
+
+
+def _shows_files(field: WebRenderer[Any]) -> bool:
+    return "hidden" not in _element(field.to_html(), f"{field.widget_id}-files").attributes
+
+
+def test_a_file_path_with_server_roots_is_picked_among_their_files_never_copied(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "studies"
+    (root / "beam").mkdir(parents=True)
+    (root / "Alpha").mkdir()
+    for name in ("beam/beam.export", "beam/beam.comm", "zeta.export", "notes.txt", ".old.export"):
+        (root / name).write_text("")
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, root)
+    main_view.set_language("fr")
+    picked: list[Path] = []
+    main_view.study.path_picked.connect(picked.append)
+    element = _element(field.to_html(), field.widget_id)
+    assert [tag for tag, a in element.descendants if a.get("type") == "file"] == []  # no upload
+    files = root.resolve()
+
+    # at the only root: its folders, then its files of the field's types, none hidden
+    body = handle_event(field, "browse", {})
+    assert _listed(body, field) == [
+        ("browse-folder", "Alpha"),
+        ("browse-folder", "beam"),
+        ("browse-file", "zeta.export"),
+    ]
+    assert str(files) in _element(body, f"{field.widget_id}-files-list").text
+    body = handle_event(field, "browse-folder", {"name": "beam"})
+    assert _listed(body, field) == [("browse-parent", ""), ("browse-file", "beam.export")]
+    # only the list swaps: the dialog open stays the same element
+    assert _find(body, f"{field.widget_id}-files") is _find(body, field.widget_id) is None
+    assert "Dossier parent" in _element(body, f"{field.widget_id}-files-list").text
+    handle_event(field, "browse-file", {"name": "beam.comm"})  # not of the field's types
+    assert (main_view.study.text, _shows_files(field)) == ("", True)
+
+    body = handle_event(field, "browse-file", {"name": "beam.export"})
+
+    assert picked == [files / "beam" / "beam.export"]
+    assert main_view.study.path == files / "beam" / "beam.export"
+    assert "hidden" in _element(body, f"{field.widget_id}-files").attributes
+    with pytest.raises(UnsupportedEventError):  # closed: nothing to move in
+        handle_event(field, "browse-folder", {"name": "beam"})
+    # opened again: in the folder of the field's file, closed by Cancel or Escape
+    assert _listed(handle_event(field, "browse", {}), field)[-1] == ("browse-file", "beam.export")
+    handle_event(field, "browse-parent", {})
+    assert _listed(field.to_html(), field)[0] == ("browse-folder", "Alpha")
+    handle_event(field, "browse-close", {})
+    assert not _shows_files(field)
+
+
+def test_a_file_path_with_server_roots_keeps_to_them_whatever_the_page_sends(
+    tmp_path: Path,
+) -> None:
+    root, other = tmp_path / "studies", tmp_path / "other"
+    (root / "beam").mkdir(parents=True)
+    (root / "beam" / "beam.export").write_text("")
+    (root / ".old").mkdir()
+    (root / ".old" / "old.export").write_text("")
+    (other / "secret").mkdir(parents=True)
+    (other / "secret" / "secret.export").write_text("")
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, root)
+    study = main_view.study
+    handle_event(field, "browse", {})
+    shown = _listed(field.to_html(), field)
+
+    crafted = ["..", "../other", str(other), "beam/../..", "/", ".old", "missing", "a\0b"]
+    for name in [*crafted, "beam/beam.export"]:
+        handle_event(field, "browse-folder", {"name": name})
+        handle_event(field, "browse-file", {"name": name})
+    handle_event(field, "browse-parent", {})  # at the only root: nowhere above it
+    handle_event(field, "browse-root", {"name": "0"})  # one root: no list of them
+
+    assert (_listed(field.to_html(), field), study.text) == (shown, "")
+    # typed: only a path inside the roots, links followed, is the field's path
+    for typed, path in [
+        (str(root / "beam" / "beam.export"), root / "beam" / "beam.export"),
+        (str(root / "beam" / ".." / ".." / "other" / "secret" / "secret.export"), None),
+        (str(other / "secret" / "secret.export"), None),
+        ("a\0b", None),
+    ]:
+        handle_event(field, "change", {"value": typed})
+        assert study.path == path, typed
+
+
+def test_a_file_path_with_several_server_roots_lists_them_first(tmp_path: Path) -> None:
+    first, second = tmp_path / "first", tmp_path / "second"
+    (first / "beam").mkdir(parents=True)
+    second.mkdir()
+    (tmp_path / "file.export").write_text("")
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, first)
+    # a root missing, a file, or there twice: left out
+    main_view.study.server_roots = (first, tmp_path / "missing", tmp_path / "file.export", second)
+    main_view.study.server_roots += (first / ".." / "first",)
+
+    body = handle_event(field, "browse", {})
+    assert _listed(body, field) == [("browse-root", "0"), ("browse-root", "1")]
+    assert str(second.resolve()) in _element(body, f"{field.widget_id}-files-list").text
+    for name in ("2", "x"):  # no such root: the list stays
+        handle_event(field, "browse-root", {"name": name})
+    handle_event(field, "browse-parent", {})
+    assert _listed(field.to_html(), field) == [("browse-root", "0"), ("browse-root", "1")]
+
+    handle_event(field, "browse-root", {"name": "0"})
+    # a root among others: its parent is the list of the roots
+    assert _listed(field.to_html(), field) == [("browse-parent", ""), ("browse-folder", "beam")]
+    handle_event(field, "browse-parent", {})
+    assert _listed(field.to_html(), field)[0] == ("browse-root", "0")
+    # opened again on a file that isn't there: on the list of the roots
+    main_view.study.text = str(first / "beam" / "gone.export")
+    assert _listed(handle_event(field, "browse", {}), field)[0] == ("browse-root", "0")
+    # in a root the field no longer has: back to the list of the roots
+    handle_event(field, "browse-root", {"name": "1"})
+    main_view.study.server_roots = (first,)
+    handle_event(field, "browse-folder", {"name": "beam"})
+    assert _listed(field.to_html(), field) == [("browse-root", "0")]
+
+
+def test_a_file_path_s_server_list_says_when_a_folder_is_too_large_or_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "studies"
+    (root / "beam").mkdir(parents=True)
+    for name in ("a.export", "b.export", "c.export"):
+        (root / "beam" / name).write_text("")
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, root)
+    main_view.study.partial_folder_text = "Too many"
+    main_view.study.unreadable_folder_text = "Unreadable"
+    monkeypatch.setattr(serverfiles, "MAX_ITEMS", 2)
+    handle_event(field, "browse", {})
+
+    body = handle_event(field, "browse-folder", {"name": "beam"})
+
+    assert len(_listed(body, field)) == 3  # the parent folder, and 2 of the 3 files
+    assert _element(body, f"{field.widget_id}-files-list").text.count("Too many") == 1
+    for name in ("a.export", "b.export", "c.export"):
+        (root / "beam" / name).unlink()
+    (root / "beam").rmdir()  # gone while shown
+
+    body = handle_event(field, "browse-folder", {"name": "gone"})
+
+    assert _listed(body, field) == [("browse-parent", "")]
+    assert "Unreadable" in _element(body, f"{field.widget_id}-files-list").text
+
+
+def test_a_file_path_s_server_list_shows_nothing_a_link_leads_to_outside_the_roots(
+    tmp_path: Path,
+) -> None:
+    if sys.platform == "win32":
+        pytest.skip("Windows needs a privilege to make a symbolic link")
+    root, other = tmp_path / "studies", tmp_path / "other"
+    (root / "beam").mkdir(parents=True)
+    (root / "beam" / "beam.export").write_text("")
+    other.mkdir()
+    (other / "secret.export").write_text("")
+    (root / "out").symlink_to(other)
+    (root / "secret.export").symlink_to(other / "secret.export")
+    (root / "loop.export").symlink_to(root / "loop.export")
+    (root / "study.export").symlink_to(root / "beam" / "beam.export")  # inside: kept
+    (root / "it's <b> & co.export").write_text("")
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, root)
+    study = main_view.study
+
+    body = handle_event(field, "browse", {})
+
+    assert _listed(body, field) == [
+        ("browse-folder", "beam"),
+        ("browse-file", "it's <b> & co.export"),
+        ("browse-file", "study.export"),
+    ]
+    for name in ("out", "secret.export", "loop.export"):
+        handle_event(field, "browse-folder", {"name": name})
+        handle_event(field, "browse-file", {"name": name})
+    assert study.text == ""
+    for typed in ("out/secret.export", "secret.export", "loop.export"):
+        handle_event(field, "change", {"value": str(root / typed)})
+        assert study.path is None, typed
+    handle_event(field, "browse", {})
+    handle_event(field, "browse-file", {"name": "it's <b> & co.export"})
+    assert study.path == root.resolve() / "it's <b> & co.export"
+
+
+def test_a_file_path_s_server_list_needs_its_roots_and_an_enabled_field(tmp_path: Path) -> None:
+    main_view = StudyFileMainView()
+    field = _server_files(main_view, tmp_path)
+    handle_event(field, "browse", {})
+    main_view.study.is_enabled = False
+    assert not _shows_files(field)  # nothing to pick in a disabled field
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "browse-close", {})
+    main_view.study.is_enabled = True
+    main_view.study.server_roots = ()
+    with pytest.raises(UnsupportedEventError):  # the field uploads its file
+        handle_event(field, "browse", {})
+    main_view.study.server_roots = (tmp_path,)
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "browse-up", {})
 
 
 def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
