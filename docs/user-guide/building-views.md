@@ -160,6 +160,10 @@ A row shows in any view, such as a `SidebarView` or a `VerticalView`, as a form 
 its label, its field, and its message. A `FormView` adds what concerns its rows together:
 on Qt, it lines up their labels, and its [checks](#check-a-form) compare their values.
 
+A form shows its other views too, such as a table or a `HorizontalView` of buttons. Each one
+shows in its place between the rows, as wide as the form. The checks of the form run on its
+rows only.
+
 - **The text fields** emit `text_edited` on each change that the user makes, and
   `editing_finished` when the user is done with the field, for example on Enter.
 - **A check box** shows other views only while it is checked, with `shows`:

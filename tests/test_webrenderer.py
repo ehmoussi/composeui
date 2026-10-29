@@ -136,6 +136,7 @@ from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
+from tests.folderform import StudyMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
@@ -3691,6 +3692,52 @@ def test_a_form_dialog_swaps_only_its_ok_as_its_form_s_checks_change(
     body = client.post(f"/widget/{dialog_id}", data={"event": "accept"}).text
     assert "hidden" in _swapped(body, dialog_id).attributes  # closed
     assert "Return, 12 m" in body
+
+
+@pytest.fixture
+def study() -> Iterator[tuple[TestClient, StudyMainView]]:
+    """Serve an app opening a study from a form dialog; yield a client and its main view."""
+    views: list[StudyMainView] = []
+
+    class StudyApp(WebApplication[StudyMainView]):
+        def setup_session(self, main_view: StudyMainView) -> None:
+            views.append(main_view)
+
+    app = StudyApp(build_main_view=StudyMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def test_a_form_shows_its_other_views_between_its_rows_in_their_order(
+    study: tuple[TestClient, StudyMainView],
+) -> None:
+    client, view = study
+    form = view.open_dialog.form
+    dialog_id = _widget_id(view.open_dialog.renderer)
+    ids = [
+        _field_id(form.folder),
+        _widget_id(form.buttons.up.renderer),
+        _widget_id(form.entries.renderer),
+        _widget_id(form.log_view.renderer),
+    ]
+
+    body = client.post(f"/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}).text
+    form_id = _widget_id(form.renderer)
+    assert _contains(_swapped(body, dialog_id), form_id)
+    # in the form's fieldset: the folder's row, the button, the table, then the message
+    shown = [attributes.get("id") for _, attributes in _element(body, form_id).descendants]
+    assert [shown.index(element_id) for element_id in ids] == sorted(
+        shown.index(element_id) for element_id in ids
+    )
+
+    body = client.post(f"/widget/{ids[1]}", data={"event": "click"}).text
+
+    assert view.open_dialog.is_visible  # a button of its form leaves it open
+    assert f'id="{dialog_id}"' not in body
+    assert _swapped(body, ids[0]).attributes.get("value") == "/studies"
+    assert "beam" in _swapped(body, ids[2]).text
 
 
 @pytest.fixture

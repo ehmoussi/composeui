@@ -4758,7 +4758,9 @@ class LabelRowComboBoxView(FormLabelRowView, ValuesGroupMixin[TValue]):
 class FormView(View):
     """A form: its rows, one above the other, and the message of its cross-field checks.
 
-    Its `FormRowView` and `FormView` fields are its rows, in order (`field_rows`).
+    Its `FormRowView` and `FormView` fields are its rows, in order (`field_rows`). Its
+    other view fields, such as a table or a row of buttons, show in their place between
+    the rows, as wide as the form (`content_views`). Its checks run on its rows only.
     """
 
     _renderer_key = "form"
@@ -4774,6 +4776,11 @@ class FormView(View):
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.log_view.is_visible = False
+
+    @property
+    def content_views(self) -> list[View]:
+        """Get the views the form shows, in order: its rows and its other views, not its log."""
+        return [view for view in self.children_views if view is not self.log_view]
 
     @property
     def field_rows(self) -> list[Union[FormRowView, FormView]]:

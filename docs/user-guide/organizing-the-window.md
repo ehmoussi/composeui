@@ -452,6 +452,9 @@ dialog.form.name.text = "Main pipe"
   hasn't triggered yet. The dialog stays open while a check fails. `FormView.check` runs
   all the checks, and `is_valid` tells whether they pass.
 - **The answer** comes through `accepted` or `rejected`.
+- **The form can hold other views.** A table or a button in the form shows in the dialog.
+  A click on such a button leaves the dialog open, for example to show the files of
+  another folder in the table.
 - **The form keeps its values.** The app reads them once the user accepts, or fills them
   before `open()`.
 

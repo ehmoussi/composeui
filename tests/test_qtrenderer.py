@@ -131,6 +131,7 @@ from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
+from tests.folderform import StudyMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
@@ -1553,6 +1554,34 @@ def test_a_form_dialog_s_ok_follows_its_form_s_checks(qtbot: QtBot) -> None:
     dialog.close()  # the title bar's button: as Cancel
     assert not dialog.isVisible()
     assert view.pipe.text == "Return, 12 m"
+
+
+def test_a_form_shows_its_other_views_between_its_rows_in_their_order(qtbot: QtBot) -> None:
+    view = StudyMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    form = view.open_dialog.form
+    layout = _widget(form).layout()
+    assert isinstance(layout, QFormLayout)
+    folder = _field_widget(form.folder)
+    up, table = _widget(form.buttons.up), _table(form.entries)
+
+    # each view spans the form, after the row before it
+    rows = [layout.getWidgetPosition(_widget(child)) for child in (form.buttons, form.entries)]
+    assert rows == [(1, QFormLayout.ItemRole.SpanningRole), (2, QFormLayout.ItemRole.SpanningRole)]
+    qtbot.mouseClick(_widget(view.open), Qt.MouseButton.LeftButton)
+    dialog = _widget(view.open_dialog)
+    assert dialog.isVisible()
+    assert all(dialog.isAncestorOf(widget) for widget in (folder, up, table))
+
+    qtbot.mouseClick(up, Qt.MouseButton.LeftButton)
+
+    assert dialog.isVisible()  # a button of its form leaves it open
+    assert isinstance(folder, QLineEdit)
+    assert folder.text() == "/studies"
+    assert table.model().index(0, 0).data() == "beam"
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

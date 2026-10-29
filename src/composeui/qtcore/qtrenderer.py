@@ -1700,16 +1700,13 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                 self._rendered_object = QWidget()
             layout = QFormLayout()
             self._rendered_object.setLayout(layout)
-            for field_row in self._view.field_rows:
-                if isinstance(field_row, FormRowView) and isinstance(
-                    field_row.renderer, RendererContainer
-                ):
-                    self.add_row(layout, field_row, field_row.renderer)
-                elif isinstance(field_row, FormView):
-                    assert isinstance(field_row.renderer, QtWidgetRenderer)
-                    assert isinstance(field_row.renderer.qt_object, QWidget)
-                    layout.addRow(field_row.renderer.qt_object)
-                # else a row whose field this backend doesn't register: left out
+            for view in self._view.content_views:
+                if isinstance(view, FormRowView) and isinstance(view.renderer, RendererContainer):
+                    self.add_row(layout, view, view.renderer)
+                # another view, e.g. a table, as wide as the form
+                elif (widget := _widget_of(view)) is not None:
+                    layout.addRow(widget)
+                # else a view this backend doesn't register: left out
             log = self._view.log_view.renderer
             assert isinstance(log, QtWidgetRenderer)
             assert isinstance(log.qt_object, QWidget)
