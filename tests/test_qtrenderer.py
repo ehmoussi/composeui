@@ -776,6 +776,37 @@ def test_a_file_path_s_dialog_opens_in_its_first_server_root_and_can_leave_it(
     assert view.study.path == tmp_path / "elsewhere.py"
 
 
+def test_a_folder_path_is_picked_in_qt_s_folder_dialog_from_its_folder_else_its_root(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = StudyFileMainView()
+    view.results.server_roots = (tmp_path / "studies",)
+    view.render(RendererType.QT)
+    field = _field_widget(view.results)
+    assert isinstance(field, QFilePathField)
+    qtbot.addWidget(field)
+    picked: list[Path] = []
+    view.results.path_picked.connect(picked.append)
+    asked: list[tuple[str, str]] = []
+    answer = str(tmp_path / "results")
+
+    def ask(*args: object) -> str:
+        asked.append((str(args[1]), str(args[2])))
+        return answer
+
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(ask))
+    assert not field.reload_button.isVisibleTo(field)  # a folder has nothing to reload
+
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert asked == [("Choose a folder", str(tmp_path / "studies"))]
+    assert (view.results.path, picked) == (tmp_path / "results", [tmp_path / "results"])
+    # again: in the folder picked, and cancelled
+    answer = ""
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert asked[-1] == ("Choose a folder", str(tmp_path / "results"))
+    assert len(picked) == 1
+
+
 def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:
     view = WorkersMainView()
     view.render(RendererType.QT)

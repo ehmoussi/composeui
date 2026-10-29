@@ -26,6 +26,9 @@ The notable changes of each release of ComposeUI. The format follows
   button lists, instead of uploading a copy. The field holds the path of the file on the
   server. A typed path outside the roots gives `path` `None` on the web. Qt and Textual open
   their dialogs in the first root.
+- `FolderPathInputView`, `RowFolderPathInputView` and `LabelRowFolderPathInputView`, a
+  folder's path, typed or picked in a folder dialog. On the web, the path is typed, or picked
+  among the server's folders with `server_roots`.
 - `CellWidget.file_path(..., server_roots=...)`, a table's file path cells picked among the
   server's files, as a field's. On the web, a path typed outside the roots is refused: the
   cell keeps its text, and the status bar says why (`TableView.file_texts`).

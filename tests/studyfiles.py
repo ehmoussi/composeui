@@ -9,6 +9,7 @@ from attrs import Factory
 from composeui.core.view import (
     CellWidget,
     LabelRowFilePathInputView,
+    LabelRowFolderPathInputView,
     MainView,
     TableView,
     child,
@@ -18,7 +19,10 @@ from composeui.core.view import (
 
 @define_view
 class StudyFileMainView(MainView):
-    """Its field lists the files of this folder, until a test gives it roots of its own."""
+    """Its fields list the files and folders of this folder, until a test gives them roots.
+
+    `scratch` has none: on the web, its folder is typed.
+    """
 
     app_title = "Study file"
     extension = ".studyfile"
@@ -29,6 +33,10 @@ class StudyFileMainView(MainView):
         extensions={"Python": (".py",)},
         server_roots=(Path(__file__).parent,),
     )
+    results: LabelRowFolderPathInputView = child(
+        LabelRowFolderPathInputView, label="Results", server_roots=(Path(__file__).parent,)
+    )
+    scratch: LabelRowFolderPathInputView = child(LabelRowFolderPathInputView, label="Scratch")
 
 
 @define_view

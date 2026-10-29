@@ -113,6 +113,8 @@ __all__ = [
     "FilterProblem",
     "FloatInputMixin",
     "FloatInputView",
+    "FolderPathInputMixin",
+    "FolderPathInputView",
     "FormDialogView",
     "FormLabelRowView",
     "FormRowView",
@@ -133,6 +135,7 @@ __all__ = [
     "LabelRowDateInputView",
     "LabelRowFilePathInputView",
     "LabelRowFloatInputView",
+    "LabelRowFolderPathInputView",
     "LabelRowInputView",
     "LabelRowIntInputView",
     "LabelRowRadioGroupView",
@@ -167,6 +170,7 @@ __all__ = [
     "RowDateInputView",
     "RowFilePathInputView",
     "RowFloatInputView",
+    "RowFolderPathInputView",
     "RowInputView",
     "RowIntInputView",
     "RowRadioGroupView",
@@ -1562,45 +1566,27 @@ def is_within_roots(path: Path, roots: Iterable[Path]) -> bool:
 
 
 @define_view
-class FilePathInputMixin(InputMixin):
-    """A file's path, typed in the field or picked with the "…" button beside it.
+class PathInputMixin(InputMixin):
+    """A path typed in the field or picked with the "…" button beside it.
 
-    `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
-    button opens the toolkit's file dialog. On the web, the browser's picker uploads the
-    file. The field then holds the path of the session's copy, kept until the session
-    ends. With `server_roots`, the web's button instead lists the files on the server in
-    those folders, and the field holds the path of the file picked there, not a copy.
-    With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to read
-    the file again once it changed.
+    What `FilePathInputMixin` and `FolderPathInputMixin` share: `text` holds the path as
+    typed, and `path` reads it as a path. With `server_roots`, the web's button lists the
+    server's folders in them, and the field holds the path picked there.
     """
 
-    #: the file types the dialog offers, by name: ``{"CSV": (".csv",)}``; on the web, a
-    #: file of another type is refused
-    extensions: dict[str, tuple[str, ...]] = attrs.field(
-        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
-    )
-    #: the folders of the server whose files the web's "…" lists, and nothing outside
-    #: them; none to upload a file instead. On Qt and Textual, the dialog opens in the
-    #: first one while the field is empty, and the user can leave it.
+    #: the folders of the server that the web's "…" lists, and nothing outside them. On
+    #: Qt and Textual, the dialog opens in the first one while the field is empty, and the
+    #: user can leave it.
     server_roots: tuple[Path, ...] = attrs.field(default=(), metadata={OMIT: True})
-    has_reload: bool = attrs.field(default=False)
-    #: the names of the "…" and reload buttons, as a tooltip and a screen reader show them
-    browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
-    reload_text: str = attrs.field(default=T("Reload"), metadata={UI_TEXT: True})
-    #: the texts of the web's list of the files in `server_roots`
+    #: the texts of the web's list of the server's files in `server_roots`
     parent_folder_text: str = attrs.field(default=T("Parent folder"), metadata={UI_TEXT: True})
     cancel_text: str = attrs.field(default=T("Cancel"), metadata={UI_TEXT: True})
     unreadable_folder_text: str = attrs.field(
         default=T("This folder can't be read."), metadata={UI_TEXT: True}
     )
-    partial_folder_text: str = attrs.field(
-        default=T("This folder holds too many items to list them all: type the file's path."),
-        metadata={UI_TEXT: True},
-    )
-    #: the user picked a file with the "…" button, its path now in the field; a typed
-    #: path is reported as any text is (`text_edited`, `editing_finished`)
+    #: the user picked a path with the "…" button, now in the field; a typed path is
+    #: reported as any text is (`text_edited`, `editing_finished`)
     path_picked: Signal[Path] = attrs.Factory(Signal[Path])
-    reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
     #: whether `path` keeps to `server_roots`: set by the web, which lists only their files
     _keeps_to_roots: bool = attrs.field(
         default=False, init=False, repr=False, eq=False, metadata={OMIT: True}
@@ -1624,6 +1610,63 @@ class FilePathInputMixin(InputMixin):
         ):
             return None
         return path
+
+
+@define_view
+class FilePathInputMixin(PathInputMixin):
+    """A file's path, typed in the field or picked with the "…" button beside it.
+
+    `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
+    button opens the toolkit's file dialog. On the web, the browser's picker uploads the
+    file. The field then holds the path of the session's copy, kept until the session
+    ends. With `server_roots`, the web's button instead lists the files on the server in
+    those folders, and the field holds the path of the file picked there, not a copy.
+    With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to read
+    the file again once it changed.
+    """
+
+    #: the file types the dialog offers, by name: ``{"CSV": (".csv",)}``; on the web, a
+    #: file of another type is refused
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
+    )
+    has_reload: bool = attrs.field(default=False)
+    #: the names of the "…" and reload buttons, as a tooltip and a screen reader show them
+    browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
+    reload_text: str = attrs.field(default=T("Reload"), metadata={UI_TEXT: True})
+    partial_folder_text: str = attrs.field(
+        default=T("This folder holds too many items to list them all: type the file's path."),
+        metadata={UI_TEXT: True},
+    )
+    reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+
+@define_view
+class FolderPathInputMixin(PathInputMixin):
+    """A folder's path, typed in the field or picked with the "…" button beside it.
+
+    `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
+    button opens the toolkit's folder dialog. The browser can't give the page a folder's
+    path: on the web, the user types it, and the field has no button. With
+    `server_roots`, the web's button lists the server's folders in them: a folder's item
+    shows its folders, and "Choose this folder" puts the folder shown in the field.
+    """
+
+    #: the name of the "…" button, as a tooltip and a screen reader show it
+    browse_text: str = attrs.field(default=T("Choose a folder"), metadata={UI_TEXT: True})
+    #: the button of the web's list that picks the folder it shows
+    choose_folder_text: str = attrs.field(default=T("Choose this folder"), metadata={UI_TEXT: True})
+    partial_folder_text: str = attrs.field(
+        default=T("This folder holds too many items to list them all: type the folder's path."),
+        metadata={UI_TEXT: True},
+    )
+
+
+@define_view
+class FolderPathInputView(FolderPathInputMixin, View):
+    """A folder's path, e.g. where to write results: typed, or picked from a folder dialog."""
+
+    _renderer_key = "folder_path_input"
 
 
 @define_view
@@ -4775,6 +4818,20 @@ class LabelRowFilePathInputView(FormLabelRowView, FilePathInputMixin):
     """A row of a form with a label and a file path field."""
 
     _field_renderer_key = "file_path_input"
+
+
+@define_view
+class RowFolderPathInputView(FormRowView, FolderPathInputMixin):
+    """A row of a form with a folder path field, without a label."""
+
+    _field_renderer_key = "folder_path_input"
+
+
+@define_view
+class LabelRowFolderPathInputView(FormLabelRowView, FolderPathInputMixin):
+    """A row of a form with a label and a folder path field."""
+
+    _field_renderer_key = "folder_path_input"
 
 
 @define_view

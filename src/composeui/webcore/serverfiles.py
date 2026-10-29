@@ -75,8 +75,12 @@ def has_extension(name: str, extensions: tuple[str, ...]) -> bool:
     )
 
 
-def list_folder(folder: Path, roots: list[Path], extensions: tuple[str, ...]) -> Listing:
+def list_folder(
+    folder: Path, roots: list[Path], extensions: tuple[str, ...], *, has_files: bool = True
+) -> Listing:
     """List `folder`'s folders, then its files of `extensions` (all if none), by name.
+
+    Without `has_files`, its folders only.
 
     Hidden items and items outside `roots` are left out (see `item_path`). Raises
     `OSError` if the folder can't be read.
@@ -93,7 +97,7 @@ def list_folder(folder: Path, roots: list[Path], extensions: tuple[str, ...]) ->
                 continue
             if path.is_dir():
                 items.append(Item(entry.name, is_folder=True))
-            elif path.is_file() and has_extension(entry.name, extensions):
+            elif has_files and path.is_file() and has_extension(entry.name, extensions):
                 items.append(Item(entry.name, is_folder=False))
     items.sort(key=lambda item: (not item.is_folder, item.name.lower(), item.name))
     return Listing(items, is_partial)

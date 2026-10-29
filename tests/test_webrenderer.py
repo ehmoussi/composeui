@@ -58,6 +58,7 @@ from composeui.core.view import (
     DialogView,
     EditRefusedError,
     FilePathInputMixin,
+    FolderPathInputMixin,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowIntInputView,
@@ -775,7 +776,7 @@ def _states(main_view: MainView) -> Iterator[str]:
     for view in _views(main_view):
         if isinstance(view, DialogView):
             view.open()
-        if isinstance(view, FilePathInputMixin) and view.server_roots:
+        if isinstance(view, (FilePathInputMixin, FolderPathInputMixin)) and view.server_roots:
             _part(view, "field").dispatch("browse", {})
         renderer = view.renderer
         if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
@@ -1454,6 +1455,77 @@ def test_a_file_path_s_server_list_needs_its_roots_and_an_enabled_field(tmp_path
     main_view.study.server_roots = (tmp_path,)
     with pytest.raises(UnsupportedEventError):
         handle_event(field, "browse-up", {})
+
+
+def test_a_folder_path_is_typed_on_the_web_without_server_roots(tmp_path: Path) -> None:
+    main_view = StudyFileMainView()
+    main_view.render(RendererType.WEB)
+    scratch = main_view.scratch
+    field = _part(scratch, "field")
+    element = _element(field.to_html(), field.widget_id)
+
+    # the browser can't give a folder's path: no button, nothing uploaded
+    assert [tag for tag, _attributes in element.descendants] == ["input"]
+    handle_event(field, "change", {"value": str(tmp_path)})
+    assert scratch.path == tmp_path  # any folder: no roots to keep to
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "browse", {})
+
+
+def test_a_folder_path_with_server_roots_is_picked_among_their_folders(tmp_path: Path) -> None:
+    root, other = tmp_path / "studies", tmp_path / "other"
+    (root / "beam" / "run").mkdir(parents=True)
+    (root / "beam" / "beam.export").write_text("")
+    other.mkdir()
+    main_view = StudyFileMainView()
+    main_view.results.server_roots = (root,)
+    main_view.render(RendererType.WEB)
+    main_view.set_language("fr")
+    results = main_view.results
+    field = _part(results, "field")
+    picked: list[Path] = []
+    results.path_picked.connect(picked.append)
+    folders = root.resolve()
+    choose = f"{field.widget_id}-files-choose"
+
+    body = handle_event(field, "browse", {})
+    assert _listed(body, field) == [("browse-folder", "beam")]
+    assert _element(body, choose).text == "Choisir ce dossier"
+    # its folders only, the files left out; "Choose this folder" swapped with the list
+    body = handle_event(field, "browse-folder", {"name": "beam"})
+    assert _listed(body, field) == [("browse-parent", ""), ("browse-folder", "run")]
+    assert "disabled" not in _swapped(body, choose).attributes
+
+    body = handle_event(field, "browse-choose", {})
+
+    assert picked == [folders / "beam"]
+    assert results.path == folders / "beam"
+    assert "hidden" in _element(body, f"{field.widget_id}-files").attributes
+    # opened again: in the folder itself
+    body = handle_event(field, "browse", {})
+    assert _listed(body, field) == [("browse-parent", ""), ("browse-folder", "run")]
+    handle_event(field, "browse-close", {})
+    # a file isn't a folder: neither listed, nor picked by name
+    handle_event(field, "browse", {})
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "browse-file", {"name": "beam.export"})
+    assert picked == [folders / "beam"]
+    handle_event(field, "browse-close", {})
+    handle_event(field, "change", {"value": str(other)})
+    assert results.path is None  # typed outside the roots
+
+    # several roots: none chosen while they're listed
+    results.server_roots = (root, other)
+    handle_event(field, "change", {"value": ""})
+    body = handle_event(field, "browse", {})
+    assert "disabled" in _element(body, choose).attributes
+    handle_event(field, "browse-choose", {})
+    assert len(picked) == 1
+    # and a file field picks no folder
+    study = _part(main_view.study, "field")
+    handle_event(study, "browse", {})
+    with pytest.raises(UnsupportedEventError):
+        handle_event(study, "browse-choose", {})
 
 
 @pytest.fixture

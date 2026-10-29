@@ -1734,6 +1734,31 @@ def test_a_file_of_the_server_is_picked_in_the_list_its_folders_open_in_place(
     context.close()
 
 
+def test_a_folder_of_the_server_is_chosen_in_the_list_its_button_focused_again(
+    browser: Browser, study_files_base_url: str
+) -> None:
+    context = browser.new_context(base_url=study_files_base_url)
+    page = context.new_page()
+    page.goto("/")
+    results = page.get_by_label("Results")
+    browse = page.get_by_role("button", name="Choose a folder")
+    expect(browse).to_have_count(1)  # Scratch, without roots, has none: it's typed
+    with _posted(page):
+        browse.click()
+    folders = page.get_by_role("dialog", name="Choose a folder")
+    with _posted(page):
+        folders.get_by_role("button", name="locales").click()
+    expect(folders.get_by_role("button", name="Parent folder")).to_be_focused()
+
+    with _posted(page):
+        folders.get_by_role("button", name="Choose this folder").click()
+
+    expect(folders).to_have_count(0)
+    expect(results).to_have_value(re.compile(r"locales$"))
+    expect(browse).to_be_focused()
+    context.close()
+
+
 def test_a_file_of_the_server_is_picked_for_a_table_s_cell_its_button_focused_again(
     browser: Browser, study_files_table_base_url: str
 ) -> None:

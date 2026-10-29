@@ -881,33 +881,36 @@ _SERVER_LIST_TEXTS = (
 )
 
 
-class FilePathInputViewLike(InputViewLike, Protocol):
-    extensions: dict[str, tuple[str, ...]]
+class PathInputViewLike(InputViewLike, Protocol):
     server_roots: tuple[Path, ...]
-    has_reload: bool
     browse_text: str
-    reload_text: str
     path_picked: Signal[Path]
+
+
+class FilePathInputViewLike(PathInputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    has_reload: bool
+    reload_text: str
     reload_clicked: SignalNoArgs
 
 
-class TextualFilePathInputRenderer(
-    TextualWidgetRenderer[FilePathInputViewLike, ComposeFilePathInput]
-):
-    """A field typing a file's path, then a "…" button opening textual-fspicker's picker."""
+TPathView = TypeVar("TPathView", bound=PathInputViewLike)
+
+
+class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePathInput]):
+    """A field typing a path, then a "…" button opening textual-fspicker's picker."""
 
     _marks_invalid = True
+    #: whether its picker picks a folder rather than a file
+    _picks_folder: ClassVar[bool] = False
 
-    def __init__(self, view: FilePathInputViewLike) -> None:
+    def __init__(self, view: TPathView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "text": self._refresh_text,
                 "placeholder": self._refresh_placeholder,
-                "extensions": self._refresh_extensions,
-                "has_reload": self._refresh_has_reload,
                 "browse_text": self._refresh_browse_text,
-                "reload_text": self._refresh_reload_text,
                 "server_roots": self._refresh_server_roots,
                 # the web's list of the server's files only
                 **dict.fromkeys(_SERVER_LIST_TEXTS, lambda _view, _widget, _value: None),
@@ -916,23 +919,66 @@ class TextualFilePathInputRenderer(
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeFilePathInput()
+            self._rendered_object = ComposeFilePathInput(picks_folder=self._picks_folder)
             self._rendered_object.input.value_changed.connect(self._update_text)
             self._rendered_object.input.value_submitted.connect(self._view.editing_finished.emit)
             self._rendered_object.path_picked.connect(self._pick)
-            self._rendered_object.reload_pressed.connect(self._view.reload_clicked.emit)
 
     @staticmethod
-    def _refresh_text(
-        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
-    ) -> None:
+    def _refresh_text(_view: TPathView, rendered_object: ComposeFilePathInput, value: str) -> None:
         rendered_object.input.value = value
 
     @staticmethod
     def _refresh_placeholder(
-        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
+        _view: TPathView, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
         rendered_object.input.placeholder = value
+
+    @staticmethod
+    def _refresh_browse_text(
+        _view: TPathView, rendered_object: ComposeFilePathInput, value: str
+    ) -> None:
+        rendered_object.browse_button.tooltip = Content(value)
+        rendered_object.picker_title = value
+
+    @staticmethod
+    def _refresh_server_roots(
+        _view: TPathView, rendered_object: ComposeFilePathInput, value: tuple[Path, ...]
+    ) -> None:
+        rendered_object.start_folder = value[0] if value else None
+
+    def _update_text(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.text = text
+        self._view.text_changed.emit(text)
+        self._view.text_edited.emit(text)
+
+    def _pick(self, path: Path) -> None:
+        # the field's change arrives later, as a message: the view has the path first
+        with self.stop_refresh():
+            self._view.text = str(path)
+        self._view.path_picked.emit(path)
+
+
+class TextualFilePathInputRenderer(_TextualPathInputRenderer[FilePathInputViewLike]):
+    """A field typing a file's path, then a "…" button opening textual-fspicker's picker."""
+
+    def __init__(self, view: FilePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "extensions": self._refresh_extensions,
+                "has_reload": self._refresh_has_reload,
+                "reload_text": self._refresh_reload_text,
+            }
+        )
+
+    def render(self) -> None:
+        is_new = self._rendered_object is None
+        super().render()
+        if is_new:
+            assert self._rendered_object is not None
+            self._rendered_object.reload_pressed.connect(self._view.reload_clicked.emit)
 
     @staticmethod
     def _refresh_extensions(
@@ -949,37 +995,21 @@ class TextualFilePathInputRenderer(
         rendered_object.reload_button.display = value
 
     @staticmethod
-    def _refresh_browse_text(
-        _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
-    ) -> None:
-        rendered_object.browse_button.tooltip = Content(value)
-        rendered_object.picker_title = value
-
-    @staticmethod
     def _refresh_reload_text(
         _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
         rendered_object.reload_button.tooltip = Content(value)
 
-    @staticmethod
-    def _refresh_server_roots(
-        _view: FilePathInputViewLike,
-        rendered_object: ComposeFilePathInput,
-        value: tuple[Path, ...],
-    ) -> None:
-        rendered_object.start_folder = value[0] if value else None
 
-    def _update_text(self, text: str) -> None:
-        with self.stop_refresh():
-            self._view.text = text
-        self._view.text_changed.emit(text)
-        self._view.text_edited.emit(text)
+class TextualFolderPathInputRenderer(_TextualPathInputRenderer[PathInputViewLike]):
+    """A field typing a folder's path, then a "…" button opening textual-fspicker's picker."""
 
-    def _pick(self, path: Path) -> None:
-        # the field's change arrives later, as a message: the view has the path first
-        with self.stop_refresh():
-            self._view.text = str(path)
-        self._view.path_picked.emit(path)
+    _picks_folder = True
+
+    def __init__(self, view: PathInputViewLike) -> None:
+        super().__init__(view)
+        # the web's list of the server's folders only
+        self._refresh_dispatcher["choose_folder_text"] = lambda _view, _widget, _value: None
 
 
 class SliderViewLike(ViewLike, Protocol):
@@ -2884,6 +2914,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "source_table": TextualSourceTableRenderer,
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
+    "folder_path_input": TextualFolderPathInputRenderer,
     "dialog": TextualDialogRenderer,
     "expander": TextualExpanderRenderer,
     "float_input": TextualFloatInputRenderer,
