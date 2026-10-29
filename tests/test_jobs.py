@@ -348,6 +348,48 @@ def test_a_dropped_job_s_callbacks_are_not_called(
     assert calls == []
 
 
+def test_a_job_handing_over_before_the_main_view_renders_reaches_it_in_order(
+    qtbot: QtBot,
+) -> None:
+    pytest.importorskip("qtpy")
+    main_view = MainView()
+    handed_over = threading.Event()
+    calls: list[tuple[str, threading.Thread]] = []
+
+    def record(name: str) -> None:
+        calls.append((name, threading.current_thread()))
+
+    def step(job: Job[int]) -> int:
+        job.call_on_main_thread(functools.partial(record, "step"))
+        handed_over.set()
+        return 1
+
+    # started as `setup_model` would, before the app shows its main view
+    main_view.jobs.start(step).finished.connect(lambda _: record("finished"))
+    assert handed_over.wait(5)
+    main_view.render(RendererType.QT)
+    qtbot.waitUntil(lambda: len(calls) == 2)
+
+    main = threading.main_thread()
+    assert calls == [("step", main), ("finished", main)]
+
+
+def test_a_main_view_its_backend_doesn_t_render_still_gets_its_jobs_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderers = pytest.importorskip("composeui.webcore.webrenderer").RENDERERS
+    monkeypatch.delitem(renderers, "main")  # e.g. a backend of an app's own
+    main_view = MainView()
+    results: list[int] = []
+
+    main_view.render(RendererType.WEB)
+    main_view.jobs.start(_double, 1).finished.connect(results.append)
+    main_view.jobs.wait()  # no renderer: waiting emits them
+
+    assert main_view.renderer is None
+    assert results == [2]
+
+
 @pytest.mark.parametrize("report_progress", [False, True])
 def test_a_job_s_callbacks_are_called_on_the_gui_thread(
     qtbot: QtBot, *, report_progress: bool

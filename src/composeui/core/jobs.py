@@ -17,6 +17,7 @@ from composeui.core.signal import Signal, SignalNoArgs
 
 if TYPE_CHECKING:
     from composeui.core.model import Model
+    from composeui.core.renderer import Renderer, RendererContainer
     from composeui.core.view import MainView
 
 __all__ = ["CalledInJobError", "Job", "Jobs", "Task"]
@@ -231,8 +232,13 @@ class Jobs:
         # the jobs started and not over yet: only changed on the main thread
         self._running: set[Job[Any, Any]] = set()
         self._tasks: list[Task[Any, Any, Any]] = []
-        # the results handed back while the main view isn't rendered, for `wait`
+        # the results handed back while the main view isn't rendered, for `wait`, or for its
+        # renderer once it has one (`hand_over_to`)
         self._results: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
+        # whether the queued results went to the renderer: the jobs' threads queue theirs
+        # until then, so none waits forever or overtakes one queued before it
+        self._handed_over = False
+        self._results_lock = threading.Lock()
 
     @property
     def is_running(self) -> bool:
@@ -389,10 +395,27 @@ class Jobs:
         main_view = self._main_view()
         if main_view is None:
             return  # the app is gone
-        if main_view.renderer is None:
-            self._results.put(callback)
-        else:
-            main_view.renderer.call_on_main_thread(callback)
+        with self._results_lock:
+            renderer = main_view.renderer if self._handed_over else None
+            if renderer is None:
+                self._results.put(callback)
+                return
+        # outside the lock: a web session's renderer takes the session's lock
+        renderer.call_on_main_thread(callback)
+
+    def hand_over_to(self, renderer: Renderer[Any, Any] | RendererContainer[Any]) -> None:
+        """Hand the results queued before the main view was rendered to `renderer`, its own.
+
+        In order, before any later one: a job started as the app is built, e.g. by
+        `setup_model`, may be over before its main view is shown. `MainView.render` calls it.
+        """
+        while True:
+            with self._results_lock:
+                if self._results.empty():
+                    self._handed_over = True
+                    return
+                callback = self._results.get()
+            renderer.call_on_main_thread(callback)
 
     def _hand_over(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
         self._on_main_thread(functools.partial(self._call, job, callback))
