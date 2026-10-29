@@ -20,6 +20,9 @@ The notable changes of each release of ComposeUI. The format follows
 - A choice whose value is `None`, such as `{"All regions": None, "North": "north"}`, shows
   as selected when `value` is `None`, and its study saves it as that choice. A combobox
   showed nothing selected instead, on each backend.
+- A job started before the main view shows, such as by `setup_model`, gives its result once
+  the view shows. A job over before then gave it to no backend: a quick load stayed on its
+  "Loading..." text.
 - A chart shows the hovered values of a series of whole numbers, such as counts, as
   integers: `45280`, not `4.528e+04`, and `12`, not `12.00`. Qt and the web showed 4
   significant digits for every series. A series with other values still shows 4.
