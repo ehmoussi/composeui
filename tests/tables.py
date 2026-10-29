@@ -140,6 +140,23 @@ class CellWidgetsMainView(MainView):
 
 
 @define_view
+class DataFilesTableMainView(MainView):
+    """A study's inputs, each read from a file picked in its row."""
+
+    app_title = "Inputs"
+    extension = ".inputs"
+
+    inputs: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.inputs.headers = ["Input", "File"]
+        self.inputs.rows = [["Flows", ""], ["Levels", ""]]
+        self.inputs.editable_columns = [1]
+        self.inputs.cell_widgets = {1: CellWidget.file_path({"CSV": (".csv",)})}
+
+
+@define_view
 class StyledTablesMainView(MainView):
     """A result's points, colored, marked and grouped, and a key/value table of its numbers."""
 

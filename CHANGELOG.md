@@ -17,6 +17,8 @@ The notable changes of each release of ComposeUI. The format follows
 - `Task.show_state`, which shows a task's loading, progress, or error in a label, and other
   views only once the task has a result.
 - `CheckBoxMixin.shows`, which shows other views only while the box is checked.
+- `CellWidget.file_path`, a file path in each cell of a table's column: typed, or picked
+  with a "…" button. Qt and Textual open their file dialogs, and the web uploads the file.
 
 ### Fixed
 

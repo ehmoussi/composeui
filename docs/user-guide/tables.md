@@ -86,6 +86,7 @@ variables: RecordTableView[Variable] = child(
         Column("role", T("Role"), editable=True, widget=CellWidget.combobox()),
         Column("distribution", T("Distribution"), widget=CellWidget.button()),
         Column("doc", T("Help"), widget=CellWidget.link()),
+        Column("data", T("Data"), editable=True, widget=CellWidget.file_path({"CSV": (".csv",)})),
     ],
 )
 ```
@@ -99,11 +100,17 @@ On a `TableView`, `cell_widgets` maps each column's index to its `CellWidget`.
 - **`CellWidget.button(text)`** shows the cell's text, then a button ("…" by default).
   A text such as `T("Retry")` follows the app's language.
 - **`CellWidget.link()`** shows the cell's text as a link.
+- **`CellWidget.file_path(extensions)`** shows a file's path, then a "…" button that picks a
+  file, as a [file path input](widgets.md#file-path-input) does. The dialog offers the file
+  types of `extensions`, such as `{"CSV": (".csv",)}`; the web refuses a file of another
+  type. Its `text`, "Choose a file" by
+  default, names the button for a tooltip and a screen reader.
 
-A check box or a combobox changes its cell only when the column is editable. Otherwise it
-only shows the cell. The change is an edit, as when the user types in a cell:
-`cell_edited` emits it, and on a `RecordTableView`, `record_edited` too. The user does not
-type in these cells.
+A check box, a combobox, or a file path changes its cell only when the column is editable.
+Otherwise it only shows the cell, and the "…" button picks nothing. The change is an edit, as
+when the user types in a cell: `cell_edited` emits it, and on a `RecordTableView`,
+`record_edited` too. The user also types in a file path cell, but not in the other cells
+with a widget.
 
 A click on a button or a link emits `cell_clicked` with the row and the column. The row
 is an index into `rows`, whatever the order.
@@ -124,14 +131,20 @@ What each backend shows:
 
 - **Qt** draws a checkable cell, a combobox frame, a push button, or underlined link text.
   A click or F2 on an editable combobox cell opens a `QComboBox`. Space toggles the current
-  check box, or clicks the current button or link.
+  check box, or clicks the current button or link. A file path's "…" button, or Space on
+  its cell, opens a `QFileDialog` in the folder of the cell's path.
 - **Textual** shows the cell as text: a box (☑ or ☐), the text and ▾, the text and the
   button's text in brackets, or underlined text. A click toggles a box, and so does Space
   on the cursor's row. A click on an editable combobox cell opens a list of its options. A click on
-  a button or a link cell clicks it. A check-all header shows its box (▣ when partly
-  checked), and a click on the header toggles it instead of sorting.
+  a button or a link cell clicks it. A file path shows its text and "[…]". A click on an
+  editable file path cell opens the file picker, and F2's editor types the path. A
+  check-all header shows its box (▣ when partly checked), and a click on the header
+  toggles it instead of sorting.
 - **The web** shows a check box, a `<select>`, a button, or a link-like button. A click on
-  a widget does not select its row.
+  a widget does not select its row. A file path's "…" button uploads the file that the user
+  picks in the browser. The session keeps a copy of the file, and the cell shows the copy's
+  path. The session removes a copy when no cell of the table holds its path any more,
+  at the table's next upload, and all the copies when it ends.
 
 ### How cells and headers look
 

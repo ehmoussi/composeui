@@ -32,6 +32,7 @@ from composeui.webcore.webrenderer import (
     WebFilePathInputRenderer,
     WebMainRenderer,
     WebSourceTableRenderer,
+    WebTableRenderer,
     collect_dirty,
     handle_event,
     page_path,
@@ -151,22 +152,34 @@ class WebSession(RenderTarget):
             return self._respond(functools.partial(renderer.dispatch, event, form))
 
     def pick_file(
-        self, widget_id: str, filename: str, content: bytes
+        self,
+        widget_id: str,
+        filename: str,
+        content: bytes,
+        form: Mapping[str, str] | None = None,
     ) -> tuple[str, str | None] | None:
-        """Hand an uploaded file to one of this session's `PickFileAction`s or path fields.
+        """Hand an uploaded file to a `PickFileAction`, a path field or a table's path cell.
 
-        None if `widget_id` is neither. The file is a copy under its own name: for an
-        action, gone once its callbacks have run; for a file path field, whose text keeps
-        its path, kept until the session ends or the field's next upload. One of a type
-        they don't offer, or too large, is refused in the status bar. Returns what
-        `handle_event` does.
+        None if `widget_id` is none of them; a table's cell is the `form`'s row and column.
+        The file is a copy under its own name: for an action, gone once its callbacks have
+        run; for a file path field, whose text keeps its path, kept until the session ends
+        or the field's next upload; for a cell, until the session ends or a table's upload
+        finds no cell holding its path. One of a type they don't offer, or too large, is
+        refused in the status bar. Returns what `handle_event` does.
         """
         name = safe_filename(Path(filename).name)
         with self.lock:
             renderer = self.renderers.get(widget_id)
-            if not isinstance(renderer, (WebActionRenderer, WebFilePathInputRenderer)):
+            cell = None
+            if isinstance(renderer, WebTableRenderer):
+                cell = renderer.file_path_cell(form or {})
+                if cell is None:  # a stale page: the table as it now is
+                    return self._respond(functools.partial(renderer.pick_file, None, None))
+                types = renderer.file_types(cell[1])
+            elif isinstance(renderer, (WebActionRenderer, WebFilePathInputRenderer)):
+                types = renderer.file_types
+            else:
                 return None
-            types = renderer.file_types
             error = None
             if len(content) > MAX_FILE_SIZE:
                 error = "the file is too large"
@@ -177,6 +190,10 @@ class WebSession(RenderTarget):
                 return self._respond(
                     functools.partial(self.main_view.status_bar.show_message, message)
                 )
+            if isinstance(renderer, WebTableRenderer):
+                path = self._cell_upload_directory(widget_id, renderer.file_paths()) / name
+                path.write_bytes(content)
+                return self._respond(functools.partial(renderer.pick_file, cell, path))
             if isinstance(renderer, WebFilePathInputRenderer):
                 path = self._upload_directory(widget_id) / name
                 path.write_bytes(content)
@@ -194,6 +211,21 @@ class WebSession(RenderTarget):
         shutil.rmtree(directory, ignore_errors=True)
         directory.mkdir()
         return directory
+
+    def _cell_upload_directory(self, widget_id: str, kept: set[str]) -> Path:
+        """Get a new directory for a table cell's upload, among the table's.
+
+        The cells' rows move, and one cell's path may be copied to another: each upload has
+        its own directory, removed once no path of `kept` is in it.
+        """
+        if self._uploads is None:
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+        table = self._uploads / widget_id
+        table.mkdir(exist_ok=True)
+        for directory in table.iterdir():
+            if not any(str(path) in kept for path in directory.iterdir()):
+                shutil.rmtree(directory)
+        return Path(tempfile.mkdtemp(dir=table))
 
     def _respond(self, apply: Callable[[], None]) -> tuple[str, str | None]:
         """Run `apply` against the tree and return what changed, as `handle_event` does."""

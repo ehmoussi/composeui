@@ -1316,7 +1316,8 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
     """A table under its filter bar; the table shows `shown_rows`, in their order.
 
     The widgets know the rows only as shown: their indexes map back to `rows` through
-    `shown_rows`.
+    `shown_rows`. A file path cell's button opens Qt's file dialog in the directory of
+    the cell's path, if any.
     """
 
     def __init__(self, view: TableViewLike) -> None:
@@ -1354,6 +1355,7 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             table.selected_rows_changed.connect(self._update_selected_rows)
             table.cell_edited.connect(self._update_cell)
             table.cell_clicked.connect(self._click_cell)
+            table.browse_clicked.connect(self._browse)
             table.check_all_clicked.connect(self._check_all)
             table.header_clicked.connect(self._sort_by)
             bar.check = self._view.filter_error
@@ -1517,6 +1519,21 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _browse(self, position: int, column: int) -> None:
+        """Pick a file in Qt's dialog, its path then the cell's; nothing if cancelled."""
+        assert self._rendered_object is not None
+        widget = self._view.cell_widgets[column]
+        cells = self._view.rows[self._view.shown_rows[position]]
+        text = cells[column].strip() if column < len(cells) else ""
+        picked, _selected_filter = QFileDialog.getOpenFileName(
+            self._rendered_object,
+            widget.text,
+            "" if text == "" else str(Path(text).parent),
+            _file_filters(widget.extensions),
+        )
+        if picked != "":
+            self._rendered_object.table.set_text(position, column, picked)
 
     def _check_all(self, column: int) -> None:
         if column in self._view.editable_columns:

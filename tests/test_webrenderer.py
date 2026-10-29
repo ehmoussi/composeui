@@ -151,6 +151,7 @@ from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
+    DataFilesTableMainView,
     EditableTableMainView,
     MillionRowsMainView,
     MillionSource,
@@ -705,6 +706,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     EditableTableMainView,
     SortedRoomsMainView,
     CellWidgetsMainView,
+    DataFilesTableMainView,
     StyledTablesMainView,
     _NotesMainView,
 ]
@@ -4458,6 +4460,81 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
             (1, 3),
             (0, 4),
         ]
+
+
+def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_holds_it() -> None:
+    views: list[DataFilesTableMainView] = []
+
+    class InputsApp(WebApplication[DataFilesTableMainView]):
+        def setup_session(self, main_view: DataFilesTableMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    app = InputsApp(build_main_view=DataFilesTableMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        table = view.inputs
+        table_id = _widget_id(table.renderer)
+        edits: list[tuple[int, int, str]] = []
+        table.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+
+        def upload(row: str, name: str) -> str:
+            response = client.post(
+                f"/widget/{table_id}/file",
+                data={"row": row, "column": "1"},
+                files={"file": (name, b"1,2", "text/csv")},
+            )
+            assert response.status_code == 200
+            return str(response.text)
+
+        cell = _element(page, f"{table_id}-cell-0-1")
+        assert cell.attributes["aria-label"] == "File: Choose a file"
+        (picker,) = [
+            a for tag, a in _element(page, f"{table_id}-row-0").descendants if tag == "input"
+        ]
+        assert (picker["type"], picker["accept"]) == ("file", ".csv")
+        assert picker["hx-post"] == f"/widget/{table_id}/file"
+        assert picker["hx-vals"] == '{"row": "0", "column": "1"}'
+
+        # the cell shows the copy's path once swapped back
+        body = upload("0", "flows.csv")
+        flows = Path(table.rows[0][1])
+        assert (flows.name, flows.read_bytes()) == ("flows.csv", b"1,2")
+        _swapped(body, table_id)
+        assert str(flows) in _element(body, f"{table_id}-row-0").text
+        # each cell keeps its copy, a copy no cell holds is gone at the next upload
+        upload("1", "levels.csv")
+        levels = Path(table.rows[1][1])
+        upload("0", "flows.csv")
+        assert (flows.exists(), levels.exists()) == (True, True)
+        upload("1", "levels.csv")
+        assert (flows.exists(), levels.exists(), Path(table.rows[1][1]).exists()) == (
+            False,
+            True,
+            True,
+        )
+        # another type is refused
+        body = upload("0", "notes.md")
+        status = _swapped(body, _widget_id(view.status_bar.renderer))
+        assert status.text == "Can't open 'notes.md': expected a .csv file."
+        # or the path is typed
+        client.post(f"/widget/{table_id}", data={"event": "start_edit", "row": "1", "column": "1"})
+        client.post(
+            f"/widget/{table_id}",
+            data={"event": "edit", "row": "1", "column": "1", "text": "/data/levels.csv"},
+        )
+        assert table.rows[1][1] == "/data/levels.csv"
+        # a stale page's upload, to a table disabled or a column no longer editable: the
+        # table as it now is
+        table.is_enabled = False
+        _swapped(upload("0", "flows.csv"), table_id)
+        table.is_enabled = True
+        table.editable_columns = []
+        body = upload("0", "flows.csv")
+        _swapped(body, table_id)
+        assert "disabled" in _element(client.get("/").text, f"{table_id}-cell-0-1").attributes
+        assert [edit[:2] for edit in edits] == [(0, 1), (1, 1), (0, 1), (1, 1), (1, 1)]
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:

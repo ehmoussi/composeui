@@ -55,6 +55,7 @@ from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.tables import (
     CellWidgetsMainView,
+    DataFilesTableMainView,
     EditableTableMainView,
     MillionRowsMainView,
     SortedRoomsMainView,
@@ -291,6 +292,14 @@ def bookings_base_url() -> Iterator[str]:
 def data_files_base_url() -> Iterator[str]:
     """Serve an app with a file path field, for the whole module."""
     with _serve(WebApplication(build_main_view=DataFileMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def data_files_table_base_url() -> Iterator[str]:
+    """Serve an app with a table of file paths, for the whole module."""
+    app = WebApplication(build_main_view=DataFilesTableMainView).create_starlette_app()
+    with _serve(app) as url:
         yield url
 
 
@@ -1670,6 +1679,24 @@ def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown
         payload: FilePayload = {"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}
         chooser.value.set_files(files=[payload])
     expect(field).to_have_value(re.compile(r"flows\.csv$"))
+    context.close()
+
+
+def test_a_file_picked_by_a_table_cell_s_button_is_uploaded_its_copy_s_path_shown(
+    browser: Browser, data_files_table_base_url: str
+) -> None:
+    context = browser.new_context(base_url=data_files_table_base_url)
+    page = context.new_page()
+    _intercept_file_choosers(page)
+    page.goto("/")
+    levels = page.get_by_role("row").filter(has_text="Levels")
+    with page.expect_file_chooser() as chooser, _posted(page):
+        levels.get_by_role("button", name="File: Choose a file").click()
+        payload: FilePayload = {"name": "levels.csv", "mimeType": "text/csv", "buffer": b"3"}
+        chooser.value.set_files(files=[payload])
+    # the row picked, not another, shows the copy's path
+    expect(levels).to_contain_text(re.compile(r"levels\.csv"))
+    expect(page.get_by_role("row").filter(has_text="Flows")).not_to_contain_text("levels")
     context.close()
 
 

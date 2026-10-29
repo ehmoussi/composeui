@@ -16,6 +16,24 @@ def _has_any_extension(path: Path, extensions: tuple[str, ...]) -> bool:
     return any(path.name.endswith(extension) for extension in extensions)
 
 
+def file_picker(text: str, extensions: dict[str, tuple[str, ...]], title: str) -> FileOpen:
+    """Get a picker of the files of `extensions`, opening in the directory of `text`'s path.
+
+    In the current directory if `text` is empty, or no directory's path.
+    """
+    text = text.strip()
+    location = Path(text).parent if text != "" else Path()
+    if not location.is_dir():  # e.g. a path typed halfway
+        location = Path()
+    filters = Filters(
+        *(
+            Filter(name, functools.partial(_has_any_extension, extensions=name_extensions))
+            for name, name_extensions in extensions.items()
+        )
+    )
+    return FileOpen(location, title or "Open", filters=filters)
+
+
 class ComposeFilePathInput(Horizontal):
     """A field typing a file's path, then a "…" button picking one, and a reload button.
 
@@ -58,17 +76,7 @@ class ComposeFilePathInput(Horizontal):
 
     def open_picker(self) -> None:
         """Show the file picker in the directory of the field's path, else the current one."""
-        text = self.input.value.strip()
-        location = Path(text).parent if text != "" else Path()
-        if not location.is_dir():  # e.g. a path typed halfway
-            location = Path()
-        filters = Filters(
-            *(
-                Filter(name, functools.partial(_has_any_extension, extensions=extensions))
-                for name, extensions in self.extensions.items()
-            )
-        )
-        picker = FileOpen(location, self.picker_title or "Open", filters=filters)
+        picker = file_picker(self.input.value, self.extensions, self.picker_title)
         self.app.push_screen(picker, self._pick)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

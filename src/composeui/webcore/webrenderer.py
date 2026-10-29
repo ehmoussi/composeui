@@ -1934,7 +1934,10 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     posting its change and never swapped back for it (only a check-all box in the header
     follows); a button after the cell's text, or the text as a link-like button, posting
     a click. A check-all column's header starts with its box, partly checked (see
-    `page.js`) while some rows are; its click swaps back the rows, not itself.
+    `page.js`) while some rows are; its click swaps back the rows, not itself. A file
+    path is typed as a plain cell, and its "…" button opens the browser's picker, a
+    hidden file input uploading the file picked with its row and column
+    (`/widget/{id}/file`, see `WebSession.pick_file`); the cell then shows its copy's path.
 
     A cell of `cell_styles` has its background color, its text black or white on it, and
     its mark before its text, named for screen readers; a disabled one is grayed, its
@@ -2187,14 +2190,6 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
 
     def _cell_html(self, row: int, column: int, text: str, style: CellStyle) -> Markup:
         """Render a cell: its mark, then its text, widget or field, as `style` says."""
-        widget = self._view.cell_widgets.get(column)
-        if widget is not None and column < len(self._view.headers):
-            content = self._widget_html(row, column, text, widget, is_disabled=not style.is_enabled)
-            # a disabled widget is grayed already
-            look = self._look(attrs.evolve(style, is_enabled=True))
-            return Markup("<td{}>{}</td>").format(look, self._marked(style, content))
-        if column not in self._editable_columns() or not self.is_enabled or not style.is_enabled:
-            return Markup("<td{}>{}</td>").format(self._look(style), self._marked(style, text))
 
         def post(event: str) -> Markup:
             return Markup(
@@ -2202,6 +2197,23 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
                 """ hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
             ).format(widget_id=self.widget_id, event=event, row=row, column=column)
 
+        is_typed = column in self._editable_columns() and self.is_enabled and style.is_enabled
+        widget = self._view.cell_widgets.get(column)
+        # a file path's, typed in, is a field while edited
+        if (
+            widget is not None
+            and column < len(self._view.headers)
+            and self._editing != (row, column)
+        ):
+            content = self._widget_html(row, column, text, widget, is_disabled=not style.is_enabled)
+            # a disabled widget is grayed already
+            look = self._look(attrs.evolve(style, is_enabled=True))
+            edit = Markup(' data-edit hx-trigger="dblclick"{}').format(post("start_edit"))
+            return Markup("<td{}{}>{}</td>").format(
+                look, edit if is_typed else Markup(), self._marked(style, content)
+            )
+        if not is_typed:
+            return Markup("<td{}>{}</td>").format(self._look(style), self._marked(style, text))
         if self._editing != (row, column):
             return Markup('<td{look} data-edit hx-trigger="dblclick"{post}>{marked}</td>').format(
                 look=self._look(style), post=post("start_edit"), marked=self._marked(style, text)
@@ -2301,6 +2313,8 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
                 '<button id="{widget_id}" type="button" class="link'
                 ' link-primary"{click}{disabled}>{text}</button>'
             ).format(widget_id=widget_id, click=click, disabled=disabled, text=text)
+        if widget.kind is CellKind.FILE_PATH:
+            return self._file_path_html(row, column, text, widget, is_editable=is_editable)
         label = f"{self._view.headers[column]}: {widget.text}"
         return Markup(
             '<span class="flex items-center gap-2"><span class="flex-1">{text}'
@@ -2315,6 +2329,64 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             disabled=disabled,
             text2=widget.text,
         )
+
+    def _file_path_html(
+        self, row: int, column: int, text: str, widget: CellWidget, *, is_editable: bool
+    ) -> Markup:
+        """Render a file path's text, then its "…" button opening the hidden file input."""
+        label = f"{self._view.headers[column]}: {widget.text}"
+        widget_id = f"{self.widget_id}-cell-{row}-{column}"
+        types = ",".join(_file_types(widget.extensions))
+        disabled = "" if is_editable else " disabled"
+        return Markup(
+            '<span class="flex items-center gap-2"><span class="flex-1">{text}</span>'
+            '<button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
+            ' aria-label="{label}" title="{label}" data-file-browse{disabled}>…</button>'
+            # emptied once sent: picking the same file again is a change too
+            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            ' aria-hidden="true" hx-post="/widget/{table_id}/file"'
+            """ hx-vals='{values}' hx-encoding="multipart/form-data" hx-trigger="change\""""
+            ' hx-swap="none" data-clear-after-post autocomplete="off"{disabled}></span>'
+        ).format(
+            text=text,
+            widget_id=widget_id,
+            label=label,
+            disabled=disabled,
+            accept=Markup(' accept="{}"').format(types) if types else "",
+            table_id=self.widget_id,
+            values=json.dumps({"row": str(row), "column": str(column)}),
+        )
+
+    def file_path_cell(self, form: Mapping[str, str]) -> tuple[int, int] | None:
+        """Get the file path cell an upload names, if the user can edit it; a stale page's, None."""
+        if not self.is_enabled:
+            return None
+        return self._widget_cell(form, (CellKind.FILE_PATH,))
+
+    def file_types(self, column: int) -> list[str]:
+        """Get the file types a column's picker offers, e.g. [".csv"]; empty for any."""
+        return _file_types(self._view.cell_widgets[column].extensions)
+
+    def file_paths(self) -> set[str]:
+        """Get the texts of the file path cells, the paths whose uploads are kept."""
+        columns = [
+            column
+            for column, widget in self._view.cell_widgets.items()
+            if widget.kind is CellKind.FILE_PATH
+        ]
+        return {
+            cells[column] for cells in self._view.rows for column in columns if column < len(cells)
+        }
+
+    def pick_file(self, cell: tuple[int, int] | None, path: Path | None) -> None:
+        """Give a file path cell the path of the file its picker uploaded, as the user's edit.
+
+        Without a cell, or a path, swap the table back as it now is, e.g. for a stale page.
+        """
+        if cell is not None and path is not None:
+            self._set_widget_cell(cell, str(path))
+        # the picker only uploaded: the cell shows the path once swapped back
+        self._mark_dirty(self._view, self.widget_id, self._view.rows)
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled table can't be clicked: a post saying otherwise is refused
@@ -2405,7 +2477,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         widget = self._view.cell_widgets.get(int(column))
         if widget is None or widget.kind not in kinds or int(column) >= len(self._view.headers):
             return None
-        is_edit = widget.kind in (CellKind.CHECK_BOX, CellKind.COMBOBOX)
+        is_edit = widget.kind in (CellKind.CHECK_BOX, CellKind.COMBOBOX, CellKind.FILE_PATH)
         if is_edit and int(column) not in self._view.editable_columns:
             return None
         if not self._view.cell_style(int(row), int(column)).is_enabled:
@@ -2456,11 +2528,16 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._view.cell_clicked.emit(*cell)
 
     def _editable_columns(self) -> list[int]:
-        """Get the `editable_columns` the table has a header for, and the user types in."""
+        """Get the `editable_columns` the table has a header for, and the user types in.
+
+        Those without a widget, and the file paths.
+        """
+        widgets = self._view.cell_widgets
         return [
             column
             for column in self._view.editable_columns
-            if 0 <= column < len(self._view.headers) and column not in self._view.cell_widgets
+            if 0 <= column < len(self._view.headers)
+            and (column not in widgets or widgets[column].kind is CellKind.FILE_PATH)
         ]
 
     def _is_multiple(self) -> bool:
