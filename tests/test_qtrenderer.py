@@ -2058,6 +2058,8 @@ def test_picking_a_combobox_cell_s_option_with_the_mouse_edits_it_once(qtbot: Qt
     editor = table.viewport().findChild(QComboBox)
     assert editor is not None
     popup = editor.view()
+    # shown once the event loop turns (`showPopup` is queued): a click before misses it
+    qtbot.waitUntil(popup.isVisible)
     option = popup.visualRect(popup.model().index(1, 0)).center()
     qtbot.mouseClick(popup.viewport(), Qt.MouseButton.LeftButton, pos=option)
     qtbot.waitUntil(lambda: table.state() is not QAbstractItemView.State.EditingState)
