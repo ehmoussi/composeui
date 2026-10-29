@@ -64,7 +64,7 @@ from tests.vertical import VerticalMainView
 from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Callable, Generator, Iterator
 
     from playwright.sync_api import (
         BrowserContext,
@@ -426,7 +426,7 @@ def test_map_draws_and_keeps_the_viewport_after_swaps(browser: Browser) -> None:
         region.focus()
         region.press("+")
         expect(page.get_by_text("Zoom 12")).to_be_visible()
-        page.get_by_role("button", name="Move map").click()
+        _moved_map(page, region)
         region.locator("canvas").click()
         expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
         region.focus()
@@ -468,7 +468,7 @@ def test_map_fits_loaded_points_and_resizes_without_pinning_the_viewport(browser
         expect(canvas).to_be_visible()
         canvas.click()
         expect(page.get_by_text(re.compile(r"Clicked -?0\.00, -?0\.00"))).to_be_visible()
-        page.get_by_role("button", name="Move map").click()
+        _moved_map(page, region)
         canvas.click()
         expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
 
@@ -489,9 +489,9 @@ def test_map_fits_loaded_points_and_resizes_without_pinning_the_viewport(browser
             assert min(left, right, top, bottom) >= 28
             assert min(left, right, top, bottom) <= 36
 
-        assert_fitted()
+        _eventually(assert_fitted)
         page.set_viewport_size({"width": 420, "height": 800})
-        assert_fitted()
+        _eventually(assert_fitted)  # once redrawn at its new size
         canvas.click()
         expect(page.get_by_text("Clicked 48.86, 2.35")).to_be_visible()
         region.focus()
@@ -692,6 +692,40 @@ def _posted(page: Page) -> contextlib.AbstractContextManager[object]:
     return page.expect_response(
         lambda response: response.request.method == "POST" and "/widget/" in response.url
     )
+
+
+def _intercept_file_choosers(page: Page) -> None:
+    """Have Playwright catch the page's file pickers from now on, before one opens.
+
+    `expect_file_chooser` asks for them without waiting for the browser's answer: a picker
+    opened right after would be the browser's own, never reported.
+    """
+    page.on("filechooser", lambda _chooser: None)
+
+
+def _passes(check: Callable[[], None]) -> bool:
+    try:
+        check()
+    except AssertionError:
+        return False
+    return True
+
+
+def _eventually(check: Callable[[], None]) -> None:
+    """Run `check` until it passes, as `expect` does: e.g. a canvas once redrawn."""
+    deadline = time.monotonic() + 5
+    while not _passes(check):
+        if time.monotonic() > deadline:
+            check()  # its own error, telling what failed
+        time.sleep(0.1)
+
+
+def _moved_map(page: Page, region: Locator) -> None:
+    """Move the map with its button, until the page draws it at its new center."""
+    with _posted(page):
+        page.get_by_role("button", name="Move map").click()
+    # a click reads its point on the map as drawn: Paris, once the answer is swapped in
+    expect(region).to_have_attribute("data-map", re.compile(r'"latitude":48\.8'))
 
 
 def test_typing_keeps_the_caret_where_the_user_put_it(page: Page) -> None:
@@ -1025,6 +1059,7 @@ def help_page(browser: Browser) -> Iterator[Page]:
 
 def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) -> None:
     page = help_page
+    _intercept_file_choosers(page)
     page.goto("/")
     markdown = page.locator(".cui-markdown")
     expect(markdown.get_by_role("heading", name="Help")).to_be_visible()
@@ -1370,7 +1405,8 @@ def test_a_form_dialog_s_ok_follows_its_form_as_the_user_types(
     expect(name).to_have_value("Main line")
     expect(ok).to_be_enabled()
 
-    name.fill("")
+    with _posted(page):
+        name.fill("")  # answered before the next edit, whose answer the next block waits for
     with _posted(page):
         name.press_sequentially("R")  # a debounced edit at a time
     with _posted(page):
@@ -1604,6 +1640,7 @@ def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown
 ) -> None:
     context = browser.new_context(base_url=data_files_base_url)
     page = context.new_page()
+    _intercept_file_choosers(page)
     page.goto("/")
     field = page.get_by_label("Measurements")
     with page.expect_file_chooser() as chooser, _posted(page):
@@ -1865,7 +1902,9 @@ def test_a_swapped_chart_is_destroyed_and_keeps_the_zoom(chart_page: Page) -> No
     expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
     chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
 
-    chart_page.get_by_label("Diameter (mm)").fill("80")
+    # the server has the new diameter before the click: the two would else race
+    with _posted(chart_page):
+        chart_page.get_by_label("Diameter (mm)").fill("80")
     with _posted(chart_page):
         add.click()
 
