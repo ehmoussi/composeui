@@ -151,6 +151,17 @@ restores, and how errors show. Prototype in M0; deliver in M1.
 **Done when:** a CSV dashboard takes a few dozen clear lines, and one panel moves into its own
 view class without other changes. Count meaningful code, not compressed formatting.
 
+The first helpers are in place, and the Uber examples use them: `DashboardView` and
+`bar_chart` in `composeui.core.dashboard`, `Task.show_state`, and `CheckBoxMixin.shows`.
+The work left:
+
+- **Uploads and downloads,** once N13 has their widgets.
+- **More helpers from a second dashboard,** not by symmetry: a preset that only renames
+  `child(...)` saves no code. Keep a helper when two dashboards repeat the same code.
+- **The wiring of filters** to the views that they update: N02 decides it.
+- **`CheckBoxMixin.shows` follows only `toggled`.** A study that opens with the box checked
+  leaves the views as they were.
+
 ### N02 — Reactive methods
 
 Today, a view field pushes its changes to the UI, and a signal such as `value_changed` reports

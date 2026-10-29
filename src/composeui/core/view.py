@@ -1713,6 +1713,15 @@ class CheckBoxMixin:
     #: the user checked or unchecked the box; not emitted when `is_checked` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
 
+    def shows(self, *views: View) -> None:
+        """Show `views` only while the box is checked, from now on, e.g. an optional part."""
+
+        def follow() -> None:
+            for view in views:
+                view.is_visible = self.is_checked
+
+        self.toggled.connect(follow, now=True)
+
 
 @define_view
 class CheckBoxView(CheckBoxMixin, View):

@@ -284,9 +284,9 @@ def _examples() -> list[Example]:
         ),
         Example(
             "uberpickupsframe",
-            uberpickupsframe.UberPickupsFrameMainView,
+            uberpickupsframe.UberPickupsMainView,
             _uberpickups,
-            uberpickupsframe.UberPickupsFrameModel,
+            uberpickupsframe.UberPickupsModel,
             _uberpickupsframe_setup,
             window=(1200, 1200),
         ),

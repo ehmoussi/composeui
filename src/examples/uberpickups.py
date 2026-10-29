@@ -9,20 +9,19 @@ from typing import TYPE_CHECKING
 import attrs
 
 from composeui.core.application import run
+from composeui.core.dashboard import DashboardView, bar_chart
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 from composeui.core.view import (
-    ChartKind,
     ChartView,
-    CheckBoxView,
+    FormView,
+    LabelRowSliderView,
     LabelView,
-    MainView,
     MapPoint,
     MapView,
-    PageWidth,
+    RowCheckBoxView,
     Series,
-    SliderView,
+    SidebarView,
     SourceTableView,
-    VerticalView,
     child,
     define_view,
 )
@@ -114,86 +113,65 @@ class UberPickupsModel(SqliteModel):
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
 @define_view
-class UberPickupsDataView(VerticalView):
-    table: SourceTableView = child(SourceTableView, is_visible=False)
-    pickups_chart: ChartView = child(
-        ChartView,
-        title="Number of pickups by hour",
-        kind=ChartKind.BAR,
+class PickupFilters(FormView):
+    show_raw_data: RowCheckBoxView = child(RowCheckBoxView, text="Show raw data")
+    hour: LabelRowSliderView = child(LabelRowSliderView, label="Hour", maximum=23, value=11)
+
+
+@define_view
+class PickupSidebar(SidebarView):
+    filters: PickupFilters = child(PickupFilters)
+
+
+@define_view
+class UberPickupsMainView(DashboardView):
+    app_title = "Uber pickups in NYC"
+    # a study keeps the rows read, so that opening it downloads none
+    has_file_menu = True
+    extension = ".streamlit"
+
+    sidebar: PickupSidebar = child(PickupSidebar, title="Filters")
+    status: LabelView = child(LabelView)
+    table: SourceTableView = child(SourceTableView)
+    pickups_chart: ChartView = bar_chart(
+        "Number of pickups by hour",
+        HOURS,
         x_title="Hour of day",
         y_title="Number of pickups",
-        categories=[f"{hour:02d}:00" for hour in range(24)],
         height=400,
     )
-    slider_hours: SliderView = child(SliderView, minimum=0, maximum=23, step=1, value=11)
-    pickups_map: MapView = child(
-        MapView,
-        title="Pickup locations (up to 10,000 sampled pickups)",
-    )
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.slider_hours.value_changed.connect(self._update_map)
-
-    def _update_map(self, value: int, model: UberPickupsModel) -> None:
-        self.pickups_map.points = model.uber_data.pickup_points(value)
-
-
-@define_view
-class UberPickupsMainView(MainView):
-    app_title = "Uber pickups in NYC"
-    extension = ".streamlit"
-    width = PageWidth.WIDE
-
-    data_load_state: LabelView = child(LabelView, text="Loading data...")
-    show_raw_data: CheckBoxView = child(CheckBoxView, text="Show raw data", is_checked=False)
-    data_load_status: LabelView = child(
-        LabelView, text="Start reading rows from CSV", is_visible=False
-    )
-    data: UberPickupsDataView = child(UberPickupsDataView, is_visible=False)
+    pickups_map: MapView = child(MapView, title="Pickup locations (up to 10,000 sampled pickups)")
 
     def connect_model(self, model: UberPickupsModel) -> None:
-        self.data.table.source = model.uber_data.source()
+        self.table.source = model.uber_data.source()
         self.loader = self.jobs.task(model.load_pickups)
-        self.loader.changed.connect(self._show_loading)
+        self.loader.show_state(
+            self.status,
+            views=[self.pickups_chart, self.pickups_map],
+            loading_text="Loading rows from SQLite or CSV",
+            progress_text="Read {progress:,} rows from CSV",
+            failed_text="Failed to read the CSV: {error}",
+        )
+        self.sidebar.filters.show_raw_data.shows(self.table)
         self.loader.finished.connect(self._show_pickups)
-        self.loader.failed.connect(self._show_failure)
-        self.show_raw_data.toggled.connect(self._show_raw_data)
+        self.sidebar.filters.hour.value_changed.connect(self._show_map)
+        # New and Open replace the rows: read them again
         model.uber_data.changed.connect(self._start_loading, now=True)
 
     def _start_loading(self) -> None:
         if not self.loader.is_running:
-            self.loader.start(DATA_URL, self.data.slider_hours.value)
-
-    def _show_raw_data(self) -> None:
-        self.data.table.is_visible = self.show_raw_data.is_checked
-
-    def _show_loading(self) -> None:
-        # a run starting or reading rows, or New and Open dropping its pickups
-        loader = self.loader
-        self.data_load_status.is_visible = loader.is_running
-        self.data.table.is_visible = self.show_raw_data.is_checked
-        self.data.is_visible = loader.has_result
-        if not loader.has_result and loader.error is None:
-            self.data_load_state.text = "Loading data..."
-        if loader.is_running:
-            self.data_load_status.text = (
-                "Loading rows from SQLite or CSV"
-                if loader.progress is None
-                else f"Read {loader.progress:,} rows from CSV"
-            )
+            self.loader.start(DATA_URL, self.sidebar.filters.hour.value)
 
     def _show_pickups(self, result: PickupData) -> None:
-        self.data.pickups_chart.series = [Series.bars("Pickups", result.hours)]
-        self.data.pickups_map.points = result.points
-        self.data_load_state.text = "Done! (using SQLite)"
+        self.pickups_chart.series = [Series.bars("Pickups", result.hours)]
+        self.pickups_map.points = result.points
 
-    def _show_failure(self, error: Exception) -> None:
-        self.data_load_state.text = "Failed to load data"
-        self.status_bar.show_message(self.tr("Failed to read the CSV: {error}").format(error=error))
+    def _show_map(self, hour: int, model: UberPickupsModel) -> None:
+        self.pickups_map.points = model.uber_data.pickup_points(hour)
 
 
 def main() -> None:

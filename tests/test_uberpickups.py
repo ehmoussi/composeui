@@ -13,6 +13,7 @@ from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
+from composeui.core.renderer import RendererContainer
 from composeui.core.view import MapPoint
 from examples import uberpickups
 
@@ -21,7 +22,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
+    from qtpy.QtWidgets import QWidget
 
+    from composeui.core.view import View
     from composeui.qtcore.qtrenderer import QtWidgetRenderer
     from composeui.webcore.webrenderer import WebRenderer
 
@@ -71,106 +74,94 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[App]:
 def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     app.main_view.jobs.wait()
     page = app.main_view
-    assert page.data_load_state.text == "Done! (using SQLite)"
-    assert page.data_load_status.text == "Read 2 rows from CSV"
-    assert not page.data_load_status.is_visible
-    assert page.data.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
-    assert page.data.table.source is not None
-    assert page.data.table.source.count() == 2
-    assert page.data.pickups_map.points == [
+    assert not page.status.is_visible
+    assert page.status.text == "Read 2 rows from CSV"
+    assert page.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    assert page.table.source is not None
+    assert page.table.source.count() == 2
+    assert page.pickups_map.points == [
         MapPoint(latitude=40.7, longitude=-73.9),
     ]
-    assert page.data.is_visible
+    assert page.pickups_chart.is_visible
+    assert page.pickups_map.is_visible
+
+
+def _qt_object(renderer: object) -> QWidget:
+    qt_widgets = pytest.importorskip("qtpy.QtWidgets")
+    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+        "composeui.qtcore.qtrenderer"
+    ).QtWidgetRenderer
+    assert isinstance(renderer, renderer_type)
+    widget = cast("QtWidgetRenderer", renderer).qt_object
+    assert isinstance(widget, qt_widgets.QWidget)
+    return widget
+
+
+def _qt_field(row: View) -> QWidget:
+    """Get the Qt widget of the form row `row`'s field."""
+    assert isinstance(row.renderer, RendererContainer)
+    return _qt_object(row.renderer.get_renderer("field"))
 
 
 def _select_hour(
     view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
-        "composeui.qtcore.qtrenderer"
-    ).QtWidgetRenderer
-    renderer = view.data.slider_hours.renderer
-    assert isinstance(renderer, renderer_type)
-    slider = cast("QtWidgetRenderer", renderer).qt_object
-    assert slider is not None
+    slider = _qt_field(view.sidebar.filters.hour)
     assert isinstance(slider, qt_widgets.QSlider)
     slider.setValue(hour)
-    assert view.data.pickups_map.points == expected_points
-    assert view.data.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
-    assert view.data.table.source is not None
-    assert view.data.table.source.count() == 2
+    assert view.pickups_map.points == expected_points
+    assert view.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    assert view.table.source is not None
+    assert view.table.source.count() == 2
 
 
 def test_visibility_follows_loading_and_real_checkbox_clicks(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
-        "composeui.qtcore.qtrenderer"
-    ).QtWidgetRenderer
     path = tmp_path / "pickups.csv.gz"
     path.write_bytes(gzip.compress(_CSV.encode()))
     monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
-    # Render before starting the worker so Qt receives every queued outcome.
-    app = ModelApplication(
-        build_main_view=uberpickups.UberPickupsMainView,
-        build_model=uberpickups.UberPickupsModel,
-    )
-    app.main_view.data.pickups_map.tiles = False
+    app = _app()
+    view = app.main_view
+    view.pickups_map.tiles = False
     try:
+        # the loader started with the app, before it renders: its outcome still shows
         app.render(RendererType.QT)
-        view, page = app.main_view, app.main_view
-        renderer = view.renderer
-        assert isinstance(renderer, renderer_type)
-        window = cast("QtWidgetRenderer", renderer).qt_object
-        assert isinstance(window, qt_widgets.QWidget)
+        window = _qt_object(view.renderer)
         qtbot.addWidget(window)
-        widgets = []
-        for child in (
-            page.show_raw_data,
-            page.data.table,
-            page.data.pickups_chart,
-            page.data.pickups_map,
-            page.data_load_status,
-            page.data,
-        ):
-            renderer = child.renderer
-            assert isinstance(renderer, renderer_type)
-            widget = cast("QtWidgetRenderer", renderer).qt_object
-            assert isinstance(widget, qt_widgets.QWidget)
-            widgets.append(widget)
-        checkbox, table, chart, map_widget, status, data = widgets
+        checkbox = _qt_field(view.sidebar.filters.show_raw_data)
+        table, chart, map_widget, status = (
+            _qt_object(child.renderer)
+            for child in (view.table, view.pickups_chart, view.pickups_map, view.status)
+        )
+        # the filters show in the sidebar, beside the content
+        assert checkbox.isVisibleTo(window)
+        assert _qt_field(view.sidebar.filters.hour).isVisibleTo(window)
 
         def assert_visibility(*, loaded: bool, raw: bool) -> None:
-            assert data.isVisibleTo(window) == loaded
             assert chart.isVisibleTo(window) == loaded
             assert map_widget.isVisibleTo(window) == loaded
-            assert table.isVisibleTo(window) == (loaded and raw)
+            assert status.isVisibleTo(window) == (not loaded)
+            assert table.isVisibleTo(window) == raw
+
+        qtbot.waitUntil(lambda: not view.loader.is_running)
+        assert_visibility(loaded=True, raw=False)
 
         assert isinstance(checkbox, qt_widgets.QCheckBox)
         checkbox.click()
-        assert_visibility(loaded=False, raw=True)
-        assert status.isHidden()
-
-        view.connect_model(app.model)
-        assert not status.isHidden()
-        assert_visibility(loaded=False, raw=True)
-        qtbot.waitUntil(lambda: not view.loader.is_running)
         assert_visibility(loaded=True, raw=True)
-        assert status.isHidden()
-
-        _select_hour(page, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
+        _select_hour(view, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
         checkbox.click()
         assert_visibility(loaded=True, raw=False)
-        assert page.data.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
-        _select_hour(page, 12, [])
+        assert view.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
+        _select_hour(view, 12, [])
         view.jobs.drop()
         checkbox.click()
         assert_visibility(loaded=False, raw=True)
-        assert status.isHidden()
     finally:
-        app.main_view.jobs.drop()
+        view.close()  # its window first: a table shown reads the model as it paints
         app.model.close()
 
 
@@ -186,12 +177,11 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         load_reloaded_state(restored.main_view, restored.model, tmp_path)
         restored.main_view.jobs.wait()
         page = restored.main_view
-        assert page.data.table.source is not None
-        assert page.data.table.source.count() == 2
-        assert page.data.pickups_chart.series[0].y == app.main_view.data.pickups_chart.series[0].y
-        assert page.data.is_visible
-        assert not page.data_load_status.is_visible
-        assert page.data_load_state.text == "Done! (using SQLite)"
+        assert page.table.source is not None
+        assert page.table.source.count() == 2
+        assert page.pickups_chart.series[0].y == app.main_view.pickups_chart.series[0].y
+        assert page.pickups_chart.is_visible
+        assert not page.status.is_visible
     finally:
         restored.model.close()
 
@@ -235,16 +225,26 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
         view.loader.changed.connect(finished, now=True)
         assert done.wait(10)
         response = client.get("/jobs")
-        assert "Done! (using SQLite)" in response.text
         visibility = _VisibilityParser()
         visibility.feed(response.text)
-        data = view.data
-        for child in (data, data.pickups_chart, data.pickups_map):
-            renderer = child.renderer
+
+        def widget_id_of(renderer: object) -> str:
             assert isinstance(renderer, renderer_type)
-            widget_id = cast("WebRenderer", renderer).widget_id
-            assert widget_id in visibility.ids
-            assert widget_id not in visibility.hidden_ids
+            return cast("WebRenderer", renderer).widget_id
+
+        def widget_id(child: View) -> str:
+            return widget_id_of(child.renderer)
+
+        for child in (view.pickups_chart, view.pickups_map):
+            assert widget_id(child) in visibility.ids
+            assert widget_id(child) not in visibility.hidden_ids
+        assert widget_id(view.status) in visibility.hidden_ids
+        page = _VisibilityParser()
+        page.feed(client.get("/").text)
+        # the filters' fields in the sidebar, not only their labels
+        for row in (view.sidebar.filters.show_raw_data, view.sidebar.filters.hour):
+            assert isinstance(row.renderer, RendererContainer)
+            assert widget_id_of(row.renderer.get_renderer("field")) in page.ids
         assert view.loader.error is None
 
 
@@ -259,14 +259,13 @@ def test_invalid_csv_is_shown_as_a_loading_failure(
     path.write_bytes(gzip.compress(f"{_CSV}{row}\n".encode()))
     monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
     app = _app()
-    app.main_view.status_bar.timeout = 0
     try:
         app.main_view.jobs.wait()
         page = app.main_view
-        assert page.data_load_state.text == "Failed to load data"
-        assert not page.data_load_status.is_visible
-        assert not page.data.is_visible
-        assert "Failed to read the CSV:" in app.main_view.status_bar.message
+        assert page.status.is_visible
+        assert page.status.text.startswith("Failed to read the CSV:")
+        assert not page.pickups_chart.is_visible
+        assert not page.pickups_map.is_visible
         assert app.model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
         app.model.close()

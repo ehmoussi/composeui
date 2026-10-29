@@ -34,7 +34,7 @@
 ## Reference
 
 - [Widget catalog](https://ehmoussi.github.io/composeui/widgets.html): every view that a backend renders
-- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, dataframesource, study, translation, translationcheck, jobs, renderer, registry, reload, chartimage) and the backends
+- [API reference](https://ehmoussi.github.io/composeui/api/index.html): built from the docstrings of `composeui.core` (view, signal, application, model, sqlitemodel, dataframesource, dashboard, study, translation, translationcheck, jobs, renderer, registry, reload, chartimage) and the backends
 
 ## Contributing
 

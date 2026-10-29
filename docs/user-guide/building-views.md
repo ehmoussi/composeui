@@ -158,6 +158,10 @@ Each field has its row views too, for example `RowFloatInputView` and
 
 - **The text fields** emit `text_edited` on each change that the user makes, and
   `editing_finished` when the user is done with the field, for example on Enter.
+- **A check box** shows other views only while it is checked, with `shows`:
+  `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again on
+  each `toggled`. A change of `is_checked` in code, such as a study that opens, emits no
+  `toggled`: set the views' `is_visible` there too.
 - **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
   is `None` or one of `values`. `value_changed` reports the user's choice. A `None` value
   selects nothing, unless `None` is one of `values`: then it selects that choice, such as
@@ -221,6 +225,28 @@ A subclass of `MainView` is the app. Its class variables configure it:
 
 Its view fields are the content of the window, one above the other. Its `status_bar` shows
 short messages, and its `jobs` [run work in threads](threads.md).
+
+### A dashboard's main view
+
+`DashboardView`, from `composeui.core.dashboard`, is a `MainView` for a dashboard. Its
+`width` is `WIDE`, and it has no File menu:
+
+```python
+from composeui.core.dashboard import DashboardView
+from composeui.core.view import ChartView, LabelView, child, define_view
+
+
+@define_view
+class SalesDashboard(DashboardView):
+    app_title = "Sales"
+
+    status: LabelView = child(LabelView)
+    sales: ChartView = child(ChartView, title="Sales by month")
+```
+
+A dashboard that saves studies sets `has_file_menu = True` and its `extension`. The
+[Uber pickups example](../../src/examples/uberpickups.py) does, so that a study keeps the
+rows that it read.
 
 ### The status bar
 

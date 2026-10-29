@@ -14,6 +14,7 @@ application
 model
 sqlitemodel
 dataframesource
+dashboard
 study
 jobs
 reload
