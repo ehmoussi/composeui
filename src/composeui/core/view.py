@@ -2027,6 +2027,10 @@ class ReferenceLine:
     style: LineStyle = LineStyle.DASHED
 
 
+#: past it, a float's digits no longer tell the whole number it is (see `ChartView.is_whole`)
+_WHOLE_LIMIT = 1e15
+
+
 @define_view
 class ChartView(View):
     """A chart of results, e.g. a quantity against time or a swept dimension.
@@ -2160,6 +2164,18 @@ class ChartView(View):
             if x.is_integer() and 0 <= x < category_count:
                 heights[int(x)] = math.nan if y_log and not y > 0 else y
         return heights
+
+    @staticmethod
+    def is_whole(values: Sequence[float]) -> bool:
+        """Tell whether `values` are whole numbers, e.g. counts, their gaps (NaN) aside.
+
+        A series of them shows its hovered values as integers, e.g. "45280" rather than
+        "4.528e+04"; another with 4 significant digits.
+        """
+        return all(
+            math.isnan(value) or (value.is_integer() and abs(value) < _WHOLE_LIMIT)
+            for value in values
+        )
 
     @staticmethod
     def bar_slot(index: int, series_count: int) -> tuple[float, float]:

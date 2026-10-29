@@ -39,9 +39,11 @@ _LINE_STYLES = {
 }
 
 
-def _format(value: float, unit: str) -> str:
-    # its trailing zeros kept: as many digits wherever the cursor is, as on the web
-    return f"{value:#.4g} {unit}".rstrip()
+def _format(value: float, unit: str, *, is_whole: bool = False) -> str:
+    # a count as it is; else its trailing zeros kept: as many digits wherever the cursor
+    # is, as on the web
+    text = f"{value:.0f}" if is_whole else f"{value:#.4g}"
+    return f"{text} {unit}".rstrip()
 
 
 def _tabular_font() -> QFont:
@@ -360,7 +362,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 heights = ChartView.bar_heights(curve, len(self._categories), y_log=self._y_log)
                 height = heights[category]
                 if math.isfinite(height):
-                    lines.append(f"{curve.name}: {_format(height, y_unit)}")
+                    value = _format(height, y_unit, is_whole=ChartView.is_whole(curve.y))
+                    lines.append(f"{curve.name}: {value}")
             return lines
         lines = [_format(x, x_unit)]
         for curve in self._series:
@@ -373,7 +376,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 point = _nearest(*points, x)
                 y = None if point is None else point[1]
             if y is not None:
-                lines.append(f"{curve.name}: {_format(y, y_unit)}")
+                value = _format(y, y_unit, is_whole=ChartView.is_whole(curve.y))
+                lines.append(f"{curve.name}: {value}")
         return lines
 
     def _is_step(self, curve: Series) -> bool:
