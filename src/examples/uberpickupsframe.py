@@ -12,12 +12,11 @@ from composeui.core.dataframesource import DataFrameSource, points_of
 from composeui.core.model import Model
 from composeui.core.view import (
     ChartView,
-    FormView,
+    CheckBoxView,
     LabelRowSliderView,
     LabelView,
     MapPoint,
     MapView,
-    RowCheckBoxView,
     Series,
     SidebarView,
     SourceTableView,
@@ -55,21 +54,16 @@ HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
 @define_view
-class PickupFilters(FormView):
-    show_raw_data: RowCheckBoxView = child(RowCheckBoxView, text="Show raw data")
+class PickupFilters(SidebarView):
+    show_raw_data: CheckBoxView = child(CheckBoxView, text="Show raw data")
     hour: LabelRowSliderView = child(LabelRowSliderView, label="Hour", maximum=23, value=11)
-
-
-@define_view
-class PickupSidebar(SidebarView):
-    filters: PickupFilters = child(PickupFilters)
 
 
 @define_view
 class UberPickupsMainView(DashboardView):
     app_title = "Uber pickups in NYC"
 
-    sidebar: PickupSidebar = child(PickupSidebar, title="Filters")
+    filters: PickupFilters = child(PickupFilters, title="Filters")
     status: LabelView = child(LabelView)
     table: SourceTableView = child(SourceTableView)
     pickups_chart: ChartView = bar_chart(
@@ -88,16 +82,16 @@ class UberPickupsMainView(DashboardView):
             views=[self.pickups_chart, self.pickups_map],
             failed_text="Failed to read the CSV: {error}",
         )
-        self.sidebar.filters.show_raw_data.shows(self.table)
+        self.filters.show_raw_data.shows(self.table)
         self.loader.finished.connect(self._show_pickups)
-        self.sidebar.filters.hour.value_changed.connect(self._show_map)
+        self.filters.hour.value_changed.connect(self._show_map)
         self.loader.start(DATA_URL)
 
     def _show_pickups(self, frame: pl.DataFrame, model: UberPickupsModel) -> None:
         model.frame = frame
         self.table.source = DataFrameSource(frame)
         self.pickups_chart.series = [Series.bars("Pickups", pickups_by_hour(frame))]
-        self._show_map(self.sidebar.filters.hour.value, model)
+        self._show_map(self.filters.hour.value, model)
 
     def _show_map(self, hour: int, model: UberPickupsModel) -> None:
         self.pickups_map.points = pickup_points(model.frame, hour)

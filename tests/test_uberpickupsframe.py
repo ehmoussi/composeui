@@ -115,8 +115,8 @@ def test_the_raw_data_checkbox_and_the_hour_slider_drive_the_table_and_map(
         qtbot.waitUntil(lambda: view.pickups_chart.is_visible)
 
         window = _qt_widget(view, qt_widgets.QWidget)
-        checkbox = _qt_field(view.sidebar.filters.show_raw_data, qt_widgets.QCheckBox)
-        slider = _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)
+        checkbox = _qt_widget(view.filters.show_raw_data, qt_widgets.QCheckBox)
+        slider = _qt_field(view.filters.hour, qt_widgets.QSlider)
         # the filters show in the sidebar, beside the content
         for widget in (checkbox, slider):
             assert window.isAncestorOf(widget)  # a widget never added is "visible" too

@@ -109,7 +109,7 @@ def _select_hour(
     view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    slider = _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)
+    slider = _qt_field(view.filters.hour, qt_widgets.QSlider)
     slider.setValue(hour)
     assert view.pickups_map.points == expected_points
     assert view.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
@@ -132,13 +132,13 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         app.render(RendererType.QT)
         window = _qt_object(view.renderer, qt_widgets.QWidget)
         qtbot.addWidget(window)
-        checkbox = _qt_field(view.sidebar.filters.show_raw_data, qt_widgets.QCheckBox)
+        checkbox = _qt_object(view.filters.show_raw_data.renderer, qt_widgets.QCheckBox)
         table, chart, map_widget, status = (
             _qt_object(child.renderer, qt_widgets.QWidget)
             for child in (view.table, view.pickups_chart, view.pickups_map, view.status)
         )
         # the filters show in the sidebar, beside the content
-        for widget in (checkbox, _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)):
+        for widget in (checkbox, _qt_field(view.filters.hour, qt_widgets.QSlider)):
             assert window.isAncestorOf(widget)  # a widget never added is "visible" too
             assert widget.isVisibleTo(window)
 
@@ -242,10 +242,11 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
         assert widget_id(view.status) in visibility.hidden_ids
         page = _VisibilityParser()
         page.feed(client.get("/").text)
-        # the filters' fields in the sidebar, not only their labels
-        for row in (view.sidebar.filters.show_raw_data, view.sidebar.filters.hour):
-            assert isinstance(row.renderer, RendererContainer)
-            assert widget_id_of(row.renderer.get_renderer("field")) in page.ids
+        # the filters in the sidebar: the check box, and the slider's field, not only its label
+        hour = view.filters.hour.renderer
+        assert isinstance(hour, RendererContainer)
+        for renderer in (view.filters.show_raw_data.renderer, hour.get_renderer("field")):
+            assert widget_id_of(renderer) in page.ids
         assert view.loader.error is None
 
 
