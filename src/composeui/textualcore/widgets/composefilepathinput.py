@@ -5,7 +5,7 @@ from pathlib import Path
 
 from textual.containers import Horizontal
 from textual.widgets import Button
-from textual_fspicker import FileOpen
+from textual_fspicker import FileOpen, SelectDirectory
 from textual_fspicker.path_filters import Filter, Filters
 
 from composeui.core.signal import Signal, SignalNoArgs
@@ -37,6 +37,18 @@ def file_picker(
     return FileOpen(location, title or "Open", filters=filters)
 
 
+def folder_picker(text: str, title: str, start: Path | None = None) -> SelectDirectory:
+    """Get a picker of a folder, opening in `text`'s folder, else in `start`.
+
+    In the current directory if neither is a folder.
+    """
+    text = text.strip()
+    location = Path(text) if text != "" else (start or Path())
+    if not location.is_dir():  # e.g. a path typed halfway
+        location = Path()
+    return SelectDirectory(location, title or "Select")
+
+
 class ComposeFilePathInput(Horizontal):
     """A field typing a file's path, then a "…" button picking one, and a reload button.
 
@@ -65,7 +77,9 @@ class ComposeFilePathInput(Horizontal):
     }
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, picks_folder: bool = False) -> None:
+        #: whether the picker picks a folder (textual-fspicker's `SelectDirectory`)
+        self.picks_folder = picks_folder
         self.input = ComposeInput()
         self.browse_button = Button("…")
         self.reload_button = Button("↻")
@@ -81,10 +95,14 @@ class ComposeFilePathInput(Horizontal):
         self.reload_pressed = SignalNoArgs()
 
     def open_picker(self) -> None:
-        """Show the file picker in the directory of the field's path, else `start_folder`."""
-        picker = file_picker(
-            self.input.value, self.extensions, self.picker_title, self.start_folder
-        )
+        """Show the picker in the directory of the field's path, else `start_folder`."""
+        picker: FileOpen | SelectDirectory
+        if self.picks_folder:
+            picker = folder_picker(self.input.value, self.picker_title, self.start_folder)
+        else:
+            picker = file_picker(
+                self.input.value, self.extensions, self.picker_title, self.start_folder
+            )
         self.app.push_screen(picker, self._pick)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

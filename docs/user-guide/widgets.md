@@ -176,6 +176,48 @@ class StudyForm(FormView):
 Every user of a web app sees the names of the folders and files in the roots. Give only the
 folders that every user may see.
 
+## Folder path input
+
+A `FolderPathInputView` takes the path of a folder, for example where the app writes its
+results. The user types the path, or picks the folder with the "…" button beside the field.
+
+```python
+from pathlib import Path
+
+from composeui.core.view import FormView, LabelRowFolderPathInputView, child, define_view
+
+
+@define_view
+class OutputForm(FormView):
+    results: LabelRowFolderPathInputView = child(
+        LabelRowFolderPathInputView,
+        label="Results folder",
+        server_roots=(Path.home() / "studies",),
+    )
+```
+
+- `text` holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
+  the field is empty.
+- `path_picked` emits the path of a folder that the user picks with the "…" button. A typed
+  path comes through the signals of any text field: `text_edited` and `editing_finished`.
+- `browse_text` names the "…" button in a tooltip and for a screen reader. The catalogs
+  translate it.
+
+The state saves `text`, but not `server_roots`, which the app sets.
+
+What the "…" button opens:
+
+- Qt shows its folder dialog (`QFileDialog.getExistingDirectory`), in the field's folder,
+  else in the first of `server_roots`.
+- Textual shows the folder picker of textual-fspicker (`SelectDirectory`), in the same
+  folder.
+- The browser cannot give the page a folder's path. On the web, without `server_roots`,
+  the field has no "…" button: the user types the path. With `server_roots`, the button
+  lists the server's folders in them, as a file field lists its files (see
+  [Files on the server](#files-on-the-server)). A folder's item shows its folders, and
+  "Choose this folder" puts the folder shown in the field. On the web, `path` is `None` for
+  a path typed outside the roots.
+
 ## Slider
 
 A `SliderView` picks a whole number when the user drags a handle, for example a number of

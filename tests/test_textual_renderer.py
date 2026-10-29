@@ -16,6 +16,7 @@ pytest.importorskip("textual_fspicker")
 import asyncio
 import datetime
 import math
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
@@ -42,6 +43,7 @@ from textual.widgets import (
 from textual.widgets._select import SelectCurrent
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
+from textual_fspicker import SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
 
 from composeui.core import chartimage
@@ -3891,6 +3893,41 @@ async def test_a_file_path_s_picker_opens_in_its_first_server_root_and_can_leave
     assert Path(location) == tmp_path / "studies"
     # the app's own machine: a file outside the roots is the field's path too
     assert view.study.path == tmp_path / "elsewhere.py"
+
+
+@pytest.mark.asyncio
+async def test_a_folder_path_s_picker_selects_a_folder_from_its_folder_else_its_root(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "studies").mkdir()
+    view = StudyFileMainView()
+    view.results.server_roots = (tmp_path / "studies",)
+    app = _app_of(view)
+    picked: list[Path] = []
+    view.results.path_picked.connect(picked.append)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        field = _field_widget(view.results.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+        locations: list[Path] = []
+        for text in ("", str(tmp_path), "nowhere/halfway"):
+            field.input.value = text
+            await pilot.pause()
+            await pilot.click(field.browse_button)
+            await pilot.pause()
+            screen = app.screen
+            assert isinstance(screen, SelectDirectory)
+            locations.append(Path(screen.query_one(DirectoryNavigation).location))
+            screen.dismiss(tmp_path / "results")  # as the picker's Select does
+            await pilot.pause()
+
+    # its root while empty, the folder typed, else the current directory
+    # os.getcwd: `Path.cwd()` is a blocking call in the event loop (ASYNC240)
+    here = Path(os.getcwd())  # noqa: PTH109
+    assert locations == [tmp_path / "studies", tmp_path, here]
+    assert picked == [tmp_path / "results"] * 3
+    assert not field.reload_button.display  # a folder has nothing to reload
 
 
 @pytest.mark.asyncio

@@ -752,6 +752,8 @@ class _FilesTexts(NamedTuple):
     cancel: str
     unreadable_folder: str
     partial_folder: str
+    #: the button picking the folder shown, for a list of folders
+    choose_folder: str = ""
 
 
 class _ServerFiles:
@@ -764,13 +766,17 @@ class _ServerFiles:
     list (`list_html`): the dialog open, and the button that opened it, stay the same
     elements, so closing it gives that button the focus. The first item of a new list
     takes the focus, the one clicked being gone with the old list.
+
+    With `picks_folders`, it lists only folders, and "Choose this folder" picks the one
+    shown ("browse-choose").
     """
 
     #: the events it takes, each but "browse" only while open
     EVENTS = ("browse", "browse-close", "browse-root", "browse-parent", "browse-folder")
 
-    def __init__(self, dialog_id: str, widget_id: str) -> None:
+    def __init__(self, dialog_id: str, widget_id: str, *, picks_folders: bool = False) -> None:
         self.dialog_id = dialog_id
+        self.picks_folders = picks_folders
         #: the renderer its events post to
         self._widget_id = widget_id
         #: whether it shows
@@ -779,59 +785,78 @@ class _ServerFiles:
         self._folder: Path | None = None
 
     def takes(self, event: str) -> bool:
-        """Whether `event` moves it, or picks a file of it, as it now is."""
-        return (event in self.EVENTS or event == "browse-file") and (
-            self.is_open or event == "browse"
-        )
+        """Whether `event` moves it, or picks a file or a folder of it, as it now is."""
+        pick = "browse-choose" if self.picks_folders else "browse-file"
+        return (event in self.EVENTS or event == pick) and (self.is_open or event == "browse")
 
     def move(
         self, event: str, name: str, roots: list[Path], extensions: tuple[str, ...]
     ) -> Path | None:
-        """Open, move or close it on `event`; get the file picked by "browse-file".
+        """Open, move or close it on `event`; get the path picked, a file's or a folder's.
 
         On "browse", it opens in the folder of `name`, a path, if inside the roots, else
-        in the only root. An item that is no longer there, or never was, moves nothing.
+        in the only root; for a list of folders, in that folder itself. An item that is no
+        longer there, or never was, moves nothing.
         """
         if self._folder is not None and not is_within(self._folder, roots):
             self._folder = None  # the roots changed since
         if event == "browse":
             self.is_open = True
             self._folder = self._start_folder(name, roots)
-        elif event == "browse-close":
+            return None
+        if event == "browse-close":
             self.is_open = False
-        elif event == "browse-root":
-            if name.isdigit() and int(name) < len(roots):
-                self._folder = roots[int(name)]
-        elif event == "browse-parent":
-            self._show_parent(roots)
-        else:
-            path = None if self._folder is None else item_path(self._folder, name, roots)
-            if event == "browse-folder" and path is not None and path.is_dir():
-                self._folder = path
-            elif event == "browse-file" and self._is_file(path, name, extensions):
-                assert self._folder is not None
-                self.is_open = False
-                return self._folder / name
-        return None
+            return None
+        moves = {
+            "browse-root": self._show_root,
+            "browse-parent": self._show_parent,
+            "browse-folder": self._show_folder,
+            "browse-file": self._pick_file,
+            "browse-choose": self._pick_folder,
+        }
+        picked = moves[event](name, roots, extensions)
+        if picked is not None:
+            self.is_open = False
+        return picked
 
-    def _start_folder(self, name: str, roots: list[Path]) -> Path | None:
-        start = roots[0] if len(roots) == 1 else None
-        if name.strip() == "":
-            return start
-        path = Path(name.strip())
-        file = item_path(path.parent, path.name, roots)
-        return start if file is None else file.parent
+    def _show_root(self, name: str, roots: list[Path], _extensions: tuple[str, ...]) -> None:
+        if name.isdigit() and int(name) < len(roots):
+            self._folder = roots[int(name)]
 
-    def _show_parent(self, roots: list[Path]) -> None:
+    def _show_parent(self, _name: str, roots: list[Path], _extensions: tuple[str, ...]) -> None:
         folder = self._folder
         if folder is not None and folder not in roots:
             self._folder = folder.parent
         elif len(roots) > 1:
             self._folder = None  # the list of the roots
 
-    @staticmethod
-    def _is_file(path: Path | None, name: str, extensions: tuple[str, ...]) -> bool:
-        return path is not None and path.is_file() and has_extension(name, extensions)
+    def _show_folder(self, name: str, roots: list[Path], _extensions: tuple[str, ...]) -> None:
+        path = None if self._folder is None else item_path(self._folder, name, roots)
+        if path is not None and path.is_dir():
+            self._folder = path
+
+    def _pick_file(self, name: str, roots: list[Path], extensions: tuple[str, ...]) -> Path | None:
+        folder = self._folder
+        path = None if folder is None else item_path(folder, name, roots)
+        if path is None or not path.is_file() or not has_extension(name, extensions):
+            return None
+        assert folder is not None
+        return folder / name
+
+    def _pick_folder(
+        self, _name: str, _roots: list[Path], _extensions: tuple[str, ...]
+    ) -> Path | None:
+        return self._folder
+
+    def _start_folder(self, name: str, roots: list[Path]) -> Path | None:
+        start = roots[0] if len(roots) == 1 else None
+        if name.strip() == "":
+            return start
+        path = Path(name.strip())
+        item = item_path(path.parent, path.name, roots)
+        if item is None:
+            return start
+        return item if self.picks_folders and item.is_dir() else item.parent
 
     def dialog_html(
         self,
@@ -851,8 +876,9 @@ class _ServerFiles:
             '<div class="modal-box flex flex-col gap-3">'
             '<h2 id="{title_id}" class="text-lg font-bold">{title}</h2>{items}'
             '<div class="modal-action"><button type="button" class="btn"{close}'
-            " data-close-dialog>{cancel}</button></div></div></dialog>"
+            " data-close-dialog>{cancel}</button>{choose}</div></div></dialog>"
         ).format(
+            choose=self._choose_html(texts, oob=False) if self.picks_folders else "",
             dialog_id=self.dialog_id,
             hidden="" if is_open else " hidden",
             swap=Markup(' hx-swap-oob="true"') if oob else "",
@@ -884,7 +910,7 @@ class _ServerFiles:
                 )
             has_parent = len(items) > 0
             try:
-                listing = list_folder(folder, roots, extensions)
+                listing = list_folder(folder, roots, extensions, has_files=not self.picks_folders)
             except OSError:
                 message = texts.unreadable_folder
             else:
@@ -900,11 +926,15 @@ class _ServerFiles:
                 )
                 if listing.is_partial:
                     message = texts.partial_folder
+        # swapped with the list: the folder it picks is the one the list shows
+        choose = self._choose_html(texts, oob=True) if oob and self.picks_folders else ""
         return Markup(
             '<div id="{dialog_id}-list" class="flex flex-col gap-3"{swap}>'
             '<p class="break-all font-mono text-sm">{folder}</p>{message}'
             '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul></div>'
+            "{choose}"
         ).format(
+            choose=choose,
             dialog_id=self.dialog_id,
             swap=Markup(' hx-swap-oob="true"') if oob else "",
             folder="" if folder is None else str(folder),
@@ -914,6 +944,19 @@ class _ServerFiles:
                 else ""
             ),
             items=Markup("").join(items),
+        )
+
+    def _choose_html(self, texts: _FilesTexts, *, oob: bool) -> Markup:
+        """Get the button picking the folder shown, disabled on the list of the roots."""
+        return Markup(
+            '<button id="{dialog_id}-choose" type="button" class="btn btn-primary"{swap}'
+            "{post} data-close-dialog{disabled}>{text}</button>"
+        ).format(
+            dialog_id=self.dialog_id,
+            swap=Markup(' hx-swap-oob="true"') if oob else "",
+            post=self._post({"event": "browse-choose"}),
+            disabled=" disabled" if self._folder is None else "",
+            text=texts.choose_folder,
         )
 
     def _item_html(self, event: str, name: str, text: str, icon: str, *, is_first: bool) -> Markup:
@@ -936,59 +979,64 @@ class _ServerFiles:
         )
 
 
-class FilePathInputViewLike(InputViewLike, Protocol):
-    extensions: dict[str, tuple[str, ...]]
+class PathInputViewLike(InputViewLike, Protocol):
     server_roots: tuple[Path, ...]
-    has_reload: bool
     browse_text: str
-    reload_text: str
     parent_folder_text: str
     cancel_text: str
     unreadable_folder_text: str
     partial_folder_text: str
     path_picked: Signal[Path]
-    reload_clicked: SignalNoArgs
     _keeps_to_roots: bool
 
     @property
     def path(self) -> Path | None: ...
 
 
-class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
-    """A text field typing a file's path, then a "…" button uploading one, and a reload button.
+class FilePathInputViewLike(PathInputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    has_reload: bool
+    reload_text: str
+    reload_clicked: SignalNoArgs
 
-    The field posts as a text input's (see `_WebTextFieldRenderer`). The browser can't
-    hand a page its files' paths: the button opens the browser's picker, a hidden file
-    input beside it (see `page.js`) uploading the file picked (`/widget/{id}/file`), and
-    the session keeps a copy (see `WebSession.pick_file`), whose path the field then
-    shows. The root is a `<div>` holding them, so a row's label names the field with
-    `aria-labelledby`. With `server_roots`, the button instead opens the list of the
-    server's files (see `_ServerFiles`), a file of which puts its path in the field.
+
+class FolderPathInputViewLike(PathInputViewLike, Protocol):
+    choose_folder_text: str
+
+
+TPathView = TypeVar("TPathView", bound=PathInputViewLike)
+
+#: the fields of a path field that change its HTML, a file's or a folder's
+_PATH_FIELDS = (
+    "text",
+    "placeholder",
+    "server_roots",
+    "browse_text",
+    "parent_folder_text",
+    "cancel_text",
+    "unreadable_folder_text",
+    "partial_folder_text",
+)
+
+
+class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
+    """A text field typing a path, then a "…" button, and what a subclass adds after it.
+
+    The field posts as a text input's (see `_WebTextFieldRenderer`). The root is a
+    `<div>` holding them, so a row's label names the field with `aria-labelledby`. With
+    `server_roots`, the button opens the list of the server's files (see `_ServerFiles`),
+    a path of which it puts in the field.
     """
 
-    _role = "file_path_input"
     is_labelable = False
+    #: whether the list of the server's files picks a folder rather than a file
+    _picks_folders: ClassVar[bool] = False
+    #: the view's fields that change the field's HTML
+    _shown_fields: ClassVar[tuple[str, ...]] = _PATH_FIELDS
 
-    def __init__(self, view: FilePathInputViewLike) -> None:
+    def __init__(self, view: TPathView) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update(
-            dict.fromkeys(
-                (
-                    "text",
-                    "placeholder",
-                    "extensions",
-                    "server_roots",
-                    "has_reload",
-                    "browse_text",
-                    "reload_text",
-                    "parent_folder_text",
-                    "cancel_text",
-                    "unreadable_folder_text",
-                    "partial_folder_text",
-                ),
-                self._mark_dirty,
-            )
-        )
+        self._refresh_dispatcher.update(dict.fromkeys(self._shown_fields, self._mark_dirty))
         # the user can type any path of the server: `path` then keeps to the roots too
         view._keeps_to_roots = True  # noqa: SLF001
         self._server_files: _ServerFiles | None = None
@@ -999,10 +1047,12 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
     def _files(self) -> _ServerFiles:
         # once rendered, with its id
         if self._server_files is None:
-            self._server_files = _ServerFiles(f"{self.widget_id}-files", self.widget_id)
+            self._server_files = _ServerFiles(
+                f"{self.widget_id}-files", self.widget_id, picks_folders=self._picks_folders
+            )
         return self._server_files
 
-    def _mark_dirty(self, view: FilePathInputViewLike, rendered_object: str, value: Any) -> None:
+    def _mark_dirty(self, view: TPathView, rendered_object: str, value: Any) -> None:
         self._mark_part("field")
 
     def _mark_part(self, part: str) -> None:
@@ -1013,45 +1063,16 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
         swaps, self._swaps = self._swaps, set()
         if oob and swaps and "field" not in swaps:
             return self._files_html(oob=True) if "dialog" in swaps else self._list_html(oob=True)
-        view = self._view
         disabled = "" if self.is_enabled else " disabled"
-        browse, reload = view.browse_text, view.reload_text
-        types = ",".join(self.file_types)
-        accept = Markup(' accept="{}"').format(types) if types else ""
-        if view.server_roots:
-            browse_button = Markup(
+        if self._view.server_roots:
+            browse = Markup(
                 '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
-                ' aria-label="{browse}" title="{browse}" hx-post="/widget/{widget_id}"'
+                ' aria-label="{text}" title="{text}" hx-post="/widget/{widget_id}"'
                 """ hx-vals='{{"event": "browse"}}' hx-swap="none"{disabled}>…</button>"""
-            ).format(widget_id=self.widget_id, browse=browse, disabled=disabled)
-            picker = self._files_html(oob=False)
+            ).format(widget_id=self.widget_id, text=self._view.browse_text, disabled=disabled)
+            picker = browse + self._files_html(oob=False)
         else:
-            browse_button = Markup(
-                '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
-                ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
-            ).format(widget_id=self.widget_id, browse=browse, disabled=disabled)
-            # emptied once sent: picking the same file again is a change too
-            picker = Markup(
-                '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
-                ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
-                ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
-                ' data-clear-after-post autocomplete="off"{disabled}>'
-            ).format(accept=accept, widget_id=self.widget_id, disabled=disabled)
-        reload_button = (
-            Markup(
-                '<button id="{widget_id}-reload" type="button" class="btn btn-square"'
-                ' aria-label="{reload}" title="{reload}" hx-post="/widget/{widget_id}"'
-                """ hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
-                "{reload_icon}</button>"
-            ).format(
-                widget_id=self.widget_id,
-                reload=reload,
-                disabled=disabled,
-                reload_icon=_icon("reload"),
-            )
-            if view.has_reload
-            else ""
-        )
+            picker = self._picker_html(disabled)
         return Markup(
             '<div {root_attributes} class="flex gap-1" data-file-path>'
             '<input id="{widget_id}-field"{row_attributes}'
@@ -1060,18 +1081,25 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
-            "{browse_button}{picker}{reload_button}</div>"
+            "{picker}{after}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
             row_attributes=self._row_attributes(),
             text=self._text(),
-            placeholder=view.placeholder,
+            placeholder=self._view.placeholder,
             disabled=disabled,
-            browse_button=browse_button,
             picker=picker,
-            reload_button=reload_button,
+            after=self._after_html(disabled),
         )
+
+    def _picker_html(self, _disabled: str) -> Markup:
+        """Get what picks a path without `server_roots`: nothing, the path typed."""
+        return Markup()
+
+    def _after_html(self, _disabled: str) -> Markup:
+        """Get what follows the "…" button, e.g. a reload button."""
+        return Markup()
 
     def _files_texts(self) -> _FilesTexts:
         view = self._view
@@ -1081,7 +1109,11 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             view.cancel_text,
             view.unreadable_folder_text,
             view.partial_folder_text,
+            self._choose_folder_text(),
         )
+
+    def _choose_folder_text(self) -> str:
+        return ""
 
     def _files_html(self, *, oob: bool) -> Markup:
         return self._files.dialog_html(
@@ -1100,18 +1132,19 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             oob=oob,
         )
 
+    @property
+    def file_types(self) -> list[str]:
+        """Get the file types the picker offers, e.g. [".csv"]; empty for any."""
+        return []
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event.startswith("browse"):
             self._browse(event, form.get("name", ""))
-        elif event != "reload":
-            super().dispatch(event, form)
-        elif not self.is_enabled or not self._view.has_reload:
-            raise UnsupportedEventError(self, event)
         else:
-            self._view.reload_clicked.emit()
+            super().dispatch(event, form)
 
     def _browse(self, event: str, name: str) -> None:
-        """Open, move or close the list of the server's files, or pick a file of it."""
+        """Open, move or close the list of the server's files, or pick a path of it."""
         if not self._files.takes(event) or not self.is_enabled or not self._view.server_roots:
             raise UnsupportedEventError(self, event)
         was_open = self._files.is_open
@@ -1125,20 +1158,6 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
         self._mark_part("list" if was_open == self._files.is_open else "dialog")
         if picked is not None:
             self._show_path(picked)
-
-    @property
-    def file_types(self) -> list[str]:
-        """Get the file types the picker offers, e.g. [".csv"]; empty for any."""
-        return _file_types(self._view.extensions)
-
-    def pick_file(self, path: Path) -> None:
-        """Show the path of the file the picker uploaded, and hand it to `path_picked`.
-
-        Raises `UnsupportedEventError` while the field is disabled.
-        """
-        if not self.is_enabled:
-            raise UnsupportedEventError(self, "file")
-        self._show_path(path)
 
     def _show_path(self, path: Path) -> None:
         text = str(path)
@@ -1156,6 +1175,90 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
     def _apply_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
+
+
+class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
+    """A text field typing a file's path, then a "…" button uploading one, and a reload button.
+
+    The browser can't hand a page its files' paths: the button opens the browser's
+    picker, a hidden file input beside it (see `page.js`) uploading the file picked
+    (`/widget/{id}/file`), and the session keeps a copy (see `WebSession.pick_file`),
+    whose path the field then shows. With `server_roots`, the button instead opens the
+    list of the server's files, a file of which puts its path in the field.
+    """
+
+    _role = "file_path_input"
+    _shown_fields = (*_PATH_FIELDS, "extensions", "has_reload", "reload_text")
+
+    def _picker_html(self, disabled: str) -> Markup:
+        types = ",".join(self.file_types)
+        return Markup(
+            '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
+            ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
+            # emptied once sent: picking the same file again is a change too
+            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
+            ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
+            ' data-clear-after-post autocomplete="off"{disabled}>'
+        ).format(
+            widget_id=self.widget_id,
+            browse=self._view.browse_text,
+            disabled=disabled,
+            accept=Markup(' accept="{}"').format(types) if types else "",
+        )
+
+    def _after_html(self, disabled: str) -> Markup:
+        if not self._view.has_reload:
+            return Markup()
+        reload = self._view.reload_text
+        return Markup(
+            '<button id="{widget_id}-reload" type="button" class="btn btn-square"'
+            ' aria-label="{reload}" title="{reload}" hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
+            "{reload_icon}</button>"
+        ).format(
+            widget_id=self.widget_id,
+            reload=reload,
+            disabled=disabled,
+            reload_icon=_icon("reload"),
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event != "reload":
+            super().dispatch(event, form)
+        elif not self.is_enabled or not self._view.has_reload:
+            raise UnsupportedEventError(self, event)
+        else:
+            self._view.reload_clicked.emit()
+
+    @property
+    def file_types(self) -> list[str]:
+        return _file_types(self._view.extensions)
+
+    def pick_file(self, path: Path) -> None:
+        """Show the path of the file the picker uploaded, and hand it to `path_picked`.
+
+        Raises `UnsupportedEventError` while the field is disabled.
+        """
+        if not self.is_enabled:
+            raise UnsupportedEventError(self, "file")
+        self._show_path(path)
+
+
+class WebFolderPathInputRenderer(_WebPathInputRenderer[FolderPathInputViewLike]):
+    """A text field typing a folder's path, then a "…" button with `server_roots`.
+
+    The browser can't hand a page a folder's path: without `server_roots`, the path is
+    typed, and the field has no button. With them, the button opens the list of the
+    server's folders, whose "Choose this folder" puts the folder shown in the field.
+    """
+
+    _role = "folder_path_input"
+    _picks_folders = True
+    _shown_fields = (*_PATH_FIELDS, "choose_folder_text")
+
+    def _choose_folder_text(self) -> str:
+        return self._view.choose_folder_text
 
 
 class CheckBoxViewLike(ViewLike, Protocol):
@@ -5597,6 +5700,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "source_table": WebSourceTableRenderer,
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
+    "folder_path_input": WebFolderPathInputRenderer,
     "dialog": WebDialogRenderer,
     "expander": WebExpanderRenderer,
     "float_input": WebFloatInputRenderer,
