@@ -150,6 +150,7 @@ from tests.pages import InputsPage, PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
+from tests.studydialog import StudyDialogMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -3738,6 +3739,43 @@ def test_a_form_shows_its_other_views_between_its_rows_in_their_order(
     assert f'id="{dialog_id}"' not in body
     assert _swapped(body, ids[0]).attributes.get("value") == "/studies"
     assert "beam" in _swapped(body, ids[2]).text
+
+
+@pytest.fixture
+def study_dialog() -> Iterator[tuple[TestClient, StudyDialogMainView]]:
+    """Serve an app opening a study from a content dialog; yield a client and its main view."""
+    views: list[StudyDialogMainView] = []
+
+    class StudyApp(WebApplication[StudyDialogMainView]):
+        def setup_session(self, main_view: StudyDialogMainView) -> None:
+            views.append(main_view)
+
+    app = StudyApp(build_main_view=StudyDialogMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view
+
+
+def test_a_content_dialog_shows_its_view_whose_buttons_leave_it_open(
+    study_dialog: tuple[TestClient, StudyDialogMainView],
+) -> None:
+    client, view = study_dialog
+    content = view.open_dialog.content
+    dialog_id = _widget_id(view.open_dialog.renderer)
+    up_id, table_id = _widget_id(content.up.renderer), _widget_id(content.entries.renderer)
+
+    body = client.post(f"/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}).text
+    dialog = _swapped(body, dialog_id)
+    assert "hidden" not in dialog.attributes
+    assert all(_contains(dialog, element_id) for element_id in (up_id, table_id))
+    assert "disabled" in _element(body, f"{dialog_id}-accept").attributes  # nothing selected
+
+    body = client.post(f"/widget/{up_id}", data={"event": "click"}).text
+
+    assert view.open_dialog.is_visible
+    assert f'id="{dialog_id}"' not in body  # left as the user has it
+    assert "notes.txt" in _swapped(body, table_id).text
 
 
 @pytest.fixture

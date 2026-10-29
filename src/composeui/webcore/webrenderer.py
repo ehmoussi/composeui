@@ -66,6 +66,7 @@ from composeui.core.view import (
     MetricView,
     NewAction,
     NodeMark,
+    OkCancelDialogView,
     OpenFileAction,
     Orientation,
     PageView,
@@ -86,7 +87,6 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
-    TypedFormDialogView,
     VerticalView,
     View,
     as_pattern,
@@ -3945,13 +3945,11 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             answer()
 
 
-TForm = TypeVar("TForm", bound=FormView)
+class WebFormDialogRenderer(WebDialogRenderer):
+    """A modal `<dialog>` holding its form or other view, then Cancel and OK.
 
-
-class WebFormDialogRenderer(WebDialogRenderer, Generic[TForm]):
-    """A modal `<dialog>` holding its form, then Cancel and OK.
-
-    OK is disabled while a check of the form fails, and only it swaps when that changes:
+    OK is disabled while the view says so, e.g. while a check of the form fails, and only
+    it swaps when that changes:
     the dialog itself, swapped while open, would take back what the user is typing.
     Unlike a message's, OK doesn't close the dialog in the browser: the form may refuse
     it, the dialog then staying open with its checks shown; the server swaps it closed
@@ -3960,7 +3958,7 @@ class WebFormDialogRenderer(WebDialogRenderer, Generic[TForm]):
 
     _role = "form_dialog"
 
-    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
+    def __init__(self, view: OkCancelDialogView) -> None:
         super().__init__(view)
         self._form_view = view
         #: whether more than OK changed since the dialog was last sent: then it swaps whole
@@ -3969,7 +3967,7 @@ class WebFormDialogRenderer(WebDialogRenderer, Generic[TForm]):
 
     def render(self) -> None:
         super().render()
-        self._adopt([self._form_view.form])
+        self._adopt([self._form_view.content])
 
     @property
     def accept_id(self) -> str:
@@ -4004,8 +4002,7 @@ class WebFormDialogRenderer(WebDialogRenderer, Generic[TForm]):
         )
         labelledby = Markup(' aria-labelledby="{}"').format(title_id) if view.title else ""
         describedby = Markup(' aria-describedby="{}"').format(text_id) if view.text else ""
-        form = view.form.renderer
-        form_html = form.to_html() if isinstance(form, WebRenderer) else ""
+        form_html = _view_html(view.content)
         return Markup(
             '<dialog {root_attributes} class="modal" data-dialog'
             '{labelledby}{describedby}{cancel} hx-swap="none">'
@@ -5165,6 +5162,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "float_input": WebFloatInputRenderer,
     "int_input": WebIntInputRenderer,
     "form": WebFormRenderer,
+    "content_dialog": WebFormDialogRenderer,
     "form_dialog": WebFormDialogRenderer,
     "form_label": WebFormLabelRenderer,
     "grid": WebGridRenderer,
