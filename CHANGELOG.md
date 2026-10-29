@@ -37,6 +37,8 @@ The notable changes of each release of ComposeUI. The format follows
 - With reload on, an app that runs the changed code, then exits by itself soon after, such
   as one closing its window, isn't started again in a new process. The supervisor took its
   exit for a request to run the code anew.
+- On the web, a click right after typing in a field sees the value typed. The field posts
+  its value as the click takes the focus, and the server could handle the click first.
 
 ## [0.1.0] - 2026-10-27
 

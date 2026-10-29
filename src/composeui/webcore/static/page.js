@@ -678,6 +678,22 @@ document.addEventListener("htmx:configRequest", function (event) {
 document.addEventListener("htmx:afterRequest", function (event) {
   if ("clearAfterPost" in event.detail.elt.dataset) event.detail.elt.value = "";
 });
+/* the server handles the page's posts in the order they leave (see `webcore/order.py`): a
+   field's value, sent as it loses the focus, may else come after the click on the button
+   that took it. Each post carries the page's id and its number, set as it leaves. Those
+   replacing each other on purpose (`hx-sync` "replace": a large table's scroll windows)
+   carry none, as one replaced may never reach the server, which would wait for it. */
+var PAGE_ID = Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(16)), function (byte) {
+  return ("0" + byte.toString(16)).slice(-2);
+}).join("");
+var postNumber = 0;
+document.addEventListener("htmx:beforeSend", function (event) {
+  if (event.detail.requestConfig.verb !== "post") return;
+  if (/:\s*replace$/.test(event.detail.elt.getAttribute("hx-sync") || "")) return;
+  postNumber += 1;
+  event.detail.xhr.setRequestHeader("X-ComposeUI-Page", PAGE_ID);
+  event.detail.xhr.setRequestHeader("X-ComposeUI-Post", String(postNumber));
+});
 /* the triggers htmx would filter: Enter, Escape, and `activate` (a click, or Enter, not
    from a field or a button, which take their own) for a table's rows. Captured, so they
    come before the keydown's own handlers, as htmx's filters did. */

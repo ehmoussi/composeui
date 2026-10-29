@@ -168,7 +168,7 @@ from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from starlette.applications import Starlette
     from starlette.types import ASGIApp
@@ -396,6 +396,83 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     assert summary.text == "Bob hasn't said how old they are."
     assert _swapped(body, _widget_id(main_view.status_bar.renderer)).text == "Hello, Bob!"
     assert _find(body, input_id) is None  # the field being typed in is never swapped back
+
+
+#: a page's id, as `page.js` makes one: the posts of one page are handled in their order
+_PAGE = "0123456789abcdef0123456789abcdef"
+
+
+def _post_in_page(
+    client: TestClient, widget_id: str, number: int, value: str, page: str = _PAGE
+) -> None:
+    """Post a field's new `value`, as the `number`th post of the page with the id `page`."""
+    response = client.post(
+        f"/widget/{widget_id}",
+        data={"value": value, "event": "input"},
+        headers={"X-ComposeUI-Page": page, "X-ComposeUI-Post": str(number)},
+    )
+    assert response.status_code == 200
+
+
+def _in_thread(post: Callable[[], None]) -> threading.Thread:
+    """Send `post` from a thread of its own: it waits for its turn, as the next ones are sent."""
+    thread = threading.Thread(target=post)
+    thread.start()
+    time.sleep(0.5)  # time to reach the server, and wait there
+    return thread
+
+
+def test_a_page_s_posts_are_handled_in_the_order_it_sent_them(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    name_id = _field_id(main_view.form.name)
+    edited: list[str] = []
+    main_view.form.name.text_edited.connect(edited.append)
+
+    # the second post reaches the server first: it waits for the first one
+    second = _in_thread(lambda: _post_in_page(client, name_id, 2, "Bob"))
+    assert edited == []
+    _post_in_page(client, name_id, 1, "Ada")
+    second.join()
+
+    assert edited == ["Ada", "Bob"]
+    assert main_view.form.name.text == "Bob"
+
+
+def test_a_post_waits_for_a_missing_one_only_so_long(
+    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 0.2)
+    name_id = _field_id(main_view.form.name)
+    edited: list[str] = []
+    main_view.form.name.text_edited.connect(edited.append)
+
+    # the first one never comes, e.g. aborted by the page
+    _post_in_page(client, name_id, 2, "Bob")
+    assert edited == ["Bob"]
+    # one coming after its turn is handled at once, the next ones' turns kept
+    _post_in_page(client, name_id, 1, "Ada")
+    _post_in_page(client, name_id, 3, "Cy")
+    assert edited == ["Bob", "Ada", "Cy"]
+
+
+def test_a_page_forgotten_for_newer_ones_waits_for_nothing(
+    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("composeui.webcore.order.MAX_PAGES", 1)
+    name_id = _field_id(main_view.form.name)
+    other_page = "f" * 32  # e.g. the same app in another tab
+    edited: list[str] = []
+    main_view.form.name.text_edited.connect(edited.append)
+
+    started = time.monotonic()
+    waiting = _in_thread(lambda: _post_in_page(client, name_id, 2, "Bob"))
+    _post_in_page(client, name_id, 1, "Ada", page=other_page)  # its page now the one kept
+    waiting.join()
+
+    # handled once its page was forgotten, not after its whole wait
+    assert time.monotonic() - started < 2
+    assert edited == ["Ada", "Bob"]
 
 
 def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestClient) -> None:
