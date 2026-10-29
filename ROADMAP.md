@@ -159,8 +159,6 @@ The work left:
 - **More helpers from a second dashboard,** not by symmetry: a preset that only renames
   `child(...)` saves no code. Keep a helper when two dashboards repeat the same code.
 - **The wiring of filters** to the views that they update: N02 decides it.
-- **`CheckBoxMixin.shows` follows only `toggled`.** A study that opens with the box checked
-  leaves the views as they were.
 
 ### N02 — Reactive methods
 

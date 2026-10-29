@@ -24,6 +24,7 @@ from composeui.core.view import (
     ActionView,
     ChartKind,
     ChartView,
+    CheckBoxView,
     ComboBoxView,
     FloatInputMixin,
     InputView,
@@ -960,3 +961,29 @@ def test_a_none_choice_is_selected_saved_and_loaded_as_any_other(tmp_path: Path)
 
     assert region.value is None
     assert region.serialize_value() == "0"
+
+
+@define_view
+class _RawDataMainView(MainView):
+    show_raw_data: CheckBoxView = child(CheckBoxView, text="Show raw data")
+    #: after the box: a study sets its own visibility after the box's state
+    raw_data: LabelView = child(LabelView, text="12 rows")
+
+
+def test_a_check_box_shows_its_views_however_it_changes() -> None:
+    main_view = _RawDataMainView()
+    box, raw_data = main_view.show_raw_data, main_view.raw_data
+    box.shows(raw_data)
+    assert not raw_data.is_visible
+    box.is_checked = True  # in code, emitting no `toggled`
+    assert raw_data.is_visible
+    checked = main_view.state_data()
+
+    main_view.reset_state()  # New: its view hidden again, whatever its own initial state
+    assert not box.is_checked
+    assert not raw_data.is_visible
+    main_view.load_state_data(checked)  # Open
+    assert raw_data.is_visible
+    box.is_checked = False
+    main_view.load_state_data(main_view.state_data())  # saved unchecked, then opened
+    assert not raw_data.is_visible
