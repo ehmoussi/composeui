@@ -13,12 +13,11 @@ from composeui.core.dashboard import DashboardView, bar_chart
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 from composeui.core.view import (
     ChartView,
-    FormView,
+    CheckBoxView,
     LabelRowSliderView,
     LabelView,
     MapPoint,
     MapView,
-    RowCheckBoxView,
     Series,
     SidebarView,
     SourceTableView,
@@ -117,14 +116,9 @@ HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
 @define_view
-class PickupFilters(FormView):
-    show_raw_data: RowCheckBoxView = child(RowCheckBoxView, text="Show raw data")
+class PickupFilters(SidebarView):
+    show_raw_data: CheckBoxView = child(CheckBoxView, text="Show raw data")
     hour: LabelRowSliderView = child(LabelRowSliderView, label="Hour", maximum=23, value=11)
-
-
-@define_view
-class PickupSidebar(SidebarView):
-    filters: PickupFilters = child(PickupFilters)
 
 
 @define_view
@@ -134,7 +128,7 @@ class UberPickupsMainView(DashboardView):
     has_file_menu = True
     extension = ".streamlit"
 
-    sidebar: PickupSidebar = child(PickupSidebar, title="Filters")
+    filters: PickupFilters = child(PickupFilters, title="Filters")
     status: LabelView = child(LabelView)
     table: SourceTableView = child(SourceTableView)
     pickups_chart: ChartView = bar_chart(
@@ -156,15 +150,15 @@ class UberPickupsMainView(DashboardView):
             progress_text="Read {progress:,} rows from CSV",
             failed_text="Failed to read the CSV: {error}",
         )
-        self.sidebar.filters.show_raw_data.shows(self.table)
+        self.filters.show_raw_data.shows(self.table)
         self.loader.finished.connect(self._show_pickups)
-        self.sidebar.filters.hour.value_changed.connect(self._show_map)
+        self.filters.hour.value_changed.connect(self._show_map)
         # New and Open replace the rows: read them again
         model.uber_data.changed.connect(self._start_loading, now=True)
 
     def _start_loading(self) -> None:
         if not self.loader.is_running:
-            self.loader.start(DATA_URL, self.sidebar.filters.hour.value)
+            self.loader.start(DATA_URL, self.filters.hour.value)
 
     def _show_pickups(self, result: PickupData) -> None:
         self.pickups_chart.series = [Series.bars("Pickups", result.hours)]

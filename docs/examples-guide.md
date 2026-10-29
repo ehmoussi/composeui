@@ -389,9 +389,10 @@ It shows:
   callback gives them their data.
 - a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups per hour, which counts
   all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its kind and its hours.
-- a [sidebar](user-guide/organizing-the-window.md#sidebar) of filters: a
-  [form](user-guide/building-views.md#forms-and-their-fields) with a check box and a
-  [slider](user-guide/widgets.md#slider) of the hour, 11 at the start.
+- a [sidebar](user-guide/organizing-the-window.md#sidebar) of filters: a check box, and a
+  [slider](user-guide/widgets.md#slider) of the hour, 11 at the start. The slider is a
+  [form row](user-guide/building-views.md#forms-and-their-fields) with its label, straight
+  in the sidebar, without a form around it.
 - a [map](user-guide/maps.md) of the pickups of the slider's hour, on Qt and the web. The
   map shows at most 10,000 of them, sampled in the order of the rows. A move of the slider
   queries the saved rows again for the map only. The map fits the pickups, and keeps the
