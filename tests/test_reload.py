@@ -954,6 +954,41 @@ class _OneLook:
         return set()
 
 
+def test_an_app_running_the_changed_code_then_exiting_isn_t_run_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # the directory watched
+    log = tmp_path / "runs.log"
+    # it runs the changed code in place, acknowledging it, then is done at once, e.g. its
+    # window closed: both while the supervisor waits between two looks at it
+    app_code = textwrap.dedent(
+        f"""
+        import os, pathlib, time
+        with pathlib.Path({str(log)!r}).open("a") as file:
+            file.write("start\\n")
+        changes = pathlib.Path(os.environ["COMPOSEUI_RELOADED"], "changes")
+        while not changes.exists():
+            time.sleep(0.01)
+        taken = changes.with_name("taken")
+        changes.replace(taken)
+        taken.unlink()
+        os._exit(0)
+        """
+    )
+    app = tmp_path / "app.py"
+
+    def changes() -> Iterator[set[Path]]:
+        _wait_for(lambda: _lines(log) == 1)
+        app.write_text("VERSION = 2\n")
+        yield {app}
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:  # an app run again would start in that time
+            yield set()
+
+    assert run_reloading([sys.executable, "-c", app_code], changes()) == 0
+    assert log.read_text().splitlines() == ["start"]
+
+
 @pytest.mark.parametrize("ending", ["exhausted", "interrupted"])
 def test_a_supervisor_whose_changes_end_stops_its_app(
     ending: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

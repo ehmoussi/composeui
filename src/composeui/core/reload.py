@@ -439,7 +439,10 @@ def _exit(signum: int, _frame: FrameType | None) -> None:
 def _reload_in_place(
     child: subprocess.Popen[bytes] | None, changed: set[Path], state_directory: Path
 ) -> bool:
-    """Ask `child` to run the code of the files `changed`; tell whether it did, still running."""
+    """Ask `child` to run the code of the files `changed`; tell whether it did.
+
+    An app that ran it may have exited since, e.g. its window closed: it isn't run again.
+    """
     if child is None or child.poll() is not None:
         return False
     request = state_directory / _CHANGES_NAME
@@ -451,10 +454,11 @@ def _reload_in_place(
     deadline = time.monotonic() + _RELOAD_TIMEOUT
     try:
         while True:
-            if child.poll() is not None:  # it saved its state and exited for a new process
-                return False
+            # first: an app that ran the changed code, then exited by itself, acknowledged it
             if not request.exists() and not taken.exists():
                 return True
+            if child.poll() is not None:  # it saved its state and exited for a new process
+                return False
             if request.exists() and time.monotonic() > deadline:
                 LOGGER.warning("The app didn't answer: it runs again, its state since then lost")
                 return False
