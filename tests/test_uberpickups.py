@@ -138,8 +138,9 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
             for child in (view.table, view.pickups_chart, view.pickups_map, view.status)
         )
         # the filters show in the sidebar, beside the content
-        assert checkbox.isVisibleTo(window)
-        assert _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider).isVisibleTo(window)
+        for widget in (checkbox, _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)):
+            assert window.isAncestorOf(widget)  # a widget never added is "visible" too
+            assert widget.isVisibleTo(window)
 
         def assert_visibility(*, loaded: bool, raw: bool) -> None:
             assert chart.isVisibleTo(window) == loaded

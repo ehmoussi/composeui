@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import sys
+import weakref
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
@@ -1686,19 +1687,7 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
                 if isinstance(field_row, FormRowView) and isinstance(
                     field_row.renderer, RendererContainer
                 ):
-                    field_container = QWidget()
-                    field_container_layout = QVBoxLayout(field_container)
-                    # avoid extra row spacing
-                    field_container_layout.setContentsMargins(0, 0, 0, 0)
-                    field_object = self._get_field_object(field_row.renderer)
-                    field_container_layout.addWidget(field_object)
-                    log_object = self._get_log_object(field_row.renderer)
-                    field_container_layout.addWidget(log_object)
-                    if isinstance(field_row, FormLabelRowView):
-                        label_object = self._get_label_object(field_row.renderer)
-                        layout.addRow(label_object, field_container)
-                    else:
-                        layout.addRow(field_container)
+                    self.add_row(layout, field_row, field_row.renderer)
                 elif isinstance(field_row, FormView):
                     assert isinstance(field_row.renderer, QtWidgetRenderer)
                     assert isinstance(field_row.renderer.qt_object, QWidget)
@@ -1709,6 +1698,22 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
             assert isinstance(log.qt_object, QWidget)
             layout.addRow(log.qt_object)
             self.refresh()
+
+    @classmethod
+    def add_row(
+        cls, layout: QFormLayout, row: FormRowView, row_renderer: RendererContainer[View]
+    ) -> None:
+        """Add `row` to `layout`: its label, beside its field above its message."""
+        field_container = QWidget()
+        field_container_layout = QVBoxLayout(field_container)
+        # avoid extra row spacing
+        field_container_layout.setContentsMargins(0, 0, 0, 0)
+        field_container_layout.addWidget(cls._get_field_object(row_renderer))
+        field_container_layout.addWidget(cls._get_log_object(row_renderer))
+        if isinstance(row, FormLabelRowView):
+            layout.addRow(cls._get_label_object(row_renderer), field_container)
+        else:
+            layout.addRow(field_container)
 
     @staticmethod
     def _get_field_object(field_row_renderer: RendererContainer[View]) -> QWidget:
@@ -1753,12 +1758,38 @@ class QtGroupFormRenderer(QtFormRenderer):
 _SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget, QSplitter, QDataFilterTable)
 
 
+#: the widgets of the form rows shown outside a form, by their rows' renderers: built once,
+#: as a widget has one parent, and gone with the row
+_ROW_WIDGETS: weakref.WeakKeyDictionary[RendererContainer[Any], QWidget] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _widget_of(view: View) -> QWidget | None:
+    """Get the widget showing `view` in a layout; a form row's anywhere, as a form shows it.
+
+    None when this backend doesn't render `view`.
+    """
+    renderer = view.renderer
+    if isinstance(view, FormRowView) and isinstance(renderer, RendererContainer):
+        widget = _ROW_WIDGETS.get(renderer)
+        if widget is None:
+            widget = QWidget()
+            layout = QFormLayout(widget)
+            # the layout holding the row already insets it
+            layout.setContentsMargins(0, 0, 0, 0)
+            QtFormRenderer.add_row(layout, view, renderer)
+            _ROW_WIDGETS[renderer] = widget
+        return widget
+    if isinstance(renderer, QtWidgetRenderer) and isinstance(renderer.qt_object, QWidget):
+        return renderer.qt_object
+    return None
+
+
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
     """Add `view`'s widget to a column of content: a window's, or a page's."""
-    if not isinstance(view.renderer, QtWidgetRenderer):
-        return
-    widget = view.renderer.qt_object
-    if not isinstance(widget, QWidget):
+    widget = _widget_of(view)
+    if widget is None:
         return
     if isinstance(view, DialogView):
         # a window of its own, over the column's window
@@ -1992,10 +2023,8 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
             if self._view.align is Align.END:
                 layout.addStretch(0)
             for view, stretch in self._view.stretched_views:
-                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
-                    view.renderer.qt_object, QWidget
-                ):
-                    widget = view.renderer.qt_object
+                widget = _widget_of(view)
+                if widget is not None:
                     # at the top: Qt centres a view shorter than the row (e.g. a table
                     # as tall as its rows, beside a taller one) as the window grows; one
                     # scrolling within itself, as tall as the row
@@ -2020,10 +2049,9 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
             # the row holding the column already insets it
             layout.setContentsMargins(0, 0, 0, 0)
             for view in self._view.children_views:
-                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
-                    view.renderer.qt_object, QWidget
-                ):
-                    layout.addWidget(view.renderer.qt_object)
+                widget = _widget_of(view)
+                if widget is not None:
+                    layout.addWidget(widget)
             # height to spare, next to a taller view, goes below the views, not between them
             layout.addStretch()
             self.refresh()
@@ -2048,10 +2076,9 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
             # a pane dragged to nothing would be lost to the user
             self._rendered_object.setChildrenCollapsible(False)
             for view in self._view.panes:
-                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
-                    view.renderer.qt_object, QWidget
-                ):
-                    self._rendered_object.addWidget(view.renderer.qt_object)
+                widget = _widget_of(view)
+                if widget is not None:
+                    self._rendered_object.addWidget(widget)
             self._rendered_object.moved_by_user.connect(self._update_sizes)
             self.refresh()
 
@@ -2086,10 +2113,8 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
         if self._rendered_object is None:
             self._rendered_object = QExpander()
             for view in self._view.children_views:
-                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
-                    view.renderer.qt_object, QWidget
-                ):
-                    widget = view.renderer.qt_object
+                widget = _widget_of(view)
+                if widget is not None:
                     # a button as wide as its text, as in a window's column, not the section
                     alignment = (
                         Qt.AlignmentFlag.AlignLeft
@@ -2190,10 +2215,9 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
         for item_view in value:
             if item_view.renderer is None:
                 item_view.render(RendererType.QT)  # a record's view built since
-            if isinstance(item_view.renderer, QtWidgetRenderer) and isinstance(
-                item_view.renderer.qt_object, QWidget
-            ):
-                widgets.append(item_view.renderer.qt_object)
+            widget = _widget_of(item_view)
+            if widget is not None:
+                widgets.append(widget)
         column = rendered_object.widget()
         layout = None if column is None else column.layout()
         assert isinstance(layout, QVBoxLayout)
@@ -2443,14 +2467,13 @@ class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
             # the column holding the grid already insets it
             layout.setContentsMargins(0, 0, 0, 0)
             for view, position in self._view.positioned_views:
-                if isinstance(view.renderer, QtWidgetRenderer) and isinstance(
-                    view.renderer.qt_object, QWidget
-                ):
+                widget = _widget_of(view)
+                if widget is not None:
                     # at the top, as in a row; with no share of a row, as wide as its content
                     alignment = Qt.AlignmentFlag.AlignTop
                     if view.default_stretch == 0:
                         alignment |= Qt.AlignmentFlag.AlignLeft
-                    layout.addWidget(view.renderer.qt_object, *position, alignment)
+                    layout.addWidget(widget, *position, alignment)
             for column in range(self._view.column_count):
                 layout.setColumnStretch(column, 1)
             # height to spare, next to a taller view, goes below the rows, not between them

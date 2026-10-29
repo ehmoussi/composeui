@@ -3118,6 +3118,31 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
         )
 
 
+def _is_shown(view: View) -> bool:
+    """Tell whether this backend shows `view`: with a renderer of its own, or as a form row."""
+    return isinstance(view.renderer, WebRenderer) or (
+        isinstance(view, FormRowView) and isinstance(view.renderer, RendererContainer)
+    )
+
+
+def _view_html(view: View) -> Markup:
+    """Get `view`'s HTML in a layout; a form row's anywhere, as a form shows it."""
+    renderer = view.renderer
+    if isinstance(view, FormRowView) and isinstance(renderer, RendererContainer):
+        parts = (
+            ["label", "field", "log"] if isinstance(view, FormLabelRowView) else ["field", "log"]
+        )
+        # field right before log: the page's stylesheet marks a field followed by an error
+        return Markup('<div class="flex flex-col gap-1">{}</div>').format(
+            Markup("").join(_fragment(renderer.get_renderer(part)) for part in parts)
+        )
+    return _fragment(renderer)
+
+
+def _fragment(renderer: Any) -> Markup:
+    return renderer.to_html() if isinstance(renderer, WebRenderer) else Markup()
+
+
 class WebFormRenderer(WebRenderer[FormView]):
     """A form: each row's label, field and log stacked together, then the form's log.
 
@@ -3137,7 +3162,8 @@ class WebFormRenderer(WebRenderer[FormView]):
 
     def _fieldset(self, *, oob: bool, classes: str, legend: str) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
-        rows = Markup("").join(self._row_html(row) for row in self._view.field_rows)
+        # a row whose field this backend doesn't support: empty
+        rows = Markup("").join(_view_html(row) for row in self._view.field_rows)
         return Markup(
             "<fieldset {root_attributes}"
             ' class="{classes}"{disabled}>{legend}{rows}{fragment}</fieldset>'
@@ -3147,26 +3173,8 @@ class WebFormRenderer(WebRenderer[FormView]):
             disabled=disabled,
             legend=legend,
             rows=rows,
-            fragment=self._fragment(self._view.log_view.renderer),
+            fragment=_fragment(self._view.log_view.renderer),
         )
-
-    def _row_html(self, row: FormRowView | FormView) -> Markup:
-        if isinstance(row, FormView):
-            return self._fragment(row.renderer)
-        if not isinstance(row.renderer, RendererContainer):
-            return Markup()  # this backend doesn't support the row's field
-        parts = ["label", "field", "log"] if isinstance(row, FormLabelRowView) else ["field", "log"]
-        # field right before log: the page's stylesheet marks a field followed by an error
-        return Markup('<div class="flex flex-col gap-1">{}</div>').format(
-            Markup("").join(self._row_part(row.renderer, part) for part in parts)
-        )
-
-    def _row_part(self, row_renderer: RendererContainer[Any], part: str) -> Markup:
-        return self._fragment(row_renderer.get_renderer(part))
-
-    @staticmethod
-    def _fragment(renderer: Any) -> Markup:
-        return renderer.to_html() if isinstance(renderer, WebRenderer) else Markup()
 
 
 class WebGroupFormRenderer(WebFormRenderer):
@@ -3973,10 +3981,10 @@ class WebPageRenderer(WebRenderer[PageView]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
-            view.renderer.to_html()
+            _view_html(view)
             for view in self._view.content_views
             # at the end of the page instead (see `WebDialogRenderer`)
-            if isinstance(view.renderer, WebRenderer) and not isinstance(view, DialogView)
+            if _is_shown(view) and not isinstance(view, DialogView)
         )
         return Markup(
             '<section {root_attributes} data-width="{lower}" class="flex flex-col'
@@ -4010,9 +4018,9 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
             cells = Markup("").join(
                 Markup(
                     '<div class="min-w-0 has-[>[hidden]]:hidden" style="flex: none">{}</div>'
-                ).format(view.renderer.to_html())
+                ).format(_view_html(view))
                 for view, _ in stretched_views
-                if isinstance(view.renderer, WebRenderer)
+                if _is_shown(view)
             )
             align = " justify-end" if self._view.align is Align.END else ""
             return Markup('<div {root_attributes} class="flex gap-6{align}">{cells}</div>').format(
@@ -4024,9 +4032,9 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
                 # no share: as wide as its content
                 ' style="--share: {}">'
                 "{}</div>"
-            ).format(f"{stretch} 1 0%" if stretch > 0 else "none", view.renderer.to_html())
+            ).format(f"{stretch} 1 0%" if stretch > 0 else "none", _view_html(view))
             for view, stretch in stretched_views
-            if isinstance(view.renderer, WebRenderer)
+            if _is_shown(view)
         )
         # the row's own width is queried from its root, the views laid out inside it
         return Markup(
@@ -4046,9 +4054,7 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
-            view.renderer.to_html()
-            for view in self._view.children_views
-            if isinstance(view.renderer, WebRenderer)
+            _view_html(view) for view in self._view.children_views if _is_shown(view)
         )
         return Markup('<div {} class="flex flex-col gap-6">{}</div>').format(
             self._root_attributes(oob=oob), content
@@ -4096,7 +4102,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
         cells: list[str] = []
         before = 0  # the length of the panes shown before the border, in percent
         for index, (pane, size) in enumerate(zip(view.panes, view.sizes)):
-            if not isinstance(pane.renderer, WebRenderer):
+            if not _is_shown(pane):
                 continue
             pane_id = f"{self.widget_id}-pane-{index}"
             if index > 0:
@@ -4126,7 +4132,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
                     pane_id=pane_id,
                     pane_class=pane_class,
                     size=size,
-                    to_html=pane.renderer.to_html(),
+                    to_html=_view_html(pane),
                 )
             )
         if is_vertical:
@@ -4187,9 +4193,7 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
         )
         summary_classes = "" if self.is_enabled else " pointer-events-none opacity-50"
         content = Markup("").join(
-            view.renderer.to_html()
-            for view in self._view.children_views
-            if isinstance(view.renderer, WebRenderer)
+            _view_html(view) for view in self._view.children_views if _is_shown(view)
         )
         # `toggle` also fires when the server swaps it in open: posting the state the
         # server already has, which `dispatch` ignores
@@ -4423,9 +4427,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             Markup('<h2 class="font-semibold text-primary">{}</h2>').format(title) if title else ""
         )
         content = Markup("").join(
-            view.renderer.to_html()
-            for view in self._view.children_views
-            if isinstance(view.renderer, WebRenderer)
+            _view_html(view) for view in self._view.children_views if _is_shown(view)
         )
         name = title or self._view.toggle_text
         retracted = "" if self._view.is_expanded else " data-retracted"
@@ -4539,7 +4541,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
         return f"{self.widget_id}-item-{id(view)}"
 
     def _item_html(self, view: View) -> Markup:
-        content = view.renderer.to_html() if isinstance(view.renderer, WebRenderer) else ""
+        content = _view_html(view)
         return Markup('<div id="{}">{}</div>').format(self._item_id(view), content)
 
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -4638,9 +4640,7 @@ class WebTabPageRenderer(WebRenderer[TabPage]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
-            view.renderer.to_html()
-            for view in self._view.children_views
-            if isinstance(view.renderer, WebRenderer)
+            _view_html(view) for view in self._view.children_views if _is_shown(view)
         )
         return Markup('<div {} class="flex flex-col gap-6">{}</div>').format(
             self._root_attributes(oob=oob), content
@@ -4764,10 +4764,10 @@ class WebGridRenderer(WebRenderer[GridView]):
                 value2=column + 1,
                 row_span=row_span,
                 column_span=column_span,
-                to_html=view.renderer.to_html(),
+                to_html=_view_html(view),
             )
             for view, (row, column, row_span, column_span) in self._view.positioned_views
-            if isinstance(view.renderer, WebRenderer)
+            if _is_shown(view)
         )
         columns = f"repeat({self._view.column_count}, minmax(0, 1fr))"
         # the grid's own width is queried from its root, the views laid out inside it
@@ -4945,6 +4945,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         toolbar = ""
         sidebar: WebSidebarRenderer | None = None
         for child_view in self._view.children_views:
+            if isinstance(child_view, FormRowView):
+                content.append(_view_html(child_view))  # its parts, as a form shows them
+                continue
             if not isinstance(child_view.renderer, WebRenderer):
                 continue
             if isinstance(child_view, DialogView):

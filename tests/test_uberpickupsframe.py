@@ -118,8 +118,9 @@ def test_the_raw_data_checkbox_and_the_hour_slider_drive_the_table_and_map(
         checkbox = _qt_field(view.sidebar.filters.show_raw_data, qt_widgets.QCheckBox)
         slider = _qt_field(view.sidebar.filters.hour, qt_widgets.QSlider)
         # the filters show in the sidebar, beside the content
-        assert checkbox.isVisibleTo(window)
-        assert slider.isVisibleTo(window)
+        for widget in (checkbox, slider):
+            assert window.isAncestorOf(widget)  # a widget never added is "visible" too
+            assert widget.isVisibleTo(window)
         assert not view.table.is_visible
         checkbox.click()
         assert view.table.is_visible
