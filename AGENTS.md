@@ -213,9 +213,10 @@ document owns what, and the checks.
 - A pull request is complete when it opens: its tests, its docs, and its `CHANGELOG.md`
   line are in the commit that changes the behavior (see "Documentation"). Ask for the
   permission that they need before you open it, not after.
-- Before you push, run `make check test`. Also run `make docs` after a change to `docs/`
-  or a docstring, and `make browser-test` after a change to the page's scripts or a web
-  renderer. Run them again after a rebase.
+- Before you push, run `make check test`. Also run `make typecheck` after a change to
+  `tests/`: Pyright, Pyrefly and ty check the tests in CI, and `make check` runs none of
+  them. Run `make docs` after a change to `docs/` or a docstring, and `make browser-test`
+  after a change to the page's scripts or a web renderer. Run them again after a rebase.
 - When fixes or features depend on each other, open one pull request at a time. Push the
   next once the previous one merges, rebased on `origin/main` and checked again.
 - The title is the commit's subject. The body says what was wrong or missing, what
