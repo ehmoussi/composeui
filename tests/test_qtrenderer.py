@@ -2185,9 +2185,11 @@ def test_a_table_s_file_path_is_picked_in_qt_s_dialog_or_typed(
     answer = (str(tmp_path / "levels.csv"), "CSV (*.csv)")
     qtbot.keyClick(table, Qt.Key.Key_Space)
     assert asked[-1][1] == str(tmp_path)
-    # or the path is typed
-    table.setCurrentIndex(model.index(1, 1))
-    qtbot.keyClick(table, Qt.Key.Key_F2)
+    # or the path is typed, after a double click on its text
+    cell = table.visualRect(model.index(1, 1))
+    text = QPoint(cell.left() + 4, cell.center().y())
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=text)
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=text)
     editor = table.focusWidget()
     assert isinstance(editor, QLineEdit)
     qtbot.keyClicks(editor, "/data/levels.csv")
