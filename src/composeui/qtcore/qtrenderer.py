@@ -83,6 +83,7 @@ from composeui.core.view import (
     Menu,
     MetricView,
     NodeMark,
+    OkCancelDialogView,
     Orientation,
     PageView,
     PickFileAction,
@@ -99,7 +100,6 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
-    TypedFormDialogView,
     VerticalView,
     View,
     date_hint,
@@ -1933,17 +1933,15 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         self._reject_button.setText(value)
 
 
-TForm = TypeVar("TForm", bound=FormView)
+class QtFormDialogRenderer(QtWidgetRenderer[OkCancelDialogView, QFormDialog]):
+    """A modal dialog holding its form or other view, shown without blocking.
 
-
-class QtFormDialogRenderer(QtWidgetRenderer[TypedFormDialogView[TForm], QFormDialog]):
-    """A modal dialog holding its form, shown without blocking: its answer reaches the view.
-
-    OK is disabled while a check of the form fails; the view closes the dialog once it
-    accepts the answer, so OK on a form refusing it leaves the dialog open.
+    Its answer reaches the view. OK is disabled while the view says so, e.g. while a check
+    of the form fails; the view closes the dialog once it accepts the answer, so OK on a
+    form refusing it leaves the dialog open.
     """
 
-    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
+    def __init__(self, view: OkCancelDialogView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
@@ -1960,10 +1958,9 @@ class QtFormDialogRenderer(QtWidgetRenderer[TypedFormDialogView[TForm], QFormDia
         if self._rendered_object is None:
             dialog = QFormDialog()
             release_when_hidden(dialog)
-            form = self._view.form.renderer
-            assert isinstance(form, QtWidgetRenderer)
-            assert isinstance(form.qt_object, QWidget)
-            dialog.set_form(form.qt_object)
+            content = _widget_of(self._view.content)
+            assert content is not None
+            dialog.set_form(content)
             dialog.answered_ok.connect(self._view.accept)
             dialog.answered_cancel.connect(self._view.reject)
             dialog.dismissed.connect(self._view.dismiss)
@@ -1972,38 +1969,36 @@ class QtFormDialogRenderer(QtWidgetRenderer[TypedFormDialogView[TForm], QFormDia
 
     @staticmethod
     def _refresh_dialog_title(
-        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
+        _view: OkCancelDialogView, rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.setWindowTitle(value)
 
     @staticmethod
-    def _refresh_text(
-        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
-    ) -> None:
+    def _refresh_text(_view: OkCancelDialogView, rendered_object: QFormDialog, value: str) -> None:
         rendered_object.text.setText(value)
         rendered_object.text.setVisible(value != "")
 
     @staticmethod
     def _refresh_kind(
-        _view: TypedFormDialogView[TForm], _rendered_object: QFormDialog, _value: Any
+        _view: OkCancelDialogView, _rendered_object: QFormDialog, _value: Any
     ) -> None:
-        pass  # always OK and Cancel: a form is confirmed or not
+        pass  # always OK and Cancel: its view is confirmed or not
 
     @staticmethod
     def _refresh_accept_text(
-        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
+        _view: OkCancelDialogView, rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.ok_button.setText(value)
 
     @staticmethod
     def _refresh_reject_text(
-        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: str
+        _view: OkCancelDialogView, rendered_object: QFormDialog, value: str
     ) -> None:
         rendered_object.cancel_button.setText(value)
 
     @staticmethod
     def _refresh_is_accept_enabled(
-        _view: TypedFormDialogView[TForm], rendered_object: QFormDialog, value: bool
+        _view: OkCancelDialogView, rendered_object: QFormDialog, value: bool
     ) -> None:
         rendered_object.ok_button.setEnabled(value)
 
@@ -2868,6 +2863,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": QtFloatInputRenderer,
     "int_input": QtIntInputRenderer,
     "form": QtFormRenderer,
+    "content_dialog": QtFormDialogRenderer,
     "form_dialog": QtFormDialogRenderer,
     "form_label": QtFormLabelRenderer,
     "grid": QtGridRenderer,

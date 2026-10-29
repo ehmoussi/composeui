@@ -19,6 +19,9 @@ The notable changes of each release of ComposeUI. The format follows
 - `CheckBoxMixin.shows`, which shows other views only while the box is checked.
 - `CellWidget.file_path`, a file path in each cell of a table's column: typed, or picked
   with a "…" button. Qt and Textual open their file dialogs, and the web uploads the file.
+- `ContentDialogView`, a dialog holding any view with OK and Cancel, such as a table to pick
+  a file from. The app enables OK with `is_accept_enabled`, and a subclass can keep the
+  dialog open on OK by overriding `accept`.
 
 ### Fixed
 

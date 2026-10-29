@@ -121,6 +121,11 @@ the option for the web (extra `web`, the default).
 - **Type a form dialog:** subclass `TypedFormDialogView[YourForm]` with
   `form: YourForm = attrs.Factory(YourForm)`. See
   https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html#form-dialogs
+- **Use a content dialog for a dialog that isn't a form**, such as a table to pick from:
+  subclass `ContentDialogView[YourView]` with `content: YourView = attrs.Factory(YourView)`.
+  The app sets `is_accept_enabled`. To keep the dialog open on OK, override `accept()` and
+  call `super().accept()` only to close it. See
+  https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html#content-dialogs
 - **Support Python 3.9 in view fields.** Write `Optional[int]` and `Union[int, str]`, not
   `int | None`, because `attrs` and `cattrs` evaluate the annotations at runtime. Start
   every module with `from __future__ import annotations`, and do not quote annotations.

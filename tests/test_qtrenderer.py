@@ -146,6 +146,7 @@ from tests.pages import InputsPage, PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
+from tests.studydialog import StudyDialogMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -1582,6 +1583,36 @@ def test_a_form_shows_its_other_views_between_its_rows_in_their_order(qtbot: QtB
     assert isinstance(folder, QLineEdit)
     assert folder.text() == "/studies"
     assert table.model().index(0, 0).data() == "beam"
+
+
+def test_a_content_dialog_shows_its_view_whose_buttons_leave_it_open(qtbot: QtBot) -> None:
+    view = StudyDialogMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    dialog = _widget(view.open_dialog)
+    assert isinstance(dialog, QFormDialog)
+    content = view.open_dialog.content
+    up, table = _widget(content.up), _table(content.entries)
+
+    qtbot.mouseClick(_widget(view.open), Qt.MouseButton.LeftButton)
+    assert dialog.isVisible()
+    assert dialog.windowTitle() == "Open a study"
+    assert all(dialog.isAncestorOf(widget) for widget in (_widget(content.folder), up, table))
+    assert not dialog.ok_button.isEnabled()  # nothing selected yet
+    qtbot.mouseClick(up, Qt.MouseButton.LeftButton)
+    assert dialog.isVisible()
+    assert table.model().index(0, 0).data() == "beam"
+
+    beam = table.visualRect(table.model().index(0, 0)).center()
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=beam)
+    assert dialog.ok_button.isEnabled()
+    qtbot.mouseClick(dialog.ok_button, Qt.MouseButton.LeftButton)
+
+    assert dialog.isVisible()  # a folder: shown, not opened
+    assert table.model().index(0, 0).data() == "beam.export"
+    assert not dialog.ok_button.isEnabled()
 
 
 def test_a_toolbar_docks_its_actions_beside_the_pages(qtbot: QtBot) -> None:

@@ -96,6 +96,7 @@ __all__ = [
     "CheckBoxView",
     "Column",
     "ComboBoxView",
+    "ContentDialogView",
     "DateInputMixin",
     "DateInputView",
     "DialogKind",
@@ -4923,6 +4924,11 @@ class TypedFormDialogView(DialogView, Generic[FormT]):
         if self.form.is_valid:
             super().accept()
 
+    @property
+    def content(self) -> FormT:
+        """Get the view the dialog shows: its form."""
+        return self.form
+
     def _follow_form(self) -> None:
         self.is_accept_enabled = self.form.is_valid
 
@@ -4936,6 +4942,41 @@ class FormDialogView(TypedFormDialogView[FormView]):
     """
 
     form: FormView = attrs.Factory(FormView)
+
+
+ContentT = TypeVar("ContentT", bound=View)
+
+
+@define_view
+class ContentDialogView(DialogView, Generic[ContentT]):
+    """A modal holding a view, e.g. a table to pick a file from, with OK and Cancel.
+
+    Pass the view as ``content``, or give a subclass its typed ``content`` default. Its
+    `text` shows above it. The app sets `is_accept_enabled`, e.g. once a row is selected:
+    OK can't be pressed before. The answer comes through `accepted` or `rejected`. A
+    button of the content acts without closing the dialog. To keep it open on OK too,
+    e.g. to show the folder selected rather than open it, a subclass overrides `accept`
+    and calls ``super().accept()`` only to close it.
+    """
+
+    _renderer_key = "content_dialog"
+
+    content: ContentT = attrs.field()
+    #: whether OK can be pressed
+    is_accept_enabled: bool = attrs.field(default=True)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.kind = DialogKind.CONFIRM
+
+    def accept(self) -> None:
+        """Close the dialog with its accepting answer; ignored unless it's open and OK enabled."""
+        if self.is_accept_enabled:
+            super().accept()
+
+
+#: a dialog showing a view above OK and Cancel, as the backends render it
+OkCancelDialogView = Union[TypedFormDialogView[Any], ContentDialogView[Any]]
 
 
 class Align(enum.Enum):

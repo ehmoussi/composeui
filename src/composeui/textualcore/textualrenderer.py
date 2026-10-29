@@ -47,6 +47,7 @@ from composeui.core.view import (
     MainView,
     Menu,
     MetricView,
+    OkCancelDialogView,
     OpenFileAction,
     Orientation,
     PageView,
@@ -66,7 +67,6 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
-    TypedFormDialogView,
     VerticalView,
     View,
     date_hint,
@@ -479,18 +479,15 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             self.screen.reject_button.label = Content(value)
 
 
-TForm = TypeVar("TForm", bound=FormView)
+class TextualFormDialogRenderer(TextualDialogRenderer):
+    """A modal screen holding the form or other view, installed once: pushed open, popped closed.
 
-
-class TextualFormDialogRenderer(TextualDialogRenderer, Generic[TForm]):
-    """A modal screen holding the form, installed once: pushed open, popped closed.
-
-    The form's widgets are built once, so its screen is too, unlike a message's. OK is
-    disabled while a check of the form fails; the view closes the dialog once it accepts
-    the answer, so OK on a form refusing it leaves the screen up.
+    The view's widgets are built once, so its screen is too, unlike a message's. OK is
+    disabled while the view says so, e.g. while a check of the form fails; the view closes
+    the dialog once it accepts the answer, so OK on a form refusing it leaves the screen up.
     """
 
-    def __init__(self, view: TypedFormDialogView[TForm]) -> None:
+    def __init__(self, view: OkCancelDialogView) -> None:
         super().__init__(view)
         self._form_view = view
         self.form_screen: ComposeFormDialog | None = None
@@ -499,16 +496,15 @@ class TextualFormDialogRenderer(TextualDialogRenderer, Generic[TForm]):
     def render(self) -> None:
         if self._rendered_object is None:
             super().render()
-            form = self._form_view.form.renderer
-            assert isinstance(form, TextualWidgetRenderer)
-            assert form.widget is not None
-            self.form_screen = ComposeFormDialog(form.widget)
+            content = _widget_of(self._form_view.content)
+            assert content is not None
+            self.form_screen = ComposeFormDialog(content)
             self.form_screen.answered.connect(self._answer_form)
             # its form's widgets mount with it, first pushed: their state only then
             self.form_screen.mounted.connect(self._refresh_screen)
 
     def _refresh_screen(self) -> None:
-        _refresh_tree(self._form_view.form)
+        _refresh_tree(self._form_view.content)
         self.refresh()  # the screen's title, text and buttons
 
     def _answer_form(self, answer: str) -> None:
@@ -2870,6 +2866,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "float_input": TextualFloatInputRenderer,
     "int_input": TextualIntInputRenderer,
     "form": TextualFormRenderer,
+    "content_dialog": TextualFormDialogRenderer,
     "form_dialog": TextualFormDialogRenderer,
     "form_label": TextualFormLabelRenderer,
     "grid": TextualGridRenderer,

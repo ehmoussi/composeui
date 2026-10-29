@@ -141,6 +141,7 @@ from tests.pages import PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
+from tests.studydialog import StudyDialogMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -1357,6 +1358,32 @@ async def test_a_form_shows_its_other_views_between_its_rows_in_their_order() ->
 
         assert app.screen is screen  # a button of its form leaves it open
         assert folder.value == "/studies"
+        assert str(box.table.get_cell_at(Coordinate(0, 0))) == "beam"
+
+
+@pytest.mark.asyncio
+async def test_a_content_dialog_shows_its_view_whose_buttons_leave_it_open() -> None:
+    view = StudyDialogMainView()
+    app = _app_of(view)
+    content = view.open_dialog.content
+    up = _widget(content.up)
+    box = _widget(content.entries)
+    assert isinstance(box, ComposeFilterTable)
+
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        await pilot.click(_widget(view.open))
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeFormDialog)
+        shown = list(screen.walk_children())
+        assert all(widget in shown for widget in (_widget(content.folder), up, box))
+        assert screen.accept_button.disabled  # nothing selected yet
+
+        await pilot.click(up)
+        await pilot.pause()
+
+        assert app.screen is screen
         assert str(box.table.get_cell_at(Coordinate(0, 0))) == "beam"
 
 

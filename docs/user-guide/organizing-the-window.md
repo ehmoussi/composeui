@@ -460,3 +460,61 @@ dialog.form.name.text = "Main pipe"
 
 In [`src/examples/pipecatalogue.py`](../../src/examples/pipecatalogue.py), the Edit button of
 each pipe changes the pipe in a form dialog.
+
+### Content dialogs
+
+A content dialog holds any view with OK and Cancel, for example a table to pick a file
+from. Use it when the dialog shows something other than a form. Subclass
+`ContentDialogView[YourView]`, and give it its `content`:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import (
+    ButtonView, ContentDialogView, TableView, VerticalView, child, define_view,
+)
+
+
+@define_view
+class FolderView(VerticalView):
+    up: ButtonView = child(ButtonView, text="Parent folder")
+    entries: TableView = child(TableView, headers=["Name"])
+
+
+@define_view
+class OpenStudyDialog(ContentDialogView[FolderView]):
+    content: FolderView = Factory(FolderView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.title = "Open a study"
+        self.is_accept_enabled = False  # until the user selects a row
+        self.content.entries.selection_changed.connect(self._follow_selection)
+
+    def _follow_selection(self, rows: list[int]) -> None:
+        self.is_accept_enabled = len(rows) == 1
+
+    def accept(self) -> None:
+        # `selects_a_folder` and `show_selected_folder` are the app's own methods
+        if self.is_accept_enabled and self.selects_a_folder():
+            self.show_selected_folder()  # the dialog stays open
+            return
+        super().accept()  # closes the dialog, then `accepted` fires
+```
+
+- **The content.** Any view: a `VerticalView` of a table and buttons, tabs, or a chart.
+  The dialog's `text` shows above it. A `ContentDialogView` needs `content=...`, unless its
+  subclass gives a default, as above. A type checker then reads `content` as a `FolderView`.
+- **OK follows the app.** The app sets `is_accept_enabled`. While it is `False`, the user
+  can't press OK, and `accept()` does nothing.
+- **The buttons of the content** act without closing the dialog, for example to show the
+  parent folder in the table.
+- **OK can keep the dialog open.** A subclass overrides `accept()`, and calls
+  `super().accept()` only to close the dialog. Above, OK on a folder shows that folder.
+- **The answer** comes through `accepted` or `rejected`. Escape, Cancel, or closing the
+  window of the dialog rejects it.
+- **The content is not study data.** As for any dialog, saving, opening, and New leave it
+  alone, the rows of a table too.
+
+Each backend shows a content dialog as it shows a form dialog: Qt a `QDialog`, Textual a
+modal screen, and the web a modal `<dialog>`, with the view above the OK and Cancel buttons.
