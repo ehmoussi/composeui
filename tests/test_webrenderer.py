@@ -439,6 +439,22 @@ def test_a_page_s_posts_are_handled_in_the_order_it_sent_them(
     assert main_view.form.name.text == "Bob"
 
 
+def test_save_comes_after_the_posts_the_page_sent_before_it(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    name_id = _field_id(main_view.form.name)
+    save = {"trigger": _action_id(main_view.file_menu.save), "page": _PAGE, "post": "2"}
+    saved: list[str] = []
+
+    # Save's form, the page's second post, reaches the server first: it waits
+    saving = _in_thread(lambda: saved.append(client.post("/state/download", data=save).text))
+    assert saved == []
+    _post_in_page(client, name_id, 1, "Bob")
+    saving.join()
+
+    assert json.loads(saved[0])["views"]["form"]["name"]["text"] == "Bob"
+
+
 def test_a_post_waits_for_a_missing_one_only_so_long(
     main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

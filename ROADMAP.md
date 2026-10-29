@@ -663,7 +663,9 @@ The user guide's "Web backend" section covers what users see.
   `htmx:beforeSend`, and the routes await its turn on the event loop, no thread held, at
   most `ORDER_TIMEOUT` (2 s) for a post that never comes. Scroll windows
   (`hx-sync="this:replace"`) carry none: one replaced may never be sent. A session keeps
-  the order of `MAX_PAGES` (32) pages. Holding the posts back in `page.js` fails instead:
+  the order of `MAX_PAGES` (32) pages. Save's form (`cui-save`), submitted without htmx,
+  carries no header: `page.js` sets its hidden `page` and `post` fields as it is
+  submitted. Holding the posts back in `page.js` fails instead:
   htmx drops a held request whose element a swap has since replaced, and gives no promise
   to wait on for a trigger's request.
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's

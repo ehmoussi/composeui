@@ -694,6 +694,14 @@ document.addEventListener("htmx:beforeSend", function (event) {
   event.detail.xhr.setRequestHeader("X-ComposeUI-Page", PAGE_ID);
   event.detail.xhr.setRequestHeader("X-ComposeUI-Post", String(postNumber));
 });
+/* Save and Save As submit a form, which carries no header: its fields carry the same */
+document.addEventListener("submit", function (event) {
+  var form = event.target;
+  if (form.id !== "cui-save") return;
+  postNumber += 1;
+  form.elements.page.value = PAGE_ID;
+  form.elements.post.value = String(postNumber);
+});
 /* the triggers htmx would filter: Enter, Escape, and `activate` (a click, or Enter, not
    from a field or a button, which take their own) for a table's rows. Captured, so they
    come before the keydown's own handlers, as htmx's filters did. */

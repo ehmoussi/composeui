@@ -771,6 +771,28 @@ def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:
     expect(name).to_have_value("Alice")
 
 
+def test_save_right_after_typing_saves_the_value_typed(page: Page) -> None:
+    # the field's post, sent as Save takes the focus, held on its way to the server
+    page.add_init_script(
+        "const send = XMLHttpRequest.prototype.send;"
+        "XMLHttpRequest.prototype.send = function (body) {"
+        "  if (typeof body === 'string' && body.includes('Alice')) {"
+        "    setTimeout(() => send.call(this, body), 500);"
+        "  } else {"
+        "    send.call(this, body);"
+        "  }"
+        "};"
+    )
+    page.goto("/")
+
+    page.get_by_label("Name").fill("Alice")
+    with page.expect_download() as download_info:
+        page.get_by_role("button", name="Save").click()
+
+    # saved after the field's post, which left first
+    assert "Alice" in Path(download_info.value.path()).read_text()
+
+
 def test_a_reload_server_s_page_reloads_on_its_session_once_the_server_restarts(
     browser: Browser, tmp_path: Path
 ) -> None:
