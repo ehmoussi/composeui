@@ -76,6 +76,9 @@ _COMPOSEUI_DIRECTORY = Path(__file__).resolve().parent.parent
 _RERUNS: ContextVar[list[Any] | None] = ContextVar("composeui_reruns", default=None)
 #: seconds between two looks at the files, and at whether the app has exited
 _STEP = 0.5
+#: seconds a change is let settle before its files are read: a save can be reported as it
+#: is written, e.g. once the file is truncated, which the app wouldn't run
+_SETTLE = 0.1
 #: directories never watched: tools' caches and environments, not the app's code
 _IGNORED_DIRECTORIES = frozenset({"__pycache__", "node_modules", "site-packages"})
 
@@ -444,6 +447,8 @@ def _new_contents(
 
     An app that exited runs again on any change, even one that leaves a file as it was.
     """
+    if len(batch) > 0:
+        time.sleep(_SETTLE)
     digests = {path: _digest(path) for path in batch}
     changed = {
         path

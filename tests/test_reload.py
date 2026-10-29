@@ -9,6 +9,7 @@ import platform
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import types
 from pathlib import Path
@@ -73,6 +74,8 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
     # changes as an app does: it takes them and runs the changed code itself ("ack"),
     # slower than the supervisor waits for an app to take them ("slow"), or exits
     monkeypatch.setattr("composeui.core.reload._RELOAD_TIMEOUT", 0.3)
+    # time enough to finish a write the test reports as it's written
+    monkeypatch.setattr("composeui.core.reload._SETTLE", 0.5)
     program = textwrap.dedent(
         f"""
         import os, pathlib, sys, time
@@ -111,9 +114,12 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
     def changes() -> Iterator[set[Path]]:
         _wait_for(lambda: runs() == ["start"])
         yield set()  # nothing changed: the app keeps running
-        yield changed()
+        # a save told as it's written, once the file is truncated, then again once written,
+        # as macOS can: one reload, of the code saved
+        app.write_text("")
+        threading.Timer(0.05, changed).start()
+        yield {app}
         _wait_for(lambda: runs() == ["start", "reloaded"])  # the same app runs on
-        # the same write told again, as macOS can: the app already runs that code
         yield {app}
         mode.write_text("slow")
         yield changed()
