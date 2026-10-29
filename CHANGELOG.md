@@ -34,6 +34,9 @@ The notable changes of each release of ComposeUI. The format follows
 - A form row in another view than a `FormView`, such as a `LabelRowSliderView` in a
   sidebar, shows its label, its field, and its message, as a form shows them. No backend
   showed it, and nothing said why.
+- With reload on, an app that runs the changed code, then exits by itself soon after, such
+  as one closing its window, isn't started again in a new process. The supervisor took its
+  exit for a request to run the code anew.
 
 ## [0.1.0] - 2026-10-27
 
