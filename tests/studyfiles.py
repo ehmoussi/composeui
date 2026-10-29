@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from composeui.core.view import LabelRowFilePathInputView, MainView, child, define_view
+from attrs import Factory
+
+from composeui.core.view import (
+    CellWidget,
+    LabelRowFilePathInputView,
+    MainView,
+    TableView,
+    child,
+    define_view,
+)
 
 
 @define_view
@@ -20,3 +29,25 @@ class StudyFileMainView(MainView):
         extensions={"Python": (".py",)},
         server_roots=(Path(__file__).parent,),
     )
+
+
+@define_view
+class StudyFilesTableMainView(MainView):
+    """A study's input files, each picked in its row among the files of this folder.
+
+    Until a test gives the column roots of its own.
+    """
+
+    app_title = "Study files"
+    extension = ".studyfiles"
+
+    inputs: TableView = Factory(TableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.inputs.headers = ["Input", "File"]
+        self.inputs.rows = [["Mesh", ""], ["Commands", ""]]
+        self.inputs.editable_columns = [1]
+        self.inputs.cell_widgets = {
+            1: CellWidget.file_path({"Python": (".py",)}, server_roots=(Path(__file__).parent,))
+        }

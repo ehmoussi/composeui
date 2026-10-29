@@ -53,7 +53,7 @@ from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
-from tests.studyfiles import StudyFileMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -300,6 +300,14 @@ def data_files_base_url() -> Iterator[str]:
 def study_files_base_url() -> Iterator[str]:
     """Serve an app with a file path field listing the server's files, for the whole module."""
     with _serve(WebApplication(build_main_view=StudyFileMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def study_files_table_base_url() -> Iterator[str]:
+    """Serve an app whose table's path cells list the server's files, for the whole module."""
+    app = WebApplication(build_main_view=StudyFilesTableMainView).create_starlette_app()
+    with _serve(app) as url:
         yield url
 
 
@@ -1723,6 +1731,29 @@ def test_a_file_of_the_server_is_picked_in_the_list_its_folders_open_in_place(
     with _posted(page):
         page.keyboard.press("Escape")
     expect(files).to_have_count(0)
+    context.close()
+
+
+def test_a_file_of_the_server_is_picked_for_a_table_s_cell_its_button_focused_again(
+    browser: Browser, study_files_table_base_url: str
+) -> None:
+    context = browser.new_context(base_url=study_files_table_base_url)
+    page = context.new_page()
+    page.goto("/")
+    commands = page.get_by_role("row").filter(has_text="Commands")
+    with _posted(page):
+        commands.get_by_role("button", name="File: Choose a file").click()
+    files = page.get_by_role("dialog", name="Choose a file")
+    expect(files).to_be_visible()
+
+    with _posted(page):
+        files.get_by_role("button", name="studyfiles.py").click()
+
+    expect(files).to_have_count(0)
+    # the row picked for, not another, shows the path
+    expect(commands).to_contain_text(re.compile(r"studyfiles\.py"))
+    expect(page.get_by_role("row").filter(has_text="Mesh")).not_to_contain_text("studyfiles")
+    expect(commands.get_by_role("button", name="File: Choose a file")).to_be_focused()
     context.close()
 
 

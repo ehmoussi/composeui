@@ -153,7 +153,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -714,6 +714,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     DataFilesTableMainView,
     StyledTablesMainView,
     StudyFileMainView,
+    StudyFilesTableMainView,
     _NotesMainView,
 ]
 
@@ -779,10 +780,7 @@ def _states(main_view: MainView) -> Iterator[str]:
         renderer = view.renderer
         if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
             tables.append((view, renderer))
-            for column in view.editable_columns:
-                if view.rows and column not in view.cell_widgets:
-                    renderer.dispatch("start_edit", {"row": "0", "column": str(column)})
-                    break
+            _open_cell(view, renderer)
     yield "dialogs open, a cell edited, the server's files listed"
     for view, renderer in tables:
         view.search = _HOSTILE  # last: it hides every row
@@ -792,6 +790,19 @@ def _states(main_view: MainView) -> Iterator[str]:
             yield f"column {column} filtered"
             renderer.dispatch("open_editor", {"column": str(column)})
             yield f"column {column}'s filter edited"
+
+
+def _open_cell(table: TableView, renderer: WebTableRenderer) -> None:
+    """Edit the first row's first plain editable cell, and list a path cell's server files."""
+    if not table.rows:
+        return
+    for column in table.editable_columns:
+        widget = table.cell_widgets.get(column)
+        if widget is not None and widget.server_roots:
+            renderer.dispatch("browse", {"row": "0", "column": str(column)})
+        elif widget is None:
+            renderer.dispatch("start_edit", {"row": "0", "column": str(column)})
+            return
 
 
 @pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
@@ -1240,8 +1251,9 @@ def _listed(markup: str, field: WebRenderer[Any]) -> list[tuple[str, str]]:
     return [(value["event"], value["name"]) for value in values]
 
 
-def _shows_files(field: WebRenderer[Any]) -> bool:
-    return "hidden" not in _element(field.to_html(), f"{field.widget_id}-files").attributes
+def _shows_files(renderer: WebRenderer[Any]) -> bool:
+    dialog = _find(renderer.to_html(), f"{renderer.widget_id}-files")
+    return dialog is not None and "hidden" not in dialog.attributes
 
 
 def test_a_file_path_with_server_roots_is_picked_among_their_files_never_copied(
@@ -1442,6 +1454,132 @@ def test_a_file_path_s_server_list_needs_its_roots_and_an_enabled_field(tmp_path
     main_view.study.server_roots = (tmp_path,)
     with pytest.raises(UnsupportedEventError):
         handle_event(field, "browse-up", {})
+
+
+@pytest.fixture
+def study_files(tmp_path: Path) -> Iterator[tuple[TestClient, StudyFilesTableMainView, Path]]:
+    """Serve a table whose file path cells list the `.export` files of a folder of studies.
+
+    Yield a client, its main view and the folder: `beam/beam.export`, `beam/beam.comm`.
+    """
+    root = tmp_path / "studies"
+    (root / "beam").mkdir(parents=True)
+    for name in ("beam.export", "beam.comm"):
+        (root / "beam" / name).write_text("")
+    views: list[StudyFilesTableMainView] = []
+
+    class StudyFilesApp(WebApplication[StudyFilesTableMainView]):
+        def setup_session(self, main_view: StudyFilesTableMainView) -> None:
+            main_view.status_bar.timeout = 0
+            main_view.inputs.cell_widgets = {
+                1: CellWidget.file_path({"Code_Aster": (".export",)}, server_roots=(root,))
+            }
+            views.append(main_view)
+
+    app = StudyFilesApp(build_main_view=StudyFilesTableMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view, root
+
+
+def test_a_table_s_file_path_with_server_roots_is_picked_among_their_files(
+    study_files: tuple[TestClient, StudyFilesTableMainView, Path],
+) -> None:
+    client, view, root = study_files
+    table = view.inputs
+    renderer = table.renderer
+    assert isinstance(renderer, WebTableRenderer)
+    edits: list[tuple[int, int, str]] = []
+    table.cell_edited.connect(lambda row, column, text: edits.append((row, column, text)))
+    button = _element(renderer.to_html(), f"{renderer.widget_id}-cell-1-1").attributes
+    assert json.loads(button["hx-vals"] or "") == {"event": "browse", "row": "1", "column": "1"}
+
+    def post(event: str, **values: str) -> str:
+        return client.post(f"/widget/{renderer.widget_id}", data={"event": event, **values}).text
+
+    body = post("browse", row="1", column="1")
+    assert "hidden" not in _swapped(body, f"{renderer.widget_id}-files").attributes
+    assert _listed(body, renderer) == [("browse-folder", "beam")]
+    body = post("browse-folder", name="beam")
+    assert _listed(body, renderer) == [("browse-parent", ""), ("browse-file", "beam.export")]
+    assert _find(body, f"{renderer.widget_id}-files") is None  # only the list swaps
+
+    body = post("browse-file", name="beam.export")
+
+    # as the user's edit of the cell the list opened for
+    path = str(root.resolve() / "beam" / "beam.export")
+    assert edits == [(1, 1, path)]
+    assert table.rows[1] == ["Commands", path]
+    assert path in _swapped(body, f"{renderer.widget_id}-body").text  # the cell shows it
+    assert "hidden" in _swapped(body, f"{renderer.widget_id}-files").attributes
+    # opened again: in the folder of the cell's file
+    assert _listed(post("browse", row="1", column="1"), renderer)[-1] == (
+        "browse-file",
+        "beam.export",
+    )
+    post("browse-close")
+    assert not _shows_files(renderer)
+
+
+def test_a_table_s_file_path_typed_outside_its_server_roots_is_refused(
+    study_files: tuple[TestClient, StudyFilesTableMainView, Path],
+) -> None:
+    client, view, root = study_files
+    table = view.inputs
+    renderer = table.renderer
+    assert isinstance(renderer, WebTableRenderer)
+    view.set_language("fr")
+
+    def type_path(text: str) -> None:
+        for event in ("start_edit", "edit"):
+            data = {"event": event, "row": "0", "column": "1", "text": text}
+            client.post(f"/widget/{renderer.widget_id}", data=data)
+
+    for text in ("/etc/passwd", str(root / "beam" / ".." / ".."), "a\0b"):
+        type_path(text)
+        assert table.rows[0] == ["Mesh", ""], text  # the cell keeps its text
+    assert view.status_bar.message == (
+        "Impossible de prendre a\0b : il n'est pas dans les dossiers que liste cette colonne."
+    )
+    inside = str(root / "beam" / "beam.comm")
+    type_path(inside)  # any file inside the roots, as typed
+    assert table.rows[0] == ["Mesh", inside]
+    type_path("")
+    assert table.rows[0] == ["Mesh", ""]
+
+
+def test_a_table_s_server_files_open_only_for_a_cell_the_user_can_edit(
+    study_files: tuple[TestClient, StudyFilesTableMainView, Path],
+) -> None:
+    client, view, _root = study_files
+    table = view.inputs
+    renderer = table.renderer
+    assert isinstance(renderer, WebTableRenderer)
+
+    def post(event: str, **values: str) -> int:
+        data = {"event": event, **values}
+        return client.post(f"/widget/{renderer.widget_id}", data=data).status_code
+
+    for row, column in (("0", "0"), ("9", "1"), ("x", "1")):  # no path, no row, no number
+        post("browse", row=row, column=column)
+    table.editable_columns = []
+    post("browse", row="0", column="1")
+    assert not _shows_files(renderer)
+    assert post("browse-close") == 400  # closed: nothing to move in
+
+    table.editable_columns = [1]
+    post("browse", row="0", column="1")
+    assert _shows_files(renderer)
+    # its column no longer lists the server's files: it closes, picking nothing
+    table.cell_widgets = {1: CellWidget.file_path({"Code_Aster": (".export",)})}
+    post("browse-folder", name="beam")
+    assert not _shows_files(renderer)
+    assert table.rows[0] == ["Mesh", ""]
+    table.cell_widgets = {1: CellWidget.file_path(server_roots=(_root,))}
+    post("browse", row="0", column="1")
+    table.is_enabled = False
+    assert not _shows_files(renderer)  # nothing to pick in a disabled table
 
 
 def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(

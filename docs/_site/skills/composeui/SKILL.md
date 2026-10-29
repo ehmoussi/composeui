@@ -82,7 +82,9 @@ the option for the web (extra `web`, the default).
 - **Pick a file on the server with `server_roots`** when the app needs the file where it is,
   not a copy: on the web, a file path field otherwise uploads a copy. The web lists only
   the files in those folders, and `path` is `None` for a path typed outside them: read
-  `path`, not `text`. Give only folders that every user of the app may see.
+  `path`, not `text`. A table's path cell takes them too:
+  `CellWidget.file_path(extensions, server_roots=(...))`; the web refuses a path typed
+  outside them. Give only folders that every user of the app may see.
   See https://ehmoussi.github.io/composeui/user-guide/widgets.html#files-on-the-server
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
   `cattrs`, which handles `datetime.date` and `datetime.datetime` as ISO 8601 text. A new

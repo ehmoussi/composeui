@@ -144,7 +144,7 @@ from tests.partial import PartialMainView, UnregisteredView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -2229,6 +2229,30 @@ async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() 
             (1, 3),
             (0, 4),
         ]
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_file_path_picker_opens_in_its_first_server_root(tmp_path: Path) -> None:
+    (tmp_path / "studies").mkdir()
+    view = StudyFilesTableMainView()
+    view.inputs.cell_widgets = {1: CellWidget.file_path(server_roots=(tmp_path / "studies",))}
+    app = _app_of(view)
+    box = _widget(view.inputs)
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        x = next(iter(table.columns.values())).get_render_width(table) + 1
+        await pilot.click(table, offset=(x, 1))
+        await pilot.pause()
+        location = app.screen.query_one(DirectoryNavigation).location
+        app.screen.dismiss(tmp_path / "elsewhere.export")  # as the picker's Open does
+        await pilot.pause()
+
+    assert Path(location) == tmp_path / "studies"
+    # the app's own machine: a file outside the roots is the cell's path too
+    assert view.inputs.rows[0] == ["Mesh", str(tmp_path / "elsewhere.export")]
 
 
 @pytest.mark.asyncio

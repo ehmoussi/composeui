@@ -20,8 +20,9 @@ import threading
 from abc import abstractmethod
 from collections import deque
 from contextvars import ContextVar
+from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, NamedTuple, TypeVar
 
 import attrs
 from markdown_it import MarkdownIt
@@ -29,6 +30,7 @@ from markupsafe import Markup, escape
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
+from composeui.core.model import RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
@@ -91,6 +93,7 @@ from composeui.core.view import (
     View,
     as_pattern,
     date_hint,
+    is_within_roots,
     parse_date,
     replace_cell,
     split_pattern,
@@ -108,7 +111,6 @@ from composeui.webcore.serverfiles import (
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Iterator, Mapping
-    from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
@@ -742,6 +744,198 @@ def _file_types(extensions: dict[str, tuple[str, ...]]) -> list[str]:
     return list(dict.fromkeys(t.lower() for ts in extensions.values() for t in ts))
 
 
+class _FilesTexts(NamedTuple):
+    """The texts of a list of the server's files: its title, its items and its messages."""
+
+    title: str
+    parent_folder: str
+    cancel: str
+    unreadable_folder: str
+    partial_folder: str
+
+
+class _ServerFiles:
+    """The `<dialog>` that a "…" button opens on the files of a folder of the server.
+
+    It lists a folder's subfolders, then its files of the picker's types, within the roots
+    (see `serverfiles.py`): a folder's item shows its files, a file's is picked. Only the
+    server knows the folder shown: the page names an item by its name in it. Opened or
+    closed, only the dialog swaps (`dialog_html`), and moving between folders only its
+    list (`list_html`): the dialog open, and the button that opened it, stay the same
+    elements, so closing it gives that button the focus. The first item of a new list
+    takes the focus, the one clicked being gone with the old list.
+    """
+
+    #: the events it takes, each but "browse" only while open
+    EVENTS = ("browse", "browse-close", "browse-root", "browse-parent", "browse-folder")
+
+    def __init__(self, dialog_id: str, widget_id: str) -> None:
+        self.dialog_id = dialog_id
+        #: the renderer its events post to
+        self._widget_id = widget_id
+        #: whether it shows
+        self.is_open = False
+        #: the folder it lists, resolved; None for the list of the roots
+        self._folder: Path | None = None
+
+    def takes(self, event: str) -> bool:
+        """Whether `event` moves it, or picks a file of it, as it now is."""
+        return (event in self.EVENTS or event == "browse-file") and (
+            self.is_open or event == "browse"
+        )
+
+    def move(
+        self, event: str, name: str, roots: list[Path], extensions: tuple[str, ...]
+    ) -> Path | None:
+        """Open, move or close it on `event`; get the file picked by "browse-file".
+
+        On "browse", it opens in the folder of `name`, a path, if inside the roots, else
+        in the only root. An item that is no longer there, or never was, moves nothing.
+        """
+        if self._folder is not None and not is_within(self._folder, roots):
+            self._folder = None  # the roots changed since
+        if event == "browse":
+            self.is_open = True
+            self._folder = self._start_folder(name, roots)
+        elif event == "browse-close":
+            self.is_open = False
+        elif event == "browse-root":
+            if name.isdigit() and int(name) < len(roots):
+                self._folder = roots[int(name)]
+        elif event == "browse-parent":
+            self._show_parent(roots)
+        else:
+            path = None if self._folder is None else item_path(self._folder, name, roots)
+            if event == "browse-folder" and path is not None and path.is_dir():
+                self._folder = path
+            elif event == "browse-file" and self._is_file(path, name, extensions):
+                assert self._folder is not None
+                self.is_open = False
+                return self._folder / name
+        return None
+
+    def _start_folder(self, name: str, roots: list[Path]) -> Path | None:
+        start = roots[0] if len(roots) == 1 else None
+        if name.strip() == "":
+            return start
+        path = Path(name.strip())
+        file = item_path(path.parent, path.name, roots)
+        return start if file is None else file.parent
+
+    def _show_parent(self, roots: list[Path]) -> None:
+        folder = self._folder
+        if folder is not None and folder not in roots:
+            self._folder = folder.parent
+        elif len(roots) > 1:
+            self._folder = None  # the list of the roots
+
+    @staticmethod
+    def _is_file(path: Path | None, name: str, extensions: tuple[str, ...]) -> bool:
+        return path is not None and path.is_file() and has_extension(name, extensions)
+
+    def dialog_html(
+        self,
+        texts: _FilesTexts,
+        roots: list[Path],
+        extensions: tuple[str, ...],
+        *,
+        is_enabled: bool,
+        oob: bool,
+    ) -> Markup:
+        """Get the dialog, hidden while closed or disabled."""
+        is_open = self.is_open and is_enabled
+        title_id = f"{self.dialog_id}-title"
+        return Markup(
+            '<dialog id="{dialog_id}" class="modal" data-dialog{hidden}{swap}'
+            ' aria-labelledby="{title_id}" hx-trigger="cancel"{close}>'
+            '<div class="modal-box flex flex-col gap-3">'
+            '<h2 id="{title_id}" class="text-lg font-bold">{title}</h2>{items}'
+            '<div class="modal-action"><button type="button" class="btn"{close}'
+            " data-close-dialog>{cancel}</button></div></div></dialog>"
+        ).format(
+            dialog_id=self.dialog_id,
+            hidden="" if is_open else " hidden",
+            swap=Markup(' hx-swap-oob="true"') if oob else "",
+            title_id=title_id,
+            close=self._post({"event": "browse-close"}),
+            title=texts.title,
+            items=self.list_html(texts, roots, extensions, oob=False) if is_open else Markup(),
+            cancel=texts.cancel,
+        )
+
+    def list_html(
+        self, texts: _FilesTexts, roots: list[Path], extensions: tuple[str, ...], *, oob: bool
+    ) -> Markup:
+        """Get the dialog's list: the roots, or a folder's path, its folders and its files."""
+        folder = self._folder
+        message = ""
+        items: list[Markup] = []
+        if folder is None:
+            items = [
+                self._item_html("browse-root", str(index), str(root), "folder", is_first=index == 0)
+                for index, root in enumerate(roots)
+            ]
+        else:
+            if folder not in roots or len(roots) > 1:
+                items.append(
+                    self._item_html(
+                        "browse-parent", "", texts.parent_folder, "parent", is_first=True
+                    )
+                )
+            has_parent = len(items) > 0
+            try:
+                listing = list_folder(folder, roots, extensions)
+            except OSError:
+                message = texts.unreadable_folder
+            else:
+                items.extend(
+                    self._item_html(
+                        "browse-folder" if item.is_folder else "browse-file",
+                        item.name,
+                        item.name,
+                        "folder" if item.is_folder else "file",
+                        is_first=index == 0 and not has_parent,
+                    )
+                    for index, item in enumerate(listing.items)
+                )
+                if listing.is_partial:
+                    message = texts.partial_folder
+        return Markup(
+            '<div id="{dialog_id}-list" class="flex flex-col gap-3"{swap}>'
+            '<p class="break-all font-mono text-sm">{folder}</p>{message}'
+            '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul></div>'
+        ).format(
+            dialog_id=self.dialog_id,
+            swap=Markup(' hx-swap-oob="true"') if oob else "",
+            folder="" if folder is None else str(folder),
+            message=(
+                Markup('<p role="status" class="text-sm text-warning">{}</p>').format(message)
+                if message
+                else ""
+            ),
+            items=Markup("").join(items),
+        )
+
+    def _item_html(self, event: str, name: str, text: str, icon: str, *, is_first: bool) -> Markup:
+        # a file's closes the dialog first, as a dialog's answer does
+        closes = " data-close-dialog" if event == "browse-file" else ""
+        return Markup(
+            '<li><button type="button"{post}{closes}{autofocus}>{icon}'
+            '<span class="break-all">{text}</span></button></li>'
+        ).format(
+            post=self._post({"event": event, "name": name}),
+            closes=closes,
+            autofocus=" autofocus" if is_first else "",
+            icon=_icon(icon),
+            text=text,
+        )
+
+    def _post(self, values: Mapping[str, str]) -> Markup:
+        return Markup(""" hx-post="/widget/{}" hx-vals='{}' hx-swap="none\"""").format(
+            self._widget_id, json.dumps(values)
+        )
+
+
 class FilePathInputViewLike(InputViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
     server_roots: tuple[Path, ...]
@@ -768,14 +962,8 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
     input beside it (see `page.js`) uploading the file picked (`/widget/{id}/file`), and
     the session keeps a copy (see `WebSession.pick_file`), whose path the field then
     shows. The root is a `<div>` holding them, so a row's label names the field with
-    `aria-labelledby`.
-
-    With `server_roots`, the button instead opens a `<dialog>` in the root listing the
-    files of a folder of the server (see `serverfiles.py`): a folder's item shows its
-    files, and a file's puts its path in the field. Only the server knows the folder
-    shown: the page names an item by its name in it. Opened or closed, only the dialog
-    swaps, and moving between folders only its list: the dialog open, and the button
-    that opened it, stay the same elements, so closing it gives that button the focus.
+    `aria-labelledby`. With `server_roots`, the button instead opens the list of the
+    server's files (see `_ServerFiles`), a file of which puts its path in the field.
     """
 
     _role = "file_path_input"
@@ -803,12 +991,16 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
         )
         # the user can type any path of the server: `path` then keeps to the roots too
         view._keeps_to_roots = True  # noqa: SLF001
-        #: whether the list of the server's files shows
-        self._is_browsing = False
-        #: the folder it lists, resolved; None for the list of the roots
-        self._folder: Path | None = None
+        self._server_files: _ServerFiles | None = None
         #: what changed since last sent: "field" (all of it), "dialog" or "list"
         self._swaps: set[str] = set()
+
+    @property
+    def _files(self) -> _ServerFiles:
+        # once rendered, with its id
+        if self._server_files is None:
+            self._server_files = _ServerFiles(f"{self.widget_id}-files", self.widget_id)
+        return self._server_files
 
     def _mark_dirty(self, view: FilePathInputViewLike, rendered_object: str, value: Any) -> None:
         self._mark_part("field")
@@ -881,98 +1073,31 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             reload_button=reload_button,
         )
 
+    def _files_texts(self) -> _FilesTexts:
+        view = self._view
+        return _FilesTexts(
+            view.browse_text,
+            view.parent_folder_text,
+            view.cancel_text,
+            view.unreadable_folder_text,
+            view.partial_folder_text,
+        )
+
     def _files_html(self, *, oob: bool) -> Markup:
-        """Get the `<dialog>` listing the server's files, hidden while closed."""
-        is_open = self._is_browsing and self.is_enabled
-        title_id = f"{self.widget_id}-files-title"
-        return Markup(
-            '<dialog id="{widget_id}-files" class="modal" data-dialog{hidden}{swap}'
-            ' aria-labelledby="{title_id}" hx-post="/widget/{widget_id}" hx-trigger="cancel"'
-            """ hx-vals='{{"event": "browse-close"}}' hx-swap="none">"""
-            '<div class="modal-box flex flex-col gap-3">'
-            '<h2 id="{title_id}" class="text-lg font-bold">{title}</h2>{items}'
-            '<div class="modal-action"><button type="button" class="btn"'
-            ' hx-post="/widget/{widget_id}"'
-            """ hx-vals='{{"event": "browse-close"}}' data-close-dialog>{cancel}</button>"""
-            "</div></div></dialog>"
-        ).format(
-            widget_id=self.widget_id,
-            hidden="" if is_open else " hidden",
-            swap=Markup(' hx-swap-oob="true"') if oob else "",
-            title_id=title_id,
-            title=self._view.browse_text,
-            items=self._list_html(oob=False) if is_open else Markup(),
-            cancel=self._view.cancel_text,
+        return self._files.dialog_html(
+            self._files_texts(),
+            resolve_roots(self._view.server_roots),
+            tuple(self.file_types),
+            is_enabled=self.is_enabled,
+            oob=oob,
         )
 
     def _list_html(self, *, oob: bool) -> Markup:
-        """Get the dialog's list: the roots, or a folder's path, its folders and its files."""
-        view = self._view
-        roots = resolve_roots(view.server_roots)
-        folder = self._folder
-        message = ""
-        items: list[Markup] = []
-        if folder is None:
-            items = [
-                self._item_html("browse-root", str(index), str(root), "folder", is_first=index == 0)
-                for index, root in enumerate(roots)
-            ]
-        else:
-            if folder not in roots or len(roots) > 1:
-                items.append(
-                    self._item_html(
-                        "browse-parent", "", view.parent_folder_text, "parent", is_first=True
-                    )
-                )
-            has_parent = len(items) > 0
-            try:
-                listing = list_folder(folder, roots, tuple(self.file_types))
-            except OSError:
-                message = view.unreadable_folder_text
-            else:
-                items.extend(
-                    self._item_html(
-                        "browse-folder" if item.is_folder else "browse-file",
-                        item.name,
-                        item.name,
-                        "folder" if item.is_folder else "file",
-                        is_first=index == 0 and not has_parent,
-                    )
-                    for index, item in enumerate(listing.items)
-                )
-                if listing.is_partial:
-                    message = view.partial_folder_text
-        return Markup(
-            '<div id="{widget_id}-files-list" class="flex flex-col gap-3"{swap}>'
-            '<p class="break-all font-mono text-sm">{folder}</p>{message}'
-            '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul></div>'
-        ).format(
-            widget_id=self.widget_id,
-            swap=Markup(' hx-swap-oob="true"') if oob else "",
-            folder="" if folder is None else str(folder),
-            message=(
-                Markup('<p role="status" class="text-sm text-warning">{}</p>').format(message)
-                if message
-                else ""
-            ),
-            items=Markup("").join(items),
-        )
-
-    def _item_html(self, event: str, name: str, text: str, icon: str, *, is_first: bool) -> Markup:
-        # a file's closes the dialog first, as a dialog's answer does; a folder's swaps the
-        # list, and the first item of the new one takes the focus: the one clicked is gone
-        closes = " data-close-dialog" if event == "browse-file" else ""
-        return Markup(
-            '<li><button type="button" hx-post="/widget/{widget_id}"'
-            """ hx-vals='{values}'{closes}{autofocus}>{icon}"""
-            '<span class="break-all">{text}</span></button></li>'
-        ).format(
-            widget_id=self.widget_id,
-            values=json.dumps({"event": event, "name": name}),
-            closes=closes,
-            autofocus=" autofocus" if is_first else "",
-            icon=_icon(icon),
-            text=text,
+        return self._files.list_html(
+            self._files_texts(),
+            resolve_roots(self._view.server_roots),
+            tuple(self.file_types),
+            oob=oob,
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -986,67 +1111,20 @@ class WebFilePathInputRenderer(_WebTextFieldRenderer[FilePathInputViewLike]):
             self._view.reload_clicked.emit()
 
     def _browse(self, event: str, name: str) -> None:
-        """Open, move or close the list of the server's files, or pick a file of it.
-
-        An item that is no longer there, or never was, shows the list again.
-        """
-        moves = {
-            "browse": self._open_files,
-            "browse-close": self._close_files,
-            "browse-root": self._show_root,
-            "browse-parent": self._show_parent,
-            "browse-folder": self._show_folder,
-            "browse-file": self._pick_server_file,
-        }
-        move = moves.get(event)
-        is_open = self._is_browsing or event == "browse"
-        if move is None or not is_open or not self.is_enabled or not self._view.server_roots:
+        """Open, move or close the list of the server's files, or pick a file of it."""
+        if not self._files.takes(event) or not self.is_enabled or not self._view.server_roots:
             raise UnsupportedEventError(self, event)
-        roots = resolve_roots(self._view.server_roots)
-        if self._folder is not None and not is_within(self._folder, roots):
-            self._folder = None  # the roots changed since
-        was_open = self._is_browsing
-        move(name, roots)
+        was_open = self._files.is_open
+        if event == "browse":
+            path = self._view.path
+            name = "" if path is None else str(path)
+        picked = self._files.move(
+            event, name, resolve_roots(self._view.server_roots), tuple(self.file_types)
+        )
         # opened or closed: the dialog; else only its list, the dialog left open
-        self._mark_part("list" if was_open == self._is_browsing else "dialog")
-
-    def _open_files(self, _name: str, roots: list[Path]) -> None:
-        """Show the list in the folder of the field's file, else in the only root."""
-        self._is_browsing = True
-        self._folder = roots[0] if len(roots) == 1 else None
-        path = self._view.path
-        if path is not None:
-            file = item_path(path.parent, path.name, roots)
-            if file is not None:
-                self._folder = file.parent
-
-    def _close_files(self, _name: str, _roots: list[Path]) -> None:
-        self._is_browsing = False
-
-    def _show_root(self, name: str, roots: list[Path]) -> None:
-        if name.isdigit() and int(name) < len(roots):
-            self._folder = roots[int(name)]
-
-    def _show_parent(self, _name: str, roots: list[Path]) -> None:
-        folder = self._folder
-        if folder is not None and folder not in roots:
-            self._folder = folder.parent
-        elif len(roots) > 1:
-            self._folder = None  # the list of the roots
-
-    def _show_folder(self, name: str, roots: list[Path]) -> None:
-        path = None if self._folder is None else item_path(self._folder, name, roots)
-        if path is not None and path.is_dir():
-            self._folder = path
-
-    def _pick_server_file(self, name: str, roots: list[Path]) -> None:
-        folder = self._folder
-        path = None if folder is None else item_path(folder, name, roots)
-        if folder is None or path is None or not path.is_file():
-            return
-        if has_extension(name, tuple(self.file_types)):
-            self._is_browsing = False
-            self._show_path(folder / name)
+        self._mark_part("list" if was_open == self._files.is_open else "dialog")
+        if picked is not None:
+            self._show_path(picked)
 
     @property
     def file_types(self) -> list[str]:
@@ -1736,11 +1814,13 @@ class TableViewLike(ViewLike, Protocol):
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
+    file_texts: dict[str, str]
     cell_clicked: Signal[int, int]
     cell_styles: dict[tuple[int, int], CellStyle]
     header_groups: list[HeaderGroup]
     row_headers: list[str]
 
+    def refusing(self, message: str) -> contextlib.AbstractContextManager[None]: ...
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
     def mark_text(self, mark: NodeMark) -> str: ...
     def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
@@ -2187,10 +2267,14 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         super().__init__(view)
         #: the cell the user is editing, by row and column
         self._editing: tuple[int, int] | None = None
+        self._server_files: _ServerFiles | None = None
+        #: the file path cell the list of the server's files picks for
+        self._files_cell: tuple[int, int] | None = None
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
                 "filter_texts": self._mark_dirty,
+                "file_texts": self._mark_dirty,
                 "selection_mode": self._mark_dirty,
                 "rows": self._refresh_rows,
                 "sortable_columns": self._mark_dirty,
@@ -2227,22 +2311,77 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         return self._view.filter_texts.get("count", "").format(shown=shown, total=total)
 
     def _own_parts(self) -> dict[str, Callable[..., Markup]]:
-        return {"head": self._head_html, "body": self._body_html}
+        return {
+            "head": self._head_html,
+            "body": self._body_html,
+            "files": self._files_html,
+            "files-list": self._files_list_html,
+        }
 
     def _whole_html(self, *, oob: bool) -> Markup:
         grid = Markup(' role="grid" aria-multiselectable="true"') if self._is_multiple() else ""
+        has_files = any(
+            widget.kind is CellKind.FILE_PATH and widget.server_roots
+            for widget in self._view.cell_widgets.values()
+        )
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
             "{bar_html}"
             '<div class="overflow-x-auto rounded-box border border-base-300">'
             '<table class="table table-zebra table-sm"{grid}>'
-            "{head_html}{body_html}</table></div></div>"
+            "{head_html}{body_html}</table></div>{files_html}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             bar_html=self._bar_html(),
             grid=grid,
             head_html=self._head_html(),
             body_html=self._body_html(),
+            files_html=self._files_html() if has_files else "",
+        )
+
+    @property
+    def _files(self) -> _ServerFiles:
+        # once rendered, with its id
+        if self._server_files is None:
+            self._server_files = _ServerFiles(f"{self.widget_id}-files", self.widget_id)
+        return self._server_files
+
+    def _files_widget(self) -> CellWidget | None:
+        """Get the widget of the cell the list of the server's files picks for, if still one."""
+        cell = self._files_cell
+        widget = None if cell is None else self._view.cell_widgets.get(cell[1])
+        if widget is None or widget.kind is not CellKind.FILE_PATH or not widget.server_roots:
+            return None
+        return widget
+
+    def _files_texts(self, widget: CellWidget | None) -> _FilesTexts:
+        texts = self._view.file_texts
+        return _FilesTexts(
+            "" if widget is None else widget.text,
+            texts.get("parent_folder", ""),
+            texts.get("cancel", ""),
+            texts.get("unreadable_folder", ""),
+            texts.get("partial_folder", ""),
+        )
+
+    def _files_html(self, *, oob: bool = False) -> Markup:
+        """Render the list of the server's files of a file path cell, hidden while closed."""
+        widget = self._files_widget()
+        return self._files.dialog_html(
+            self._files_texts(widget),
+            [] if widget is None else resolve_roots(widget.server_roots),
+            () if widget is None else tuple(_file_types(widget.extensions)),
+            is_enabled=self.is_enabled and widget is not None,
+            oob=oob,
+        )
+
+    def _files_list_html(self, *, oob: bool = False) -> Markup:
+        widget = self._files_widget()
+        return self._files.list_html(
+            self._files_texts(widget),
+            [] if widget is None else resolve_roots(widget.server_roots),
+            () if widget is None else tuple(_file_types(widget.extensions)),
+            oob=oob,
         )
 
     def _head_html(self, *, oob: bool = False) -> Markup:
@@ -2560,11 +2699,26 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     def _file_path_html(
         self, row: int, column: int, text: str, widget: CellWidget, *, is_editable: bool
     ) -> Markup:
-        """Render a file path's text, then its "…" button opening the hidden file input."""
+        """Render a file path's text, then its "…" button opening the hidden file input.
+
+        With `server_roots`, the button opens the list of the server's files instead.
+        """
         label = f"{self._view.headers[column]}: {widget.text}"
         widget_id = f"{self.widget_id}-cell-{row}-{column}"
         types = ",".join(_file_types(widget.extensions))
         disabled = "" if is_editable else " disabled"
+        if widget.server_roots:
+            return Markup(
+                '<span class="flex items-center gap-2"><span class="flex-1">{text}</span>'
+                '<button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
+                ' aria-label="{label}" title="{label}"{browse}{disabled}>…</button></span>'
+            ).format(
+                text=text,
+                widget_id=widget_id,
+                label=label,
+                browse=self._post({"event": "browse", "row": str(row), "column": str(column)}),
+                disabled=disabled,
+            )
         return Markup(
             '<span class="flex items-center gap-2"><span class="flex-1">{text}</span>'
             '<button id="{widget_id}" type="button" class="btn btn-xs btn-soft"'
@@ -2621,6 +2775,9 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             super().dispatch(event, form)
         if event in ("start_edit", "edit"):
             self._edit(event, form)
+            return
+        if event.startswith("browse"):
+            self._browse(event, form)
             return
         handlers = {
             "check": self._check,
@@ -2684,12 +2841,59 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         cells, text = self._view.rows[cell[0]], form.get("text", "")
         if text == (cells[cell[1]] if cell[1] < len(cells) else ""):
             return
+        widget = self._view.cell_widgets.get(cell[1])
+        if widget is not None and widget.kind is CellKind.FILE_PATH and widget.server_roots:
+            path = Path(text.strip())
+            if text.strip() != "" and not is_within_roots(path, widget.server_roots):
+                self._refuse_path(path)
+                return
         rows = self._view.rows
         self._view.emit_cell_edited(*cell, text)
         # unless the app answered with its own rows, which it has marked to show
         if self._view.rows is rows:
             with self.stop_refresh():
                 self._view.rows = replace_cell(rows, *cell, text)
+
+    def _refuse_path(self, path: Path) -> None:
+        """Keep a file path cell's text, typed outside its roots, and say why."""
+        message = self._view.file_texts.get("outside_roots", "")
+        with (
+            contextlib.suppress(RefusedError),
+            self._view.refusing(message.replace("{path}", "{error}")),
+        ):
+            raise RefusedError(str(path))
+
+    def _browse(self, event: str, form: Mapping[str, str]) -> None:
+        """Open, move or close a file path cell's list of the server's files, or pick a file."""
+        files = self._files
+        if not files.takes(event):
+            raise UnsupportedEventError(self, event)
+        name = form.get("name", "")
+        if event == "browse":
+            cell = self._widget_cell(form, (CellKind.FILE_PATH,))
+            if cell is None or not self._view.cell_widgets[cell[1]].server_roots:
+                return  # a cell a stale page still shows: the table comes back as it is
+            self._files_cell = cell
+            cells = self._view.rows[cell[0]]
+            name = cells[cell[1]] if cell[1] < len(cells) else ""
+        widget = self._files_widget()
+        if widget is None:  # its column changed since: nothing to pick for
+            files.move("browse-close", "", [], ())
+            self._mark_parts("files")
+            return
+        was_open = files.is_open
+        picked = files.move(
+            event,
+            name,
+            resolve_roots(widget.server_roots),
+            tuple(_file_types(widget.extensions)),
+        )
+        # opened or closed: the dialog; else only its list, the dialog left open
+        self._mark_parts("files-list" if was_open == files.is_open else "files")
+        if picked is not None:
+            self._set_widget_cell(self._files_cell, str(picked))
+            # unlike a check box's, the cell doesn't show it yet
+            self._mark_parts("body")
 
     def _widget_cell(
         self, form: Mapping[str, str], kinds: tuple[CellKind, ...]

@@ -1354,6 +1354,8 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
                 "shown_rows": self._refresh_shown_rows,
                 "editable_columns": self._refresh_editable_columns,
                 "cell_widgets": self._refresh_cell_widgets,
+                # the web's list of the server's files only
+                "file_texts": lambda _view, _rendered_object, _value: None,
                 "cell_styles": self._refresh_looks,
                 "header_groups": self._refresh_header_groups,
                 "row_headers": self._refresh_looks,
@@ -1536,15 +1538,20 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
 
     def _browse(self, position: int, column: int) -> None:
-        """Pick a file in Qt's dialog, its path then the cell's; nothing if cancelled."""
+        """Pick a file in Qt's dialog, its path then the cell's; nothing if cancelled.
+
+        The dialog opens in the folder of the cell's path, else in the first server root.
+        """
         assert self._rendered_object is not None
         widget = self._view.cell_widgets[column]
         cells = self._view.rows[self._view.shown_rows[position]]
         text = cells[column].strip() if column < len(cells) else ""
+        roots = widget.server_roots
+        start = Path(text).parent if text != "" else (roots[0] if roots else None)
         picked, _selected_filter = QFileDialog.getOpenFileName(
             self._rendered_object,
             widget.text,
-            "" if text == "" else str(Path(text).parent),
+            "" if start is None else str(start),
             _file_filters(widget.extensions),
         )
         if picked != "":
