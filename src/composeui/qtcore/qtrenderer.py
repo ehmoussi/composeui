@@ -111,7 +111,7 @@ from composeui.core.view import (
     with_extension,
 )
 from composeui.qtcore.widgets.qchart import QChart
-from composeui.qtcore.widgets.qconsole import QConsole
+from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -890,10 +890,17 @@ class ConsoleViewLike(ViewLike, Protocol):
     max_lines: int
     line_count: int
     last_line: str
+    texts: dict[str, str]
+    export_filename: str
+
+    def export_text(self, path: Path) -> None: ...
 
 
-class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsole]):
-    """The console's text in a `QConsole`, its new lines added to those it shows."""
+class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
+    """The console's text in a `QConsole`, its new lines added to those it shows.
+
+    Its Save button asks where to save the text, in Qt's file dialog.
+    """
 
     def __init__(self, view: ConsoleViewLike) -> None:
         super().__init__(view)
@@ -904,28 +911,51 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsole]):
                 "max_lines": self._refresh_max_lines,
                 "text": self._refresh_text,
                 "line_count": self._refresh_line_count,
+                "texts": self._refresh_texts,
+                # the dialog's, read as it opens
+                "export_filename": lambda _view, _box, _value: None,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QConsole()
+            self._rendered_object = QConsoleBox()
+            self._rendered_object.save.clicked.connect(self._save)
             self.refresh()
 
     @staticmethod
-    def _refresh_max_lines(_view: ConsoleViewLike, rendered_object: QConsole, value: int) -> None:
-        rendered_object.set_max_lines(value)
+    def _refresh_max_lines(
+        _view: ConsoleViewLike, rendered_object: QConsoleBox, value: int
+    ) -> None:
+        rendered_object.text.set_max_lines(value)
 
-    def _refresh_text(self, view: ConsoleViewLike, rendered_object: QConsole, value: str) -> None:
-        rendered_object.set_text(value)
+    def _refresh_text(
+        self, view: ConsoleViewLike, rendered_object: QConsoleBox, value: str
+    ) -> None:
+        rendered_object.text.set_text(value)
         self._shown_count = view.line_count
 
     def _refresh_line_count(
-        self, view: ConsoleViewLike, rendered_object: QConsole, value: int
+        self, view: ConsoleViewLike, rendered_object: QConsoleBox, value: int
     ) -> None:
         assert isinstance(view, ConsoleView)
-        rendered_object.add(lines_after(view, self._shown_count), view.last_line)
+        rendered_object.text.add(lines_after(view, self._shown_count), view.last_line)
         self._shown_count = value
+
+    @staticmethod
+    def _refresh_texts(
+        _view: ConsoleViewLike, rendered_object: QConsoleBox, value: dict[str, str]
+    ) -> None:
+        rendered_object.save.setText(f"{value.get('save', '')}…")
+
+    def _save(self) -> None:
+        """Ask where to save the text, and save it there."""
+        assert self._rendered_object is not None
+        path, _chosen = QFileDialog.getSaveFileName(
+            self._rendered_object, self._view.texts.get("save", ""), self._view.export_filename
+        )
+        if path != "":
+            self._view.export_text(Path(path))
 
 
 class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
@@ -1950,7 +1980,7 @@ class QtGroupFormRenderer(QtFormRenderer):
 #: splitter too, its panes as tall as it
 _SCROLLING_WIDGETS = (
     QTextBrowser,
-    QConsole,
+    QConsoleBox,
     QScrollArea,
     QTreeWidget,
     QSplitter,

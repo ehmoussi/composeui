@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 import pytest
 from attrs import Factory
@@ -26,9 +27,13 @@ from composeui.core.view import (
     parse_date,
 )
 from tests.buildings import SITE
+from tests.console import RunMainView
 from tests.pages import InputsPage
 from tests.splitter import StudySplitter
 from tests.tabs import PipeTabs
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _note(_instance: object, _attribute: object, value: str) -> str:
@@ -220,3 +225,17 @@ def test_a_console_ends_a_line_at_a_newline_and_starts_it_again_at_a_return() ->
     assert (list(console.lines), console.last_line) == (["New"], "run")
     console.clear()
     assert console.text == ""
+
+
+def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:
+    app = Application(build_main_view=RunMainView)
+    output, status_bar = app.main_view.output, app.main_view.status_bar
+
+    output.export_text(tmp_path / "run.log")
+    assert (tmp_path / "run.log").read_text(encoding="utf-8") == "Ready <ok>\n"
+    assert status_bar.message == "Saved the output to run.log."
+    output.export_text(tmp_path)  # a folder: not written
+    assert status_bar.message.startswith(f"Can't save to {tmp_path.name}: ")
+
+    with pytest.raises(OSError):  # noqa: PT011 (whichever the system raises)
+        ConsoleView().export_text(tmp_path)  # outside a main view

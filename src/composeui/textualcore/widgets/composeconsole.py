@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rich.cells import cell_len
 from textual.geometry import Size
 from textual.widgets import Log
+from textual_fspicker import FileSave
+
+from composeui.core.signal import Signal
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+#: the key asking where to save the text
+SAVE_KEY = "s"
 
 
 class ComposeConsole(Log):
@@ -11,11 +22,29 @@ class ComposeConsole(Log):
     `Log` only adds to its last line, and its `write_lines` drops empty lines. The console
     scrolls to its end as lines come only when the end was shown: `Log.write` scrolls
     whatever the user is reading. `set_max_lines` keeps that many lines, the line being
-    written not counted.
+    written not counted. `SAVE_KEY` asks where to save the text, in textual-fspicker's
+    save dialog, and `save_path_chosen` emits the path chosen.
     """
 
     def __init__(self) -> None:
         super().__init__(auto_scroll=False)
+        self.save_path_chosen: Signal[Path] = Signal()
+        #: the name the save dialog offers
+        self.export_filename = "output.txt"
+        self.set_save_text("Save output")
+
+    def set_save_text(self, text: str) -> None:
+        """Describe the key saving the text, e.g. in the app's footer."""
+        self._bindings.key_to_bindings.pop(SAVE_KEY, None)
+        self._bindings.bind(SAVE_KEY, "save", text)
+        self.refresh_bindings()
+
+    def action_save(self) -> None:
+        self.app.push_screen(FileSave(default_file=self.export_filename), self._save_path_chosen)
+
+    def _save_path_chosen(self, path: Path | None) -> None:
+        if path is not None:
+            self.save_path_chosen.emit(path)
 
     def set_max_lines(self, count: int) -> None:
         self.max_lines = count + 1

@@ -235,6 +235,19 @@ def table_csv(request: Request) -> Response:
     return StreamingResponse(chunks, media_type="text/csv; charset=utf-8", headers=headers)
 
 
+def console_text(request: Request) -> Response:
+    """Download a console's text, as a plain link does: it only reads."""
+    session = _session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=303)
+    result = session.console_text(request.path_params["widget_id"])
+    if result is None:
+        return PlainTextResponse("Unknown widget", status_code=404)
+    filename, text = result
+    headers = {**_NO_STORE, "Content-Disposition": _attachment(filename)}
+    return Response(text, media_type="text/plain; charset=utf-8", headers=headers)
+
+
 def jobs_poll(request: Request) -> Response:
     """Return the jobs' poller and what they changed, which it fetches while they run."""
     session = _session(request)

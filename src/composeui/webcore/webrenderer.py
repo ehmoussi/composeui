@@ -3795,6 +3795,8 @@ class ConsoleViewLike(ViewLike, Protocol):
     line_count: int
     last_line: str
     lines: Sequence[str]
+    texts: dict[str, str]
+    export_filename: str
 
 
 class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
@@ -3803,7 +3805,8 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
     Each line is a ``<span>`` ended by its newline, in a ``<pre>``. New lines go before
     the line being written, which is swapped: the text the page holds stays as it is. The
     page's script drops the oldest lines past `data-max-lines`, and keeps the box at its
-    end as lines come, unless the user scrolled up (see `page.js`).
+    end as lines come, unless the user scrolled up (see `page.js`). A link above the box
+    downloads the text (`text_file`, by the `/widget/{id}/text` route).
     """
 
     _role = "console"
@@ -3818,6 +3821,9 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
                 "max_lines": self._mark_dirty,
                 "text": self._mark_dirty,
                 "line_count": self._mark_added,
+                "texts": self._mark_dirty,
+                # the download's, read as it is asked for
+                "export_filename": lambda _view, _rendered_object, _value: None,
             }
         )
 
@@ -3832,13 +3838,25 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             )
             return (added if len(lines) > 0 else Markup()) + self._last_html(oob=True)
         return Markup(
-            '<pre {} class="cui-console" data-console data-max-lines="{}" tabindex="0">{}{}</pre>'
+            '<div {root_attributes} class="flex flex-col gap-2">'
+            # a plain link: htmx can't start a download
+            '<a class="btn btn-ghost btn-xs self-end" href="/widget/{widget_id}/text"'
+            " download>{save}</a>"
+            '<pre id="{widget_id}-text" class="cui-console" data-console'
+            ' data-max-lines="{max_lines}" tabindex="0">'
+            "{lines}{last}</pre></div>"
         ).format(
-            self._root_attributes(oob=oob),
-            self._view.max_lines,
-            self._lines_html(self._view.lines),
-            self._last_html(oob=False),
+            root_attributes=self._root_attributes(oob=oob),
+            widget_id=self.widget_id,
+            save=self._view.texts.get("save", ""),
+            max_lines=self._view.max_lines,
+            lines=self._lines_html(self._view.lines),
+            last=self._last_html(oob=False),
         )
+
+    def text_file(self) -> tuple[str, str]:
+        """Get the download's name, and the text."""
+        return self._view.export_filename, self._view.text
 
     @staticmethod
     def _lines_html(lines: Iterable[str]) -> Markup:

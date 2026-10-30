@@ -48,7 +48,6 @@ from qtpy.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QRadioButton,
@@ -109,6 +108,7 @@ from composeui.core.view import (
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -374,8 +374,9 @@ def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_u
     window.resize(800, 400)  # shorter than a run's lines
     window.show()
     qtbot.waitExposed(window)
-    console = _widget(view.output)
-    assert isinstance(console, QPlainTextEdit)
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+    console = box.text
     assert console.isReadOnly()
     # it scrolls within itself: down to the status bar, as Markdown does
     assert isinstance(window, QMainWindow)
@@ -396,6 +397,33 @@ def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_u
 
     view.output.text = "New run"
     assert console.toPlainText() == "New run"
+
+
+@pytest.mark.parametrize("picked", ["run.log", ""])
+def test_a_console_s_save_button_saves_its_text_where_the_user_picks(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, picked: str
+) -> None:
+    view = RunMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+    asked: list[tuple[str, str]] = []
+
+    def get_save_file_name(_parent: QWidget, caption: str, name: str) -> tuple[str, str]:
+        asked.append((caption, name))
+        return (str(tmp_path / picked) if picked else ""), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    assert box.save.text() == "Save output…"
+
+    qtbot.mouseClick(box.save, Qt.MouseButton.LeftButton)
+
+    assert asked == [("Save output", "output.txt")]
+    if picked:
+        assert (tmp_path / picked).read_text(encoding="utf-8") == "Ready <ok>\n"
+    else:  # cancelled
+        assert list(tmp_path.iterdir()) == []
 
 
 def test_the_window_shows_the_app_s_icon_composeui_s_by_default(

@@ -3209,6 +3209,34 @@ async def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scro
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("is_cancelled", [False, True])
+async def test_a_console_s_key_saves_its_text_where_the_user_picks(
+    tmp_path: Path, *, is_cancelled: bool
+) -> None:
+    view = RunMainView()
+    app = _app_of(view)
+    console = _widget(view.output)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        console.focus()
+        await pilot.pause()
+        footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
+        assert "Save output" in footer
+
+        await pilot.press("s")
+        await pilot.pause()
+        assert isinstance(app.screen, FileSave)
+        # as the dialog's Save button does, or Cancel
+        app.screen.dismiss(None if is_cancelled else tmp_path / "run.log")
+        await pilot.pause()
+
+    if is_cancelled:
+        assert _names(tmp_path) == []
+    else:
+        assert (tmp_path / "run.log").read_text(encoding="utf-8") == "Ready <ok>\n"
+
+
+@pytest.mark.asyncio
 async def test_a_text_like_markup_shows_as_it_is() -> None:
     """Textual reads a string as its markup: `[/]` would crash it, an action would run."""
     view = MarkupMainView()

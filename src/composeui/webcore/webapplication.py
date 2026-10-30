@@ -39,6 +39,7 @@ from composeui.webcore.limits import BodySizeLimitMiddleware
 from composeui.webcore.origin import SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
+    console_text,
     homepage,
     icon,
     jobs_poll,
@@ -135,6 +136,7 @@ def create_starlette_app(
             Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
             Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
             Route("/widget/{widget_id}/csv", table_csv, methods=["GET"]),
+            Route("/widget/{widget_id}/text", console_text, methods=["GET"]),
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
             Route("/state/download", state_save, methods=["POST"]),

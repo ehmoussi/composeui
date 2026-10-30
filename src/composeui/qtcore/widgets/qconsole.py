@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QFontDatabase, QTextCursor
-from qtpy.QtWidgets import QPlainTextEdit
+from qtpy.QtWidgets import QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 
 class QConsole(QPlainTextEdit):
@@ -45,3 +46,18 @@ class QConsole(QPlainTextEdit):
     def _scroll_to_end(self) -> None:
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+
+class QConsoleBox(QWidget):
+    """A `QConsole` under its controls: `save`, at the right, as a large table's export."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.text = QConsole()
+        self.save = QToolButton()
+        self.save.setAutoRaise(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.save, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(self.text, 1)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)

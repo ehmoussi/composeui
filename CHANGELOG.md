@@ -50,6 +50,9 @@ The notable changes of each release of ComposeUI. The format follows
   buttons or actions that cancel its run, enabled only until it is asked to stop. They
   follow every start and outcome. `Task.is_canceled` tells a run asked to stop, and
   `Task.cancel` emits `changed`.
+- A console saves its text to a file: a "Save output…" button on Qt, the key `s` on
+  Textual, and a download link on the web. `ConsoleView.export_text(path)` writes it, and
+  `export_filename` names the file at first.
 
 ### Fixed
 

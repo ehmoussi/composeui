@@ -83,5 +83,8 @@
   "Can't export to {name}: {error}.": "Impossible d'exporter dans {name} : {error}.",
   "Loading...": "Chargement...",
   "Loading... ({progress})": "Chargement... ({progress})",
-  "Failed: {error}": "Échec : {error}"
+  "Failed: {error}": "Échec : {error}",
+  "Save output": "Enregistrer la sortie",
+  "Saved the output to {name}.": "Sortie enregistrée dans {name}.",
+  "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}."
 }

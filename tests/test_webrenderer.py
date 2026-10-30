@@ -2759,6 +2759,7 @@ def test_a_request_without_a_live_session_reloads_the_page(
             stale.post("/state/download", follow_redirects=False),
             stale.get(f"/widget/{field_id}/image", follow_redirects=False),
             stale.get(f"/widget/{field_id}/csv", follow_redirects=False),
+            stale.get(f"/widget/{field_id}/text", follow_redirects=False),
         ]
 
     for response in (posted, fetched, uploaded, picked, polled):
@@ -4175,7 +4176,7 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
         page = client.get("/").text
         (view,) = views
         output_id, run_id = _widget_id(view.output.renderer), _widget_id(view.run.renderer)
-        console = _element(page, output_id)
+        console = _element(page, f"{output_id}-text")
         assert (console.tag, console.attributes["data-max-lines"]) == ("pre", str(MAX_LINES))
         assert console.text == "Ready <ok>\n"
 
@@ -4189,7 +4190,35 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
 
         view.run.clicked.connect(lambda: setattr(view.output, "text", "New run"))
         body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
-        assert _swapped(body, output_id).text == "New run"
+        _swapped(body, output_id)  # whole
+        assert _element(body, f"{output_id}-text").text == "New run"
+
+
+def test_a_console_s_link_downloads_its_text() -> None:
+    views: list[RunMainView] = []
+
+    class RunApp(WebApplication[RunMainView]):
+        def setup_session(self, main_view: RunMainView) -> None:
+            main_view.output.export_filename = "run é.log"
+            views.append(main_view)
+
+    with _Browser(RunApp(build_main_view=RunMainView).create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        output_id = _widget_id(view.output.renderer)
+        links = [a for tag, a in _element(page, output_id).descendants if tag == "a"]
+        assert [(a["href"], "download" in a) for a in links] == [
+            (f"/widget/{output_id}/text", True)
+        ]
+        view.output.append("Step 1 <done>\n")
+
+        response = client.get(f"/widget/{output_id}/text")
+        unknown = client.get(f"/widget/{_widget_id(view.run.renderer)}/text")
+
+    assert response.text == "Ready <ok>\nStep 1 <done>\n"
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert response.headers["content-disposition"].endswith("filename*=UTF-8''run%20%C3%A9.log")
+    assert unknown.status_code == 404
 
 
 def _contains(element: _Element, element_id: str) -> bool:
