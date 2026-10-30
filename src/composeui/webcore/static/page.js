@@ -1192,6 +1192,23 @@ document.addEventListener("htmx:load", function (event) {
     navigator.clipboard.writeText(text).catch(function () {});
   }
 });
+/* a console (see `WebConsoleRenderer`) keeps its last `data-max-lines` lines, the line
+   being written not counted, and stays at its end as lines come, unless the user
+   scrolled up to read (a scroll doesn't bubble) */
+document.addEventListener("scroll", function (event) {
+  var box = event.target;
+  if (!(box instanceof HTMLElement) || !("console" in box.dataset)) return;
+  box.dataset.scrolledUp = String(box.scrollTop + box.clientHeight < box.scrollHeight - 4);
+}, true);
+function keepConsoles() {
+  document.querySelectorAll("[data-console]").forEach(function (box) {
+    for (var excess = box.children.length - 1 - Number(box.dataset.maxLines); excess > 0;
+      excess--) {
+      box.firstElementChild.remove();
+    }
+    if (box.dataset.scrolledUp !== "true") box.scrollTop = box.scrollHeight;
+  });
+}
 /* neither bubbles */
 document.addEventListener("beforetoggle", placeHelp, true);
 document.addEventListener("toggle", placeHelp, true);
@@ -1201,6 +1218,7 @@ document.addEventListener("DOMContentLoaded", function () {
   syncMaps();
   loadCalendars();
   syncSidebarToggles();
+  keepConsoles();
   new MutationObserver(function () {
     syncInvalidFields();
     syncSidebarToggles();
@@ -1209,6 +1227,7 @@ document.addEventListener("DOMContentLoaded", function () {
     syncCharts();
     syncMaps();
     loadCalendars();
+    keepConsoles();
   }).observe(document.body, {
     childList: true,
     subtree: true,

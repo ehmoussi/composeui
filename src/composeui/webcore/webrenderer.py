@@ -59,6 +59,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    ConsoleView,
     DialogKind,
     DialogView,
     ExitAppAction,
@@ -104,6 +105,7 @@ from composeui.core.view import (
     as_pattern,
     date_hint,
     is_within_roots,
+    lines_after,
     parse_date,
     replace_cell,
     split_pattern,
@@ -122,7 +124,7 @@ from composeui.webcore.serverfiles import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable, Iterator, Mapping
+    from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
@@ -3787,6 +3789,77 @@ class WebMarkdownRenderer(WebRenderer[MarkdownViewLike]):
         )
 
 
+class ConsoleViewLike(ViewLike, Protocol):
+    text: str
+    max_lines: int
+    line_count: int
+    last_line: str
+    lines: Sequence[str]
+
+
+class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
+    """The console's lines in a box, the line being written last; a change sends new lines.
+
+    Each line is a ``<span>`` ended by its newline, in a ``<pre>``. New lines go before
+    the line being written, which is swapped: the text the page holds stays as it is. The
+    page's script drops the oldest lines past `data-max-lines`, and keeps the box at its
+    end as lines come, unless the user scrolled up (see `page.js`).
+    """
+
+    _role = "console"
+
+    def __init__(self, view: ConsoleViewLike) -> None:
+        super().__init__(view)
+        #: how many of the view's lines had ended when the page last got them
+        self._sent: int | None = None
+        self._is_whole = True
+        self._refresh_dispatcher.update(
+            {
+                "max_lines": self._mark_dirty,
+                "text": self._mark_dirty,
+                "line_count": self._mark_added,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        sent, self._sent = self._sent, self._view.line_count
+        is_whole, self._is_whole = self._is_whole, False
+        if oob and not is_whole and sent is not None:
+            assert isinstance(self._view, ConsoleView)
+            lines = lines_after(self._view, sent)
+            added = Markup('<span hx-swap-oob="beforebegin:#{}-last">{}</span>').format(
+                self.widget_id, self._lines_html(lines)
+            )
+            return (added if len(lines) > 0 else Markup()) + self._last_html(oob=True)
+        return Markup(
+            '<pre {} class="cui-console" data-console data-max-lines="{}" tabindex="0">{}{}</pre>'
+        ).format(
+            self._root_attributes(oob=oob),
+            self._view.max_lines,
+            self._lines_html(self._view.lines),
+            self._last_html(oob=False),
+        )
+
+    @staticmethod
+    def _lines_html(lines: Iterable[str]) -> Markup:
+        return Markup("").join(Markup("<span>{}\n</span>").format(line) for line in lines)
+
+    def _last_html(self, *, oob: bool) -> Markup:
+        """Render the line being written: its own swap when `oob`."""
+        swap = Markup(' hx-swap-oob="true"') if oob else Markup()
+        return Markup('<span id="{}-last"{}>{}</span>').format(
+            self.widget_id, swap, self._view.last_line
+        )
+
+    def _mark_dirty(self, view: ConsoleViewLike, rendered_object: str, value: Any) -> None:
+        self._is_whole = True
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _mark_added(self, view: ConsoleViewLike, rendered_object: str, value: Any) -> None:
+        # the lines added, unless the whole console is to go
+        super()._mark_dirty(view, rendered_object, value)
+
+
 class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
     """The label of a form row, pointing at the row's field for clicks/screen readers.
 
@@ -5917,6 +5990,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "log": WebLogRenderer,
     "main": WebMainRenderer,
     "markdown": WebMarkdownRenderer,
+    "console": WebConsoleRenderer,
     "menu": WebMenuRenderer,
     "metric": WebMetricRenderer,
     "page": WebPageRenderer,

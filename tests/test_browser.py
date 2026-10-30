@@ -41,6 +41,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView
 from tests.charts import ChartPagesMainView
+from tests.console import MAX_LINES, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -225,6 +226,13 @@ class _PlacesApp(WebApplication[EditableTableMainView]):
             main_view.status_bar.show_message(f"Opened {places.rows[row][0]}")
 
         places.row_activated.connect(show_opened)
+
+
+@pytest.fixture(scope="module")
+def run_base_url() -> Iterator[str]:
+    """Serve an app writing a run's output to a console, for the whole module."""
+    with _serve(WebApplication(build_main_view=RunMainView).create_starlette_app()) as url:
+        yield url
 
 
 @pytest.fixture(scope="module")
@@ -1609,6 +1617,49 @@ def test_a_slider_shows_its_value_beside_the_track_as_tall_as_a_text_field(
     expect(value).to_have_text("14")
     assert _box(value) == shown  # its slot as wide whatever the value: the track keeps its length
     expect(slider).to_be_focused()  # never swapped back
+    context.close()
+
+
+def test_a_console_keeps_its_last_lines_at_its_end_unless_the_user_scrolled_up(
+    browser: Browser, run_base_url: str
+) -> None:
+    context = browser.new_context(base_url=run_base_url)
+    page = context.new_page()
+    page.goto("/")
+    console = page.locator("pre")
+    run = page.get_by_role("button", name="Run")
+
+    def is_at_end() -> bool:
+        return bool(
+            console.evaluate("box => box.scrollTop + box.clientHeight >= box.scrollHeight - 1")
+        )
+
+    with _posted(page):
+        run.click()
+    expect(console).to_contain_text("Step 30")
+    page.wait_for_function(
+        "box => box.scrollTop + box.clientHeight >= box.scrollHeight - 1",
+        arg=console.element_handle(),
+    )
+    # the user scrolls up to read: the next run, its oldest lines dropped, leaves it there
+    console.hover()
+    page.mouse.wheel(0, -10_000)
+    expect(console).to_have_attribute("data-scrolled-up", "true")
+    with _posted(page):
+        run.click()
+    # dropped in the pass that would have scrolled
+    expect(console.locator("span")).to_have_count(MAX_LINES + 1)
+    expect(console).to_contain_text("Step 60")
+    expect(console).not_to_contain_text("Ready")
+    assert not is_at_end()
+    # back at the end: it follows the lines again
+    console.hover()  # the click on Run moved the mouse
+    page.mouse.wheel(0, 10_000)
+    expect(console).to_have_attribute("data-scrolled-up", "false")
+    with _posted(page):
+        run.click()
+    expect(console).to_contain_text("Step 90")
+    assert is_at_end()
     context.close()
 
 

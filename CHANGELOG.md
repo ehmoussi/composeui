@@ -39,6 +39,10 @@ The notable changes of each release of ComposeUI. The format follows
 - `TableView.row_activated`, which emits a row's index when the user opens it with a double
   click or Enter, as a large table's `row_activated` emits its id. A double click that edits
   a cell, or clicks its button or link, doesn't open the row.
+- `ConsoleView`, plain text that the app adds to as it comes, such as a process's output:
+  `append` adds text, "\r" starts a line again, and the view keeps the last `max_lines`
+  lines. It scrolls to its end unless the user scrolled up. On the web, a change sends only
+  the new lines.
 
 ### Fixed
 

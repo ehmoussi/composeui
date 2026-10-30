@@ -48,6 +48,7 @@ from qtpy.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QRadioButton,
@@ -127,6 +128,7 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.console import MAX_LINES, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -360,6 +362,40 @@ def test_markdown_renderer_shows_the_text_formatted(qtbot: QtBot) -> None:
 
     view.help.text = "## Results\n\nAll [done](https://example.com)."
     assert _blocks(browser) == [("Results", 2, False), ("All done.", 0, False)]
+
+
+def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_up(
+    qtbot: QtBot,
+) -> None:
+    view = RunMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)  # shorter than a run's lines
+    window.show()
+    qtbot.waitExposed(window)
+    console = _widget(view.output)
+    assert isinstance(console, QPlainTextEdit)
+    assert console.isReadOnly()
+    # it scrolls within itself: down to the status bar, as Markdown does
+    assert isinstance(window, QMainWindow)
+    bottom = console.mapTo(window, console.rect().bottomLeft()).y()
+    assert window.statusBar().geometry().top() - bottom < 30
+    bar = console.verticalScrollBar()
+    assert console.toPlainText() == "Ready <ok>\n"
+
+    view.run.clicked.emit()
+    assert console.toPlainText() == view.output.text
+    assert bar.value() == bar.maximum() > 0
+    # the user scrolls up: the next run's lines, the oldest dropped, don't scroll down
+    bar.setValue(0)
+    view.run.clicked.emit()
+    assert console.toPlainText() == view.output.text
+    assert console.blockCount() == MAX_LINES + 1
+    assert bar.value() < bar.maximum()
+
+    view.output.text = "New run"
+    assert console.toPlainText() == "New run"
 
 
 def test_the_window_shows_the_app_s_icon_composeui_s_by_default(
@@ -3595,6 +3631,7 @@ def _widgets_of(view: View) -> list[object]:
         CellWidgetsMainView,
         RoomsDataMainView,
         HelpMainView,
+        RunMainView,
         JobsMainView,
         BookingMainView,
         DataFileMainView,

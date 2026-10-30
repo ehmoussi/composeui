@@ -52,6 +52,7 @@ from composeui.core.view import (
 from examples.pipechart import PipeChartMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
+from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
 from tests.horizontal import HorizontalMainView
@@ -143,6 +144,19 @@ def test_a_study_neither_saves_nor_sets_an_icon(tmp_path: Path) -> None:
     data["toolbar"]["run"]["icon"] = "/etc/passwd"  # a study saved before, or forged
     view.load_state_data(data)
     assert view.toolbar.run.icon == "icons/run.svg"
+
+
+def test_a_study_neither_saves_loads_nor_resets_a_console_s_text(tmp_path: Path) -> None:
+    view = RunMainView()
+    view.run.clicked.emit()
+    text = view.output.text
+    filepath = tmp_path / "state.json"
+    view.save_state(filepath)
+    assert "Step" not in filepath.read_text()
+
+    view.reset_state()  # a new study: the app's output stays
+    view.load_state(filepath)
+    assert view.output.text == text
 
 
 def test_radio_group_rejects_a_value_not_in_values() -> None:
