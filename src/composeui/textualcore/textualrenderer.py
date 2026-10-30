@@ -1225,7 +1225,7 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
     def _refresh_texts(
         _view: ConsoleViewLike, rendered_object: ComposeConsole, value: dict[str, str]
     ) -> None:
-        rendered_object.set_save_text(value.get("save", ""))
+        rendered_object.set_texts(save=value.get("save", ""), copy=value.get("copy", ""))
 
     @staticmethod
     def _refresh_export_filename(

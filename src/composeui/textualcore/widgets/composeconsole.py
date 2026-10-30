@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 #: the key asking where to save the text
 SAVE_KEY = "s"
+#: the key copying the whole text
+COPY_KEY = "c"
 
 
 class ComposeConsole(Log):
@@ -23,7 +25,8 @@ class ComposeConsole(Log):
     scrolls to its end as lines come only when the end was shown: `Log.write` scrolls
     whatever the user is reading. `set_max_lines` keeps that many lines, the line being
     written not counted. `SAVE_KEY` asks where to save the text, in textual-fspicker's
-    save dialog, and `save_path_chosen` emits the path chosen.
+    save dialog, and `save_path_chosen` emits the path chosen. `COPY_KEY` copies the whole
+    text to the clipboard, as the terminal lets an app (`App.copy_to_clipboard`).
     """
 
     def __init__(self) -> None:
@@ -31,13 +34,18 @@ class ComposeConsole(Log):
         self.save_path_chosen: Signal[Path] = Signal()
         #: the name the save dialog offers
         self.export_filename = "output.txt"
-        self.set_save_text("Save output")
+        self.set_texts(save="Save output", copy="Copy all")
 
-    def set_save_text(self, text: str) -> None:
-        """Describe the key saving the text, e.g. in the app's footer."""
-        self._bindings.key_to_bindings.pop(SAVE_KEY, None)
-        self._bindings.bind(SAVE_KEY, "save", text)
+    def set_texts(self, *, save: str, copy: str) -> None:
+        """Describe the keys saving and copying the text, e.g. in the app's footer."""
+        for key, action, text in ((COPY_KEY, "copy_all", copy), (SAVE_KEY, "save", save)):
+            self._bindings.key_to_bindings.pop(key, None)
+            self._bindings.bind(key, action, text)
         self.refresh_bindings()
+
+    def action_copy_all(self) -> None:
+        # its lines are the text's, the line being written last
+        self.app.copy_to_clipboard("\n".join(self._lines))
 
     def action_save(self) -> None:
         self.app.push_screen(FileSave(default_file=self.export_filename), self._save_path_chosen)

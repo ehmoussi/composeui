@@ -85,6 +85,7 @@
   "Loading... ({progress})": "Chargement... ({progress})",
   "Failed: {error}": "Échec : {error}",
   "Save output": "Enregistrer la sortie",
+  "Copy all": "Tout copier",
   "Saved the output to {name}.": "Sortie enregistrée dans {name}.",
   "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}."
 }

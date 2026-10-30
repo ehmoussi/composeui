@@ -444,9 +444,10 @@ assert main_view.output.text == "Step 1\nDone\n"
 - **Scrolling.** The view scrolls to its end as text comes. When the user scrolls up to read,
   it stays there, until the user scrolls back to the end.
 - **Not study data.** The text is the app's output: a study never saves, loads or resets it.
-- **Save the output.** The user saves the text to a file, named `export_filename`
-  (`output.txt` by default) at first. In code, `export_text(path)` writes it in UTF-8, and
-  the status bar says how it went. `texts["save"]` names the control, "Save output" by
+- **Save or copy the output.** The user saves the text to a file, named `export_filename`
+  (`output.txt` by default) at first, or copies the whole text to the clipboard. In code,
+  `export_text(path)` writes it in UTF-8, and the status bar says how it went.
+  `texts["save"]` and `texts["copy"]` name the controls, "Save output" and "Copy all" by
   default.
 
 Qt shows a read-only `QPlainTextEdit` in a fixed-width font, Textual a `Log`, and the web a
@@ -454,7 +455,10 @@ box of preformatted text. Qt and the web wrap a long line; Textual scrolls sidew
 selects and copies the text on each backend. On the web, a change sends only the new lines.
 To save the text, Qt has a "Save output…" button above it, which opens a save dialog;
 Textual has the key `s`, shown in the footer while the console has the focus; the web has a
-"Save output" link above it, which downloads the text.
+"Save output" link above it, which downloads the text. To copy it, Qt has a "Copy all"
+button, Textual the key `c`, and the web a "Copy all" button. Textual copies through the
+terminal, which must allow it. The web needs a secure page (HTTPS, or `localhost`) to write
+the clipboard: elsewhere, the button selects the text, for the user's Ctrl+C.
 
 ## The File menu and picking a file
 

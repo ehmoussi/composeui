@@ -1663,6 +1663,26 @@ def test_a_console_keeps_its_last_lines_at_its_end_unless_the_user_scrolled_up(
     context.close()
 
 
+def test_a_console_s_copy_all_writes_its_whole_text_to_the_clipboard(
+    browser: Browser, run_base_url: str
+) -> None:
+    context = browser.new_context(
+        base_url=run_base_url, permissions=["clipboard-read", "clipboard-write"]
+    )
+    page = context.new_page()
+    page.goto("/")
+    with _posted(page):
+        page.get_by_role("button", name="Run").click()
+    console = page.locator("pre")
+    expect(console).to_contain_text("Progress 100%")
+
+    page.get_by_role("button", name="Copy all").click()
+
+    lines = ["Ready <ok>", *(f"Step {step}" for step in range(1, 31)), "Progress 100%"]
+    assert _clipboard_becomes(page, "\n".join(lines))
+    context.close()
+
+
 def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(
     horizontal_page: Page,
 ) -> None:

@@ -899,7 +899,8 @@ class ConsoleViewLike(ViewLike, Protocol):
 class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     """The console's text in a `QConsole`, its new lines added to those it shows.
 
-    Its Save button asks where to save the text, in Qt's file dialog.
+    Its Copy button copies the whole text to the clipboard, and its Save button asks
+    where to save it, in Qt's file dialog.
     """
 
     def __init__(self, view: ConsoleViewLike) -> None:
@@ -921,6 +922,7 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
         if self._rendered_object is None:
             self._rendered_object = QConsoleBox()
             self._rendered_object.save.clicked.connect(self._save)
+            self._rendered_object.copy.clicked.connect(self._copy)
             self.refresh()
 
     @staticmethod
@@ -947,6 +949,10 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
         _view: ConsoleViewLike, rendered_object: QConsoleBox, value: dict[str, str]
     ) -> None:
         rendered_object.save.setText(f"{value.get('save', '')}…")
+        rendered_object.copy.setText(value.get("copy", ""))
+
+    def _copy(self) -> None:
+        QApplication.clipboard().setText(self._view.text)
 
     def _save(self) -> None:
         """Ask where to save the text, and save it there."""
