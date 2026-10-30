@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from composeui.core.model import Model
     from composeui.core.renderer import Renderer, RendererContainer
-    from composeui.core.view import LabelView, MainView, View
+    from composeui.core.view import ActionView, ButtonView, LabelView, MainView, View
 
 __all__ = ["CalledInJobError", "Job", "Jobs", "Task"]
 
@@ -131,6 +131,11 @@ class Task(Generic[R, P, ProgressT]):
         return self._job is not None
 
     @property
+    def is_canceled(self) -> bool:
+        """Get whether the current run was asked to stop; False once it is over."""
+        return self._job is not None and self._job.is_canceled
+
+    @property
     def progress(self) -> ProgressT | None:
         """Get the last progress value, or None before the run reports one."""
         return self._progress
@@ -166,10 +171,45 @@ class Task(Generic[R, P, ProgressT]):
         return True
 
     def cancel(self) -> None:
-        """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`."""
+        """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`.
+
+        `changed` emits, `is_canceled` then true until the outcome.
+        """
+        _check_main_thread("Task.cancel")
         job = self._job
-        if job is not None:
+        if job is not None and not job.is_canceled:
             job.cancel()
+            self.changed.emit()
+
+    def disables(self, *views: View) -> None:
+        """Disable `views` while this task runs, from now on, e.g. the fields of its run.
+
+        The task sets their `is_enabled` at each start and outcome, a failure or a
+        cancel's included, and when New or Open drop the run.
+        """
+
+        def follow() -> None:
+            for view in views:
+                view.is_enabled = not self.is_running
+
+        self.changed.connect(follow, now=True)
+
+    def cancel_with(self, *controls: ButtonView | ActionView) -> None:
+        """Cancel the run when one of `controls` is clicked or triggered, from now on.
+
+        A button, or a menu's or a toolbar's action, e.g. Stop. Each is enabled only while
+        a run goes on, until it is asked to stop.
+        """
+        from composeui.core.view import ActionView  # noqa: PLC0415 (it imports this module)
+
+        def follow() -> None:
+            for control in controls:
+                control.is_enabled = self.is_running and not self.is_canceled
+
+        for control in controls:
+            signal = control.triggered if isinstance(control, ActionView) else control.clicked
+            signal.connect(self.cancel)
+        self.changed.connect(follow, now=True)
 
     def show_state(
         self,

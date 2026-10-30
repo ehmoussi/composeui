@@ -104,6 +104,8 @@ the option for the web (extra `web`, the default).
   `failed`, and `progress` (`job.report_progress(value)`), which emit on the main thread.
   Raise `RefusedError` for an expected refusal only. For a worker that a view runs again
   and again, create `self.jobs.task(work)` once in `__attrs_post_init__`, not as a field.
+  Let the task set its controls' state: `task.disables(*views)` and
+  `task.cancel_with(stop)`, rather than enabling them in each callback.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and

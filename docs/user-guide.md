@@ -93,6 +93,7 @@ not in the package: run them from a clone of the repository (see
   - [Progress and canceling](user-guide/threads.md#progress-and-canceling)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
     - [Show a task's state](user-guide/threads.md#show-a-tasks-state)
+    - [Disable views while a task runs](user-guide/threads.md#disable-views-while-a-task-runs)
   - [How jobs behave](user-guide/threads.md#how-jobs-behave)
 - [A SQLite model](user-guide/sqlite-model.md)
 - [Importing CSV data](user-guide/csv-import.md)
