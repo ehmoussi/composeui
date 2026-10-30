@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtGui import QColor, QFontDatabase, QTextCursor
+from qtpy.QtGui import QColor, QFont, QFontDatabase, QTextCharFormat, QTextCursor
 from qtpy.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
@@ -21,7 +21,14 @@ from composeui.core.view import find_in_lines, follow_match
 from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from qtpy.QtGui import QKeyEvent
+
+    from composeui.core.view import TextStyle
+
+    #: a line's styled parts: start, end and style
+    LineStyles = Sequence[tuple[int, int, TextStyle]]
 
 #: the background of a match, then of the current one; black text, on a light or dark palette
 _MATCH_COLOR = QColor("#fde68a")
@@ -32,7 +39,8 @@ class QConsole(QPlainTextEdit):
     """Read-only plain text in a fixed-width font, a block per line, the last being written.
 
     `set_max_lines` keeps that many lines, the line being written not counted: Qt drops
-    the oldest blocks. The user selects and copies the text.
+    the oldest blocks. The user selects and copies the text. Each line's styled parts, if
+    given, take their colors, weight, slant and underline.
 
     `set_query` highlights the matches of a search (`find_in_lines`), and shows the first;
     `step` shows the next, or the previous, around the ends. New lines keep the current
@@ -60,17 +68,20 @@ class QConsole(QPlainTextEdit):
         self.setMaximumBlockCount(count + 1)
         self._dropped += before - self.blockCount()
 
-    def set_text(self, text: str) -> None:
-        """Show `text` instead, from its end."""
+    def set_text(self, text: str, styles: Sequence[LineStyles] = ()) -> None:
+        """Show `text` instead, from its end, its lines styled by `styles`, if given."""
+        self.setCurrentCharFormat(QTextCharFormat())  # else the text takes the last one's
         self.setPlainText(text)
+        self._style_lines(0, styles)
         self._dropped = 0
         self._scroll_to_end()
         self._show_matches(is_moved=False)
 
-    def add(self, lines: list[str], last_line: str) -> None:
+    def add(self, lines: list[str], last_line: str, styles: Sequence[LineStyles] = ()) -> None:
         """End the line being written with `lines`, then write `last_line` in its place.
 
-        The text keeps its place on the screen unless the end was shown.
+        `styles`, if given, style these lines, `last_line` last. The text keeps its place
+        on the screen unless the end was shown.
         """
         bar = self.verticalScrollBar()
         is_at_end = bar.value() == bar.maximum()
@@ -78,11 +89,25 @@ class QConsole(QPlainTextEdit):
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
         before = self.blockCount()
-        cursor.insertText("\n".join([*lines, last_line]))
+        # plain: else it takes the style of the text it replaces
+        cursor.insertText("\n".join([*lines, last_line]), QTextCharFormat())
         self._dropped += before + len(lines) - self.blockCount()
+        kept = min(len(styles), self.blockCount())  # the oldest new lines may have gone too
+        self._style_lines(self.blockCount() - kept, styles[len(styles) - kept :])
         if is_at_end:
             self._scroll_to_end()
         self._show_matches(is_moved=False)
+
+    def _style_lines(self, first: int, styles: Sequence[LineStyles]) -> None:
+        """Style the lines from the block `first` on, by `styles`, one per line."""
+        document = self.document()
+        for number, line_styles in enumerate(styles, start=first):
+            position = document.findBlockByNumber(number).position()
+            for start, end, style in line_styles:
+                cursor = QTextCursor(document)
+                cursor.setPosition(position + start)
+                cursor.setPosition(position + end, QTextCursor.MoveMode.KeepAnchor)
+                cursor.setCharFormat(_char_format(style))
 
     def set_query(self, query: str) -> None:
         """Highlight the matches of `query`, and show the first."""
@@ -136,6 +161,20 @@ class QConsole(QPlainTextEdit):
     def _scroll_to_end(self) -> None:
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+
+def _char_format(style: TextStyle) -> QTextCharFormat:
+    """Get the format of text in `style`."""
+    text_format = QTextCharFormat()
+    if style.foreground is not None:
+        text_format.setForeground(QColor(style.foreground))
+    if style.background is not None:
+        text_format.setBackground(QColor(style.background))
+    if style.is_bold:
+        text_format.setFontWeight(QFont.Weight.Bold)
+    text_format.setFontItalic(style.is_italic)
+    text_format.setFontUnderline(style.is_underlined)
+    return text_format
 
 
 class QSearchField(QLineEdit):

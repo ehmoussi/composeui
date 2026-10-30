@@ -105,6 +105,7 @@ from composeui.core.view import (
     VerticalView,
     View,
     date_hint,
+    line_styles_after,
     lines_after,
     replace_cell,
     walk_tree,
@@ -890,6 +891,7 @@ class ConsoleViewLike(ViewLike, Protocol):
     max_lines: int
     line_count: int
     last_line: str
+    ansi_colors: bool
     texts: dict[str, str]
     export_filename: str
 
@@ -912,6 +914,8 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
                 "max_lines": self._refresh_max_lines,
                 "text": self._refresh_text,
                 "line_count": self._refresh_line_count,
+                # the text again: with its colors or without
+                "ansi_colors": lambda view, box, value: self._show_text(view, box, colors=value),
                 "texts": self._refresh_texts,
                 # the dialog's, read as it opens
                 "export_filename": lambda _view, _box, _value: None,
@@ -935,14 +939,24 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     def _refresh_text(
         self, view: ConsoleViewLike, rendered_object: QConsoleBox, value: str
     ) -> None:
-        rendered_object.text.set_text(value)
+        self._show_text(view, rendered_object, colors=view.ansi_colors)
+
+    def _show_text(self, view: ConsoleViewLike, box: QConsoleBox, *, colors: bool) -> None:
+        """Show the whole text, with its colors if `colors`: maybe not yet the view's."""
+        assert isinstance(view, ConsoleView)
+        styles = [*view.line_styles, view.last_line_styles] if colors else ()
+        box.text.set_text(view.text, styles)
         self._shown_count = view.line_count
 
     def _refresh_line_count(
         self, view: ConsoleViewLike, rendered_object: QConsoleBox, value: int
     ) -> None:
         assert isinstance(view, ConsoleView)
-        rendered_object.text.add(lines_after(view, self._shown_count), view.last_line)
+        lines = lines_after(view, self._shown_count)
+        styles: list[Any] = []
+        if view.ansi_colors:
+            styles = [*line_styles_after(view, self._shown_count), view.last_line_styles]
+        rendered_object.text.add(lines, view.last_line, styles)
         self._shown_count = value
 
     @staticmethod

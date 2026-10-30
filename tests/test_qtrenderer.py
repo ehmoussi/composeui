@@ -30,6 +30,7 @@ from qtpy.QtGui import (
     QMouseEvent,
     QPalette,
     QPixmap,
+    QTextCursor,
     QTextDocument,
 )
 from qtpy.QtWidgets import (
@@ -128,7 +129,7 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
-from tests.console import MAX_LINES, RunMainView
+from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -434,6 +435,39 @@ def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one(
     assert (box.matches.text(), box.text.extraSelections()) == ("No match", [])
     qtbot.keyClick(box.search, Qt.Key.Key_Escape)
     assert (box.search.text(), box.matches.text(), box.text.extraSelections()) == ("", "", [])
+
+
+def test_a_console_shows_its_ansi_colors_and_drops_them_when_asked(qtbot: QtBot) -> None:
+    view = ColoredRunMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+    document = box.text.document()
+
+    def look(line: int, column: int) -> tuple[str, str, bool]:
+        """Get a character's color, background and weight: bold or not."""
+        block = document.findBlockByNumber(line)
+        cursor = QTextCursor(block)
+        cursor.setPosition(block.position() + column + 1)  # the format before the cursor
+        text_format = cursor.charFormat()
+        background = text_format.background()
+        return (
+            text_format.foreground().color().name(),
+            background.color().name() if background.style() != Qt.BrushStyle.NoBrush else "",
+            text_format.fontWeight() == QFont.Weight.Bold,
+        )
+
+    assert box.text.toPlainText() == "ERROR <x> bg\ngreen"
+    plain = look(0, 4)  # "R", after the reset
+    assert look(0, 0) == ("#cd3131", "", True)
+    assert look(0, 10)[1] == "#0dbc79"
+    assert look(1, 0)[0] == "#0dbc79"
+    view.more.clicked.emit()  # the green line ends, a plain one comes
+    assert (look(1, 6)[0], look(2, 0)) == ("#2472c8", plain)  # blue
+
+    view.output.ansi_colors = False
+    assert [look(line, 0) for line in range(3)] == [plain] * 3
 
 
 def test_a_console_s_copy_button_copies_its_whole_text(qtbot: QtBot) -> None:

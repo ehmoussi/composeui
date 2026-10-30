@@ -98,6 +98,7 @@ from composeui.core.view import (
     StatusBar,
     TabPage,
     TabView,
+    TextStyle,
     ToolBar,
     TreeView,
     VerticalView,
@@ -105,6 +106,7 @@ from composeui.core.view import (
     as_pattern,
     date_hint,
     is_within_roots,
+    line_styles_after,
     lines_after,
     parse_date,
     replace_cell,
@@ -3794,9 +3796,28 @@ class ConsoleViewLike(ViewLike, Protocol):
     max_lines: int
     line_count: int
     last_line: str
+    ansi_colors: bool
+    line_styles: Sequence[tuple[tuple[int, int, TextStyle], ...]]
+    last_line_styles: Sequence[tuple[int, int, TextStyle]]
     lines: Sequence[str]
     texts: dict[str, str]
     export_filename: str
+
+
+def _css_style(style: TextStyle) -> str:
+    """Get the inline CSS of text in `style`: its colors are "#rrggbb", from the view."""
+    declarations = []
+    if style.foreground is not None:
+        declarations.append(f"color:{style.foreground}")
+    if style.background is not None:
+        declarations.append(f"background-color:{style.background}")
+    if style.is_bold:
+        declarations.append("font-weight:bold")
+    if style.is_italic:
+        declarations.append("font-style:italic")
+    if style.is_underlined:
+        declarations.append("text-decoration:underline")
+    return ";".join(declarations)
 
 
 class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
@@ -3824,6 +3845,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
                 "max_lines": self._mark_dirty,
                 "text": self._mark_dirty,
                 "line_count": self._mark_added,
+                "ansi_colors": self._mark_dirty,
                 "texts": self._mark_dirty,
                 # the download's, read as it is asked for
                 "export_filename": lambda _view, _rendered_object, _value: None,
@@ -3836,8 +3858,9 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
         if oob and not is_whole and sent is not None:
             assert isinstance(self._view, ConsoleView)
             lines = lines_after(self._view, sent)
+            styles = line_styles_after(self._view, sent)
             added = Markup('<span hx-swap-oob="beforebegin:#{}-last">{}</span>').format(
-                self.widget_id, self._lines_html(lines)
+                self.widget_id, self._lines_html(lines, styles)
             )
             return (added if len(lines) > 0 else Markup()) + self._last_html(oob=True)
         return Markup(
@@ -3865,7 +3888,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             matches=self._view.texts.get("matches", ""),
             no_match=self._view.texts.get("no_match", ""),
             max_lines=self._view.max_lines,
-            lines=self._lines_html(self._view.lines),
+            lines=self._lines_html(self._view.lines, self._view.line_styles),
             last=self._last_html(oob=False),
         )
 
@@ -3873,16 +3896,34 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
         """Get the download's name, and the text."""
         return self._view.export_filename, self._view.text
 
-    @staticmethod
-    def _lines_html(lines: Iterable[str]) -> Markup:
-        return Markup("").join(Markup("<span>{}\n</span>").format(line) for line in lines)
+    def _lines_html(
+        self, lines: Sequence[str], styles: Sequence[Sequence[tuple[int, int, TextStyle]]]
+    ) -> Markup:
+        return Markup("").join(
+            Markup("<span>{}\n</span>").format(self._styled_html(line, line_styles))
+            for line, line_styles in zip(lines, styles)
+        )
 
     def _last_html(self, *, oob: bool) -> Markup:
         """Render the line being written: its own swap when `oob`."""
         swap = Markup(' hx-swap-oob="true"') if oob else Markup()
-        return Markup('<span id="{}-last"{}>{}</span>').format(
-            self.widget_id, swap, self._view.last_line
-        )
+        last = self._styled_html(self._view.last_line, self._view.last_line_styles)
+        return Markup('<span id="{}-last"{}>{}</span>').format(self.widget_id, swap, last)
+
+    def _styled_html(self, line: str, styles: Sequence[tuple[int, int, TextStyle]]) -> Markup:
+        """Render a line's text, its styled parts in their styles if the view shows them."""
+        if not self._view.ansi_colors:
+            return Markup("{}").format(line)
+        parts: list[Markup] = []
+        position = 0
+        for start, end, style in styles:
+            parts.append(Markup("{}").format(line[position:start]))
+            parts.append(
+                Markup('<span style="{}">{}</span>').format(_css_style(style), line[start:end])
+            )
+            position = end
+        parts.append(Markup("{}").format(line[position:]))
+        return Markup("").join(parts)
 
     def _mark_dirty(self, view: ConsoleViewLike, rendered_object: str, value: Any) -> None:
         self._is_whole = True

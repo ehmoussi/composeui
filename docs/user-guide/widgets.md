@@ -454,6 +454,20 @@ assert main_view.output.text == "Step 1\nDone\n"
   match" (`texts["matches"]` and `texts["no_match"]`). Typing shows the first match, and
   Enter the next. New lines keep the current match, or the next one if it went with the
   oldest lines. `find_in_lines` finds the matches as the search does.
+- **Colors.** The view removes the escape sequences of a terminal from the text, such as
+  the ANSI codes that color a solver's output: the text reads, searches, copies and saves
+  as plain text. With `ansi_colors`, the view shows the colors and the bold, italic and
+  underlined text that those codes ask for: 16, 256, or 24-bit colors. `line_styles` and
+  `last_line_styles` give each line's styled parts, as `TextStyle`s.
+
+  ```python
+  from composeui.core.view import ConsoleView, TextStyle
+
+  output = ConsoleView(ansi_colors=True)
+  output.append("\x1b[1;31mFAILED\x1b[0m test_beam\n")
+  assert output.text == "FAILED test_beam\n"  # the codes are gone from the text
+  assert output.line_styles[0] == ((0, 6, TextStyle(foreground="#cd3131", is_bold=True)),)
+  ```
 
 Qt shows a read-only `QPlainTextEdit` in a fixed-width font, Textual a `Log`, and the web a
 box of preformatted text. Qt and the web wrap a long line; Textual scrolls sideways. The user

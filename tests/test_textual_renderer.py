@@ -133,7 +133,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
-from tests.console import MAX_LINES, RunMainView
+from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -3266,6 +3266,42 @@ async def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_o
         assert not box.has_class("-searching")
         assert (box.search.value, matches()) == ("", "")
         assert app.focused is console
+
+
+@pytest.mark.asyncio
+async def test_a_console_shows_its_ansi_colors_and_drops_them_when_asked() -> None:
+    view = ColoredRunMainView()
+    app = _app_of(view)
+    box = _widget(view.output)
+    assert isinstance(box, ComposeConsoleBox)
+    console = box.log_view
+
+    def look(y: int, x: int) -> tuple[str | None, str | None, bool]:
+        """Get a cell's color, background and weight, as drawn."""
+        for segment in console.render_line(y - int(console.scroll_y)):
+            if x < len(segment.text):
+                style = segment.style
+                assert style is not None
+                color = None if style.color is None else style.color.name
+                background = None if style.bgcolor is None else style.bgcolor.name
+                return color, background, bool(style.bold)
+            x -= len(segment.text)
+        return None, None, False
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert list(console.lines) == ["ERROR <x> bg", "green"]
+        plain = look(0, 4)  # "R", after the reset
+        assert look(0, 0)[::2] == ("#cd3131", True)
+        assert look(0, 10)[1] == "#0dbc79"
+        assert look(1, 0)[0] == "#0dbc79"
+        view.more.clicked.emit()  # the green line ends, a plain one comes
+        await pilot.pause()
+        assert (look(1, 6)[0], look(2, 0)) == ("#2472c8", plain)  # blue
+
+        view.output.ansi_colors = False
+        await pilot.pause()
+        assert [look(y, 0) for y in range(3)] == [plain] * 3
 
 
 @pytest.mark.asyncio
