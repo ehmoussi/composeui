@@ -62,7 +62,9 @@ the option for the web (extra `web`, the default).
 
 - **Import views, signals and `run` from `composeui.core`.** Never import `PySide6`,
   Textual, or Starlette in the app's views: the same views must run on every backend.
-  Use `qtpy` if the app needs Qt itself.
+  Use `qtpy` if the app needs Qt itself. To adapt a view to the backend, ask
+  `renders(MapView)`, or `current_backend()`, from `composeui.core.application` as the
+  views are built.
 - **Decorate every view class with `@define_view`,** and give it typed fields. Fields are
   keyword-only. A class variable such as `app_title`, `extension`, `align`, or `width`
   configures the class and is not state.

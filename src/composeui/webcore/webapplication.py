@@ -29,6 +29,7 @@ from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
 from composeui.core.application import Application, _add_reference_to_signals
+from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
@@ -290,6 +291,7 @@ class WebApplication(Application[MainViewT]):
     before serving: a session already open keeps the connections it was built with.
     """
 
+    backend = RendererType.WEB
     #: seconds a session may stay idle before it is dropped
     session_ttl: ClassVar[float] = 3600.0
     #: most sessions live at once: past it, a new browser gets 503 until one is dropped

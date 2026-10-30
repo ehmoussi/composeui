@@ -650,6 +650,11 @@ class View:
             raise NotImplementedError(self._create_renderer)
         self.renderer = create_renderer(renderer_type, self._renderer_key, self)
 
+    @classmethod
+    def _renderer_keys(cls) -> tuple[str, ...]:
+        """Get the keys of the renderers that show the view: a backend needs each of them."""
+        return () if cls._renderer_key is None else (cls._renderer_key,)
+
     def _render_children(self, renderer_type: RendererType) -> None:
         for child_view in self.children_views:
             child_view.render(renderer_type)
@@ -4898,6 +4903,10 @@ class FormRowView(LogMixin, View):
         if renderers is not None:
             self.renderer = RendererContainer(self, renderers)
 
+    @classmethod
+    def _renderer_keys(cls) -> tuple[str, ...]:
+        return () if cls._field_renderer_key is None else (cls._field_renderer_key, "log")
+
     def _create_row_renderers(
         self, renderer_type: RendererType
     ) -> Optional[dict[str, Renderer[Any, Any]]]:
@@ -4920,6 +4929,11 @@ class FormLabelRowView(FormRowView):
     help: str = attrs.field(default="", metadata={UI_TEXT: True})
     #: the "?" button's name for screen readers
     help_button_text: str = attrs.field(default=T("Help"), metadata={UI_TEXT: True})
+
+    @classmethod
+    def _renderer_keys(cls) -> tuple[str, ...]:
+        keys = super()._renderer_keys()
+        return (*keys, "form_label") if len(keys) > 0 else ()
 
     def _create_row_renderers(
         self, renderer_type: RendererType

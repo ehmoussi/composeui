@@ -43,6 +43,9 @@ The notable changes of each release of ComposeUI. The format follows
   `append` adds text, "\r" starts a line again, and the view keeps the last `max_lines`
   lines. It scrolls to its end unless the user scrolled up. On the web, a change sends only
   the new lines.
+- `current_backend()` and `renders(view_type)` in `composeui.core.application`: the views
+  that the app builds know its backend, and whether it shows a kind of view, such as a
+  `MapView`, which Textual doesn't show.
 
 ### Fixed
 

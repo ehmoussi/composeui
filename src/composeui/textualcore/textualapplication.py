@@ -87,6 +87,8 @@ def _show(main_view: MainView, model: Model | None, render: Callable[[RendererTy
 class TextualApplication(Application[MainViewT]):
     """The Textual app: it shows the main view in the terminal."""
 
+    backend = RendererType.TEXTUAL
+
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         super().__init__(build_main_view=build_main_view)
         _add_reload_argument(self._parser)
@@ -98,6 +100,8 @@ class TextualApplication(Application[MainViewT]):
 
 class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
     """The Textual app with a model, which it closes once the app exits."""
+
+    backend = RendererType.TEXTUAL
 
     def __init__(
         self,

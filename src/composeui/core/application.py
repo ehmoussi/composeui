@@ -11,11 +11,11 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TypeVar, cast
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
-from composeui.core.registry import RendererType
+from composeui.core.registry import RendererType, has_renderer
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
     from composeui.core.view import MainView, View
 
-__all__ = ["Application", "ModelApplication", "run"]
+__all__ = ["Application", "ModelApplication", "current_backend", "renders", "run"]
 
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -157,6 +157,32 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
             signal.set_model(model)
 
 
+class _Running:
+    """The backend of the app this process runs, from the start of its build."""
+
+    backend: ClassVar[RendererType | None] = None
+
+
+def current_backend() -> RendererType | None:
+    """Get the backend of the app running, e.g. `RendererType.QT`; None before an app is built.
+
+    It is set before the app builds its main view, so the views can read it as they are
+    built. To tell whether the backend shows a kind of view, use `renders` instead.
+    """
+    return _Running.backend
+
+
+def renders(view_type: type[View]) -> bool:
+    """Tell whether the backend of the app running shows views of `view_type`.
+
+    For example, `MapView` shows on Qt and the web, but not on Textual, where an app can
+    show a table of the points instead. False before an app is built.
+    """
+    backend = current_backend()
+    keys = view_type._renderer_keys()  # noqa: SLF001 (the views' own rule)
+    return backend is not None and len(keys) > 0 and all(has_renderer(backend, k) for k in keys)
+
+
 class Application(Generic[MainViewT]):
     """An app showing the main view `build_main_view` builds; each backend has its own.
 
@@ -164,7 +190,12 @@ class Application(Generic[MainViewT]):
     app builds one per browser session.
     """
 
+    #: the backend that shows the app, given by each backend's app (`current_backend`)
+    backend: ClassVar[RendererType | None] = None
+
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
+        if self.backend is not None:
+            _Running.backend = self.backend
         self._main_view = build_main_view()
         self._args: argparse.Namespace | None = None
         self._parser = argparse.ArgumentParser()
