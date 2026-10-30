@@ -46,6 +46,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- With reload on, an app that runs the changed code, then exits at once, is no longer started
+  again now and then. When the app acknowledged the change and exited between two of the
+  supervisor's looks, the supervisor took the exit for a request to run the code anew.
 - On Textual, a file or folder picker loading a folder no longer fails now and then with a
   `KeyError` on a style of its list. textual-fspicker read the styles from its loading
   thread while Textual applied them again; they are read on the app's thread.

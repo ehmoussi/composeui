@@ -17,8 +17,10 @@ from typing import TYPE_CHECKING
 import pytest
 
 import composeui as composeui_package
+from composeui.core import reload as reload_module
 from composeui.core.reload import (
     RELOADED_VARIABLE,
+    acknowledge_changes,
     can_reload_in_place,
     has_change_events,
     load_reloaded_state,
@@ -26,6 +28,7 @@ from composeui.core.reload import (
     rerun_program,
     run_reloading,
     save_reloaded_state,
+    take_changes,
     watch_changes,
 )
 from composeui.core.view import MainView, define_view
@@ -987,6 +990,47 @@ def test_an_app_running_the_changed_code_then_exiting_isn_t_run_again(
 
     assert run_reloading([sys.executable, "-c", app_code], changes()) == 0
     assert log.read_text().splitlines() == ["start"]
+
+
+def test_an_app_acknowledging_then_exiting_between_two_looks_isn_t_run_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # the directory watched
+    started: list[_TakingApp] = []
+
+    class _TakingApp:
+        """An app's process, which moves on each time the supervisor looks at it.
+
+        It takes the changes at one look, then runs them and exits at the next: the
+        supervisor first finds them taken, then the app gone, the order a busy machine
+        gives two real processes now and then.
+        """
+
+        def __init__(self, _command: list[str], *, env: dict[str, str]) -> None:
+            monkeypatch.setenv(RELOADED_VARIABLE, env[RELOADED_VARIABLE])
+            self.returncode: int | None = None
+            self._has_taken = False
+            started.append(self)
+
+        def poll(self) -> int | None:
+            if self.returncode is None and self._has_taken:
+                acknowledge_changes()
+                self.returncode = 0  # e.g. its window closed
+            elif self.returncode is None:
+                self._has_taken = take_changes() is not None
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.returncode = -15
+
+        def wait(self, timeout: float | None = None) -> int | None:
+            return self.returncode
+
+    processes = types.SimpleNamespace(Popen=_TakingApp, TimeoutExpired=subprocess.TimeoutExpired)
+    monkeypatch.setattr(reload_module, "subprocess", processes)
+
+    assert run_reloading(["app"], iter([{tmp_path / "app.py"}, set()])) == 0
+    assert len(started) == 1
 
 
 @pytest.mark.parametrize("ending", ["exhausted", "interrupted"])
