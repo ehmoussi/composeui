@@ -384,6 +384,17 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  /* its lines' offsets, for a search to scroll to a match */
+  position: relative;
+}
+/* a console's search: black on amber, the current match darker, as on Qt and Textual */
+::highlight(cui-match) {
+  background-color: #fde68a;
+  color: black;
+}
+::highlight(cui-match-current) {
+  background-color: #f59e0b;
+  color: black;
 }
 
 .cui-markdown {

@@ -35,7 +35,6 @@ from textual.widgets import (
     Footer,
     Input,
     Label,
-    Log,
     Markdown,
     ProgressBar,
     Select,
@@ -88,6 +87,7 @@ from composeui.textualcore.textualrenderer import (
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
+from composeui.textualcore.widgets.composeconsole import ComposeConsoleBox
 from composeui.textualcore.widgets.composedateinput import (
     ComposeCalendar,
     ComposeDateInput,
@@ -3183,8 +3183,9 @@ def _widget(view: View) -> Widget:
 async def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_up() -> None:
     view = RunMainView()
     app = _app_of(view)
-    console = _widget(view.output)
-    assert isinstance(console, Log)
+    box = _widget(view.output)
+    assert isinstance(box, ComposeConsoleBox)
+    console = box.log_view
 
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
@@ -3209,10 +3210,71 @@ async def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scro
 
 
 @pytest.mark.asyncio
+async def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one() -> None:
+    view = RunMainView()
+    app = _app_of(view)
+    box = _widget(view.output)
+    assert isinstance(box, ComposeConsoleBox)
+    console = box.log_view
+
+    def matches() -> str:
+        return str(box.matches.render())
+
+    def background(y: int, x: int) -> str | None:
+        """Get the background of a cell of the console, as drawn."""
+        cells = [(s.style, len(s.text)) for s in console.render_line(y - int(console.scroll_y))]
+        for style, width in cells:
+            if x < width:
+                return None if style is None or style.bgcolor is None else style.bgcolor.name
+            x -= width
+        return None
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        view.run.clicked.emit()
+        console.focus()
+        await pilot.pause()
+        footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
+        assert "Search" in footer
+
+        await pilot.press("slash", *"step 1")  # Step 1, then Step 10 to Step 19
+        await pilot.pause()
+        assert app.focused is box.search
+        assert matches() == "1 of 11"
+        assert (background(1, 0), background(10, 0)) == ("#f59e0b", "#fde68a")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert matches() == "2 of 11"
+        assert background(10, 0) == "#f59e0b"  # Step 10, current
+        console.focus()
+        await pilot.press("N")
+        await pilot.pause()
+        assert matches() == "1 of 11"
+        await pilot.press("n")
+        await pilot.pause()
+
+        # the next run drops the oldest lines, Step 10 among them: Step 11, next, is current
+        view.run.clicked.emit()
+        await pilot.pause()
+        assert matches() == "1 of 9"
+        box.search.focus()
+        await pilot.press("x", "enter")  # step 1x
+        await pilot.pause()
+        assert matches() == "No match"
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not box.has_class("-searching")
+        assert (box.search.value, matches()) == ("", "")
+        assert app.focused is console
+
+
+@pytest.mark.asyncio
 async def test_a_console_s_key_copies_its_whole_text() -> None:
     view = RunMainView()
     app = _app_of(view)
-    console = _widget(view.output)
+    box = _widget(view.output)
+    assert isinstance(box, ComposeConsoleBox)
+    console = box.log_view
 
     async with app.run_test(size=(100, 30)) as pilot:
         view.output.append("Progress 50%")  # the line being written too
@@ -3233,7 +3295,9 @@ async def test_a_console_s_key_saves_its_text_where_the_user_picks(
 ) -> None:
     view = RunMainView()
     app = _app_of(view)
-    console = _widget(view.output)
+    box = _widget(view.output)
+    assert isinstance(box, ComposeConsoleBox)
+    console = box.log_view
 
     async with app.run_test(size=(100, 30)) as pilot:
         console.focus()

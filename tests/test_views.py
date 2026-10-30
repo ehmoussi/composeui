@@ -24,6 +24,8 @@ from composeui.core.view import (
     TreeView,
     TypedFormDialogView,
     define_view,
+    find_in_lines,
+    follow_match,
     parse_date,
 )
 from tests.buildings import SITE
@@ -225,6 +227,21 @@ def test_a_console_ends_a_line_at_a_newline_and_starts_it_again_at_a_return() ->
     assert (list(console.lines), console.last_line) == (["New"], "run")
     console.clear()
     assert console.text == ""
+
+
+def test_a_console_s_search_finds_plain_text_in_any_case_and_follows_its_match() -> None:
+    lines = ["Step 1 done", "a.b DONE, done", ""]
+    assert find_in_lines(lines, "done") == [(0, 7, 11), (1, 4, 8), (1, 10, 14)]
+    assert find_in_lines(lines, "a.b") == [(1, 0, 3)]  # not a pattern
+    assert find_in_lines(["axb"], "a.b") == []
+    assert find_in_lines(lines, "") == []
+
+    matches = [(0, 0, 1), (3, 2, 3), (5, 0, 1)]
+    assert follow_match(matches, 0, None) == 0  # a new search: the first
+    assert follow_match(matches, 2, (5, 2)) == 1  # the same, two lines dropped before it
+    assert follow_match(matches, 10, (5, 2)) == 0  # gone with them: the next
+    assert follow_match(matches, 0, (9, 0)) == 2  # past the last: the last
+    assert follow_match([], 0, (1, 1)) == 0
 
 
 def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:

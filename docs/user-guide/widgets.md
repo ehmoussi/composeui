@@ -449,6 +449,11 @@ assert main_view.output.text == "Step 1\nDone\n"
   `export_text(path)` writes it in UTF-8, and the status bar says how it went.
   `texts["save"]` and `texts["copy"]` name the controls, "Save output" and "Copy all" by
   default.
+- **Search the output.** The user searches the text: plain text, in any case. Every match is
+  highlighted, the current one darker, and the count says which one it is: "2 of 5", or "No
+  match" (`texts["matches"]` and `texts["no_match"]`). Typing shows the first match, and
+  Enter the next. New lines keep the current match, or the next one if it went with the
+  oldest lines. `find_in_lines` finds the matches as the search does.
 
 Qt shows a read-only `QPlainTextEdit` in a fixed-width font, Textual a `Log`, and the web a
 box of preformatted text. Qt and the web wrap a long line; Textual scrolls sideways. The user
@@ -458,7 +463,10 @@ Textual has the key `s`, shown in the footer while the console has the focus; th
 "Save output" link above it, which downloads the text. To copy it, Qt has a "Copy all"
 button, Textual the key `c`, and the web a "Copy all" button. Textual copies through the
 terminal, which must allow it. The web needs a secure page (HTTPS, or `localhost`) to write
-the clipboard: elsewhere, the button selects the text, for the user's Ctrl+C.
+the clipboard: elsewhere, the button selects the text, for the user's Ctrl+C. To search it,
+Qt and the web have a search field above it, where Shift+Enter shows the previous match;
+Escape clears it on Qt. On Textual, `/` shows a search field, Escape hides it, and `n` and
+`N` show the next and the previous match.
 
 ## The File menu and picking a file
 

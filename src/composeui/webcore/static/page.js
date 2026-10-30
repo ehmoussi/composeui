@@ -1213,12 +1213,97 @@ document.addEventListener("click", function (event) {
 });
 function keepConsoles() {
   document.querySelectorAll("[data-console]").forEach(function (box) {
-    for (var excess = box.children.length - 1 - Number(box.dataset.maxLines); excess > 0;
-      excess--) {
-      box.firstElementChild.remove();
-    }
+    var excess = box.children.length - 1 - Number(box.dataset.maxLines);
+    for (var dropped = 0; dropped < excess; dropped++) box.firstElementChild.remove();
+    /* the lines dropped since the console was drawn whole, for its search */
+    if (excess > 0) box.dataset.dropped = String(Number(box.dataset.dropped || 0) + excess);
     if (box.dataset.scrolledUp !== "true") box.scrollTop = box.scrollHeight;
   });
+  document.querySelectorAll("[data-console-search]").forEach(function (field) {
+    if (field.value !== "" || consoleMatches.has(field.dataset.consoleSearch)) {
+      searchConsole(field, "keep");
+    }
+  });
+}
+/* a console's search: its matches, plain text in any case as `find_in_lines` finds them,
+   highlighted by the CSS Custom Highlight API, which leaves the text as it is. Typing
+   shows the first, Enter the next, Shift+Enter the previous, around the ends; new lines
+   keep the current one, or the next if it went with the oldest lines, as `follow_match`
+   does. The count, in the page's language, is beside the field. */
+/* a console's id: its matches' ranges and places (line, from the first line ever, and
+   start), and the current one's index */
+var consoleMatches = new Map();
+document.addEventListener("input", function (event) {
+  if ("consoleSearch" in event.target.dataset) searchConsole(event.target, "first");
+});
+document.addEventListener("keydown", function (event) {
+  if (!("consoleSearch" in event.target.dataset) || event.key !== "Enter") return;
+  event.preventDefault();
+  searchConsole(event.target, event.shiftKey ? "previous" : "next");
+});
+function searchConsole(field, move) {
+  var box = document.getElementById(field.dataset.consoleSearch);
+  if (box === null) return;
+  var ranges = [], places = [], first = Number(box.dataset.dropped || 0);
+  if (field.value !== "") {
+    var pattern = new RegExp(field.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    box.querySelectorAll("span").forEach(function (line, index) {
+      var node = line.firstChild, match;
+      if (node === null) return;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(node.textContent)) !== null) {
+        var range = new Range();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        ranges.push(range);
+        places.push([first + index, match.index]);
+      }
+    });
+  }
+  var previous = consoleMatches.get(box.id), current = 0;
+  if (move !== "first" && previous !== undefined && ranges.length > 0) {
+    var shown = previous.places[previous.current];
+    if (move === "keep" && shown !== undefined) {
+      current = places.length - 1;
+      for (var index = 0; index < places.length; index++) {
+        var place = places[index];
+        if (place[0] > shown[0] || (place[0] === shown[0] && place[1] >= shown[1])) {
+          current = index;
+          break;
+        }
+      }
+    } else {
+      current = previous.current + (move === "next" ? 1 : move === "previous" ? -1 : 0);
+      current = (current % ranges.length + ranges.length) % ranges.length;
+    }
+  }
+  if (field.value === "") consoleMatches.delete(box.id);
+  else consoleMatches.set(box.id, {ranges: ranges, places: places, current: current});
+  paintConsoleMatches();
+  if (move !== "keep" && ranges.length > 0) {
+    var line = ranges[current].startContainer.parentElement;
+    box.scrollTop = line.offsetTop - box.clientHeight / 2;
+    /* now, not on the scroll's event: the page's observer, running first, would scroll
+       the box back to its end */
+    box.dataset.scrolledUp = String(box.scrollTop + box.clientHeight < box.scrollHeight - 4);
+  }
+  var count = field.parentElement.querySelector("[data-console-matches]");
+  var text = field.value === "" ? "" : ranges.length === 0 ? field.dataset.noMatch :
+    field.dataset.matches.replace("{current}", current + 1).replace("{count}", ranges.length);
+  /* unchanged, not set: the page's observer would run this again */
+  if (count !== null && count.textContent !== text) count.textContent = text;
+}
+function paintConsoleMatches() {
+  if (!window.CSS || !CSS.highlights) return;  /* still counted, and scrolled to */
+  var others = [], currents = [];
+  consoleMatches.forEach(function (found, id) {
+    if (document.getElementById(id) === null) return consoleMatches.delete(id);
+    found.ranges.forEach(function (range, index) {
+      (index === found.current ? currents : others).push(range);
+    });
+  });
+  CSS.highlights.set("cui-match", new Highlight(...others));
+  CSS.highlights.set("cui-match-current", new Highlight(...currents));
 }
 /* neither bubbles */
 document.addEventListener("beforetoggle", placeHelp, true);

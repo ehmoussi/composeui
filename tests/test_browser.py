@@ -1663,6 +1663,64 @@ def test_a_console_keeps_its_last_lines_at_its_end_unless_the_user_scrolled_up(
     context.close()
 
 
+def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one(
+    browser: Browser, run_base_url: str
+) -> None:
+    context = browser.new_context(base_url=run_base_url)
+    page = context.new_page()
+    page.goto("/")
+    run = page.get_by_role("button", name="Run")
+    with _posted(page):
+        run.click()
+    field = page.get_by_role("searchbox", name="Search")
+    count = page.locator("[data-console-matches]")
+    console = page.locator("pre")
+
+    def highlighted() -> list[int]:
+        """Get how many matches the page highlights, then how many as the current one."""
+        return list(
+            page.evaluate(
+                "() => ['cui-match', 'cui-match-current'].map(n => CSS.highlights.get(n).size)"
+            )
+        )
+
+    def current_line() -> str:
+        return str(
+            page.evaluate(
+                "() => [...CSS.highlights.get('cui-match-current')][0]"
+                ".startContainer.textContent.trim()"
+            )
+        )
+
+    # pasted at once, one input: Step 1, then Step 10 to Step 19
+    field.fill("step 1")
+    expect(count).to_have_text("1 of 11")
+    assert highlighted() == [10, 1]
+    # scrolled to it, from the end the console followed
+    expect(console.get_by_text("Step 1", exact=True)).to_be_in_viewport()
+    field.press("Enter")
+    expect(count).to_have_text("2 of 11")
+    field.press("Shift+Enter")
+    field.press("Shift+Enter")
+    expect(count).to_have_text("11 of 11")
+    assert current_line() == "Step 19"
+    for _ in range(4):  # around the end, to Step 12
+        field.press("Enter")
+    expect(count).to_have_text("4 of 11")
+
+    # the next run drops the oldest lines, Step 1 to Step 10 among them: Step 12 stays current
+    with _posted(page):
+        run.click()
+    expect(count).to_have_text("2 of 9")
+    assert current_line() == "Step 12"
+    expect(field).to_have_value("step 1")
+
+    field.fill("")
+    expect(count).to_have_text("")
+    assert highlighted() == [0, 0]
+    context.close()
+
+
 def test_a_console_s_copy_all_writes_its_whole_text_to_the_clipboard(
     browser: Browser, run_base_url: str
 ) -> None:
