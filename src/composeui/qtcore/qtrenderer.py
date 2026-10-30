@@ -899,8 +899,8 @@ class ConsoleViewLike(ViewLike, Protocol):
 class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     """The console's text in a `QConsole`, its new lines added to those it shows.
 
-    Its Copy button copies the whole text to the clipboard, and its Save button asks
-    where to save it, in Qt's file dialog.
+    Its search field highlights the matches, its Copy button copies the whole text to the
+    clipboard, and its Save button asks where to save it, in Qt's file dialog.
     """
 
     def __init__(self, view: ConsoleViewLike) -> None:
@@ -923,6 +923,7 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
             self._rendered_object = QConsoleBox()
             self._rendered_object.save.clicked.connect(self._save)
             self._rendered_object.copy.clicked.connect(self._copy)
+            self._rendered_object.text.matches_changed.connect(self._show_matches)
             self.refresh()
 
     @staticmethod
@@ -950,6 +951,19 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     ) -> None:
         rendered_object.save.setText(f"{value.get('save', '')}…")
         rendered_object.copy.setText(value.get("copy", ""))
+        rendered_object.search.setPlaceholderText(value.get("search", ""))
+
+    def _show_matches(self, current: int, count: int) -> None:
+        """Show the search's count of matches: none without a search."""
+        assert self._rendered_object is not None
+        texts = self._view.texts
+        if self._rendered_object.search.text() == "":
+            text = ""
+        elif count == 0:
+            text = texts.get("no_match", "")
+        else:
+            text = texts.get("matches", "").format(current=current, count=count)
+        self._rendered_object.matches.setText(text)
 
     def _copy(self) -> None:
         QApplication.clipboard().setText(self._view.text)

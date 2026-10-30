@@ -209,6 +209,7 @@ __all__ = [
     "as_pattern",
     "child",
     "define_view",
+    "find_in_lines",
     "format_date",
     "notify_renderer",
     "parse_date",
@@ -1887,9 +1888,47 @@ class MarkdownView(MarkdownMixin, View):
 
 #: what ends a line, or starts it again ("\r"), in a console's text
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
-#: a console's texts, by what they're for: its controls saving the text to a file, and
-#: copying it to the clipboard
-CONSOLE_TEXTS: Mapping[str, str] = {"save": T("Save output"), "copy": T("Copy all")}
+#: a console's texts, by what they're for: its controls saving the text to a file, copying
+#: it to the clipboard, and searching it, with the count of the matches
+CONSOLE_TEXTS: Mapping[str, str] = {
+    "save": T("Save output"),
+    "copy": T("Copy all"),
+    "search": T("Search"),
+    "matches": T("{current} of {count}"),
+    "no_match": T("No match"),
+}
+
+
+def find_in_lines(lines: Sequence[str], query: str) -> list[tuple[int, int, int]]:
+    """Find `query` in a console's `lines`, as its search does: plain text, any case.
+
+    Get each match's line, start and end, in order; none for an empty query.
+    """
+    if query == "":
+        return []
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    return [
+        (index, match.start(), match.end())
+        for index, line in enumerate(lines)
+        for match in pattern.finditer(line)
+    ]
+
+
+def follow_match(
+    matches: Sequence[tuple[int, int, int]], first_line: int, current: Optional[tuple[int, int]]
+) -> int:
+    """Get the index of a search's current match among `matches`, after lines came or went.
+
+    `current` is the match shown before, as its line's number, counted from the first line
+    ever shown, and its start; `first_line` is the number of `matches`' first line. The
+    match is the same one, or the next if it went, else the last; the first without one.
+    """
+    if current is None or len(matches) == 0:
+        return 0
+    for index, (line, start, _end) in enumerate(matches):
+        if (first_line + line, start) >= current:
+            return index
+    return len(matches) - 1
 
 
 @define_view
@@ -1903,7 +1942,8 @@ class ConsoleView(View):
 
     Its text is the app's output, not study data: never saved, loaded or reset. For a
     single message to the user, such as an error, see `LogView`. The user saves the text
-    to a file (`export_text`), named `export_filename` at first, or copies it all.
+    to a file (`export_text`), named `export_filename` at first, or copies it all. The
+    user searches the text too: plain text, any case, as `find_in_lines` finds it.
     """
 
     _renderer_key = "console"

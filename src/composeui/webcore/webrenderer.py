@@ -3807,7 +3807,9 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
     page's script drops the oldest lines past `data-max-lines`, and keeps the box at its
     end as lines come, unless the user scrolled up (see `page.js`). Above the box, a button
     copies the whole text, in the page, which holds the lines the view keeps; a link
-    downloads it (`text_file`, by the `/widget/{id}/text` route).
+    downloads it (`text_file`, by the `/widget/{id}/text` route). The search field finds
+    in the page too, as `find_in_lines` does, and highlights the matches without changing
+    the text; it stays as typed when the whole console is swapped (`hx-preserve`).
     """
 
     _role = "console"
@@ -3840,8 +3842,13 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             return (added if len(lines) > 0 else Markup()) + self._last_html(oob=True)
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
-            '<div class="flex gap-1 self-end">'
-            '<button type="button" class="btn btn-ghost btn-xs"'
+            '<div class="flex flex-wrap items-center gap-1">'
+            '<input type="search" id="{widget_id}-search" class="input input-xs w-48"'
+            ' placeholder="{search}" aria-label="{search}" autocomplete="off" hx-preserve'
+            ' data-console-search="{widget_id}-text" data-matches="{matches}"'
+            ' data-no-match="{no_match}">'
+            '<span class="text-sm" aria-live="polite" data-console-matches></span>'
+            '<button type="button" class="btn btn-ghost btn-xs ml-auto"'
             ' data-copy-console="{widget_id}-text">{copy}</button>'
             # a plain link: htmx can't start a download
             '<a class="btn btn-ghost btn-xs" href="/widget/{widget_id}/text"'
@@ -3854,6 +3861,9 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             widget_id=self.widget_id,
             save=self._view.texts.get("save", ""),
             copy=self._view.texts.get("copy", ""),
+            search=self._view.texts.get("search", ""),
+            matches=self._view.texts.get("matches", ""),
+            no_match=self._view.texts.get("no_match", ""),
             max_lines=self._view.max_lines,
             lines=self._lines_html(self._view.lines),
             last=self._last_html(oob=False),

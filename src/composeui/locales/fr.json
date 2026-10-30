@@ -86,6 +86,8 @@
   "Failed: {error}": "Échec : {error}",
   "Save output": "Enregistrer la sortie",
   "Copy all": "Tout copier",
+  "{current} of {count}": "{current} sur {count}",
+  "No match": "Aucun résultat",
   "Saved the output to {name}.": "Sortie enregistrée dans {name}.",
   "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}."
 }

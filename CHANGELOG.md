@@ -55,6 +55,9 @@ The notable changes of each release of ComposeUI. The format follows
   `export_filename` names the file at first.
 - A console copies its whole text to the clipboard: a "Copy all" button on Qt and the web,
   and the key `c` on Textual.
+- A console searches its text: a search field on Qt and the web, `/` on Textual. Its
+  matches are highlighted, and a count says which one is current. New lines keep the
+  current match. `find_in_lines` finds them as the search does.
 
 ### Fixed
 

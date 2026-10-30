@@ -399,6 +399,43 @@ def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_u
     assert console.toPlainText() == "New run"
 
 
+def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one(
+    qtbot: QtBot,
+) -> None:
+    view = RunMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+    view.run.clicked.emit()
+    assert box.search.placeholderText() == "Search"
+
+    def current() -> str:
+        return box.text.textCursor().block().text()
+
+    qtbot.keyClicks(box.search, "step 1")  # Step 1, then Step 10 to Step 19
+    assert (box.matches.text(), current()) == ("1 of 11", "Step 1")
+    assert len(box.text.extraSelections()) == 11
+    qtbot.keyClick(box.search, Qt.Key.Key_Return)
+    assert (box.matches.text(), current()) == ("2 of 11", "Step 10")
+    qtbot.keyClick(box.search, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    qtbot.keyClick(box.search, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    assert (box.matches.text(), current()) == ("11 of 11", "Step 19")
+    for _ in range(4):  # around the end, to Step 12
+        qtbot.keyClick(box.search, Qt.Key.Key_Return)
+    assert (box.matches.text(), current()) == ("4 of 11", "Step 12")
+
+    # the next run drops the oldest lines, Step 1 to Step 10 among them: Step 12 stays current
+    view.run.clicked.emit()
+    assert box.matches.text() == "2 of 9"  # Step 11, then Step 12
+
+    qtbot.keyClicks(box.search, "x")  # step 1x
+    qtbot.keyClick(box.search, Qt.Key.Key_Return)
+    assert (box.matches.text(), box.text.extraSelections()) == ("No match", [])
+    qtbot.keyClick(box.search, Qt.Key.Key_Escape)
+    assert (box.search.text(), box.matches.text(), box.text.extraSelections()) == ("", "", [])
+
+
 def test_a_console_s_copy_button_copies_its_whole_text(qtbot: QtBot) -> None:
     view = RunMainView()
     view.render(RendererType.QT)

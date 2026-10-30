@@ -79,7 +79,7 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
-from composeui.textualcore.widgets.composeconsole import ComposeConsole
+from composeui.textualcore.widgets.composeconsole import ComposeConsoleBox
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefilepathinput import (
@@ -1179,8 +1179,11 @@ class ConsoleViewLike(ViewLike, Protocol):
     def export_text(self, path: Path) -> None: ...
 
 
-class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConsole]):
-    """The console's text in a `ComposeConsole`, its new lines added to those it shows."""
+class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConsoleBox]):
+    """The console's text in a `ComposeConsole`, its new lines added to those it shows.
+
+    Above it, the search bar (`ComposeConsoleBox`) shows the count of its matches.
+    """
 
     def __init__(self, view: ConsoleViewLike) -> None:
         super().__init__(view)
@@ -1198,40 +1201,55 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeConsole()
-            self._rendered_object.save_path_chosen.connect(self._view.export_text)
+            self._rendered_object = ComposeConsoleBox()
+            console = self._rendered_object.log_view
+            console.save_path_chosen.connect(self._view.export_text)
+            console.matches_changed.connect(self._show_matches)
 
     @staticmethod
     def _refresh_max_lines(
-        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: int
+        _view: ConsoleViewLike, rendered_object: ComposeConsoleBox, value: int
     ) -> None:
-        rendered_object.set_max_lines(value)
+        rendered_object.log_view.set_max_lines(value)
 
     def _refresh_text(
-        self, view: ConsoleViewLike, rendered_object: ComposeConsole, _value: str
+        self, view: ConsoleViewLike, rendered_object: ComposeConsoleBox, _value: str
     ) -> None:
         # the view as it is now: the change has waited for the app's thread
-        rendered_object.set_text(view.text)
+        rendered_object.log_view.set_text(view.text)
         self._shown_count = view.line_count
 
     def _refresh_line_count(
-        self, view: ConsoleViewLike, rendered_object: ComposeConsole, _value: int
+        self, view: ConsoleViewLike, rendered_object: ComposeConsoleBox, _value: int
     ) -> None:
         assert isinstance(view, ConsoleView)
-        rendered_object.add(lines_after(view, self._shown_count), view.last_line)
+        rendered_object.log_view.add(lines_after(view, self._shown_count), view.last_line)
         self._shown_count = view.line_count
 
     @staticmethod
     def _refresh_texts(
-        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: dict[str, str]
+        _view: ConsoleViewLike, rendered_object: ComposeConsoleBox, value: dict[str, str]
     ) -> None:
-        rendered_object.set_texts(save=value.get("save", ""), copy=value.get("copy", ""))
+        rendered_object.log_view.set_texts(save=value.get("save", ""), copy=value.get("copy", ""))
+        rendered_object.set_search_text(value.get("search", ""))
 
     @staticmethod
     def _refresh_export_filename(
-        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: str
+        _view: ConsoleViewLike, rendered_object: ComposeConsoleBox, value: str
     ) -> None:
-        rendered_object.export_filename = value
+        rendered_object.log_view.export_filename = value
+
+    def _show_matches(self, current: int, count: int) -> None:
+        """Show the search's count of matches: none without a search."""
+        assert self._rendered_object is not None
+        texts = self._view.texts
+        if self._rendered_object.search.value == "":
+            text = ""
+        elif count == 0:
+            text = texts.get("no_match", "")
+        else:
+            text = texts.get("matches", "").format(current=current, count=count)
+        self._rendered_object.matches.update(text)
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
