@@ -41,7 +41,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView
 from tests.charts import ChartPagesMainView
-from tests.console import MAX_LINES, RunMainView
+from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -226,6 +226,14 @@ class _PlacesApp(WebApplication[EditableTableMainView]):
             main_view.status_bar.show_message(f"Opened {places.rows[row][0]}")
 
         places.row_activated.connect(show_opened)
+
+
+@pytest.fixture(scope="module")
+def colors_base_url() -> Iterator[str]:
+    """Serve an app whose console shows its output's ANSI colors, for the whole module."""
+    app = WebApplication(build_main_view=ColoredRunMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
 
 
 @pytest.fixture(scope="module")
@@ -1718,6 +1726,26 @@ def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one(
     field.fill("")
     expect(count).to_have_text("")
     assert highlighted() == [0, 0]
+    context.close()
+
+
+def test_a_console_s_colors_show_and_its_search_finds_across_them(
+    browser: Browser, colors_base_url: str
+) -> None:
+    context = browser.new_context(base_url=colors_base_url)
+    page = context.new_page()
+    page.goto("/")
+    console = page.locator("pre")
+    # the page's policy lets the inline styles show (a refusal fails the test)
+    expect(console.get_by_text("ERR", exact=True)).to_have_css("color", "rgb(205, 49, 49)")
+    with _posted(page):
+        page.get_by_role("button", name="More").click()
+    expect(console.get_by_text("blue", exact=True)).to_have_css("color", "rgb(36, 114, 200)")
+
+    page.get_by_role("searchbox", name="Search").fill("error")  # ERR in red, then OR
+    expect(page.locator("[data-console-matches]")).to_have_text("1 of 2")
+    current = "() => [...CSS.highlights.get('cui-match-current')].map(String)"
+    assert page.evaluate(current) == ["ERROR"]
     context.close()
 
 

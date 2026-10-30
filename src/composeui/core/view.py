@@ -197,6 +197,7 @@ __all__ = [
     "TableMixin",
     "TableSource",
     "TableView",
+    "TextStyle",
     "ToolBar",
     "TreeNode",
     "TreePath",
@@ -1899,6 +1900,104 @@ CONSOLE_TEXTS: Mapping[str, str] = {
 }
 
 
+#: an escape sequence of a terminal: a CSI one (a color, a cursor's move...), an OSC one (a
+#: title, a link...), or another of two characters
+_ESCAPE = re.compile(r"\x1b(?:\[([0-?]*)[ -/]*([@-~])|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")
+#: the start of one, cut at the end of a text: the next text ends it
+_ESCAPE_START = re.compile(r"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*\x1b?)?\Z")
+#: the 16 colors of ANSI escape codes, then their bright ones: readable on a light or dark page
+_ANSI_COLORS = (
+    "#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5",
+    "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff",
+)  # fmt: skip
+
+
+@attrs.frozen
+class TextStyle:
+    """How a part of a console's line looks, as its ANSI escape codes ask (see `ConsoleView`).
+
+    Colors are "#rrggbb", None for the console's own.
+    """
+
+    foreground: Optional[str] = None
+    background: Optional[str] = None
+    is_bold: bool = False
+    is_italic: bool = False
+    is_underlined: bool = False
+
+
+#: the style of text no escape code styled
+PLAIN_TEXT = TextStyle()
+
+
+#: where the 256 colors' 6 by 6 by 6 cube starts, after the 16 colors, then its grays
+_CUBE_START = 16
+_GRAYS_START = 232
+#: the SGR codes turning a style on or off: the style, and its value
+_SGR_FLAGS = {
+    1: ("is_bold", True),
+    3: ("is_italic", True),
+    4: ("is_underlined", True),
+    22: ("is_bold", False),
+    23: ("is_italic", False),
+    24: ("is_underlined", False),
+}
+#: the SGR codes of a color: what it colors, and its index (None for the console's own)
+_SGR_COLORS: dict[int, tuple[str, Optional[int]]] = {
+    **{30 + index: ("foreground", index) for index in range(8)},
+    **{90 + index: ("foreground", 8 + index) for index in range(8)},
+    39: ("foreground", None),
+    **{40 + index: ("background", index) for index in range(8)},
+    **{100 + index: ("background", 8 + index) for index in range(8)},
+    49: ("background", None),
+}
+#: the SGR codes of a color given next: by its index (5, then it), or red, green, blue (2)
+_SGR_EXTENDED = {38: "foreground", 48: "background"}
+_INDEXED, _RGB = 5, 2
+
+
+def _ansi_color(index: int) -> str:
+    """Get the color of an ANSI code's index: 16 colors, a 6 by 6 by 6 cube, then grays."""
+    if index < _CUBE_START:
+        return _ANSI_COLORS[index]
+    if index < _GRAYS_START:
+        cube = index - _CUBE_START
+        steps = (cube // 36, cube // 6 % 6, cube % 6)
+        return "#{:02x}{:02x}{:02x}".format(*(0 if step == 0 else 55 + 40 * step for step in steps))
+    gray = 8 + 10 * (min(index, 255) - _GRAYS_START)
+    return f"#{gray:02x}{gray:02x}{gray:02x}"
+
+
+def _styled(style: TextStyle, parameters: str) -> TextStyle:
+    """Get `style` as an SGR escape code (``ESC [ parameters m``) changes it."""
+    codes = [int(code) if code.isdigit() else 0 for code in re.split("[;:]", parameters or "0")]
+    changes: dict[str, Any] = {}
+    index = 0
+    while index < len(codes):
+        code = codes[index]
+        if code == 0:
+            style, changes = PLAIN_TEXT, {}
+        elif code in _SGR_FLAGS:
+            name, value = _SGR_FLAGS[code]
+            changes[name] = value
+        elif code in _SGR_COLORS:
+            name, color = _SGR_COLORS[code]
+            changes[name] = None if color is None else _ansi_color(color)
+        elif code in _SGR_EXTENDED and index + 2 < len(codes):
+            kind, values = codes[index + 1], codes[index + 2 :]
+            if kind == _INDEXED:
+                changes[_SGR_EXTENDED[code]] = _ansi_color(min(values[0], 255))
+                index += 2
+            elif kind == _RGB and len(values) >= len("rgb"):
+                rgb = [min(value, 255) for value in values[:3]]
+                changes[_SGR_EXTENDED[code]] = "#{:02x}{:02x}{:02x}".format(*rgb)
+                index += 4
+            else:  # an unknown kind, or cut short: its values can't be told from codes
+                index = len(codes)
+        index += 1
+    return attrs.evolve(style, **changes)
+
+
 def find_in_lines(lines: Sequence[str], query: str) -> list[tuple[int, int, int]]:
     """Find `query` in a console's `lines`, as its search does: plain text, any case.
 
@@ -1944,6 +2043,10 @@ class ConsoleView(View):
     single message to the user, such as an error, see `LogView`. The user saves the text
     to a file (`export_text`), named `export_filename` at first, or copies it all. The
     user searches the text too: plain text, any case, as `find_in_lines` finds it.
+
+    The text loses the escape sequences of a terminal, such as the ANSI codes coloring a
+    solver's output, so it reads, searches and saves as plain text. With `ansi_colors`,
+    the view shows the colors and styles those codes ask for (`line_styles`).
     """
 
     _renderer_key = "console"
@@ -1966,6 +2069,20 @@ class ConsoleView(View):
     #: a "\r" ended the text so far: the next text starts the last line again
     _is_returned: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
     _line_count: int = attrs.field(default=0, init=False, repr=False, metadata={OMIT: True})
+    #: whether it shows the colors and styles of the text's ANSI escape codes
+    ansi_colors: bool = attrs.field(default=False, metadata={OMIT: True})
+    _line_styles: deque[tuple[tuple[int, int, TextStyle], ...]] = attrs.field(
+        factory=deque, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    _last_line_styles: list[tuple[int, int, TextStyle]] = attrs.field(
+        factory=list, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: the style the escape codes so far ask for, for the next text
+    _style: TextStyle = attrs.field(
+        default=PLAIN_TEXT, init=False, repr=False, metadata={OMIT: True}
+    )
+    #: an escape sequence cut at the end of the text so far: the next text ends it
+    _escape: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
     #: the texts of its controls, by what they're for (see `CONSOLE_TEXTS`)
     texts: dict[str, str] = attrs.field(
         factory=lambda: dict(CONSOLE_TEXTS), metadata={UI_TEXT: True}
@@ -1981,8 +2098,12 @@ class ConsoleView(View):
     @text.setter
     def text(self, text: str) -> None:
         self._lines.clear()
+        self._line_styles.clear()
         self._last_line = ""
+        self._last_line_styles = []
         self._is_returned = False
+        self._style = PLAIN_TEXT
+        self._escape = ""
         self._add(text)
         self._refresh("text")
 
@@ -1995,6 +2116,16 @@ class ConsoleView(View):
     def last_line(self) -> str:
         """Get the line being written: the text after the last line's end."""
         return self._last_line
+
+    @property
+    def line_styles(self) -> Sequence[tuple[tuple[int, int, TextStyle], ...]]:
+        """Get the styled parts of each line kept, as `lines`: start, end and style."""
+        return self._line_styles
+
+    @property
+    def last_line_styles(self) -> Sequence[tuple[int, int, TextStyle]]:
+        """Get the styled parts of the line being written: start, end and style."""
+        return self._last_line_styles
 
     @property
     def line_count(self) -> int:
@@ -2029,23 +2160,47 @@ class ConsoleView(View):
             main_view.status_bar.show_message(done.format(name=path.name))
 
     def _add(self, text: str) -> None:
-        for part in _LINE_BREAKS.split(text):
+        text, self._escape = self._escape + text, ""
+        cut = _ESCAPE_START.search(text)
+        if cut is not None:
+            text, self._escape = text[: cut.start()], text[cut.start() :]
+        start = 0
+        for escape in _ESCAPE.finditer(text):
+            self._add_text(text[start : escape.start()])
+            if escape.group(2) == "m":  # a color or a style; the other sequences go
+                self._style = _styled(self._style, escape.group(1))
+            start = escape.end()
+        self._add_text(text[start:])
+        self._drop_oldest(self.max_lines)
+
+    def _add_text(self, text: str) -> None:
+        """Add `text`, without escape sequences, in the current style."""
+        for part in _LINE_BREAKS.split(text.replace("\x1b", "")):
             if part in ("\n", "\r\n"):
                 self._lines.append(self._last_line)
+                self._line_styles.append(tuple(self._last_line_styles))
                 self._line_count += 1
-                self._last_line = ""
+                self._last_line, self._last_line_styles = "", []
                 self._is_returned = False
             elif part == "\r":
                 # a "\n" may come next, in the next text: the line then ends as it is
                 self._is_returned = True
             elif part != "":
-                self._last_line = part if self._is_returned else self._last_line + part
+                if self._is_returned:
+                    self._last_line, self._last_line_styles = "", []
+                start = len(self._last_line)
+                self._last_line += part
+                styles = self._last_line_styles
+                if styles and styles[-1][1:] == (start, self._style):  # one part, longer
+                    styles[-1] = (styles[-1][0], len(self._last_line), self._style)
+                elif self._style != PLAIN_TEXT:
+                    styles.append((start, len(self._last_line), self._style))
                 self._is_returned = False
-        self._drop_oldest(self.max_lines)
 
     def _drop_oldest(self, max_lines: int) -> None:
         while len(self._lines) > max_lines:
             self._lines.popleft()
+            self._line_styles.popleft()
 
     def _refresh(self, name: str) -> None:
         """Show the change: not a field's, which the renderer would hear by itself."""
@@ -2059,6 +2214,15 @@ def lines_after(console: ConsoleView, count: int) -> list[str]:
     lines = console.lines
     new = min(console.line_count - count, len(lines))
     return [lines[index] for index in range(len(lines) - new, len(lines))]
+
+
+def line_styles_after(
+    console: ConsoleView, count: int
+) -> list[tuple[tuple[int, int, TextStyle], ...]]:
+    """Get the styles of `lines_after`'s lines, as `ConsoleView.line_styles` gives them."""
+    styles = console.line_styles
+    new = min(console.line_count - count, len(styles))
+    return [styles[index] for index in range(len(styles) - new, len(styles))]
 
 
 @define_view

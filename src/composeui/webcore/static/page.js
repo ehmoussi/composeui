@@ -1247,14 +1247,20 @@ function searchConsole(field, move) {
   var ranges = [], places = [], first = Number(box.dataset.dropped || 0);
   if (field.value !== "") {
     var pattern = new RegExp(field.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-    box.querySelectorAll("span").forEach(function (line, index) {
-      var node = line.firstChild, match;
-      if (node === null) return;
+    /* a line: its text's nodes, several when ANSI codes styled its parts */
+    Array.prototype.forEach.call(box.children, function (line, index) {
+      var nodes = [], text = "", match;
+      var walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        nodes.push({node: walker.currentNode, start: text.length});
+        text += walker.currentNode.textContent;
+      }
       pattern.lastIndex = 0;
-      while ((match = pattern.exec(node.textContent)) !== null) {
-        var range = new Range();
-        range.setStart(node, match.index);
-        range.setEnd(node, match.index + match[0].length);
+      while ((match = pattern.exec(text)) !== null) {
+        var range = new Range(), end = match.index + match[0].length;
+        var from = textPoint(nodes, match.index, false), to = textPoint(nodes, end, true);
+        range.setStart(from.node, match.index - from.start);
+        range.setEnd(to.node, end - to.start);
         ranges.push(range);
         places.push([first + index, match.index]);
       }
@@ -1292,6 +1298,14 @@ function searchConsole(field, move) {
     field.dataset.matches.replace("{current}", current + 1).replace("{count}", ranges.length);
   /* unchanged, not set: the page's observer would run this again */
   if (count !== null && count.textContent !== text) count.textContent = text;
+}
+/* the text node holding a line's `offset`: the one it starts, or for an `isEnd`, ends */
+function textPoint(nodes, offset, isEnd) {
+  for (var index = 0; index < nodes.length; index++) {
+    var node = nodes[index], length = node.node.textContent.length;
+    if (offset < node.start + length || (isEnd && offset === node.start + length)) return node;
+  }
+  return nodes[nodes.length - 1];
 }
 function paintConsoleMatches() {
   if (!window.CSS || !CSS.highlights) return;  /* still counted, and scrolled to */

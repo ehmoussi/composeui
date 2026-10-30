@@ -15,7 +15,13 @@ from composeui.core.signal import Signal
 from composeui.core.view import find_in_lines, follow_match
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
+
+    from composeui.core.view import TextStyle
+
+    #: a line's styled parts: start, end and style
+    LineStyles = Sequence[tuple[int, int, TextStyle]]
 
     from rich.text import Text
     from textual.app import ComposeResult
@@ -30,8 +36,18 @@ _MATCH_STYLE = Style(color="black", bgcolor="#fde68a")
 _CURRENT_STYLE = Style(color="black", bgcolor="#f59e0b")
 
 
-class _SearchHighlighter(Highlighter):
-    """Highlight the matches of `query` in a console's line: `line`'s, its `current` one too."""
+def _rich_style(style: TextStyle) -> Style:
+    return Style(
+        color=style.foreground,
+        bgcolor=style.background,
+        bold=style.is_bold or None,
+        italic=style.is_italic or None,
+        underline=style.is_underlined or None,
+    )
+
+
+class _LineHighlighter(Highlighter):
+    """Style a console's `line` by its `styles`, then its matches of `query`, `current` too."""
 
     def __init__(self) -> None:
         self.query = ""
@@ -39,8 +55,12 @@ class _SearchHighlighter(Highlighter):
         self.line = -1
         #: the current match: its line and its start
         self.current: tuple[int, int] | None = None
+        #: each line's styled parts, as the console's lines
+        self.styles: list[LineStyles] = []
 
     def highlight(self, text: Text) -> None:
+        for start, end, style in self.styles[self.line]:  # one per line, as the lines
+            text.stylize(_rich_style(style), start, end)
         for _, start, end in find_in_lines([text.plain], self.query):
             is_current = self.current == (self.line, start)
             text.stylize(_CURRENT_STYLE if is_current else _MATCH_STYLE, start, end)
@@ -66,7 +86,7 @@ class ComposeConsole(Log):
 
     def __init__(self) -> None:
         super().__init__(auto_scroll=False, highlight=True)
-        self.highlighter = self._search = _SearchHighlighter()
+        self.highlighter = self._search = _LineHighlighter()
         #: the index of the current match, in the matches
         self._current = 0
         #: the current match: its line's number, from the text's first line ever, its start
@@ -101,26 +121,32 @@ class ComposeConsole(Log):
         before = len(self._lines)
         self.max_lines = count + 1
         self._prune_max_lines()
-        self._dropped += before - len(self._lines)
+        self._drop_styles(before)
         self.virtual_size = Size(self._width, len(self._lines))
         self.refresh()
 
-    def set_text(self, text: str) -> None:
-        """Show `text` instead, from its end."""
+    def set_text(self, text: str, styles: Sequence[LineStyles] = ()) -> None:
+        """Show `text` instead, from its end, its lines styled by `styles`, if given."""
         self.clear()
         self._dropped = 0
+        self._search.styles = []
         *lines, last_line = text.split("\n")
-        self.add(lines, last_line)
+        self.add(lines, last_line, styles)
         self.scroll_end(animate=False, immediate=True, x_axis=False)
 
-    def add(self, lines: list[str], last_line: str) -> None:
-        """End the line being written with `lines`, then write `last_line` in its place."""
+    def add(self, lines: list[str], last_line: str, styles: Sequence[LineStyles] = ()) -> None:
+        """End the line being written with `lines`, then write `last_line` in its place.
+
+        `styles`, if given, style these lines, `last_line` last.
+        """
         is_at_end = self.is_vertical_scroll_end
         new = [*lines, last_line]
-        self._lines[max(len(self._lines) - 1, 0) :] = new
+        replaced = max(len(self._lines) - 1, 0)
+        self._lines[replaced:] = new
+        self._search.styles[replaced:] = list(styles) or [() for _ in new]
         shown = len(self._lines)
         self._prune_max_lines()
-        self._dropped += shown - len(self._lines)
+        self._drop_styles(shown)
         width = max(cell_len(self._process_line(line)) for line in new)
         self._width = max(self._width, width)
         self.virtual_size = Size(self._width, len(self._lines))
@@ -131,6 +157,12 @@ class ComposeConsole(Log):
         else:
             self.refresh()  # the oldest lines dropped move the others up
         self._show_matches(is_moved=False)
+
+    def _drop_styles(self, shown: int) -> None:
+        """Drop the styles of the lines `Log` dropped, the oldest, of the `shown` before."""
+        dropped = shown - len(self._lines)
+        del self._search.styles[:dropped]
+        self._dropped += dropped
 
     def set_query(self, query: str) -> None:
         """Highlight the matches of `query`, and show the first."""

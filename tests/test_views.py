@@ -21,11 +21,13 @@ from composeui.core.view import (
     NodeMark,
     RowInputView,
     TableView,
+    TextStyle,
     TreeView,
     TypedFormDialogView,
     define_view,
     find_in_lines,
     follow_match,
+    line_styles_after,
     parse_date,
 )
 from tests.buildings import SITE
@@ -242,6 +244,34 @@ def test_a_console_s_search_finds_plain_text_in_any_case_and_follows_its_match()
     assert follow_match(matches, 10, (5, 2)) == 0  # gone with them: the next
     assert follow_match(matches, 0, (9, 0)) == 2  # past the last: the last
     assert follow_match([], 0, (1, 1)) == 0
+
+
+def test_a_console_keeps_its_text_plain_and_the_styles_its_ansi_codes_ask_for() -> None:
+    console = ConsoleView(max_lines=2)
+    red, green = TextStyle(foreground="#cd3131", is_bold=True), TextStyle(background="#0dbc79")
+    console.append("\x1b[1;31mERR\x1b[0mOR <x> \x1b[42mbg\x1b[0m\n\x1b[3")  # cut in the code
+    console.append("2mgo\x1b]0;a title\x07\x1b[2K!")  # a title, an erased line: gone
+    assert (console.text, console.lines[0]) == ("ERROR <x> bg\ngo!", "ERROR <x> bg")
+    assert console.line_styles[0] == ((0, 3, red), (10, 12, green))
+    # the style goes on, in one part, until a code changes it
+    assert console.last_line_styles == [(0, 3, TextStyle(foreground="#0dbc79"))]
+
+    console.append("\r\x1b[38;5;208;48;2;1;2;300;4mnew\x1b[24;39;49m\x1b x\n")
+    orange = TextStyle(foreground="#ff8700", background="#0102ff", is_underlined=True)
+    assert (console.lines[-1], console.line_styles[-1]) == ("new x", ((0, 3, orange),))
+    console.append("\x1b[3mlast\n")  # the oldest line goes, its styles too
+    assert [len(styles) for styles in console.line_styles] == [1, 1]
+    assert line_styles_after(console, 2) == [((0, 4, TextStyle(is_italic=True)),)]
+
+    # a gray of the 256 colors; an unknown kind of color, one cut short, and a code that
+    # a console doesn't show (inverse): no change
+    console.text = "\x1b[38;5;240mg\x1b[38;9;1;1;1m\x1b[48;2;1;2m\x1b[7mh"
+    assert console.last_line_styles == [(0, 2, TextStyle(foreground="#585858"))]
+
+    console.text = "\x1b[1mbold"  # replaced: from the plain style
+    assert console.last_line_styles == [(0, 4, TextStyle(is_bold=True))]
+    console.text = "plain"
+    assert console.last_line_styles == []
 
 
 def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:

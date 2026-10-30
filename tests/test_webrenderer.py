@@ -136,7 +136,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView, styled_site
 from tests.charts import ChartPagesMainView
-from tests.console import MAX_LINES, STEP_LINES, RunMainView
+from tests.console import MAX_LINES, STEP_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -4192,6 +4192,45 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
         body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
         _swapped(body, output_id)  # whole
         assert _element(body, f"{output_id}-text").text == "New run"
+
+
+def test_a_console_shows_its_ansi_colors_in_inline_styles_and_drops_them_when_asked() -> None:
+    views: list[ColoredRunMainView] = []
+
+    class ColorsApp(WebApplication[ColoredRunMainView]):
+        def setup_session(self, main_view: ColoredRunMainView) -> None:
+            views.append(main_view)
+
+    def styles(markup: str, element_id: str) -> list[str | None]:
+        """Get the inline styles of an element's parts."""
+        found = _element(markup, element_id).descendants
+        return [attributes.get("style") for _, attributes in found if "style" in attributes]
+
+    app = ColorsApp(build_main_view=ColoredRunMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        output_id = _widget_id(view.output.renderer)
+        console = _element(page, f"{output_id}-text")
+        assert console.text == "ERROR <x> bg\ngreen"  # the text, not markup
+        assert styles(page, f"{output_id}-text") == [
+            "color:#cd3131;font-weight:bold",
+            "background-color:#0dbc79",
+            "color:#0dbc79",
+        ]
+
+        body = client.post(
+            f"/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
+        ).text
+        assert f'id="{output_id}" hx-swap-oob' not in body  # only the new lines
+        assert 'style="color:#2472c8;font-style:italic;text-decoration:underline"' in body
+
+        view.output.ansi_colors = False
+        body = client.post(
+            f"/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
+        ).text
+        _swapped(body, output_id)  # whole
+        assert styles(body, f"{output_id}-text") == []
 
 
 def test_a_console_s_link_downloads_its_text() -> None:
