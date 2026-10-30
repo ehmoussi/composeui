@@ -3306,6 +3306,7 @@ class SourceTableViewLike(ViewLike, Protocol):
     def is_selected(self, row_id: Any) -> bool: ...
     def select_at(self, position: int) -> None: ...
     def extend_to(self, position: int) -> None: ...
+    def activate_at(self, position: int) -> None: ...
     def header(self, column: str) -> str: ...
     def filter_error(self, column: str, text: str) -> str | None: ...
     def filter_takes_pattern(self, column: str) -> bool: ...
@@ -3333,7 +3334,8 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     whole frame, scrolled to the top. A header is a button sorting by its column
     (`SourceTableView.sort_by`), keeping the focus as it comes back (`autofocus`). A click
     on a row, or Enter on it, selects it (`select_at`): only the rows come back, the row
-    keeping the focus. The web neither extends a selection nor activates a row. While a
+    keeping the focus. A double click on a row, or Enter, then activates it (`activate_at`,
+    posted by `page.js`). The web doesn't extend a selection. While a
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
     above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
     text (`SourceTableView.selection_text`) comes back in a hidden element, which the page
@@ -3424,6 +3426,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             "clear_filters": self._clear_filters,
             "sort": self._sort,
             "select": self._select,
+            "activate_row": self._activate,
             "scroll": self._scroll,
             "copy": self._copy,
         }
@@ -3446,6 +3449,14 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             return
         self._focused_row = int(position)
         self._view.select_at(int(position))
+
+    def _activate(self, form: Mapping[str, str]) -> None:
+        position = form.get("row", "")
+        if not position.isdigit() or int(position) >= self._view.row_count:
+            self._mark_parts("rows")  # a row a stale page still shows
+            return
+        # the click or Enter before it has selected the row
+        self._view.activate_at(int(position))
 
     def _scroll(self, form: Mapping[str, str]) -> None:
         """Draw the window around the first row shown, a fifth of it above.
@@ -3542,8 +3553,12 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         return Markup(
             '<tr class="h-9 cursor-pointer" tabindex="0" aria-rowindex="{index}"'
             '{selected}{autofocus} data-window-row hx-post="/widget/{widget_id}"'
-            """ hx-trigger="activate" hx-vals='{vals}' hx-swap="none">{content}</tr>"""
+            """ hx-trigger="activate" hx-vals='{vals}'"""
+            ' hx-swap="none"'
+            # a double click or Enter then activates it (see `page.js`)
+            ' data-activate="{position}">{content}</tr>'
         ).format(
+            position=position,
             index=position + 2,
             selected=selected,
             autofocus=" autofocus" if is_focused else "",

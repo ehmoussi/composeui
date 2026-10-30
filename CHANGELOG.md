@@ -61,6 +61,8 @@ The notable changes of each release of ComposeUI. The format follows
 - A console removes the escape sequences of a terminal, such as ANSI color codes, from its
   text. With `ConsoleView.ansi_colors`, it shows their colors and styles on every backend
   (`TextStyle`, `line_styles`). Before, their characters showed in the text.
+- A large table (`SourceTableView`) opens a row on the web too: a double click or Enter
+  emits its id with `row_activated`, as on Qt and Textual.
 
 ### Fixed
 

@@ -6243,6 +6243,37 @@ def test_a_large_table_s_row_selected_by_a_click_keeps_the_focus(
     assert main_view.table.selected_ids == [54]
 
 
+def test_a_large_table_s_row_activated_emits_its_id(
+    million_views: list[MillionRowsMainView], million_client: TestClient
+) -> None:
+    million_client.get("/")
+    (main_view,) = million_views
+    table = main_view.table
+    table_id = _widget_id(table.renderer)
+    activated: list[object] = []
+    table.row_activated.connect(activated.append)
+
+    def activate(position: str) -> str:
+        return million_client.post(
+            f"/widget/{table_id}", data={"event": "activate_row", "row": position}
+        ).text
+
+    page = million_client.get("/").text
+    assert _window(page, table_id)[3].get("data-activate") == "3"
+    activate("3")
+    assert activated == [3]
+    assert table.selected_ids == []  # the click or Enter before it selects
+
+    # a row a stale page still shows: the rows as they now are
+    assert _window(activate("1000000"), table_id)[0].get("aria-rowindex") == "2"
+    table.is_enabled = False
+    response = million_client.post(
+        f"/widget/{table_id}", data={"event": "activate_row", "row": "3"}
+    )
+    assert response.status_code == 400
+    assert activated == [3]
+
+
 @pytest.fixture
 def rooms_data_views() -> list[RoomsDataMainView]:
     """Each session's main view, kept by `rooms_data_client`'s app."""
