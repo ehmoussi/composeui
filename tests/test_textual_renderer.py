@@ -3228,6 +3228,19 @@ async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
         assert (boxed, header()) == ("▣ Keep", "Keep")
 
 
+async def _click_laid_out(pilot: Pilot[Any], widget: Widget) -> None:
+    """Click `widget` once its screen has laid it out, e.g. on a screen just pushed.
+
+    The pilot aims at the widget's region, empty until then: the click would land on the
+    screen's corner instead, on a slow machine.
+    """
+    for _ in range(100):
+        if widget.region.area > 0:
+            break
+        await pilot.pause()
+    assert await pilot.click(widget)
+
+
 def _app_of(view: MainView) -> App[Any]:
     """Render `view` on Textual, and get the app that shows it, not running yet."""
     view.render(RendererType.TEXTUAL)
@@ -4016,7 +4029,8 @@ async def test_a_save_path_is_picked_in_a_save_picker_and_replaces_a_file_once_a
         assert len(picked) == 1
         question = await save(tmp_path / "report")
         assert isinstance(question, ReplaceFileScreen)
-        await pilot.click(question.replace_button)
+        # pushed as the picker closed: maybe not laid out yet
+        await _click_laid_out(pilot, question.replace_button)
         await pilot.pause()
         assert picked[-1] == tmp_path / "report.pdf"
         report.confirms_overwrite = False
