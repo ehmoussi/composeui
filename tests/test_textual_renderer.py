@@ -17,6 +17,7 @@ import asyncio
 import datetime
 import math
 import os
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
@@ -45,6 +46,7 @@ from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 from textual_fspicker import SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
+from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
 
 from composeui.core import chartimage
 from composeui.core.application import ModelApplication, _add_reference_to_signals
@@ -3928,6 +3930,46 @@ async def test_a_folder_path_s_picker_selects_a_folder_from_its_folder_else_its_
     assert locations == [tmp_path / "studies", tmp_path, here]
     assert picked == [tmp_path / "results"] * 3
     assert not field.reload_button.display  # a folder has nothing to reload
+
+
+@pytest.mark.asyncio
+async def test_a_picker_s_folder_list_reads_its_styles_on_the_app_s_thread() -> None:
+    """textual-fspicker reads them from the thread loading a folder.
+
+    Textual empties a widget's component styles, then fills them anew, as it applies its
+    styles again: read in between from another thread, a style would be missing.
+    """
+    view = DataFileMainView()
+    app = _app_of(view)
+    read: list[object] = []
+
+    def read_styles(navigation: DirectoryNavigation) -> None:
+        try:
+            read.append(navigation._styles)  # noqa: SLF001  # what its loading thread reads
+        except KeyError as error:
+            read.append(error)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        field = _field_widget(view.form.measurements.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+        await pilot.click(field.browse_button)
+        await pilot.pause()
+        navigation = app.screen.query_one(DirectoryNavigation)
+        # as Textual applies the list's styles again: none, until the app's thread is done
+        styles = navigation._component_styles  # noqa: SLF001  # nothing else reaches them
+        kept = dict(styles)
+        styles.clear()
+        thread = threading.Thread(target=read_styles, args=(navigation,))
+        thread.start()
+        thread.join(timeout=0.2)  # the app's thread busy: the read waits for it
+        assert thread.is_alive()
+        styles.update(kept)
+        while thread.is_alive():
+            await pilot.pause(0.01)
+
+    assert len(read) == 1
+    assert isinstance(read[0], DirectoryEntryStyling)
 
 
 @pytest.mark.asyncio
