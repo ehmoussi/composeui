@@ -96,6 +96,7 @@ __all__ = [
     "CheckBoxView",
     "Column",
     "ComboBoxView",
+    "ConsoleView",
     "ContentDialogView",
     "DateInputMixin",
     "DateInputView",
@@ -1839,7 +1840,10 @@ class LogMixin:
 
 @define_view
 class LogView(LogMixin, View):
-    """A message to the user, for example an error, styled by its `log_type`."""
+    """A message to the user, for example an error, styled by its `log_type`.
+
+    A new message replaces the last one. For a stream of output, see `ConsoleView`.
+    """
 
     _renderer_key = "log"
 
@@ -1874,6 +1878,114 @@ class MarkdownView(MarkdownMixin, View):
     """
 
     _renderer_key = "markdown"
+
+
+#: what ends a line, or starts it again ("\r"), in a console's text
+_LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
+
+
+@define_view
+class ConsoleView(View):
+    r"""Plain text that the app adds to as it comes, for example the output of a process.
+
+    `append` adds text: "\n" ends a line, and "\r" starts the line again, as a terminal
+    shows a progress line. The view keeps the last `max_lines` lines and drops the oldest.
+    Set `text` to replace the text, or call `clear`. The view shows the text as it is,
+    never as markup, and scrolls to its end as text comes, unless the user scrolled up.
+
+    Its text is the app's output, not study data: never saved, loaded or reset. For a
+    single message to the user, such as an error, see `LogView`.
+    """
+
+    _renderer_key = "console"
+
+    def _trim(self, _attribute: attrs.Attribute[Any], max_lines: int) -> int:
+        self._drop_oldest(max_lines)
+        return max_lines
+
+    #: the most lines kept, the line being written not counted; the oldest go first
+    max_lines: int = attrs.field(
+        default=10_000,
+        validator=attrs.validators.ge(1),
+        on_setattr=[attrs.setters.validate, _trim, notify_renderer],
+        metadata={OMIT: True},
+    )
+    _lines: deque[str] = attrs.field(
+        factory=deque[str], init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    _last_line: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
+    #: a "\r" ended the text so far: the next text starts the last line again
+    _is_returned: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    _line_count: int = attrs.field(default=0, init=False, repr=False, metadata={OMIT: True})
+
+    @property
+    def text(self) -> str:
+        """Get the lines kept, then the line being written."""
+        return "\n".join([*self._lines, self._last_line])
+
+    @text.setter
+    def text(self, text: str) -> None:
+        self._lines.clear()
+        self._last_line = ""
+        self._is_returned = False
+        self._add(text)
+        self._refresh("text")
+
+    @property
+    def lines(self) -> Sequence[str]:
+        """Get the lines kept, each ended, the oldest first."""
+        return self._lines
+
+    @property
+    def last_line(self) -> str:
+        """Get the line being written: the text after the last line's end."""
+        return self._last_line
+
+    @property
+    def line_count(self) -> int:
+        """Get how many lines have ended since the view was built, the dropped ones too."""
+        return self._line_count
+
+    def append(self, text: str) -> None:
+        """Add `text` at the end, e.g. the output a process has written since the last call."""
+        self._add(text)
+        self._refresh("line_count")
+
+    def clear(self) -> None:
+        """Remove the whole text."""
+        self.text = ""
+
+    def _add(self, text: str) -> None:
+        for part in _LINE_BREAKS.split(text):
+            if part in ("\n", "\r\n"):
+                self._lines.append(self._last_line)
+                self._line_count += 1
+                self._last_line = ""
+                self._is_returned = False
+            elif part == "\r":
+                # a "\n" may come next, in the next text: the line then ends as it is
+                self._is_returned = True
+            elif part != "":
+                self._last_line = part if self._is_returned else self._last_line + part
+                self._is_returned = False
+        self._drop_oldest(self.max_lines)
+
+    def _drop_oldest(self, max_lines: int) -> None:
+        while len(self._lines) > max_lines:
+            self._lines.popleft()
+
+    def _refresh(self, name: str) -> None:
+        """Show the change: not a field's, which the renderer would hear by itself."""
+        renderer = self.renderer
+        if isinstance(renderer, (Renderer, RendererContainer)):
+            renderer.refresh_attribute(name, getattr(self, name))
+
+
+def lines_after(console: ConsoleView, count: int) -> list[str]:
+    """Get the lines kept that ended after the first `count`, e.g. the ones not shown yet."""
+    lines = console.lines
+    new = min(console.line_count - count, len(lines))
+    return [lines[index] for index in range(len(lines) - new, len(lines))]
 
 
 @define_view

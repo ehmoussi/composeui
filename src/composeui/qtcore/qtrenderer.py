@@ -69,6 +69,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    ConsoleView,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -104,11 +105,13 @@ from composeui.core.view import (
     VerticalView,
     View,
     date_hint,
+    lines_after,
     replace_cell,
     walk_tree,
     with_extension,
 )
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qconsole import QConsole
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -880,6 +883,49 @@ class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
         rendered_object.document().setMarkdown(
             value, features.MarkdownDialectGitHub | features.MarkdownNoHTML
         )
+
+
+class ConsoleViewLike(ViewLike, Protocol):
+    text: str
+    max_lines: int
+    line_count: int
+    last_line: str
+
+
+class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsole]):
+    """The console's text in a `QConsole`, its new lines added to those it shows."""
+
+    def __init__(self, view: ConsoleViewLike) -> None:
+        super().__init__(view)
+        #: how many of the view's lines had ended when the console last showed them
+        self._shown_count = 0
+        self._refresh_dispatcher.update(
+            {
+                "max_lines": self._refresh_max_lines,
+                "text": self._refresh_text,
+                "line_count": self._refresh_line_count,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QConsole()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_max_lines(_view: ConsoleViewLike, rendered_object: QConsole, value: int) -> None:
+        rendered_object.set_max_lines(value)
+
+    def _refresh_text(self, view: ConsoleViewLike, rendered_object: QConsole, value: str) -> None:
+        rendered_object.set_text(value)
+        self._shown_count = view.line_count
+
+    def _refresh_line_count(
+        self, view: ConsoleViewLike, rendered_object: QConsole, value: int
+    ) -> None:
+        assert isinstance(view, ConsoleView)
+        rendered_object.add(lines_after(view, self._shown_count), view.last_line)
+        self._shown_count = value
 
 
 class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
@@ -1902,7 +1948,14 @@ class QtGroupFormRenderer(QtFormRenderer):
 #: widgets scrolling within themselves: as tall as the room they're given, rather than
 #: their content, so they take a column's spare height, and a row's whole height; a
 #: splitter too, its panes as tall as it
-_SCROLLING_WIDGETS = (QTextBrowser, QScrollArea, QTreeWidget, QSplitter, QDataFilterTable)
+_SCROLLING_WIDGETS = (
+    QTextBrowser,
+    QConsole,
+    QScrollArea,
+    QTreeWidget,
+    QSplitter,
+    QDataFilterTable,
+)
 
 
 #: the widgets of the form rows shown outside a form, by their rows' renderers: built once,
@@ -3010,6 +3063,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "log": QtLogRenderer,
     "main": QtMainRenderer,
     "markdown": QtMarkdownRenderer,
+    "console": QtConsoleRenderer,
     "menu": QtMenuRenderer,
     "metric": QtMetricRenderer,
     "page": QtPageRenderer,

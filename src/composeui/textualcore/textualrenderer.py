@@ -32,6 +32,7 @@ from composeui.core.view import (
     CellKind,
     ChartKind,
     ChartView,
+    ConsoleView,
     DialogKind,
     DialogView,
     ExpanderView,
@@ -70,6 +71,7 @@ from composeui.core.view import (
     VerticalView,
     View,
     date_hint,
+    lines_after,
     replace_cell,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
@@ -77,6 +79,7 @@ from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecheckbox import ComposeCheckBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
+from composeui.textualcore.widgets.composeconsole import ComposeConsole
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
 from composeui.textualcore.widgets.composefilepathinput import (
@@ -1163,6 +1166,53 @@ class TextualMarkdownRenderer(TextualWidgetRenderer[MarkdownViewLike, ComposeMar
         _view: MarkdownViewLike, rendered_object: ComposeMarkdown, value: str
     ) -> None:
         rendered_object.set_text(value)
+
+
+class ConsoleViewLike(ViewLike, Protocol):
+    text: str
+    max_lines: int
+    line_count: int
+    last_line: str
+
+
+class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConsole]):
+    """The console's text in a `ComposeConsole`, its new lines added to those it shows."""
+
+    def __init__(self, view: ConsoleViewLike) -> None:
+        super().__init__(view)
+        #: how many of the view's lines had ended when the console last showed them
+        self._shown_count = 0
+        self._refresh_dispatcher.update(
+            {
+                "max_lines": self._refresh_max_lines,
+                "text": self._refresh_text,
+                "line_count": self._refresh_line_count,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeConsole()
+
+    @staticmethod
+    def _refresh_max_lines(
+        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: int
+    ) -> None:
+        rendered_object.set_max_lines(value)
+
+    def _refresh_text(
+        self, view: ConsoleViewLike, rendered_object: ComposeConsole, _value: str
+    ) -> None:
+        # the view as it is now: the change has waited for the app's thread
+        rendered_object.set_text(view.text)
+        self._shown_count = view.line_count
+
+    def _refresh_line_count(
+        self, view: ConsoleViewLike, rendered_object: ComposeConsole, _value: int
+    ) -> None:
+        assert isinstance(view, ConsoleView)
+        rendered_object.add(lines_after(view, self._shown_count), view.last_line)
+        self._shown_count = view.line_count
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
@@ -2989,6 +3039,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "log": TextualLogRenderer,
     "main": TextualMainRenderer,
     "markdown": TextualMarkdownRenderer,
+    "console": TextualConsoleRenderer,
     "menu": TextualMenuRenderer,
     "metric": TextualMetricRenderer,
     "page": TextualPageRenderer,

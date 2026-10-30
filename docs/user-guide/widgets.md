@@ -320,6 +320,9 @@ shows its message under its field.
 Qt shows a `QLabel`, Textual a `Label`, and the web a paragraph that screen readers read
 when it changes (`aria-live="polite"`).
 
+A new message replaces the last one. To show a stream of output, such as the output of a
+process, use a [console](#console).
+
 ## Expander
 
 An `ExpanderView` is a collapsible section, for example the details of a record with its
@@ -383,6 +386,68 @@ markup: Qt and the web show it as text, and Textual leaves out its tags.
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) has a help page.
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) shows a Markdown file
 (`uv run python -m examples.markdownviewer --markdown README.md --backend qt`).
+
+## Console
+
+A `ConsoleView` shows plain text that the app adds to as it comes, for example the output of a
+solver that a [job](threads.md) runs. To show one message to the user, such as an error, use a
+[log message](#log-message) instead.
+
+Call `append` with the new text, such as each line that the job reports as its progress:
+
+
+```python
+import io
+import subprocess
+import sys
+
+from composeui.core.jobs import Job
+from composeui.core.view import ConsoleView, MainView, child, define_view
+
+SOLVER = "print('Step 1'); print('50%', end='\\r'); print('Done')"
+
+
+def run_solver(job: Job[int, str], command: list[str]) -> int:
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+        assert process.stdout is not None
+        # newline="": each line keeps its "\r" or "\n", which text mode reads as "\n"
+        for line in io.TextIOWrapper(process.stdout, encoding="utf-8", newline=""):
+            job.report_progress(line)
+    return process.returncode
+
+
+@define_view
+class SolverView(MainView):
+    output: ConsoleView = child(ConsoleView, max_lines=5_000)
+
+    def run(self) -> None:
+        self.output.clear()
+        job = self.jobs.start(run_solver, [sys.executable, "-c", SOLVER])
+        job.progress.connect(self.output.append)
+
+
+main_view = SolverView()
+main_view.run()
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.output.text == "Step 1\nDone\n"
+```
+
+- **Lines.** "\n" ends a line. "\r" starts the line again: the next text replaces it, as a
+  terminal shows a progress line. "\r\n" ends the line. Python reads a "\r" in text mode as
+  "\n", so read the output with `newline=""`, as the example does.
+- **The last lines.** The view keeps the last `max_lines` lines (10,000 by default) and drops
+  the oldest. `lines` holds them, and `last_line` the line being written. `line_count` counts
+  the lines ended since the view was built, the dropped ones too.
+- **Replace and clear.** `text` holds the lines, then the line being written. Set it to
+  replace them, or call `clear`.
+- **The text as it is.** The view never reads the text as markup: a tag shows as text.
+- **Scrolling.** The view scrolls to its end as text comes. When the user scrolls up to read,
+  it stays there, until the user scrolls back to the end.
+- **Not study data.** The text is the app's output: a study never saves, loads or resets it.
+
+Qt shows a read-only `QPlainTextEdit` in a fixed-width font, Textual a `Log`, and the web a
+box of preformatted text. Qt and the web wrap a long line; Textual scrolls sideways. The user
+selects and copies the text on each backend. On the web, a change sends only the new lines.
 
 ## The File menu and picking a file
 

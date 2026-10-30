@@ -35,6 +35,7 @@ from textual.widgets import (
     Footer,
     Input,
     Label,
+    Log,
     Markdown,
     ProgressBar,
     Select,
@@ -132,6 +133,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.console import MAX_LINES, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -3178,6 +3180,35 @@ def _widget(view: View) -> Widget:
 
 
 @pytest.mark.asyncio
+async def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_up() -> None:
+    view = RunMainView()
+    app = _app_of(view)
+    console = _widget(view.output)
+    assert isinstance(console, Log)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert list(console.lines) == ["Ready <ok>", ""]
+
+        view.run.clicked.emit()
+        await pilot.pause()
+        assert "\n".join(console.lines) == view.output.text
+        assert console.max_scroll_y > 0
+        assert console.is_vertical_scroll_end
+        # the user scrolls up: the next run's lines, the oldest dropped, don't scroll down
+        console.scroll_home(animate=False, immediate=True)
+        view.run.clicked.emit()
+        await pilot.pause()
+        assert "\n".join(console.lines) == view.output.text
+        assert len(console.lines) == MAX_LINES + 1
+        assert not console.is_vertical_scroll_end
+
+        view.output.text = "New run"
+        await pilot.pause()
+        assert list(console.lines) == ["New run"]
+
+
+@pytest.mark.asyncio
 async def test_a_text_like_markup_shows_as_it_is() -> None:
     """Textual reads a string as its markup: `[/]` would crash it, an action would run."""
     view = MarkupMainView()
@@ -3597,6 +3628,7 @@ def _textual_widgets_of(view: View) -> list[object]:
         CellWidgetsMainView,
         RoomsDataMainView,
         HelpMainView,
+        RunMainView,
         JobsMainView,
         BookingMainView,
         DataFileMainView,

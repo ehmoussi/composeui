@@ -10,6 +10,7 @@ from attrs import Factory
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
+    ConsoleView,
     FormView,
     GroupFormView,
     LabelView,
@@ -196,3 +197,26 @@ def test_a_table_and_a_tree_name_their_marks() -> None:
     names = [TableView().mark_text(NodeMark.DONE), TreeView().mark_text(NodeMark.DONE)]
 
     assert names == ["Done", "Done"]
+
+
+def test_a_console_ends_a_line_at_a_newline_and_starts_it_again_at_a_return() -> None:
+    console = ConsoleView(max_lines=3)
+    console.append("Ready\nStep")
+    console.append(" 1\r\n50%\r")
+    assert (list(console.lines), console.last_line) == (["Ready", "Step 1"], "50%")
+    # a return then text: the progress line again; a return then a newline ends it as it is
+    console.append("80%\r")
+    console.append("\n")
+    assert (list(console.lines), console.last_line) == (["Ready", "Step 1", "80%"], "")
+
+    # the oldest lines go past `max_lines`, counted all the same
+    console.append("Done\n")
+    assert console.text == "Step 1\n80%\nDone\n"
+    assert console.line_count == 4
+    console.max_lines = 1
+    assert list(console.lines) == ["Done"]
+
+    console.text = "New\nrun"
+    assert (list(console.lines), console.last_line) == (["New"], "run")
+    console.clear()
+    assert console.text == ""

@@ -52,6 +52,7 @@ not in the package: run them from a clone of the repository (see
   - [Expander](user-guide/widgets.md#expander)
   - [Tree](user-guide/widgets.md#tree)
   - [Markdown](user-guide/widgets.md#markdown)
+  - [Console](user-guide/widgets.md#console)
   - [The File menu and picking a file](user-guide/widgets.md#the-file-menu-and-picking-a-file)
 - [Organizing the window](user-guide/organizing-the-window.md)
   - [Pages](user-guide/organizing-the-window.md#pages)

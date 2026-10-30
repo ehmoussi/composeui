@@ -136,6 +136,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.console import MAX_LINES, STEP_LINES, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
@@ -717,6 +718,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     StyledTablesMainView,
     StudyFileMainView,
     StudyFilesTableMainView,
+    RunMainView,
     _NotesMainView,
 ]
 
@@ -4160,6 +4162,34 @@ def pipes() -> Iterator[tuple[TestClient, PipesMainView]]:
         client.get("/")
         (view,) = views
         yield client, view
+
+
+def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> None:
+    views: list[RunMainView] = []
+
+    class RunApp(WebApplication[RunMainView]):
+        def setup_session(self, main_view: RunMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(RunApp(build_main_view=RunMainView).create_starlette_app()) as client:
+        page = client.get("/").text
+        (view,) = views
+        output_id, run_id = _widget_id(view.output.renderer), _widget_id(view.run.renderer)
+        console = _element(page, output_id)
+        assert (console.tag, console.attributes["data-max-lines"]) == ("pre", str(MAX_LINES))
+        assert console.text == "Ready <ok>\n"
+
+        for _ in range(2):
+            body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
+            assert f'id="{output_id}" hx-swap-oob' not in body
+            assert f'hx-swap-oob="beforebegin:#{output_id}-last"' in body
+            # the run's lines, the last run's progress line ended as the first of them
+            assert (body.count("Step "), "Ready" in body) == (STEP_LINES, False)
+            assert _swapped(body, f"{output_id}-last").text == "Progress 100%"
+
+        view.run.clicked.connect(lambda: setattr(view.output, "text", "New run"))
+        body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
+        assert _swapped(body, output_id).text == "New run"
 
 
 def _contains(element: _Element, element_id: str) -> bool:
