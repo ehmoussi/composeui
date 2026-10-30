@@ -171,6 +171,8 @@ def _forget_widgets(view: View, window: QMainWindow) -> None:
 class QtApplication(Application[MainViewT]):
     """The Qt app: it shows the main view in a window."""
 
+    backend = RendererType.QT
+
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         super().__init__(build_main_view=build_main_view)
         _add_reload_argument(self._parser)
@@ -185,6 +187,8 @@ class QtApplication(Application[MainViewT]):
 
 class QtModelApplication(ModelApplication[MainViewT, ModelT]):
     """The Qt app with a model, which it closes once the window is closed."""
+
+    backend = RendererType.QT
 
     def __init__(
         self,

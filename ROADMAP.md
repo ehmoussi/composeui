@@ -55,7 +55,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 
 | Area | Already there |
 | --- | --- |
-| Core | Typed `attrs` views, reactive attributes, signals, callback injection, and lazy backend selection |
+| Core | Typed `attrs` views, reactive attributes, signals, callback injection, lazy backend selection, and the backend's capabilities |
 | Backends | Qt, Textual, and the web (Starlette and htmx); maps on Qt and the web only |
 | Forms and layout | Inputs, validation, buttons, progress, metrics, expanders, trees, Markdown, consoles, pages, tabs, splitters, sidebars, view lists, menus, toolbars, and typed form and content dialogs |
 | Tables | Editable tables, typed record tables, sorting, filtering, cell widgets and styles, header groups, and row headers |

@@ -53,6 +53,11 @@ class RendererType(enum.Enum):
     )
 
 
+def has_renderer(renderer_type: RendererType, key: str) -> bool:
+    """Tell whether `renderer_type`'s backend registers `key`, so it shows such views."""
+    return key in importlib.import_module(renderer_type.value.renderers).RENDERERS
+
+
 def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Renderer[Any, Any] | None:
     """Create the renderer registered under `key` by `renderer_type`'s backend.
 

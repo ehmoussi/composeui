@@ -31,6 +31,49 @@ browser gets its own copy of it.
   other sites. Read [Serve the app to other users](#serve-the-app-to-other-users) before
   other people use the app.
 
+### Adapt the views to the backend
+
+The app knows its backend before it builds its main view. So the views can adapt to it as
+they are built:
+
+- **`renders(view_type)`** tells whether the backend shows views of that type. For example,
+  Textual shows no `MapView`, and an app can show a table of the points instead. Without
+  it, a view that the backend doesn't show is left out, with no error.
+- **`current_backend()`** gives the backend, a `RendererType`, for what depends on it in
+  another way, such as a hint that names a mouse action.
+
+Prefer `renders`: its answer stays right when a backend adds a renderer. Both come from
+`composeui.core.application`.
+
+```python
+from composeui.core.application import current_backend, renders
+from composeui.core.registry import RendererType
+from composeui.core.view import LabelView, MainView, MapView, TableView, child, define_view
+
+
+@define_view
+class PickupsView(MainView):
+    hint: LabelView = child(LabelView)
+    map: MapView = child(MapView)
+    table: TableView = child(TableView, headers=["Latitude", "Longitude"])
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        # a backend that draws no map shows a table of the points instead
+        self.table.is_visible = not renders(MapView)
+        if current_backend() is RendererType.TEXTUAL:
+            self.hint.text = "Select a row, then press Enter to open it."
+        else:
+            self.hint.text = "Double-click a row to open it."
+
+
+main_view = PickupsView()  # built outside an app, e.g. in a test: no backend
+assert main_view.table.is_visible
+```
+
+Before an app is built, for example in a test that builds the main view itself,
+`current_backend()` is `None` and `renders` is `False`.
+
 ## Reloading the app on a change
 
 Use `--reload` for development, on every backend: the app runs the changed code when a

@@ -10,11 +10,25 @@ from typing import TYPE_CHECKING
 import attrs
 import pytest
 
-from composeui.core.application import BACKEND_VARIABLE, Application, ModelApplication, run
+from composeui.core.application import (
+    BACKEND_VARIABLE,
+    Application,
+    ModelApplication,
+    current_backend,
+    renders,
+    run,
+)
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
 from composeui.core.study import save_study
-from composeui.core.view import ButtonView, MainView, define_view
+from composeui.core.view import (
+    ButtonView,
+    FileView,
+    LabelRowInputView,
+    MainView,
+    MapView,
+    define_view,
+)
 
 if TYPE_CHECKING:
     import argparse
@@ -95,6 +109,40 @@ def test_run_starts_the_backend_the_command_line_names(
     assert app_arguments == rest
     # for a process the app starts again, e.g. the web's `--reload` server
     assert os.environ[BACKEND_VARIABLE] == backend.name.lower()
+
+
+@pytest.mark.parametrize("kind", ["APPLICATION", "MODEL_APPLICATION"])
+@pytest.mark.parametrize("backend", list(RendererType))
+def test_the_views_an_app_builds_see_its_backend_and_the_views_it_shows(
+    backend: RendererType, kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    application = getattr(pytest.importorskip(backend.value.applications), kind)
+    monkeypatch.setattr("composeui.core.application._Running.backend", None)
+    seen: list[tuple[RendererType | None, bool, bool, bool]] = []
+
+    def build_main_view() -> MainView:
+        # as a main view's own fields are built
+        seen.append(
+            (current_backend(), renders(MapView), renders(LabelRowInputView), renders(FileView))
+        )
+        return MainView()
+
+    if kind == "APPLICATION":
+        application(build_main_view=build_main_view)
+    else:
+        application(build_main_view=build_main_view, build_model=Model)
+
+    # a map on Qt and the web only; a form row everywhere; a file dialog's view nowhere
+    assert seen == [(backend, backend is not RendererType.TEXTUAL, True, False)]
+
+
+def test_before_an_app_is_built_there_is_no_backend_and_no_view_shows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("composeui.core.application._Running.backend", None)
+
+    assert current_backend() is None
+    assert not renders(LabelRowInputView)
 
 
 @pytest.mark.parametrize(

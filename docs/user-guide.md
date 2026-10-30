@@ -104,6 +104,7 @@ not in the package: run them from a clone of the repository (see
   - [Checking the catalogs](user-guide/translation.md#checking-the-catalogs)
 - [Running the app](user-guide/running-the-app.md)
   - [Backends](user-guide/running-the-app.md#backends)
+    - [Adapt the views to the backend](user-guide/running-the-app.md#adapt-the-views-to-the-backend)
   - [Reloading the app on a change](user-guide/running-the-app.md#reloading-the-app-on-a-change)
   - [Web backend](user-guide/running-the-app.md#web-backend)
     - [How the web differs from a window](user-guide/running-the-app.md#how-the-web-differs-from-a-window)
