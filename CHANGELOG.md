@@ -26,6 +26,10 @@ The notable changes of each release of ComposeUI. The format follows
   button lists, instead of uploading a copy. The field holds the path of the file on the
   server. A typed path outside the roots gives `path` `None` on the web. Qt and Textual open
   their dialogs in the first root.
+- `SavePathInputView`, `RowSavePathInputView` and `LabelRowSavePathInputView`, the path of a
+  file to save, typed or picked in a save dialog, the first extension added to a name that
+  has none. The user agrees to replace a file that exists (`confirms_overwrite`). On the
+  web, the path is typed, or picked in the server's folders with `server_roots`.
 - `FolderPathInputView`, `RowFolderPathInputView` and `LabelRowFolderPathInputView`, a
   folder's path, typed or picked in a folder dialog. On the web, the path is typed, or picked
   among the server's folders with `server_roots`.

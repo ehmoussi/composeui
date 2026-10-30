@@ -22,7 +22,17 @@ from collections import deque
 from contextvars import ContextVar
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final, Generic, NamedTuple, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Final,
+    Generic,
+    Literal,
+    NamedTuple,
+    TypeVar,
+)
 
 import attrs
 from markdown_it import MarkdownIt
@@ -98,11 +108,13 @@ from composeui.core.view import (
     replace_cell,
     split_pattern,
     walk_tree,
+    with_extension,
 )
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
 from composeui.webcore.serverfiles import (
     has_extension,
+    is_item_name,
     is_within,
     item_path,
     list_folder,
@@ -754,6 +766,23 @@ class _FilesTexts(NamedTuple):
     partial_folder: str
     #: the button picking the folder shown, for a list of folders
     choose_folder: str = ""
+    #: for a file to save: the box of its name, the button saving it, and the question
+    #: before replacing a file, ``{name}`` the file's, and its answer
+    file_name: str = ""
+    save: str = ""
+    replace_question: str = ""
+    replace: str = ""
+
+
+#: what a list of the server's files picks: a file to open, a folder, or a file to save
+_FilesKind = Literal["file", "folder", "save"]
+
+#: the events picking a path, by what the list picks
+_PICK_EVENTS: Final[dict[str, tuple[str, ...]]] = {
+    "file": ("browse-file",),
+    "folder": ("browse-choose",),
+    "save": ("browse-name", "browse-save", "browse-replace", "browse-keep"),
+}
 
 
 class _ServerFiles:
@@ -767,27 +796,37 @@ class _ServerFiles:
     elements, so closing it gives that button the focus. The first item of a new list
     takes the focus, the one clicked being gone with the old list.
 
-    With `picks_folders`, it lists only folders, and "Choose this folder" picks the one
-    shown ("browse-choose").
+    For a folder (`kind`), it lists only folders, and "Choose this folder" picks the one
+    shown ("browse-choose"). For a file to save, a file's item puts its name in a box
+    ("browse-name"), and "Save" picks the folder shown with the name typed
+    ("browse-save"), the first extension added. A file that exists is picked once the
+    user agrees to replace it ("browse-replace"), with `confirms_overwrite`.
     """
 
     #: the events it takes, each but "browse" only while open
     EVENTS = ("browse", "browse-close", "browse-root", "browse-parent", "browse-folder")
 
-    def __init__(self, dialog_id: str, widget_id: str, *, picks_folders: bool = False) -> None:
+    def __init__(self, dialog_id: str, widget_id: str, *, kind: _FilesKind = "file") -> None:
         self.dialog_id = dialog_id
-        self.picks_folders = picks_folders
+        self.kind = kind
+        #: for a file to save: whether to ask before replacing one
+        self.confirms_overwrite = True
         #: the renderer its events post to
         self._widget_id = widget_id
         #: whether it shows
         self.is_open = False
         #: the folder it lists, resolved; None for the list of the roots
         self._folder: Path | None = None
+        #: for a file to save: the name in its box, whether it was refused, and the name
+        #: of the file that exists, until the user answers whether to replace it
+        self._name = ""
+        self._is_name_refused = False
+        self._replacing: str | None = None
 
     def takes(self, event: str) -> bool:
-        """Whether `event` moves it, or picks a file or a folder of it, as it now is."""
-        pick = "browse-choose" if self.picks_folders else "browse-file"
-        return (event in self.EVENTS or event == pick) and (self.is_open or event == "browse")
+        """Whether `event` moves it, or picks a path of it, as it now is."""
+        is_its = event in self.EVENTS or event in _PICK_EVENTS[self.kind]
+        return is_its and (self.is_open or event == "browse")
 
     def move(
         self, event: str, name: str, roots: list[Path], extensions: tuple[str, ...]
@@ -800,9 +839,13 @@ class _ServerFiles:
         """
         if self._folder is not None and not is_within(self._folder, roots):
             self._folder = None  # the roots changed since
+        self._is_name_refused = False
+        if event not in ("browse-replace", "browse-keep"):
+            self._replacing = None
         if event == "browse":
             self.is_open = True
             self._folder = self._start_folder(name, roots)
+            self._name = "" if self.kind != "save" or name.strip() == "" else Path(name).name
             return None
         if event == "browse-close":
             self.is_open = False
@@ -813,6 +856,10 @@ class _ServerFiles:
             "browse-folder": self._show_folder,
             "browse-file": self._pick_file,
             "browse-choose": self._pick_folder,
+            "browse-name": self._take_name,
+            "browse-save": self._save,
+            "browse-replace": self._replace,
+            "browse-keep": self._keep,
         }
         picked = moves[event](name, roots, extensions)
         if picked is not None:
@@ -848,15 +895,54 @@ class _ServerFiles:
     ) -> Path | None:
         return self._folder
 
+    def _take_name(self, name: str, _roots: list[Path], _extensions: tuple[str, ...]) -> None:
+        if is_item_name(name):
+            self._name = name
+
+    def _save(self, name: str, roots: list[Path], extensions: tuple[str, ...]) -> Path | None:
+        """Get the file the name typed names in the folder shown, the first extension added.
+
+        Refused for a name that isn't a file's, or for a folder; a file that exists is
+        picked once the user agrees to replace it.
+        """
+        folder = self._folder
+        self._name = name.strip()
+        if folder is None or not is_item_name(self._name):
+            self._is_name_refused = True
+            return None
+        file_name = with_extension(Path(self._name), {"": extensions}).name
+        path = folder / file_name
+        if not path.exists() and not path.is_symlink():
+            return path
+        if item_path(folder, file_name, roots) is None or path.is_dir():
+            self._is_name_refused = True  # a folder, or a link out of the roots
+            return None
+        if self.confirms_overwrite:
+            self._replacing = file_name
+            return None
+        return path
+
+    def _replace(self, _name: str, roots: list[Path], _extensions: tuple[str, ...]) -> Path | None:
+        folder, file_name, self._replacing = self._folder, self._replacing, None
+        if folder is None or file_name is None or item_path(folder, file_name, roots) is None:
+            return None
+        return folder / file_name
+
+    def _keep(self, _name: str, _roots: list[Path], _extensions: tuple[str, ...]) -> None:
+        self._replacing = None
+
     def _start_folder(self, name: str, roots: list[Path]) -> Path | None:
         start = roots[0] if len(roots) == 1 else None
         if name.strip() == "":
             return start
         path = Path(name.strip())
+        if self.kind == "save":  # a file that may not exist yet: its folder
+            folder = item_path(path.parent.parent, path.parent.name, roots)
+            return folder if folder is not None and folder.is_dir() else start
         item = item_path(path.parent, path.name, roots)
         if item is None:
             return start
-        return item if self.picks_folders and item.is_dir() else item.parent
+        return item if self.kind == "folder" and item.is_dir() else item.parent
 
     def dialog_html(
         self,
@@ -876,9 +962,9 @@ class _ServerFiles:
             '<div class="modal-box flex flex-col gap-3">'
             '<h2 id="{title_id}" class="text-lg font-bold">{title}</h2>{items}'
             '<div class="modal-action"><button type="button" class="btn"{close}'
-            " data-close-dialog>{cancel}</button>{choose}</div></div></dialog>"
+            " data-close-dialog>{cancel}</button>{action}</div></div></dialog>"
         ).format(
-            choose=self._choose_html(texts, oob=False) if self.picks_folders else "",
+            action=self._action_html(texts, oob=False),
             dialog_id=self.dialog_id,
             hidden="" if is_open else " hidden",
             swap=Markup(' hx-swap-oob="true"') if oob else "",
@@ -910,13 +996,14 @@ class _ServerFiles:
                 )
             has_parent = len(items) > 0
             try:
-                listing = list_folder(folder, roots, extensions, has_files=not self.picks_folders)
+                listing = list_folder(folder, roots, extensions, has_files=self.kind != "folder")
             except OSError:
                 message = texts.unreadable_folder
             else:
+                file_event = "browse-name" if self.kind == "save" else "browse-file"
                 items.extend(
                     self._item_html(
-                        "browse-folder" if item.is_folder else "browse-file",
+                        "browse-folder" if item.is_folder else file_event,
                         item.name,
                         item.name,
                         "folder" if item.is_folder else "file",
@@ -927,14 +1014,14 @@ class _ServerFiles:
                 if listing.is_partial:
                     message = texts.partial_folder
         # swapped with the list: the folder it picks is the one the list shows
-        choose = self._choose_html(texts, oob=True) if oob and self.picks_folders else ""
+        action = self._action_html(texts, oob=True) if oob else ""
         return Markup(
             '<div id="{dialog_id}-list" class="flex flex-col gap-3"{swap}>'
             '<p class="break-all font-mono text-sm">{folder}</p>{message}'
-            '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul></div>'
-            "{choose}"
+            '<ul class="menu max-h-96 w-full flex-nowrap overflow-y-auto">{items}</ul>'
+            "{name}</div>{action}"
         ).format(
-            choose=choose,
+            action=action,
             dialog_id=self.dialog_id,
             swap=Markup(' hx-swap-oob="true"') if oob else "",
             folder="" if folder is None else str(folder),
@@ -944,19 +1031,60 @@ class _ServerFiles:
                 else ""
             ),
             items=Markup("").join(items),
+            name=self._name_html(texts) if self.kind == "save" else "",
         )
 
-    def _choose_html(self, texts: _FilesTexts, *, oob: bool) -> Markup:
-        """Get the button picking the folder shown, disabled on the list of the roots."""
+    def _name_html(self, texts: _FilesTexts) -> Markup:
+        """Get the box of the file's name, Enter saving it, or the question to replace it."""
+        name_id = f"{self.dialog_id}-name"
+        if self._replacing is not None:
+            return Markup(
+                '<div role="alert" class="flex flex-col gap-2"><p>{question}</p>'
+                '<div class="flex justify-end gap-2"><button type="button" class="btn"'
+                "{keep} autofocus>{cancel}</button>"
+                '<button type="button" class="btn btn-warning"{replace}'
+                " data-close-dialog>{replace_text}</button></div></div>"
+            ).format(
+                question=texts.replace_question.format(name=self._replacing),
+                keep=self._post({"event": "browse-keep"}),
+                cancel=texts.cancel,
+                replace=self._post({"event": "browse-replace"}),
+                replace_text=texts.replace,
+            )
         return Markup(
-            '<button id="{dialog_id}-choose" type="button" class="btn btn-primary"{swap}'
-            "{post} data-close-dialog{disabled}>{text}</button>"
+            '<label class="flex flex-col gap-1" for="{name_id}">{label}'
+            '<input id="{name_id}" class="input w-full" type="text" name="name" value="{name}"'
+            ' autocomplete="off"{invalid}{post} hx-trigger="enter-key"></label>'
+        ).format(
+            name_id=name_id,
+            label=texts.file_name,
+            name=self._name,
+            invalid=Markup(' aria-invalid="true"') if self._is_name_refused else "",
+            post=self._post({"event": "browse-save"}),
+        )
+
+    def _action_html(self, texts: _FilesTexts, *, oob: bool) -> Markup:
+        """Get the button picking the folder shown, disabled on the list of the roots.
+
+        For a folder, "Choose this folder"; for a file to save, "Save", with the name typed.
+        """
+        if self.kind == "file":
+            return Markup()
+        is_folder = self.kind == "folder"
+        return Markup(
+            '<button id="{dialog_id}-action" type="button" class="btn btn-primary"{swap}'
+            "{post}{include}{closes}{disabled}>{text}</button>"
         ).format(
             dialog_id=self.dialog_id,
             swap=Markup(' hx-swap-oob="true"') if oob else "",
-            post=self._post({"event": "browse-choose"}),
-            disabled=" disabled" if self._folder is None else "",
-            text=texts.choose_folder,
+            post=self._post({"event": "browse-choose" if is_folder else "browse-save"}),
+            # a folder is picked at once; a file to save may be refused, or exist
+            include=(
+                Markup("") if is_folder else Markup(' hx-include="#{}-name"').format(self.dialog_id)
+            ),
+            closes=" data-close-dialog" if is_folder else "",
+            disabled=" disabled" if self._folder is None or self._replacing else "",
+            text=texts.choose_folder if is_folder else texts.save,
         )
 
     def _item_html(self, event: str, name: str, text: str, icon: str, *, is_first: bool) -> Markup:
@@ -1004,6 +1132,15 @@ class FolderPathInputViewLike(PathInputViewLike, Protocol):
     choose_folder_text: str
 
 
+class SavePathInputViewLike(PathInputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    confirms_overwrite: bool
+    file_name_text: str
+    save_text: str
+    replace_question_text: str
+    replace_text: str
+
+
 TPathView = TypeVar("TPathView", bound=PathInputViewLike)
 
 #: the fields of a path field that change its HTML, a file's or a folder's
@@ -1029,8 +1166,8 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
     """
 
     is_labelable = False
-    #: whether the list of the server's files picks a folder rather than a file
-    _picks_folders: ClassVar[bool] = False
+    #: what the list of the server's files picks
+    _kind: ClassVar[_FilesKind] = "file"
     #: the view's fields that change the field's HTML
     _shown_fields: ClassVar[tuple[str, ...]] = _PATH_FIELDS
 
@@ -1042,13 +1179,16 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
         self._server_files: _ServerFiles | None = None
         #: what changed since last sent: "field" (all of it), "dialog" or "list"
         self._swaps: set[str] = set()
+        #: whether the "…" button takes the focus as the field swaps: the list closed by
+        #: the server, not the browser, which would have given it back
+        self._focuses_browse = False
 
     @property
     def _files(self) -> _ServerFiles:
         # once rendered, with its id
         if self._server_files is None:
             self._server_files = _ServerFiles(
-                f"{self.widget_id}-files", self.widget_id, picks_folders=self._picks_folders
+                f"{self.widget_id}-files", self.widget_id, kind=self._kind
             )
         return self._server_files
 
@@ -1065,11 +1205,18 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
             return self._files_html(oob=True) if "dialog" in swaps else self._list_html(oob=True)
         disabled = "" if self.is_enabled else " disabled"
         if self._view.server_roots:
+            focuses, self._focuses_browse = self._focuses_browse, False
             browse = Markup(
                 '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
                 ' aria-label="{text}" title="{text}" hx-post="/widget/{widget_id}"'
-                """ hx-vals='{{"event": "browse"}}' hx-swap="none"{disabled}>…</button>"""
-            ).format(widget_id=self.widget_id, text=self._view.browse_text, disabled=disabled)
+                """ hx-vals='{{"event": "browse"}}' hx-swap="none"{autofocus}{disabled}>"""
+                "…</button>"
+            ).format(
+                widget_id=self.widget_id,
+                text=self._view.browse_text,
+                autofocus=" autofocus" if focuses else "",
+                disabled=disabled,
+            )
             picker = browse + self._files_html(oob=False)
         else:
             picker = self._picker_html(disabled)
@@ -1110,10 +1257,15 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
             view.unreadable_folder_text,
             view.partial_folder_text,
             self._choose_folder_text(),
+            *self._save_texts(),
         )
 
     def _choose_folder_text(self) -> str:
         return ""
+
+    def _save_texts(self) -> tuple[str, str, str, str]:
+        """Get the texts of a list for saving: its name's box, its button, its question."""
+        return ("", "", "", "")
 
     def _files_html(self, *, oob: bool) -> Markup:
         return self._files.dialog_html(
@@ -1151,13 +1303,18 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
         if event == "browse":
             path = self._view.path
             name = "" if path is None else str(path)
+        self._files.confirms_overwrite = self._confirms_overwrite()
         picked = self._files.move(
             event, name, resolve_roots(self._view.server_roots), tuple(self.file_types)
         )
         # opened or closed: the dialog; else only its list, the dialog left open
         self._mark_part("list" if was_open == self._files.is_open else "dialog")
         if picked is not None:
+            self._focuses_browse = True
             self._show_path(picked)
+
+    def _confirms_overwrite(self) -> bool:
+        return True
 
     def _show_path(self, path: Path) -> None:
         text = str(path)
@@ -1245,6 +1402,39 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
         self._show_path(path)
 
 
+class WebSavePathInputRenderer(_WebPathInputRenderer[SavePathInputViewLike]):
+    """A text field typing a path to save a file to, then a "…" button with `server_roots`.
+
+    The browser can't hand a page a path: without `server_roots`, the path is typed, and
+    the field has no button. With them, the button opens the list of the server's folders
+    and their files of `extensions`, whose "Save" puts the folder shown, with the name
+    typed, in the field, once the user agrees to replace a file that exists.
+    """
+
+    _role = "save_path_input"
+    _kind = "save"
+    _shown_fields = (
+        *_PATH_FIELDS,
+        "extensions",
+        "confirms_overwrite",
+        "file_name_text",
+        "save_text",
+        "replace_question_text",
+        "replace_text",
+    )
+
+    @property
+    def file_types(self) -> list[str]:
+        return _file_types(self._view.extensions)
+
+    def _confirms_overwrite(self) -> bool:
+        return self._view.confirms_overwrite
+
+    def _save_texts(self) -> tuple[str, str, str, str]:
+        view = self._view
+        return (view.file_name_text, view.save_text, view.replace_question_text, view.replace_text)
+
+
 class WebFolderPathInputRenderer(_WebPathInputRenderer[FolderPathInputViewLike]):
     """A text field typing a folder's path, then a "…" button with `server_roots`.
 
@@ -1254,7 +1444,7 @@ class WebFolderPathInputRenderer(_WebPathInputRenderer[FolderPathInputViewLike])
     """
 
     _role = "folder_path_input"
-    _picks_folders = True
+    _kind = "folder"
     _shown_fields = (*_PATH_FIELDS, "choose_folder_text")
 
     def _choose_folder_text(self) -> str:
@@ -5701,6 +5891,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
     "folder_path_input": WebFolderPathInputRenderer,
+    "save_path_input": WebSavePathInputRenderer,
     "dialog": WebDialogRenderer,
     "expander": WebExpanderRenderer,
     "float_input": WebFloatInputRenderer,

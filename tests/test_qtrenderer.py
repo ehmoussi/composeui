@@ -807,6 +807,57 @@ def test_a_folder_path_is_picked_in_qt_s_folder_dialog_from_its_folder_else_its_
     assert len(picked) == 1
 
 
+def test_a_save_path_is_picked_in_qt_s_save_dialog_its_extension_added(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "report.pdf").write_text("")
+    view = StudyFileMainView()
+    report = view.report
+    report.extensions = {"PDF": (".pdf",)}
+    report.server_roots = (tmp_path,)
+    view.render(RendererType.QT)
+    field = _field_widget(report)
+    assert isinstance(field, QFilePathField)
+    qtbot.addWidget(field)
+    picked: list[Path] = []
+    report.path_picked.connect(picked.append)
+    asked: list[tuple[str, str, object]] = []
+    questions: list[str] = []
+    saved = [""]  # what the save dialog answers
+    replaced = [QMessageBox.StandardButton.No]  # what the question answers
+
+    def ask(*args: object, options: object) -> tuple[str, str]:
+        asked.append((str(args[2]), str(args[3]), options))
+        return saved[0], ""
+
+    def question(*args: object) -> QMessageBox.StandardButton:
+        questions.append(str(args[2]))
+        return replaced[0]
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(ask))
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(question))
+
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)  # cancelled
+    assert asked == [(str(tmp_path), "PDF (*.pdf)", QFileDialog.Option(0))]
+    saved[0] = str(tmp_path / "summary")
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert (report.path, picked) == (tmp_path / "summary.pdf", [tmp_path / "summary.pdf"])
+    # Qt asked about "report": the extension names a file it didn't ask about
+    saved[0] = str(tmp_path / "report")
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert asked[-1][0] == str(tmp_path / "summary.pdf")  # on the field's path
+    assert questions == ["report.pdf already exists. Replace it?"]
+    assert len(picked) == 1  # kept
+    replaced[0] = QMessageBox.StandardButton.Yes
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert picked[-1] == tmp_path / "report.pdf"
+    # without the question: Qt's own is off too
+    report.confirms_overwrite = False
+    qtbot.mouseClick(field.browse_button, Qt.MouseButton.LeftButton)
+    assert asked[-1][2] == QFileDialog.Option.DontConfirmOverwrite
+    assert len(questions) == 2
+
+
 def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: QtBot) -> None:
     view = WorkersMainView()
     view.render(RendererType.QT)

@@ -44,7 +44,7 @@ from textual.widgets import (
 from textual.widgets._select import SelectCurrent
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
-from textual_fspicker import SelectDirectory
+from textual_fspicker import FileSave, SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
 
@@ -93,7 +93,10 @@ from composeui.textualcore.widgets.composedateinput import (
     ComposeMonth,
 )
 from composeui.textualcore.widgets.composedialog import ComposeDialog
-from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
+from composeui.textualcore.widgets.composefilepathinput import (
+    ComposeFilePathInput,
+    ReplaceFileScreen,
+)
 from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterBar,
     ComposeFilterChip,
@@ -3970,6 +3973,58 @@ async def test_a_picker_s_folder_list_reads_its_styles_on_the_app_s_thread() -> 
 
     assert len(read) == 1
     assert isinstance(read[0], DirectoryEntryStyling)
+
+
+@pytest.mark.asyncio
+async def test_a_save_path_is_picked_in_a_save_picker_and_replaces_a_file_once_agreed(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "report.pdf").write_text("")
+    view = StudyFileMainView()
+    report = view.report
+    report.extensions = {"PDF": (".pdf",)}
+    report.server_roots = (tmp_path,)
+    app = _app_of(view)
+    picked: list[Path] = []
+    report.path_picked.connect(picked.append)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        field = _field_widget(report.renderer)
+        assert isinstance(field, ComposeFilePathInput)
+        await pilot.pause()
+
+        async def save(path: Path) -> Screen[Any]:
+            await pilot.click(field.browse_button)
+            await pilot.pause()
+            assert isinstance(app.screen, FileSave)
+            app.screen.dismiss(path)  # as the picker's Save does
+            await pilot.pause()
+            return app.screen
+
+        await pilot.click(field.browse_button)
+        await pilot.pause()
+        location = app.screen.query_one(DirectoryNavigation).location
+        app.screen.dismiss(None)  # cancelled
+        await pilot.pause()
+        await save(tmp_path / "summary")  # a new file: at once, its extension added
+        assert picked == [tmp_path / "summary.pdf"]
+        question = await save(tmp_path / "report")
+        assert isinstance(question, ReplaceFileScreen)
+        assert str(question.question.render()) == "report.pdf already exists. Replace it?"
+        await pilot.press("escape")  # kept
+        await pilot.pause()
+        assert len(picked) == 1
+        question = await save(tmp_path / "report")
+        assert isinstance(question, ReplaceFileScreen)
+        await pilot.click(question.replace_button)
+        await pilot.pause()
+        assert picked[-1] == tmp_path / "report.pdf"
+        report.confirms_overwrite = False
+        await save(tmp_path / "report")  # no question
+
+    assert Path(location) == tmp_path
+    assert picked == [tmp_path / "summary.pdf", tmp_path / "report.pdf", tmp_path / "report.pdf"]
+    assert report.path == tmp_path / "report.pdf"
 
 
 @pytest.mark.asyncio

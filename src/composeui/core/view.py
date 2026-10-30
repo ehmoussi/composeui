@@ -139,6 +139,7 @@ __all__ = [
     "LabelRowInputView",
     "LabelRowIntInputView",
     "LabelRowRadioGroupView",
+    "LabelRowSavePathInputView",
     "LabelRowSliderView",
     "LabelView",
     "LanguageMenu",
@@ -174,7 +175,10 @@ __all__ = [
     "RowInputView",
     "RowIntInputView",
     "RowRadioGroupView",
+    "RowSavePathInputView",
     "RowSliderView",
+    "SavePathInputMixin",
+    "SavePathInputView",
     "SelectionMode",
     "SeparatorAction",
     "Series",
@@ -1660,6 +1664,67 @@ class FolderPathInputMixin(PathInputMixin):
         default=T("This folder holds too many items to list them all: type the folder's path."),
         metadata={UI_TEXT: True},
     )
+
+
+def with_extension(path: Path, extensions: Mapping[str, tuple[str, ...]]) -> Path:
+    """Get `path` with the first of `extensions` added, unless it has one of them (any case)."""
+    suffixes = [suffix for group in extensions.values() for suffix in group]
+    if not suffixes or path.name.lower().endswith(tuple(s.lower() for s in suffixes)):
+        return path
+    return path.with_name(path.name + suffixes[0])
+
+
+@define_view
+class SavePathInputMixin(PathInputMixin):
+    """A path to save a file to, typed in the field or picked with the "…" button beside it.
+
+    `text` holds the path as typed, and `path` reads it as a path, with the first of
+    `extensions` added if the name has none of them. On Qt and Textual, the button opens
+    the toolkit's save dialog. The browser can't give the page a path: on the web, the
+    user types it, and the field has no button. With `server_roots`, the web's button
+    lists the server's folders in them and their files of `extensions`: a file's item
+    takes its name, and "Save" picks the folder shown with the name typed. With
+    `confirms_overwrite`, a file that exists is picked only once the user agrees to
+    replace it.
+    """
+
+    #: the file types the dialog offers, by name: ``{"PDF": (".pdf",)}``; the first one is
+    #: added to a name that has none of them
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
+    )
+    #: whether the user agrees to replace a file that exists, before it's picked
+    confirms_overwrite: bool = attrs.field(default=True, metadata={OMIT: True})
+    #: the name of the "…" button, as a tooltip and a screen reader show it
+    browse_text: str = attrs.field(default=T("Save as"), metadata={UI_TEXT: True})
+    partial_folder_text: str = attrs.field(
+        default=T("This folder holds too many items to list them all: type the file's path."),
+        metadata={UI_TEXT: True},
+    )
+    #: the texts of the web's list: the box of the file's name, and the button saving it
+    file_name_text: str = attrs.field(default=T("File name"), metadata={UI_TEXT: True})
+    save_text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
+    #: the question before replacing a file, its ``{name}`` the file's, and its answer
+    replace_question_text: str = attrs.field(
+        default=T("{name} already exists. Replace it?"), metadata={UI_TEXT: True}
+    )
+    replace_text: str = attrs.field(default=T("Replace"), metadata={UI_TEXT: True})
+
+    @property
+    def path(self) -> Optional[Path]:
+        """Get the path the field holds, the first extension added; None while it's empty.
+
+        On the web, with `server_roots`, None too for a path typed outside them.
+        """
+        path = super().path
+        return None if path is None else with_extension(path, self.extensions)
+
+
+@define_view
+class SavePathInputView(SavePathInputMixin, View):
+    """A path to save a file to, e.g. a report: typed, or picked from a save dialog."""
+
+    _renderer_key = "save_path_input"
 
 
 @define_view
@@ -4818,6 +4883,20 @@ class LabelRowFilePathInputView(FormLabelRowView, FilePathInputMixin):
     """A row of a form with a label and a file path field."""
 
     _field_renderer_key = "file_path_input"
+
+
+@define_view
+class RowSavePathInputView(FormRowView, SavePathInputMixin):
+    """A row of a form with a field of a path to save a file to, without a label."""
+
+    _field_renderer_key = "save_path_input"
+
+
+@define_view
+class LabelRowSavePathInputView(FormLabelRowView, SavePathInputMixin):
+    """A row of a form with a label and a field of a path to save a file to."""
+
+    _field_renderer_key = "save_path_input"
 
 
 @define_view
