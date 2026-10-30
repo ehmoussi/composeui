@@ -29,6 +29,7 @@ from composeui.webcore.webrenderer import (
     RenderTarget,
     WebActionRenderer,
     WebChartRenderer,
+    WebConsoleRenderer,
     WebFilePathInputRenderer,
     WebMainRenderer,
     WebSourceTableRenderer,
@@ -315,6 +316,14 @@ class WebSession(RenderTarget):
             if not isinstance(renderer, WebChartRenderer):
                 return None
             return renderer.image(image_format, query)
+
+    def console_text(self, widget_id: str) -> tuple[str, str] | None:
+        """Get the file name and the text of one of this session's consoles; None if not one."""
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+            if not isinstance(renderer, WebConsoleRenderer):
+                return None
+            return renderer.text_file()
 
     def table_csv(self, widget_id: str) -> tuple[str, Iterator[str]] | None:
         """Get the file name and the CSV, in pieces, of one of this session's large tables.

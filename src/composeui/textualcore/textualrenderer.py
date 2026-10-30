@@ -1173,6 +1173,10 @@ class ConsoleViewLike(ViewLike, Protocol):
     max_lines: int
     line_count: int
     last_line: str
+    texts: dict[str, str]
+    export_filename: str
+
+    def export_text(self, path: Path) -> None: ...
 
 
 class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConsole]):
@@ -1187,12 +1191,15 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
                 "max_lines": self._refresh_max_lines,
                 "text": self._refresh_text,
                 "line_count": self._refresh_line_count,
+                "texts": self._refresh_texts,
+                "export_filename": self._refresh_export_filename,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeConsole()
+            self._rendered_object.save_path_chosen.connect(self._view.export_text)
 
     @staticmethod
     def _refresh_max_lines(
@@ -1213,6 +1220,18 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
         assert isinstance(view, ConsoleView)
         rendered_object.add(lines_after(view, self._shown_count), view.last_line)
         self._shown_count = view.line_count
+
+    @staticmethod
+    def _refresh_texts(
+        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: dict[str, str]
+    ) -> None:
+        rendered_object.set_save_text(value.get("save", ""))
+
+    @staticmethod
+    def _refresh_export_filename(
+        _view: ConsoleViewLike, rendered_object: ComposeConsole, value: str
+    ) -> None:
+        rendered_object.export_filename = value
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):

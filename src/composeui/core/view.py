@@ -1887,6 +1887,8 @@ class MarkdownView(MarkdownMixin, View):
 
 #: what ends a line, or starts it again ("\r"), in a console's text
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
+#: a console's texts, by what they're for: its control saving the text to a file
+CONSOLE_TEXTS: Mapping[str, str] = {"save": T("Save output")}
 
 
 @define_view
@@ -1899,7 +1901,8 @@ class ConsoleView(View):
     never as markup, and scrolls to its end as text comes, unless the user scrolled up.
 
     Its text is the app's output, not study data: never saved, loaded or reset. For a
-    single message to the user, such as an error, see `LogView`.
+    single message to the user, such as an error, see `LogView`. The user saves the text
+    to a file (`export_text`), named `export_filename` at first.
     """
 
     _renderer_key = "console"
@@ -1922,6 +1925,12 @@ class ConsoleView(View):
     #: a "\r" ended the text so far: the next text starts the last line again
     _is_returned: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
     _line_count: int = attrs.field(default=0, init=False, repr=False, metadata={OMIT: True})
+    #: the texts of its controls, by what they're for (see `CONSOLE_TEXTS`)
+    texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(CONSOLE_TEXTS), metadata={UI_TEXT: True}
+    )
+    #: the name offered for the file the text is saved to
+    export_filename: str = attrs.field(default="output.txt", metadata={OMIT: True})
 
     @property
     def text(self) -> str:
@@ -1959,6 +1968,24 @@ class ConsoleView(View):
     def clear(self) -> None:
         """Remove the whole text."""
         self.text = ""
+
+    def export_text(self, path: Path) -> None:
+        """Write the text to the file `path`, in UTF-8; the status bar says how it went.
+
+        Outside a main view, a failure raises `OSError` instead.
+        """
+        main_view = None if self._main_view is None else self._main_view()
+        try:
+            path.write_text(self.text, encoding="utf-8")
+        except OSError as error:
+            if main_view is None:
+                raise
+            failed = self.tr("Can't save to {name}: {error}.")
+            main_view.status_bar.show_message(failed.format(name=path.name, error=error))
+            return
+        if main_view is not None:
+            done = self.tr("Saved the output to {name}.")
+            main_view.status_bar.show_message(done.format(name=path.name))
 
     def _add(self, text: str) -> None:
         for part in _LINE_BREAKS.split(text):
