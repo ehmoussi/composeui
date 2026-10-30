@@ -188,11 +188,25 @@ def vertical_base_url() -> Iterator[str]:
         yield url
 
 
+class _MillionApp(WebApplication[MillionRowsMainView]):
+    """A large table of a million rows; the status bar names each row the user opens."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=MillionRowsMainView)
+
+    def setup_session(self, main_view: MillionRowsMainView) -> None:
+        main_view.status_bar.timeout = 0
+
+        def show_opened(row_id: object) -> None:
+            main_view.status_bar.show_message(f"Opened row {row_id}")
+
+        main_view.table.row_activated.connect(show_opened)
+
+
 @pytest.fixture(scope="module")
 def million_base_url() -> Iterator[str]:
     """Serve an app with a large table of a million rows, for the whole module."""
-    app = WebApplication(build_main_view=MillionRowsMainView).create_starlette_app()
-    with _serve(app) as url:
+    with _serve(_MillionApp().create_starlette_app()) as url:
         yield url
 
 
@@ -2756,6 +2770,27 @@ def test_a_large_table_draws_the_rows_scrolled_to_keeping_the_focus(
     first = page.locator("tr[data-window-row]").first.get_attribute("aria-rowindex")
     assert first is not None
     assert int(first) > 1_000
+
+
+def test_a_large_table_s_row_opens_on_a_double_click_or_enter_once_selected(
+    million_page: Page,
+) -> None:
+    page = million_page
+    page.goto("/")
+    rows = page.locator("tr[data-window-row]")
+    status_bar = page.locator("footer")
+
+    with _posted(page):
+        rows.nth(3).dblclick()
+    expect(status_bar).to_have_text("Opened row 3")
+    expect(rows.nth(3)).to_have_attribute("aria-current", "true")
+    expect(page.locator(".htmx-added")).to_have_count(0)
+
+    rows.nth(5).focus()
+    with _posted(page):
+        page.keyboard.press("Enter")
+    expect(status_bar).to_have_text("Opened row 5")
+    expect(rows.nth(5)).to_have_attribute("aria-current", "true")
 
 
 def test_a_large_table_scrolled_past_its_rows_shows_the_rows_its_scroll_bar_stands_for(

@@ -345,8 +345,8 @@ It shows:
   responsive. The label says how many rows pass and how long SQLite took to order them, once the
   table's `ordered` emits.
 - a selection of several rows: the label under the table counts them, and shows the
-  reading that a double click or Enter activates (on Qt and Textual). Ctrl+C copies them,
-  to paste in a spreadsheet.
+  reading that a double click or Enter activates. Ctrl+C copies them, to paste in a
+  spreadsheet.
 - an export of the rows shown to a CSV file: a job writes it on Qt and Textual, and the
   status bar says when it's done; the web downloads it.
 - an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):

@@ -307,7 +307,7 @@ filters.
 - **The selection** is a list of ids: `selected_ids`. A new order keeps the selected rows
   that it still shows. A click on a row selects it. With `SelectionMode.MULTIPLE`, the
   click adds the row, or removes it if it is selected. `selection_changed` emits the ids.
-  A double click emits the id of the row with `row_activated`.
+  A double click, or Enter, emits the id of the row with `row_activated`.
 - **Ctrl+C** copies the selected rows, in their order, as tab-separated text that a
   spreadsheet takes. Each row is a line, with its cells as shown, and without the headers
   (`selection_text`). The view reads the rows from the source a window at a time.
@@ -342,7 +342,7 @@ What each backend shows:
     ratio.
   - Each header is a button, with `aria-sort`. A sort scrolls back to the top.
   - A click or Enter on a row selects it (`aria-selected`, or `aria-current` for one row
-    at most). The web selects no range and activates no row.
+    at most). A double click or Enter then activates it. The web selects no range.
   - The "Export CSV" link above the frame downloads the rows. The server streams them, a
     window at a time.
 
