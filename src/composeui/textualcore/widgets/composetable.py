@@ -131,7 +131,8 @@ class ComposeTable(DataTable[Text]):
     removes its row, checked in a first column of its own: the cursor can't show
     several rows. `selected_rows_changed` emits the selected rows, in order, only when
     the user changes them, re-emitting `DataTable`'s messages through a plain composeui
-    `Signal` a renderer can connect to (see `ComposeRadioSet`).
+    `Signal` a renderer can connect to (see `ComposeRadioSet`). `row_activated` emits a
+    row on Enter, after its selection, and on a double click that edits or clicks nothing.
 
     The user edits the cells of `editable_columns` in a `ComposeRowEditor`: F2 opens it
     on the cursor's row, a double click on the clicked cell's. It types file paths too,
@@ -164,6 +165,7 @@ class ComposeTable(DataTable[Text]):
     def __init__(self) -> None:
         super().__init__(cursor_type="row", show_cursor=False, zebra_stripes=True)
         self.selected_rows_changed: Signal[list[int]] = Signal()
+        self.row_activated: Signal[int] = Signal()
         self.cell_edited: Signal[int, int, str] = Signal()
         self.header_clicked: Signal[int] = Signal()
         self.cell_clicked: Signal[int, int] = Signal()
@@ -342,12 +344,14 @@ class ComposeTable(DataTable[Text]):
             self._toggle(row)
         column = event.style.meta.get("column", -1) - (1 if self._is_multiple else 0)
         kind = self._kind(column)
-        if not self._style(row, column).is_enabled:
-            return
-        if kind in (CellKind.BUTTON, CellKind.LINK) and event.chain == 1:
-            self.cell_clicked.emit(row, column)
-        elif column in self._editable_columns(kind=kind):
+        is_enabled = self._style(row, column).is_enabled
+        if is_enabled and kind in (CellKind.BUTTON, CellKind.LINK):
+            if event.chain == 1:
+                self.cell_clicked.emit(row, column)
+        elif is_enabled and column in self._editable_columns(kind=kind):
             self._edit_clicked(row, column, kind, event.chain)
+        elif event.chain == _DOUBLE_CLICK:
+            self.row_activated.emit(row)
 
     def _edit_clicked(self, row: int, column: int, kind: CellKind | None, chain: int) -> None:
         """Edit an editable cell clicked `chain` times in a row, as its widget does."""
@@ -486,6 +490,10 @@ class ComposeTable(DataTable[Text]):
             self._toggle(self.cursor_row)
         self.show_cursor = True
         super().action_select_cursor()
+        if self.cursor_row < self.row_count:
+            # selected now, not on `DataTable`'s message, so before it's activated
+            self._select(self.cursor_row)
+            self.row_activated.emit(self.cursor_row)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         self._select(event.cursor_row)

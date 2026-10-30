@@ -2009,6 +2009,45 @@ async def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user() -> 
 
 
 @pytest.mark.asyncio
+async def test_enter_or_a_double_click_activates_a_table_row_unless_it_edits() -> None:
+    view = EditableTableMainView()
+    # sorted by place, the harbour shows first: the table emits its index in `rows`
+    view.places.sortable_columns = [0]
+    view.places.sort_column = 0
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.places.renderer, TextualWidgetRenderer)
+    box = view.places.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+    emitted: list[tuple[str, object]] = []
+    view.places.selection_changed.connect(lambda rows: emitted.append(("selected", rows)))
+    view.places.row_activated.connect(lambda row: emitted.append(("activated", row)))
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        # nothing selected yet: Enter selects the cursor's row, then activates it
+        table.focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert emitted == [("selected", [1]), ("activated", 1)]
+
+        # the header, then the rows: the lake's is the second
+        await pilot.double_click(table, offset=(2, 2))
+        await pilot.pause()
+        assert emitted[-1] == ("activated", 0)
+        count = len(emitted)
+        # a double click on a note edits it instead
+        place = next(iter(table.columns.values()))
+        await pilot.double_click(table, offset=(place.get_render_width(table) + 1, 2))
+        await pilot.pause()
+        assert isinstance(app.screen, ComposeRowEditor)
+        assert len(emitted) == count
+
+
+@pytest.mark.asyncio
 async def test_a_click_or_enter_adds_or_removes_its_row_in_a_table_selecting_several() -> None:
     view = HorizontalMainView()
     table_view = view.tables.narrow
@@ -2184,6 +2223,7 @@ async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() 
     events: list[tuple[int, ...] | tuple[int, int, str]] = []
     view.variables.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
     view.variables.cell_clicked.connect(lambda row, column: events.append((row, column)))
+    view.variables.row_activated.connect(lambda row: events.append((row,)))
 
     def x(column: int) -> int:
         """Get the offset of a column's first character."""
@@ -2223,9 +2263,10 @@ async def test_a_table_s_cell_widgets_edit_their_cells_or_report_their_clicks() 
         await pilot.pause()
         assert view.variables.rows[0][2] == "Output"
 
-        # a button and a link report their clicks, editing nothing
+        # a button and a link report their clicks, editing nothing; a double click, once,
+        # opening no row
         await pilot.click(table, offset=(x(3) + 1, 2))
-        await pilot.click(table, offset=(x(4) + 1, 1))
+        await pilot.double_click(table, offset=(x(4) + 1, 1))
         await pilot.pause()
         assert events == [
             (1, 0, "True"),

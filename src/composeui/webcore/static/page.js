@@ -710,10 +710,26 @@ document.addEventListener("keydown", function (event) {
   else if (event.key === "Escape") dispatch(event.target, "escape-key");
   if (event.key === "Enter" && event.target.closest("input,select,button") === null) {
     dispatch(event.target, "activate");
+    activateRow(event.target);
   }
 }, true);
 function dispatch(target, type) {
   target.dispatchEvent(new CustomEvent(type, { bubbles: true }));
+}
+/* a double click on a table's row, or Enter, activates it, unless on a cell's field,
+   widget or editable text. Posted after the click or Enter selecting it, so the server
+   handles it after (see `webcore/order.py`); not from the row, which htmx would make wait
+   for its selection's answer, then drop, the answer swapping the row out. */
+document.addEventListener("dblclick", function (event) { activateRow(event.target); });
+function activateRow(target) {
+  if (target.closest("input,select,button,a,[data-edit]") !== null) return;
+  var row = target.closest("tr[data-activate]");
+  if (row === null) return;
+  htmx.ajax("POST", row.getAttribute("hx-post"), {
+    source: row.parentElement,
+    values: {event: "activate_row", row: row.dataset.activate},
+    swap: "none"
+  });
 }
 /* a dialog's button closes it first, so the focus returns where it was, then posts its
    answer. A dialog Escape mustn't dismiss stays open: the browser lets its `cancel` be

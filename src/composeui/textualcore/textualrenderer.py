@@ -1683,6 +1683,7 @@ class TableViewLike(ViewLike, Protocol):
     selected_rows: list[int]
     shown_rows: list[int]
     selection_changed: Signal[list[int]]
+    row_activated: Signal[int]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
@@ -1746,6 +1747,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
             self._rendered_object = ComposeFilterTable()
             table, bar = self._rendered_object.table, self._rendered_object.bar
             table.selected_rows_changed.connect(self._update_selected_rows)
+            table.row_activated.connect(self._activate_row)
             table.cell_edited.connect(self._update_cell)
             table.cell_clicked.connect(self._click_cell)
             table.check_all_clicked.connect(self._check_all)
@@ -1906,6 +1908,9 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _activate_row(self, position: int) -> None:
+        self._view.row_activated.emit(self._view.shown_rows[position])
 
     def _check_all(self, column: int) -> None:
         if column in self._view.editable_columns:

@@ -2199,6 +2199,40 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
 
 
+def test_a_double_click_or_enter_activates_a_table_row_unless_it_edits(qtbot: QtBot) -> None:
+    view = EditableTableMainView()
+    # sorted by place, the harbour shows first: the table emits its index in `rows`
+    view.places.sortable_columns = [0]
+    view.places.sort_column = 0
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.places)
+    model = table.model()
+    activated: list[int] = []
+    view.places.row_activated.connect(activated.append)
+
+    def double_click(row: int, column: int) -> None:
+        # a double click's first press, which Qt's double click handler checks
+        center = table.visualRect(model.index(row, column)).center()
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+        qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
+
+    double_click(0, 0)
+    assert activated == [1]
+    qtbot.keyClick(table, Qt.Key.Key_Down)
+    qtbot.keyClick(table, Qt.Key.Key_Return)
+    assert view.places.selected_rows == [0]
+    assert activated == [1, 0]
+
+    # a double click on a note edits it instead
+    double_click(0, 1)
+    assert table.state() is QAbstractItemView.State.EditingState
+    assert activated == [1, 0]
+
+
 def test_picking_a_combobox_cell_s_option_with_the_mouse_edits_it_once(qtbot: QtBot) -> None:
     headers = ["Name", "Role"]
     table = QTextTableView()

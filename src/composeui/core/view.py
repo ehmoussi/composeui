@@ -2965,7 +2965,9 @@ class TableMixin:
     list in place doesn't reach the renderer. The user selects rows as `selection_mode`
     allows. `selected_rows` holds their indexes, and `selection_changed` emits them when
     the user changes them. New `rows` keep each selected row selected when they hold it
-    exactly once, wherever it moved, and drop it otherwise.
+    exactly once, wherever it moved, and drop it otherwise. `row_activated` emits a row's
+    index when the user opens it: a double click on a cell that doesn't edit or click, or
+    Enter, which also selects it on Textual and the web.
 
     The user edits the cells of the columns in `editable_columns` (none by default).
     `cell_edited` emits the row, the column and the new text while `rows` still holds the
@@ -3153,6 +3155,8 @@ class TableMixin:
         factory=list[int], init=False, on_setattr=attrs.setters.frozen, metadata={OMIT: True}
     )
     selection_changed: Signal[list[int]] = attrs.Factory(Signal[list[int]])
+    #: the user opened a row (a double click, Enter): its index in `rows`
+    row_activated: Signal[int] = attrs.Factory(Signal[int])
     editable_columns: list[int] = attrs.Factory(list[int])
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
     #: the widget in each cell of a column, by column: the app's setup, not study data
