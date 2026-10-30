@@ -1200,6 +1200,17 @@ document.addEventListener("scroll", function (event) {
   if (!(box instanceof HTMLElement) || !("console" in box.dataset)) return;
   box.dataset.scrolledUp = String(box.scrollTop + box.clientHeight < box.scrollHeight - 4);
 }, true);
+/* a console's Copy all writes its whole text to the clipboard: the page holds the lines
+   the view keeps. Without the clipboard (a page over plain HTTP from another host), it
+   selects the text instead, for the user's Ctrl+C. */
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-copy-console]");
+  if (button === null) return;
+  var box = document.getElementById(button.dataset.copyConsole);
+  if (box === null) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(box.textContent).catch(function () {});
+  else window.getSelection().selectAllChildren(box);
+});
 function keepConsoles() {
   document.querySelectorAll("[data-console]").forEach(function (box) {
     for (var excess = box.children.length - 1 - Number(box.dataset.maxLines); excess > 0;

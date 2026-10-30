@@ -53,6 +53,8 @@ The notable changes of each release of ComposeUI. The format follows
 - A console saves its text to a file: a "Save output…" button on Qt, the key `s` on
   Textual, and a download link on the web. `ConsoleView.export_text(path)` writes it, and
   `export_filename` names the file at first.
+- A console copies its whole text to the clipboard: a "Copy all" button on Qt and the web,
+  and the key `c` on Textual.
 
 ### Fixed
 

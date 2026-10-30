@@ -3805,8 +3805,9 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
     Each line is a ``<span>`` ended by its newline, in a ``<pre>``. New lines go before
     the line being written, which is swapped: the text the page holds stays as it is. The
     page's script drops the oldest lines past `data-max-lines`, and keeps the box at its
-    end as lines come, unless the user scrolled up (see `page.js`). A link above the box
-    downloads the text (`text_file`, by the `/widget/{id}/text` route).
+    end as lines come, unless the user scrolled up (see `page.js`). Above the box, a button
+    copies the whole text, in the page, which holds the lines the view keeps; a link
+    downloads it (`text_file`, by the `/widget/{id}/text` route).
     """
 
     _role = "console"
@@ -3839,9 +3840,12 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             return (added if len(lines) > 0 else Markup()) + self._last_html(oob=True)
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
+            '<div class="flex gap-1 self-end">'
+            '<button type="button" class="btn btn-ghost btn-xs"'
+            ' data-copy-console="{widget_id}-text">{copy}</button>'
             # a plain link: htmx can't start a download
-            '<a class="btn btn-ghost btn-xs self-end" href="/widget/{widget_id}/text"'
-            " download>{save}</a>"
+            '<a class="btn btn-ghost btn-xs" href="/widget/{widget_id}/text"'
+            " download>{save}</a></div>"
             '<pre id="{widget_id}-text" class="cui-console" data-console'
             ' data-max-lines="{max_lines}" tabindex="0">'
             "{lines}{last}</pre></div>"
@@ -3849,6 +3853,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
             save=self._view.texts.get("save", ""),
+            copy=self._view.texts.get("copy", ""),
             max_lines=self._view.max_lines,
             lines=self._lines_html(self._view.lines),
             last=self._last_html(oob=False),

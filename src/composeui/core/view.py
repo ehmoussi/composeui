@@ -1887,8 +1887,9 @@ class MarkdownView(MarkdownMixin, View):
 
 #: what ends a line, or starts it again ("\r"), in a console's text
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
-#: a console's texts, by what they're for: its control saving the text to a file
-CONSOLE_TEXTS: Mapping[str, str] = {"save": T("Save output")}
+#: a console's texts, by what they're for: its controls saving the text to a file, and
+#: copying it to the clipboard
+CONSOLE_TEXTS: Mapping[str, str] = {"save": T("Save output"), "copy": T("Copy all")}
 
 
 @define_view
@@ -1902,7 +1903,7 @@ class ConsoleView(View):
 
     Its text is the app's output, not study data: never saved, loaded or reset. For a
     single message to the user, such as an error, see `LogView`. The user saves the text
-    to a file (`export_text`), named `export_filename` at first.
+    to a file (`export_text`), named `export_filename` at first, or copies it all.
     """
 
     _renderer_key = "console"

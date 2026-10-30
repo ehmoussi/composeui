@@ -399,6 +399,20 @@ def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_u
     assert console.toPlainText() == "New run"
 
 
+def test_a_console_s_copy_button_copies_its_whole_text(qtbot: QtBot) -> None:
+    view = RunMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+    view.output.append("Progress 50%")  # the line being written too
+    assert box.copy.text() == "Copy all"
+
+    qtbot.mouseClick(box.copy, Qt.MouseButton.LeftButton)
+
+    assert QApplication.clipboard().text() == "Ready <ok>\nProgress 50%"
+
+
 @pytest.mark.parametrize("picked", ["run.log", ""])
 def test_a_console_s_save_button_saves_its_text_where_the_user_picks(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, picked: str

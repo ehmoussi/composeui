@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from qtpy.QtCore import Qt
 from qtpy.QtGui import QFontDatabase, QTextCursor
-from qtpy.QtWidgets import QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QHBoxLayout,
+    QPlainTextEdit,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class QConsole(QPlainTextEdit):
@@ -49,15 +55,20 @@ class QConsole(QPlainTextEdit):
 
 
 class QConsoleBox(QWidget):
-    """A `QConsole` under its controls: `save`, at the right, as a large table's export."""
+    """A `QConsole` under its controls, `copy` then `save`, at the right as an export."""
 
     def __init__(self) -> None:
         super().__init__()
         self.text = QConsole()
+        self.copy = QToolButton()
         self.save = QToolButton()
-        self.save.setAutoRaise(True)
+        controls = QHBoxLayout()
+        controls.addStretch(1)
+        for button in (self.copy, self.save):
+            button.setAutoRaise(True)
+            controls.addWidget(button)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.save, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addLayout(controls)
         layout.addWidget(self.text, 1)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
