@@ -6,6 +6,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
 ### Added
 
 - `MainView.loaded`, a signal emitted once the views and the model's data are in place: as
@@ -48,8 +50,7 @@ The notable changes of each release of ComposeUI. The format follows
   `MapView`, which Textual doesn't show.
 - `Task.disables` and `Task.cancel_with`: the views disabled while a task runs, and the
   buttons or actions that cancel its run, enabled only until it is asked to stop. They
-  follow every start and outcome. `Task.is_canceled` tells a run asked to stop, and
-  `Task.cancel` emits `changed`.
+  follow every start and outcome. `Task.is_canceled` tells a run asked to stop.
 - A console saves its text to a file: a "Save output…" button on Qt, the key `s` on
   Textual, and a download link on the web. `ConsoleView.export_text(path)` writes it, and
   `export_filename` names the file at first.
@@ -63,6 +64,12 @@ The notable changes of each release of ComposeUI. The format follows
   (`TextStyle`, `line_styles`). Before, their characters showed in the text.
 - A large table (`SourceTableView`) opens a row on the web too: a double click or Enter
   emits its id with `row_activated`, as on Qt and Textual.
+
+### Changed
+
+- `Task.cancel` emits `changed` when it cancels a run, so a `changed` callback can show that
+  the run is stopping. Called in a job's function, it raises `CalledInJobError`, as
+  `Task.start` does: call it on the main thread.
 
 ### Fixed
 
@@ -116,5 +123,6 @@ The first release on PyPI.
 - A skill for coding agents that write a ComposeUI app.
 - `composeui.__version__`, the version of the installed package.
 
-[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ehmoussi/composeui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ehmoussi/composeui/releases/tag/v0.1.0
