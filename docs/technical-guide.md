@@ -582,24 +582,29 @@ project `composeui`: the owner `ehmoussi`, the repository `composeui`, the workf
 `release.yml`, and the environment `pypi` (`testpypi` on TestPyPI). In the repository's
 settings, add the two environments.
 
-To release a version, for example 0.2.0:
+To release a version, for example 0.3.0:
 
 1. Try it on TestPyPI: in the repository's Actions, run the Release workflow on `main`. It
-   publishes a development version, such as `0.2.dev12`. Install it in a new environment,
-   its dependencies from PyPI, and run the quickstart:
+   publishes a development version. setuptools-scm numbers it after the last tag, with its
+   next patch version, such as `0.2.1.dev12` after `v0.2.0`: only the tag gives the
+   release's version. Install it in a new environment, its dependencies from PyPI, and run
+   the quickstart:
 
    ```bash
    pip install --index-url https://test.pypi.org/simple/ \
-     --extra-index-url https://pypi.org/simple/ "composeui[web]==0.2.dev12"
+     --extra-index-url https://pypi.org/simple/ "composeui[web]==0.2.1.dev12"
    ```
 2. On `main`, give the version's entry in `CHANGELOG.md` its date
-   (`## [0.2.0] - 2026-11-02`), and set the `composeui-version` of the agent skill and its
-   text to the minor version (`0.2`).
-3. Tag the commit, and push the tag:
+   (`## [0.3.0] - 2026-11-20`), and set the `composeui-version` of the agent skill and its
+   text to the minor version (`0.3`).
+3. Tag `main`'s commit, and push the tag. Name the commit: a pull request is squash-merged,
+   so its branch's commit is not in `main`'s history, and a tag on it would leave the next
+   development versions counting from the previous tag.
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git fetch origin
+   git tag -a v0.3.0 -m v0.3.0 origin/main
+   git push origin v0.3.0
    ```
 
 The tag runs the tests again, then builds the package. Before it publishes, the workflow
