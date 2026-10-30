@@ -1759,6 +1759,42 @@ def test_a_folder_of_the_server_is_chosen_in_the_list_its_button_focused_again(
     context.close()
 
 
+def test_a_path_to_save_to_is_picked_with_the_name_typed_a_file_replaced_once_agreed(
+    browser: Browser, study_files_base_url: str
+) -> None:
+    context = browser.new_context(base_url=study_files_base_url)
+    page = context.new_page()
+    page.goto("/")
+    report = page.get_by_label("Report")
+    browse = page.get_by_role("button", name="Save as")
+    with _posted(page):
+        browse.click()
+    files = page.get_by_role("dialog", name="Save as")
+    name = files.get_by_label("File name")
+
+    # a new file: Enter saves it, its extension added, the "…" button focused again
+    name.fill("summary")
+    with _posted(page):
+        name.press("Enter")
+    expect(files).to_have_count(0)
+    expect(report).to_have_value(re.compile(r"summary\.py$"))
+    expect(browse).to_be_focused()
+    # a file that exists: replaced once the user agrees
+    with _posted(page):
+        browse.click()
+    with _posted(page):
+        files.get_by_role("button", name="studyfiles.py").click()
+    expect(name).to_have_value("studyfiles.py")
+    with _posted(page):
+        files.get_by_role("button", name="Save", exact=True).click()
+    expect(files.get_by_role("alert")).to_contain_text("studyfiles.py already exists")
+    with _posted(page):
+        files.get_by_role("button", name="Replace").click()
+    expect(files).to_have_count(0)
+    expect(report).to_have_value(re.compile(r"studyfiles\.py$"))
+    context.close()
+
+
 def test_a_file_of_the_server_is_picked_for_a_table_s_cell_its_button_focused_again(
     browser: Browser, study_files_table_base_url: str
 ) -> None:

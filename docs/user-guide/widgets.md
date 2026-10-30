@@ -218,6 +218,57 @@ What the "…" button opens:
   "Choose this folder" puts the folder shown in the field. On the web, `path` is `None` for
   a path typed outside the roots.
 
+## Save path input
+
+A `SavePathInputView` takes the path of a file to save, for example a report that the app
+writes. The file may not exist yet. The user types the path, or picks it with the "…"
+button beside the field.
+
+```python
+from pathlib import Path
+
+from composeui.core.view import FormView, LabelRowSavePathInputView, child, define_view
+
+
+@define_view
+class ReportForm(FormView):
+    report: LabelRowSavePathInputView = child(
+        LabelRowSavePathInputView,
+        label="Report",
+        extensions={"PDF": (".pdf",)},
+        server_roots=(Path.home() / "studies",),
+    )
+```
+
+- `text` holds the path as the user typed it. `path` reads it as a `Path`, with the first of
+  `extensions` added when the name has none of them: "report" reads as `report.pdf`.
+  `path` is `None` while the field is empty.
+- `path_picked` emits the path that the user picks with the "…" button. A typed path comes
+  through the signals of any text field: `text_edited` and `editing_finished`.
+- With `confirms_overwrite` (on by default), the user agrees to replace a file that exists
+  before it is picked.
+- `browse_text` ("Save as"), `file_name_text`, `save_text`, `replace_question_text` and
+  `replace_text` name the button and the texts of the dialog. The catalogs translate them.
+
+The state saves `text`, but not `extensions`, `confirms_overwrite` or `server_roots`, which
+the app sets.
+
+What the "…" button opens:
+
+- Qt shows its save dialog, on the field's path, else in the first of `server_roots`. It
+  asks before it replaces a file. When the first extension, added to the name typed, names
+  a file that exists, the field asks too.
+- Textual shows the save picker of textual-fspicker, on the same path. Before it replaces a
+  file, the field asks in a dialog of its own; Escape keeps the file.
+- The browser cannot give the page a path. On the web, without `server_roots`, the field has
+  no "…" button: the user types the path. With `server_roots`, the button lists the server's
+  folders in them and their files of `extensions` (see
+  [Files on the server](#files-on-the-server)). A file's item puts its name in the "File
+  name" box. "Save", or Enter in the box, picks the folder shown with that name. The
+  dialog asks there before it replaces a file, and refuses a name that is not a file's,
+  such as one with a separator, or a folder's. On the web, `path` is `None` for a path typed
+  outside the roots.
+
 ## Slider
 
 A `SliderView` picks a whole number when the user drags a handle, for example a number of

@@ -51,14 +51,22 @@ def is_within(path: Path, roots: list[Path]) -> bool:
     return any(path == root or root in path.parents for root in roots)
 
 
+def is_item_name(name: str) -> bool:
+    """Whether `name` names one item of a folder, not a hidden one (starting with a dot).
+
+    Neither a separator nor a NUL character, which no file's name holds.
+    """
+    forbidden = [os.sep, "\0"] if os.altsep is None else [os.sep, os.altsep, "\0"]
+    return name != "" and not name.startswith(".") and not any(c in name for c in forbidden)
+
+
 def item_path(folder: Path, name: str, roots: list[Path]) -> Path | None:
     """Get the resolved path of `folder`'s item `name`, if it is inside `roots`.
 
     None for a name that isn't one item's (``..``, a separator), a hidden item's (starting
     with a dot), an item that doesn't exist, or one that a link leads out of the roots.
     """
-    separators = [os.sep] if os.altsep is None else [os.sep, os.altsep]
-    if name in ("", ".") or name.startswith(".") or any(sep in name for sep in separators):
+    if not is_item_name(name):
         return None
     try:
         path = (folder / name).resolve(strict=True)

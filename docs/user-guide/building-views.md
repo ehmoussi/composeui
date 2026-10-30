@@ -148,6 +148,7 @@ The fields:
 | `DateInputView` | `value`, a `datetime.date` or `None` (see [Date input](widgets.md#date-input)) | Types or picks a date |
 | `FilePathInputView` | `text`, and `path` (see [File path input](widgets.md#file-path-input)) | Types or picks a file |
 | `FolderPathInputView` | `text`, and `path` (see [Folder path input](widgets.md#folder-path-input)) | Types or picks a folder |
+| `SavePathInputView` | `text`, and `path` (see [Save path input](widgets.md#save-path-input)) | Types or picks a file to save |
 | `CheckBoxView` | `is_checked`, with its `text` beside the box | Checks or unchecks the box (`toggled`) |
 | `RadioGroupView` | `value`, one of `values` | Picks one of a few choices |
 | `ComboBoxView` | `value`, one of `values` | Picks one choice in a drop-down list |

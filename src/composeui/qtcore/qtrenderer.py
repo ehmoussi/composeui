@@ -106,6 +106,7 @@ from composeui.core.view import (
     date_hint,
     replace_cell,
     walk_tree,
+    with_extension,
 )
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qdatefield import QDateField
@@ -689,6 +690,62 @@ class QtFilePathInputRenderer(_QtPathInputRenderer[FilePathInputViewLike]):
     ) -> None:
         rendered_object.reload_button.setToolTip(plain_tool_tip(value))
         rendered_object.reload_button.setAccessibleName(value)
+
+
+class SavePathInputViewLike(PathInputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    confirms_overwrite: bool
+    replace_question_text: str
+
+
+#: the texts of the web's list for saving, which Qt doesn't show
+_SAVE_LIST_TEXTS = ("file_name_text", "save_text", "replace_text")
+
+
+class QtSavePathInputRenderer(_QtPathInputRenderer[SavePathInputViewLike]):
+    """A field typing a path to save a file to, then a "…" button opening Qt's save dialog.
+
+    The dialog opens on the field's path, if any, else in the first of the view's
+    `server_roots`, and asks before replacing a file, unless `confirms_overwrite` is off.
+    The path picked gets the first of `extensions` if it has none of them.
+    """
+
+    def __init__(self, view: SavePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            # read by the dialog each time it opens; the web's list only
+            dict.fromkeys(
+                ("extensions", "confirms_overwrite", "replace_question_text", *_SAVE_LIST_TEXTS),
+                lambda _view, _rendered_object, _value: None,
+            )
+        )
+
+    def ask(self, parent: QWidget) -> str:
+        path, roots = self._view.path, self._view.server_roots
+        start = path if path is not None else (roots[0] if roots else None)
+        options = QFileDialog.Option(0)
+        if not self._view.confirms_overwrite:
+            options = QFileDialog.Option.DontConfirmOverwrite
+        picked, _selected_filter = QFileDialog.getSaveFileName(
+            parent,
+            self._view.browse_text,
+            "" if start is None else str(start),
+            _file_filters(self._view.extensions),
+            options=options,
+        )
+        if picked == "":
+            return ""
+        path = with_extension(Path(picked), self._view.extensions)
+        # Qt asked about the name as typed: the extension may name a file it didn't ask about
+        if path != Path(picked) and path.exists() and self._view.confirms_overwrite:
+            answer = QMessageBox.question(
+                parent,
+                self._view.browse_text,
+                self._view.replace_question_text.format(name=path.name),
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return ""
+        return str(path)
 
 
 class QtFolderPathInputRenderer(_QtPathInputRenderer[PathInputViewLike]):
@@ -2927,6 +2984,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "date_input": QtDateInputRenderer,
     "file_path_input": QtFilePathInputRenderer,
     "folder_path_input": QtFolderPathInputRenderer,
+    "save_path_input": QtSavePathInputRenderer,
     "dialog": QtDialogRenderer,
     "expander": QtExpanderRenderer,
     "float_input": QtFloatInputRenderer,

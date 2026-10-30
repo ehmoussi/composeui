@@ -79,7 +79,10 @@ from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composedialog import ComposeDialog
-from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathInput
+from composeui.textualcore.widgets.composefilepathinput import (
+    ComposeFilePathInput,
+    PickerKind,
+)
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
@@ -901,8 +904,8 @@ class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePath
     """A field typing a path, then a "…" button opening textual-fspicker's picker."""
 
     _marks_invalid = True
-    #: whether its picker picks a folder rather than a file
-    _picks_folder: ClassVar[bool] = False
+    #: what its picker picks
+    _kind: ClassVar[PickerKind] = "file"
 
     def __init__(self, view: TPathView) -> None:
         super().__init__(view)
@@ -919,7 +922,7 @@ class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePath
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = ComposeFilePathInput(picks_folder=self._picks_folder)
+            self._rendered_object = ComposeFilePathInput(kind=self._kind)
             self._rendered_object.input.value_changed.connect(self._update_text)
             self._rendered_object.input.value_submitted.connect(self._view.editing_finished.emit)
             self._rendered_object.path_picked.connect(self._pick)
@@ -1001,10 +1004,58 @@ class TextualFilePathInputRenderer(_TextualPathInputRenderer[FilePathInputViewLi
         rendered_object.reload_button.tooltip = Content(value)
 
 
+class SavePathInputViewLike(PathInputViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    confirms_overwrite: bool
+    replace_question_text: str
+    replace_text: str
+    cancel_text: str
+
+
+class TextualSavePathInputRenderer(_TextualPathInputRenderer[SavePathInputViewLike]):
+    """A field typing a path to save a file to, then a "…" button opening a save picker.
+
+    textual-fspicker's, asking before replacing a file (see `ComposeFilePathInput`).
+    """
+
+    _kind = "save"
+
+    def __init__(self, view: SavePathInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "extensions": self._refresh_extensions,
+                "confirms_overwrite": self._refresh_widget("confirms_overwrite"),
+                "replace_question_text": self._refresh_widget("replace_question"),
+                "replace_text": self._refresh_widget("replace_text"),
+                "cancel_text": self._refresh_widget("cancel_text"),
+                # the web's list only
+                **dict.fromkeys(
+                    ("file_name_text", "save_text"), lambda _view, _widget, _value: None
+                ),
+            }
+        )
+
+    @staticmethod
+    def _refresh_widget(
+        name: str,
+    ) -> Callable[[SavePathInputViewLike, ComposeFilePathInput, Any], None]:
+        """Get a handler giving the widget's attribute `name` the view's value."""
+        return lambda _view, widget, value: setattr(widget, name, value)
+
+    @staticmethod
+    def _refresh_extensions(
+        _view: SavePathInputViewLike,
+        rendered_object: ComposeFilePathInput,
+        value: dict[str, tuple[str, ...]],
+    ) -> None:
+        rendered_object.extensions = dict(value)
+
+
 class TextualFolderPathInputRenderer(_TextualPathInputRenderer[PathInputViewLike]):
     """A field typing a folder's path, then a "…" button opening textual-fspicker's picker."""
 
-    _picks_folder = True
+    _kind = "folder"
 
     def __init__(self, view: PathInputViewLike) -> None:
         super().__init__(view)
@@ -2915,6 +2966,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
     "folder_path_input": TextualFolderPathInputRenderer,
+    "save_path_input": TextualSavePathInputRenderer,
     "dialog": TextualDialogRenderer,
     "expander": TextualExpanderRenderer,
     "float_input": TextualFloatInputRenderer,

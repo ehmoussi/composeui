@@ -10,6 +10,7 @@ from composeui.core.view import (
     CellWidget,
     LabelRowFilePathInputView,
     LabelRowFolderPathInputView,
+    LabelRowSavePathInputView,
     MainView,
     TableView,
     child,
@@ -21,7 +22,7 @@ from composeui.core.view import (
 class StudyFileMainView(MainView):
     """Its fields list the files and folders of this folder, until a test gives them roots.
 
-    `scratch` has none: on the web, its folder is typed.
+    `scratch` has none: on the web, its folder is typed. `report` saves a `.py` file.
     """
 
     app_title = "Study file"
@@ -37,6 +38,12 @@ class StudyFileMainView(MainView):
         LabelRowFolderPathInputView, label="Results", server_roots=(Path(__file__).parent,)
     )
     scratch: LabelRowFolderPathInputView = child(LabelRowFolderPathInputView, label="Scratch")
+    report: LabelRowSavePathInputView = child(
+        LabelRowSavePathInputView,
+        label="Report",
+        extensions={"Python": (".py",)},
+        server_roots=(Path(__file__).parent,),
+    )
 
 
 @define_view

@@ -84,8 +84,8 @@ the option for the web (extra `web`, the default).
   the files in those folders, and `path` is `None` for a path typed outside them: read
   `path`, not `text`. A table's path cell takes them too:
   `CellWidget.file_path(extensions, server_roots=(...))`; the web refuses a path typed
-  outside them. A `FolderPathInputView` takes a folder the same way; on the web, without
-  `server_roots`, its path is typed. Give only folders that every user of the app may see.
+  outside them. A `FolderPathInputView` takes a folder, and a `SavePathInputView` a file to
+  save, the same way; on the web, without `server_roots`, their path is typed. Give only folders that every user of the app may see.
   See https://ehmoussi.github.io/composeui/user-guide/widgets.html#files-on-the-server
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
   `cattrs`, which handles `datetime.date` and `datetime.datetime` as ISO 8601 text. A new

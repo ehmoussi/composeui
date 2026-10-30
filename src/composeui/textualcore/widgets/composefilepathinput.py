@@ -2,19 +2,27 @@ from __future__ import annotations
 
 import functools
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Literal
 
-from textual.containers import Horizontal
-from textual.widgets import Button
-from textual_fspicker import FileOpen, SelectDirectory
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Button, Label
+from textual_fspicker import FileOpen, FileSave, SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.path_filters import Filter, Filters
 
 from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.view import with_extension
 from composeui.textualcore.widgets.composeinput import ComposeInput
 
 if TYPE_CHECKING:
+    from textual.app import ComposeResult
+    from textual.binding import BindingType
     from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
+
+#: what the picker picks: a file to open, a folder, or a file to save
+PickerKind = Literal["file", "folder", "save"]
 
 #: how textual-fspicker's folder list reads the styles of its entries
 _read_entry_styles = vars(DirectoryNavigation)["_styles"].fget
@@ -46,6 +54,21 @@ def _has_any_extension(path: Path, extensions: tuple[str, ...]) -> bool:
     return any(path.name.endswith(extension) for extension in extensions)
 
 
+def _filters(extensions: dict[str, tuple[str, ...]]) -> Filters:
+    return Filters(
+        *(
+            Filter(name, functools.partial(_has_any_extension, extensions=name_extensions))
+            for name, name_extensions in extensions.items()
+        )
+    )
+
+
+def _parent_folder(text: str, start: Path | None) -> Path:
+    """Get the directory of `text`'s path, else `start`; else the current directory."""
+    location = Path(text).parent if text != "" else (start or Path())
+    return location if location.is_dir() else Path()  # e.g. a path typed halfway
+
+
 def file_picker(
     text: str, extensions: dict[str, tuple[str, ...]], title: str, start: Path | None = None
 ) -> FileOpen:
@@ -54,17 +77,24 @@ def file_picker(
     In `start` if `text` is empty, else in the current directory, as for no directory's
     path.
     """
+    location = _parent_folder(text.strip(), start)
+    return FileOpen(location, title or "Open", filters=_filters(extensions))
+
+
+def save_picker(
+    text: str, extensions: dict[str, tuple[str, ...]], title: str, start: Path | None = None
+) -> FileSave:
+    """Get a picker of a file to save, opening on `text`'s path, as `file_picker` does.
+
+    It replaces a file without asking: `ComposeFilePathInput` asks.
+    """
     text = text.strip()
-    location = Path(text).parent if text != "" else (start or Path())
-    if not location.is_dir():  # e.g. a path typed halfway
-        location = Path()
-    filters = Filters(
-        *(
-            Filter(name, functools.partial(_has_any_extension, extensions=name_extensions))
-            for name, name_extensions in extensions.items()
-        )
+    return FileSave(
+        _parent_folder(text, start),
+        title or "Save as",
+        filters=_filters(extensions),
+        default_file=Path(text).name if text != "" else None,
     )
-    return FileOpen(location, title or "Open", filters=filters)
 
 
 def folder_picker(text: str, title: str, start: Path | None = None) -> SelectDirectory:
@@ -77,6 +107,49 @@ def folder_picker(text: str, title: str, start: Path | None = None) -> SelectDir
     if not location.is_dir():  # e.g. a path typed halfway
         location = Path()
     return SelectDirectory(location, title or "Select")
+
+
+class ReplaceFileScreen(ModalScreen[bool]):
+    """Ask whether to replace a file that exists: True for its replace button."""
+
+    DEFAULT_CSS = """
+    ReplaceFileScreen {
+        align: center middle;
+        & > Vertical {
+            width: auto;
+            height: auto;
+            padding: 1 2;
+            border: thick $primary 50%;
+            background: $surface;
+        }
+        & Horizontal {
+            width: auto;
+            height: auto;
+            margin-top: 1;
+        }
+    }
+    """
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "keep", show=False)]
+
+    def __init__(self, question: str, replace_text: str, cancel_text: str) -> None:
+        super().__init__()
+        self.question = Label(question)
+        self.cancel_button = Button(cancel_text)
+        self.replace_button = Button(replace_text, variant="warning")
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield self.question
+            with Horizontal():
+                yield self.cancel_button
+                yield self.replace_button
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.dismiss(event.button is self.replace_button)
+
+    def action_keep(self) -> None:
+        self.dismiss(result=False)
 
 
 class ComposeFilePathInput(Horizontal):
@@ -107,9 +180,9 @@ class ComposeFilePathInput(Horizontal):
     }
     """
 
-    def __init__(self, *, picks_folder: bool = False) -> None:
-        #: whether the picker picks a folder (textual-fspicker's `SelectDirectory`)
-        self.picks_folder = picks_folder
+    def __init__(self, *, kind: PickerKind = "file") -> None:
+        #: what the picker picks (textual-fspicker's `FileOpen`, `SelectDirectory`, `FileSave`)
+        self.kind = kind
         self.input = ComposeInput()
         self.browse_button = Button("…")
         self.reload_button = Button("↻")
@@ -121,18 +194,24 @@ class ComposeFilePathInput(Horizontal):
         self.picker_title = ""
         #: where the picker opens while the field is empty, the view's first server root
         self.start_folder: Path | None = None
+        #: for a file to save: whether to ask before replacing one, and the question's texts
+        self.confirms_overwrite = True
+        self.replace_question = "{name}"
+        self.replace_text = ""
+        self.cancel_text = ""
         self.path_picked: Signal[Path] = Signal()
         self.reload_pressed = SignalNoArgs()
 
     def open_picker(self) -> None:
         """Show the picker in the directory of the field's path, else `start_folder`."""
-        picker: FileOpen | SelectDirectory
-        if self.picks_folder:
-            picker = folder_picker(self.input.value, self.picker_title, self.start_folder)
+        picker: FileOpen | SelectDirectory | FileSave
+        text, title, start = self.input.value, self.picker_title, self.start_folder
+        if self.kind == "folder":
+            picker = folder_picker(text, title, start)
+        elif self.kind == "save":
+            picker = save_picker(text, self.extensions, title, start)
         else:
-            picker = file_picker(
-                self.input.value, self.extensions, self.picker_title, self.start_folder
-            )
+            picker = file_picker(text, self.extensions, title, start)
         self.app.push_screen(picker, self._pick)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -143,6 +222,22 @@ class ComposeFilePathInput(Horizontal):
             self.reload_pressed.emit()
 
     def _pick(self, path: Path | None) -> None:
+        if path is not None and self.kind == "save":
+            path = with_extension(path, self.extensions)
+            if self.confirms_overwrite and path.exists():
+                question = ReplaceFileScreen(
+                    self.replace_question.format(name=path.name),
+                    self.replace_text,
+                    self.cancel_text,
+                )
+                self.app.push_screen(question, functools.partial(self._replace, path))
+                return
+        self._take(path)
+
+    def _replace(self, path: Path, is_replaced: bool | None) -> None:
+        self._take(path if is_replaced else None)
+
+    def _take(self, path: Path | None) -> None:
         if path is not None:
             self.input.value = str(path)
             self.path_picked.emit(path)

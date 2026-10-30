@@ -74,6 +74,7 @@ from composeui.core.view import (
     PageWidth,
     Router,
     SaveAsAction,
+    SavePathInputMixin,
     SelectionMode,
     SeparatorAction,
     Series,
@@ -776,7 +777,8 @@ def _states(main_view: MainView) -> Iterator[str]:
     for view in _views(main_view):
         if isinstance(view, DialogView):
             view.open()
-        if isinstance(view, (FilePathInputMixin, FolderPathInputMixin)) and view.server_roots:
+        path_types = (FilePathInputMixin, FolderPathInputMixin, SavePathInputMixin)
+        if isinstance(view, path_types) and view.server_roots:
             _part(view, "field").dispatch("browse", {})
         renderer = view.renderer
         if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
@@ -1486,7 +1488,7 @@ def test_a_folder_path_with_server_roots_is_picked_among_their_folders(tmp_path:
     picked: list[Path] = []
     results.path_picked.connect(picked.append)
     folders = root.resolve()
-    choose = f"{field.widget_id}-files-choose"
+    choose = f"{field.widget_id}-files-action"
 
     body = handle_event(field, "browse", {})
     assert _listed(body, field) == [("browse-folder", "beam")]
@@ -1526,6 +1528,119 @@ def test_a_folder_path_with_server_roots_is_picked_among_their_folders(tmp_path:
     handle_event(study, "browse", {})
     with pytest.raises(UnsupportedEventError):
         handle_event(study, "browse-choose", {})
+
+
+def _name_box(markup: str, field: WebRenderer[Any]) -> _Element:
+    return _element(markup, f"{field.widget_id}-files-name")
+
+
+def test_a_save_path_with_server_roots_is_picked_in_a_folder_with_the_name_typed(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "studies"
+    (root / "beam" / "old.pdf").mkdir(parents=True)  # a folder, named as a file
+    (root / "beam" / "report.pdf").write_text("")
+    main_view = StudyFileMainView()
+    report = main_view.report
+    report.extensions = {"PDF": (".pdf",)}
+    report.server_roots = (root,)
+    main_view.render(RendererType.WEB)
+    main_view.set_language("fr")
+    field = _part(report, "field")
+    picked: list[Path] = []
+    report.path_picked.connect(picked.append)
+    beam = root.resolve() / "beam"
+    action = f"{field.widget_id}-files-action"
+
+    body = handle_event(field, "browse", {})
+    assert _listed(body, field) == [("browse-folder", "beam")]
+    assert (_element(body, action).text, _name_box(body, field).attributes["value"]) == (
+        "Enregistrer",
+        "",
+    )
+    body = handle_event(field, "browse-folder", {"name": "beam"})
+    # its folders, then its files of the field's types, each giving its name
+    assert _listed(body, field) == [
+        ("browse-parent", ""),
+        ("browse-folder", "old.pdf"),
+        ("browse-name", "report.pdf"),
+    ]
+    for name in ("report.pdf", "../x"):  # a name that isn't one: the box keeps its own
+        body = handle_event(field, "browse-name", {"name": name})
+        assert _name_box(body, field).attributes["value"] == "report.pdf"
+
+    # a file that exists: picked once the user agrees to replace it
+    body = handle_event(field, "browse-save", {"name": "report"})
+    assert (
+        "report.pdf existe déjà. Le remplacer ?"
+        in _swapped(body, f"{field.widget_id}-files-list").text
+    )
+    assert "disabled" in _swapped(body, action).attributes
+    body = handle_event(field, "browse-keep", {})
+    assert _name_box(body, field).attributes["value"] == "report"
+    assert picked == []
+    for name in ("../x", ".hidden", "a/b", "", "a\0b", "old.pdf"):  # not a file's name
+        body = handle_event(field, "browse-save", {"name": name})
+        assert _name_box(body, field).attributes.get("aria-invalid") == "true", name
+    handle_event(field, "browse-replace", {})  # nothing to replace
+    handle_event(field, "browse-save", {"name": "report"})
+
+    body = handle_event(field, "browse-replace", {})
+
+    assert picked == [beam / "report.pdf"]
+    assert report.text == str(beam / "report.pdf")
+    assert "hidden" in _element(body, f"{field.widget_id}-files").attributes
+    # closed by the server: the "…" button takes the focus back
+    assert "autofocus" in _element(body, f"{field.widget_id}-browse").attributes
+    # opened again: in the file's folder, its name in the box; a new file, at once
+    assert _name_box(handle_event(field, "browse", {}), field).attributes["value"] == ("report.pdf")
+    handle_event(field, "browse-save", {"name": "summary"})
+    assert picked[-1] == beam / "summary.pdf"
+    report.confirms_overwrite = False
+    handle_event(field, "browse", {})
+    handle_event(field, "browse-save", {"name": "report"})  # replaced without a question
+    assert picked[-1] == beam / "report.pdf"
+
+
+def test_a_save_path_is_typed_with_its_extension_inside_the_server_roots(tmp_path: Path) -> None:
+    root, other = tmp_path / "studies", tmp_path / "other"
+    (root / "beam").mkdir(parents=True)
+    other.mkdir()
+    main_view = StudyFileMainView()
+    report = main_view.report
+    report.extensions = {"PDF": (".pdf",)}
+    report.server_roots = (root, other)
+    main_view.render(RendererType.WEB)
+    field = _part(report, "field")
+    action = f"{field.widget_id}-files-action"
+
+    for typed, path in [
+        (str(root / "beam" / "summary"), root / "beam" / "summary.pdf"),
+        (str(root / "beam" / "summary.pdf"), root / "beam" / "summary.pdf"),
+        (str(tmp_path / "elsewhere"), None),
+    ]:
+        handle_event(field, "change", {"value": typed})
+        assert report.path == path, typed
+
+    # several roots: nothing saved while they're listed
+    handle_event(field, "change", {"value": ""})
+    body = handle_event(field, "browse", {})
+    assert "disabled" in _element(body, action).attributes
+    body = handle_event(field, "browse-save", {"name": "summary"})
+    assert _name_box(body, field).attributes.get("aria-invalid") == "true"
+    handle_event(field, "browse-close", {})
+    # opened on a typed file: in its folder, else on the list of the roots
+    for typed, listed in [
+        (str(root / "beam" / "summary"), ("browse-parent", "")),
+        (str(root / "gone" / "summary"), ("browse-root", "0")),
+    ]:
+        handle_event(field, "change", {"value": typed})
+        assert _listed(handle_event(field, "browse", {}), field)[0] == listed
+        handle_event(field, "browse-close", {})
+    # without roots, typed: no button
+    report.server_roots = ()
+    element = _element(field.to_html(), field.widget_id)
+    assert [tag for tag, _attributes in element.descendants] == ["input"]
 
 
 @pytest.fixture
