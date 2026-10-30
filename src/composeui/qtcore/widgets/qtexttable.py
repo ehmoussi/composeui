@@ -510,6 +510,8 @@ class QTextTableView(QTableView):
     indexes, in order, only when the user changes them: setting them or the table from
     code stays silent. The user edits a cell of `set_editable_columns` with a double click
     or F2, and `cell_edited` emits its row, column and new text once the editor has closed.
+    Enter emits `activated` with the current cell, as a double click that edits nothing does,
+    also on macOS, whose Enter would edit the cell instead.
     `header_clicked` emits the column whose header the user clicked; the header shows the
     order `set_sort_indicator` gives, the table never sorting its rows itself.
 
@@ -578,6 +580,11 @@ class QTextTableView(QTableView):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         index = self.currentIndex()
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and index.isValid():
+            # as Qt does on the other platforms: activated, then passed on (e.g. to a dialog)
+            self.activated.emit(index)
+            event.ignore()
+            return
         kind = self._model.kind(index.column()) if index.isValid() else None
         if event.key() == Qt.Key.Key_Space and (
             index.isValid() and self._model.style(index.row(), index.column()).is_enabled

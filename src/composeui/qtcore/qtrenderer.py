@@ -1476,7 +1476,7 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             self._rendered_object = QFilterTable()
             table, bar = self._rendered_object.table, self._rendered_object.bar
             table.selected_rows_changed.connect(self._update_selected_rows)
-            # Qt's: a double click that edits nothing, or Enter, as the platform activates
+            # a double click that edits nothing, or Enter (see `QTextTableView`)
             table.activated.connect(self._activate_row)
             table.cell_edited.connect(self._update_cell)
             table.cell_clicked.connect(self._click_cell)
