@@ -457,8 +457,10 @@ def _reload_in_place(
             # first: an app that ran the changed code, then exited by itself, acknowledged it
             if not request.exists() and not taken.exists():
                 return True
-            if child.poll() is not None:  # it saved its state and exited for a new process
-                return False
+            if child.poll() is not None:
+                # it acknowledged since the look above, then exited; else it saved its
+                # state and exited for a new process
+                return not request.exists() and not taken.exists()
             if request.exists() and time.monotonic() > deadline:
                 LOGGER.warning("The app didn't answer: it runs again, its state since then lost")
                 return False
