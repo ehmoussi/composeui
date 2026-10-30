@@ -35,6 +35,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On Textual, a file or folder picker loading a folder no longer fails now and then with a
+  `KeyError` on a style of its list. textual-fspicker read the styles from its loading
+  thread while Textual applied them again; they are read on the app's thread.
 - A large table of a `DataFrameSource` whose `id_column` is also one of its columns shows its
   rows. Its cells failed to read on Polars.
 - A choice whose value is `None`, such as `{"All regions": None, "North": "north"}`, shows

@@ -2,14 +2,44 @@ from __future__ import annotations
 
 import functools
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from textual.containers import Horizontal
 from textual.widgets import Button
 from textual_fspicker import FileOpen, SelectDirectory
+from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.path_filters import Filter, Filters
 
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.textualcore.widgets.composeinput import ComposeInput
+
+if TYPE_CHECKING:
+    from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
+
+#: how textual-fspicker's folder list reads the styles of its entries
+_read_entry_styles = vars(DirectoryNavigation)["_styles"].fget
+
+
+def _entry_styles(navigation: DirectoryNavigation) -> DirectoryEntryStyling:
+    """Read the styles of a folder list's entries on the app's thread.
+
+    textual-fspicker's `_load` worker reads them from its own thread, while the app's may be
+    applying the list's styles again, a theme changed or a test's parallel load: Textual
+    empties a widget's component styles, then fills them anew. Read in between, a style is
+    missing (a `KeyError`). The worker waits for the app's thread, as it does already to
+    show the entries it read (`call_from_thread`).
+    """
+    try:
+        styles: DirectoryEntryStyling = navigation.app.call_from_thread(
+            _read_entry_styles, navigation
+        )
+    except RuntimeError:  # on the app's thread already, or the app has stopped
+        return _read_entry_styles(navigation)
+    return styles
+
+
+# no hook in textual-fspicker 0.6.0 for this: its `_styles` property, replaced
+setattr(DirectoryNavigation, "_styles", property(_entry_styles))  # noqa: B010
 
 
 def _has_any_extension(path: Path, extensions: tuple[str, ...]) -> bool:
