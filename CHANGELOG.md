@@ -46,6 +46,10 @@ The notable changes of each release of ComposeUI. The format follows
 - `current_backend()` and `renders(view_type)` in `composeui.core.application`: the views
   that the app builds know its backend, and whether it shows a kind of view, such as a
   `MapView`, which Textual doesn't show.
+- `Task.disables` and `Task.cancel_with`: the views disabled while a task runs, and the
+  buttons or actions that cancel its run, enabled only until it is asked to stop. They
+  follow every start and outcome. `Task.is_canceled` tells a run asked to stop, and
+  `Task.cancel` emits `changed`.
 
 ### Fixed
 

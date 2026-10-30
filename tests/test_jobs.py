@@ -15,7 +15,7 @@ from composeui.core.application import ModelApplication
 from composeui.core.jobs import CalledInJobError
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
-from composeui.core.view import MainView
+from composeui.core.view import ActionView, ButtonView, LabelRowInputView, MainView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -112,7 +112,7 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
         assert record.exc_info[1] is error
 
 
-@pytest.mark.parametrize("method", ["start", "cancel", "drop", "task", "task.start"])
+@pytest.mark.parametrize("method", ["start", "cancel", "drop", "task", "task.start", "task.cancel"])
 @pytest.mark.parametrize("tracked", [False, True])
 def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
     app: ModelApplication[MainView, _Model],
@@ -132,6 +132,7 @@ def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
         "drop": jobs.drop,
         "task": lambda: jobs.task(_double),
         "task.start": lambda: task.start(1),
+        "task.cancel": task.cancel,
     }
 
     def change_the_jobs(job: Job[bool]) -> bool:
@@ -599,6 +600,58 @@ def test_a_task_can_succeed_with_none_and_restart_from_its_changed_callback() ->
     assert results == [None, None]
     assert task.has_result
     assert not task.is_running
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_a_task_disables_its_views_while_it_runs_and_enables_its_stop_until_asked(
+    *, fail: bool
+) -> None:
+    view = MainView()
+    started = threading.Event()
+
+    def work(job: Job[str]) -> str:
+        started.set()
+        while job.sleep(0.01):
+            pass
+        if fail:
+            msg = "stopped badly"
+            raise RefusedError(msg)
+        return "stopped"
+
+    task = view.jobs.task(work)
+    source, stop, stop_action = LabelRowInputView(), ButtonView(), ActionView()
+    task.disables(source)
+    task.cancel_with(stop, stop_action)
+    states: list[tuple[bool, bool, bool, bool]] = []
+
+    def record() -> None:
+        states.append(
+            (source.is_enabled, stop.is_enabled, stop_action.is_enabled, task.is_canceled)
+        )
+
+    task.changed.connect(record)
+    record()  # idle
+    task.start()
+    assert started.wait(5)
+    stop_action.triggered.emit()  # e.g. Stop in the toolbar
+    stop.clicked.emit()  # asked already: nothing more
+    view.jobs.wait()
+
+    assert states == [
+        (True, False, False, False),
+        (False, True, True, False),
+        (False, False, False, True),
+        (True, False, False, False),  # whatever the outcome
+    ]
+    assert (task.result, task.error is not None) == (None if fail else "stopped", fail)
+
+    # New or Open drop the run: its views come back
+    started.clear()
+    task.start()
+    assert started.wait(5)
+    view.reset_state()
+    assert (source.is_enabled, stop.is_enabled) == (True, False)
+    view.jobs.wait()
 
 
 def test_canceling_a_task_at_startup_leaves_other_jobs_running() -> None:

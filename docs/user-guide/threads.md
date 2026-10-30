@@ -218,6 +218,70 @@ loading task. `show_state` shows the count of rows read or the error in a status
 the chart and the map once the task has a result. Its `finished` callback gives them their
 data.
 
+### Disable views while a task runs
+
+`task.disables(*views)` disables `views` while the task runs, such as the fields of its run
+and its Run button. `task.cancel_with(*controls)` cancels the run when one of `controls` is
+clicked: a `ButtonView`, or an `ActionView` of a menu or a toolbar, such as Stop. They replace
+the callbacks that enable and disable the controls at each start and outcome:
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import (
+    ButtonView,
+    FormView,
+    LabelRowInputView,
+    MainView,
+    child,
+    define_view,
+)
+
+
+def solve(job: Job[str], study: str) -> str:
+    while job.sleep(0.01):  # Solve the study here, a step at a time.
+        pass
+    return f"{study}: stopped"
+
+
+@define_view
+class SolverForm(FormView):
+    study: LabelRowInputView = child(LabelRowInputView, label="Study", text="beam.comm")
+
+
+@define_view
+class SolverView(MainView):
+    form: SolverForm = child(SolverForm)
+    run: ButtonView = child(ButtonView, text="Run")
+    stop: ButtonView = child(ButtonView, text="Stop")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.solver = self.jobs.task(solve)
+        self.solver.disables(self.form.study, self.run)
+        self.solver.cancel_with(self.stop)
+        self.run.clicked.connect(lambda: self.solver.start(self.form.study.text))
+
+
+main_view = SolverView()
+assert not main_view.stop.is_enabled
+main_view.run.clicked.emit()
+assert not main_view.run.is_enabled
+main_view.stop.clicked.emit()
+assert not main_view.stop.is_enabled  # Asked to stop: it can't be asked again.
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.run.is_enabled
+assert main_view.solver.result == "beam.comm: stopped"
+```
+
+- **From now on.** The task sets `is_enabled` at once, then at each start and outcome: a
+  success, a failure, or the end of a canceled run. New, Open, and `jobs.drop()` end the
+  run, and the views come back too.
+- **Asked to stop.** `cancel_with`'s controls are enabled only while a run goes on, until
+  it is asked to stop. `task.cancel()` sets `is_canceled`, and `changed` emits: a
+  `changed` callback can show "Stopping..." until the run is over.
+- **The task's views.** The task alone sets their `is_enabled`: don't set it from another
+  callback too.
+
 ## How jobs behave
 
 These rules hold for every job, and for the jobs of a task.

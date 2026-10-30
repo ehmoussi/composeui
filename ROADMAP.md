@@ -64,7 +64,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | CSV import | `CSVSqliteTable`: typed columns, column mapping, dialect detection, batches in a transaction, gzip, and URLs |
 | Charts and maps | Line, step, scatter and bar charts, log axes, reference lines, report images, and `MapView` point overlays |
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, and `MainView.state_version` / `migrate_state` |
-| Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result and error |
+| Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, and the controls that follow them |
 | Deployment | One Uvicorn process behind nginx: TLS, proxy headers, request limits, and optional HTTP Basic Auth |
 | Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, and a coding-agent skill |
 | Releases | PyPI, a changelog, Semantic Versioning, a public API per module, and automated publishing |
