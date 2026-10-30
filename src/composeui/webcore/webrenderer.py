@@ -2104,6 +2104,7 @@ class TableViewLike(ViewLike, Protocol):
     selected_rows: list[int]
     shown_rows: list[int]
     selection_changed: Signal[list[int]]
+    row_activated: Signal[int]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
@@ -2843,7 +2844,10 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             '{selected} hx-post="/widget/{widget_id}"'
             # a click or Enter, not from a cell's field or widget, which takes its own
             ' hx-trigger="activate"'
-            """ hx-vals='{{"event": "select", "row": "{index}"}}' hx-swap="none">"""
+            """ hx-vals='{{"event": "select", "row": "{index}"}}'"""
+            ' hx-swap="none"'
+            # a double click or Enter then activates it (see `page.js`)
+            ' data-activate="{index}">'
             "{cells}</tr>"
         ).format(widget_id=self.widget_id, index=index, selected=selected, cells=cells)
 
@@ -3088,12 +3092,16 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         if event in handlers:
             handlers[event](form)
             return
-        if event != "select":
+        if event not in ("select", "activate_row"):
             super().dispatch(event, form)
         row = form.get("row", "")
         if not row.isdigit() or int(row) not in self._view.shown_rows:
             # a row a stale page still shows: swap the table back as it now is
             self._mark_dirty(self._view, self.widget_id, self._view.rows)
+            return
+        if event == "activate_row":
+            # the click or Enter before it has selected the row
+            self._view.row_activated.emit(int(row))
             return
         if self._is_multiple():
             rows = sorted(set(self._view.selected_rows) ^ {int(row)})

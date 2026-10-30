@@ -211,11 +211,26 @@ def grid_base_url() -> Iterator[str]:
         yield url
 
 
+class _PlacesApp(WebApplication[EditableTableMainView]):
+    """Places whose notes are editable; the status bar names each place the user opens."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=EditableTableMainView)
+
+    def setup_session(self, main_view: EditableTableMainView) -> None:
+        main_view.status_bar.timeout = 0
+        places = main_view.places
+
+        def show_opened(row: int) -> None:
+            main_view.status_bar.show_message(f"Opened {places.rows[row][0]}")
+
+        places.row_activated.connect(show_opened)
+
+
 @pytest.fixture(scope="module")
 def places_base_url() -> Iterator[str]:
     """Serve an app with a table whose notes are editable, for the whole module."""
-    app = WebApplication(build_main_view=EditableTableMainView).create_starlette_app()
-    with _serve(app) as url:
+    with _serve(_PlacesApp().create_starlette_app()) as url:
         yield url
 
 
@@ -1985,6 +2000,38 @@ def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(
         note.press("Escape")
     expect(note).to_have_count(0)
     expect(lake).to_contain_text("Windy")
+
+
+def test_a_double_click_or_enter_opens_a_table_row_once_selected_unless_it_edits(
+    places_page: Page,
+) -> None:
+    page = places_page
+    page.goto("/")
+    lake, harbour = (page.get_by_role("row").filter(has_text=name) for name in ("Lake", "Harbour"))
+    status_bar = page.locator("footer")
+
+    with _posted(page):
+        lake.get_by_text("Lake").dblclick()
+    expect(status_bar).to_have_text("Opened Lake")
+    expect(lake).to_have_attribute("aria-current", "true")
+    expect(page.locator(".htmx-added")).to_have_count(0)
+
+    harbour.focus()
+    with _posted(page):
+        page.keyboard.press("Enter")
+    expect(status_bar).to_have_text("Opened Harbour")
+    expect(harbour).to_have_attribute("aria-current", "true")
+    expect(page.locator(".htmx-added")).to_have_count(0)
+
+    # a double click on a note edits it, and Enter in its field opens nothing
+    with _posted(page):
+        lake.get_by_text("Calm").dblclick()
+    note = lake.get_by_label("Note")
+    expect(note).to_be_focused()
+    with _posted(page):
+        note.press("Enter")
+    expect(note).to_have_count(0)
+    expect(status_bar).to_have_text("Opened Harbour")
 
 
 def test_a_row_clicked_before_the_last_click_is_answered_shows_selected(

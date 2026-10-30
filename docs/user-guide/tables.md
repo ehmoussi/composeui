@@ -20,6 +20,9 @@ runs: RecordTableView[Run] = child(
 
 - Assign `records` to update the table (`table.records = model.runs.above(0.1)`).
 - Read `selected_record`, or `selected_records`.
+- Connect to `row_activated` to open a row: a double click, or Enter, emits the row's
+  index in `rows`. A double click on a cell that edits, or on a button or a link, doesn't.
+  On Textual and the web, Enter also selects the row first.
 - The table parses an edited cell into the type of its field, through the `cattrs`
   converter of the views. `record_edited` emits the old and the new record.
 - When a cell doesn't parse, the table refuses the edit and says why in the status bar.

@@ -130,6 +130,8 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Callable, Iterable
 
+    from qtpy.QtCore import QModelIndex
+
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
         CellStyle,
@@ -1225,6 +1227,7 @@ class TableViewLike(ViewLike, Protocol):
     selected_rows: list[int]
     shown_rows: list[int]
     selection_changed: Signal[list[int]]
+    row_activated: Signal[int]
     editable_columns: list[int]
     cell_edited: Signal[int, int, str]
     cell_widgets: dict[int, CellWidget]
@@ -1473,6 +1476,8 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             self._rendered_object = QFilterTable()
             table, bar = self._rendered_object.table, self._rendered_object.bar
             table.selected_rows_changed.connect(self._update_selected_rows)
+            # Qt's: a double click that edits nothing, or Enter, as the platform activates
+            table.activated.connect(self._activate_row)
             table.cell_edited.connect(self._update_cell)
             table.cell_clicked.connect(self._click_cell)
             table.browse_clicked.connect(self._browse)
@@ -1639,6 +1644,9 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _activate_row(self, index: QModelIndex) -> None:
+        self._view.row_activated.emit(self._view.shown_rows[index.row()])
 
     def _browse(self, position: int, column: int) -> None:
         """Pick a file in Qt's dialog, its path then the cell's; nothing if cancelled.

@@ -36,6 +36,9 @@ The notable changes of each release of ComposeUI. The format follows
 - `CellWidget.file_path(..., server_roots=...)`, a table's file path cells picked among the
   server's files, as a field's. On the web, a path typed outside the roots is refused: the
   cell keeps its text, and the status bar says why (`TableView.file_texts`).
+- `TableView.row_activated`, which emits a row's index when the user opens it with a double
+  click or Enter, as a large table's `row_activated` emits its id. A double click that edits
+  a cell, or clicks its button or link, doesn't open the row.
 
 ### Fixed
 

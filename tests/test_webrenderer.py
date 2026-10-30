@@ -4795,6 +4795,29 @@ def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it(
     assert emitted == [[1]]
 
 
+def test_activating_a_table_row_emits_it_leaving_the_selection_to_its_click(
+    tables: tuple[TestClient, HorizontalMainView],
+) -> None:
+    client, view = tables
+    table = view.tables.narrow
+    table_id = _widget_id(table.renderer)
+    activated: list[int] = []
+    table.row_activated.connect(activated.append)
+
+    def activate(row: str) -> Any:
+        return client.post(f"/widget/{table_id}", data={"event": "activate_row", "row": row})
+
+    activate("2")
+    assert activated == [2]
+    assert table.selected_rows == []
+
+    # a row a stale page still shows: the table comes back as it now is
+    _swapped(activate("7").text, table_id)
+    table.is_enabled = False
+    assert activate("1").status_code == 400
+    assert activated == [2]
+
+
 def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     tables: tuple[TestClient, HorizontalMainView],
 ) -> None:
