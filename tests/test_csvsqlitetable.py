@@ -10,10 +10,14 @@ import gzip
 import io
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 import pytest
+from hypothesis import given, reject
+from hypothesis import strategies as st
 
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
@@ -21,7 +25,6 @@ from composeui.core.view import Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
 
 
 @define_csv_row
@@ -224,6 +227,51 @@ def test_sniffing_replays_a_sample_ending_inside_a_quoted_line_or_crlf(
         21: [name],
         22: ["Two\nlines"],
     }
+
+
+# names holding the delimiter, quotes, line ends, spaces and a letter beyond ASCII
+_CSV_NAMES = st.text(st.sampled_from('ab;"\r\n é'), min_size=1, max_size=12)
+
+
+@given(
+    st.lists(_CSV_NAMES, min_size=1, max_size=6),
+    # Python before 3.12 leaves a lone "\r" unquoted in lines ending with "\n"
+    st.sampled_from([("\r\n", False), ("\n", True)]),
+    st.integers(min_value=1, max_value=400),
+)
+def test_any_rows_written_as_csv_import_whole_wherever_the_sniff_sample_ends(
+    names: list[str], line_end_and_quote_all: tuple[str, bool], sample_size: int
+) -> None:
+    line_end, quote_all = line_end_and_quote_all
+    text = io.StringIO()
+    writer = csv.writer(
+        text,
+        delimiter=";",
+        lineterminator=line_end,
+        quoting=csv.QUOTE_ALL if quote_all else csv.QUOTE_MINIMAL,
+    )
+    writer.writerow(["Name", "Value", "Day", "Moment"])
+    writer.writerows([name, 1.5, "25/10/2026", "25/10/2026 17:00+0200"] for name in names)
+    model = ReadingsModel()
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "data.csv"
+            path.write_bytes(text.getvalue().encode())
+            # every option explicit: the sample is read and replayed, not trusted
+            batches = model.readings.fill_from_file(
+                path, sniff=True, sniff_sample_size=sample_size, dialect="excel", delimiter=";"
+            )
+            try:
+                list(batches)
+            except RefusedError as error:
+                if "Cannot detect the CSV dialect" not in str(error):
+                    raise
+                reject()  # the sample too short, or too odd, to detect a dialect
+        ids = list(range(1, len(names) + 1))
+        cells = model.readings.source().cells(ids, ["name"])
+        assert [cells[row][0] for row in ids] == [name.strip() for name in names]
+    finally:
+        model.close()
 
 
 @pytest.mark.parametrize(
