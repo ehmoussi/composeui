@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import enum
 import re
@@ -12,13 +13,22 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from composeui.core import sqlitemodel
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, as_parameters
-from composeui.core.view import ListSource, Sort, SourceColumn, SourceTableView, parse_filter
+from composeui.core.view import (
+    FilterError,
+    ListSource,
+    Sort,
+    SourceColumn,
+    SourceTableView,
+    parse_filter,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Hashable, Iterator, Sequence
+    from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
 
     from composeui.core.view import Filter
 
@@ -176,6 +186,112 @@ def test_a_search_finds_its_text_as_typed_in_the_text_columns(
     numbers = SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns)
     numbered = ListSource(Place, {"depth": "Depth"}, PLACES, id_field="id")
     assert numbers.ordered_ids(None, "5", {}) == numbered.ordered_ids(None, "5", {}) == []
+
+
+# Generated places, from few values so that cells are often equal, or equal but for
+# their case. Their text holds LIKE's wildcards, its escape, a quote, the filters' own
+# syntax, and a letter in two cases that SQLite doesn't fold. Not letters folding into
+# ASCII ones ("ß" into "ss"): text typed in ASCII doesn't find them, by design (see
+# `sqlitemodel._folded`).
+_ASCII_TEXT = st.text(st.sampled_from("aAbB_%\\' *!="), max_size=3)
+_TEXT = st.text(st.sampled_from("aAbB_%\\' *!=éÉ"), max_size=3)
+_DEPTHS = [-1.5, 0.0, 3.0]
+_DATES = [datetime.date(2022, 2, 2), datetime.date(2024, 1, 31)]
+
+
+@attrs.frozen
+class _Query:
+    """Places and what a table asks of them: filters, by column, and a search."""
+
+    places: list[Place]
+    filters: dict[str, Filter]
+    search: str
+
+
+@st.composite
+def _queries(draw: st.DrawFn, texts: st.SearchStrategy[str]) -> _Query:
+    """Draw places, and filters and a search often typed as a name is, maybe in other cases."""
+    rows = draw(
+        st.lists(
+            st.tuples(
+                texts,
+                st.none() | st.sampled_from(_DEPTHS),
+                st.none() | st.sampled_from(_DATES),
+                st.sampled_from(Kind),
+            ),
+            max_size=8,
+        )
+    )
+    places = [Place(row, *fields) for row, fields in enumerate(rows, start=1)]
+    names = sorted({place.name for place in places})
+    if names:
+        named = st.sampled_from(names)
+        texts = texts | named | named.map(str.swapcase)
+    comparison = st.sampled_from(["", "=", "!=", "<", "<=", ">", ">="])
+    number = st.sampled_from(_DEPTHS).map(str)
+    date = st.sampled_from(_DATES).map(datetime.date.isoformat)
+    name_filter = st.builds(
+        "{}{}{}".format,
+        st.sampled_from(["", "=", "!=", "!", "*"]),
+        texts,
+        st.sampled_from(["", "*"]),
+    )
+    filter_texts = st.one_of(
+        # text filters half the time: they have the most ways to differ
+        st.tuples(st.just("name"), name_filter),
+        st.tuples(st.just("name"), name_filter),
+        st.tuples(st.just("depth"), st.builds("{}{}".format, comparison, number)),
+        st.tuples(st.just("depth"), st.builds("{}..{}".format, number, number)),
+        st.tuples(st.just("surveyed"), st.builds("{}{}".format, comparison, date)),
+        st.tuples(st.just("surveyed"), st.builds("{}..{}".format, date, date)),
+    )
+    types = {column.name: column.type for column in ListSource(Place, HEADERS).columns}
+    filters = {}
+    for column, text in draw(st.lists(filter_texts, max_size=2)):
+        with contextlib.suppress(FilterError):  # e.g. an empty text
+            filters[column] = parse_filter(text, types[column])
+    return _Query(places, filters, draw(texts))
+
+
+@contextlib.contextmanager
+def _sources(
+    places: list[Place],
+) -> Generator[tuple[SqliteSource, ListSource[Place]], None, None]:
+    model = PlacesModel()
+    try:
+        for place in places:
+            model.places.add(place)
+        listed = ListSource(Place, HEADERS, places, id_field="id")
+        columns = [
+            SourceColumn(column.name, column.header, column.type) for column in listed.columns
+        ]
+        yield (
+            SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns),
+            listed,
+        )
+    finally:
+        model.close()
+
+
+# cheap examples, many: a difference needs a few cells and a filter to meet
+@settings(max_examples=500)
+@given(_queries(_TEXT))
+def test_any_filters_and_search_keep_the_rows_a_list_source_keeps(query: _Query) -> None:
+    with _sources(query.places) as (sql, listed):
+        found, expected = _both(sql, listed, search=query.search, filters=query.filters)
+        assert found == expected
+
+
+# ASCII names alone: SQLite's NOCASE ignores the case of ASCII letters alone
+@settings(max_examples=500)
+@given(_queries(_ASCII_TEXT), st.sampled_from(list(HEADERS)), st.booleans())
+def test_any_sort_of_filtered_rows_orders_them_as_a_list_source(
+    query: _Query, column: str, descending: bool
+) -> None:
+    sort = Sort(column, descending=descending)
+    with _sources(query.places) as (sql, listed):
+        found, expected = _both(sql, listed, sort, query.search, query.filters)
+        assert found == expected
 
 
 def test_cells_read_the_rows_asked_as_their_columns_types(sql: SqliteSource) -> None:

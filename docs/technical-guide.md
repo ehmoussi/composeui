@@ -454,6 +454,21 @@ Every behavior change needs a test in `tests/`.
   `tests/test_browser.py`, marked `browser`. These tests need the `browser` group and
   Chromium. Install Chromium once with `uv run --group browser playwright install chromium`,
   then run `make browser-test`.
+- A property-based test, with [Hypothesis](https://hypothesis.readthedocs.io/), checks a
+  rule for many inputs that Hypothesis makes. Use one when two implementations must agree,
+  such as `SqliteSource` or `DataFrameSource` and `ListSource`. Use one also for a rule of
+  a pure function, such as a date read back as it was shown. Do not use one for rendered
+  widgets or the browser: they are too slow for many inputs.
+  - Make the inputs from a small set of values, so that cells are often equal, or equal
+    except for their case. Wide random values rarely make the input that fails.
+  - Add each input that found a bug with `@example(...)`, so that each run tries it.
+  - Discard an input (`reject()`) only for the reason that the test expects, never for
+    another error.
+  - Break the code that the property checks, and make sure that the test fails. Then
+    restore the code.
+  - `tests/conftest.py` removes the time limit of each input. On CI (`CI` set),
+    Hypothesis's `ci` profile tries the same inputs on each run, so a pull request fails
+    for its own change only. A local run makes new inputs on each run.
 - `make test` fails when the coverage of lines and branches is below 100% (`fail_under` in
   `pyproject.toml`). Coverage also counts the child processes that the reload tests start.
   Add a test with each new line. When no test can reach a line, mark it

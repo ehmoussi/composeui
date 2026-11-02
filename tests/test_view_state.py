@@ -13,6 +13,8 @@ from typing import Any, Optional, Union
 import attrs
 import pytest
 from attrs import Factory, evolve
+from hypothesis import given
+from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication, _add_reference_to_signals
 from composeui.core.model import Model
@@ -92,6 +94,23 @@ def test_datetimes_structure_from_iso_text_or_native_values_and_round_trip(text:
     saved = json.loads(json.dumps(CONVERTER.unstructure(restored)))
     assert saved == expected.isoformat()
     assert CONVERTER.structure(saved, datetime.datetime) == expected
+
+
+#: fixed UTC offsets, which need no time zone database
+_OFFSETS = st.builds(
+    datetime.timezone,
+    st.timedeltas(
+        min_value=datetime.timedelta(hours=-23, minutes=-59),
+        max_value=datetime.timedelta(hours=23, minutes=59),
+    ),
+)
+
+
+@given(st.datetimes(timezones=st.none() | _OFFSETS))
+def test_any_datetime_saved_as_json_loads_back_the_same(value: datetime.datetime) -> None:
+    saved = json.loads(json.dumps(CONVERTER.unstructure(value)))
+    restored = CONVERTER.structure(saved, datetime.datetime)
+    assert (restored, restored.utcoffset()) == (value, value.utcoffset())
 
 
 def test_is_omitted_type_detects_signal_renderer_and_container() -> None:
@@ -396,6 +415,22 @@ def test_a_decimal_number_shows_at_most_its_decimals(
     assert FloatInputMixin.shown_text(value, decimals) == shown
 
 
+@given(
+    st.floats(allow_nan=False, allow_infinity=False, min_value=-1e12, max_value=1e12),
+    st.integers(min_value=0, max_value=6),
+)
+def test_any_decimal_number_shows_its_rounded_value_without_trailing_zeros(
+    value: float, decimals: int
+) -> None:
+    shown = FloatInputMixin.shown_text(value, decimals)
+    rounded = float(f"{value:.{decimals}f}")
+    assert float(shown) == rounded
+    whole, _, fraction = shown.partition(".")
+    assert len(fraction) <= decimals
+    assert not fraction.endswith("0")
+    assert whole != "-0" or fraction != ""
+
+
 def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:
     day = datetime.date(2026, 1, 2)
     assert format_date(day, "dd/MM/yyyy") == "02/01/2026"
@@ -407,6 +442,22 @@ def test_a_date_is_typed_and_shown_as_its_format_says_or_as_iso_8601() -> None:
     for text in ("31/02/2026", "2/1/26", "2026/01/02", "02/01/2026 x", ""):
         with pytest.raises(ValueError, match="isn't a date as dd/MM/yyyy"):
             parse_date(text, "dd/MM/yyyy")
+
+
+@st.composite
+def _date_formats(draw: st.DrawFn) -> str:
+    """Draw a day, a month and a year in any order, between separators, maybe one ending."""
+    parts = draw(st.permutations(["dd", "MM", "yyyy"]))
+    separator = draw(st.sampled_from(["/", ".", "-", ". ", " "]))
+    ending = draw(st.sampled_from(["", separator.strip()]))
+    return separator.join(parts) + ending
+
+
+@given(st.dates(), _date_formats())
+def test_any_date_shown_as_a_format_is_read_back_as_that_format(
+    day: datetime.date, date_format: str
+) -> None:
+    assert parse_date(format_date(day, date_format), date_format) == day
 
 
 def test_a_date_input_follows_the_language_and_its_study_keeps_its_dates(tmp_path: Path) -> None:
@@ -462,6 +513,27 @@ def test_a_slider_shows_its_value_at_the_nearest_step_within_its_range() -> None
     assert SliderView.position(3, 5, 0, 1) == 0
     with pytest.raises(ValueError, match="step"):
         SliderView(step=0)
+
+
+# small numbers, so that values halfway between two steps come often
+@given(st.integers(-30, 30), st.integers(-30, 30), st.integers(-30, 30), st.integers(1, 8))
+def test_a_slider_s_handle_is_at_the_step_in_range_nearest_any_value(
+    value: int, minimum: int, maximum: int, step: int
+) -> None:
+    last = SliderView.last_position(minimum, maximum, step)
+    position = SliderView.position(value, minimum, maximum, step)
+    assert 0 <= position <= last
+    assert minimum + last * step <= max(minimum, maximum)
+
+    def distance(at: int) -> int:
+        return abs(value - (minimum + at * step))
+
+    # no step in range is nearer, and of two as near, the higher one
+    for other in (position - 1, position + 1):
+        if 0 <= other <= last:
+            assert distance(position) < distance(other) or (
+                distance(position) == distance(other) and position > other
+            )
 
 
 def test_a_metric_badge_points_the_way_its_figure_changed() -> None:

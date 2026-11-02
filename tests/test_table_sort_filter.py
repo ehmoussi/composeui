@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import datetime
 import json
+import operator
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import attrs
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from composeui.core.application import Application
 from composeui.core.view import (
@@ -74,6 +77,29 @@ def test_a_table_of_text_sorts_stably_by_text() -> None:
     assert table.shown_rows == [1, 0, 2, 3]
 
 
+@given(
+    st.lists(st.sampled_from(["", "a", "A", "b", "B", "ab", "Ab", "ß", "ss", "10", "9"])),
+    st.booleans(),
+)
+def test_any_text_column_sorts_ignoring_case_stably_its_empty_cells_last(
+    cells: list[str],
+    descending: bool,
+) -> None:
+    table = TableView(headers=["Text", "Row"], sortable_columns=[0])
+    table.rows = [[cell, str(row)] for row, cell in enumerate(cells)]
+    table.sort_column = 0
+    table.sort_descending = descending
+
+    shown = table.shown_rows
+    assert sorted(shown) == list(range(len(cells)))
+    filled = [row for row in shown if cells[row] != ""]
+    assert shown[len(filled) :] == [row for row, cell in enumerate(cells) if cell == ""]
+    for before, after in zip(filled, filled[1:]):
+        first, second = cells[before].casefold(), cells[after].casefold()
+        in_order = second < first if descending else first < second
+        assert in_order or (first == second and before < after)  # equal cells as given
+
+
 @pytest.mark.parametrize(
     ("text", "field_type", "value", "matches"),
     [
@@ -105,6 +131,49 @@ def test_a_filter_compares_a_number_a_date_or_a_boolean_by_value(
 ) -> None:
     cell = "" if value is None else str(value)
     assert parse_filter(text, field_type).matches(value, cell) is matches
+
+
+_COMPARE_TEXTS = {
+    ">": operator.gt,
+    ">=": operator.ge,
+    "<": operator.lt,
+    "<=": operator.le,
+    "!=": operator.ne,
+    "": operator.eq,
+}
+
+
+@given(st.sampled_from(sorted(_COMPARE_TEXTS)), st.integers(), st.integers())
+def test_a_number_filter_compares_any_number_as_python_does(
+    comparison: str, bound: int, value: int
+) -> None:
+    number_filter = parse_filter(f"{comparison}{bound}", int)
+    assert number_filter.matches(value, str(value)) is _COMPARE_TEXTS[comparison](value, bound)
+
+
+@given(st.integers(), st.integers(), st.integers())
+def test_a_number_range_keeps_any_number_between_its_ends_or_is_refused_reversed(
+    lower: int, upper: int, value: int
+) -> None:
+    text = f"{lower}..{upper}"
+    if lower > upper:
+        with pytest.raises(FilterError) as error:
+            parse_filter(text, int)
+        assert error.value.problem is FilterProblem.REVERSED_RANGE
+    else:
+        assert parse_filter(text, int).matches(value, str(value)) is (lower <= value <= upper)
+
+
+_WORDS = st.text(st.characters(categories=["Lu", "Ll"]), min_size=1, max_size=4)
+
+
+@given(_WORDS, st.text(max_size=8))
+def test_a_word_filters_the_cells_containing_it_and_its_negation_the_others(
+    word: str, cell: str
+) -> None:
+    contains = word.casefold() in cell.casefold()
+    assert parse_filter(word, str).matches(cell, cell) is contains
+    assert parse_filter(f"!{word}", str).matches(cell, cell) is not contains
 
 
 @pytest.mark.parametrize(

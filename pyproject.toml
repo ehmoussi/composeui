@@ -74,6 +74,7 @@ include = ["composeui*"]
 browser = ["playwright>=1.60.0"]
 dev = [
     "httpx>=0.28.1",
+    "hypothesis>=6.141.1",
     "mypy>=1.19.1",
     "pandas>=2.3.3",
     "pandas-stubs>=2.2.2.240807",
