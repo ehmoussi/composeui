@@ -8,12 +8,12 @@ import json
 import logging
 import math
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import attrs
 import pytest
 from attrs import Factory, evolve
-from hypothesis import given
+from hypothesis import given, reject
 from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication, _add_reference_to_signals
@@ -60,6 +60,9 @@ from tests.filters import FiltersMainView
 from tests.horizontal import HorizontalMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 # Generic mixins must be bound to a concrete type through a subclass (like
@@ -684,6 +687,70 @@ class _RemarkStudyMainView(MainView):
         if version < 2:
             data["remark"] = data.pop("note")
         return data
+
+
+def _leaves(value: Any) -> Iterator[tuple[Any, Any]]:
+    """Get where each text, number and boolean of a state is: its container and key.
+
+    Not a values group's: its options are the app's, and a value not among them is
+    dropped (see `test_load_state_warns_and_clears_value_when_label_no_longer_exists`).
+    """
+    if isinstance(value, dict) and "values" in value:
+        return
+    items = value.items() if isinstance(value, dict) else enumerate(value)
+    for key, item in items:
+        if isinstance(item, (dict, list)):
+            yield from _leaves(item)
+        elif isinstance(item, (bool, int, float, str)):
+            yield value, key
+
+
+def _changed(data: st.DataObject, value: Any) -> Any:
+    """Draw a value of the type of `value`."""
+    if isinstance(value, bool):
+        return data.draw(st.booleans())
+    if isinstance(value, int):
+        return data.draw(st.integers(-1000, 1000))
+    if isinstance(value, float):
+        return data.draw(st.floats(-1e6, 1e6))
+    return data.draw(st.text(max_size=8))
+
+
+@pytest.mark.parametrize(
+    "main_view_type",
+    [
+        BookingMainView,
+        DataFileMainView,
+        EditableTableMainView,
+        FiltersMainView,
+        HorizontalMainView,
+        RunMainView,
+        SiteMainView,
+        ToolBarMainView,
+        _RadioMainView,
+    ],
+)
+@given(data=st.data())
+def test_any_state_a_view_takes_is_saved_and_opened_unchanged(
+    main_view_type: type[MainView], data: st.DataObject
+) -> None:
+    view = main_view_type()
+    state = view.state_data()
+    # a few values: one of a closed set (an enum's, a date) more often makes it refused
+    leaves = list(_leaves(state))
+    for index in data.draw(st.sets(st.integers(0, len(leaves) - 1), max_size=4)):
+        container, key = leaves[index]
+        container[key] = _changed(data, container[key])
+    try:
+        view.load_state_data(state)
+    except InvalidStateError:
+        reject()  # e.g. a date that isn't one: refused, as `load_state` refuses its file
+    saved = json.loads(json.dumps(view.file_data()))
+    assert saved["views"] == json.loads(json.dumps(state))  # loaded as it was
+
+    opened = main_view_type()
+    opened.load_state_data(opened.state_data_from_file(saved))
+    assert opened.state_data() == saved["views"]
 
 
 def test_a_study_file_holds_its_versions_and_an_older_one_is_upgraded(tmp_path: Path) -> None:
