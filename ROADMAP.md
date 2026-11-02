@@ -56,7 +56,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Area | Already there |
 | --- | --- |
 | Core | Typed `attrs` views, reactive attributes, signals, callback injection, lazy backend selection, and the backend's capabilities |
-| Backends | Qt, Textual, and the web (Starlette and htmx); maps on Qt and the web only. The web sends only the shown page of a router and the shown tab of a tab view |
+| Backends | Qt, Textual, and the web (Starlette and htmx); maps on Qt and the web only. The web sends only the shown page of a router and the shown tab of a tab view; Qt builds each page and tab the first time it shows |
 | Forms and layout | Inputs, validation, buttons, progress, metrics, expanders, trees, Markdown, consoles, pages, tabs, splitters, sidebars, view lists, menus, toolbars, and typed form and content dialogs, with buttons and checks of their own |
 | Files and paths | File, folder and save path fields and table cells, files picked on the server (`server_roots`), paths relative to the study (`base_folder`), a path cell by the row's kind (`path_by`), and `MainView.write_file`, which asks before it replaces a file |
 | Tables | Editable tables, typed record tables, sorting, filtering, cell widgets and styles, header groups, and row headers |

@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QCheckBox,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFormLayout,
@@ -106,6 +107,7 @@ from composeui.core.view import (
     VerticalView,
     View,
     date_hint,
+    dialogs_in,
     line_styles_after,
     lines_after,
     replace_cell,
@@ -217,6 +219,17 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
 
     @staticmethod
     def _refresh_visible(_view: TView, renderer_object: TWidget, value: bool) -> None:
+        # a widget not in a layout yet, e.g. of a page built as it's shown, would show as a
+        # window of its own: it shows with the parent it's given
+        # one the app shows or hides itself, e.g. a view rendered alone, follows the view
+        if (
+            value
+            and isinstance(renderer_object, QWidget)
+            and renderer_object.parentWidget() is None
+            and not isinstance(renderer_object, (QMainWindow, QDialog))
+            and not renderer_object.testAttribute(Qt.WidgetAttribute.WA_WState_ExplicitShowHide)
+        ):
+            return
         renderer_object.setVisible(value)
 
     @staticmethod
@@ -2180,14 +2193,28 @@ def _widget_of(view: View) -> QWidget | None:
     return None
 
 
+def _adopt_dialogs(view: View, parent: QWidget) -> None:
+    """Make `parent` the parent of the dialogs under `view` with none: they open over its window.
+
+    A dialog with a parent already keeps it: another one would hide it, maybe open.
+    """
+    for dialog in dialogs_in(view):
+        widget = _widget_of(dialog)
+        assert widget is not None  # Qt renders every dialog of the core
+        if widget.parentWidget() is None:
+            widget.setParent(parent, widget.windowFlags())
+
+
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
     """Add `view`'s widget to a column of content: a window's, or a page's."""
     widget = _widget_of(view)
     if widget is None:
         return
     if isinstance(view, DialogView):
-        # a window of its own, over the column's window
-        widget.setParent(layout.parentWidget(), widget.windowFlags())
+        # a window of its own, over the column's window; a page's built late already has
+        # its router's, maybe while open, which another parent would hide
+        if widget.parentWidget() is None:
+            widget.setParent(layout.parentWidget(), widget.windowFlags())
     elif isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
         # a plain form insets its rows with its own layout's margins, and a page its views;
         # a page holding a view that scrolls within itself takes the spare height, for it
@@ -2804,12 +2831,29 @@ class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
-            layout = QVBoxLayout(self._rendered_object)
-            for view in self._view.children_views:
-                _add_content_widget(layout, view)
-            # height to spare goes below the views, not between them
-            layout.addStretch()
+            QVBoxLayout(self._rendered_object).setContentsMargins(0, 0, 0, 0)
+            # its dialogs, rendered already, open over the window before its views are built
+            _adopt_dialogs(self._view, self._rendered_object)
             self.refresh()
+
+    def build(self) -> None:
+        """Build the tab's views, once: the first time the tab is shown."""
+        assert self._rendered_object is not None
+        layout = self._rendered_object.layout()
+        assert isinstance(layout, QVBoxLayout)
+        if layout.count() > 0:
+            return
+        # built apart, then shown with the tab: added to the tab, maybe on screen already,
+        # each view would only show at the event loop's next turn
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        for view in self._view.children_views:
+            view.render(RendererType.QT)
+            _add_content_widget(content_layout, view)
+        # height to spare goes below the views, not between them
+        content_layout.addStretch()
+        layout.addWidget(content)
+        content.show()
 
     @staticmethod
     def _refresh_title(_view: TabPage, rendered_object: QWidget, value: str) -> None:
@@ -2833,7 +2877,13 @@ class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
 
 
 class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
-    """A tab widget: the tabs in a row, the current one's views under them."""
+    """A tab widget: the tabs in a row, the current one's views under them.
+
+    A tab's views are built the first time it's shown, so many tabs don't slow the start.
+    """
+
+    #: read by `TabView`: it renders only the tab shown, and this renderer the others' views
+    renders_on_demand = True
 
     def __init__(self, view: TabView) -> None:
         super().__init__(view)
@@ -2852,13 +2902,23 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
             self._view.current_changed.add_qt_signal(self._rendered_object.currentChanged)
             self.refresh()
 
-    @staticmethod
-    def _refresh_current_index(_view: TabView, rendered_object: QTabWidget, value: int) -> None:
+    def _refresh_current_index(
+        self, _view: TabView, rendered_object: QTabWidget, value: int
+    ) -> None:
+        self._build_tab(value)
         rendered_object.setCurrentIndex(value)
 
     def _update_current_index(self, index: int) -> None:
+        self._build_tab(index)
         with self.stop_refresh():
             self._view.current_index = index
+
+    def _build_tab(self, index: int) -> None:
+        tabs = self._view.tabs
+        if 0 <= index < len(tabs):
+            renderer = tabs[index].renderer
+            assert isinstance(renderer, QtTabPageRenderer)
+            renderer.build()
 
 
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
@@ -2889,8 +2949,12 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
     """The pages, stacked, and a toolbar of their actions that the window docks.
 
     Each page sits in a slot of its own: the stack shows and hides its slots, which
-    leaves the page's own `is_visible` to the page.
+    leaves the page's own `is_visible` to the page. A page is built the first time it's
+    shown, so an app's many pages don't slow its start.
     """
+
+    #: read by `Router`: it renders only the page shown, and this renderer the others
+    renders_on_demand = True
 
     def __init__(self, view: Router) -> None:
         super().__init__(view)
@@ -2912,13 +2976,12 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
                 assert page.action.renderer.qt_object is not None
                 self.toolbar.addAction(page.action.renderer.qt_object)
                 slot = QWidget()
-                slot_layout = QVBoxLayout(slot)
-                slot_layout.setContentsMargins(0, 0, 0, 0)
-                assert isinstance(page.renderer, QtPageRenderer)
-                assert page.renderer.qt_object is not None
-                slot_layout.addWidget(page.renderer.qt_object)
+                QVBoxLayout(slot).setContentsMargins(0, 0, 0, 0)
                 self._slots[page.route] = slot
                 self._rendered_object.addWidget(slot)
+                if page.renderer is None:
+                    # its dialogs, rendered already, open over the window before it's built
+                    _adopt_dialogs(page, self._rendered_object)
             self.refresh()
 
     def _refresh_current_route(
@@ -2926,7 +2989,24 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
     ) -> None:
         slot = self._slots.get(value)
         if slot is not None:
+            self._fill_slot(value, slot)
             rendered_object.setCurrentWidget(slot)
+
+    def _fill_slot(self, route: str, slot: QWidget) -> None:
+        """Put the page on `route` in its slot, building the page the first time it's shown."""
+        layout = slot.layout()
+        assert layout is not None
+        if layout.count() > 0:
+            return
+        page = self._view.page(route)
+        assert page is not None
+        if page.renderer is None:
+            page.render(RendererType.QT)
+        assert isinstance(page.renderer, QtPageRenderer)
+        assert page.renderer.qt_object is not None
+        layout.addWidget(page.renderer.qt_object)
+        # its visibility once in the slot: reparenting the widget hid it
+        page.renderer.qt_object.setVisible(page.is_visible)
 
 
 class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):

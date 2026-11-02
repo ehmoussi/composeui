@@ -58,6 +58,12 @@ def has_renderer(renderer_type: RendererType, key: str) -> bool:
     return key in importlib.import_module(renderer_type.value.renderers).RENDERERS
 
 
+def renders_on_demand(renderer_type: RendererType, key: str) -> bool:
+    """Whether `renderer_type`'s renderer of `key` builds the pages or tabs not shown once shown."""
+    factory = importlib.import_module(renderer_type.value.renderers).RENDERERS.get(key)
+    return bool(getattr(factory, "renders_on_demand", False))
+
+
 def create_renderer(renderer_type: RendererType, key: str, view: Any) -> Renderer[Any, Any] | None:
     """Create the renderer registered under `key` by `renderer_type`'s backend.
 

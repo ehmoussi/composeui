@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyqtgraph as pg
 import pytest
-from qtpy.QtCore import QDate, QEvent, QModelIndex, QPoint, QPointF, QSize, Qt, QUrl
+from qtpy.QtCore import QDate, QEvent, QModelIndex, QObject, QPoint, QPointF, QSize, Qt, QUrl
 from qtpy.QtGui import (
     QAction,
     QColor,
@@ -105,6 +105,7 @@ from composeui.core.view import (
     SourceTableView,
     T,
     TableView,
+    TabView,
     TextAreaView,
     TreeNode,
     replace_cell,
@@ -143,6 +144,7 @@ from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView
 from tests.hours import HoursMainView
+from tests.latepages import LatePagesMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.lonerows import LoneRowsMainView
 from tests.maps import MapMainView
@@ -1197,30 +1199,20 @@ def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot)
 def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.render(RendererType.QT)
-    assert isinstance(view.pages.results.summary.renderer, QtWidgetRenderer)
-    box = view.pages.results.summary.renderer.qt_object
-    assert isinstance(box, QFilterTable)
-    table = box.table
-    model = table.model()
-    assert model.headerData(3, Qt.Orientation.Horizontal) == "Half Length"
-    radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius)
-    assert isinstance(radius_widget, QLineEdit)
-
-    radius_widget.show()
-    radius_widget.setFocus()
-    radius_widget.selectAll()
-    qtbot.keyClicks(radius_widget, "35")
-    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
-
-    cells = [model.index(0, column).data() for column in range(model.columnCount())]
-    assert cells == ["Main Pipe", "35", "20", "200"]
-
     assert isinstance(view.renderer, QtWidgetRenderer)
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     window.resize(900, 1100)
     window.show()
     qtbot.waitExposed(window)
+    radius_widget = _field_widget(view.pages.inputs.pipe_form.main_pipe.radius)
+    assert isinstance(radius_widget, QLineEdit)
+
+    # typed before the results page is first shown: the table is built with the edit
+    radius_widget.setFocus()
+    radius_widget.selectAll()
+    qtbot.keyClicks(radius_widget, "35")
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
     name_renderer = view.pages.inputs.pipe_form.name.renderer
     assert isinstance(name_renderer, RendererContainer)
     name_label = name_renderer.get_renderer("label")
@@ -1228,6 +1220,12 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     assert isinstance(name_label.qt_object, QFormLabel)
     label_left = name_label.qt_object.mapTo(window, QPoint(0, 0)).x()
     view.pages.navigate("results")
+    table = _table(view.pages.results.summary)
+    model = table.model()
+    assert model.headerData(3, Qt.Orientation.Horizontal) == "Half Length"
+    cells = [model.index(0, column).data() for column in range(model.columnCount())]
+    assert cells == ["Main Pipe", "35", "20", "200"]
+
     qtbot.waitUntil(table.isVisible)
     # as tall as its rows in the window: no empty block under them
     rows_height = model.rowCount() * table.rowHeight(0)
@@ -1238,6 +1236,12 @@ def test_the_summary_table_shows_each_edit_and_cannot_be_edited(qtbot: QtBot) ->
     table.setFocus()
     qtbot.keyClick(table, Qt.Key.Key_F2)  # the edit key
     assert table.state() is not QAbstractItemView.State.EditingState
+
+    view.pages.navigate("inputs")
+    radius_widget.selectAll()
+    qtbot.keyClicks(radius_widget, "40")
+    qtbot.keyClick(radius_widget, Qt.Key.Key_Return)
+    assert model.index(0, 1).data() == "40"  # built already: the table follows each edit
 
 
 def _qt_part(row: Any, part: str) -> QWidget:
@@ -1588,6 +1592,19 @@ def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) ->
             assert first.left() == 0
 
 
+class _WindowsShown(QObject):
+    """Record the windows Qt shows, e.g. a widget shown before it's in a layout."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.shown: list[QWidget] = []
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.Show and isinstance(watched, QWidget) and watched.isWindow():
+            self.shown.append(watched)
+        return False
+
+
 def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     view = PagesMainView()
     view.render(RendererType.QT)
@@ -1600,29 +1617,142 @@ def test_the_toolbar_shows_one_page_at_a_time(qtbot: QtBot) -> None:
     assert isinstance(toolbar, QToolBar)
     actions = {action.text(): action for action in toolbar.actions()}
     assert list(actions) == ["Inputs", "Results"]
-    name = view.router.inputs.name.renderer
-    total = view.router.results.total.renderer
-    assert isinstance(name, QtWidgetRenderer)
-    assert isinstance(total, QtWidgetRenderer)
-    assert name.qt_object is not None
-    assert total.qt_object is not None
-    assert name.qt_object.isVisible()
-    assert not total.qt_object.isVisible()
+    name = _widget(view.router.inputs.name)
+    assert name.isVisible()
+    # a page is built the first time it's shown, from its views as they are then
+    assert view.router.results.total.renderer is None
+    view.router.results.total.text = "Total: 3"
 
     results_button = toolbar.widgetForAction(actions["Results"])
+    windows = _WindowsShown()
+    app = QApplication.instance()
+    assert app is not None
+    app.installEventFilter(windows)
     qtbot.mouseClick(results_button, Qt.MouseButton.LeftButton)
+    app.removeEventFilter(windows)
+    assert windows.shown == []  # none of its widgets flashes as a window, as it's built
     assert view.router.current_route == "results"
-    assert total.qt_object.isVisible()
-    assert not name.qt_object.isVisible()
+    total = _widget(view.router.results.total)
+    assert isinstance(total, QLabel)
+    assert total.text() == "Total: 3"
+    assert total.isVisible()  # at once, not at the event loop's next turn
+    assert total.window() is window  # in the window, not a window of its own
+    assert not name.isVisible()
     # clicking the shown page's entry again leaves it checked, the other unchecked
     qtbot.mouseClick(results_button, Qt.MouseButton.LeftButton)
     assert actions["Results"].isChecked()
     assert not actions["Inputs"].isChecked()
 
     view.router.navigate("inputs")  # from app code
-    assert name.qt_object.isVisible()
+    assert name.isVisible()
     assert actions["Inputs"].isChecked()
     assert not actions["Results"].isChecked()
+    view.router.navigate("results")
+    assert _widget(view.router.results.total) is total  # built once
+    view.router.results.is_visible = False
+    assert not total.isVisible()
+
+
+def _late_pages_window(qtbot: QtBot) -> tuple[LatePagesMainView, QMainWindow]:
+    view = LatePagesMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the tables find the jobs
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    return view, window
+
+
+def test_tables_changed_before_their_page_is_built_show_their_order_and_selection(
+    qtbot: QtBot,
+) -> None:
+    view, _ = _late_pages_window(qtbot)
+    page = view.router.rooms
+    assert page.renderer is None
+    page.rooms.records = [Room("Hall", 18), Room("Kitchen", 20.5), Room("Attic", 9)]
+    page.rooms.sort_column = 1  # temperature
+    page.rooms.sort_descending = True
+    page.rooms.search = "t"  # not the hall
+    page.rooms.selected_rows = [2]  # the attic, second once ordered
+    source = page.readings.source
+    assert isinstance(source, GatedSource)
+    page.readings.sort_column = "value"
+    page.readings.sort_descending = True  # ordered in a job, with no table to show it
+    qtbot.waitUntil(lambda: not page.readings.is_ordering)
+    source.gate.clear()
+    page.readings.sort_descending = False  # still ordering once the page is built
+
+    view.router.navigate("rooms")
+    rooms = _table(page.rooms)
+    model = rooms.model()
+    shown = [model.index(row, 0).data() for row in range(model.rowCount())]
+    assert shown == ["Kitchen", "Attic"]
+    assert rooms.horizontalHeader().sortIndicatorSection() == 1
+    assert rooms.horizontalHeader().sortIndicatorOrder() == Qt.SortOrder.DescendingOrder
+    assert [index.row() for index in rooms.selectionModel().selectedRows()] == [1]
+    box = _widget(page.readings)
+    assert isinstance(box, QDataFilterTable)
+    readings = box.table.model()
+    assert readings.index(0, 0).data() == str(source.size - 1)  # the first job's order
+    source.gate.set()
+    qtbot.waitUntil(lambda: not page.readings.is_ordering)
+    assert readings.index(0, 0).data() == "0"  # the job running as the page was built
+
+
+def test_the_dialogs_of_pages_and_tabs_not_built_open_over_the_window(qtbot: QtBot) -> None:
+    view, window = _late_pages_window(qtbot)
+    page = view.router.dialogs
+    assert page.renderer is None
+    answers: list[str] = []
+    page.confirm.accepted.connect(lambda: answers.append("confirm"))
+    page.tabs.tools.tool.accepted.connect(lambda: answers.append("tool"))
+
+    for dialog in (page.confirm, page.tabs.tools.tool):
+        dialog.open()
+        box = _widget(dialog)
+        assert isinstance(box, QMessageBox)
+        assert box.isVisible()
+        parent = box.parentWidget()
+        assert parent is not None
+        assert parent.window() is window
+        _shown_buttons(box)["OK"].click()
+        assert not box.isVisible()
+    assert answers == ["confirm", "tool"]
+
+    # open as its page and its tab view are built: they stay open, over the window
+    page.rename.content.name.text = "Ada"
+    page.rename.open()
+    page.tabs.tools.tool.open()
+    rename, tool = _widget(page.rename), _widget(page.tabs.tools.tool)
+    name = _field_widget(page.rename.content.name)
+    assert isinstance(name, QLineEdit)
+    assert name.text() == "Ada"
+    view.router.navigate("dialogs")
+    for box in (rename, tool):
+        assert box.isVisible()
+        parent = box.parentWidget()
+        assert parent is not None
+        assert parent.window() is window
+    page.rename.is_visible = False
+    page.tabs.tools.tool.is_visible = False
+    page.tabs.current_index = 1
+    page.tabs.tools.tool.open()
+    assert tool.isVisible()
+
+
+def test_a_view_rendered_alone_shows_and_hides_as_the_view_says(qtbot: QtBot) -> None:
+    view = LabelView(text="Alone")
+    view.render(RendererType.QT)
+    label = _widget(view)
+    qtbot.addWidget(label)
+    assert not label.isVisible()  # no window of its own until the app shows it
+    label.show()
+
+    view.is_visible = False
+    assert not label.isVisible()
+    view.is_visible = True
+    assert label.isVisible()
 
 
 def test_a_sidebar_is_docked_left_of_the_pages_whatever_the_page(qtbot: QtBot) -> None:
@@ -1826,23 +1956,43 @@ def test_a_tab_view_shows_the_tab_the_user_picks(qtbot: QtBot) -> None:
     ]
     picks: list[int] = []
     tabs.current_changed.connect(picks.append)
-    created = _widget(tabs.history.created)
     assert _widget(tabs.details.length).isVisible()
-    assert not created.isVisible()
+    # a tab's views are built the first time it's shown, as they are then
+    assert tabs.history.created.renderer is None
+    tabs.history.created.text = "Created on Tuesday"
 
     qtbot.mouseClick(bar, Qt.MouseButton.LeftButton, pos=bar.tabRect(1).center())
     assert (tabs.current_index, picks) == (1, [1])
-    assert created.isVisible()
+    created = _widget(tabs.history.created)
+    assert isinstance(created, QLabel)
+    assert created.text() == "Created on Tuesday"
+    assert created.isVisible()  # at once, not at the event loop's next turn
     assert tabs.current_tab is tabs.history
 
     tabs.current_index = 0  # set in code: shown, and not reported
     assert (tab_widget.currentIndex(), picks) == (0, [1])
+    assert not created.isVisible()
+    tabs.current_index = 1
+    assert _widget(tabs.history.created) is created  # built once
     tabs.history.title = "Changes"
     assert tab_widget.tabText(1) == "Changes"
+    # a tab not built yet shows its title and state on its tab all the same
+    assert tabs.notes.note.renderer is None
+    tabs.notes.title = "Remarks"
+    assert tab_widget.tabText(2) == "Remarks"
     tabs.notes.is_enabled = False
     assert not tab_widget.isTabEnabled(2)
     tabs.notes.is_visible = False
     assert not tab_widget.isTabVisible(2)
+
+
+def test_a_tab_view_without_tabs_shows_an_empty_tab_widget(qtbot: QtBot) -> None:
+    view = TabView()
+    view.render(RendererType.QT)
+    tab_widget = _widget(view)
+    assert isinstance(tab_widget, QTabWidget)
+    qtbot.addWidget(tab_widget)
+    assert tab_widget.count() == 0
 
 
 def test_a_form_dialog_s_ok_follows_its_form_s_checks(qtbot: QtBot) -> None:
@@ -2200,6 +2350,7 @@ def test_the_progress_bar_follows_its_view(qtbot: QtBot) -> None:
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     qtbot.addWidget(window)
+    view.router.navigate("results")
     progress = view.router.results.progress
     assert isinstance(progress.renderer, QtWidgetRenderer)
     bar = progress.renderer.qt_object
@@ -3884,6 +4035,18 @@ def test_a_text_like_html_shows_as_it_is(qtbot: QtBot) -> None:
     view.warning.reject()
 
 
+def _show_every_page_and_tab(view: View) -> None:
+    """Show each page of `view`'s routers and each tab of its tab views: Qt builds them."""
+    for child_view in view.children_views:
+        if isinstance(child_view, Router):
+            for page in child_view.pages:
+                child_view.navigate(page.route)
+        elif isinstance(child_view, TabView):
+            for index in range(len(child_view.tabs)):
+                child_view.current_index = index
+        _show_every_page_and_tab(child_view)
+
+
 def _widgets_of(view: View) -> list[object]:
     """Get the widgets of `view` and of its children, depth first."""
     renderer = view.renderer
@@ -3931,6 +4094,7 @@ def test_a_main_view_rendered_again_keeps_every_widget(
     view = main_view_type()
     view.render(RendererType.QT)
     qtbot.addWidget(_widget(view))
+    _show_every_page_and_tab(view)  # built once shown: all of them, to keep them all
     before = _widgets_of(view)
 
     view.render(RendererType.QT)

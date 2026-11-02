@@ -45,6 +45,10 @@ The page shown is navigation, not study data: saving, opening, and New leave it 
 
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web puts the
 toolbar in the page header, with a web address per page.
+
+Qt builds a page the first time it shows, and the web sends only the shown page. So an app
+with many pages starts as fast as one with a few. A page shows every change that code made to
+its views before it was built. Its dialogs open from any page.
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is an app with three pages: Inputs,
 Results, and Help.
 
@@ -115,7 +119,8 @@ The view starts on the first tab. Code shows another tab with `current_index`, c
 
 Qt shows a `QTabWidget`, Textual a `TabbedContent`, and the web a row of tabs. On the web,
 the arrow keys move between the tabs. The web sends only the shown tab's views: a tab's views
-arrive when the user picks it.
+arrive when the user picks it. Qt builds a tab's views the first time the tab shows, as it
+does a page. The title and state of a tab show on its tab at once.
 [`src/examples/pipechart.py`](../../src/examples/pipechart.py) shows its chart on one tab, and
 the measurements plotted on it, as a table, on another tab.
 

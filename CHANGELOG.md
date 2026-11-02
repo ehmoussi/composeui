@@ -43,6 +43,11 @@ The notable changes of each release of ComposeUI. The format follows
   page shows, so an app's other pages no longer add to each page load and response.
 - The web sends only the shown tab of a `TabView`. Its views arrive when the user picks the
   tab.
+- Qt builds a page of a `Router` the first time it shows, and the views of a tab of a
+  `TabView` the first time the tab shows. An app with many pages or tabs starts as fast as
+  one with a few. A page or a tab shows every change made before it was built. Its dialogs
+  open from any page, and the title and state of a tab show on its tab at once. Until then,
+  the views of the page or tab have no Qt widget (`renderer` is `None`).
 
 ## [0.2.0] - 2026-10-30
 

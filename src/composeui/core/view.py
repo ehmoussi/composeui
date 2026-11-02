@@ -51,7 +51,7 @@ from typing_extensions import ParamSpec, Unpack, dataclass_transform
 from composeui.core import study
 from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
-from composeui.core.registry import RendererType, create_renderer
+from composeui.core.registry import RendererType, create_renderer, renders_on_demand
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
@@ -6246,6 +6246,22 @@ class TabView(View):
         tabs = self.tabs
         return tabs[self.current_index] if len(tabs) > 0 else None
 
+    def _render_children(self, renderer_type: RendererType) -> None:
+        if not renders_on_demand(renderer_type, "tabs"):
+            super()._render_children(renderer_type)
+            return
+        # a tab gets its renderer, which shows its title and state on its tab, and its
+        # dialogs: the renderer builds its views the first time it's shown, the shown one's
+        # at once
+        for tab in self.tabs:
+            for dialog in dialogs_in(tab):
+                dialog.render(renderer_type)
+            if tab.renderer is None:
+                tab._create_renderer(renderer_type)  # noqa: SLF001
+            # a backend building tabs once shown renders the tabs themselves
+            assert tab.renderer is not None
+            tab.renderer.render()
+
 
 class GridPosition(NamedTuple):
     """A view's cell in a `GridView`, counted from 0, spanning more cells to its right or below."""
@@ -6379,6 +6395,19 @@ class PageView(View):
         return [view for view in self.children_views if view is not self.action]
 
 
+def dialogs_in(view: View) -> list[DialogView]:
+    """Get the dialogs under `view`, not those inside another dialog."""
+    dialogs: list[DialogView] = []
+    views = deque(view.children_views)
+    while len(views) > 0:
+        current = views.popleft()
+        if isinstance(current, DialogView):
+            dialogs.append(current)
+        else:
+            views.extend(current.children_views)
+    return dialogs
+
+
 @define_view
 class Router(View):
     """Pages shown one at a time, picked from a toolbar with an entry per page.
@@ -6440,6 +6469,25 @@ class Router(View):
         self._show(route)
         if is_changed:
             self.route_changed.emit(route)
+
+    def _render_children(self, renderer_type: RendererType) -> None:
+        if not renders_on_demand(renderer_type, "router"):
+            super()._render_children(renderer_type)
+            return
+        # the pages not shown, nor built yet, get only their toolbar entry, and their
+        # dialogs, which the app opens whatever the page shown: the renderer builds each
+        # page the first time it's shown, from the page's state then
+        for view in self.children_views:
+            if (
+                isinstance(view, PageView)
+                and view.route != self.current_route
+                and view.renderer is None
+            ):
+                view.action.render(renderer_type)
+                for dialog in dialogs_in(view):
+                    dialog.render(renderer_type)
+            else:
+                view.render(renderer_type)
 
     def _show(self, route: str) -> None:
         # set even when it's already the route: triggering a checked action unchecks it
