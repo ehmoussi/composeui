@@ -214,9 +214,12 @@ async def chart_image(request: Request) -> Response:
 
 def _attachment(filename: str) -> str:
     """Get the `Content-Disposition` of a download named `filename`."""
-    # the name's own letters, which a header's latin-1 may not have, and a fallback
-    ascii_name = filename.encode("ascii", "replace").decode().replace("?", "_")
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    # the name's own letters, which a header's latin-1 may not have, and a fallback of
+    # printable ASCII: a quote or a backslash would end its quoted text, and a control
+    # character the header (uvicorn refuses it, failing the download)
+    ascii_name = "".join(c if " " <= c <= "~" and c not in '"\\' else "_" for c in filename)
+    # every character but letters, digits and "_.-~" encoded: RFC 5987 takes no "/" there
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def table_csv(request: Request) -> Response:

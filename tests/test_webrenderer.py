@@ -29,6 +29,7 @@ from html.parser import HTMLParser
 from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
+from urllib.parse import unquote
 
 import pytest
 
@@ -37,7 +38,7 @@ pytest.importorskip("httpx")
 
 import attrs
 from attrs import Factory
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 from markupsafe import escape
 from starlette.testclient import TestClient
@@ -4479,6 +4480,39 @@ def test_a_console_s_link_downloads_its_text() -> None:
     assert response.headers["content-type"] == "text/plain; charset=utf-8"
     assert response.headers["content-disposition"].endswith("filename*=UTF-8''run%20%C3%A9.log")
     assert unknown.status_code == 404
+
+
+#: a download's `Content-Disposition`: a fallback name in printable ASCII, quoted, then
+#: the name itself in RFC 5987's characters
+_DISPOSITION = re.compile(
+    r"attachment; filename=\"([ !#-\[\]-~]*)\"; filename\*=UTF-8''([A-Za-z0-9!#$&+.^_`|~%-]*)"
+)
+
+
+def test_a_download_of_whatever_name_has_a_header_naming_it() -> None:
+    views: list[RunMainView] = []
+
+    class RunApp(WebApplication[RunMainView]):
+        def setup_session(self, main_view: RunMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(RunApp(build_main_view=RunMainView).create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        address = f"/widget/{_widget_id(view.output.renderer)}/text"
+
+        # any characters a name can hold: quotes, slashes, line breaks, letters beyond ASCII
+        @given(st.text(st.characters(codec="utf-8"), min_size=1, max_size=12))
+        @example('a\x1f"b\\.log')  # a control character: uvicorn refused the header
+        @example("runs/1.log")  # RFC 5987 takes no "/"
+        def download(name: str) -> None:
+            view.output.export_filename = name
+            header = client.get(address).headers["content-disposition"]
+            matched = _DISPOSITION.fullmatch(header)
+            assert matched is not None, header
+            assert unquote(matched[2]) == name
+
+        download()
 
 
 def _contains(element: _Element, element_id: str) -> bool:
