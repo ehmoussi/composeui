@@ -172,8 +172,11 @@ class DataFrameSource:
             column = self._column(sort.column)
             is_text = column_kind(column.type) is ColumnKind.TEXT
             cell = nw.col(column.name)
-            empty = cell.is_null() | (cell.cast(nw.String) == "") if is_text else cell.is_null()
-            key = cell.cast(nw.String).str.to_lowercase() if is_text else cell
+            text = cell.cast(nw.String)
+            empty = cell.is_null() | (text == "") if is_text else cell.is_null()
+            # an empty text's key is null, as a missing one's: the empty cells in the
+            # frame's order, "" sorting before null otherwise
+            key = nw.when(text != "").then(text.str.to_lowercase()) if is_text else cell
             ordered = (
                 frame.select(self._id, empty.alias(_EMPTY_KEY), key.alias(_SORT_KEY))
                 # the empty cells last in both orders, equal cells in the frame's order

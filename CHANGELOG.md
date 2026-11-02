@@ -6,6 +6,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A `DataFrameSource` sorted by a text column keeps its empty cells, "" and missing ones
+  alike, in the frame's order, as `ListSource` and `SqliteSource` do. Before, "" came first.
+
 ## [0.3.0] - 2026-11-02
 
 ### Added

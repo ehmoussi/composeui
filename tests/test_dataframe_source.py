@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import attrs
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 pytest.importorskip("narwhals")
 pytest.importorskip("polars")
@@ -15,7 +18,7 @@ import pandas as pd
 import polars as pl
 
 from composeui.core.dataframesource import DataFrameSource, points_of, series_of
-from composeui.core.view import ListSource, MapPoint, Sort, parse_filter
+from composeui.core.view import FilterError, ListSource, MapPoint, Sort, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Hashable
@@ -44,7 +47,6 @@ READINGS = [
     Reading("Delta b", 12.0, 3, datetime.datetime.fromisoformat("2023-12-31T00:00"), ok=False),
 ]
 HEADERS = {"name": "Name", "value": "Value", "count": "Count", "at": "At", "ok": "OK"}
-COLUMNS = {name: [getattr(reading, name) for reading in READINGS] for name in HEADERS}
 SCHEMA = {
     "name": pl.String,
     "value": pl.Float64,
@@ -54,9 +56,13 @@ SCHEMA = {
 }
 
 
-def _pandas() -> Any:
+def _columns(readings: list[Reading]) -> dict[str, list[Any]]:
+    return {name: [getattr(reading, name) for reading in readings] for name in HEADERS}
+
+
+def _pandas(readings: list[Reading]) -> Any:
     # as pandas reads a file: NA in text, NaN in floats, NaT in dates
-    return pd.DataFrame(COLUMNS).astype(
+    return pd.DataFrame(_columns(readings)).astype(
         {
             "name": "string",
             "value": "float64",
@@ -67,19 +73,23 @@ def _pandas() -> Any:
     )
 
 
-#: the frames of each library, by name, and whether the source needs an id column
-FRAMES: dict[str, Callable[[], DataFrameSource]] = {
-    "polars": lambda: DataFrameSource(pl.DataFrame(COLUMNS, schema=SCHEMA), HEADERS),
-    "pandas": lambda: DataFrameSource(_pandas(), HEADERS),
-    "lazy": lambda: DataFrameSource(
-        pl.DataFrame(COLUMNS, schema=SCHEMA).with_row_index("key").lazy(), HEADERS, id_column="key"
+#: the source of each library's frame of some readings, by the library's name
+FRAMES: dict[str, Callable[[list[Reading]], DataFrameSource]] = {
+    "polars": lambda readings: DataFrameSource(
+        pl.DataFrame(_columns(readings), schema=SCHEMA), HEADERS
+    ),
+    "pandas": lambda readings: DataFrameSource(_pandas(readings), HEADERS),
+    "lazy": lambda readings: DataFrameSource(
+        pl.DataFrame(_columns(readings), schema=SCHEMA).with_row_index("key").lazy(),
+        HEADERS,
+        id_column="key",
     ),
 }
 
 
 @pytest.fixture(params=list(FRAMES))
 def source(request: pytest.FixtureRequest) -> DataFrameSource:
-    return FRAMES[request.param]()
+    return FRAMES[request.param](READINGS)
 
 
 #: (sort, search, filters by column): the same as a `ListSource` of the readings orders them
@@ -120,6 +130,112 @@ def test_a_dataframe_source_orders_its_rows_as_a_list_source_does(
 
     # the ids are the rows' positions, or the lazy frame's key holding them
     assert source.ordered_ids(sort, search, filters) == expected
+
+
+# Generated readings, from few values so that cells are often equal, or equal but for
+# their case. Their text holds a regular expression's and LIKE's characters, which
+# compare as text, and a letter in two cases. Not letters whose lower case isn't their
+# `casefold` ("ß"): the frame's library compares in lower case, by design.
+# half from a pool of names that lower case orders otherwise ("B" and "a", "A" and "_")
+_NAMES = st.sampled_from(["a", "A", "B", "b_", "_", "é", "É", "a.b"]) | st.text(
+    st.sampled_from("aAbB_%.*\\' !=éÉ"), max_size=3
+)
+_VALUES = [12.0, 18.0, 20.5]
+_COUNTS = [1, 2, 10]
+_TIMES = [
+    datetime.datetime.fromisoformat(text) for text in ("2024-01-01T09:00", "2024-01-03T08:00")
+]
+
+
+@attrs.frozen
+class _Query:
+    """Readings and what a table asks of them: a sort, a search, and filters' texts."""
+
+    readings: list[Reading]
+    sort: Optional[Sort]
+    search: str
+    texts: dict[str, str]
+
+
+@st.composite
+def _queries(draw: st.DrawFn) -> _Query:
+    """Draw readings, and a search and filters often typed as a name is, maybe in other cases."""
+    readings = draw(
+        st.lists(
+            st.builds(
+                Reading,
+                st.none() | _NAMES,
+                st.none() | st.sampled_from(_VALUES),
+                st.none() | st.sampled_from(_COUNTS),
+                st.none() | st.sampled_from(_TIMES),
+                ok=st.none() | st.booleans(),
+            ),
+            max_size=8,
+        )
+    )
+    texts = _NAMES
+    names = sorted({reading.name for reading in readings if reading.name is not None})
+    if names:
+        named = st.sampled_from(names)
+        texts = texts | named | named.map(str.swapcase)
+    comparison = st.sampled_from(["", "=", "!=", "<", "<=", ">", ">="])
+
+    def compared(values: st.SearchStrategy[str]) -> st.SearchStrategy[str]:
+        return st.builds("{}{}".format, comparison, values) | st.builds(
+            "{}..{}".format, values, values
+        )
+
+    name_filter = st.builds(
+        "{}{}{}".format,
+        st.sampled_from(["", "=", "!=", "!", "*"]),
+        texts,
+        st.sampled_from(["", "*"]),
+    )
+    filter_texts = st.one_of(
+        # text filters half the time: they have the most ways to differ
+        st.tuples(st.just("name"), name_filter),
+        st.tuples(st.just("name"), name_filter),
+        st.tuples(st.just("value"), compared(st.sampled_from(_VALUES).map(str))),
+        st.tuples(st.just("count"), compared(st.sampled_from(_COUNTS).map(str))),
+        st.tuples(
+            st.just("at"), compared(st.sampled_from(_TIMES).map(datetime.datetime.isoformat))
+        ),
+        st.tuples(st.just("ok"), st.sampled_from(["true", "false", "="])),
+    )
+    # mostly a sort, by name half the time: text has the most ways to sort apart
+    sorted_by = st.builds(
+        Sort, st.sampled_from(["name", *HEADERS, "name"]), descending=st.booleans()
+    )
+    sort = st.none() | sorted_by | sorted_by
+    return _Query(readings, draw(sort), draw(texts), dict(draw(st.lists(filter_texts, max_size=2))))
+
+
+# cheap examples, many: a difference needs a few cells and a filter to meet
+@settings(max_examples=300)
+@given(_queries())
+# an empty text and a missing one, both empty: in the frame's order, not "" first
+@example(
+    _Query(
+        [Reading(None, None, None, None, ok=None), Reading("", None, None, None, ok=None)],
+        Sort("name"),
+        "",
+        {},
+    )
+)
+def test_any_query_orders_a_dataframe_s_rows_as_a_list_source_does(query: _Query) -> None:
+    reference = ListSource(Reading, HEADERS, query.readings)
+    fields = attrs.fields_dict(attrs.resolve_types(Reading))
+    filters = {}
+    for name, text in query.texts.items():
+        with contextlib.suppress(FilterError):  # e.g. an empty text
+            filters[name] = parse_filter(text, fields[name].type)
+    expected = reference.ordered_ids(query.sort, query.search, filters)
+    for library, source in FRAMES.items():
+        frame_source = source(query.readings)
+        types = {column.name: column.type for column in frame_source.columns}
+        frame_filters = {name: parse_filter(query.texts[name], types[name]) for name in filters}
+        found = frame_source.ordered_ids(query.sort, query.search, frame_filters)
+        assert found == expected, library
 
 
 def test_cells_give_python_values_by_id_and_leave_out_the_ids_gone(
