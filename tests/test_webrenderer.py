@@ -1388,6 +1388,36 @@ def test_a_file_path_with_server_roots_keeps_to_them_whatever_the_page_sends(
         assert study.path == path, typed
 
 
+#: pieces of the names a page could post for an item: separators, dots, a link out of
+#: the roots, a NUL character, and items that are there
+_NAME_PIECES = ["..", ".", "/", "\\", "~", "\0", "beam", "beam.export", "out", "other", "secret"]
+
+
+def test_no_name_a_page_posts_leads_out_of_the_server_roots(tmp_path: Path) -> None:
+    root, other = tmp_path / "studies", tmp_path / "other"
+    (root / "beam").mkdir(parents=True)
+    (root / "beam" / "beam.export").write_text("")
+    (other / "secret").mkdir(parents=True)
+    if sys.platform != "win32":  # Windows needs a privilege to make a symbolic link
+        (root / "out").symlink_to(other)
+        (root / "beam" / "out").symlink_to(other / "secret")
+    roots = serverfiles.resolve_roots([root])
+
+    @given(
+        st.sampled_from([root, root / "beam"]),
+        st.lists(st.sampled_from(_NAME_PIECES), min_size=1, max_size=5).map("".join),
+    )
+    def post(folder: Path, name: str) -> None:
+        path = serverfiles.item_path(folder, name, roots)
+        assert path is None or serverfiles.is_within(path, roots), name
+        # one item of the folder, shown: not a path, even one inside the roots, nor hidden
+        separators = [os.sep, os.altsep or os.sep, "\0"]
+        if name.startswith(".") or any(separator in name for separator in separators):
+            assert path is None, name
+
+    post()
+
+
 def test_a_file_path_s_base_folder_reads_its_relative_text_and_opens_its_server_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
