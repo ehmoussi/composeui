@@ -6,6 +6,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-02
+
 ### Added
 
 - `TextAreaView`, a field for several lines of text, and its form rows `RowTextAreaView`
@@ -166,6 +168,7 @@ The first release on PyPI.
 - A skill for coding agents that write a ComposeUI app.
 - `composeui.__version__`, the version of the installed package.
 
-[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ehmoussi/composeui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ehmoussi/composeui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ehmoussi/composeui/releases/tag/v0.1.0

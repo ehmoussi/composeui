@@ -2,7 +2,7 @@
 name: composeui
 description: "Use when writing or changing an app built with ComposeUI, the Python MVVM layer whose views are typed attrs classes that a Qt, Textual or web renderer shows: when the code imports composeui, defines a MainView, a FormView or another view with @define_view, connects a Signal, or starts an app with run(); also when choosing widgets for a screen, or judging whether ComposeUI supports a feature. Holds the rules that keep such an app correct on every backend, a minimal app, and where the documentation is."
 metadata:
-  composeui-version: "0.2"
+  composeui-version: "0.3"
 ---
 
 # ComposeUI
@@ -16,10 +16,10 @@ documentation and this skill disagree, trust the documentation.
 Full documentation: https://ehmoussi.github.io/composeui/ (an index for models is at
 https://ehmoussi.github.io/composeui/llms.txt).
 
-This file is a copy, for ComposeUI 0.2. The current skill is at
+This file is a copy, for ComposeUI 0.3. The current skill is at
 https://ehmoussi.github.io/composeui/skills/composeui/SKILL.md, published with the
 documentation of the `main` branch. `python -c "import composeui; print(composeui.__version__)"`
-gives the installed version. When it is newer than 0.2 (its first two numbers), or a name of
+gives the installed version. When it is newer than 0.3 (its first two numbers), or a name of
 this file is not in the installed `composeui`, the copy is older than the code: read the
 current skill, and tell the user to download it again.
 
@@ -34,7 +34,7 @@ When the app needs a name that no release has yet, depend on a commit of `main`:
 `[tool.uv.sources]` instead, which pip ignores. Check that the name is in that commit, and
 install the app with pip and with uv, not only in the current environment.
 
-An installed commit has a version with `.dev`, such as `0.2.1.dev4+g1a2b3c4`. Its first two
+An installed commit has a version with `.dev`, such as `0.3.1.dev4+g1a2b3c4`. Its first two
 numbers can be those of this copy, but the commit can have names that this copy does not
 know. Then read the skill of that commit, at
 https://raw.githubusercontent.com/ehmoussi/composeui/<commit>/docs/_site/skills/composeui/SKILL.md,
