@@ -44,6 +44,8 @@ jobs:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       - name: Install the system libraries offscreen Qt needs
         run: |
           sudo apt-get update
@@ -83,6 +85,8 @@ jobs:
             experimental: true
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           # Match the test checker configuration and the oldest supported Python.
@@ -104,6 +108,8 @@ jobs:
         python-version: ["3.9", "3.14"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -128,6 +134,8 @@ jobs:
       UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -142,6 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.13"
@@ -157,6 +167,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       # the API reference imports the Qt application module, which loads Qt's libraries
       - name: Install the system libraries Qt needs
         run: |
