@@ -10,6 +10,7 @@ directly through `handle_event`, the function the route calls.
 from __future__ import annotations
 
 import ast
+import asyncio
 import contextlib
 import datetime
 import enum
@@ -36,6 +37,8 @@ pytest.importorskip("httpx")
 
 import attrs
 from attrs import Factory
+from hypothesis import given
+from hypothesis import strategies as st
 from markupsafe import escape
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
@@ -92,6 +95,7 @@ from composeui.webcore import serverfiles
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
+from composeui.webcore.order import ORDER_TIMEOUT, PAGE_HEADER, POST_HEADER, PostOrder
 from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.session import MAX_FILE_SIZE, SessionStore, WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -448,6 +452,44 @@ def test_a_page_s_posts_are_handled_in_the_order_it_sent_them(
 
     assert edited == ["Ada", "Bob"]
     assert main_view.form.name.text == "Bob"
+
+
+@st.composite
+def _arrivals(draw: st.DrawFn) -> list[tuple[str, int]]:
+    """Draw the posts of one to three pages, each numbered from 1, in any order of arrival."""
+    counts = draw(st.lists(st.integers(1, 4), min_size=1, max_size=3))
+    posts = [
+        (f"{page:032x}", number)
+        for page, count in enumerate(counts)
+        for number in range(1, count + 1)
+    ]
+    return draw(st.permutations(posts))
+
+
+@given(_arrivals())
+def test_posts_arriving_in_any_order_are_handled_in_the_order_each_page_sent_them(
+    arrivals: list[tuple[str, int]],
+) -> None:
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+
+        async def post(page: str, number: int) -> None:
+            async with order.turn({PAGE_HEADER: page, POST_HEADER: str(number)}):
+                handled.append((page, number))
+
+        posts = []
+        for page, number in arrivals:
+            posts.append(asyncio.ensure_future(post(page, number)))
+            await asyncio.sleep(0)  # on its way before the next one comes
+        # all handled well before a turn times out: none waited for nothing
+        await asyncio.wait_for(asyncio.gather(*posts), ORDER_TIMEOUT / 2)
+        return handled
+
+    handled = asyncio.run(handle_all())
+    for page in {page for page, _ in arrivals}:
+        numbers = [number for handled_page, number in handled if handled_page == page]
+        assert numbers == sorted(numbers) == [n for p, n in sorted(arrivals) if p == page]
 
 
 def test_save_comes_after_the_posts_the_page_sent_before_it(
