@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 import zlib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 from composeui.core.model import InvalidStateError
 
@@ -68,6 +68,16 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     main_view.state_filepath = path
 
 
+def _archive(file: IO[bytes], invalid: str) -> zipfile.ZipFile:
+    """Read the archive in `file`; raise `InvalidStateError` with `invalid` for a damaged one."""
+    try:
+        return zipfile.ZipFile(file)
+    # Python 3.9 raises `OSError` for a directory that the file places before its start,
+    # and every Python `NotImplementedError` for a member of a version newer than it reads
+    except (zipfile.BadZipFile, OSError, NotImplementedError) as error:
+        raise InvalidStateError(invalid) from error
+
+
 def open_study(
     main_view: MainView, model: Model | None, path: Path, *, max_size: int | None = None
 ) -> None:
@@ -85,12 +95,16 @@ def open_study(
         return
     invalid = f"it isn't a valid {main_view.extension} file"
     try:
-        with zipfile.ZipFile(path) as archive:
+        # the file opened first: one that can't be read raises its own `OSError`
+        with path.open("rb") as file, _archive(file, invalid) as archive:
             members = archive.infolist()
             if sorted(member.filename for member in members) != sorted(
                 [VIEWS_NAME, model.data_name]
             ) or any(
-                member.compress_type not in _COMPRESSIONS or member.flag_bits & _ENCRYPTED
+                member.compress_type not in _COMPRESSIONS
+                or member.flag_bits & _ENCRYPTED
+                # a member before the file's start, which reading would seek to (`OSError`)
+                or member.header_offset < 0
                 for member in members
             ):
                 raise InvalidStateError(invalid)

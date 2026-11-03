@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar
 import attrs
 import pytest
 from attrs import Factory
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication
 from composeui.core.model import RefusedError
@@ -486,9 +488,14 @@ def _archive(
 
 
 def _forged(
-    views: bytes, *, declared: int | None = None, method: int | None = None, flags: int = 0
+    views: bytes,
+    *,
+    declared: int | None = None,
+    method: int | None = None,
+    flags: int = 0,
+    version: int | None = None,
 ) -> Callable[[Path], None]:
-    """Write an archive whose `views.json` lies about its size, method or flags.
+    """Write an archive whose `views.json` lies about its size, method, flags or version.
 
     Its entries say so twice, in its local header and in the central directory.
     """
@@ -503,8 +510,28 @@ def _forged(
         if method is not None:
             struct.pack_into("<H", data, local + 8, method)
             struct.pack_into("<H", data, central + 10, method)
+        if version is not None:  # needed to extract it, in tenths: 64 for 6.4
+            struct.pack_into("<H", data, local + 4, version)
+            struct.pack_into("<H", data, central + 6, version)
         struct.pack_into("<H", data, local + 6, flags)
         struct.pack_into("<H", data, central + 8, flags)
+        path.write_bytes(data)
+
+    return write
+
+
+def _misplaced(*, size: int = 0, offset: int = 0) -> Callable[[Path], None]:
+    """Write an archive whose end record says its directory is `size` or `offset` larger.
+
+    Larger, its directory starts before the file; its offset larger, its members do.
+    """
+
+    def write(path: Path) -> None:
+        _archive(b"{}", b"")(path)
+        data = bytearray(path.read_bytes())
+        end = data.rfind(b"PK\x05\x06")
+        directory_size, directory_offset = struct.unpack_from("<II", data, end + 12)
+        struct.pack_into("<II", data, end + 12, directory_size + size, directory_offset + offset)
         path.write_bytes(data)
 
     return write
@@ -526,6 +553,10 @@ def _forged(
         (_archive(b"{}", b"", zipfile.ZIP_BZIP2), "it isn't a valid .hello file"),
         (_forged(b"{}", method=9), "it isn't a valid .hello file"),
         (_forged(b"{}", flags=0x1), "it isn't a valid .hello file"),  # encrypted
+        (_forged(b"{}", version=64), "it isn't a valid .hello file"),  # newer than zipfile
+        # its directory, or its members, before the file's start: reading seeks there
+        (_misplaced(size=10_000), "it isn't a valid .hello file"),
+        (_misplaced(offset=100_000), "it isn't a valid .hello file"),
     ],
 )
 def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
@@ -542,6 +573,37 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
     assert app.model.runs.radii() == [80.0]
     assert app.main_view.form.name.text == "Bob"
     assert app.main_view.state_filepath is None
+
+
+def test_a_damaged_study_opens_or_is_refused_leaving_the_study_as_it_was(
+    app: App, tmp_path: Path
+) -> None:
+    app.main_view.form.name.text = "Ada"
+    app.model.runs.add(80.0)
+    _save(app, tmp_path / "saved.hello")
+    saved = (tmp_path / "saved.hello").read_bytes()
+    path = tmp_path / "damaged.hello"
+    # half the bytes changed in the archive's directory and end record, at its end
+    at = st.integers(0, len(saved) - 1) | st.integers(len(saved) - 100, len(saved) - 1)
+
+    @settings(max_examples=500)  # cheap examples, many: few bytes break the archive
+    @given(
+        st.lists(st.tuples(at, st.integers(0, 255)), max_size=4),
+        st.integers(0, len(saved)),
+        st.binary(max_size=8),
+    )
+    def open_damaged(changes: list[tuple[int, int]], kept: int, added: bytes) -> None:
+        data = bytearray(saved)
+        for index, byte in changes:
+            data[index] = byte
+        path.write_bytes(bytes(data[:kept]) + added)
+        views, radii = app.main_view.state_data(), app.model.runs.radii()
+        try:
+            open_study(app.main_view, app.model, path)
+        except InvalidStateError:
+            assert (app.main_view.state_data(), app.model.runs.radii()) == (views, radii)
+
+    open_damaged()
 
 
 def test_an_archive_lying_about_its_size_is_refused_before_it_is_unpacked(
