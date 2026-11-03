@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Optional
 import attrs
 import pytest
 from attrs import Factory
+from hypothesis import given
+from hypothesis import strategies as st
 
 from composeui.core.application import Application
 from composeui.core.view import (
@@ -128,6 +130,28 @@ def test_the_rows_asked_stay_while_the_rows_they_need_more_of_are_read() -> None
     rows = table.rows(SOURCE_TABLE_WINDOW - 50, end)
 
     assert all(cells[0] != "" for _row_id, cells in rows)
+
+
+#: a table's rows and the ranges it is asked for: past the cache, so windows go
+_MOST_ROWS = SOURCE_TABLE_CACHE + 3 * SOURCE_TABLE_WINDOW
+
+
+@given(
+    st.integers(0, _MOST_ROWS),
+    st.lists(
+        st.tuples(st.integers(-5, _MOST_ROWS + 5), st.integers(0, 3 * SOURCE_TABLE_WINDOW)),
+        min_size=1,
+        max_size=12,
+    ),
+)
+def test_rows_read_after_any_others_are_the_rows_a_new_table_reads(
+    count: int, asked: list[tuple[int, int]]
+) -> None:
+    table = SourceTableView(source=CountingSource(_samples(count)))
+    for start, length in asked:
+        # whatever windows the table keeps, read or let go before
+        fresh = SourceTableView(source=CountingSource(_samples(count)))
+        assert table.rows(start, start + length) == fresh.rows(start, start + length)
 
 
 def test_rows_known_by_text_ids_read_as_rows_known_by_numbers() -> None:
