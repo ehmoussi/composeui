@@ -41,8 +41,8 @@ M0 sets measurable targets for the goal, and each milestone reports against them
 - **This file holds the work that is left.** Delete an entry when it lands. The code, the
   docs, `CHANGELOG.md` and `git log` record what is done.
 - **Each entry has an identifier.** N is for data apps, W for widgets, T for tables, C for
-  charts, A for adoption, and L for later work. Keep an identifier until its work is done or
-  explicitly deferred.
+  charts, A for adoption, L for later work, and P for known problems. Keep an identifier until
+  its work is done or explicitly deferred.
 - **Milestones give the order, not dates.** Choose dates only after estimating the work.
 - **Each entry says when it is done.** A milestone is done when its acceptance examples work,
   its tests pass, its behavior is documented, and its limitations are recorded.
@@ -298,6 +298,11 @@ cancellation of long imports and exports. Keep study files, data uploads, and ex
 apart in the UI and the API. An app that accepts URLs from users defines the allowed schemes,
 hosts, and redirects before it passes them to the import.
 
+On the web, a file path field without `server_roots` uploads the file, and gives the path of a
+copy in the session. Give an uploaded file instead: its name, its size, its type, and a
+temporary file whose lifecycle the API states. A file picked on the server (`server_roots`) is
+not an upload: it stays where it is.
+
 The web's 5 MiB limit (`MAX_FILE_SIZE`) is a default, not a requirement for data apps. Make it
 configurable and test apps near it. Deliver the API in M1 and the deployment settings in M4.
 
@@ -370,8 +375,22 @@ optional adapters and their backends in the catalog. Cover keyboard navigation, 
 and errors in the reference apps. Work on it from M1 to M5; keep the public imports and the
 checks that run the docs' examples.
 
+Add helpers for testing an app as it renders, not only its views. A scientific app's dialog
+had a table with its rows in Python, but the rendered dialog did not show the table: a test of
+the views passed. The helpers:
+
+- find a control by its role and its accessible name;
+- check that a control is rendered, visible, and enabled in effect, also under a disabled
+  parent;
+- select rows, open pickers, and accept or cancel dialogs;
+- run one test case on Qt, Textual and the web.
+
+Add tests of real interaction with the backend for focus and the keyboard, where practical.
+
 **Done when:** a new developer builds, tests and packages a documented example with the public
-API, and the docs say which features differ between backends.
+API, and the docs say which features differ between backends. A test fails when a table with
+rows is missing from its rendered dialog, and finds a control under a disabled parent not
+interactive.
 
 ### N12 — Examples and adoption
 
@@ -460,6 +479,7 @@ first.
 | W13 | Sizes in forms: a field's width (short, medium, the whole row), and a compact density for the main view that reduces the gaps and the padding | M3 |
 | W14 | The router's navigation: in a toolbar or in a list on the window's side, pages grouped in sections, and a count or a badge on a page's entry | M3 |
 | W15 | A list row: a primary and a secondary text, an icon, a badge, actions at its end, and a signal when the user activates it, such as a list of recent files | M3, with W01 and W02 |
+| W16 | A command that a button, a menu entry and a toolbar entry share: its text, its enabled state, and what it runs. `Task.cancel_with` does it only to cancel a task | M3 |
 
 **Done when:** each widget has typed state and signals, validation where needed, keyboard
 behavior, translations, documentation, and tests of the real widget on the three backends. On
@@ -556,6 +576,8 @@ the main thread. Do not rebuild it. New work comes from T02, T03, N06 and L01.
 | L04 | Textual: reload in place, keeping scroll and focus | M5 |
 | L05 | Qt: a reload that keeps the widgets' own state, frees old classes, and defines what running threads do | M5 |
 | L06 | PyQt6 as a second Qt binding, with a `pyqt6` extra | When an app asks for it |
+| L07 | Optional filesystem adapters: paths between Windows and WSL, and opening a folder on the app's host | When an app asks for it |
+| L08 | Recent folders in the picker of the server's files (`server_roots`) | When an app asks for it |
 
 For A02, test the Qt package on a clean machine. An app with a map needs `map.qml`, the Qt
 Location and Qt Positioning QML modules, and the location plugins. Document each recipe in
@@ -588,6 +610,57 @@ For L06, `qtpy` already accepts `QT_API=pyqt6`. With PyQt6 6.11, the Qt tests sh
 Then run the Qt tests on PyQt6 in CI, and mypy on both bindings (`always_true` selects PySide6
 today). The extra states that PyQt6 is GPL or commercial, where PySide6 is LGPL. Do not add Qt 5
 bindings (PyQt5, PySide2): Qt 5 is past its end of life.
+
+For L07, a scientific app that runs in WSL does this work itself today:
+
+- it converts a Windows drive path with `wslpath`, and handles WSL UNC paths and the
+  distribution's name;
+- it refuses the `C:\fakepath\...` value that a browser gives for a file;
+- it opens a result folder in the Windows Explorer.
+
+An optional location service would share this work, with handlers that an app plugs in to
+convert a path and to open a folder. It tells the app's host from the browser's computer, and
+assumes no mount layout, such as `/mnt/c`. Opening a folder on the host is not opening it on a
+remote user's computer: give a remote web user another way, such as copying the server's path,
+or downloading the results that the user may read. Converting a path transfers no file, and
+gives no access to another computer's files. Done when an adapter converts a supported Windows
+path in WSL and opens a folder on the host, and a remote web user gets the other way.
+
+For L08, the web's picker of the server's files has no recent folders, so a user goes to the
+same study folder again and again. Keep a short history, within the current `server_roots`,
+and state who owns it: the web session, or the local user. A folder outside the current roots
+never shows, even if a root that held it was allowed before. Done when a test changes the roots
+and finds that the history shows no folder outside them.
+
+## Known problems
+
+These problems were found while measuring reactive methods (N02). They are on `main` and in
+0.3.0, and nothing fixes them yet. Each measure uses the same page: a `ListView` of rows, each
+row a `VerticalView` of a `LabelView`, a `CheckBoxView` and a `LabelRowSliderView`.
+
+| ID | Problem | When |
+| --- | --- | --- |
+| P01 | Qt: a page whose views have connected callbacks is never freed after its window is deleted | Next |
+| P02 | Qt: freeing a page of 1,000 rows takes about 1.2 s of garbage collection | With P01 |
+| P03 | The web renders a page about 70% slower than in 0.1.0 | Before the M1 release |
+
+For P01, connect a lambda that refers to the main view to each row's `toggled`, render the page
+on Qt, delete its window, and collect garbage: the main view stays alive. The lambda's
+`_FirstArgumentsCallback` holds it, and no Python object refers to that callback, so something
+outside Python keeps it, probably the Qt connection. Each closed window or dialog that has such
+callbacks then stays in memory. Done when a test renders such a page on Qt, deletes its window,
+collects garbage, and finds the main view gone.
+
+For P02, one full (generation 2) garbage collection frees the page in about 1.2 s, while the UI
+waits. Fixing P01 frees more pages, so more apps will pay this cost: fix both together. Done
+when the cause is known, and the measure before and after the fix is recorded in its pull
+request.
+
+For P03, `WebSession(view).page_html()` on the page takes 51 ms in 0.1.0 and 88 ms in 0.3.0
+for 300 rows, and 196 ms and 289 ms for 1,000 rows. Building the page takes the same time, and
+Qt renders it faster than in 0.1.0, so the cost is in the web renderer. Bisect from v0.1.0 to
+v0.3.0 with this measure, then profile `page_html`. Done when the cause is known, and the render
+is back near 0.1.0's time, or the feature that costs the time is recorded here.
 
 ## Reference apps
 
