@@ -154,7 +154,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   cells are often equal (wide random values rarely fail); pin each input that found a bug
   with `@example(...)`; `reject()` only for the reason the test expects; and break the code
   to show the property fails. On CI (`CI` set), `tests/conftest.py` loads Hypothesis's `ci`
-  profile: the same inputs each run. Locally, new ones each run, without a time limit.
+  profile: the same inputs each run. Locally, new ones each run, without a time limit. See
+  the `test-audit` skill ("Property-based tests (Hypothesis)").
 - `make test` fails below 100% coverage of lines and branches (`fail_under` in
   `pyproject.toml`, child processes included). A new line comes with its test, or with a
   `# pragma: no cover` that says why no test reaches it. A line only POSIX runs gets a

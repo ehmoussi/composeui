@@ -1,6 +1,6 @@
 ---
 name: test-audit
-description: "Invoke whenever writing, changing, reviewing, or sweeping ComposeUI tests. Authoring gate for new tests plus audit workflow for low-value, implementation-coupled, or duplicative tests and the test-only production seams they demand."
+description: "Invoke whenever writing, changing, reviewing, or sweeping ComposeUI tests, Hypothesis property tests included. Authoring gate for new tests plus audit workflow for low-value, implementation-coupled, or duplicative tests and the test-only production seams they demand."
 ---
 
 # Test Audit
@@ -121,6 +121,51 @@ A skipped browser test proves nothing: when the regression proof needs one,
 check the run reports it passed, not skipped, and break the script or renderer
 it covers to show it fails.
 
+## Property-based tests (Hypothesis)
+
+A property test checks a rule for inputs that Hypothesis draws, and shrinks a
+failing one to the smallest. In this repo, properties found bugs that tests at
+100% coverage missed: an empty text sorted before a missing one, a quote in a
+download's name, a damaged study, a record's `Decimal` field. Use one where:
+
+- **Two implementations must agree.** `SqliteSource` and `DataFrameSource` keep
+  the rows `ListSource` keeps; a large table's rows read after any others are the
+  rows a new table reads; a text translated again is the text built in that
+  language.
+- **A pure rule covers a wide space of inputs.** A round trip (a date shown,
+  then read; a cell's shown text edited back; a study saved, then opened), a
+  parser (filters, a catalog's placeholders), a cache, or a security check (no
+  posted name leads out of the server roots).
+- **A state machine has a small model.** A `RuleBasedStateMachine` runs the
+  session store's create, look up, drop and expiry in any order, on a fake clock.
+
+Don't use one for rendered widgets or the browser: they are too slow for many
+inputs. Don't copy the rule from the code under test: compare with an oracle of
+the test's own, such as another implementation, `str.format` itself, or a new
+object.
+
+Write it so it can fail:
+
+- **Draw from small pools.** Wide random values rarely make the input that
+  fails: draw cells that are often equal, or equal except for their case; a value
+  halfway between two steps; a translation made of its text's own pieces. Draw a
+  position within the input (`st.integers(0, len(output))`), not past its end.
+- **Pin what it found.** Add each input that found a bug with `@example(...)`, or
+  as a row of a parametrized test, so every run and CI try it. Pin a state
+  machine's sequence in an example-based test.
+- **Discard only for the reason the test expects.** Call `reject()` for that one
+  refusal (check its message); let any other error fail the test. A CSV test that
+  discarded every `RefusedError` hid the very bug it was written to catch.
+- **Build once, draw many.** A function-scoped fixture doesn't run again for each
+  input: build the app or the client in the test, then nest the `@given` function
+  in it and call it. A cheap property may take `@settings(max_examples=...)` above
+  100; say why in a comment.
+- **Know the runner.** `tests/conftest.py` removes the time limit of each input.
+  On CI (`CI` set), Hypothesis's `ci` profile tries the same inputs on each run:
+  a property misses there what its fixed inputs miss. Keep a Python version's
+  difference out of the expectations: Python before 3.12 writes a lone `"\r"`
+  unquoted in CSV lines ending with `"\n"`, so the test writes such lines quoted.
+
 ## Junk patterns
 
 The shared checklist for both modes: the authoring gate rejects a new test that
@@ -160,6 +205,11 @@ matches one, and audits hunt for existing tests that do.
   in `webcore/routes.py`;
 - names or fixtures that promise more than the input exercises, such as a
   "round-trips" test that only checks one direction;
+- property tests whose expected value repeats the code's own formula, or whose
+  inputs never reach the case their name promises (a cut drawn past the end of
+  the text);
+- `reject()` or `assume` for any error, rather than the one refusal the test
+  expects;
 - browser tests that re-check markup a `TestClient` test can see, wait with
   fixed sleeps, locate by `cui-<id>` ids, or set values through `page.evaluate`
   instead of typing (see [Browser tests](#browser-tests-playwright)).
@@ -272,15 +322,20 @@ rewrites), each passing validation on its own.
    down: a temporary `time.sleep(0.5)` in the production code it runs, such as
    `MainView.save_state`. The test must still pass; a test that waits on time
    fails. Revert the delay before continuing.
-4. Run `make lint`, then `git diff --check`.
-5. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
+4. For a property test, break each part of the code it checks, one at a time.
+   Run it a few times without saved inputs (`rm -rf .hypothesis`), and once with
+   `CI=true`, and count how often it fails. Narrow its inputs, raise its
+   `max_examples`, or pin the case with `@example` until it fails each time.
+   Revert each break.
+5. Run `make lint`, then `git diff --check`.
+6. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
    Compare coverage against the baseline run and explain any drop.
    When browser tests, `webcore/static/page.js` or the markup they rely on changed, also
    run `make browser-test` (once: `uv run --group browser playwright install
    chromium`) and check they passed rather than skipped; `make test` excludes them.
-6. Inspect `git diff --numstat`; report production/examples separately from
+7. Inspect `git diff --numstat`; report production/examples separately from
    tests and test support.
-7. After final audit edits, run the `code-review` skill on the diff.
+8. After final audit edits, run the `code-review` skill on the diff.
 
 ## Landing and continuation
 
