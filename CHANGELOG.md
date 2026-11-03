@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, a job's `finished` callback can start another job or task. It raised
+  `CalledInJobError`: the web hands a job's outcome over in the job's thread, which took the
+  callback for the job's own function.
 - A `DataFrameSource` sorted by a text column keeps its empty cells, "" and missing ones
   alike, in the frame's order, as `ListSource` and `SqliteSource` do. Before, "" came first.
 - On the web, a download whose `export_filename` holds a control character no longer fails:

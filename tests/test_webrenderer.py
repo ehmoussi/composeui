@@ -4966,6 +4966,39 @@ def test_the_page_asks_for_what_jobs_change_while_they_run(
     assert _swapped(polled, total_id).text == "Total: 7"
 
 
+def test_a_job_s_finished_callback_starts_the_next_job(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    pages_client.get("/results")
+    (main_view,) = pages_views
+    results, submit = main_view.router.results, main_view.router.inputs.submit
+    total_id = _widget_id(results.total.renderer)
+
+    def first(_job: Job[int]) -> int:
+        return 3
+
+    def second(_job: Job[int], value: int) -> int:
+        return value * 2
+
+    def show(total: int) -> None:
+        results.total.text = f"Total: {total}"
+
+    def start_second(value: int) -> None:
+        # the web runs it in the first job's thread, under the session's lock
+        main_view.jobs.start(second, value).finished.connect(show)
+
+    def start() -> None:
+        main_view.jobs.start(first).finished.connect(start_second)
+
+    submit.clicked.connect(start)
+    pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    deadline = time.monotonic() + 10
+    while results.total.text != "Total: 6" and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert _swapped(pages_client.get("/jobs").text, total_id).text == "Total: 6"
+
+
 # handed over by the view it changes, or by the main view, as an app does
 @pytest.mark.parametrize("through_main_view", [False, True])
 def test_what_a_thread_changes_comes_with_the_session_s_next_response(

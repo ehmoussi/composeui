@@ -46,6 +46,20 @@ def current_job() -> Job[Any, Any] | None:
     return job
 
 
+def _as_main_thread(callback: Callable[[], None]) -> None:
+    """Call `callback` as the main thread does, wherever the backend runs it.
+
+    The web backend runs it in the job's thread, under the session's lock: there, the
+    callback may start jobs, as on the main thread of a toolkit.
+    """
+    job = current_job()
+    _CURRENT.job = None
+    try:
+        callback()
+    finally:
+        _CURRENT.job = job
+
+
 def _check_main_thread(method: str) -> None:
     """Raise `CalledInJobError` in a job's thread: `Jobs` is only changed on the main one."""
     if current_job() is not None:
@@ -474,7 +488,7 @@ class Jobs:
                 self._results.put(callback)
                 return
         # outside the lock: a web session's renderer takes the session's lock
-        renderer.call_on_main_thread(callback)
+        renderer.call_on_main_thread(functools.partial(_as_main_thread, callback))
 
     def hand_over_to(self, renderer: Renderer[Any, Any] | RendererContainer[Any]) -> None:
         """Hand the results queued before the main view was rendered to `renderer`, its own.
