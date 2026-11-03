@@ -20,6 +20,11 @@ The notable changes of each release of ComposeUI. The format follows
 - On the web, a click on a chart whose pointer moves a little, up to 3 pixels, is a click
   again: `clicked` emits it. uPlot took any move for a drag. It lost the click, and zoomed
   the chart into the pixels that the pointer moved across.
+- A `RecordTableView` edits a field of `decimal.Decimal`, or of an enum of numbers. The
+  table refused every edit of such a cell, even of the text that the cell showed. An enum's
+  cell now takes a member's value, as the cell shows it, and an enum that is also a `str`
+  gets its member, not a plain `str`. A study saves a `Decimal` as its exact text: saving
+  one failed.
 
 ## [0.3.0] - 2026-11-02
 

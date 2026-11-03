@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import datetime
+import decimal
 import enum
 import json
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 import attrs
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
@@ -15,8 +19,10 @@ from composeui.core.view import (
     CellWidget,
     Column,
     InvalidStateError,
+    MainView,
     RecordTableView,
     T,
+    child,
     define_view,
 )
 from tests.tables import COLUMNS, Room, RoomsMainView
@@ -205,6 +211,127 @@ def test_a_study_saves_and_loads_the_records_by_their_type(tmp_path: Path) -> No
     loaded.reset_state()
     assert loaded.rooms.records == RoomsMainView().rooms.records
     assert loaded.others.records == []
+
+
+class _Level(enum.Enum):
+    LOW = 1
+    HIGH = 2
+
+
+class _Size(enum.IntEnum):
+    SMALL = 1
+    LARGE = 2
+
+
+class _Shade(str, enum.Enum):
+    LIGHT = "light"
+    DARK = "dark"
+
+
+@attrs.frozen
+class _Sample:
+    """A record with a field of each type a cell parses."""
+
+    name: str
+    count: int
+    ratio: float
+    is_kept: bool
+    price: decimal.Decimal
+    day: datetime.date
+    taken: datetime.datetime
+    level: _Level
+    size: _Size
+    shade: _Shade
+    spare: Optional[int]
+
+
+@define_view
+class _SamplesMainView(MainView):
+    app_title = "Samples"
+    extension = ".samples"
+
+    samples: RecordTableView[_Sample] = child(
+        RecordTableView[_Sample],
+        columns=[Column(name, name, editable=True) for name in attrs.fields_dict(_Sample)],
+    )
+
+
+_SAMPLE = _Sample(
+    name="Pump",
+    count=2,
+    ratio=0.5,
+    is_kept=True,
+    price=decimal.Decimal("9.50"),
+    day=datetime.date(2026, 11, 3),
+    taken=datetime.datetime(2026, 11, 3, 8, tzinfo=datetime.timezone.utc),
+    level=_Level.HIGH,
+    size=_Size.LARGE,
+    shade=_Shade.DARK,
+    spare=None,
+)
+
+
+_SAMPLES = st.builds(
+    _Sample,
+    st.text(),
+    st.integers(),
+    st.floats(allow_nan=False),
+    st.booleans(),
+    st.decimals(allow_nan=False, allow_infinity=False),
+    st.dates(),
+    st.datetimes(timezones=st.none() | st.just(datetime.timezone.utc)),
+    st.sampled_from(_Level),
+    st.sampled_from(_Size),
+    st.sampled_from(_Shade),
+    st.none() | st.integers(),
+)
+
+
+def test_a_cell_edited_to_the_text_another_shows_takes_its_value() -> None:
+    main_view = Application(build_main_view=_SamplesMainView).main_view
+    table = main_view.samples
+
+    @given(_SAMPLES, _SAMPLES)
+    def edit(record: _Sample, other: _Sample) -> None:
+        table.records = [record, other]
+        main_view.status_bar.clear_message()
+        for column, name in enumerate(attrs.fields_dict(_Sample)):
+            table.emit_cell_edited(0, column, table.rows[1][column])
+            # the other's value, of the field's type: an enum's member, not its value
+            edited, expected = getattr(table.records[0], name), getattr(other, name)
+            assert (edited, type(edited)) == (expected, type(expected)), name
+            assert main_view.status_bar.message == "", name
+
+    edit()
+
+
+# a decimal that isn't a number; an enum's name, which no cell shows: its value does
+@pytest.mark.parametrize(("field", "text"), [("price", "cheap"), ("level", "HIGH")])
+def test_a_decimal_or_an_enum_cell_that_doesn_t_parse_refuses_the_edit(
+    field: str, text: str
+) -> None:
+    main_view = Application(build_main_view=_SamplesMainView).main_view
+    table = main_view.samples
+    column = list(attrs.fields_dict(_Sample)).index(field)
+    table.records = [_SAMPLE]
+
+    table.emit_cell_edited(0, column, text)
+
+    assert table.records == [_SAMPLE]
+    assert main_view.status_bar.message == f'{field}: "{text}" isn\'t a valid value'
+
+
+def test_a_study_saves_decimals_as_they_are_and_enums_of_numbers(tmp_path: Path) -> None:
+    main_view = _SamplesMainView()
+    main_view.samples.records = [_SAMPLE]
+    path = tmp_path / "study.samples"
+    main_view.save_state(path)
+    saved = json.loads(path.read_text())["views"]["samples"]["records"][0]
+    assert (saved["price"], saved["level"], saved["size"]) == ("9.50", 2, 2)  # exact
+
+    opened = _SamplesMainView()
+    opened.load_state(path)
+    assert opened.samples.records == [_SAMPLE]
 
 
 def test_a_study_with_records_that_don_t_fit_is_refused() -> None:

@@ -1554,10 +1554,25 @@ def _structure_datetime(value: Any, _type: type) -> datetime.datetime:
     )
 
 
+def _unstructure_decimal(value: decimal.Decimal) -> str:
+    # its exact text: JSON has no decimals, and a float would round it
+    return str(value)
+
+
+def _structure_decimal(value: Any, _type: type) -> decimal.Decimal:
+    try:
+        return decimal.Decimal(str(value))
+    except decimal.InvalidOperation as error:  # an `ArithmeticError`: a bad state's error
+        msg = f"{value!r} isn't a decimal number"
+        raise ValueError(msg) from error
+
+
 # registered with their type: cattrs can't read a postponed annotation on 3.9
 CONVERTER.register_unstructure_hook(datetime.date, _unstructure_date)
 CONVERTER.register_structure_hook(datetime.date, _structure_date)
 CONVERTER.register_structure_hook(datetime.datetime, _structure_datetime)
+CONVERTER.register_unstructure_hook(decimal.Decimal, _unstructure_decimal)
+CONVERTER.register_structure_hook(decimal.Decimal, _structure_decimal)
 
 
 def is_date_format(date_format: str) -> bool:
@@ -4108,6 +4123,25 @@ def _cell_text(value: Any) -> str:
     return "" if value is None else str(CONVERTER.unstructure(value))
 
 
+def _parse_cell(text: str, field_type: Any) -> Any:
+    """Parse a cell's text into a record's field of `field_type`, as its cell shows it.
+
+    An enum's member by the text of its value: cattrs would read "1" as text, or an
+    `IntEnum`'s as an `int`. Raises a `ValueError` for text no cell shows.
+    """
+    types = [arg for arg in get_args(field_type) if arg is not type(None)]
+    if text == "" and len(types) < len(get_args(field_type)):
+        return None  # an empty cell: an `Optional` field's None
+    base = types[0] if get_origin(field_type) is Union and len(types) == 1 else field_type
+    if isinstance(base, type) and issubclass(base, enum.Enum):
+        for member in base:
+            if _cell_text(member) == text:
+                return member
+        msg = f"{text!r} isn't a value of {base.__name__}"
+        raise ValueError(msg)
+    return _CELL_CONVERTER.structure(text, field_type)
+
+
 @define_view
 class RecordTableView(TableView, Generic[RecordT]):
     """A table of records, `attrs` instances, each a row with a cell per column.
@@ -4253,10 +4287,7 @@ class RecordTableView(TableView, Generic[RecordT]):
         name = self.columns[column].field
         field_type: Any = attrs.fields_dict(attrs.resolve_types(type(old)))[name].type
         try:
-            if text == "" and type(None) in get_args(field_type):
-                value = None
-            else:
-                value = _CELL_CONVERTER.structure(text, field_type)
+            value = _parse_cell(text, field_type)
         except _BAD_STATE_ERRORS as error:
             main_view = None if self._main_view is None else self._main_view()
             if main_view is not None:

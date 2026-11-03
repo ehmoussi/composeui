@@ -24,7 +24,9 @@ runs: RecordTableView[Run] = child(
   index in `rows`. A double click on a cell that edits, or on a button or a link, doesn't.
   On Textual and the web, Enter also selects the row first.
 - The table parses an edited cell into the type of its field, through the `cattrs`
-  converter of the views. `record_edited` emits the old and the new record.
+  converter of the views. In an enum's cell, the user types a member's value as the cell
+  shows it, such as `1` or `red`, not the member's name. `record_edited` emits the old and
+  the new record.
 - When a cell doesn't parse, the table refuses the edit and says why in the status bar.
 
 The study saves and loads the records by their type. So build the table as
