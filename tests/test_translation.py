@@ -10,9 +10,18 @@ from typing import TYPE_CHECKING, Any, Optional
 import attrs
 import pytest
 from attrs import Factory
+from hypothesis import given
+from hypothesis import strategies as st
 
 from composeui.core.application import _add_reference_to_signals
-from composeui.core.translation import T, TranslatedText, load_catalog, no_translation, translator
+from composeui.core.translation import (
+    T,
+    TranslatedText,
+    load_catalog,
+    no_translation,
+    translate_again,
+    translator,
+)
 from composeui.core.view import (
     ButtonView,
     CellWidget,
@@ -250,6 +259,90 @@ def test_formatted_text_follows_the_language_with_its_arguments(tmp_path: Path) 
 
     main_view.set_language("en")
     assert main_view.status_bar.message == "Picked Red"
+
+
+#: French, for text as written: its arguments by name, in another order, or by position
+_FRENCH = {
+    "Room": "Pièce",
+    "Kitchen": "Cuisine",
+    "{n} rooms": "{n} pièces",
+    "{a} and {b}": "{b} et {a}",
+    "{} of {}": "{} de {}",
+}
+
+#: text as a tree: a word, a number, or a text formatted with the texts under it
+_Text = Any
+
+
+def _texts() -> st.SearchStrategy[_Text]:
+    leaves = st.sampled_from(["Room", "Kitchen", "plain"]) | st.integers(0, 9)
+    return st.recursive(
+        leaves,
+        lambda inner: st.one_of(
+            st.tuples(st.just("{n} rooms"), st.lists(inner, min_size=1, max_size=1)),
+            st.tuples(
+                st.sampled_from(["{a} and {b}", "{} of {}"]),
+                st.lists(inner, min_size=2, max_size=2),
+            ),
+        ),
+        max_leaves=6,
+    )
+
+
+def _as_written(text: _Text) -> Any:
+    """Build `text` as an app does: `T` and its `format`, "plain" a str no one translates."""
+    if isinstance(text, int):
+        return text
+    if isinstance(text, str):
+        return text if text == "plain" else T(text)
+    source, under = text
+    values = [_as_written(value) for value in under]
+    if source == "{n} rooms":
+        return T(source).format(n=values[0])
+    return (
+        T(source).format(*values)
+        if source == "{} of {}"
+        else T(source).format(a=values[0], b=values[1])
+    )
+
+
+def _built_in(text: _Text, translate: Any) -> Any:
+    """Build `text` straight in the language `translate` translates into; a number as is."""
+    if isinstance(text, int):
+        return text
+    if isinstance(text, str):
+        return text if text == "plain" else translate(text)
+    source, under = text
+    values = [str(_built_in(value, translate)) for value in under]
+    if source == "{n} rooms":
+        return translate(source).format(n=values[0])
+    if source == "{} of {}":
+        return translate(source).format(*values)
+    return translate(source).format(a=values[0], b=values[1])
+
+
+@given(st.lists(_texts(), max_size=3), st.sampled_from([list, tuple, dict]))
+def test_text_translated_again_is_the_text_built_in_that_language(
+    texts: list[_Text], kind: type
+) -> None:
+    def french(text: str) -> str:
+        return _FRENCH.get(text, text)
+
+    def shown(value: Any) -> Any:
+        return value if isinstance(value, int) else str(value)
+
+    written = [_as_written(text) for text in texts]
+    # a dict's keys are text too, e.g. a choice's labels
+    held: Any = dict(zip([T("Room"), *written], written)) if kind is dict else kind(written)
+    for translate in (french, no_translation, french):  # into French, back, then again
+        held = translate_again(held, translate)
+        expected = [_built_in(text, translate) for text in texts]
+        if kind is dict:
+            keys = [_built_in("Room", translate), *expected]
+            assert {shown(k): shown(v) for k, v in held.items()} == dict(zip(keys, expected))
+        else:
+            assert [shown(value) for value in held] == expected
+        assert type(held) is kind  # a tuple stays a tuple
 
 
 def test_text_made_from_a_translation_stays_in_its_language(tmp_path: Path) -> None:
