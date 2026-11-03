@@ -4966,6 +4966,28 @@ def test_the_page_asks_for_what_jobs_change_while_they_run(
     assert _swapped(polled, total_id).text == "Total: 7"
 
 
+@define_view
+class GuestsMainView(MainView):
+    guests: TableView = child(TableView, headers=["Name"])
+    add: ButtonView = child(ButtonView, text="Add")
+
+
+def test_a_row_added_with_plus_equals_comes_with_the_response() -> None:
+    main_view = GuestsMainView()
+    session = WebSession(main_view)
+
+    def add() -> None:
+        # in place before, the same list set back: the table saw no change
+        main_view.guests.rows += [["Ada"]]
+
+    main_view.add.clicked.connect(add)
+    response = session.handle_event(_widget_id(main_view.add.renderer), "click", {})
+
+    assert response is not None
+    table_id = _widget_id(main_view.guests.renderer)
+    assert "Ada" in _swapped(response[0], table_id).text
+
+
 def test_a_job_s_finished_callback_starts_the_next_job(
     pages_views: list[PagesMainView], pages_client: TestClient
 ) -> None:

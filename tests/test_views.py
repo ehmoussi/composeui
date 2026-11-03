@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import datetime
+import pickle
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from attrs import Factory
@@ -23,6 +26,8 @@ from composeui.core.view import (
     LanguageMenu,
     ListView,
     MainView,
+    MapPoint,
+    MapView,
     NodeMark,
     RowInputView,
     TableView,
@@ -41,6 +46,9 @@ from tests.console import RunMainView
 from tests.pages import InputsPage
 from tests.splitter import StudySplitter
 from tests.tabs import PipeTabs
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _note(_instance: object, _attribute: object, value: str) -> str:
@@ -468,3 +476,65 @@ def test_saving_the_summary_asks_before_replacing_a_file_unless_the_picker_did(
     )
     dialog.accept()
     assert written == [summary]
+
+
+# a view's lists: set anew, never changed in place
+
+_CHANGES_IN_PLACE: list[Callable[[list[Any]], object]] = [
+    lambda items: items.append(["Ada"]),
+    lambda items: items.extend([["Ada"]]),
+    lambda items: items.insert(0, ["Ada"]),
+    lambda items: items.pop(),
+    lambda items: items.remove(["Bob"]),
+    lambda items: items.clear(),
+    lambda items: items.sort(),
+    lambda items: items.reverse(),
+    lambda items: items.__setitem__(0, ["Ada"]),
+    lambda items: items.__setitem__(slice(0, 1), [["Ada"]]),
+    lambda items: items.__delitem__(0),
+]
+
+
+@pytest.mark.parametrize("change", _CHANGES_IN_PLACE)
+def test_a_view_s_list_and_its_inner_lists_refuse_a_change_in_place(
+    change: Callable[[list[Any]], object],
+) -> None:
+    table = TableView(rows=[["Bob"]])
+
+    with pytest.raises(TypeError, match=r"^TableView\.rows can't change in place"):
+        change(table.rows)
+    with pytest.raises(TypeError, match=r"^TableView\.rows can't change in place"):
+        change(table.rows[0])
+
+    assert table.rows == [["Bob"]]
+
+
+def test_a_view_s_list_set_again_or_with_plus_equals_refuses_its_changes_too() -> None:
+    points = MapView(points=[MapPoint(latitude=48.9, longitude=2.3)])
+    shown = points.points
+
+    points.points += [MapPoint(latitude=45.8, longitude=4.8)]
+    points.points *= 2
+    assert len(points.points) == 4
+    assert len(shown) == 1  # set anew: the list read before is as it was
+    with pytest.raises(TypeError, match=r"^MapView\.points can't change in place"):
+        points.points.append(MapPoint(latitude=0, longitude=0))
+
+    points.points = [MapPoint(latitude=0, longitude=0)]
+    with pytest.raises(TypeError, match=r"^MapView\.points can't change in place"):
+        points.points.pop()
+
+
+def test_a_copy_of_a_view_s_list_is_a_plain_list_to_change() -> None:
+    table = TableView(rows=[["Bob"]])
+
+    for copied in (
+        list(table.rows),
+        copy.copy(table.rows),
+        copy.deepcopy(table.rows),
+        pickle.loads(pickle.dumps(table.rows)),  # noqa: S301 (our own data)
+        [*table.rows, ["Ada"]],
+    ):
+        copied.append(["Eve"])
+        assert type(copied) is list
+    assert table.rows == [["Bob"]]

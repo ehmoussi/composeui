@@ -33,6 +33,7 @@ from typing import (
     ClassVar,
     Generic,
     NamedTuple,
+    NoReturn,
     Optional,
     Protocol,
     TypeVar,
@@ -69,6 +70,7 @@ from composeui.core.translation import (
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Iterable, Iterator
+    from typing import SupportsIndex
 
     from attrs import AttrsInstance
 
@@ -501,6 +503,7 @@ def _retranslate(view: View, translate: Translate) -> None:
             continue
         if f.on_setattr is attrs.setters.frozen:
             # set once by the app, e.g. the main view's title: only a language changes it
+            translated = _fix_lists(view, f, translated)
             notify_renderer(view, f, translated)
             object.__setattr__(view, f.name, translated)
         else:
@@ -511,6 +514,116 @@ def _retranslate(view: View, translate: Translate) -> None:
         view.run_validator()
     if isinstance(view, FormView) and view.log_view.log_message != "":
         view.validate()
+
+
+_ListItemT = TypeVar("_ListItemT")
+
+
+class FixedList(list[_ListItemT]):
+    """A view field's list: read it as any list, and set a new one to change it.
+
+    A change in place would reach neither the renderer nor anything that follows the field,
+    so it raises `TypeError`. ``view.points += [point]`` sets a new list, and so works.
+    """
+
+    __slots__ = ("_field",)
+
+    def __init__(self, items: Iterable[_ListItemT] = (), field: str = "") -> None:
+        super().__init__(items)
+        self._field = field
+
+    @property
+    def field(self) -> str:
+        """Get the view field holding it, e.g. ``MapView.points``, for the error."""
+        return self._field
+
+    def _refuse(self) -> NoReturn:
+        msg = (
+            f"{self._field} can't change in place, which nothing would see: set a new list,"
+            " e.g. with += or [*items, item]"
+        )
+        raise TypeError(msg)
+
+    def append(self, _item: _ListItemT, /) -> NoReturn:
+        self._refuse()
+
+    def extend(self, _items: Iterable[_ListItemT], /) -> NoReturn:
+        self._refuse()
+
+    def insert(self, _index: SupportsIndex, _item: _ListItemT, /) -> NoReturn:
+        self._refuse()
+
+    def pop(self, _index: SupportsIndex = -1, /) -> NoReturn:
+        self._refuse()
+
+    def remove(self, _item: _ListItemT, /) -> NoReturn:
+        self._refuse()
+
+    def clear(self) -> NoReturn:
+        self._refuse()
+
+    def sort(self, *_args: Any, **_kwargs: Any) -> NoReturn:
+        self._refuse()
+
+    def reverse(self) -> NoReturn:
+        self._refuse()
+
+    def __setitem__(self, _index: Any, _value: Any, /) -> NoReturn:
+        self._refuse()
+
+    def __delitem__(self, _index: Any, /) -> NoReturn:
+        self._refuse()
+
+    def __iadd__(self, items: Iterable[_ListItemT], /) -> list[_ListItemT]:  # type: ignore[misc,override]
+        return [*self, *items]  # a new list, which `+=` then sets on the view
+
+    def __imul__(self, count: SupportsIndex, /) -> list[_ListItemT]:  # type: ignore[misc,override]
+        return list(self) * count
+
+    def __reduce__(self) -> tuple[type[list[_ListItemT]], tuple[list[_ListItemT]]]:
+        return (list, (list(self),))  # a copy, or a pickle, is a plain list
+
+
+def _unstructure_fixed_list(value: FixedList[Any]) -> list[Any]:
+    """Unstructure a view's list as any list: cattrs takes its subclass for another type."""
+    return [CONVERTER.unstructure(item) for item in value]
+
+
+CONVERTER.register_unstructure_hook(FixedList, _unstructure_fixed_list)
+
+
+def _fixed(value: Any, field: str) -> Any:
+    """Get `value` with its lists, and theirs, as `FixedList`; anything else as it is."""
+    if not isinstance(value, list):
+        return value
+    if type(value) is FixedList and value.field == field:
+        return value  # its own lists are fixed already
+    return FixedList((_fixed(item, field) for item in value), field)
+
+
+def _fix_lists(instance: View, attribute: Any, value: Any) -> Any:
+    """Set a list as a `FixedList` (an ``on_setattr`` hook of every view field).
+
+    Not in a private field: the view's own code may change it in place.
+    """
+    if attribute.name.startswith("_"):
+        return value
+    return _fixed(value, f"{type(instance).__name__}.{attribute.name}")
+
+
+def _fix_lists_on_set(_cls: type, fields: list[Any]) -> list[Any]:
+    """Run `_fix_lists` first among the hooks of each field that has hooks of its own."""
+    fixed = []
+    for field in fields:
+        hooks = field.on_setattr
+        if (
+            hooks is not None
+            and hooks is not attrs.setters.NO_OP
+            and hooks is not attrs.setters.frozen
+        ):
+            field = field.evolve(on_setattr=attrs.setters.pipe(_fix_lists, hooks))  # noqa: PLW2901
+        fixed.append(field)
+    return fixed
 
 
 _ClassT = TypeVar("_ClassT", bound=type)
@@ -536,7 +649,10 @@ def define_view(
         own = options.pop("on_setattr", [])
         hooks = list(own) if isinstance(own, Sequence) else [own]
         return attrs.define(
-            cls, on_setattr=[attrs.setters.validate, *hooks, notify_renderer], **options
+            cls,
+            on_setattr=[_fix_lists, attrs.setters.validate, *hooks, notify_renderer],
+            field_transformer=_fix_lists_on_set,
+            **options,
         )
 
     if cls is None:
@@ -593,9 +709,12 @@ class View:
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
-            signal = getattr(self, f.name, None)
-            if isinstance(signal, Signal):
-                signal.set_name(f"{type(self).__name__}.{f.name}")
+            value = getattr(self, f.name, None)
+            if isinstance(value, Signal):
+                value.set_name(f"{type(self).__name__}.{f.name}")
+            elif isinstance(value, list) and not f.name.startswith("_"):
+                # as `_fix_lists` sets it: the hooks don't run in `__init__`
+                object.__setattr__(self, f.name, _fixed(value, f"{type(self).__name__}.{f.name}"))
         self.retranslate()
 
     def tr(self, text: str) -> TranslatedText:

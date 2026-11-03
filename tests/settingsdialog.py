@@ -7,7 +7,6 @@ from typing import Optional
 import attrs
 
 from composeui.core.view import (
-    OMIT,
     ContentDialogView,
     DialogButtonView,
     InputView,
@@ -46,13 +45,12 @@ class SettingsDialog(ContentDialogView[SettingsPanel]):
 @define_view
 class SettingsMainView(MainView):
     settings: SettingsDialog = attrs.Factory(SettingsDialog)
-    #: each answer of the dialog, by its signal: "apply", "discard", "accepted" or "rejected"
-    answers: list[str] = attrs.field(
-        factory=list, init=False, repr=False, eq=False, metadata={OMIT: True}
-    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        #: each answer of the dialog, by its signal: "apply", "discard", "accepted" or
+        #: "rejected"; not a field: the test's record, not the view's state
+        self.answers: list[str] = []
         dialog = self.settings
         dialog.apply.clicked.connect(lambda: self.answers.append("apply"))
         dialog.discard.clicked.connect(lambda: self.answers.append("discard"))

@@ -6,6 +6,13 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- A list that a view holds, such as a map's `points` or a table's `rows`, can't change in
+  place: `append`, `pop`, `x[i] = ...` and the like raise a `TypeError` that names the
+  attribute. Such a change reached no renderer, so the screen kept the old list. Set a new
+  list instead: `view.points = [*view.points, point]`, or `view.points += [point]`.
+
 ### Fixed
 
 - On the web, a job's `finished` callback can start another job or task. It raised

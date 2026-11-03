@@ -37,6 +37,19 @@ widget tree of the UI, without the toolkit. One app runs on each backend without
 When code sets an attribute of a view (`view.text = "..."`), the view pushes the change to
 its renderer. You do not call `update()` or `refresh()` for normal state changes.
 
+Only setting an attribute is a change. To change a list that a view holds, such as a map's
+`points` or a table's `rows`, set a new list:
+
+```python
+view.points = [*view.points, point]
+view.points += [point]  # the same: it sets a new list
+```
+
+A change in place, such as `view.points.append(point)`, would reach no renderer, so it
+raises a `TypeError` that names the attribute. The lists inside the list, such as each row
+of `rows`, are the same. A copy, such as `list(view.points)`, is a plain list that you can
+change.
+
 ## Signals inject arguments
 
 `Signal.connect` and `Application.connect` read the callback's parameter names. When a

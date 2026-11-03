@@ -207,9 +207,12 @@ def translate_again(value: Any, translate: Translate) -> Any:
         return value.translated(translate)
     if isinstance(value, (list, tuple)):
         items = [translate_again(item, translate) for item in value]
-        if all(new is old for new, old in zip(items, value)):
-            return value
-        return type(value)(items) if type(value) in (list, tuple) else value
+        if all(new is old for new, old in zip(items, value)) or not (
+            type(value) is tuple or isinstance(value, list)
+        ):
+            return value  # unchanged, or a named tuple, which can't be built from items
+        # a subclass of list, e.g. a view's, as a new list, which the view field sets again
+        return tuple(items) if type(value) is tuple else list(items)
     if isinstance(value, dict):
         entries = [
             (translate_again(key, translate), translate_again(item, translate))

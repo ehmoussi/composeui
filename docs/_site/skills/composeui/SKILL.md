@@ -149,6 +149,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Views are reactive.** Set an attribute (`view.text = "..."`) and the renderer shows it.
   Never call `update()` or `refresh()`, and never touch a widget: the app's code does not
   see the toolkit.
+- **Set a new list to change a view's list:** `view.points = [*view.points, point]`, or
+  `view.points += [point]`. `append`, `pop`, `x[i] = ...` and the like raise `TypeError` on
+  a view's list, its inner lists too.
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
   `connect` injects them. Spell the names exactly. A callback may take fewer of the
   signal's arguments than it emits.
