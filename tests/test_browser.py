@@ -2556,16 +2556,12 @@ def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url:
     page.goto("/")
     over = page.locator(".u-over")
     expect(over).to_have_count(1)
+    chart = "charts.values().next().value"
     point = page.evaluate(
-        "(() => { const chart = charts.values().next().value;"
+        f"(() => {{ const chart = {chart};"
         " return [chart.valToPos(0, 'x'), chart.valToPos(0, 'y')]; })()"
     )
-
-    with _posted(page):
-        over.click(position={"x": point[0], "y": point[1]})
-    expect(page.get_by_text("I'm Batman")).to_be_visible()
-
-    # dragging zooms, and posts no click
+    zoom = f"(() => {{ const x = {chart}.scales.x; return [x.min, x.max]; }})()"
     clicks: list[str] = []
 
     def record(request: PageRequest) -> None:
@@ -2573,16 +2569,31 @@ def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url:
             clicks.append(request.url)
 
     page.on("request", record)
+    with _posted(page):
+        over.click(position={"x": point[0], "y": point[1]})
+    expect(page.get_by_text("I'm Batman")).to_be_visible()
+
+    # a hand moving a little as it clicks: still a click, not a zoom
     box = over.bounding_box()
     assert box is not None
+    shown = page.evaluate(zoom)
+    with _posted(page):
+        page.mouse.move(box["x"] + point[0], box["y"] + point[1])
+        page.mouse.down()
+        page.mouse.move(box["x"] + point[0] + 2, box["y"] + point[1] + 1)
+        page.mouse.up()
+    assert page.evaluate(zoom) == shown
+
+    # dragging zooms, and posts no click
     page.mouse.move(box["x"] + 10, box["y"] + 10)
     page.mouse.down()
     page.mouse.move(box["x"] + 200, box["y"] + 10, steps=5)
     page.mouse.up()
+    assert page.evaluate(zoom) != shown
     # then a click, answered: a click the drag posted would have been sent before it
     with _posted(page):
         over.click(position={"x": point[0], "y": point[1]})
-    assert len(clicks) == 1
+    assert len(clicks) == 3
     context.close()
 
 

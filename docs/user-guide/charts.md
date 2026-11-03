@@ -125,8 +125,9 @@ reference line (`uv run python -m examples.pipechart --backend qt`, or `textual`
 ## Clicks on a chart
 
 A click on the chart emits its point from `clicked`, in the values of the axes (`x`, then
-`y`). Clicks work in Qt, and on the web, where a drag still zooms. A terminal has no pointer
-to click with.
+`y`). Clicks work in Qt and on the web. On the web, a drag zooms instead: when the pointer
+moves more than 3 pixels during a click, the click is a drag. A terminal has no pointer to
+click with.
 
 [`src/examples/batman.py`](../../src/examples/batman.py) draws the Batman logo, in its own
 yellow and black, and says whether a click was on the bat

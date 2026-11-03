@@ -270,7 +270,11 @@ function chartOptions(element, spec, width) {
   return {
     width: width,
     height: element.clientHeight,
-    cursor: { dataIdx: heldIndex(spec) },
+    cursor: {
+      dataIdx: heldIndex(spec),
+      // a move within the slop is a click: no zoom (uPlot zooms from `dist` pixels)
+      drag: { dist: CLICK_SLOP + 1 },
+    },
     scales: scales,
     axes: axes,
     series: [x].concat(series),
@@ -397,14 +401,23 @@ function keepLegendWidths(legend) {
 var CLICK_SLOP = 3;
 function postClicks(element, chart) {
   var down = null;
+  function moved(event) {
+    return Math.abs(event.clientX - down.x) + Math.abs(event.clientY - down.y);
+  }
   chart.over.addEventListener("mousedown", function (event) {
     down = { x: event.clientX, y: event.clientY };
   });
+  // uPlot stops the click ending any move, a pixel too: only one past the slop, a drag
+  chart.cursor.drag.click = function (_chart, event) {
+    if (down !== null && moved(event) > CLICK_SLOP) {
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  };
+  // a click, then: pressed here, and the mouse moved within the slop, if at all
   chart.over.addEventListener("click", function (event) {
     if (down === null) return;
-    var moved = Math.abs(event.clientX - down.x) + Math.abs(event.clientY - down.y);
     down = null;
-    if (moved > CLICK_SLOP) return;
     var figure = element.closest("figure");
     htmx.ajax("POST", "/widget/" + figure.id, {
       source: figure,
