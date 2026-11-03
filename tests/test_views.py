@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 from attrs import Factory
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
@@ -273,6 +275,66 @@ def test_a_console_keeps_its_text_plain_and_the_styles_its_ansi_codes_ask_for() 
     assert console.last_line_styles == [(0, 4, TextStyle(is_bold=True))]
     console.text = "plain"
     assert console.last_line_styles == []
+
+
+#: a process's output, in pieces: text, line ends, ANSI codes (colors, a title, an
+#: erased line) and the characters they are made of, which a cut leaves on their own
+_OUTPUT_PIECES = [
+    # text often: a cut in a styled part must leave it one part
+    "a",
+    "ab",
+    "é",
+    "text",
+    "\n",
+    "\r",
+    "\r\n",
+    "\x1b[31m",
+    "\x1b[1;4m",
+    "\x1b[0m",
+    "\x1b[38;5;200m",
+    "\x1b]0;title\x07",
+    "\x1b[2K",
+    "\x1b",
+    "[",
+    "3",
+    "m",
+    ";",
+    "\x07",
+]
+
+
+@st.composite
+def _cut_output(draw: st.DrawFn) -> tuple[str, list[int]]:
+    """Draw an output, and where its pieces end: anywhere in it."""
+    output = "".join(draw(st.lists(st.sampled_from(_OUTPUT_PIECES), max_size=12)))
+    return output, sorted(draw(st.sets(st.integers(0, len(output)), max_size=4)))
+
+
+# cheap examples, many: a style must meet a cut between two of its letters
+@settings(max_examples=300)
+@given(_cut_output(), st.integers(1, 3), st.booleans())
+def test_a_console_shows_its_output_the_same_wherever_it_was_cut(
+    cut_output: tuple[str, list[int]], max_lines: int, ansi_colors: bool
+) -> None:
+    output, ends = cut_output
+
+    def shown(console: ConsoleView) -> tuple[object, ...]:
+        return (
+            console.text,
+            list(console.lines),
+            [list(styles) for styles in console.line_styles],
+            list(console.last_line_styles),
+            console.line_count,
+        )
+
+    whole = ConsoleView(max_lines=max_lines, ansi_colors=ansi_colors)
+    whole.append(output)
+    # as a process writes it: in pieces that end anywhere, an escape code or "\r\n" too
+    pieces = ConsoleView(max_lines=max_lines, ansi_colors=ansi_colors)
+    for start, end in zip([0, *ends], [*ends, len(output)]):
+        pieces.append(output[start:end])
+
+    assert shown(pieces) == shown(whole)
 
 
 def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:
