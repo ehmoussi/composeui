@@ -143,7 +143,8 @@ assert main_view.status.text == "Done: 3 rows"
 - **Start again.** `start` clears `progress`, `result`, and `error`, emits `changed` with
   `is_running` true, and returns `True`. While the task runs, another `start` returns
   `False`: it changes nothing and starts no function. Other tasks and jobs can run at the
-  same time. A `finished` or `failed` callback can start the next run.
+  same time. A `finished` or `failed` callback can start the next run. For an input that
+  changes quickly, use [`start_latest`](#run-the-latest-call-only) instead.
 - **Cancel and drop.** `task.cancel()` asks only the current run of this task to stop. As
   `job.cancel()`, it works from any thread, and the function still returns its outcome.
   `jobs.cancel()` cancels every run. New, Open, closing the app, and `jobs.drop()` clear
@@ -163,6 +164,60 @@ assert main_view.status.text == "Done: 3 rows"
 - **Not study data.** Create the task in `__attrs_post_init__`, as an attribute of the
   instance, not as a view field. The study then does not save it. New and Open keep the
   same task, and clear its state with the jobs of the study.
+
+### Run the latest call only
+
+`task.start_latest(*args, **kwargs)` starts a run for an input that changes quickly, such as
+the value of a slider that the user drags. A newer call replaces the run, so only the latest
+call shows its result:
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import LabelView, MainView, SliderView, child, define_view
+
+
+def count_pickups(_job: Job[int], hour: int) -> int:
+    return hour * 100  # Query the pickups of the hour here.
+
+
+@define_view
+class PickupsView(MainView):
+    hour: SliderView = child(SliderView, value=11, maximum=23)
+    count: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.counter = self.jobs.task(count_pickups)
+        self.hour.value_changed.connect(self.counter.start_latest)
+        self.counter.finished.connect(self.show_count)
+
+    def show_count(self, count: int) -> None:
+        self.count.text = f"{count} pickups"
+
+
+main_view = PickupsView()
+for hour in (12, 13, 14):  # As the user drags the slider.
+    main_view.hour.value = hour
+    main_view.hour.value_changed.emit(hour)
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.count.text == "1400 pickups"
+```
+
+- **It waits first.** A run waits `debounce` seconds before it calls the function: 0.2 by
+  default, or the `debounce` that `jobs.task(work, debounce=...)` gives. A newer call in that
+  time replaces the run before the function starts. So a quick move of the slider calls the
+  function once.
+- **The latest wins.** A newer call cancels the run that goes on, and drops its progress and
+  its outcome. `finished` and `failed` do not emit for a replaced run, and its result never
+  replaces the newer one. The function of a replaced run goes on until it returns, unless it
+  checks `job.is_canceled`.
+- **Its state.** `start_latest` clears `progress` and `error`, and emits `changed` with
+  `is_running` true. `result` keeps the last result until the outcome of the new run. It
+  returns nothing. While its run goes on, `start` returns `False`, as for a run of `start`.
+- **The main thread.** As `start`, call it on the main thread. From the function of a job, it
+  raises `CalledInJobError`.
+- **From a reactive method.** A [reactive method](reactive-methods.md#slow-work-in-a-task) can
+  call `start_latest` with the fields that it reads, and another one show the result.
 
 ### Show a task's state
 
@@ -215,8 +270,8 @@ assert main_view.chart.is_visible
 
 The [Uber pickups example](../../src/examples/uberpickups.py) imports its CSV file in a
 loading task. `show_state` shows the count of rows read or the error in a status line, and
-the chart and the map once the task has a result. Its `finished` callback gives them their
-data.
+the chart and the map once the task has a result. Its
+[reactive methods](reactive-methods.md) give them their data.
 
 ### Disable views while a task runs
 

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from composeui.core.model import InvalidStateError
+from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
@@ -79,6 +80,8 @@ class WebSession(RenderTarget):
     def close(self) -> None:
         """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
         with self.lock:
+            # weak references would free them too, but only once collected
+            stop_reactions(self.main_view)
             if self.model is not None:
                 self.model.close()
             if self._uploads is not None:
@@ -237,7 +240,9 @@ class WebSession(RenderTarget):
             language, title = main_view.language, main_view.title
             jobs_running = main_view.jobs.is_running
             with collect_dirty() as dirty:
-                apply()
+                # the reactive methods run once for all of the event's changes
+                with batch():
+                    apply()
                 # after: the event may hand changes over with `call_on_main_thread` too
                 body = render_dirty({**self.take_pending(), **dirty})
             if main_view.title != title and isinstance(main_view.renderer, WebMainRenderer):

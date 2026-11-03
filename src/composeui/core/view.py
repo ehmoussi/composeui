@@ -52,6 +52,11 @@ from typing_extensions import ParamSpec, Unpack, dataclass_transform
 from composeui.core import study
 from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
+from composeui.core.reactivity import (
+    batch,
+    register_types,
+    register_view_class,
+)
 from composeui.core.registry import RendererType, create_renderer, renders_on_demand
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
@@ -346,6 +351,7 @@ _RECORD_TABLE_SETUP = (
 )
 
 
+@batch()
 def _apply_state(view: View, data: dict[str, Any]) -> None:
     """Update a live view tree in place from previously saved state.
 
@@ -408,6 +414,7 @@ def _show_checked(view: View) -> None:
         views.extend(current.children_views)
 
 
+@batch()
 def _reset_state(view: View, initial: View) -> None:
     """Set a live view tree back to `initial`'s state, in place.
 
@@ -648,12 +655,14 @@ def define_view(
         options = {"kw_only": True, "slots": False, **kwargs}
         own = options.pop("on_setattr", [])
         hooks = list(own) if isinstance(own, Sequence) else [own]
-        return attrs.define(
+        defined = attrs.define(
             cls,
             on_setattr=[_fix_lists, attrs.setters.validate, *hooks, notify_renderer],
             field_transformer=_fix_lists_on_set,
             **options,
         )
+        register_view_class(defined)
+        return defined
 
     if cls is None:
         return wrap
@@ -789,6 +798,9 @@ class View:
     def _render_children(self, renderer_type: RendererType) -> None:
         for child_view in self.children_views:
             child_view.render(renderer_type)
+
+
+register_types(View, Signal)
 
 
 @define_view
@@ -6749,7 +6761,8 @@ class ListView(View, Generic[ItemT]):
         """Build `item`'s view, set up as the views built with the main view were.
 
         Its signals pass the main view and the model on, and it shows the main view's
-        language; the list's renderer renders it, if the list is rendered.
+        language; the list's renderer renders it, if the list is rendered. Set in
+        `item_views`, it starts its reactive methods if the list's are started.
         """
         view = self.build_item(item)
         main_view = None if self._main_view is None else self._main_view()

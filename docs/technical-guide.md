@@ -12,6 +12,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [The registry](#the-registry)
   - [Views and renderers](#views-and-renderers)
   - [Signals](#signals)
+  - [Reactive methods](#reactive-methods)
   - [View state](#view-state)
   - [A button click](#a-button-click)
   - [The web backend](#the-web-backend)
@@ -126,6 +127,42 @@ under the session's lock. See [A button click](#a-button-click).
 
 These names are part of the API: keep them exact.
 
+### Reactive methods
+
+`composeui.core.reactivity` runs the [reactive methods](user-guide/reactive-methods.md) of the
+views. It costs nothing until a class with a `@reactive` method exists:
+
+- **The view classes wait.** `@define_view` registers each view class
+  (`register_view_class`). The first `@reactive` tracks the fields of the classes defined
+  before it, and each class defined later is tracked as soon as it is defined.
+- **A field gets a descriptor.** A tracked class gets a `_FieldReader` for each public field,
+  except `renderer`, and a `__setattr__` around the one that `attrs` gives it. The values stay
+  in the instance's `__dict__` (`slots=False`).
+- **Reads are plain outside a run.** `_FieldReader` has a `__set__` but no `__get__`, so a read
+  takes the value from `__dict__` without calling Python. `_recording_reads` gives the class a
+  `__get__` while a batch of methods runs, in any thread: a counter under a lock removes it when
+  the last batch ends. The `__get__` records the read in the method that the `_TRACKING`
+  context variable holds. Another thread's reads are not recorded: its context holds no method.
+- **A write tells the readers.** `_FieldReader.__set__` stores the value, then calls
+  `Source.changed` when the value differs (`_differs`). So a write with `object.__setattr__`,
+  which skips the renderer, still reaches the methods. The `__setattr__` refuses the write of
+  a field that the running method read (`check_write`), opens a batch, records no read in the
+  `on_setattr` hooks, and starts or stops the views that enter or leave the field.
+- **Batches.** `batch()` holds the methods to run in the `_PENDING` context variable, and runs
+  them when the outermost batch ends. `Signal.emit`, `Renderer.stop_refresh`, the web session's
+  handling of an event, New and Open (`_apply_state`, `_reset_state`), and `start_reactions`
+  open one.
+- **A fixed order.** Each `_Reaction` takes a number when it starts. `_run_all` runs the
+  waiting reactions by that number, from a heap. A reaction that runs more than 100 times in
+  one batch raises `ReactiveLoopError`. When a method fails, the others still run, then the
+  first exception is raised and the others are logged.
+- **No leaks.** A `Source` holds its readers by weak key, and a `_Reaction` its view by weak
+  reference. An ended web session calls `stop_reactions` on its main view.
+- **Tasks.** A `Task` has a `Source` too. Reading its state records it, its `changed` signal
+  calls `Source.changed`, and `start`, `start_latest` and `cancel` call `check_change`.
+
+`tests/test_reactivity.py` tests each of these rules.
+
 ### View state
 
 `MainView.save_state` and `MainView.load_state` serialize the view tree with the `cattrs`
@@ -157,6 +194,9 @@ one click does this:
    `refresh_attribute("text", "Done")` on the label's renderer.
 4. **The renderer shows the value.** The `"text"` handler of the label renderer's
    `_refresh_dispatcher` changes the toolkit's widget.
+
+When the app has [reactive methods](#reactive-methods), they run in the same `emit`, once the
+callbacks of step 2 are done, and the fields that they set take step 3 too.
 
 Steps 2 and 3 are in `composeui.core`, and are the same on every backend. Steps 1 and 4 are
 the backend's:
@@ -241,6 +281,10 @@ This is the click of [A button click](#a-button-click) on the web, step by step:
    (the Exit action), it drops the session and responds with `HX-Redirect` to `/`.
 10. **htmx swaps the fragments.** htmx puts each `hx-swap-oob` fragment in place of the element
     with the same id. The label shows "Done". The button stays as it is.
+
+When the app has [reactive methods](#reactive-methods), they run once `dispatch` returns, in the
+batch that `_respond` opens around it, and before step 7. The fields that they set mark their
+renderers dirty, as in step 6, so their fragments go out in the same response.
 
 The other routes follow the same steps. `widget_file` gives an upload to the session in place of
 a form. `jobs_poll` runs no event: its response sends the changes that the threads made.

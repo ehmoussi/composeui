@@ -8,6 +8,7 @@ shows:
 | View (`composeui.core.view`) | A typed `attrs` class that holds the state of a part of the UI, such as `InputView`, `FormView`, or `TableView`. You compose views by nesting view fields in other views. See [Building views](building-views.md). |
 | Main view | The root view, a subclass of `MainView`: the window, with its menus, its status bar, and its content. See [The main view](building-views.md#the-main-view). |
 | Signal (`composeui.core.signal`) | An event of a view or a model, such as `clicked`. `signal.connect(callback)` calls the callback on each event, and gives it the `view`, `main_view`, or `model` that it asks for. |
+| Reactive method (`composeui.core.reactivity`) | A view method decorated with `@reactive`. ComposeUI runs it again each time a view field that it read changes. See [Reactive methods](reactive-methods.md). |
 | Model (`composeui.core.model`) | The app's data beside the views. It is optional. `SqliteModel` keeps the data in a [SQLite database](sqlite-model.md). |
 | Study | The file that the File menu saves and opens: the state of the views, and the data of the model. The `extension` of the main view names its file type. See [Saving and loading state](building-views.md#saving-and-loading-state). |
 | Backend | The toolkit that shows the views: Qt, Textual, or the web. `run(MainViewClass)` starts the app on the backend that `--backend` names. See [Backends](running-the-app.md#backends). |
@@ -35,7 +36,8 @@ widget tree of the UI, without the toolkit. One app runs on each backend without
 ## Views are reactive
 
 When code sets an attribute of a view (`view.text = "..."`), the view pushes the change to
-its renderer. You do not call `update()` or `refresh()` for normal state changes.
+its renderer. You do not call `update()` or `refresh()` for normal state changes. To set a field
+from other fields each time they change, write a [reactive method](reactive-methods.md).
 
 Only setting an attribute is a change. To change a list that a view holds, such as a map's
 `points` or a table's `rows`, set a new list:

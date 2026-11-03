@@ -36,6 +36,14 @@ not in the package: run them from a clone of the repository (see
   - [Structure an app](user-guide/building-views.md#structure-an-app)
   - [Saving and loading state](user-guide/building-views.md#saving-and-loading-state)
     - [Versions of the state](user-guide/building-views.md#versions-of-the-state)
+- [Reactive methods](user-guide/reactive-methods.md)
+  - [When a method runs](user-guide/reactive-methods.md#when-a-method-runs)
+  - [What counts as a change](user-guide/reactive-methods.md#what-counts-as-a-change)
+  - [What a method must not do](user-guide/reactive-methods.md#what-a-method-must-not-do)
+  - [Slow work in a task](user-guide/reactive-methods.md#slow-work-in-a-task)
+  - [Errors in a method](user-guide/reactive-methods.md#errors-in-a-method)
+  - [Debug a method's inputs](user-guide/reactive-methods.md#debug-a-methods-inputs)
+  - [On each backend](user-guide/reactive-methods.md#on-each-backend)
 - [Widgets](user-guide/widgets.md)
   - [Label](user-guide/widgets.md#label)
   - [Buttons](user-guide/widgets.md#buttons)
@@ -98,6 +106,7 @@ not in the package: run them from a clone of the repository (see
 - [Running work in threads](user-guide/threads.md)
   - [Progress and canceling](user-guide/threads.md#progress-and-canceling)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
+    - [Run the latest call only](user-guide/threads.md#run-the-latest-call-only)
     - [Show a task's state](user-guide/threads.md#show-a-tasks-state)
     - [Disable views while a task runs](user-guide/threads.md#disable-views-while-a-task-runs)
   - [How jobs behave](user-guide/threads.md#how-jobs-behave)
@@ -133,6 +142,7 @@ not in the package: run them from a clone of the repository (see
 
 user-guide/core-concepts
 user-guide/building-views
+user-guide/reactive-methods
 user-guide/widgets
 user-guide/organizing-the-window
 user-guide/tables

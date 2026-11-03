@@ -55,7 +55,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 
 | Area | Already there |
 | --- | --- |
-| Core | Typed `attrs` views, reactive attributes, signals, callback injection, lazy backend selection, and the backend's capabilities |
+| Core | Typed `attrs` views, reactive attributes, reactive methods (`@reactive`), signals, callback injection, lazy backend selection, and the backend's capabilities |
 | Backends | Qt, Textual, and the web (Starlette and htmx); maps on Qt and the web only. The web sends only the shown page of a router and the shown tab of a tab view; Qt builds each page and tab the first time it shows |
 | Forms and layout | Inputs, validation, buttons, progress, metrics, expanders, trees, Markdown, consoles, pages, tabs, splitters, sidebars, view lists, menus, toolbars, and typed form and content dialogs, with buttons and checks of their own |
 | Files and paths | File, folder and save path fields and table cells, files picked on the server (`server_roots`), paths relative to the study (`base_folder`), a path cell by the row's kind (`path_by`), and `MainView.write_file`, which asks before it replaces a file |
@@ -66,7 +66,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | CSV import | `CSVSqliteTable`: typed columns, column mapping, dialect detection, batches in a transaction, gzip, and URLs |
 | Charts and maps | Line, step, scatter and bar charts, log axes, reference lines, report images, and `MapView` point overlays |
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, `MainView.state_version` / `migrate_state`, and `MainView.loaded` to give again what a study doesn't hold |
-| Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, and the controls that follow them |
+| Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, the controls that follow them, and runs that follow the latest input (`start_latest`) |
 | Deployment | One Uvicorn process behind nginx: TLS, proxy headers, request limits, and optional HTTP Basic Auth |
 | Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, and a coding-agent skill |
 | Releases | PyPI, a changelog, Semantic Versioning, a public API per module, and automated publishing |
@@ -76,8 +76,8 @@ The [Uber pickups example](src/examples/uberpickups.py) and its
 They load a CSV in a task, and a filter updates a table, a bar chart and a map.
 
 What is missing is mostly the path from analysis to app: a one-command start, short authoring
-helpers, computed values, common dashboard widgets (an image, a download button, a toggle, a
-range slider), adapters for plotting libraries, caches, editable sources, links that keep the
+helpers, common dashboard widgets (an image, a download button, a toggle, a range slider),
+adapters for plotting libraries, caches, editable sources, links that keep the
 app's state, one-command deployment, user identity, and sessions that survive a restart.
 
 ## Principles
@@ -107,7 +107,7 @@ Change that contract, and its tests, explicitly for extensions.
 
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
-| M0 — Baseline | Compare future work with 0.1.0 | Benchmark the Uber examples; prototype reactive methods (N02) and helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
+| M0 — Baseline | Compare future work with 0.1.0 | Benchmark the Uber examples; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
 | M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N02, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
@@ -127,15 +127,12 @@ Build one thin slice from end to end before the full catalog:
 
 1. **Measure.** Benchmark the two Uber examples: loading, filtering, row-ID memory, chart and
    map updates, and cleanup. Specify the scientific and shared-tool workflows.
-2. **Prototype.** Build `@reactive` and `Task.start_latest` on the Uber examples (N02).
-3. **Decide.** Check the prototype against the adoption criteria of N02: keep it, fall back
-   to explicit inputs, or keep only `Task.start_latest`.
-4. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
+2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
-5. **Load and export.** Add configurable uploads and filtered export to the data explorer
+3. **Load and export.** Add configurable uploads and filtered export to the data explorer
    (N07), and the dashboard widgets that it needs (N13).
-6. **Start in one command.** Add `composeui run app.py`, with reload on (N11).
-7. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
+4. **Start in one command.** Add `composeui run app.py`, with reload on (N11).
+5. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
    memory and cleanup with the baseline before the API grows.
 
 Continue the scientific backlog alongside, as capacity allows.
@@ -164,60 +161,37 @@ The work left:
 - **Uploads and downloads,** once N13 has their widgets.
 - **More helpers from a second dashboard,** not by symmetry: a preset that only renames
   `child(...)` saves no code. Keep a helper when two dashboards repeat the same code.
-- **The wiring of filters** to the views that they update: N02 decides it.
+- **The wiring of filters** to the views that they update, with reactive methods (N02).
 
 ### N02 — Reactive methods
 
-Today, a view field pushes its changes to the UI, and a signal such as `value_changed` reports
-the user's changes to the code. To update a table when a filter changes, the app connects a
-callback to each signal by hand. A field set by code emits nothing, and a plain field such as a
-loaded frame has no signal at all.
+Reactive methods are in place: `@reactive` and `reactive_inputs` in `composeui.core.reactivity`,
+and `Task.start_latest`. The Uber examples use them. The
+[user guide](docs/user-guide/reactive-methods.md) gives their rules.
 
-The proposed design is a `@reactive` method on a view. ComposeUI runs it once, and records each
-view field that it reads. When one of those fields changes, by the user or by code, the method
-runs again. Its body is ordinary ComposeUI code: it reads fields and sets fields.
+They were adopted in M0, against the criteria of the prototype:
 
-```python
-@reactive
-def show_base(self) -> None:
-    frame = of_base(self.pickups, self.base.value)  # reads pickups and base.value
-    self.table.source = DataFrameSource(frame)
-    self.chart.series = pickups_by_hour(frame)
-```
+- **Type checkers.** mypy, Pyright, Pyrefly and ty pass on the Uber examples, without `Any` or
+  field names in strings.
+- **Speed.** The budget was measured against 0.3.0. Once a reactive method exists, a page
+  builds up to about 20% slower, the web renders it up to about 10% slower, and a write of a
+  view field takes about twice as long. An app without a reactive method runs as before.
+- **Obsolete results.** A test proves that a slow, obsolete query never overwrites the latest
+  result. Another one ends a web session, collects garbage, and finds no reader left.
+- **Predictable.** A developer who did not write the code predicted the runs of ten
+  scenarios from the docstrings and the rules alone, once the methods ran in a fixed order.
+- **Shorter code, in part.** The Uber examples are not shorter. They lost their wiring: no
+  callback connects the filter to the views, and the dataframe example's model keeps no copy
+  of the frame.
 
-- **No declared inputs.** The reads are the inputs, so no field is named by a string, and type
-  checkers see plain attribute access. Each run records its reads again, so a branch that is
-  not taken is not an input.
-- **Slow work stays in jobs.** A reactive method reads its inputs on the main thread, then calls
-  a new `Task.start_latest(...)` with them. It takes the task's typed arguments, as `start`
-  does, waits a debounce delay, and drops a result whose inputs are out of date. Today `start`
-  returns `False` while a task runs, and nothing replaces obsolete work.
-- **Batches and loops.** One event that changes several fields runs each method once, after
-  the event. A method that sets a field that it reads is refused.
-- **No leaks.** The table of readers holds views by weak key and methods by `weakref.WeakMethod`,
-  as `Signal` holds its callbacks. A `ContextVar` marks the method being tracked, because web
-  sessions and jobs run concurrently. A web session clears its readers when it ends; weak
-  references are the safety net, not the mechanism.
-- **Nothing to save.** Reactive methods are code. A study saves the fields; opening it runs the
-  methods that read them.
-- **Visible inputs.** A debug helper lists the fields that each method read in its last run.
+The work left:
 
-The fallback, if tracking reads proves too slow or too surprising, is explicit inputs: typed
-signals passed to a `react(method, *signals)` call. It lists each input twice and needs a
-change signal for each field, so it is the second choice.
-
-**Adopt it only if it really improves ComposeUI.** Prototype it in M0 on the Uber pickups
-examples, beside the hand-written version, and add it to the public API only when:
-
-1. The app is clearly shorter and easier to follow: fewer callbacks and no wiring code.
-2. Every type checker of the repository passes on the app, without `Any` or strings.
-3. Field reads and writes stay within a budget measured against 0.1.0.
-4. A test proves that a slow, obsolete query never overwrites the latest result.
-5. A test ends a web session, collects garbage, and finds no reader left for its views.
-6. A developer who did not write it can predict when each method runs.
-
-If the prototype fails these, keep the existing signals and `Task`, add only
-`Task.start_latest`, and drop `@reactive`. Deliver the adopted part in M1.
+- **A filter that updates a table and a chart.** The hour filter of the Uber examples
+  updates the map only: their table shows the rows of all the hours.
+- **Dashboard helpers (N01) on reactive methods,** so that helpers and view classes use the
+  same mechanism.
+- **Cheaper writes.** Once a reactive method exists, each write of a view field, in every
+  view, goes through two Python calls: the class's `__setattr__` and the field's descriptor.
 
 **Done when:** one filter updates a table and a chart, other panels stay unchanged, and a slow,
 obsolete query cannot overwrite the latest result. Dashboard helpers (N01) and view classes use

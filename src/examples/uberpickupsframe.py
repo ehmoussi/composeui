@@ -10,6 +10,7 @@ from composeui.core.application import run
 from composeui.core.dashboard import DashboardView, bar_chart
 from composeui.core.dataframesource import DataFrameSource, points_of
 from composeui.core.model import Model
+from composeui.core.reactivity import reactive
 from composeui.core.view import (
     ChartView,
     CheckBoxView,
@@ -44,9 +45,7 @@ def pickup_points(frame: pl.DataFrame, at_hour: int) -> list[MapPoint]:
 
 
 class UberPickupsModel(Model):
-    def __init__(self) -> None:
-        #: the pickups, once read; set on the main thread
-        self.frame = pl.DataFrame()
+    """No data of its own: the loader's result holds the pickups."""
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
@@ -83,18 +82,20 @@ class UberPickupsMainView(DashboardView):
             failed_text="Failed to read the CSV: {error}",
         )
         self.filters.show_raw_data.shows(self.table)
-        self.loader.finished.connect(self._show_pickups)
-        self.filters.hour.value_changed.connect(self._show_map)
         self.loader.start(DATA_URL)
 
-    def _show_pickups(self, frame: pl.DataFrame, model: UberPickupsModel) -> None:
-        model.frame = frame
-        self.table.source = DataFrameSource(frame)
-        self.pickups_chart.series = [Series.bars("Pickups", pickups_by_hour(frame))]
-        self._show_map(self.filters.hour.value, model)
+    @reactive
+    def show_pickups(self) -> None:
+        frame = self.loader.result
+        if frame is not None:
+            self.table.source = DataFrameSource(frame)
+            self.pickups_chart.series = [Series.bars("Pickups", pickups_by_hour(frame))]
 
-    def _show_map(self, hour: int, model: UberPickupsModel) -> None:
-        self.pickups_map.points = pickup_points(model.frame, hour)
+    @reactive
+    def show_map(self) -> None:
+        frame = self.loader.result
+        if frame is not None:
+            self.pickups_map.points = pickup_points(frame, self.filters.hour.value)
 
 
 def main() -> None:

@@ -106,11 +106,17 @@ def _qt_field(row: View, widget_type: type[WidgetT]) -> WidgetT:
 
 
 def _select_hour(
-    view: uberpickups.UberPickupsMainView, hour: int, expected_points: list[MapPoint]
+    qtbot: QtBot,
+    view: uberpickups.UberPickupsMainView,
+    hour: int,
+    expected_points: list[MapPoint],
 ) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
     slider = _qt_field(view.filters.hour, qt_widgets.QSlider)
     slider.setValue(hour)
+    # the hour's points come from a job
+    assert view.points.is_running
+    qtbot.waitUntil(lambda: not view.points.is_running)
     assert view.pickups_map.points == expected_points
     assert view.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
     assert view.table.source is not None
@@ -150,14 +156,17 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
 
         qtbot.waitUntil(lambda: not view.loader.is_running)
         assert_visibility(loaded=True, raw=False)
+        # once the rows are read, the map shows the slider's hour
+        qtbot.waitUntil(lambda: not view.points.is_running)
+        assert view.pickups_map.points == [MapPoint(latitude=40.7, longitude=-73.9)]
 
         checkbox.click()
         assert_visibility(loaded=True, raw=True)
-        _select_hour(view, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
+        _select_hour(qtbot, view, 13, [MapPoint(latitude=40.8, longitude=-73.8)])
         checkbox.click()
         assert_visibility(loaded=True, raw=False)
         assert view.pickups_map.points == [MapPoint(latitude=40.8, longitude=-73.8)]
-        _select_hour(view, 12, [])
+        _select_hour(qtbot, view, 12, [])
         view.jobs.drop()
         checkbox.click()
         assert_visibility(loaded=False, raw=True)
@@ -199,25 +208,33 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
     path.write_bytes(gzip.compress(_CSV.encode()))
     monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
     views: list[uberpickups.UberPickupsMainView] = []
-    models: list[uberpickups.UberPickupsModel] = []
 
     def build_view() -> uberpickups.UberPickupsMainView:
         view = uberpickups.UberPickupsMainView()
         views.append(view)
         return view
 
-    def build_model() -> uberpickups.UberPickupsModel:
-        model = uberpickups.UberPickupsModel()
-        models.append(model)
-        return model
+    # the download outlasts the initial page render
+    rendered = threading.Event()
+    load_pickups = uberpickups.UberPickupsModel.load_pickups
 
-    app = web.WebModelApplication(build_main_view=build_view, build_model=build_model)
+    def load_once_rendered(
+        model: uberpickups.UberPickupsModel, job: Job[list[int], int], url: str
+    ) -> list[int]:
+        assert rendered.wait(10)
+        return load_pickups(model, job, url)
+
+    monkeypatch.setattr(uberpickups.UberPickupsModel, "load_pickups", load_once_rendered)
+    app = web.WebModelApplication(
+        build_main_view=build_view,
+        build_model=uberpickups.UberPickupsModel,
+        setup_model=uberpickups.UberPickupsMainView.connect_model,
+    )
     done = threading.Event()
     with testclient.TestClient(app.create_starlette_app()) as client:
         client.get("/")
-        view, model = views[-1], models[-1]
-        # Start after rendering, as a download that outlasts the initial page render does.
-        view.connect_model(model)
+        rendered.set()
+        view = views[-1]
 
         def finished() -> None:
             if not view.loader.is_running:
@@ -280,12 +297,10 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     path.write_bytes(gzip.compress(_CSV.encode()))
     model = uberpickups.UberPickupsModel()
     # Cancel before the first yielded batch, as New/Open can do during a download.
-    job: Job[uberpickups.PickupData, int] = Job(lambda _job, callback: callback())
+    job: Job[list[int], int] = Job(lambda _job, callback: callback())
     job.cancel()
     try:
-        assert model.load_pickups(job, path.as_uri(), 11) == uberpickups.PickupData(
-            hours=[], points=[]
-        )
+        assert model.load_pickups(job, path.as_uri()) == []
         assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
         model.close()

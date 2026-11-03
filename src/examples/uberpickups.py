@@ -10,6 +10,7 @@ import attrs
 
 from composeui.core.application import run
 from composeui.core.dashboard import DashboardView, bar_chart
+from composeui.core.reactivity import reactive
 from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
 from composeui.core.view import (
     ChartView,
@@ -89,26 +90,21 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
             return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows]
 
 
-@attrs.frozen(kw_only=True)
-class PickupData:
-    hours: list[int]
-    points: list[MapPoint]
-
-
 class UberPickupsModel(SqliteModel):
     uber_data = table(UberPickupsTable)
 
-    def load_pickups(self, job: Job[PickupData, int], url: str, at_hour: int) -> PickupData:
+    def load_pickups(self, job: Job[list[int], int], url: str) -> list[int]:
+        """Read the rows, unless the table has them already; get the pickups by hour."""
         if not self.uber_data.has_data():
             with contextlib.closing(self.uber_data.fill_from_url(url)) as batches:
                 for nb_read in batches:
                     if job.is_canceled:
-                        return PickupData(hours=[], points=[])
+                        return []
                     job.report_progress(nb_read)
-        return PickupData(
-            hours=self.uber_data.pickups_by_hour(),
-            points=self.uber_data.pickup_points(at_hour),
-        )
+        return self.uber_data.pickups_by_hour()
+
+    def load_points(self, _job: Job[list[MapPoint]], at_hour: int) -> list[MapPoint]:
+        return self.uber_data.pickup_points(at_hour)
 
 
 DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
@@ -143,6 +139,7 @@ class UberPickupsMainView(DashboardView):
     def connect_model(self, model: UberPickupsModel) -> None:
         self.table.source = model.uber_data.source()
         self.loader = self.jobs.task(model.load_pickups)
+        self.points = self.jobs.task(model.load_points)
         self.loader.show_state(
             self.status,
             views=[self.pickups_chart, self.pickups_map],
@@ -151,21 +148,26 @@ class UberPickupsMainView(DashboardView):
             failed_text="Failed to read the CSV: {error}",
         )
         self.filters.show_raw_data.shows(self.table)
-        self.loader.finished.connect(self._show_pickups)
-        self.filters.hour.value_changed.connect(self._show_map)
         # New and Open replace the rows: read them again
         model.uber_data.changed.connect(self._start_loading, now=True)
 
     def _start_loading(self) -> None:
         if not self.loader.is_running:
-            self.loader.start(DATA_URL, self.filters.hour.value)
+            self.loader.start(DATA_URL)
 
-    def _show_pickups(self, result: PickupData) -> None:
-        self.pickups_chart.series = [Series.bars("Pickups", result.hours)]
-        self.pickups_map.points = result.points
+    @reactive
+    def show_pickups(self) -> None:
+        self.pickups_chart.series = [Series.bars("Pickups", self.loader.result or [])]
 
-    def _show_map(self, hour: int, model: UberPickupsModel) -> None:
-        self.pickups_map.points = model.uber_data.pickup_points(hour)
+    @reactive
+    def load_points(self) -> None:
+        # a query per hour picked: the latest one shows, however long the previous ones take
+        if self.loader.has_result:
+            self.points.start_latest(self.filters.hour.value)
+
+    @reactive
+    def show_points(self) -> None:
+        self.pickups_map.points = self.points.result or []
 
 
 def main() -> None:

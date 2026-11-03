@@ -29,6 +29,7 @@ from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
 from composeui.core.application import Application, _add_reference_to_signals
+from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.signal import Signal
@@ -339,6 +340,10 @@ class WebApplication(Application[MainViewT]):
 
         return wrapper
 
+    @override
+    def _start_reactions(self) -> None:
+        """Run none on `main_view`, a template: each session runs its own's."""
+
     def setup_session(self, main_view: MainViewT) -> None:
         """Wire a new session's main view; override to connect app-level behavior."""
 
@@ -409,6 +414,7 @@ class WebApplication(Application[MainViewT]):
             self._setup_model(main_view, model)
         if self._args is not None and self._args.language is not None:
             main_view.set_language(self._args.language)
+        start_reactions(main_view)
         # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
         if self._args is not None and self._args.f is not None:
             open_study(main_view, model, self._args.f)  # emits `loaded`

@@ -47,6 +47,9 @@ def test_the_status_bar_greets_the_name_typed() -> None:
 - **Build the app, not only the main view.** The app gives each callback the `main_view` and
   the `model` that it asks for. Without the app, a callback that asks for `main_view` raises
   `ValueError`.
+  The app also starts the [reactive methods](reactive-methods.md) of the main view. A main view
+  built without the app runs none of them until `start_reactions(main_view)`, from
+  `composeui.core.reactivity`.
 - **Act as the user.** When the user edits a field, the renderer sets the view's field,
   then emits its signal. So set the field, then emit the signal, for example `text` then
   `text_edited`. For a button, emit `clicked`. For a menu or toolbar action, emit

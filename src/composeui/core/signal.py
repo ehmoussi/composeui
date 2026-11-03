@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, overload
 
 from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 
+from composeui.core import reactivity
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from weakref import ReferenceType
@@ -168,8 +170,14 @@ class Signal(Generic[Unpack[Ts]]):
         self._qt_signal.connect(self._log_signal)
 
     def emit(self, *args: Unpack[Ts]) -> None:
-        for callback in self._callbacks:
-            callback(*args)
+        if not reactivity.is_enabled():
+            for callback in self._callbacks:
+                callback(*args)
+            return
+        # the reactive methods run once all callbacks are done, without their reads
+        with reactivity.batch(), reactivity.untracked():
+            for callback in self._callbacks:
+                callback(*args)
 
     def _log_signal(self, *args: Unpack[Ts]) -> None:
         log_msgs = ["EMIT SIGNAL %s"]

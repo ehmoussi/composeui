@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TypeVar, cast
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType, has_renderer
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
@@ -211,6 +212,11 @@ class Application(Generic[MainViewT]):
             "--language", metavar="LANGUAGE", help="Show the app in LANGUAGE, e.g. fr."
         )
         self._add_reference_to_signals()
+        self._set_up()
+        self._start_reactions()
+
+    def _set_up(self) -> None:
+        """Wire the main view once it's built: nothing here, `setup_model` with a model."""
 
     def _add_reference_to_signals(self) -> None:
         _add_reference_to_signals(self._main_view, None)
@@ -260,6 +266,10 @@ class Application(Generic[MainViewT]):
             self.main_view.loaded.emit()  # the study the app starts with is in place too
         self.main_view.apply_arguments(self._args)
 
+    def _start_reactions(self) -> None:
+        """Run the main view's reactive methods once it's wired (`setup_model`)."""
+        start_reactions(self.main_view)
+
     def _study_model(self) -> Model | None:
         """Get the model opened, saved and started over with the views: none here."""
         return None
@@ -307,9 +317,13 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
     ) -> None:
         # first: the base class gives it to the signals
         self._model = build_model()
+        self._wire_model = setup_model
         super().__init__(build_main_view=build_main_view)
-        if setup_model is not None:
-            setup_model(self._main_view, self._model)
+
+    @override
+    def _set_up(self) -> None:
+        if self._wire_model is not None:
+            self._wire_model(self._main_view, self._model)
 
     @override
     def _add_reference_to_signals(self) -> None:

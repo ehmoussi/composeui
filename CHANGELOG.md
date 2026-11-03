@@ -6,6 +6,17 @@ The notable changes of each release of ComposeUI. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Reactive methods: `@reactive`, from `composeui.core.reactivity`, marks a view method that
+  ComposeUI runs again each time a view field that it read changes. The application runs it
+  once at start-up. One event, such as the callbacks of one signal, runs each method once,
+  in a fixed order. A method that sets a field that it reads raises `ReactiveLoopError`.
+  `reactive_inputs(view)` lists what each method read in its last run.
+- `Task.start_latest(*args)` starts a run that replaces the run going on, for an input that
+  changes quickly, such as a slider. It waits `debounce` seconds first (0.2 by default, or
+  `jobs.task(work, debounce=...)`), and the result of a replaced run never shows.
+
 ### Changed
 
 - A list that a view holds, such as a map's `points` or a table's `rows`, can't change in

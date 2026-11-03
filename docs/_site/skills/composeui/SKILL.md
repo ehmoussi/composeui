@@ -152,6 +152,16 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Set a new list to change a view's list:** `view.points = [*view.points, point]`, or
   `view.points += [point]`. `append`, `pop`, `x[i] = ...` and the like raise `TypeError` on
   a view's list, its inner lists too.
+- **Derive a field from other fields with `@reactive`** (`composeui.core.reactivity`), not
+  with a callback on each of their signals. The method takes only `self`. The app runs it at
+  start-up, then again once per event (a signal's callbacks, a user's edit, a web request,
+  New or Open) in which a view field or a task's state that it read in its last run changed.
+  Methods run in a fixed order: down the view tree, then in the order the class defines
+  them. Never set a field that the method reads, even to the same value: that raises
+  `ReactiveLoopError`, so correct a field from itself in a signal's callback. A model's data
+  and plain attributes are not inputs. A main view built without `Application` runs no
+  method until `start_reactions(main_view)`. `reactive_inputs(view)` shows what each read.
+  See https://ehmoussi.github.io/composeui/user-guide/reactive-methods.html
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
   `connect` injects them. Spell the names exactly. A callback may take fewer of the
   signal's arguments than it emits.
@@ -196,7 +206,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   Raise `RefusedError` for an expected refusal only. For a worker that a view runs again
   and again, create `self.jobs.task(work)` once in `__attrs_post_init__`, not as a field.
   Let the task set its controls' state: `task.disables(*views)` and
-  `task.cancel_with(stop)`, rather than enabling them in each callback.
+  `task.cancel_with(stop)`, rather than enabling them in each callback. For an input that
+  changes quickly, such as a slider, call `task.start_latest(*args)`: it replaces the run
+  going on, and a replaced run's result never shows. A reactive method can call it, but
+  must not read the state of the task that it starts.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and

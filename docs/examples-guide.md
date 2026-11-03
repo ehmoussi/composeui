@@ -51,7 +51,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
-| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, a bar chart, a street map filtered by a slider in a sidebar, a large table |
+| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a bar chart, a street map filtered by a slider in a sidebar, a large table |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
@@ -428,8 +428,10 @@ It shows:
   app does not download them again when the study opens.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a
   job. `Task.show_state` shows its state in a status line: the count of rows read, or the
-  error. It shows the chart and the map once the task has a result. The task's `finished`
-  callback gives them their data.
+  error. It shows the chart and the map once the task has a result.
+- [reactive methods](user-guide/reactive-methods.md) that give the chart and the map their
+  data. One shows the task's result in the chart. One starts the query of the map's points,
+  and one shows them in the map.
 - a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups per hour, which counts
   all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its kind and its hours.
 - a [sidebar](user-guide/organizing-the-window.md#sidebar) of filters: a check box, and a
@@ -438,8 +440,10 @@ It shows:
   in the sidebar, without a form around it.
 - a [map](user-guide/maps.md) of the pickups of the slider's hour, on Qt and the web. The
   map shows at most 10,000 of them, sampled in the order of the rows. A move of the slider
-  queries the saved rows again for the map only. The map fits the pickups, and keeps the
-  viewport once the user pans or zooms.
+  queries the saved rows again for the map only, in a task that
+  [`start_latest`](user-guide/threads.md#run-the-latest-call-only) starts: the map shows the
+  pickups of the latest hour. The map fits the pickups, and keeps the viewport once the user
+  pans or zooms.
 - a `DashboardView`: a [wide main view](user-guide/organizing-the-window.md#page-width)
   without pages. This one keeps the File menu, so that a study saves the rows.
 - the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of all
@@ -479,8 +483,10 @@ It shows:
 - a [large table](user-guide/tables.md#a-large-table) on a
   [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
   and filters a million pickups;
-- a [job](user-guide/threads.md) that only reads the CSV file. Its result, a frame, becomes
-  the table's source on the main thread.
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
+  file. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
+  the main thread. One gives the table its source and the chart its series. The other gives
+  the map the pickups of the slider's hour. The model keeps no copy of the frame.
 - the status line, the chart, the map, and the sidebar of [Uber pickups](#uber-pickups).
   The chart's series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and
   the map's points from the frame, with

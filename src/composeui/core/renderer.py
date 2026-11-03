@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from typing_extensions import Protocol
 
+from composeui.core.reactivity import batch
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Mapping
     from pathlib import Path
@@ -120,11 +122,14 @@ class Renderer(ABC, Generic[TView, TObject]):
 
     @contextlib.contextmanager
     def stop_refresh(self) -> Generator[None]:
-        self._is_updating_state = True
-        try:
-            yield
-        finally:
-            self._is_updating_state = False
+        # the reactive methods run after the block: the changes they make to this view
+        # reach its widget, which the block keeps from being refreshed
+        with batch():
+            self._is_updating_state = True
+            try:
+                yield
+            finally:
+                self._is_updating_state = False
 
 
 class MainRenderer(Renderer[TView, TObject]):

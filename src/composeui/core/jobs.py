@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
 from composeui.core.model import RefusedError
+from composeui.core.reactivity import Source, check_change
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import T
 
@@ -88,6 +89,8 @@ class Job(Generic[R, ProgressT]):
         #: progress values reported by the worker, on the main thread
         self.progress = Signal[ProgressT]()
         self._canceled = threading.Event()
+        # set before `_canceled` when a newer run replaces it (`Task.start_latest`)
+        self._superseded = False
 
     @property
     def is_canceled(self) -> bool:
@@ -124,55 +127,79 @@ class Task(Generic[R, P, ProgressT]):
     `changed` emits on the main thread when a run starts, reports progress, finishes,
     fails, or is dropped. After it, `finished` emits a run's result, and `failed` its
     exception, as a `Job`'s do. Their callbacks can ask for ``main_view`` and ``model``.
-    Starting an already running task does nothing. Dropping the owner's jobs resets
-    the task and discards queued progress and outcomes, as with ordinary jobs.
+    Starting an already running task does nothing; `start_latest` replaces the run instead.
+    Dropping the owner's jobs resets the task and discards queued progress and outcomes,
+    as with ordinary jobs. Its state is an input of the `reactive` methods that read it.
     """
 
-    def __init__(self, jobs: Jobs, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> None:
+    def __init__(
+        self,
+        jobs: Jobs,
+        work: Callable[Concatenate[Job[R, ProgressT], P], R],
+        *,
+        debounce: float = 0.2,
+    ) -> None:
         self._jobs = jobs
         self._work = work
+        #: seconds `start_latest` waits for a newer call before it runs the work
+        self.debounce = debounce
+        self._name: str = getattr(work, "__name__", "task")
+        name, reference = self._name, weakref.ref(self)
+        self._source = Source(lambda paths: paths.get(id(reference()), name))
         self.changed = SignalNoArgs()
+        self.changed.connect(self._source.changed)
         #: the result of a run that succeeded, on the main thread
         self.finished = Signal[R]()
         #: the exception of a run that failed, on the main thread
         self.failed = Signal[Exception]()
         self._job: Job[R, ProgressT] | None = None
+        self._progress: ProgressT | None = None
+        self._result: R | None = None
+        self._error: Exception | None = None
         self._reset()
 
     @property
     def is_running(self) -> bool:
         """Get whether this task is waiting for its current run's outcome."""
+        self._source.read()
         return self._job is not None
 
     @property
     def is_canceled(self) -> bool:
         """Get whether the current run was asked to stop; False once it is over."""
+        self._source.read()
         return self._job is not None and self._job.is_canceled
 
     @property
     def progress(self) -> ProgressT | None:
         """Get the last progress value, or None before the run reports one."""
+        self._source.read()
         return self._progress
 
     @property
     def result(self) -> R | None:
         """Get the successful result, or None before success; see `has_result`."""
+        self._source.read()
         return self._result
 
     @property
     def error(self) -> Exception | None:
         """Get the run's exception, or None before failure."""
+        self._source.read()
         return self._error
 
     @property
     def has_result(self) -> bool:
         """Get whether the last run succeeded, including a result of None."""
+        self._source.read()
         return self._has_result
 
     def start(self, *args: P.args, **kwargs: P.kwargs) -> bool:
         """Start the worker with fresh state; return False if it is already running."""
         _check_main_thread("Task.start")
-        if self.is_running:
+        check_change(self._source, f"starts the task {self._name}")
+        # not `is_running`: a reactive method starting it doesn't read its state
+        if self._job is not None:
             return False
         self._reset()
         job = self._jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
@@ -184,12 +211,39 @@ class Task(Generic[R, P, ProgressT]):
         self.changed.emit()
         return True
 
+    def start_latest(self, *args: P.args, **kwargs: P.kwargs) -> None:
+        """Start the worker with these arguments, replacing a run still going on.
+
+        For inputs that change quickly, e.g. a slider's value: the run waits `debounce`
+        seconds before it calls the work, and a newer call cancels it and drops its outcome,
+        so an obsolete result never replaces the latest. The last result stays until the
+        new run's outcome.
+        """
+        _check_main_thread("Task.start_latest")
+        check_change(self._source, f"starts the task {self._name}")
+        old = self._job
+        job = self._jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
+        self._job = job
+        self._progress = None
+        self._error = None
+        job.progress.connect(self._report_progress)
+        job.finished.connect(self._finish)
+        job.failed.connect(self._fail)
+        work = functools.partial(_debounced, self._work, self.debounce)
+        self._jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        if old is not None:
+            old._superseded = True  # noqa: SLF001 (shared job lifecycle)
+            old.cancel()
+            self._jobs._forget(old)  # noqa: SLF001 (shared job lifecycle)
+        self.changed.emit()
+
     def cancel(self) -> None:
         """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`.
 
         `changed` emits, `is_canceled` then true until the outcome.
         """
         _check_main_thread("Task.cancel")
+        check_change(self._source, f"cancels the task {self._name}")
         job = self._job
         if job is not None and not job.is_canceled:
             job.cancel()
@@ -257,9 +311,9 @@ class Task(Generic[R, P, ProgressT]):
 
     def _reset(self) -> None:
         self._job = None
-        self._progress: ProgressT | None = None
-        self._result: R | None = None
-        self._error: Exception | None = None
+        self._progress = None
+        self._result = None
+        self._error = None
         self._has_result = False
 
     def _report_progress(self, value: ProgressT) -> None:
@@ -278,6 +332,20 @@ class Task(Generic[R, P, ProgressT]):
         self._error = error
         self.changed.emit()
         self.failed.emit(error)
+
+
+def _debounced(
+    work: Callable[Concatenate[Job[R, ProgressT], P], R],
+    delay: float,
+    job: Job[R, ProgressT],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> R | None:
+    """Call `work` after `delay` seconds, unless a newer run replaced this one meanwhile."""
+    if not job.sleep(delay) and job._superseded:  # noqa: SLF001 (shared job lifecycle)
+        return None  # dropped: nobody gets it
+    return work(job, *args, **kwargs)
 
 
 class Jobs:
@@ -339,10 +407,15 @@ class Jobs:
             for signal in (task.changed, task.finished, task.failed):
                 signal.set_model(model)
 
-    def task(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Task[R, P, ProgressT]:
-        """Build a reusable task for `work`, without starting it; call on the main thread."""
+    def task(
+        self, work: Callable[Concatenate[Job[R, ProgressT], P], R], *, debounce: float = 0.2
+    ) -> Task[R, P, ProgressT]:
+        """Build a reusable task for `work`, without starting it; call on the main thread.
+
+        `debounce` is the seconds `Task.start_latest` waits for a newer call.
+        """
         _check_main_thread("Jobs.task")
-        task = Task(self, work)
+        task = Task(self, work, debounce=debounce)
         name = getattr(work, "__name__", "task")
         self._bind_signal(task.changed, f"{name}.changed")
         self._bind_signal(task.finished, f"{name}.finished")
@@ -388,7 +461,7 @@ class Jobs:
     def _start_job(
         self,
         job: Job[R, ProgressT],
-        work: Callable[..., R],
+        work: Callable[..., object],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> None:
@@ -398,6 +471,10 @@ class Jobs:
         # a daemon: closing the app doesn't wait for it
         thread = threading.Thread(target=self._run, args=(job, work, args, kwargs), daemon=True)
         thread.start()
+
+    def _forget(self, job: Job[Any, Any]) -> None:
+        """Drop `job`, replaced by a newer one: its progress and outcome won't be emitted."""
+        self._running.discard(job)
 
     def cancel(self) -> None:
         """Cancel every job running; each still finishes, as soon as it notices.
@@ -450,7 +527,7 @@ class Jobs:
     def _run(
         self,
         job: Job[R, ProgressT],
-        work: Callable[..., R],
+        work: Callable[..., object],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> None:
