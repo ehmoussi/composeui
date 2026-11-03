@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 from composeui.core.translationcheck import (
@@ -67,6 +69,93 @@ def test_a_translation_that_isn_t_a_valid_format_is_mismatched(tmp_path: Path) -
     )
 
     assert report.mismatched == [("{count} rooms", "{count pièces")]
+
+
+class _Recorded:
+    """A value to format, which records its name in `used` when it is formatted."""
+
+    def __init__(self, name: str, used: set[str]) -> None:
+        self.name, self.used = name, used
+
+    def __format__(self, spec: str) -> str:
+        self.used.add(self.name)
+        return "x"
+
+    def __repr__(self) -> str:
+        self.used.add(self.name)
+        return "x"
+
+    def __getattr__(self, attribute: str) -> _Recorded:  # `{name.real}`: still its value
+        return self
+
+    def __getitem__(self, key: object) -> _Recorded:  # `{name[0]}`
+        return self
+
+
+def _used(text: str) -> set[str] | None:
+    """Get the values `text` formats, as `str.format` does; None if it fails."""
+    used: set[str] = set()
+    positional = [_Recorded(str(index), used) for index in range(3)]
+    named = {name: _Recorded(name, used) for name in ("name", "count", "width")}
+    try:
+        text.format(*positional, **named)
+    except (ValueError, IndexError, KeyError):
+        return None
+    return used
+
+
+#: a text's pieces: words, values by name or position, in a format, escaped braces
+_PIECES = st.sampled_from(
+    [
+        "a ",
+        " é",
+        "{name}",
+        "{count}",
+        "{}",
+        "{0}",
+        "{1}",
+        "{name!r}",
+        "{count:>3}",
+        "{{",
+        "}}",
+        "{name.real}",
+        "{name[0]}",
+        "{count:{width}}",
+        "{:{}}",
+    ]
+)
+
+
+@st.composite
+def _translated(draw: st.DrawFn) -> tuple[str, str]:
+    """Draw a text and a translation: its pieces moved, one repeated, left out or added."""
+    pieces = draw(st.lists(_PIECES, max_size=4))
+    moved = list(draw(st.permutations(pieces)))
+    if len(moved) > 0 and draw(st.booleans()):
+        moved.append(draw(st.sampled_from(moved)))
+    if len(moved) > 0 and draw(st.booleans()):
+        moved.pop(draw(st.integers(0, len(moved) - 1)))
+    if draw(st.booleans()):  # a piece of its own, e.g. a value the text doesn't have
+        moved.insert(draw(st.integers(0, len(moved))), draw(_PIECES))
+    return "".join(pieces), "".join(moved) + " b"
+
+
+@given(_translated())
+@example(("{}{}", "{} b"))  # loses a value
+@example(("{}", "{}{} b"))  # one value more: `IndexError`
+@example(("{count}", "{count:{width}} b"))  # a value in a format: `KeyError`
+@example(("{name}", "{name.real} b"))  # the same value: no mismatch
+@example(("{0}", "{0}{} b"))  # by position and by number: `str.format` refuses it
+def test_a_translation_is_accepted_when_it_formats_the_text_s_values(
+    translated: tuple[str, str],
+) -> None:
+    text, translation = translated
+    used = _used(text)
+    if used is None:
+        return  # not a text the app formats: nothing a translation must keep
+    report = check_catalog(Path("fr.json"), {text}, {text: translation})
+    # as `str.format` finds it: it formats, and the same values
+    assert (report.mismatched == []) == (_used(translation) == used)
 
 
 def test_the_command_fails_only_on_a_catalog_that_isn_t_ok(

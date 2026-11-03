@@ -21,6 +21,7 @@ import ast
 import importlib
 import inspect
 import json
+import re
 import string
 import sys
 from pathlib import Path
@@ -136,11 +137,35 @@ def source_paths(main_view: MainView) -> set[Path]:
 
 
 def placeholders(text: str) -> set[str] | None:
-    """Get the ``{fields}`` `text` formats, or `None` if it isn't a valid format."""
+    """Get the values `text` formats, or `None` if it isn't a valid format.
+
+    A value by its name, or its position: ``{}`` numbered as `str.format` numbers it, so
+    ``"{}{}"`` formats ``{"0", "1"}``, as ``"{0}{1}"`` does. ``{name.real}`` formats
+    `name`, and so does a field in another's format, such as ``{count:{width}}``'s.
+    """
+    names: set[str] = set()
+    automatic = 0  # the `{}` fields so far
+    manual = False
+
+    def add(text: str) -> None:
+        nonlocal automatic, manual
+        for _, field, spec, _ in string.Formatter().parse(text):
+            if field is None:
+                continue
+            name = re.split(r"[.\[]", field, maxsplit=1)[0]
+            if name == "":
+                name, automatic = str(automatic), automatic + 1
+            elif name.isdigit():
+                manual = True
+            names.add(name)
+            add(spec or "")
+
     try:
-        return {name for _, name, _, _ in string.Formatter().parse(text) if name is not None}
+        add(text)
     except ValueError:
         return None
+    # both, `str.format` refuses: "cannot switch from automatic field numbering to manual"
+    return None if automatic > 0 and manual else names
 
 
 def check_catalog(

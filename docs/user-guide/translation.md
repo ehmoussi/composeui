@@ -85,7 +85,8 @@ The check fails:
 
 - on text that a catalog misses, because the text would show as written;
 - on a translation whose `{placeholders}` differ from those of the text, because formatting
-  it would fail.
+  it would fail, or leave out a value. The check reads the placeholders as `str.format`
+  does: `{}` by its position, and `{name.real}` as `name`.
 
 It also lists the entries that no code uses any more.
 
