@@ -96,7 +96,14 @@ from composeui.webcore import serverfiles
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
-from composeui.webcore.order import ORDER_TIMEOUT, PAGE_HEADER, POST_HEADER, PostOrder
+from composeui.webcore.order import (
+    ORDER_TIMEOUT,
+    PAGE_FIELD,
+    PAGE_HEADER,
+    POST_FIELD,
+    POST_HEADER,
+    PostOrder,
+)
 from composeui.webcore.page import JOBS_POLL_MS
 from composeui.webcore.session import MAX_FILE_SIZE, SessionStore, WebSession
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -184,7 +191,7 @@ from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Callable, Iterator
+    from collections.abc import Iterator
 
     from starlette.applications import Starlette
     from starlette.types import ASGIApp
@@ -418,41 +425,37 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
 _PAGE = "0123456789abcdef0123456789abcdef"
 
 
-def _post_in_page(
-    client: TestClient, widget_id: str, number: int, value: str, page: str = _PAGE
+def test_a_field_s_post_waits_for_the_one_its_page_sent_before_it(
+    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Post a field's new `value`, as the `number`th post of the page with the id `page`."""
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 0.3)
+    started = time.monotonic()
+
+    # the page's second post, numbered in its headers: the first never comes
     response = client.post(
-        f"/widget/{widget_id}",
-        data={"value": value, "event": "input"},
-        headers={"X-ComposeUI-Page": page, "X-ComposeUI-Post": str(number)},
+        f"/widget/{_field_id(main_view.form.name)}",
+        data={"value": "Ada", "event": "input"},
+        headers={PAGE_HEADER: _PAGE, POST_HEADER: "2"},
     )
-    assert response.status_code == 200
+
+    # it waited for its turn (at least about as long: asyncio may wake a little early)
+    assert time.monotonic() - started >= 0.3 / 2
+    assert (response.status_code, main_view.form.name.text) == (200, "Ada")
 
 
-def _in_thread(post: Callable[[], None]) -> threading.Thread:
-    """Send `post` from a thread of its own: it waits for its turn, as the next ones are sent."""
-    thread = threading.Thread(target=post)
-    thread.start()
-    time.sleep(0.5)  # time to reach the server, and wait there
-    return thread
-
-
-def test_a_page_s_posts_are_handled_in_the_order_it_sent_them(
-    main_view: HelloMainView, client: TestClient
+def test_save_s_form_waits_for_the_post_its_page_sent_before_it(
+    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    name_id = _field_id(main_view.form.name)
-    edited: list[str] = []
-    main_view.form.name.text_edited.connect(edited.append)
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 0.3)
+    main_view.form.name.text = "Bob"
+    save = {"trigger": _action_id(main_view.file_menu.save), PAGE_FIELD: _PAGE, POST_FIELD: "2"}
+    started = time.monotonic()
 
-    # the second post reaches the server first: it waits for the first one
-    second = _in_thread(lambda: _post_in_page(client, name_id, 2, "Bob"))
-    assert edited == []
-    _post_in_page(client, name_id, 1, "Ada")
-    second.join()
+    # the page's second post, numbered in its form's fields, as headers can't be
+    response = client.post("/state/download", data=save)
 
-    assert edited == ["Ada", "Bob"]
-    assert main_view.form.name.text == "Bob"
+    assert time.monotonic() - started >= 0.3 / 2
+    assert json.loads(response.text)["views"]["form"]["name"]["text"] == "Bob"
 
 
 @st.composite
@@ -493,56 +496,58 @@ def test_posts_arriving_in_any_order_are_handled_in_the_order_each_page_sent_the
         assert numbers == sorted(numbers) == [n for p, n in sorted(arrivals) if p == page]
 
 
-def test_save_comes_after_the_posts_the_page_sent_before_it(
-    main_view: HelloMainView, client: TestClient
-) -> None:
-    name_id = _field_id(main_view.form.name)
-    save = {"trigger": _action_id(main_view.file_menu.save), "page": _PAGE, "post": "2"}
-    saved: list[str] = []
+async def _send(order: PostOrder, handled: list[tuple[str, int]], page: str, number: int) -> Any:
+    """Send a post, then let it go as far as it can before another post comes.
 
-    # Save's form, the page's second post, reaches the server first: it waits
-    saving = _in_thread(lambda: saved.append(client.post("/state/download", data=save).text))
-    assert saved == []
-    _post_in_page(client, name_id, 1, "Bob")
-    saving.join()
+    Get its task: done once handled, else waiting for its turn.
+    """
 
-    assert json.loads(saved[0])["views"]["form"]["name"]["text"] == "Bob"
+    async def post() -> None:
+        async with order.turn({PAGE_HEADER: page, POST_HEADER: str(number)}):
+            handled.append((page, number))
+
+    task = asyncio.ensure_future(post())
+    for _ in range(20):  # turns of the event loop, not time: a post waiting never ends
+        await asyncio.sleep(0)
+    return task
 
 
-def test_a_post_waits_for_a_missing_one_only_so_long(
-    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 0.2)
-    name_id = _field_id(main_view.form.name)
-    edited: list[str] = []
-    main_view.form.name.text_edited.connect(edited.append)
+def test_a_post_waits_for_a_missing_one_only_so_long(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        timeout = 0.05
+        monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", timeout)
+        # the first one never comes, e.g. aborted by the page: the second one is handled,
+        # once its wait ends (bounded, with a wide margin: a wait that never ends fails)
+        await asyncio.wait_for(await _send(order, handled, _PAGE, 2), 100 * timeout)
+        # no other wait: one coming after its turn is handled at once, the next ones' kept
+        monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 60)
+        late, third = await _send(order, handled, _PAGE, 1), await _send(order, handled, _PAGE, 3)
+        assert (late.done(), third.done()) == (True, True)
+        return handled
 
-    # the first one never comes, e.g. aborted by the page
-    _post_in_page(client, name_id, 2, "Bob")
-    assert edited == ["Bob"]
-    # one coming after its turn is handled at once, the next ones' turns kept
-    _post_in_page(client, name_id, 1, "Ada")
-    _post_in_page(client, name_id, 3, "Cy")
-    assert edited == ["Bob", "Ada", "Cy"]
+    assert asyncio.run(handle_all()) == [(_PAGE, 2), (_PAGE, 1), (_PAGE, 3)]
 
 
 def test_a_page_forgotten_for_newer_ones_waits_for_nothing(
-    main_view: HelloMainView, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("composeui.webcore.order.MAX_PAGES", 1)
-    name_id = _field_id(main_view.form.name)
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 60)
     other_page = "f" * 32  # e.g. the same app in another tab
-    edited: list[str] = []
-    main_view.form.name.text_edited.connect(edited.append)
 
-    started = time.monotonic()
-    waiting = _in_thread(lambda: _post_in_page(client, name_id, 2, "Bob"))
-    _post_in_page(client, name_id, 1, "Ada", page=other_page)  # its page now the one kept
-    waiting.join()
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        waiting = await _send(order, handled, _PAGE, 2)
+        assert not waiting.done()
+        # its page no longer the one kept: handled once the other page's post is
+        await _send(order, handled, other_page, 1)
+        assert waiting.done()
+        return handled
 
-    # handled once its page was forgotten, not after its whole wait
-    assert time.monotonic() - started < 2
-    assert edited == ["Ada", "Bob"]
+    assert asyncio.run(handle_all()) == [(other_page, 1), (_PAGE, 2)]
 
 
 def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestClient) -> None:

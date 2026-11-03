@@ -78,6 +78,7 @@ if TYPE_CHECKING:
         Page,
         Route,
     )
+    from playwright.sync_api import Request as PageRequest
     from starlette.requests import Request
 
 pytestmark = pytest.mark.browser
@@ -2565,14 +2566,23 @@ def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url:
     expect(page.get_by_text("I'm Batman")).to_be_visible()
 
     # dragging zooms, and posts no click
+    clicks: list[str] = []
+
+    def record(request: PageRequest) -> None:
+        if request.method == "POST" and "event=click" in (request.post_data or ""):
+            clicks.append(request.url)
+
+    page.on("request", record)
     box = over.bounding_box()
     assert box is not None
     page.mouse.move(box["x"] + 10, box["y"] + 10)
     page.mouse.down()
     page.mouse.move(box["x"] + 200, box["y"] + 10, steps=5)
     page.mouse.up()
-    page.wait_for_timeout(300)
-    expect(page.get_by_text("I'm Batman")).to_be_visible()
+    # then a click, answered: a click the drag posted would have been sent before it
+    with _posted(page):
+        over.click(position={"x": point[0], "y": point[1]})
+    assert len(clicks) == 1
     context.close()
 
 
@@ -2587,8 +2597,8 @@ def test_the_legend_stays_put_while_the_cursor_moves(chart_page: Page) -> None:
 
     def hover(share: float) -> list[float]:
         """Hover the plot at `share` of its width; get where each legend entry starts."""
+        # uPlot shows the cursor's values as it handles the move, which `move` waits for
         chart_page.mouse.move(box["x"] + box["width"] * share, box["y"] + box["height"] / 2)
-        chart_page.wait_for_timeout(50)
         lefts: list[float] = legend.locator(".u-series").evaluate_all(
             "rows => rows.map(row => row.getBoundingClientRect().left)"
         )
