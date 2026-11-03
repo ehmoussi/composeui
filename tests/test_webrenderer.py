@@ -29,6 +29,7 @@ from html.parser import HTMLParser
 from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
+from unittest import mock
 from urllib.parse import unquote
 
 import pytest
@@ -38,8 +39,9 @@ pytest.importorskip("httpx")
 
 import attrs
 from attrs import Factory
-from hypothesis import example, given
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
+from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, multiple, rule
 from markupsafe import escape
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
@@ -93,6 +95,7 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.webcore import serverfiles
+from composeui.webcore import session as session_module
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE
@@ -3055,6 +3058,125 @@ def test_a_full_server_refuses_new_sessions_but_keeps_its_own() -> None:
         bob.post(f"/widget/{_action_id(bob_view.file_menu.exit_app)}", data={"event": "triggered"})
         assert carol.get("/").status_code == 200
         assert len(app.session_views) == 3
+
+
+class _Clock:
+    """The store's `time`, whose `monotonic` is `now`: moved by the test, not waited for."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+class _ReleasedModel(Model):
+    """A session's model, which records that the store released it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.is_released = False
+
+    def close(self) -> None:
+        self.is_released = True
+
+
+class _SessionStoreMachine(RuleBasedStateMachine):
+    """A store of 3 sessions, idle 10 seconds at most, used in any order.
+
+    The live sessions as it should keep them: each with when it was last used.
+    """
+
+    TTL, MOST = 10.0, 3
+    ids = Bundle("ids")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.clock = _Clock()
+        self.patched = mock.patch.object(session_module, "time", self.clock)
+        self.patched.start()
+        self.store = SessionStore(
+            lambda: (HelloMainView(), _ReleasedModel()), ttl=self.TTL, max_sessions=self.MOST
+        )
+        self.live: dict[str, tuple[WebSession, float]] = {}
+        self.ended: list[WebSession] = []
+
+    def _expire(self) -> None:
+        for session_id, (session, used) in list(self.live.items()):
+            if self.clock.now - used >= self.TTL:
+                del self.live[session_id]
+                self.ended.append(session)
+
+    @rule(target=ids)
+    def create(self) -> Any:
+        self._expire()
+        created = self.store.create()
+        if len(self.live) >= self.MOST:  # full: refused, the live ones kept
+            assert created is None
+            return multiple()
+        assert created is not None
+        session_id, session = created
+        assert session_id not in self.live
+        self.live[session_id] = (session, self.clock.now)
+        return session_id
+
+    @rule(session_id=st.one_of(ids, st.just("forged")))
+    def get(self, session_id: str) -> None:
+        self._expire()
+        got = self.store.get(session_id)
+        if session_id in self.live:  # the same session, its idle time from now
+            session = self.live[session_id][0]
+            assert got is session
+            self.live[session_id] = (session, self.clock.now)
+        else:  # ended, or never made
+            assert got is None
+
+    @rule(session_id=ids)
+    def drop(self, session_id: str) -> None:
+        self.store.drop(session_id)
+        if session_id in self.live:
+            self.ended.append(self.live.pop(session_id)[0])
+
+    # mostly less than the timeout: sessions used, then idle, then used again
+    @rule(seconds=st.sampled_from([1.0, 4.0, 6.0, 9.0, 10.0]))
+    def wait(self, seconds: float) -> None:
+        self.clock.now += seconds
+
+    @invariant()
+    def ended_sessions_alone_are_released(self) -> None:
+        # dropped at once; expired once the store is used again
+        self._expire()
+        self.store.get("forged")  # used: it drops the expired ones
+
+        def released(session: WebSession) -> bool:
+            assert isinstance(session.model, _ReleasedModel)
+            return session.model.is_released
+
+        assert all(released(session) for session in self.ended)
+        assert not any(released(session) for session, _used in self.live.values())
+
+    def teardown(self) -> None:
+        self.patched.stop()
+
+
+TestASessionStoreUsedInAnyOrder = _SessionStoreMachine.TestCase
+TestASessionStoreUsedInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
+
+
+def test_a_session_used_expires_its_timeout_after_its_last_use() -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(lambda: (HelloMainView(), None), ttl=10, max_sessions=1)
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+
+        clock.now = 9
+        assert store.get(session_id) is session
+        clock.now = 18  # 18 seconds since it was made, 9 since it was used
+        assert store.get(session_id) is session
+        clock.now = 28
+        assert store.get(session_id) is None
 
 
 def test_a_state_file_opens_in_every_new_session(
