@@ -191,6 +191,24 @@ assert main_view.count.text == "1300 pickups"
 - **The latest result wins.** `start_latest` replaces a run that is still going on. A result
   that is out of date never replaces the latest one.
 
+## Helpers that follow their inputs
+
+Two helpers of ComposeUI work as reactive methods of the view that they change:
+
+- [`CheckBoxMixin.shows`](building-views.md#forms-and-their-fields) shows views only while a check
+  box is checked. It is a method of the check box, named `shows`.
+- [`Task.show_state`](threads.md#show-a-tasks-state) shows the state of a task in a status
+  line. It is a method of the status line, named `show_state`.
+
+A helper runs once when the app calls it, and records its inputs. It then runs again when they
+change, with the reactive methods of the same event, in the order in which they started.
+`reactive_inputs` lists it under its name. When its view's methods stop, it stops too. A view
+that starts again later does not start it again.
+
+So a reactive method can read what a helper sets, such as the `is_visible` of a view that a
+check box shows. In a signal's callbacks, the helper runs once the callbacks are done, as the
+methods do. A callback that sets `is_checked` does not see the views change before it returns.
+
 ## Errors in a method
 
 When a method raises an exception, the other methods of the event still run. Then the first
@@ -227,12 +245,16 @@ field does.
 - **In a test.** `Application` starts the methods, as the backends do (see
   [Test the views](testing.md#test-the-views)). A main view built without an application,
   such as `OrderView()`, runs none of them until `start_reactions(main_view)` starts them.
-- **The cost.** An app without a reactive method runs as before. Once one class with a
-  reactive method exists, ComposeUI records the reads during the runs of the methods only. A
+- **The cost.** An app without a reactive method, and without the
+  [helpers](#helpers-that-follow-their-inputs), runs as before. Once one class with a reactive
+  method exists, or a helper runs, ComposeUI records the reads during the runs of the methods
+  only. A
   write of a view field, in any view, then takes about twice as long. A page takes up to about
   20% longer to build, and the web renders it up to about 10% slower.
 
-The [Uber pickups example](../../src/examples/uberpickups.py) shows its chart and its map with
-reactive methods, and queries the pickups of the slider's hour with `start_latest`. Its
-[dataframe version](../../src/examples/uberpickupsframe.py) builds its table, its chart and its
-map from the result of its loading task, with no state in its model.
+In the [Uber pickups example](../../src/examples/uberpickups.py), one slider of the hour
+filters the table and the map, and marks the hour on the chart. Its reactive methods do it, with
+no callback, and query the pickups of the slider's hour with `start_latest`. The chart's counts
+of each hour do not change. Its [dataframe version](../../src/examples/uberpickupsframe.py)
+builds its table, its chart and its map from the result of its loading task, with no state in
+its model.

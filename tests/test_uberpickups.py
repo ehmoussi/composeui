@@ -76,8 +76,10 @@ def test_pickups_load_progress_table_and_hourly_chart(app: App) -> None:
     assert not page.status.is_visible
     assert page.status.text == "Read 2 rows from CSV"
     assert page.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    # the slider's hour: its rows, its place on the chart, and its points
     assert page.table.source is not None
-    assert page.table.source.count() == 2
+    assert page.table.source.count() == 1
+    assert [line.value for line in page.pickups_chart.reference_lines] == [11]
     assert page.pickups_map.points == [
         MapPoint(latitude=40.7, longitude=-73.9),
     ]
@@ -118,9 +120,12 @@ def _select_hour(
     assert view.points.is_running
     qtbot.waitUntil(lambda: not view.points.is_running)
     assert view.pickups_map.points == expected_points
+    # the chart keeps every hour's pickups, and marks the hour picked
     assert view.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+    assert [line.value for line in view.pickups_chart.reference_lines] == [hour]
+    # each pickup of the test's CSV has its point
     assert view.table.source is not None
-    assert view.table.source.count() == 2
+    assert view.table.source.count() == len(expected_points)
 
 
 def test_visibility_follows_loading_and_real_checkbox_clicks(
@@ -188,7 +193,7 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         restored.main_view.jobs.wait()
         page = restored.main_view
         assert page.table.source is not None
-        assert page.table.source.count() == 2
+        assert page.table.source.count() == 1  # the pickups at 11:00
         assert page.pickups_chart.series[0].y == app.main_view.pickups_chart.series[0].y
         assert page.pickups_chart.is_visible
         assert not page.status.is_visible

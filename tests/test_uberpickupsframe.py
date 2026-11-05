@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 App = ModelApplication[uberpickupsframe.UberPickupsMainView, uberpickupsframe.UberPickupsModel]
-# a pickup without a date counts in no hour, but shows in the table
+# a pickup without a date is in no hour: neither on the chart nor in the table
 _CSV = (
     "Date/Time,Lat,Lon,Base\n"
     "9/1/2014 11:01:00,40.7,-73.9,B02512\n"
@@ -68,12 +68,27 @@ def test_pickups_load_into_the_table_the_hourly_chart_and_the_map(app: App) -> N
     assert page.pickups_map.is_visible
     assert page.pickups_chart.series[0].y == [*([0] * 11), 1, 0, 1, *([0] * 10)]
     assert page.pickups_map.points == [MapPoint(latitude=40.7, longitude=-73.9)]
+    # the slider's hour: its rows and its place on the chart
     source = page.table.source
     assert source is not None
-    assert source.count() == 3
+    assert source.count() == 1
     assert source.cells([0], ["Date/Time", "Base"]) == {
         0: [datetime.datetime.fromisoformat("2014-09-01T11:01"), "B02512"]
     }
+    assert [line.value for line in page.pickups_chart.reference_lines] == [11]
+
+
+def test_the_table_s_filter_stays_on_the_rows_of_each_hour_picked(app: App) -> None:
+    app.main_view.jobs.wait()
+    page = app.main_view
+    page.table.filters = {"Base": "=B02598"}
+    assert page.table.row_count == 0  # the pickup at 11:00 is from another base
+
+    page.filters.hour.value = 13
+
+    assert page.table.filters == {"Base": "=B02598"}
+    assert page.table.row_count == 1
+    assert [line.value for line in page.pickups_chart.reference_lines] == [13]
 
 
 WidgetT = TypeVar("WidgetT")
@@ -157,7 +172,7 @@ def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> Non
         }
     )
 
-    points = uberpickupsframe.pickup_points(frame, 0)
+    points = uberpickupsframe.pickup_points(uberpickupsframe.pickups_at(frame, 0))
 
     assert 0 < len(points) <= 10000
     assert len(set(points)) == len(points)

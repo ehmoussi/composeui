@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
 from composeui.core.model import RefusedError
-from composeui.core.reactivity import Source, check_change
+from composeui.core.reactivity import Source, check_change, follow
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import T
 
@@ -296,7 +296,7 @@ class Task(Generic[R, P, ProgressT]):
         """
         views = list(views)
 
-        def follow() -> None:
+        def show_state() -> None:
             status.is_visible = not self.has_result
             for view in views:
                 view.is_visible = self.has_result
@@ -307,7 +307,8 @@ class Task(Generic[R, P, ProgressT]):
             else:
                 status.text = status.tr(loading_text)
 
-        self.changed.connect(follow, now=True)
+        # as a reactive method of `status`: the task's state is its input
+        follow(status, "show_state", show_state)
 
     def _reset(self) -> None:
         self._job = None

@@ -21,6 +21,7 @@ from composeui.core.reactivity import (
     stop_reactions,
 )
 from composeui.core.registry import RendererType
+from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
     ButtonView,
     CheckBoxView,
@@ -411,6 +412,36 @@ def test_a_failing_method_lets_the_others_show_the_change_then_raises() -> None:
 class PlainSubclassView(HourView):
     def show_hour(self) -> None:
         self.runs.append("plain")
+
+
+def test_a_helper_follows_its_inputs_as_a_method_and_stops_with_its_view() -> None:
+    view = HourView()
+    start_reactions(view)
+    view.is_on.shows(view.other)
+    assert not view.other.is_visible
+    # a debugger lists its inputs beside the methods'
+    view.is_on.shows(view.shown)
+    assert reactive_inputs(view.is_on) == {"shows": ["is_checked"], "shows 2": ["is_checked"]}
+
+    seen: list[bool] = []
+
+    def check() -> None:
+        view.is_on.is_checked = True
+        seen.append(view.other.is_visible)
+
+    # one event: the helper runs after the callbacks, with the methods
+    checked = SignalNoArgs()
+    checked.connect(check)
+    checked.emit()
+    assert seen == [False]
+    assert view.other.is_visible
+    assert view.runs == ["show_hour", "show_hour"]
+
+    # e.g. a web session ending: the box's helper keeps no reader
+    stop_reactions(view)
+    view.is_on.is_checked = False
+    assert view.other.is_visible
+    assert reactive_inputs(view.is_on) == {}
 
 
 def test_a_subclass_s_plain_method_replaces_a_reactive_one() -> None:

@@ -265,6 +265,9 @@ assert main_view.chart.is_visible
 - **From now on.** It shows the state at once, also before the first run: `status` shows
   `loading_text`, and `views` are hidden. New, Open, and `jobs.drop()` clear the result:
   `views` hide again until the next run has a result.
+- **As a reactive method.** It follows the state of the task as a
+  [reactive method](reactive-methods.md#helpers-that-follow-their-inputs) of `status` does:
+  after the event that changed the state, with the other methods.
 - **With the other signals.** Connect `finished` to give the views their data. `changed`,
   `finished`, and `failed` keep their other callbacks.
 

@@ -108,7 +108,7 @@ Change that contract, and its tests, explicitly for extensions.
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
 | M0 — Baseline | Compare future work with 0.3.0 | Benchmark the Uber examples; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
-| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N02, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
+| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
 | M4 — Shared apps | Deploy an app for a team | L01, N08, N09, end of N05 and N07 | Restart, isolation, access control and worker-topology tests pass |
@@ -160,42 +160,8 @@ The work left:
 
 - **Uploads and downloads,** once N13 has their widgets.
 - **More helpers from a second dashboard,** not by symmetry: a preset that only renames
-  `child(...)` saves no code. Keep a helper when two dashboards repeat the same code.
-- **The wiring of filters** to the views that they update, with reactive methods (N02).
-
-### N02 — Reactive methods
-
-Reactive methods are in place: `@reactive` and `reactive_inputs` in `composeui.core.reactivity`,
-and `Task.start_latest`. The Uber examples use them. The
-[user guide](docs/user-guide/reactive-methods.md) gives their rules.
-
-They were adopted in M0, against the criteria of the prototype:
-
-- **Type checkers.** mypy, Pyright, Pyrefly and ty pass on the Uber examples, without `Any` or
-  field names in strings.
-- **Speed.** The budget was measured against 0.3.0. Once a reactive method exists, a page
-  builds up to about 20% slower, the web renders it up to about 10% slower, and a write of a
-  view field takes about twice as long. An app without a reactive method runs as before.
-- **Obsolete results.** A test proves that a slow, obsolete query never overwrites the latest
-  result. Another one ends a web session, collects garbage, and finds no reader left.
-- **Predictable.** A developer who did not write the code predicted the runs of ten
-  scenarios from the docstrings and the rules alone, once the methods ran in a fixed order.
-- **Shorter code, in part.** The Uber examples are not shorter. They lost their wiring: no
-  callback connects the filter to the views, and the dataframe example's model keeps no copy
-  of the frame.
-
-The work left:
-
-- **A filter that updates a table and a chart.** The hour filter of the Uber examples
-  updates the map only: their table shows the rows of all the hours.
-- **Dashboard helpers (N01) on reactive methods,** so that helpers and view classes use the
-  same mechanism.
-- **Cheaper writes.** Once a reactive method exists, each write of a view field, in every
-  view, goes through two Python calls: the class's `__setattr__` and the field's descriptor.
-
-**Done when:** one filter updates a table and a chart, other panels stay unchanged, and a slow,
-obsolete query cannot overwrite the latest result. Dashboard helpers (N01) and view classes use
-the same mechanism.
+  `child(...)` saves no code. Keep a helper when two dashboards repeat the same code. Build
+  them on reactive methods, as `shows` and `show_state` are.
 
 ### N03 — Dataframe types and editing
 
@@ -256,8 +222,8 @@ Start from the SQLite model and the CSV import from URLs. Add recipes or adapter
 SQLAlchemy databases and HTTP APIs, starting with a small maintained set. Read secrets from the
 environment or from a local development file. Handle timeouts, cleanup, and clear query errors.
 
-Document transactions and writes that the app owns. Use N02 and N05 so that a slow connection
-needs no hand-written thread code. Deliver in M2.
+Document transactions and writes that the app owns. Use reactive methods, `start_latest` and
+N05 so that a slow connection needs no hand-written thread code. Deliver in M2.
 
 **Done when:** a documented example reads a SQL query into a table and a chart, refreshes it,
 and handles a failed query without losing the user's work.
@@ -605,6 +571,19 @@ same study folder again and again. Keep a short history, within the current `ser
 and state who owns it: the web session, or the local user. A folder outside the current roots
 never shows, even if a root that held it was allowed before. Done when a test changes the roots
 and finds that the history shows no folder outside them.
+
+## Known problems
+
+| ID | Problem | When |
+| --- | --- | --- |
+| P05 | Once a reactive method exists, a write of a view field takes about twice as long | Before M5 |
+
+For P05, once a class with a reactive method exists, or a helper such as `shows` runs, each
+write of a view field, in every view, goes through two Python calls: the class's
+`__setattr__` and the field's descriptor (`reactivity.py`). It takes about 3.5 µs instead of
+1.7 µs, and a page builds up to about 20% slower than in 0.3.0. Measure a write and a page
+build against 0.3.0, then try one call per write. Done when a write costs near 0.3.0's time,
+or the cost left is recorded here.
 
 ## Reference apps
 

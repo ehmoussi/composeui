@@ -173,7 +173,9 @@ rows only.
 - **A check box** shows other views only while it is checked, with `shows`:
   `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again
   each time the box changes: as the user clicks it, as code sets `is_checked`, and as a
-  study opens or New starts one.
+  study opens or New starts one. It follows the box as a
+  [reactive method](reactive-methods.md#helpers-that-follow-their-inputs) does: in a
+  signal's callbacks, the views change once the callbacks are done.
 - **A choice** maps each label to its value: `values = {"Steel": Material.STEEL}`. `value`
   is `None` or one of `values`. `value_changed` reports the user's choice. A `None` value
   selects nothing, unless `None` is one of `values`: then it selects that choice, such as

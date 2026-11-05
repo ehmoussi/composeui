@@ -51,7 +51,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
-| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a bar chart, a street map filtered by a slider in a sidebar, a large table |
+| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
@@ -429,11 +429,14 @@ It shows:
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a
   job. `Task.show_state` shows its state in a status line: the count of rows read, or the
   error. It shows the chart and the map once the task has a result.
-- [reactive methods](user-guide/reactive-methods.md) that give the chart and the map their
-  data. One shows the task's result in the chart. One starts the query of the map's points,
-  and one shows them in the map.
+- [reactive methods](user-guide/reactive-methods.md) that give the table, the chart and the
+  map their data, with no callback. One shows the task's result in the chart. One follows the
+  slider: it gives the table the rows of the hour, marks the hour on the chart, and starts the
+  query of the map's points. One shows the points in the map.
 - a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups per hour, which counts
-  all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its kind and its hours.
+  all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its kind and its hours. A
+  vertical [reference line](user-guide/charts.md#reference-lines) marks the slider's hour.
+  The counts do not change with the slider.
 - a [sidebar](user-guide/organizing-the-window.md#sidebar) of filters: a check box, and a
   [slider](user-guide/widgets.md#slider) of the hour, 11 at the start. The slider is a
   [form row](user-guide/building-views.md#forms-and-their-fields) with its label, straight
@@ -446,8 +449,12 @@ It shows:
   pans or zooms.
 - a `DashboardView`: a [wide main view](user-guide/organizing-the-window.md#page-width)
   without pages. This one keeps the File menu, so that a study saves the rows.
-- the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of all
-  the hours. `CheckBoxMixin.shows` shows it only while the sidebar's check box is checked.
+- the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of the
+  slider's hour. Its [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) selects them with
+  its own query. Its
+  [filter bar](user-guide/tables.md#sorting-and-filtering-a-large-table) filters them
+  further, such as by base, and keeps its filters when the hour changes.
+  `CheckBoxMixin.shows` shows the table only while the sidebar's check box is checked.
 
 ## Uber pickups on a dataframe
 
@@ -460,8 +467,8 @@ uv run python -m examples.uberpickupsframe   # web; or --backend qt, or textual
 
 It needs the `dataframe` extra and Polars. It reads the CSV file in a job each time that it
 starts. It has no File menu, because a study would keep no rows. The table shows the CSV's
-own columns. Polars counts the pickups by hour, and samples the pickups of the slider's hour
-for the map.
+own columns. Polars counts the pickups by hour, selects the pickups of the slider's hour for
+the table, and samples them for the map.
 
 These screenshots use made-up rows. The street map needs a network connection for its
 tiles. Textual shows no map.
@@ -481,12 +488,13 @@ On the web:
 It shows:
 
 - a [large table](user-guide/tables.md#a-large-table) on a
-  [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe): Polars sorts, searches,
-  and filters a million pickups;
+  [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe) of the pickups of the
+  slider's hour: Polars sorts, searches, and filters them;
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
   file. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
-  the main thread. One gives the table its source and the chart its series. The other gives
-  the map the pickups of the slider's hour. The model keeps no copy of the frame.
+  the main thread. One gives the chart its series. The other follows the slider: it gives the
+  table and the map the pickups of the hour, and marks the hour on the chart. The model keeps
+  no copy of the frame.
 - the status line, the chart, the map, and the sidebar of [Uber pickups](#uber-pickups).
   The chart's series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and
   the map's points from the frame, with

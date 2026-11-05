@@ -18,6 +18,7 @@ from composeui.core.view import (
     LabelView,
     MapPoint,
     MapView,
+    ReferenceLine,
     Series,
     SidebarView,
     SourceTableView,
@@ -38,8 +39,11 @@ def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
     return [counts.get(hour, 0) for hour in range(24)]
 
 
-def pickup_points(frame: pl.DataFrame, at_hour: int) -> list[MapPoint]:
-    at = frame.filter(pl.col("Date/Time").dt.hour() == at_hour)
+def pickups_at(frame: pl.DataFrame, at_hour: int) -> pl.DataFrame:
+    return frame.filter(pl.col("Date/Time").dt.hour() == at_hour)
+
+
+def pickup_points(at: pl.DataFrame) -> list[MapPoint]:
     # at most 10,000 pickups, spread over the hour
     return points_of(at.gather_every(max(1, (at.height + 9999) // 10000)), "Lat", "Lon")
 
@@ -64,7 +68,10 @@ class UberPickupsMainView(DashboardView):
 
     filters: PickupFilters = child(PickupFilters, title="Filters")
     status: LabelView = child(LabelView)
-    table: SourceTableView = child(SourceTableView)
+    # the user filters the hour's rows further, e.g. by base
+    table: SourceTableView = child(
+        SourceTableView, filterable_columns=["Date/Time", "Lat", "Lon", "Base"]
+    )
     pickups_chart: ChartView = bar_chart(
         "Number of pickups by hour",
         HOURS,
@@ -88,14 +95,18 @@ class UberPickupsMainView(DashboardView):
     def show_pickups(self) -> None:
         frame = self.loader.result
         if frame is not None:
-            self.table.source = DataFrameSource(frame)
             self.pickups_chart.series = [Series.bars("Pickups", pickups_by_hour(frame))]
 
     @reactive
-    def show_map(self) -> None:
+    def show_hour(self) -> None:
+        # the hour picked filters the table and the map, and stands out on the chart
         frame = self.loader.result
         if frame is not None:
-            self.pickups_map.points = pickup_points(frame, self.filters.hour.value)
+            hour = self.filters.hour.value
+            at = pickups_at(frame, hour)
+            self.table.source = DataFrameSource(at)
+            self.pickups_chart.reference_lines = [ReferenceLine(hour, HOURS[hour], vertical=True)]
+            self.pickups_map.points = pickup_points(at)
 
 
 def main() -> None:

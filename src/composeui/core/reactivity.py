@@ -129,6 +129,27 @@ def stop_reactions(root: View) -> None:
         views.extend(view.children_views)
 
 
+def follow(owner: View, name: str, function: Callable[[], None]) -> None:
+    """Run `function` now, and again each time an input that it read changes, as a method.
+
+    For ComposeUI's helpers, e.g. `Task.show_state`: they follow their inputs as a view's
+    reactive methods do, and `reactive_inputs` lists them under `name`. It stops with
+    `owner`'s methods (see `stop_reactions`), and a view started again later doesn't start
+    it again.
+    """
+    _enable()
+    reaction = _Reaction(owner, lambda _owner: function(), name)
+    reactions: dict[str, _Reaction] = owner.__dict__.setdefault(_REACTIONS, {})
+    # a helper may follow several times on one view: "shows", then "shows 2"
+    key, count = name, 1
+    while key in reactions:
+        count += 1
+        key = f"{name} {count}"
+    reactions[key] = reaction
+    with batch():
+        _schedule(reaction)
+
+
 def reactive_inputs(view: View) -> dict[str, list[str]]:
     """Get the inputs that each reactive method of `view` read in its last run, to debug it.
 
@@ -263,12 +284,14 @@ _START_ORDER = itertools.count()
 class _Reaction:
     __slots__ = ("__weakref__", "function", "inputs", "name", "order", "owner", "stopped")
 
-    def __init__(self, owner: View, function: Callable[[Any], None]) -> None:
+    def __init__(
+        self, owner: View, function: Callable[[Any], None], name: str | None = None
+    ) -> None:
         # tree order, then the class's, as `start_reactions` builds them
         self.order = next(_START_ORDER)
         self.owner = weakref.ref(owner)
         self.function = function
-        self.name = function.__qualname__
+        self.name = function.__qualname__ if name is None else name
         # ordered: `reactive_inputs` lists them as read
         self.inputs: dict[Source, None] = {}
         self.stopped = False

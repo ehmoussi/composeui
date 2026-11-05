@@ -41,6 +41,7 @@ not in the package: run them from a clone of the repository (see
   - [What counts as a change](user-guide/reactive-methods.md#what-counts-as-a-change)
   - [What a method must not do](user-guide/reactive-methods.md#what-a-method-must-not-do)
   - [Slow work in a task](user-guide/reactive-methods.md#slow-work-in-a-task)
+  - [Helpers that follow their inputs](user-guide/reactive-methods.md#helpers-that-follow-their-inputs)
   - [Errors in a method](user-guide/reactive-methods.md#errors-in-a-method)
   - [Debug a method's inputs](user-guide/reactive-methods.md#debug-a-methods-inputs)
   - [On each backend](user-guide/reactive-methods.md#on-each-backend)

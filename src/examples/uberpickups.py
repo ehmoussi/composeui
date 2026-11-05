@@ -11,7 +11,14 @@ import attrs
 from composeui.core.application import run
 from composeui.core.dashboard import DashboardView, bar_chart
 from composeui.core.reactivity import reactive
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
+from composeui.core.sqlitemodel import (
+    CSVSqliteTable,
+    SqliteModel,
+    SqliteSource,
+    csv_field,
+    define_csv_row,
+    table,
+)
 from composeui.core.view import (
     ChartView,
     CheckBoxView,
@@ -19,6 +26,7 @@ from composeui.core.view import (
     LabelView,
     MapPoint,
     MapView,
+    ReferenceLine,
     Series,
     SidebarView,
     SourceTableView,
@@ -65,6 +73,13 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
                 if hour is not None:
                     pickups[hour] = count
             return pickups
+
+    def source_at(self, at_hour: int) -> SqliteSource:
+        """Get a source of the rows picked up during the hour `at_hour`."""
+        # a source's query takes no parameter: the hour goes in it as an int
+        hour = f"CAST(strftime('%H', date_time) AS INTEGER) = {int(at_hour)}"
+        query = f"SELECT rowid AS rowid, * FROM uber_data WHERE {hour}"  # noqa: S608 (an int)
+        return SqliteSource(self, query, id_column="rowid", columns=self.source().columns)
 
     def pickup_points(self, at_hour: int) -> list[MapPoint]:
         with self.connection() as db:
@@ -126,7 +141,10 @@ class UberPickupsMainView(DashboardView):
 
     filters: PickupFilters = child(PickupFilters, title="Filters")
     status: LabelView = child(LabelView)
-    table: SourceTableView = child(SourceTableView)
+    # the user filters the hour's rows further, e.g. by base
+    table: SourceTableView = child(
+        SourceTableView, filterable_columns=["date_time", "lat", "lon", "base"]
+    )
     pickups_chart: ChartView = bar_chart(
         "Number of pickups by hour",
         HOURS,
@@ -137,7 +155,7 @@ class UberPickupsMainView(DashboardView):
     pickups_map: MapView = child(MapView, title="Pickup locations (up to 10,000 sampled pickups)")
 
     def connect_model(self, model: UberPickupsModel) -> None:
-        self.table.source = model.uber_data.source()
+        self.model = model
         self.loader = self.jobs.task(model.load_pickups)
         self.points = self.jobs.task(model.load_points)
         self.loader.show_state(
@@ -160,10 +178,14 @@ class UberPickupsMainView(DashboardView):
         self.pickups_chart.series = [Series.bars("Pickups", self.loader.result or [])]
 
     @reactive
-    def load_points(self) -> None:
-        # a query per hour picked: the latest one shows, however long the previous ones take
+    def show_hour(self) -> None:
+        # the hour picked filters the table and the map, and stands out on the chart
+        hour = self.filters.hour.value
+        self.table.source = self.model.uber_data.source_at(hour)
+        self.pickups_chart.reference_lines = [ReferenceLine(hour, HOURS[hour], vertical=True)]
         if self.loader.has_result:
-            self.points.start_latest(self.filters.hour.value)
+            # a query per hour picked: the latest one shows, however long the previous ones take
+            self.points.start_latest(hour)
 
     @reactive
     def show_points(self) -> None:

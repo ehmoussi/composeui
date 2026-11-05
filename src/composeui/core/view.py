@@ -54,6 +54,7 @@ from composeui.core.jobs import Jobs
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.reactivity import (
     batch,
+    follow,
     register_types,
     register_view_class,
 )
@@ -2550,15 +2551,9 @@ def line_styles_after(
 class CheckBoxMixin:
     """The fields of a check box: its `text`, its state and `toggled`."""
 
-    def _show_checked(self, _attribute: attrs.Attribute[Any], is_checked: bool) -> bool:
-        for view in self._shown:
-            view.is_visible = is_checked
-        return is_checked
-
     #: shown next to the box
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
-    # its own hooks: the class's would else run, but not these
-    is_checked: bool = attrs.field(default=False, on_setattr=[_show_checked, notify_renderer])
+    is_checked: bool = False
     #: the user checked or unchecked the box; not emitted when `is_checked` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
     #: the views shown only while the box is checked (see `shows`)
@@ -2578,8 +2573,14 @@ class CheckBoxMixin:
         `is_checked`, and as a study opens or New starts one.
         """
         self._shown.extend(views)
-        for view in views:
-            view.is_visible = self.is_checked
+
+        def show_checked() -> None:
+            is_checked = self.is_checked
+            for view in views:
+                view.is_visible = is_checked
+
+        # as a reactive method of the box: `is_checked` is its input
+        follow(cast("View", self), "shows", show_checked)
 
 
 @define_view

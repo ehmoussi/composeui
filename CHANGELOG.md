@@ -19,6 +19,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- `CheckBoxMixin.shows` and `Task.show_state` follow their inputs as reactive methods of the
+  view that they change. In a signal's callbacks, the views that they show or hide change
+  once the callbacks are done, with the reactive methods, not at once. `reactive_inputs`
+  lists them as `shows` and `show_state`. An app that uses them records the reads of its
+  view fields, as an app with a reactive method does.
 - A list that a view holds, such as a map's `points` or a table's `rows`, can't change in
   place: `append`, `pop`, `x[i] = ...` and the like raise a `TypeError` that names the
   attribute. Such a change reached no renderer, so the screen kept the old list. Set a new
