@@ -572,19 +572,6 @@ and state who owns it: the web session, or the local user. A folder outside the 
 never shows, even if a root that held it was allowed before. Done when a test changes the roots
 and finds that the history shows no folder outside them.
 
-## Known problems
-
-| ID | Problem | When |
-| --- | --- | --- |
-| P05 | Once a reactive method exists, a write of a view field takes about twice as long | Before M5 |
-
-For P05, once a class with a reactive method exists, or a helper such as `shows` runs, each
-write of a view field, in every view, goes through two Python calls: the class's
-`__setattr__` and the field's descriptor (`reactivity.py`). It takes about 3.5 µs instead of
-1.7 µs, and a page builds up to about 20% slower than in 0.3.0. Measure a write and a page
-build against 0.3.0, then try one call per write. Done when a write costs near 0.3.0's time,
-or the cost left is recorded here.
-
 ## Reference apps
 
 Three apps test each milestone against real use.

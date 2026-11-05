@@ -32,6 +32,7 @@ from composeui.core.view import (
     MapPoint,
     MapView,
     SliderView,
+    TableView,
     View,
     child,
     define_view,
@@ -292,6 +293,27 @@ def test_a_list_set_again_is_a_change_even_equal() -> None:
     assert view.runs == 2
     view.pickups.points += [MapPoint(latitude=48.9, longitude=2.3)]
     assert (view.runs, view.count.text) == (3, "1")
+
+
+@define_view
+class SelectionView(MainView):
+    table: TableView = child(TableView, headers=["Pipe"], rows=[["P1"], ["P2"]])
+    selection: LabelView = child(LabelView)
+
+    @reactive
+    def show_selection(self) -> None:
+        self.selection.text = ", ".join(str(row) for row in self.table.selected_rows)
+
+
+def test_a_field_that_another_field_s_hook_sets_runs_its_methods_again() -> None:
+    view = SelectionView()
+    start_reactions(view)
+    view.table.selected_rows = [1]
+    assert view.selection.text == "1"
+
+    # the hook of `rows` drops the selected row gone, without the hooks of `selected_rows`
+    view.table.rows = [["P1"]]
+    assert view.selection.text == ""
 
 
 @define_view

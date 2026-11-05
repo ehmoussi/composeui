@@ -71,6 +71,8 @@ class _State:
     view_classes: list[type[Any]] = []  # noqa: RUF012 (one shared registry)
     #: the view class: a field holding one, or a list of them, is a branch of the tree
     view_type: type[Any] = object
+    #: the values that may hold views: a view, or a list of them
+    view_holders: tuple[type[Any], ...] = (list, tuple)
     #: values whose read isn't an input, e.g. a signal, set once
     not_inputs: tuple[type[Any], ...] = ()
     #: the batches of reactions running, in all threads: their reads are recorded
@@ -247,6 +249,7 @@ def register_types(view_type: type[Any], *not_inputs: type[Any]) -> None:
     `view` calls it, e.g. with the signal class.
     """
     _State.view_type = view_type
+    _State.view_holders = (view_type, list, tuple)
     _State.not_inputs = not_inputs
 
 
@@ -322,8 +325,11 @@ class _Reaction:
 class _FieldReader:
     """A view field read through it while reactions run: the read is an input of the one running.
 
-    Its `__get__` exists only then (`_recording_reads`). Without it, a read finds the value
-    in the view's ``__dict__`` without calling Python, as before a reactive method existed.
+    Its `__get__` and `__set__` exist only then (`_recording_reads`). Without them, a read
+    finds the value in the view's ``__dict__``, and a write stores it there, without calling
+    Python, as before a reactive method existed: `__init__` sets each field that way. The
+    class's ``__setattr__`` finds the changes (`_track_fields`), and `set_value` those that
+    a hook makes.
     """
 
     __slots__ = ("name",)
@@ -331,16 +337,10 @@ class _FieldReader:
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def __set__(self, instance: Any, value: Any) -> None:
-        values = instance.__dict__
-        missing = self.name not in values
-        old = values.get(self.name)
-        values[self.name] = value
-        if missing:
-            return
-        source = values.get(_SOURCES, {}).get(self.name)
-        if source is not None and _differs(old, value):
-            source.changed()
+
+def _store_field(self: _FieldReader, instance: Any, value: Any) -> None:
+    """`_FieldReader.__set__` while reactions run: a data descriptor's, which `__get__` needs."""
+    instance.__dict__[self.name] = value
 
 
 def _read_field(self: _FieldReader, instance: Any, _owner: Any = None) -> Any:
@@ -407,31 +407,71 @@ def _track_fields(cls: type[Any]) -> None:
     set_field = cls.__dict__["__setattr__"]
 
     def set_attribute(view: View, name: str, value: Any) -> None:
-        # `batch` and `untracked` without their context managers, and only what a write
-        # needs where it is: a field is set often
-        if _RUNNING.get() is not None:
-            check_write(view, name)
-        pending: dict[_Reaction, None] = {}
-        batching = _PENDING.set(pending) if _PENDING.get() is None else None
-        # the hooks' reads, e.g. the renderer's old value, aren't the method's inputs
-        tracking = _TRACKING.set(None) if _TRACKING.get() is not None else None
         values = view.__dict__
+        if _SOURCES in values or _TRACKING.get() is not None:
+            _set_watched(view, name, value, set_field)
+            return
+        # no method reads this view's fields, and no reads are recorded: a write costs one
+        # call more only, a field is set often
         old = values.get(name)
-        try:
-            set_field(view, name, value)
-            if _REACTIONS in values and old is not value:
-                _replace_views(old, value)
-        finally:
-            if tracking is not None:
-                _TRACKING.reset(tracking)
-            if batching is not None:
-                # even if a hook failed: the fields that it set before stay
-                try:
-                    _flush(pending)
-                finally:
-                    _PENDING.reset(batching)
+        set_field(view, name, value)
+        if (
+            _REACTIONS in values
+            and old is not value
+            and (isinstance(old, _State.view_holders) or isinstance(value, _State.view_holders))
+        ):
+            _replace_views(old, value)
 
     type.__setattr__(cls, "__setattr__", set_attribute)
+
+
+def _set_watched(
+    view: View, name: str, value: Any, set_field: Callable[[View, str, Any], None]
+) -> None:
+    """Set the field `name` of a view that a method reads, or of any view while one runs.
+
+    `batch` and `untracked` without their context managers: a field is set often.
+    """
+    if _RUNNING.get() is not None:
+        check_write(view, name)
+    pending: dict[_Reaction, None] = {}
+    batching = _PENDING.set(pending) if _PENDING.get() is None else None
+    # the hooks' reads, e.g. the renderer's old value, aren't the method's inputs
+    tracking = _TRACKING.set(None) if _TRACKING.get() is not None else None
+    values = view.__dict__
+    old = values.get(name)
+    try:
+        set_field(view, name, value)
+        source = values.get(_SOURCES, {}).get(name)
+        if source is not None and _differs(old, values[name]):
+            source.changed()
+        if _REACTIONS in values and old is not value:
+            _replace_views(old, value)
+    finally:
+        if tracking is not None:
+            _TRACKING.reset(tracking)
+        if batching is not None:
+            # even if a hook failed: the fields that it set before stay
+            try:
+                if len(pending) > 0:
+                    _flush(pending)
+            finally:
+                _PENDING.reset(batching)
+
+
+def set_value(view: object, name: str, value: Any) -> None:
+    """Set the field `name` of `view` without its hooks, e.g. from another field's hook.
+
+    The reactive methods that read it run again, as after a write of the field.
+    """
+    values = view.__dict__
+    old = values.get(name)
+    values[name] = value
+    sources = values.get(_SOURCES)
+    if sources is not None:
+        source = sources.get(name)
+        if source is not None and _differs(old, value):
+            source.changed()
 
 
 def _replace_views(old: Any, new: Any) -> None:
@@ -484,12 +524,15 @@ def _schedule(reaction: _Reaction) -> None:
 def _recording_reads() -> Generator[None]:
     """Record the reads of view fields in the block: give `_FieldReader` its `__get__`.
 
-    For all the views at once, in one class attribute; until the last block ends, in any
-    thread. Another thread's reads meanwhile aren't recorded: no reaction of theirs runs.
+    And its `__set__`: only a data descriptor's `__get__` comes before the view's
+    ``__dict__``. For all the views at once, in one class attribute; until the last block
+    ends, in any thread. Another thread's reads meanwhile aren't recorded: no reaction of
+    theirs runs.
     """
     with _State.lock:
         if _State.running_batches == 0:
             _FieldReader.__get__ = _read_field  # type: ignore[attr-defined]
+            _FieldReader.__set__ = _store_field  # type: ignore[attr-defined]
         _State.running_batches += 1
     try:
         yield
@@ -498,6 +541,7 @@ def _recording_reads() -> Generator[None]:
             _State.running_batches -= 1
             if _State.running_batches == 0:
                 del _FieldReader.__get__  # type: ignore[attr-defined]
+                del _FieldReader.__set__  # type: ignore[attr-defined]
 
 
 def _flush(pending: dict[_Reaction, None]) -> None:

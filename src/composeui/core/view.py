@@ -57,6 +57,7 @@ from composeui.core.reactivity import (
     follow,
     register_types,
     register_view_class,
+    set_value,
 )
 from composeui.core.registry import RendererType, create_renderer, renders_on_demand
 from composeui.core.renderer import MainRenderer, Renderer, RendererContainer
@@ -513,7 +514,7 @@ def _retranslate(view: View, translate: Translate) -> None:
             # set once by the app, e.g. the main view's title: only a language changes it
             translated = _fix_lists(view, f, translated)
             notify_renderer(view, f, translated)
-            object.__setattr__(view, f.name, translated)
+            set_value(view, f.name, translated)
         else:
             setattr(view, f.name, translated)
     view.retranslate()
@@ -3736,7 +3737,7 @@ def _filter_chip(texts: Mapping[str, str], header: str, typed: str, *, takes_pat
 def _store(view: View, attribute: attrs.Attribute[Any], value: Any) -> None:
     """Set `view`'s attribute, then notify its renderer: it shows the view as it now is."""
     old = getattr(view, attribute.name)
-    object.__setattr__(view, attribute.name, value)
+    set_value(view, attribute.name, value)
     renderer = view.renderer
     if (
         old != value
@@ -3857,16 +3858,16 @@ class TableMixin:
         if isinstance(renderer, (Renderer, RendererContainer)) and renderer.is_updating_state():
             # the user edited a cell: the selection stays on its rows, which may still move
             # or hide, as their cells sort or filter
-            object.__setattr__(self, "rows", rows)
+            set_value(self, "rows", rows)
             self._show_rows(self.selected_rows, force=False)
             return rows
         edited = self._edited_rows if self._edited_rows is not None else self.rows
         # each selected row as edited, then as it was
         selected = [(edited[row], self.rows[row]) for row in self.selected_rows]
         # unshown until the rows are: the renderer shows the selection with them
-        object.__setattr__(self, "selected_rows", [])
+        set_value(self, "selected_rows", [])
         rows = notify_renderer(cast("View", self), attribute, rows)
-        object.__setattr__(self, "rows", rows)
+        set_value(self, "rows", rows)
         found: set[int] = set()
         for candidates in selected:
             held = [rows.index(cells) for cells in candidates if rows.count(cells) == 1]
@@ -4209,8 +4210,8 @@ class TableMixin:
         is_shown = set(shown)
         kept = [row for row in selected if row in is_shown]
         changed = shown != self.shown_rows
-        object.__setattr__(self, "shown_rows", shown)
-        object.__setattr__(self, "selected_rows", kept)
+        set_value(self, "shown_rows", shown)
+        set_value(self, "selected_rows", kept)
         renderer = cast("View", self).renderer
         if isinstance(renderer, (Renderer, RendererContainer)) and (force or changed):
             # even while the renderer updates the view: its widget doesn't order the rows
@@ -4226,7 +4227,7 @@ class TableView(TableMixin, View):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        object.__setattr__(self, "shown_rows", self._shown())
+        set_value(self, "shown_rows", self._shown())
 
 
 RecordT = TypeVar("RecordT", bound="AttrsInstance")
@@ -4294,7 +4295,7 @@ class RecordTableView(TableView, Generic[RecordT]):
         self, _attribute: attrs.Attribute[Any], columns: list[Column]
     ) -> list[Column]:
         # first: the rows sort and filter by the columns' fields
-        object.__setattr__(self, "columns", columns)
+        set_value(self, "columns", columns)
         self.headers = [translate_again(column.header, self._tr) for column in columns]
         self.editable_columns = [index for index, column in enumerate(columns) if column.editable]
         self.sortable_columns = [index for index, column in enumerate(columns) if column.sortable]
@@ -4332,7 +4333,7 @@ class RecordTableView(TableView, Generic[RecordT]):
         self, _attribute: attrs.Attribute[Any], records: list[RecordT]
     ) -> list[RecordT]:
         # first: the rows sort and filter by the records' values
-        object.__setattr__(self, "records", records)
+        set_value(self, "records", records)
         # the records' type may be known only since: ``RecordTableView[Room](...)`` sets it
         # once built
         self.cell_widgets = self._cell_widgets()
@@ -4771,7 +4772,7 @@ class SourceTableView(View):
         and the sort on columns it doesn't have go: they'd filter and sort nothing, and
         the bar couldn't show them.
         """
-        object.__setattr__(self, attribute.name, source)
+        set_value(self, attribute.name, source)
         if source is not None:
             self._drop_other_columns_settings(source)
         if self._listener is not None:
@@ -6902,9 +6903,9 @@ class TreeView(View):
         Unnotified: the renderer shows them with the nodes.
         """
         paths = {path for path, _node in walk_tree(nodes)}
-        object.__setattr__(self, "expanded", [path for path in self.expanded if path in paths])
+        set_value(self, "expanded", [path for path in self.expanded if path in paths])
         if self.selected not in paths:
-            object.__setattr__(self, "selected", None)
+            set_value(self, "selected", None)
         return cast("list[TreeNode]", notify_renderer(self, attribute, nodes))
 
     nodes: list[TreeNode] = attrs.field(

@@ -13,6 +13,8 @@ The notable changes of each release of ComposeUI. The format follows
   once at start-up. One event, such as the callbacks of one signal, runs each method once,
   in a fixed order. A method that sets a field that it reads raises `ReactiveLoopError`.
   `reactive_inputs(view)` lists what each method read in its last run.
+  Once a reactive method exists, a write of a view field costs about one Python call more, and
+  views build as fast as without one.
 - `Task.start_latest(*args)` starts a run that replaces the run going on, for an input that
   changes quickly, such as a slider. It waits `debounce` seconds first (0.2 by default, or
   `jobs.task(work, debounce=...)`), and the result of a replaced run never shows.
