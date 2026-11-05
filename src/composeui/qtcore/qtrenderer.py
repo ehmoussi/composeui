@@ -63,6 +63,7 @@ from composeui.core.renderer import (
     RendererContainer,
     ViewLike,
 )
+from composeui.core.signal import WeakSlot
 from composeui.core.view import (
     ActionView,
     Align,
@@ -158,18 +159,31 @@ TWidget = TypeVar("TWidget", bound="QWidget | QAction")
 class _MainThreadInvoker(QObject):
     """Bridges a call from any thread onto the thread that owns this `QObject`."""
 
-    _invoke = QtSignal(object)
+    _invoke = QtSignal(object, object)
 
     def __init__(self) -> None:
         super().__init__()
         self._invoke.connect(self._run, Qt.ConnectionType.QueuedConnection)
 
-    def call(self, callback: Callable[[], None]) -> None:
-        self._invoke.emit(callback)
+    def call(self, owner: object, callback: Callable[[], None]) -> None:
+        """Call `callback` on this object's thread, unless `owner` is collected by then."""
+        self._invoke.emit(weakref.ref(owner), callback)
 
     @staticmethod
-    def _run(callback: Callable[[], None]) -> None:
-        callback()
+    def _run(owner: weakref.ref[object], callback: Callable[[], None]) -> None:
+        # as when each renderer had an invoker of its own, deleted with it
+        if owner() is not None:
+            callback()
+
+
+@functools.cache
+def _main_thread_invoker() -> _MainThreadInvoker:
+    """Get the invoker of the renderers, made on the main thread with the first of them.
+
+    One for all: each `QObject` deleted makes PySide look through every Python connection of
+    the process, so an invoker per renderer made freeing a page take the square of its size.
+    """
+    return _MainThreadInvoker()
 
 
 class QtWidgetRenderer(Renderer[TView, TWidget]):
@@ -193,10 +207,10 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
                     for name in ("log_message", "log_type", "has_form_error")
                 }
             )
-        self._main_thread_invoker = _MainThreadInvoker()
+        self._main_thread_invoker = _main_thread_invoker()  # made here, on the main thread
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
-        self._main_thread_invoker.call(callback)
+        self._main_thread_invoker.call(self, callback)
 
     @property
     def qt_object(self) -> TWidget | None:
@@ -273,9 +287,9 @@ class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
-            self._rendered_object.textChanged.connect(self._update_text)
+            self._rendered_object.textChanged.connect(WeakSlot(self._update_text))
             # Qt reports an edit before the change: the view has the text first
-            self._rendered_object.textEdited.connect(self._update_text)
+            self._rendered_object.textEdited.connect(WeakSlot(self._update_text))
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
@@ -309,7 +323,7 @@ class QtTextAreaRenderer(QtWidgetRenderer[InputViewLike, QTextArea]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTextArea()
-            self._rendered_object.text_changed.connect(self._update_text)
+            self._rendered_object.text_changed.connect(WeakSlot(self._update_text))
             self._view.editing_finished.add_qt_signal(self._rendered_object.editing_finished)
             # the text only changes without signals from the view: each change is an edit
             self._view.text_changed.add_qt_signal(self._rendered_object.text_changed)
@@ -359,9 +373,9 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
             self._rendered_object = QLineEdit()
             validator = QDoubleValidator()
             self._rendered_object.setValidator(validator)
-            self._rendered_object.textChanged.connect(self._update_text)
+            self._rendered_object.textChanged.connect(WeakSlot(self._update_text))
             # Qt reports an edit before the change: the view has the value first
-            self._rendered_object.textEdited.connect(self._update_text)
+            self._rendered_object.textEdited.connect(WeakSlot(self._update_text))
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             self._view.text_edited.add_qt_signal(self._rendered_object.textEdited)
@@ -455,12 +469,12 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
             self._rendered_object = QSpinBox()
             self._rendered_object.setRange(_INT_MINIMUM, _INT_MAXIMUM)
             # its text only changes once acceptable, so never for a transient "-"
-            self._rendered_object.valueChanged.connect(self._update_value)
+            self._rendered_object.valueChanged.connect(WeakSlot(self._update_value))
             self._view.editing_finished.add_qt_signal(self._rendered_object.editingFinished)
             self._view.text_changed.add_qt_signal(self._rendered_object.textChanged)
             line_edit = _line_edit(self._rendered_object)
             # Qt reports an edit before the spin box reads it: the view has the value first
-            line_edit.textEdited.connect(self._update_edited)
+            line_edit.textEdited.connect(WeakSlot(self._update_edited))
             self._view.text_edited.add_qt_signal(line_edit.textEdited)
             self.refresh()
 
@@ -554,7 +568,7 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
         if self._rendered_object is None:
             self._rendered_object = QDateField()
             # first, so the view's callbacks see the new date
-            self._rendered_object.date_edited.connect(self._update_value)
+            self._rendered_object.date_edited.connect(WeakSlot(self._update_value))
             line_edit = self._rendered_object.line_edit
             self._view.editing_finished.add_qt_signal(line_edit.editingFinished)
             self._view.text_changed.add_qt_signal(line_edit.textChanged)
@@ -710,13 +724,13 @@ class _QtPathInputRenderer(QtWidgetRenderer[TPathView, QFilePathField]):
         if self._rendered_object is None:
             self._rendered_object = QFilePathField()
             line_edit = self._rendered_object.line_edit
-            line_edit.textChanged.connect(self._update_text)
+            line_edit.textChanged.connect(WeakSlot(self._update_text))
             # Qt reports an edit before the change: the view has the text first
-            line_edit.textEdited.connect(self._update_text)
+            line_edit.textEdited.connect(WeakSlot(self._update_text))
             self._view.editing_finished.add_qt_signal(line_edit.editingFinished)
             self._view.text_changed.add_qt_signal(line_edit.textChanged)
             self._view.text_edited.add_qt_signal(line_edit.textEdited)
-            self._rendered_object.browse_button.clicked.connect(self.browse)
+            self._rendered_object.browse_button.clicked.connect(WeakSlot(self.browse))
             self._rendered_object.reload_button.setVisible(False)
             self.refresh()
 
@@ -892,7 +906,7 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
         if self._rendered_object is None:
             self._rendered_object = QValueSlider()
             # first, so the view's callbacks see the new value
-            self._rendered_object.shown_value_changed.connect(self._update_value)
+            self._rendered_object.shown_value_changed.connect(WeakSlot(self._update_value))
             self._view.value_changed.add_qt_signal(self._rendered_object.shown_value_changed)
             self.refresh()
 
@@ -1015,9 +1029,9 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QConsoleBox()
-            self._rendered_object.save.clicked.connect(self._save)
-            self._rendered_object.copy.clicked.connect(self._copy)
-            self._rendered_object.text.matches_changed.connect(self._show_matches)
+            self._rendered_object.save.clicked.connect(WeakSlot(self._save))
+            self._rendered_object.copy.clicked.connect(WeakSlot(self._copy))
+            self._rendered_object.text.matches_changed.connect(WeakSlot(self._show_matches))
             self.refresh()
 
     @staticmethod
@@ -1135,7 +1149,7 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
         if self._rendered_object is None:
             self._rendered_object = QCheckBox()
             # first, so the view's callbacks see the new check state
-            self._rendered_object.toggled.connect(self._update_checked)
+            self._rendered_object.toggled.connect(WeakSlot(self._update_checked))
             self._view.toggled.add_qt_signal(self._rendered_object.toggled)
             self.refresh()
 
@@ -1171,7 +1185,7 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
         if self._rendered_object is None:
             self._rendered_object = QPushButton()
             # Qt's own `clicked` also passes the check state, which a button doesn't have
-            self._rendered_object.clicked.connect(self._emit_clicked)
+            self._rendered_object.clicked.connect(WeakSlot(self._emit_clicked))
             self.refresh()
 
     @staticmethod
@@ -1318,7 +1332,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QChart()
-            self._rendered_object.save_image_requested.connect(self._save_image)
+            self._rendered_object.save_image_requested.connect(WeakSlot(self._save_image))
             self._rendered_object.point_clicked.connect(self._view.clicked.emit)
             self.refresh()
 
@@ -1575,13 +1589,13 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
             table.copy_requested.connect(
                 lambda: QApplication.clipboard().setText(self._view.selection_text())
             )
-            table.export_requested.connect(self._export)
+            table.export_requested.connect(WeakSlot(self._export))
             bar.check = columns.filter_error
             bar.placeholder = lambda column, is_pattern: columns.filter_placeholder(
                 column, is_pattern=is_pattern
             )
             bar.takes_pattern = columns.filter_takes_pattern
-            bar.search_edited.connect(self._update_search)
+            bar.search_edited.connect(WeakSlot(self._update_search))
             bar.filter_added.connect(columns.add_filter)
             bar.filter_removed.connect(columns.remove_filter)
             bar.filters_cleared.connect(columns.clear_filters)
@@ -1717,23 +1731,23 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
         if self._rendered_object is None:
             self._rendered_object = QFilterTable()
             table, bar = self._rendered_object.table, self._rendered_object.bar
-            table.selected_rows_changed.connect(self._update_selected_rows)
+            table.selected_rows_changed.connect(WeakSlot(self._update_selected_rows))
             # a double click that edits nothing, or Enter (see `QTextTableView`)
-            table.activated.connect(self._activate_row)
-            table.cell_edited.connect(self._update_cell)
-            table.cell_clicked.connect(self._click_cell)
-            table.browse_clicked.connect(self._browse)
-            table.check_all_clicked.connect(self._check_all)
-            table.header_clicked.connect(self._sort_by)
+            table.activated.connect(WeakSlot(self._activate_row))
+            table.cell_edited.connect(WeakSlot(self._update_cell))
+            table.cell_clicked.connect(WeakSlot(self._click_cell))
+            table.browse_clicked.connect(WeakSlot(self._browse))
+            table.check_all_clicked.connect(WeakSlot(self._check_all))
+            table.header_clicked.connect(WeakSlot(self._sort_by))
             bar.check = self._view.filter_error
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 column, is_pattern=is_pattern
             )
             bar.takes_pattern = self._view.filter_takes_pattern
-            bar.search_edited.connect(self._update_search)
-            bar.filter_added.connect(self._add_filter)
-            bar.filter_removed.connect(self._remove_filter)
-            bar.filters_cleared.connect(self._clear_filters)
+            bar.search_edited.connect(WeakSlot(self._update_search))
+            bar.filter_added.connect(WeakSlot(self._add_filter))
+            bar.filter_removed.connect(WeakSlot(self._remove_filter))
+            bar.filters_cleared.connect(WeakSlot(self._clear_filters))
             self.refresh()
 
     @classmethod
@@ -1976,7 +1990,7 @@ class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup]
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QRadioGroup(self._view.values)
-            self._rendered_object.value_changed.connect(self._update_value)
+            self._rendered_object.value_changed.connect(WeakSlot(self._update_value))
             self._view.value_changed.add_qt_signal(self._rendered_object.value_changed)
             self.refresh()
 
@@ -2017,7 +2031,7 @@ class QtComboBoxRenderer(
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QValueComboBox(self._view.values)
-            self._rendered_object.current_value_changed.connect(self._update_value)
+            self._rendered_object.current_value_changed.connect(WeakSlot(self._update_value))
             self._view.value_changed.add_qt_signal(self._rendered_object.current_value_changed)
             self.refresh()
 
@@ -2285,8 +2299,8 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
             release_when_hidden(box)
             self._accept_button = box.addButton("", QMessageBox.ButtonRole.AcceptRole)
             self._reject_button = box.addButton("", QMessageBox.ButtonRole.RejectRole)
-            box.buttonClicked.connect(self._set_clicked)
-            box.finished.connect(self._answer)
+            box.buttonClicked.connect(WeakSlot(self._set_clicked))
+            box.finished.connect(WeakSlot(self._answer))
             self._rendered_object = box
             self.refresh()
 
@@ -2510,7 +2524,7 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
                 widget = _widget_of(view)
                 if widget is not None:
                     self._rendered_object.addWidget(widget)
-            self._rendered_object.moved_by_user.connect(self._update_sizes)
+            self._rendered_object.moved_by_user.connect(WeakSlot(self._update_sizes))
             self.refresh()
 
     @staticmethod
@@ -2554,7 +2568,7 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
                     )
                     self._rendered_object.content_layout.addWidget(widget, 0, alignment)
             # first, so the view's callbacks see the new state
-            self._rendered_object.expanded_changed.connect(self._update_expanded)
+            self._rendered_object.expanded_changed.connect(WeakSlot(self._update_expanded))
             self._view.toggled.add_qt_signal(self._rendered_object.expanded_changed)
             self.refresh()
 
@@ -2591,7 +2605,7 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
                 _add_content_widget(self._rendered_object.content_layout, view)
             self._rendered_object.finish_content()
             # first, so the view's callbacks see the new state
-            self._rendered_object.expanded_changed.connect(self._update_expanded)
+            self._rendered_object.expanded_changed.connect(WeakSlot(self._update_expanded))
             self._view.toggled.add_qt_signal(self._rendered_object.expanded_changed)
             self.refresh()
 
@@ -2697,7 +2711,7 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
             self._rendered_object.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
-            self._rendered_object.itemSelectionChanged.connect(self._update_selected)
+            self._rendered_object.itemSelectionChanged.connect(WeakSlot(self._update_selected))
             self._rendered_object.itemExpanded.connect(
                 lambda item: self._update_expanded(item, is_expanded=True)
             )
@@ -2898,7 +2912,7 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
                 self._rendered_object.addTab(tab.renderer.qt_object, tab.title)
                 tab.renderer.refresh()  # its tab's state, now that it has one
             # once the tabs are in: adding the first one makes it current
-            self._rendered_object.currentChanged.connect(self._update_current_index)
+            self._rendered_object.currentChanged.connect(WeakSlot(self._update_current_index))
             self._view.current_changed.add_qt_signal(self._rendered_object.currentChanged)
             self.refresh()
 

@@ -15,7 +15,6 @@ from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 from composeui.core import reactivity
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from weakref import ReferenceType
 
     from qtpy.QtCore import SignalInstance
@@ -74,7 +73,7 @@ CallbackT = TypeAliasType(
 )
 
 
-def _positional_count(callback: Callable[..., None]) -> int | None:
+def _positional_count(callback: Callable[..., object]) -> int | None:
     """Get how many positional arguments `callback` takes; None for any number."""
     try:
         params = inspect.signature(callback).parameters.values()
@@ -97,7 +96,6 @@ class Signal(Generic[Unpack[Ts]]):
 
     def __init__(self) -> None:
         self._name = ""
-        self._qt_signal = _QtSignal()
         self._callbacks: list[Callable[[Unpack[Ts]], None]] = [self._log_signal]
         self._logger = LOGGER
         self._main_view: ReferenceType[MainView] | None = None
@@ -120,7 +118,7 @@ class Signal(Generic[Unpack[Ts]]):
 
     def add_qt_signal(self, signal: SignalInstance) -> None:
         """Call this signal's callbacks when the Qt signal `signal` emits too."""
-        self._qt_signal.add_signal(signal, self._callbacks)
+        signal.connect(WeakSlot(self._call_from_qt))
 
     @overload
     def connect(self, callback: Callable[[Unpack[Ts]], None], *, now: bool = False) -> None: ...
@@ -160,14 +158,16 @@ class Signal(Generic[Unpack[Ts]]):
         """
         injected_callback = self._inject_callback(callback)
         self._callbacks.append(injected_callback)
-        self._qt_signal.connect(injected_callback)
         if now:
             cast("Callable[[], None]", injected_callback)()
 
     def disconnect(self) -> None:
-        self._qt_signal.disconnect(self._callbacks)
         self._callbacks = [self._log_signal]
-        self._qt_signal.connect(self._log_signal)
+
+    def _call_from_qt(self, *args: Unpack[Ts]) -> None:
+        # the callbacks connected now, as Qt calls the slots connected when it emits
+        for callback in tuple(self._callbacks):
+            _call_reporting(callback, args)
 
     def emit(self, *args: Unpack[Ts]) -> None:
         if not reactivity.is_enabled():
@@ -275,24 +275,48 @@ else:
     SignalNoArgs = Signal
 
 
-class _QtSignal:
-    def __init__(self) -> None:
-        self._qt_signals: list[SignalInstance] = []
+def _call_reporting(callback: Callable[..., None], args: tuple[object, ...]) -> None:
+    """Call `callback`, and report its error as PySide reports a slot's, without raising it.
 
-    def add_signal(self, signal: SignalInstance, callbacks: Sequence[Callable[..., None]]) -> None:
-        """Add the Qt signal `signal`, and connect `callbacks` to it."""
-        self._qt_signals.append(signal)
-        for callback in callbacks:
-            signal.connect(callback)
+    So the next callbacks still run, as the next slots did.
+    """
+    try:
+        callback(*args)
+    except Exception:  # noqa: BLE001 - reported through the hook, as by PySide
+        sys.excepthook(*sys.exc_info())
 
-    def connect(self, callback: Callable[..., None]) -> None:
-        for qt_signal in self._qt_signals:
-            qt_signal.connect(callback)
 
-    def disconnect(self, callbacks: Sequence[Callable[..., None]]) -> None:
-        for qt_signal in self._qt_signals:
-            for callback in callbacks:
-                qt_signal.disconnect(callback)
+class WeakSlot:
+    """A Qt slot calling a method, while its object lives, with the arguments it takes.
+
+    Connect it rather than the bound method. PySide drops a bound method's connection with
+    a weak reference callback whose cost grows with the connections in the process: freeing
+    a page of many widgets took a time that grew with the square of their number. Qt holds
+    this slot until its widget is deleted, and the slot holds the method's object weakly, as
+    PySide holds a bound method's. As PySide too, it passes only the first arguments that
+    the method takes.
+    """
+
+    __slots__ = ("_count", "_method")
+
+    def __init__(self, method: Callable[..., object]) -> None:
+        self._method = weakref.WeakMethod(method)
+        self._count = _method_positional_count(method.__func__)  # type: ignore[attr-defined]
+
+    def __call__(self, *args: object) -> None:
+        method = self._method()
+        if method is not None:
+            method(*args[: self._count])
+
+
+@functools.cache
+def _method_positional_count(function: Callable[..., object]) -> int | None:
+    """Get how many positional arguments the method `function` takes; None for any number.
+
+    Read once per function: a page connects the same methods of each of its widgets.
+    """
+    count = _positional_count(function)
+    return None if count is None else count - 1  # not `self`
 
 
 class _FirstArgumentsCallback(Generic[Unpack[Ts]]):

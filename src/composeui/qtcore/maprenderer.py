@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import Protocol
 
 from composeui.core.renderer import ViewLike
+from composeui.core.signal import WeakSlot
 from composeui.core.view import MapPoint, MapView
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qmap import QMap
@@ -45,9 +46,9 @@ class QtMapRenderer(QtWidgetRenderer[MapViewLike, QMap]):
     def render(self) -> None:
         if self._rendered_object is None:
             widget = self._rendered_object = QMap(self._view.user_agent, tiles=self._view.tiles)
-            widget.viewport_moved.connect(self._viewport_moved)
+            widget.viewport_moved.connect(WeakSlot(self._viewport_moved))
             widget.point_clicked.connect(self._view.clicked.emit)
-            widget.map.resized.connect(self._resize)
+            widget.map.resized.connect(WeakSlot(self._resize))
             self.refresh()
 
     @staticmethod

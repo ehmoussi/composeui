@@ -1940,12 +1940,13 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
     assert window.minimumSizeHint().height() == height
 
 
-def _rendered_pipes_holding_their_main_view() -> tuple[weakref.ref[PipesMainView], QWidget]:
+def _rendered_pipes_holding_their_main_view() -> tuple[PipesMainView, QWidget]:
     """Render pipes whose widgets' callbacks hold the main view, as an app's closures do.
 
     Built here, so the closures keep the main view: a `del` in the test would empty them.
     """
     view = PipesMainView()
+    view.status_bar.timeout = 0  # no timer to clear the message
     _add_reference_to_signals(view, None)
     view.pipes.items = PIPES[:1]
     view.render(RendererType.QT)
@@ -1954,21 +1955,68 @@ def _rendered_pipes_holding_their_main_view() -> tuple[weakref.ref[PipesMainView
         assert isinstance(pipe, PipeExpander)
         # fewer arguments than `toggled` emits, so the signal wraps it
         pipe.toggled.connect(lambda: view.status_bar.show_message("Toggled"))
-    return weakref.ref(view), _widget(view)
+    return view, _widget(view)
 
 
 @pytest.mark.usefixtures("qtbot")  # its QApplication; not `addWidget`, which keeps the window
-def test_a_deleted_window_frees_its_main_view_and_the_callbacks_on_its_widgets() -> None:
-    reference, window = _rendered_pipes_holding_their_main_view()
-    gc.collect()
-    assert reference() is not None  # the window's connections hold the callbacks
+def test_a_window_s_widgets_run_the_callbacks_and_keep_none_of_its_views() -> None:
+    view, window = _rendered_pipes_holding_their_main_view()
+    expander = _widget(view.pipes.item_views[-1])
+    assert isinstance(expander, QExpander)
+    expander.header.click()
+    assert view.status_bar.message == "Toggled"
+    reference = weakref.ref(view)
 
-    window.deleteLater()
-    del window
-    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    del view
     gc.collect()
 
+    # the window lives on, but its slots hold the views weakly: it can't keep the app alive
     assert reference() is None
+    window.deleteLater()
+
+
+def test_a_callback_s_error_on_a_widget_s_signal_is_reported_and_the_next_ones_run(
+    qtbot: QtBot,
+) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    insulated = view.pages.inputs.pipe_form.insulated
+    checkbox = _field_widget(insulated)
+    assert isinstance(checkbox, QCheckBox)
+    toggled: list[bool] = []
+
+    def fail() -> None:
+        msg = "No insulation"
+        raise ValueError(msg)
+
+    insulated.toggled.connect(fail)
+    insulated.toggled.connect(toggled.append)
+
+    with qtbot.capture_exceptions() as exceptions:
+        checkbox.click()
+
+    # as when each callback was a slot of its own
+    assert [str(error) for _, error, _ in exceptions] == ["No insulation"]
+    assert toggled == [True]
+
+
+@pytest.mark.usefixtures("qtbot")
+def test_a_call_for_the_main_thread_is_dropped_once_its_renderer_is_collected() -> None:
+    called: list[str] = []
+    gone = LabelView()
+    gone.render(RendererType.QT)
+    kept = LabelView()
+    kept.render(RendererType.QT)
+    assert gone.renderer is not None
+    assert kept.renderer is not None
+    gone.renderer.call_on_main_thread(lambda: called.append("gone"))
+    kept.renderer.call_on_main_thread(lambda: called.append("kept"))
+
+    del gone  # e.g. the main view a reload replaced
+    gc.collect()
+    QApplication.processEvents()
+
+    assert called == ["kept"]
 
 
 def test_a_tab_view_shows_the_tab_the_user_picks(qtbot: QtBot) -> None:

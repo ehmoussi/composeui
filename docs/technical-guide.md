@@ -567,6 +567,12 @@ To update one of them:
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
+- In a Qt renderer, connect the renderer's own methods to a widget's signals through
+  `WeakSlot` from `composeui.core.signal`, never as bound methods:
+  `widget.toggled.connect(WeakSlot(self._update_checked))`. PySide undoes the connection of a
+  bound method at a cost that grows with all the connections of the process. A page of many
+  widgets then took seconds to free. A widget's own slots are methods of a `QObject`, and
+  need no `WeakSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that isn't `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.

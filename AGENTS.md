@@ -117,6 +117,11 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   annotations that `attrs`/`cattrs` evaluate at runtime (view fields), since `X | Y` fails
   there on 3.9 (ruff's `keep-runtime-typing` stops pyupgrade from rewriting them).
 - Use `qtpy` imports, never `PySide6`/`PyQt*` directly, in `qtcore`.
+- A Qt renderer connects its own methods to a widget's signals through `WeakSlot`
+  (`composeui.core.signal`): `widget.toggled.connect(WeakSlot(self._update_checked))`, never
+  the bound method. PySide undoes a bound method's connection at a cost that grows with all the
+  connections of the process, so a page of many widgets took seconds to free. A widget's own
+  slots, methods of a `QObject`, need no `WeakSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
   escapes every value (see the `web-security` skill).
 - Put imports only needed for typing under `if TYPE_CHECKING:`.

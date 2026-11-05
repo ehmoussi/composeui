@@ -608,25 +608,28 @@ and finds that the history shows no folder outside them.
 
 ## Known problems
 
-These problems were found while measuring reactive methods (N02). They are on `main` and in
-0.3.0, and nothing fixes them yet. Each measure uses the same page: a `ListView` of rows, each
-row a `VerticalView` of a `LabelView`, a `CheckBoxView` and a `LabelRowSliderView`.
+These problems were found while measuring reactive methods (N02), and nothing fixes them yet.
+Each measure uses the same page: a `ListView` of rows, each row a `VerticalView` of a
+`LabelView`, a `CheckBoxView` and a `LabelRowSliderView`.
 
 | ID | Problem | When |
 | --- | --- | --- |
-| P02 | Qt: freeing a page of 1,000 rows takes about 1.1 s of garbage collection | Next |
 | P03 | The web renders a page about 70% slower than in 0.1.0 | Before the M1 release |
-
-For P02, render the page on Qt, delete its window, and let the deletion run: one full
-(generation 2) garbage collection then frees the page in about 1.1 s, while the UI waits. The
-time is the same with or without callbacks connected to the rows. Done when the cause is known,
-and the measure before and after the fix is recorded in its pull request.
+| P04 | Qt: deleting the window of a large page takes a time that grows faster than its rows | When a page shows thousands of rows |
 
 For P03, `WebSession(view).page_html()` on the page takes 51 ms in 0.1.0 and 88 ms in 0.3.0
 for 300 rows, and 196 ms and 289 ms for 1,000 rows. Building the page takes the same time, and
 Qt renders it faster than in 0.1.0, so the cost is in the web renderer. Bisect from v0.1.0 to
 v0.3.0 with this measure, then profile `page_html`. Done when the cause is known, and the render
 is back near 0.1.0's time, or the feature that costs the time is recorded here.
+
+For P04, render the page on Qt, let the event loop run, then delete its window: the deletion
+takes about 0.18 s for 1,000 rows, 0.54 s for 2,000 rows and 1.8 s for 4,000 rows, while the UI
+waits. Garbage collection then frees the page in a time that grows with its rows. A profile
+finds most of the time in `QApplicationPrivate::compressEvent`: as the widgets are deleted one
+by one, Qt compares each event that it posts with all the events already in its queue.
+Done when the cause in Qt is known, and the deletion of 4,000 rows takes about twice the time of
+2,000 rows, or the limit is recorded in the user guide.
 
 ## Reference apps
 
