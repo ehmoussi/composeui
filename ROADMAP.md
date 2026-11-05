@@ -68,7 +68,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, `MainView.state_version` / `migrate_state`, and `MainView.loaded` to give again what a study doesn't hold |
 | Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, the controls that follow them, and runs that follow the latest input (`start_latest`) |
 | Deployment | One Uvicorn process behind nginx: TLS, proxy headers, request limits, and optional HTTP Basic Auth |
-| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, and a coding-agent skill |
+| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, a coding-agent skill, and a benchmark of the Uber examples ([`benchmarks/`](benchmarks/README.md)) |
 | Releases | PyPI, a changelog, Semantic Versioning, a public API per module, and automated publishing |
 
 The [Uber pickups example](src/examples/uberpickups.py) and its
@@ -107,7 +107,7 @@ Change that contract, and its tests, explicitly for extensions.
 
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
-| M0 — Baseline | Compare future work with 0.3.0 | Benchmark the Uber examples; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
+| M0 — Baseline | Compare future work with 0.3.0 | Specify and benchmark the other two reference apps; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
 | M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
@@ -125,8 +125,10 @@ conditional item blocks no milestone until its condition is met.
 
 Build one thin slice from end to end before the full catalog:
 
-1. **Measure.** Benchmark the two Uber examples: loading, filtering, row-ID memory, chart and
-   map updates, and cleanup. Specify the scientific and shared-tool workflows.
+1. **Measure.** The [Uber benchmark](benchmarks/README.md) measures 0.3.0 and main: loading,
+   hour moves, sorting and filtering, row-ID memory, web responses, and cleanup on the core.
+   It found P06 and P07. Measure a web session's cleanup and concurrent sessions next, then
+   specify the scientific and shared-tool workflows.
 2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
 3. **Load and export.** Add configurable uploads and filtered export to the data explorer
@@ -335,9 +337,10 @@ interactive.
 ### N12 — Examples and adoption
 
 In M0, grow three reference apps from the existing examples, and add a repeatable benchmark.
-Publish each result with its versions, hardware, data and settings. By M5 and M6, turn the
-examples guide into a gallery, with how to contribute and what each example supports. Keep the
-changelog and releases current as features land.
+`benchmarks/uber.py` does it for the Uber examples; extend it to each reference app. Publish
+each result with its versions, hardware, data and settings, as `benchmarks/README.md` does. By
+M5 and M6, turn the examples guide into a gallery, with how to contribute and what each example
+supports. Keep the changelog and releases current as features land.
 
 Choose new integrations from what real users need. N15 gives one-command deployment to
 existing platforms early. Consider a managed hosting service, or a hosting partner, in M6 only
@@ -518,6 +521,8 @@ the main thread. Do not rebuild it. New work comes from T02, T03, N06 and L01.
 | L06 | PyQt6 as a second Qt binding, with a `pyqt6` extra | When an app asks for it |
 | L07 | Optional filesystem adapters: paths between Windows and WSL, and opening a folder on the app's host | When an app asks for it |
 | L08 | Recent folders in the picker of the server's files (`server_roots`) | When an app asks for it |
+| P06 | An hour move in the SQLite Uber example takes 1.6 to 1.8 s, also for an hour of 10,702 rows | M1, before the data explorer is measured against the M0 targets |
+| P07 | `CSVSqliteTable` imports about 50,000 rows a second: 20 s for the Uber CSV, which Polars reads in 0.15 to 0.4 s | M1, with N07 |
 
 For A02, test the Qt package on a clean machine. An app with a map needs `map.qml`, the Qt
 Location and Qt Positioning QML modules, and the location plugins. Document each recipe in
@@ -571,6 +576,17 @@ same study folder again and again. Keep a short history, within the current `ser
 and state who owns it: the web session, or the local user. A folder outside the current roots
 never shows, even if a root that held it was allowed before. Done when a test changes the roots
 and finds that the history shows no folder outside them.
+
+For P06, each of the move's three queries scans the 1,028,136 rows, and computes
+`strftime('%H', date_time)` on each one; no index helps. The table's order (about 0.8 s) runs
+in the slider's request on the web, and the map's points (about 0.9 s) in a job. In 0.3.0, a
+move took 0.6 to 0.75 s, but did not filter the table. Store the hour in a column with an index,
+or index the expression, and measure again. Done when a move takes less than the M0 target, and
+the example stays as short.
+
+For P07, profile the import before choosing a fix: the CSV parsing, the row checks, and the
+inserts. Keep the typed rows, the batches in a transaction, and the progress. Done when the Uber
+CSV imports several times faster, measured by `benchmarks/uber.py`.
 
 ## Reference apps
 
