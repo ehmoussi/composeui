@@ -49,7 +49,7 @@ M0 sets measurable targets for the goal, and each milestone reports against them
 
 ## Where ComposeUI stands
 
-Release 0.2.0 (30 October 2026) is on PyPI. The README still calls the API pre-alpha: a
+Release 0.3.0 (2 November 2026) is on PyPI. The README still calls the API pre-alpha: a
 stable API is the goal of M5. The [widget catalog](docs/widgets.md) lists every widget and its
 backends, and the [user guide](docs/user-guide.md) shows how to use them.
 
@@ -107,7 +107,7 @@ Change that contract, and its tests, explicitly for extensions.
 
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
-| M0 — Baseline | Compare future work with 0.1.0 | Benchmark the Uber examples; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
+| M0 — Baseline | Compare future work with 0.3.0 | Benchmark the Uber examples; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
 | M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N02, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
@@ -605,22 +605,6 @@ same study folder again and again. Keep a short history, within the current `ser
 and state who owns it: the web session, or the local user. A folder outside the current roots
 never shows, even if a root that held it was allowed before. Done when a test changes the roots
 and finds that the history shows no folder outside them.
-
-## Known problems
-
-This problem was found while measuring reactive methods (N02). It is on `main` and in 0.3.0,
-and nothing fixes it yet. Its measure uses this page: a `ListView` of rows, each row a
-`VerticalView` of a `LabelView`, a `CheckBoxView` and a `LabelRowSliderView`.
-
-| ID | Problem | When |
-| --- | --- | --- |
-| P03 | The web renders a page about 70% slower than in 0.1.0 | Before the M1 release |
-
-For P03, `WebSession(view).page_html()` on the page takes 51 ms in 0.1.0 and 88 ms in 0.3.0
-for 300 rows, and 196 ms and 289 ms for 1,000 rows. Building the page takes the same time, and
-Qt renders it faster than in 0.1.0, so the cost is in the web renderer. Bisect from v0.1.0 to
-v0.3.0 with this measure, then profile `page_html`. Done when the cause is known, and the render
-is back near 0.1.0's time, or the feature that costs the time is recorded here.
 
 ## Reference apps
 
