@@ -16,6 +16,7 @@ import json
 import math
 import sys
 import threading
+import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1937,6 +1938,37 @@ def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot)
     height = window.minimumSizeHint().height()
     view.pipes.items = [Pipe(f"Pipe {number}", 1) for number in range(40)]
     assert window.minimumSizeHint().height() == height
+
+
+def _rendered_pipes_holding_their_main_view() -> tuple[weakref.ref[PipesMainView], QWidget]:
+    """Render pipes whose widgets' callbacks hold the main view, as an app's closures do.
+
+    Built here, so the closures keep the main view: a `del` in the test would empty them.
+    """
+    view = PipesMainView()
+    _add_reference_to_signals(view, None)
+    view.pipes.items = PIPES[:1]
+    view.render(RendererType.QT)
+    view.pipes.items = PIPES  # a record's view built after the render too
+    for pipe in view.pipes.item_views:
+        assert isinstance(pipe, PipeExpander)
+        # fewer arguments than `toggled` emits, so the signal wraps it
+        pipe.toggled.connect(lambda: view.status_bar.show_message("Toggled"))
+    return weakref.ref(view), _widget(view)
+
+
+@pytest.mark.usefixtures("qtbot")  # its QApplication; not `addWidget`, which keeps the window
+def test_a_deleted_window_frees_its_main_view_and_the_callbacks_on_its_widgets() -> None:
+    reference, window = _rendered_pipes_holding_their_main_view()
+    gc.collect()
+    assert reference() is not None  # the window's connections hold the callbacks
+
+    window.deleteLater()
+    del window
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    gc.collect()
+
+    assert reference() is None
 
 
 def test_a_tab_view_shows_the_tab_the_user_picks(qtbot: QtBot) -> None:

@@ -614,21 +614,13 @@ row a `VerticalView` of a `LabelView`, a `CheckBoxView` and a `LabelRowSliderVie
 
 | ID | Problem | When |
 | --- | --- | --- |
-| P01 | Qt: a page whose views have connected callbacks is never freed after its window is deleted | Next |
-| P02 | Qt: freeing a page of 1,000 rows takes about 1.2 s of garbage collection | With P01 |
+| P02 | Qt: freeing a page of 1,000 rows takes about 1.1 s of garbage collection | Next |
 | P03 | The web renders a page about 70% slower than in 0.1.0 | Before the M1 release |
 
-For P01, connect a lambda that refers to the main view to each row's `toggled`, render the page
-on Qt, delete its window, and collect garbage: the main view stays alive. The lambda's
-`_FirstArgumentsCallback` holds it, and no Python object refers to that callback, so something
-outside Python keeps it, probably the Qt connection. Each closed window or dialog that has such
-callbacks then stays in memory. Done when a test renders such a page on Qt, deletes its window,
-collects garbage, and finds the main view gone.
-
-For P02, one full (generation 2) garbage collection frees the page in about 1.2 s, while the UI
-waits. Fixing P01 frees more pages, so more apps will pay this cost: fix both together. Done
-when the cause is known, and the measure before and after the fix is recorded in its pull
-request.
+For P02, render the page on Qt, delete its window, and let the deletion run: one full
+(generation 2) garbage collection then frees the page in about 1.1 s, while the UI waits. The
+time is the same with or without callbacks connected to the rows. Done when the cause is known,
+and the measure before and after the fix is recorded in its pull request.
 
 For P03, `WebSession(view).page_html()` on the page takes 51 ms in 0.1.0 and 88 ms in 0.3.0
 for 300 rows, and 196 ms and 289 ms for 1,000 rows. Building the page takes the same time, and
