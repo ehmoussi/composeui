@@ -17,8 +17,6 @@ from composeui.core import reactivity
 if TYPE_CHECKING:
     from weakref import ReferenceType
 
-    from qtpy.QtCore import SignalInstance
-
     from composeui.core.model import Model
     from composeui.core.view import MainView
 
@@ -116,10 +114,6 @@ class Signal(Generic[Unpack[Ts]]):
             if isinstance(callback, InjectedCallback):
                 callback.set_model(self._model)
 
-    def add_qt_signal(self, signal: SignalInstance) -> None:
-        """Call this signal's callbacks when the Qt signal `signal` emits too."""
-        signal.connect(WeakSlot(self._call_from_qt))
-
     @overload
     def connect(self, callback: Callable[[Unpack[Ts]], None], *, now: bool = False) -> None: ...
     @overload
@@ -164,7 +158,12 @@ class Signal(Generic[Unpack[Ts]]):
     def disconnect(self) -> None:
         self._callbacks = [self._log_signal]
 
-    def _call_from_qt(self, *args: Unpack[Ts]) -> None:
+    def call_callbacks(self, *args: Unpack[Ts]) -> None:
+        """Call the callbacks, for a backend that connects a toolkit's signal to this method.
+
+        Each callback runs, even after another one raised: its error goes to
+        `sys.excepthook`, as a Qt slot's does. An app emits a signal with `emit`.
+        """
         # the callbacks connected now, as Qt calls the slots connected when it emits
         for callback in tuple(self._callbacks):
             _call_reporting(callback, args)
@@ -275,7 +274,7 @@ else:
     SignalNoArgs = Signal
 
 
-def _call_reporting(callback: Callable[..., None], args: tuple[object, ...]) -> None:
+def _call_reporting(callback: Callable[..., object], args: tuple[object, ...]) -> None:
     """Call `callback`, and report its error as PySide reports a slot's, without raising it.
 
     So the next callbacks still run, as the next slots did.
@@ -284,39 +283,6 @@ def _call_reporting(callback: Callable[..., None], args: tuple[object, ...]) -> 
         callback(*args)
     except Exception:  # noqa: BLE001 - reported through the hook, as by PySide
         sys.excepthook(*sys.exc_info())
-
-
-class WeakSlot:
-    """A Qt slot calling a method, while its object lives, with the arguments it takes.
-
-    Connect it rather than the bound method. PySide drops a bound method's connection with
-    a weak reference callback whose cost grows with the connections in the process: freeing
-    a page of many widgets took a time that grew with the square of their number. Qt holds
-    this slot until its widget is deleted, and the slot holds the method's object weakly, as
-    PySide holds a bound method's. As PySide too, it passes only the first arguments that
-    the method takes.
-    """
-
-    __slots__ = ("_count", "_method")
-
-    def __init__(self, method: Callable[..., object]) -> None:
-        self._method = weakref.WeakMethod(method)
-        self._count = _method_positional_count(method.__func__)  # type: ignore[attr-defined]
-
-    def __call__(self, *args: object) -> None:
-        method = self._method()
-        if method is not None:
-            method(*args[: self._count])
-
-
-@functools.cache
-def _method_positional_count(function: Callable[..., object]) -> int | None:
-    """Get how many positional arguments the method `function` takes; None for any number.
-
-    Read once per function: a page connects the same methods of each of its widgets.
-    """
-    count = _positional_count(function)
-    return None if count is None else count - 1  # not `self`
 
 
 class _FirstArgumentsCallback(Generic[Unpack[Ts]]):

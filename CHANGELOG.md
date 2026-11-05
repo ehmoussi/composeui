@@ -28,8 +28,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 - On Qt, closing a page of many widgets no longer freezes the app for seconds. Freeing a
   page of 1,000 rows took about 1.6 s, and four times as long for twice the rows. It now takes
-  about 0.25 s. A widget's Qt connections now hold its views weakly, as on Textual and the
-  web: an open window no longer keeps alive the views that the app dropped.
+  about 0.2 s, and about twice as long for twice the rows. A widget's Qt connections now hold
+  its views weakly, as on Textual and the web: an open window no longer keeps alive the views
+  that the app dropped.
 - On the web, a job's `finished` callback can start another job or task. It raised
   `CalledInJobError`: the web hands a job's outcome over in the job's thread, which took the
   callback for the job's own function.

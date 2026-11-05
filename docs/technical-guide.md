@@ -567,12 +567,17 @@ To update one of them:
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
-- In a Qt renderer, connect the renderer's own methods to a widget's signals through
-  `WeakSlot` from `composeui.core.signal`, never as bound methods:
-  `widget.toggled.connect(WeakSlot(self._update_checked))`. PySide undoes the connection of a
-  bound method at a cost that grows with all the connections of the process. A page of many
-  widgets then took seconds to free. A widget's own slots are methods of a `QObject`, and
-  need no `WeakSlot`.
+- In a Qt renderer, connect a widget's signal to a method of the renderer with
+  `self._connect(widget.toggled, self._update_checked)`, and to a view's signal with
+  `self._relay(self._view.toggled, widget.toggled)`. Both helpers build a `QtSlot`
+  (`qtcore/qtslot.py`): a `QObject` child of the widget, which PySide connects as a Qt slot.
+  PySide keeps a connection to any other callable, such as a lambda or a view's method, in a
+  table, and searches the whole table each time a sender is deleted. A page of many widgets
+  then took seconds to free. Call `connect` with such a callable only for a widget that a
+  page has few of, such as a table. Each `QtSlot` takes time to make, so pass all the
+  methods of one signal to one `_connect`, in order:
+  `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
+  A widget's own slots are methods of a `QObject`, and need no `QtSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that isn't `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
