@@ -337,11 +337,11 @@ interactive.
 
 ### N12 — Examples and adoption
 
-In M0, grow three reference apps from the existing examples. `benchmarks/uber.py` measures the
-Uber examples, the start of the data explorer. Add a benchmark for another reference app when work
-on its speed needs one. Publish each result with its versions, hardware, data and settings, as `benchmarks/README.md` does. By
-M5 and M6, turn the examples guide into a gallery, with how to contribute and what each example
-supports. Keep the changelog and releases current as features land.
+In M0, grow three reference apps from the existing examples. `benchmarks/uber.py` measures the Uber
+examples, the start of the data explorer. Add a benchmark for another reference app when work on its
+speed needs one. Publish each result with its versions, hardware, data and settings, as
+`benchmarks/README.md` does. By M5 and M6, turn the examples guide into a gallery, with how to
+contribute and what each example supports. Keep the changelog and releases current as features land.
 
 Choose new integrations from what real users need. N15 gives one-command deployment to
 existing platforms early. Consider a managed hosting service, or a hosting partner, in M6 only
@@ -590,10 +590,10 @@ Three apps test each milestone against real use.
 Start the workbench and the shared tool from `pipecatalogue.py` and `pipesweep.py`. Test maps
 on Qt and the web, and the rest also on Textual.
 
-When an app is measured, measure cold start, first useful render, filter and sort latency, chart update latency,
-response size, memory per session and for shared resources, throughput with concurrent
-sessions, and cleanup after a session closes. Use a small dataset, the million-row SQLite table
-of `largetable.py`, and an uploaded dataset within the limits.
+When an app is measured, measure cold start, first useful render, filter and sort latency, chart
+update latency, response size, memory per session and for shared resources, throughput with
+concurrent sessions, and cleanup after a session closes. Use a small dataset, the million-row SQLite
+table of `largetable.py`, and an uploaded dataset within the limits.
 
 Set numeric budgets after the M0 baseline, before judging the work against them. The first
 budget: an hour move in the SQLite Uber example takes less than 500 ms on the web, as
