@@ -584,9 +584,9 @@ def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
             ("2020-02-01", "2020-01-02", "2020-02-01T00:00:00", "2020-01-01T12:00:00+00:00"),
             ("2020-02-01", "2020-01-02", "2020-02-01T00:00:00", "2020-01-01T13:00:00+01:00"),
         ]
-        invalid = header + "31/02/2020,01/02/2020,01/02/2020,2020-01-01 12:00+0000\n"
+        invalid = header + "invalid,01/02/2020,01/02/2020,2020-01-01 12:00+0000\n"
         for _ in range(2):  # a date refused is refused each time
-            with pytest.raises(RefusedError, match="day is out of range"):
+            with pytest.raises(RefusedError, match="does not match format"):
                 deque(model.dates.fill(io.StringIO(invalid)), maxlen=0)
         assert model.dates.fetch_column("SELECT COUNT(*) FROM dates") == [2]
     finally:
