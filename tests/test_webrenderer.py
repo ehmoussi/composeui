@@ -22,6 +22,7 @@ import os
 import re
 import secrets
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -43,6 +44,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, multiple, rule
 from markupsafe import escape
+from starlette.requests import Request
 from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
@@ -64,6 +66,7 @@ from composeui.core.view import (
     DialogView,
     EditRefusedError,
     FilePathInputMixin,
+    FilePathInputView,
     FolderPathInputMixin,
     LabelRowFloatInputView,
     LabelRowInputView,
@@ -98,7 +101,7 @@ from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
-from composeui.webcore.limits import MAX_BODY_SIZE
+from composeui.webcore.limits import MAX_BODY_SIZE, max_upload_body_size
 from composeui.webcore.order import (
     ORDER_TIMEOUT,
     PAGE_FIELD,
@@ -108,7 +111,13 @@ from composeui.webcore.order import (
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS
-from composeui.webcore.session import MAX_FILE_SIZE, SessionStore, WebSession
+from composeui.webcore.session import SessionStore, WebSession
+from composeui.webcore.uploads import (
+    MAX_FIELD_SIZE,
+    MAX_FIELDS,
+    MAX_PART_HEADERS_SIZE,
+    receive_upload,
+)
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
     CHART_MAX_POINTS,
@@ -194,7 +203,7 @@ from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     from starlette.applications import Starlette
     from starlette.types import ASGIApp
@@ -1030,18 +1039,254 @@ def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
     assert status.text == "Can't open 'notes.txt': expected a .md or .markdown file."
     assert main_view.help.text == "# Notes"
     assert help_client.post(f"/widget/{action_id}/file").status_code == 400
-    large = b"#" * (MAX_FILE_SIZE + 1)
-    response = help_client.post(
-        f"/widget/{action_id}/file", files={"file": ("large.md", large, "text/markdown")}
-    )
-    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
-    assert status.text == "Can't open 'large.md': the file is too large."
     # another action takes no file, and an unknown widget is none of the session's
     open_id = _widget_id(main_view.file_menu.open_file.renderer)
     files = {"file": ("notes.md", b"# Other", "text/markdown")}
     assert help_client.post(f"/widget/{open_id}/file", files=files).status_code == 400
     assert help_client.post("/widget/cui-0/file", files=files).status_code == 404
     assert len(picked) == 1
+
+
+@define_view
+class _UploadMainView(MainView):
+    field: FilePathInputView = child(FilePathInputView)
+
+
+@pytest.mark.parametrize("limit", [1024, 8 * 1024 * 1024])
+def test_a_main_view_sets_the_largest_file_a_user_can_upload(
+    monkeypatch: pytest.MonkeyPatch, limit: int
+) -> None:
+    """A limit above the default passes the body's limit too; one below refuses earlier."""
+    monkeypatch.setattr(_UploadMainView, "max_upload_size", limit)
+    views: list[_UploadMainView] = []
+
+    class UploadApp(WebApplication[_UploadMainView]):
+        def setup_session(self, main_view: _UploadMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    with _Browser(UploadApp(build_main_view=_UploadMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        url = f"/widget/{_widget_id(main_view.field.renderer)}/file"
+
+        client.post(url, files={"file": ("large.csv", b"#" * limit)})
+        assert main_view.field.path is not None
+        accepted = main_view.field.path
+        assert (accepted.name, accepted.stat().st_size) == ("large.csv", limit)
+
+        response = client.post(url, files={"file": ("over.csv", b"#" * (limit + 1))})
+        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        assert "'over.csv': the file is larger than" in status.text
+        assert main_view.field.path == accepted
+
+
+def _receive(body: Iterable[bytes]) -> Request:
+    chunks = iter(body)
+
+    async def receive() -> dict[str, Any]:
+        chunk = next(chunks, None)
+        return {"type": "http.request", "body": chunk or b"", "more_body": chunk is not None}
+
+    headers = [(b"content-type", b"multipart/form-data; boundary=b")]
+    return Request({"type": "http", "headers": headers}, receive)
+
+
+_FILE_PART = b'--b\r\nContent-Disposition: form-data; name="file"; filename="a.csv"\r\n\r\n'
+#: after a part that its guard refuses: without it, a form with no file is refused anyway
+_WHOLE_FILE = _FILE_PART + b"1\r\n--b--\r\n"
+
+
+def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    written: list[int] = []
+
+    def body() -> Iterator[bytes]:
+        yield _FILE_PART
+        for _ in range(4):
+            yield b"x" * 40_000  # past the file's buffer: each one reaches the disk
+            written.extend(path.stat().st_size for path in tmp_path.rglob("upload"))
+        yield b"\r\n--b--\r\n"
+
+    async def receive() -> bool:
+        async with receive_upload(_receive(body()), 100_000) as (upload, _fields):
+            assert upload is not None
+            return upload.is_too_large
+
+    assert asyncio.run(receive())
+    assert 0 < max(written) <= 100_000
+    assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _FILE_PART + b"cut short, without its end",
+        _FILE_PART + b"1\r\n--b\r\n" + _FILE_PART[4:] + b"2\r\n--b--\r\n",  # a second file
+        b'--b\r\nContent-Disposition: form-data; name="other"; filename="a"\r\n\r\n1\r\n--b--\r\n',
+        b"--b\r\nContent-Disposition: form-data\r\n\r\n1\r\n" + _WHOLE_FILE,  # no name
+        b'--b\r\nContent-Disposition: form-data; name="row"\r\n\r\n'
+        + b"1" * (MAX_FIELD_SIZE + 1)
+        + b"\r\n"
+        + _WHOLE_FILE,
+        b"".join(
+            b'--b\r\nContent-Disposition: form-data; name="f%d"\r\n\r\n1\r\n' % index
+            for index in range(MAX_FIELDS + 2)
+        )
+        + _WHOLE_FILE,
+        b'--b\r\nContent-Disposition: form-data; name="row"\r\nX: '
+        + b"y" * (MAX_PART_HEADERS_SIZE + 1)
+        + b"\r\n\r\n1\r\n"
+        + _WHOLE_FILE,
+        b"not the form it says it is",
+    ],
+    ids=[
+        "cut",
+        "two files",
+        "other name",
+        "no name",
+        "large field",
+        "many fields",
+        "large headers",
+        "garbage",
+    ],
+)
+def test_a_malformed_upload_hands_nothing_over_and_leaves_no_file(
+    body: bytes,
+    help_views: list[HelpMainView],
+    help_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    help_client.get("/")
+    (main_view,) = help_views
+    action = main_view.help_menu.open_help
+    picked: list[Path] = []
+    action.file_picked.connect(picked.append)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+    response = help_client.post(
+        f"/widget/{_widget_id(action.renderer)}/file",
+        content=body,
+        headers={"Content-Type": "multipart/form-data; boundary=b"},
+    )
+
+    assert response.status_code == 400
+    assert picked == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
+    views: list[DataFileMainView] = []
+
+    class DataApp(WebApplication[DataFileMainView]):
+        def setup_session(self, main_view: DataFileMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        field = _part(main_view.form.measurements, "field")
+        client.post(f"/widget/{field.widget_id}/file", files={"file": ("a.csv", b"1")})
+        upload = main_view.form.measurements.path
+        assert upload is not None
+        assert upload.exists()
+
+    assert not upload.exists()
+
+
+def test_an_upload_that_arrives_after_its_session_ended_stays_nowhere(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+    session.close()
+
+    assert _pick_file(session, field.widget_id, "late.csv", b"1,2") is None
+
+    assert measurements.path is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_very_long_file_name_is_cut_and_keeps_its_type() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+
+    _pick_file(session, field.widget_id, "x" * 300 + ".csv", b"1,2")
+
+    assert measurements.path is not None
+    assert measurements.path.suffix == ".csv"
+    assert measurements.path.read_bytes() == b"1,2"
+    session.close()
+
+
+def test_a_form_without_a_boundary_is_refused(
+    help_views: list[HelpMainView], help_client: TestClient
+) -> None:
+    help_client.get("/")
+    (main_view,) = help_views
+    response = help_client.post(
+        f"/widget/{_widget_id(main_view.help_menu.open_help.renderer)}/file",
+        content=b"",
+        headers={"Content-Type": "multipart/form-data"},
+    )
+    assert response.status_code == 400
+
+
+def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No second copy: not a spooled file, nor the scratch file it was moved from."""
+    views: list[DataFileMainView] = []
+
+    class DataApp(WebApplication[DataFileMainView]):
+        def setup_session(self, main_view: DataFileMainView) -> None:
+            views.append(main_view)
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        measurements = main_view.form.measurements
+        field = _part(measurements, "field")
+        files: list[list[Path]] = []
+        measurements.path_picked.connect(
+            lambda _path: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
+        )
+        url = f"/widget/{field.widget_id}/file"
+
+        client.post(url, files={"file": ("é.csv", b"x" * (2 * 1024 * 1024), "text/csv")})
+
+        assert measurements.path is not None
+        assert measurements.path.name == "upload.csv"
+        assert files == [[measurements.path]]
+
+
+def test_a_file_the_page_kept_for_its_size_is_refused_by_name(
+    help_views: list[HelpMainView], help_client: TestClient
+) -> None:
+    help_client.get("/")
+    (main_view,) = help_views
+    action = main_view.help_menu.open_help
+    picked: list[Path] = []
+    action.file_picked.connect(picked.append)
+    too_large = {"too_large": (None, "huge.md")}
+
+    response = help_client.post(f"/widget/{_widget_id(action.renderer)}/file", files=too_large)
+
+    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'huge.md': the file is larger than 5 MiB."
+    assert picked == []
+    # a widget that takes no file has nothing to refuse
+    status_id = _widget_id(main_view.status_bar.renderer)
+    assert help_client.post(f"/widget/{status_id}/file", files=too_large).status_code == 404
 
 
 def test_a_changed_field_inside_a_changed_group_is_swapped_once(
@@ -1247,6 +1492,16 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
     assert len(changes) == 3
 
 
+def _pick_file(
+    session: WebSession, widget_id: str, name: str, content: bytes
+) -> tuple[str, str | None] | None:
+    """Hand the session a file as the route does, once the file has arrived."""
+    with tempfile.TemporaryDirectory() as directory:
+        received = Path(directory, "upload")
+        received.write_bytes(content)
+        return session.pick_file(widget_id, name, received)
+
+
 def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends() -> None:
     main_view = DataFileMainView()
     main_view.status_bar.timeout = 0
@@ -1269,16 +1524,16 @@ def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends()
 
     handle_event(field, "change", {"value": "/data/flows.csv"})
     assert measurements.path == Path("/data/flows.csv")
-    result = session.pick_file(field.widget_id, "flows.csv", b"1,2")
+    result = _pick_file(session, field.widget_id, "flows.csv", b"1,2")
     assert result is not None
     ((first, content),) = picked
     assert (first.name, content, measurements.path) == ("flows.csv", b"1,2", first)
     swapped = _swapped(result[0], field.widget_id)  # the field shows the copy's path
     assert next(a["value"] for tag, a in swapped.descendants if tag == "input") == str(first)
     # the field keeps its last upload only; another type is refused
-    session.pick_file(field.widget_id, "levels.txt", b"3")
+    _pick_file(session, field.widget_id, "levels.txt", b"3")
     assert (picked[-1][0].name, first.exists()) == ("levels.txt", False)
-    result = session.pick_file(field.widget_id, "notes.md", b"#")
+    result = _pick_file(session, field.widget_id, "notes.md", b"#")
     assert result is not None
     status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
     assert status.text == "Can't open 'notes.md': expected a .csv or .txt or .text file."
@@ -2916,9 +3171,12 @@ def test_a_post_from_another_origin_is_refused(app: _HelloApp, headers: dict[str
             ),
             browser.post("/state/download", data={"trigger": _action_id(save)}, headers=headers),
             browser.post("/state", files={"file": ("s.hello", b"{}")}, headers=headers),
+            browser.post(
+                f"/widget/{field_id}/file", files={"file": ("a.txt", b"a")}, headers=headers
+            ),
         ]
 
-    assert [response.status_code for response in responses] == [403, 403, 403]
+    assert [response.status_code for response in responses] == [403, 403, 403, 403]
     assert main_view.form.name.text == ""
     assert saved == []
 
@@ -3724,6 +3982,27 @@ def test_a_body_larger_than_any_upload_is_refused_before_it_is_read(
 
     assert response.status_code == 413
     assert main_view.status_bar.message == ""  # the route never ran
+
+
+@pytest.mark.parametrize("path", ["/state", "/widget/{}", "/state/download"])
+def test_the_app_s_upload_limit_reaches_no_other_route(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, path: str
+) -> None:
+    """Their form parser would keep the body, under no limit of the disk."""
+    monkeypatch.setattr(HelloMainView, "max_upload_size", 100 * 1024 * 1024)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    views: list[HelloMainView] = []
+
+    class HelloApp(WebApplication[HelloMainView]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(HelloApp(build_main_view=HelloMainView).create_starlette_app()) as client:
+        client.get("/")
+        address = path.format(_widget_id(views[0].status_bar.renderer))
+        over = max_upload_body_size(1) + MAX_BODY_SIZE
+        headers = {"Content-Type": "multipart/form-data; boundary=b"}
+        assert client.post(address, content=b"x" * over, headers=headers).status_code == 413
 
 
 def test_an_uploaded_file_name_cannot_reach_the_download_header(

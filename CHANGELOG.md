@@ -8,6 +8,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `MainView.max_upload_size` sets the largest file that a user can upload to the web app. It is
+  5 MiB by default. The server refuses an upload's body of more than this size plus 1 MiB. A file
+  over the limit stays in the browser, and the status bar says why. Before, a file far over the
+  limit failed without a message. An upload goes to a file as it arrives, and the server moves this
+  file, so a large upload takes no memory and no second copy, and doesn't block the session.
 - The `composeui run app.py` command starts an app from a Python file, and reloads it on a change.
   A file that defines one `MainView` class needs no `run` call. A file with a model calls `run`
   with its model. The options after the file, such as `--backend qt`, go to the app. The
@@ -40,6 +45,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, an upload whose name has only letters outside ASCII before its extension, such as
+  `データ.csv`, is no longer refused for its type.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
   expires during a long import, no longer crashes the server. `SqliteModel.close` closed the
   connection during the job's statement, which could end the process and every session in it.

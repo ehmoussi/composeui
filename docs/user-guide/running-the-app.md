@@ -195,8 +195,16 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   return, so the other browsers would show stale views.
 - **Save and Open** download the state as a file and upload a file. The File menu is in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves), because browsers keep the
-  Ctrl shortcuts for themselves. An uploaded file can be at most 5 MB, and the status bar
-  says when a file is too large.
+  Ctrl shortcuts for themselves. A study can be at most 5 MB, and the status bar says when a
+  file is too large.
+- **Uploads have a limit that the app sets.** A user can upload a file of at most 5 MiB by
+  default, to a `PickFileAction`, a file path field or a table's file path cell. A main view
+  sets another limit in `max_upload_size`, in bytes, such as `max_upload_size = 200 * 1024 *
+  1024`. The status bar says when a file is too large, and the page does not send that file.
+  While an upload arrives, the server writes it to a file in the system's temporary folder, and
+  then moves this file without another copy. The `TMPDIR` environment variable sets this folder on Linux and macOS. Make sure that
+  it has room for the uploads that can arrive at the same time, and raise the proxy's limit too
+  (see [Deploy behind nginx](#deploy-behind-nginx)).
 - **`--reload` restarts the server when a Python file under the current directory
   changes.** Use it for development. The new server process runs the program again (the
   script, or the `-m` module) with the same command line, to build its app again. The
@@ -236,8 +244,8 @@ Read this section before other people use the app, on a network or behind a reve
   (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
   full, a new browser gets an error (503) until a session ends, and the open sessions keep
   working.
-- **Requests have a size limit.** The server refuses a request body larger than 6 MB (413)
-  before it reads it.
+- **Requests have a size limit.** The server refuses a request body larger than 6 MiB (413) before
+  it reads it. A file upload's request can be `max_upload_size` plus 1 MiB.
 - **Only the app's own pages change a session.** The server refuses a POST from another
   origin (403), as protection against cross-site request forgery. Another origin includes
   another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
@@ -301,7 +309,7 @@ Each line keeps a part of the app working:
   variable to its address.
 - **`client_max_body_size 6m`** lets a study or a file of up to 5 MB through. nginx's own
   limit is 1 MB: above it, nginx refuses Open and the file inputs (413) before the app
-  sees the request.
+  sees the request. With a larger `max_upload_size`, set this limit to that size plus 1 MiB.
 - **`Strict-Transport-Security`** makes the browser use HTTPS for the site from then on. The
   session cookie has no `Secure` flag, so serve the app over HTTPS only. Redirect plain
   HTTP to HTTPS in a `server` block of its own.

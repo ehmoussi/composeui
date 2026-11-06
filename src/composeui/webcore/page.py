@@ -39,7 +39,7 @@ $icon_link
   data-deckgl="$deckgl_url"></script>
 </head>
 
-<body class="bg-base-200 min-h-screen">
+<body class="bg-base-200 min-h-screen" data-max-upload="$max_upload_size">
 <div id="app">
 $content
 </div>
@@ -127,13 +127,19 @@ def reload_poller(instance: str | None) -> Markup:
     ).format(instance, RELOAD_POLL_MS)
 
 
-def get_page(
-    title: str, content: Markup, language: str, *, pollers: Markup, icon: str | None = None
+def get_page(  # noqa: PLR0913 (each is a part of the page)
+    title: str,
+    content: Markup,
+    language: str,
+    *,
+    pollers: Markup,
+    max_upload_size: int,
+    icon: str | None = None,
 ) -> str:
     """Get the app's page showing `content`, with the browser tab's `icon` at its address.
 
     `pollers` are the elements asking the server for news: `jobs_poller`'s, and
-    `reload_poller`'s.
+    `reload_poller`'s. The page's script sends no file larger than `max_upload_size`.
     """
     return _PAGE.substitute(
         {
@@ -143,6 +149,7 @@ def get_page(
             "language": escape(language),
             "page_marker": page_marker(language, title),
             "pollers": pollers,
+            "max_upload_size": max_upload_size,
             "save_form": SAVE_FORM_ID,
             **_STATIC_URLS,
         }

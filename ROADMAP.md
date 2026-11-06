@@ -236,7 +236,7 @@ and handles a failed query without losing the user's work.
 CSV import, jobs with progress and cancellation, and streamed CSV export of a table already
 exist. Build on them.
 
-Add configurable upload limits, the lifecycle of temporary files, Parquet import, and tested
+Add the lifecycle of temporary files, Parquet import, and tested
 cancellation of long imports and exports. Keep study files, data uploads, and exported results
 apart in the UI and the API. An app that accepts URLs from users defines the allowed schemes,
 hosts, and redirects before it passes them to the import.
@@ -246,8 +246,8 @@ copy in the session. Give an uploaded file instead: its name, its size, its type
 temporary file whose lifecycle the API states. A file picked on the server (`server_roots`) is
 not an upload: it stays where it is.
 
-The web's 5 MiB limit (`MAX_FILE_SIZE`) is a default, not a requirement for data apps. Make it
-configurable and test apps near it. Deliver the API in M1 and the deployment settings in M4.
+`MainView.max_upload_size` sets the web's limit. Deliver the API in M1 and the deployment
+settings in M4.
 
 **Done when:** a user imports a realistic dataset, inspects it, and exports filtered results,
 without needless copies of the file or files shared across sessions.
@@ -719,6 +719,11 @@ The user guide's "Web backend" section covers what users see.
 - **Sessions.** A signed cookie maps to a `WebSession` holding its renderers by id and an
   `RLock` (the status bar timer takes it through `call_on_main_thread`). A request whose
   session is gone answers `HX-Refresh`.
+- **Uploads.** `widget_file` reads the multipart body itself (`uploads.py`), not through
+  Starlette's form parser, whose spooled file a route can only copy. The body goes to a scratch
+  file with no lock held, and `WebSession.pick_file` moves that file. A file over the limit keeps
+  being read, to answer in the status bar, but stops going to the disk. Open still reads through
+  Starlette: a study is small.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a
   bad file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.

@@ -687,6 +687,15 @@ document.addEventListener("htmx:configRequest", function (event) {
     var sidebar = document.getElementById(element.getAttribute("aria-controls"));
     parameters.expanded = !sidebar.hasAttribute("data-retracted");
   }
+  /* a file over the limit stays here: the server would refuse its body, which shows the
+     user nothing. Its name alone goes, and the status bar says why (see `widget_file`). */
+  if (element.type === "file" && /\/file$/.test(element.getAttribute("hx-post"))) {
+    var file = element.files[0];
+    if (file && file.size > Number(document.body.dataset.maxUpload)) {
+      delete parameters.file;
+      parameters.too_large = file.name;
+    }
+  }
 });
 document.addEventListener("htmx:afterRequest", function (event) {
   if ("clearAfterPost" in event.detail.elt.dataset) event.detail.elt.value = "";

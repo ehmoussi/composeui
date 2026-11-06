@@ -6191,6 +6191,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             self._view.language,
             pollers=jobs_poller(is_running=self._view.jobs.is_running)
             + reload_poller(reload_instance),
+            max_upload_size=self._view.max_upload_size,
             icon=self._app_icon_url(),
         )
 

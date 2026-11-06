@@ -53,8 +53,8 @@ if TYPE_CHECKING:
 MAX_STATE_SIZE = 5 * 1024 * 1024
 #: largest a study's archive may unpack to, in bytes (its database compresses well)
 MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
-#: largest file a `PickFileAction` or a file path field accepts from an upload, in bytes
-MAX_FILE_SIZE = 5 * 1024 * 1024
+#: the longest name of an upload's copy
+_MAX_FILE_NAME_LENGTH = 200
 
 
 def safe_filename(name: str) -> str:
@@ -72,6 +72,8 @@ class WebSession(RenderTarget):
         self.model = model
         #: where the file path fields' uploads are kept, made by the first one
         self._uploads: Path | None = None
+        #: whether `close` ran: an upload that arrives after it has nowhere to stay
+        self._has_ended = False
         #: the order of each page's posts, which the routes handle in it
         self.post_order = PostOrder()
         with self.lock, rendering_into(self):
@@ -80,6 +82,7 @@ class WebSession(RenderTarget):
     def close(self) -> None:
         """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
         with self.lock:
+            self._has_ended = True
             # weak references would free them too, but only once collected
             stop_reactions(self.main_view)
             # not `drop`: its signals would run the app's code in another session's request
@@ -161,21 +164,29 @@ class WebSession(RenderTarget):
         self,
         widget_id: str,
         filename: str,
-        content: bytes,
+        received: Path,
         form: Mapping[str, str] | None = None,
     ) -> tuple[str, str | None] | None:
         """Hand an uploaded file to a `PickFileAction`, a path field or a table's path cell.
 
         None if `widget_id` is none of them; a table's cell is the `form`'s row and column.
-        The file is a copy under its own name: for an action, gone once its callbacks have
+        `received` holds the file: it is moved, not copied, and stays if refused.
+        The file then has its own name: for an action, gone once its callbacks have
         run; for a file path field, whose text keeps its path, kept until the session ends
         or the field's next upload; for a cell, until the session ends or a table's upload
-        finds no cell holding its path. One of a type they don't offer, or too large, is
-        refused in the status bar. Returns what `handle_event` does.
+        finds no cell holding its path. One of a type they don't offer is refused in the
+        status bar. Returns what `handle_event` does.
         """
+        suffix = Path(filename).suffix.lower()
         name = safe_filename(Path(filename).name)
+        # a name of other letters alone, e.g. "データ.csv", would lose its type
+        if not name.lower().endswith(suffix):
+            name = safe_filename(f"upload{suffix}")
+        # a system's limit is near 255 bytes; the end of the name holds its type
+        name = name[-_MAX_FILE_NAME_LENGTH:]
         with self.lock:
-            renderer = self.renderers.get(widget_id)
+            # after its session: its body took a while, and nothing would remove what is kept
+            renderer = None if self._has_ended else self.renderers.get(widget_id)
             cell = None
             if isinstance(renderer, WebTableRenderer):
                 cell = renderer.file_path_cell(form or {})
@@ -186,28 +197,39 @@ class WebSession(RenderTarget):
                 types = renderer.file_types
             else:
                 return None
-            error = None
-            if len(content) > MAX_FILE_SIZE:
-                error = "the file is too large"
-            elif types and Path(name).suffix.lower() not in types:
-                error = f"expected a {' or '.join(types)} file"
-            if error is not None:
-                message = f"Can't open {filename!r}: {error}."
-                return self._respond(
-                    functools.partial(self.main_view.status_bar.show_message, message)
-                )
+            if types and suffix not in types:
+                return self._refuse_file(filename, f"expected a {' or '.join(types)} file")
+            apply: Callable[[Path], None]
             if isinstance(renderer, WebTableRenderer):
-                path = self._cell_upload_directory(widget_id, renderer.file_paths()) / name
-                path.write_bytes(content)
-                return self._respond(functools.partial(renderer.pick_file, cell, path))
-            if isinstance(renderer, WebFilePathInputRenderer):
-                path = self._upload_directory(widget_id) / name
-                path.write_bytes(content)
-                return self._respond(functools.partial(renderer.pick_file, path))
-            with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
-                path = Path(directory, name)
-                path.write_bytes(content)
-                return self._respond(functools.partial(renderer.pick_file, path))
+                directory = self._cell_upload_directory(widget_id, renderer.file_paths())
+                apply = functools.partial(renderer.pick_file, cell)
+            elif isinstance(renderer, WebFilePathInputRenderer):
+                directory = self._upload_directory(widget_id)
+                apply = renderer.pick_file
+            else:
+                with tempfile.TemporaryDirectory(prefix="composeui-") as scratch:
+                    shutil.move(str(received), str(Path(scratch, name)))
+                    return self._respond(functools.partial(renderer.pick_file, Path(scratch, name)))
+            shutil.move(str(received), str(directory / name))
+            return self._respond(functools.partial(apply, directory / name))
+
+    def refuse_large_file(self, widget_id: str, filename: str) -> tuple[str, str | None] | None:
+        """Say that a file is over the limit; None if the widget takes no file."""
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+            if not isinstance(
+                renderer, (WebTableRenderer, WebActionRenderer, WebFilePathInputRenderer)
+            ):
+                return None
+            return self._refuse_file(filename, self._too_large)
+
+    @property
+    def _too_large(self) -> str:
+        return f"the file is larger than {self.main_view.max_upload_size / 1024**2:g} MiB"
+
+    def _refuse_file(self, filename: str, error: str) -> tuple[str, str | None]:
+        message = f"Can't open {filename!r}: {error}."
+        return self._respond(functools.partial(self.main_view.status_bar.show_message, message))
 
     def _upload_directory(self, widget_id: str) -> Path:
         """Get an empty directory for a field's upload: the field's last one is removed."""
@@ -474,6 +496,14 @@ class SessionStore:
             entry = self._sessions.pop(session_id, None)
         if entry is not None:
             entry[0].close()
+
+    def close_all(self) -> None:
+        """Close every live session, as the server stops: nothing else removes their uploads."""
+        with self._lock:
+            sessions = [session for session, _ in self._sessions.values()]
+            self._sessions.clear()
+        for session in sessions:
+            session.close()
 
     def _drop_expired(self) -> None:
         now = time.monotonic()

@@ -120,13 +120,18 @@ def _resolve(main_view: MainView, path: _AttributePath) -> object:
 
 
 def create_starlette_app(
-    sessions: SessionStore, *, secret_key: str | None = None, reloading: bool = False
+    sessions: SessionStore,
+    *,
+    max_upload_size: int,
+    secret_key: str | None = None,
+    reloading: bool = False,
 ) -> Starlette:
     """Create the Starlette app serving one main view per browser session.
 
-    `secret_key` signs the session cookie, a new one by default. A ``--reload`` server's
-    process (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and
-    its pages reload once another process serves (`reload_poll`).
+    `max_upload_size` sets the largest body of the route of file uploads. `secret_key`
+    signs the session cookie, a new one by default. A ``--reload`` server's process
+    (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and its pages
+    reload once another process serves (`reload_poll`).
     """
     app = Starlette(
         routes=[
@@ -155,7 +160,7 @@ def create_starlette_app(
             # outermost: every response, a refusal too, carries them
             Middleware(SecurityHeadersMiddleware),
             # before a route reads the body: Starlette would spool an upload of any size
-            Middleware(BodySizeLimitMiddleware),
+            Middleware(BodySizeLimitMiddleware, max_upload_size=max_upload_size),
             # a request another origin sent is refused before it reaches a session
             Middleware(SameOriginMiddleware),
             # A per-process signing key is enough: sessions live in this process only,
@@ -171,7 +176,7 @@ def create_starlette_app(
             # the stylesheet, the scripts and a chart's points shrink several times
             Middleware(GZipMiddleware, minimum_size=1024),
         ],
-        lifespan=_saving(sessions) if reloading else None,
+        lifespan=_saving(sessions) if reloading else _closing(sessions),
     )
     app.state.sessions = sessions
     #: this process of a `--reload` server, which its pages name: None for another server
@@ -204,6 +209,19 @@ def _hide_reload_polls() -> None:
     access = logging.getLogger("uvicorn.access")
     if _is_logged not in access.filters:
         access.addFilter(_is_logged)
+
+
+def _closing(
+    sessions: SessionStore,
+) -> Callable[[Starlette], contextlib.AbstractAsyncContextManager[None]]:
+    """Get a lifespan closing the sessions once the server stops: their uploads go too."""
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        yield
+        sessions.close_all()
+
+    return lifespan
 
 
 def _saving(
@@ -365,7 +383,10 @@ class WebApplication(Application[MainViewT]):
             saved=saved_sessions,
         )
         return create_starlette_app(
-            sessions, secret_key=secret_key, reloading=saved_sessions is not None
+            sessions,
+            max_upload_size=self.main_view.max_upload_size,
+            secret_key=secret_key,
+            reloading=saved_sessions is not None,
         )
 
     def run(self) -> None:

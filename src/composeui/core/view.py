@@ -1297,6 +1297,10 @@ class MainView(View):
     #: the version of the app's state, saved with it: a subclass raises it when a change of
     #: its views would lose an older study's state, and upgrades the state in `migrate_state`
     state_version: ClassVar[int] = 1
+    #: the largest file, in bytes, that a user can upload to the web app, 5 MiB by default;
+    #: not a study (Open has its own limit). A subclass sets it:
+    #: ``max_upload_size = 200 * 1024 * 1024``
+    max_upload_size: ClassVar[int] = 5 * 1024 * 1024
     #: `app_title`, in the main view's language
     title: str = attrs.field(
         default=attrs.Factory(lambda self: self.app_title, takes_self=True),

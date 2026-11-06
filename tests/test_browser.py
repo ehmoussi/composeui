@@ -1173,6 +1173,14 @@ def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) ->
     with _posted(page):
         picker.set_input_files(notes)
     expect(markdown.get_by_role("heading", name="Notes again")).to_be_visible()
+    # past the body's limit: the server would answer 413, which shows nothing
+    huge = tmp_path / "huge.md"
+    with huge.open("wb") as file:
+        file.truncate(2 * HelpMainView.max_upload_size)
+    with _posted(page):
+        picker.set_input_files(huge)
+    expect(page.locator("footer")).to_contain_text("'huge.md': the file is larger than 5 MiB.")
+    expect(markdown.get_by_role("heading", name="Notes again")).to_be_visible()
 
 
 def test_a_dialog_opens_as_a_modal_and_closes_on_its_answer(dialogs_page: Page) -> None:
