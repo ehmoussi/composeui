@@ -3,6 +3,9 @@
 These benchmarks measure the example apps. They give the baseline that the milestones of
 [the roadmap](../ROADMAP.md) report against (M0). They are not part of the test suite.
 
+Run a benchmark before and after work on speed, or when someone reports a slow case. No schedule
+refreshes the results: each result names its commit.
+
 ## The Uber pickups benchmark
 
 [`uber.py`](uber.py) measures the two Uber pickups examples:

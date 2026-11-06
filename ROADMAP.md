@@ -34,7 +34,8 @@ M0 sets measurable targets for the goal, and each milestone reports against them
 
 - The time from `pip install composeui` to a first app in the browser.
 - The lines of the reference dashboard, compared with the same app written as a script.
-- The response time and memory of the reference apps (see "Reference apps").
+- The response time and memory of the data explorer, and of the other reference apps once they
+  are measured (see "Reference apps").
 
 ## How to read this roadmap
 
@@ -107,7 +108,7 @@ Change that contract, and its tests, explicitly for extensions.
 
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
-| M0 — Baseline | Compare future work with 0.3.0 | Specify and benchmark the other two reference apps; prototype helpers; specify capabilities and data ownership | Three reference apps are specified, measured, and used to review the proposed APIs |
+| M0 — Baseline | Compare future work with 0.3.0 | Specify the other two reference apps; prototype helpers; specify capabilities and data ownership | Three reference apps are specified and used to review the proposed APIs, and the data explorer is measured |
 | M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
@@ -336,9 +337,9 @@ interactive.
 
 ### N12 — Examples and adoption
 
-In M0, grow three reference apps from the existing examples, and add a repeatable benchmark.
-`benchmarks/uber.py` does it for the Uber examples; extend it to each reference app. Publish
-each result with its versions, hardware, data and settings, as `benchmarks/README.md` does. By
+In M0, grow three reference apps from the existing examples. `benchmarks/uber.py` measures the
+Uber examples, the start of the data explorer. Add a benchmark for another reference app when work
+on its speed needs one. Publish each result with its versions, hardware, data and settings, as `benchmarks/README.md` does. By
 M5 and M6, turn the examples guide into a gallery, with how to contribute and what each example
 supports. Keep the changelog and releases current as features land.
 
@@ -589,7 +590,7 @@ Three apps test each milestone against real use.
 Start the workbench and the shared tool from `pipecatalogue.py` and `pipesweep.py`. Test maps
 on Qt and the web, and the rest also on Textual.
 
-Measure cold start, first useful render, filter and sort latency, chart update latency,
+When an app is measured, measure cold start, first useful render, filter and sort latency, chart update latency,
 response size, memory per session and for shared resources, throughput with concurrent
 sessions, and cleanup after a session closes. Use a small dataset, the million-row SQLite table
 of `largetable.py`, and an uploaded dataset within the limits.
@@ -598,8 +599,9 @@ Set numeric budgets after the M0 baseline, before judging the work against them.
 budget: an hour move in the SQLite Uber example takes less than 500 ms on the web, as
 `benchmarks/uber.py` measures it, with the 200 ms debounce of the map's job. A browser can get
 the map's points up to 300 ms later, at its next poll of `/jobs`. The second budget: the Uber
-CSV loads in less than 10 s, as `benchmarks/uber.py` measures it. Keep
-regression thresholds in CI where results are reproducible. Report differences in workloads
+CSV loads in less than 10 s, as `benchmarks/uber.py` measures it. Add
+regression thresholds to CI only once there are real users, or a release that makes speed claims,
+and only where results are reproducible. Report differences in workloads
 when comparing with other frameworks, rather than crediting every gap to the execution model.
 
 The stable release (M5) builds on the public API, the changelog, Semantic Versioning and the
