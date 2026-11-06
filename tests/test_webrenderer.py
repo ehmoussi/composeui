@@ -1112,17 +1112,17 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
     def body() -> Iterator[bytes]:
         yield _FILE_PART
         for _ in range(4):
-            yield b"x" * 40_000  # past the file's buffer: each one reaches the disk
+            yield b"x" * 400_000  # past the file's buffer, 128 KiB on Python 3.14: on the disk
             written.extend(path.stat().st_size for path in tmp_path.rglob("upload"))
         yield b"\r\n--b--\r\n"
 
     async def receive() -> bool:
-        async with receive_upload(_receive(body()), 100_000) as (upload, _fields):
+        async with receive_upload(_receive(body()), 1_000_000) as (upload, _fields):
             assert upload is not None
             return upload.refusal is UploadRefusal.TOO_LARGE
 
     assert asyncio.run(receive())
-    assert 0 < max(written) <= 100_000
+    assert 0 < max(written) <= 1_000_000
     assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
 
 
@@ -1280,9 +1280,13 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
             for index in range(MAX_FIELDS + 2)
         )
         + _WHOLE_FILE,
-        b'--b\r\nContent-Disposition: form-data; name="row"\r\nX: '
-        + b"y" * (MAX_PART_HEADERS_SIZE + 1)
-        + b"\r\n\r\n1\r\n"
+        # a few of 4 KB: a newer python-multipart itself refuses one large header, or over 8
+        b'--b\r\nContent-Disposition: form-data; name="row"\r\n'
+        + b"".join(
+            b"X%d: %s\r\n" % (index, b"y" * 4000)
+            for index in range(MAX_PART_HEADERS_SIZE // 4000 + 1)
+        )
+        + b"\r\n1\r\n"
         + _WHOLE_FILE,
         b"not the form it says it is",
     ],
