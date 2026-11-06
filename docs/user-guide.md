@@ -119,6 +119,7 @@ not in the package: run them from a clone of the repository (see
   - [CSV files](user-guide/csv-import.md#csv-files)
   - [CSV URLs](user-guide/csv-import.md#csv-urls)
   - [CSV dialect detection](user-guide/csv-import.md#csv-dialect-detection)
+  - [A frame or a Parquet file](user-guide/csv-import.md#a-frame-or-a-parquet-file)
 - [Translating the app](user-guide/translation.md)
   - [Checking the catalogs](user-guide/translation.md#checking-the-catalogs)
 - [Running the app](user-guide/running-the-app.md)

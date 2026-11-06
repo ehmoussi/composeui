@@ -8,6 +8,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `fill_from_frame`, from `composeui.core.dataframesource`, imports the rows of a dataframe into a
+  `CSVSqliteTable`, such as a Parquet file that the app read with Polars or pandas. It works as
+  `fill` does, with progress, rollback and the row class's checks, and it needs the `dataframe`
+  extra. `CSVSqliteTable.fill_rows` imports rows from any iterable of dictionaries.
 - `FileUploadView`, with `RowFileUploadView` and `LabelRowFileUploadView`, lets the user give the
   app a file on Qt, Textual and the web. Its `uploaded` signal gives an `UploadedFile`: the file's
   name, size, type and path. On the web, each session keeps its own copy until the view's next
@@ -51,6 +55,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 - On the web, an upload whose name has only letters outside ASCII before its extension, such as
   `データ.csv`, is no longer refused for its type.
+- A CSV row without a value for a required field, such as a short row, is refused. Before, a text
+  field stored the text "None", and a boolean field stored false.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy
   that the field holds.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that

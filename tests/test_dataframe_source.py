@@ -17,11 +17,25 @@ pytest.importorskip("pandas")
 import pandas as pd
 import polars as pl
 
-from composeui.core.dataframesource import DataFrameSource, points_of, series_of
+from composeui.core.dataframesource import (
+    DataFrameSource,
+    fill_from_frame,
+    points_of,
+    series_of,
+)
+from composeui.core.sqlitemodel import (
+    CSVSqliteTable,
+    RefusedError,
+    SqliteModel,
+    csv_field,
+    define_csv_row,
+    table,
+)
 from composeui.core.view import FilterError, ListSource, MapPoint, Sort, parse_filter
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable
+    from collections.abc import Hashable, Iterator
+    from pathlib import Path
 
     from narwhals.typing import IntoFrame
 
@@ -350,3 +364,178 @@ def test_map_points_leave_out_the_rows_missing_a_value_or_off_the_map(library: s
     }
 
     assert points_of(frames[library](), "lat", "lon") == [MapPoint(latitude=40.7, longitude=-73.9)]
+
+
+@define_csv_row
+class _Measure:
+    name: str
+    count: int
+    level: float
+    day: datetime.date
+    at: datetime.datetime = csv_field("taken at", date_format="%d/%m/%Y %H:%M")
+    note: Optional[str] = None
+    extra: Optional[int] = None
+
+
+class _Measures(CSVSqliteTable, row_type=_Measure, name="measures"):
+    pass
+
+
+class _MeasuresModel(SqliteModel):
+    measures = table(_Measures)
+
+
+_DAY = datetime.date(2026, 1, 2)
+_AT = datetime.datetime(2026, 1, 2, 3, 4)  # noqa: DTZ001 (naive on purpose)
+_MEASURES: dict[str, list[Any]] = {
+    "name": ["a", "b"],
+    "count": [1, 2],
+    "level": [0.5, 1.5],
+    "day": [_DAY, _DAY],
+    "taken at": [_AT, _AT],
+    "note": ["kept", None],
+    "extra": [7, None],
+    "ignored": [0, 0],
+}
+_MEASURE_FRAMES: dict[str, Callable[[], IntoFrame]] = {
+    "polars": lambda: pl.DataFrame(_MEASURES),
+    "lazy": lambda: pl.LazyFrame(_MEASURES),
+    "pandas, NaN": lambda: pd.DataFrame(_MEASURES),
+    "pandas, NA": lambda: pd.DataFrame(_MEASURES).astype({"extra": "Int64"}),
+}
+
+
+@pytest.fixture
+def measures_model() -> Iterator[_MeasuresModel]:
+    model = _MeasuresModel()
+    yield model
+    model.close()
+
+
+def _stored(model: _MeasuresModel) -> list[tuple[Any, ...]]:
+    with model.measures.connection() as db:
+        return [tuple(row) for row in db.execute("SELECT * FROM measures ORDER BY name")]
+
+
+_STORED = [
+    ("a", 1, 0.5, "2026-01-02", "2026-01-02T03:04:00", "kept", 7),
+    ("b", 2, 1.5, "2026-01-02", "2026-01-02T03:04:00", None, None),
+]
+
+
+@pytest.mark.parametrize("batch_size", [1, 100])
+@pytest.mark.parametrize("library", _MEASURE_FRAMES)
+def test_a_frame_fills_a_table_with_its_typed_values_and_its_nulls(
+    measures_model: _MeasuresModel, library: str, batch_size: int
+) -> None:
+    frame = _MEASURE_FRAMES[library]()
+
+    counts = list(fill_from_frame(measures_model.measures, frame, batch_size=batch_size))
+
+    assert counts[-1] == 2
+    assert _stored(measures_model) == _STORED
+
+
+def test_a_parquet_file_fills_a_table_through_the_app_s_own_reader(
+    measures_model: _MeasuresModel, tmp_path: Path
+) -> None:
+    path = tmp_path / "measures.parquet"
+    pl.DataFrame(_MEASURES).write_parquet(path)
+
+    for _ in fill_from_frame(measures_model.measures, pl.scan_parquet(path)):
+        pass
+
+    assert _stored(measures_model) == _STORED
+
+
+def test_an_import_of_a_frame_stopped_or_refused_keeps_no_row(
+    measures_model: _MeasuresModel,
+) -> None:
+    frame = pl.DataFrame(_MEASURES)
+    with contextlib.closing(
+        fill_from_frame(measures_model.measures, frame, batch_size=1)
+    ) as batches:
+        assert next(batches) == 1  # as a canceled job stops reading
+    assert _stored(measures_model) == []
+
+    # a null where the row class wants a value, after a good row: as a text too, not "None"
+    for column in ("count", "name"):
+        refused = pl.DataFrame({**_MEASURES, column: [_MEASURES[column][0], None]})
+        with pytest.raises(RefusedError, match=f"no value for {column}"):
+            list(fill_from_frame(measures_model.measures, refused, batch_size=1))
+        assert _stored(measures_model) == []
+
+
+def test_a_number_is_refused_in_a_date_field_with_a_format(
+    measures_model: _MeasuresModel,
+) -> None:
+    frame = pl.DataFrame({**_MEASURES, "taken at": [1, 2]})
+
+    with pytest.raises(RefusedError):
+        list(fill_from_frame(measures_model.measures, frame))
+
+    assert _stored(measures_model) == []
+
+
+@pytest.mark.parametrize(
+    ("column", "values"),
+    [
+        ("count", [1.9, 2.0]),  # would be stored as 1
+        ("day", [_AT, _DAY]),  # its hour would be lost
+    ],
+    ids=["a fraction in an int", "an hour in a date"],
+)
+def test_a_frame_s_value_that_would_lose_something_is_refused(
+    measures_model: _MeasuresModel, column: str, values: list[Any]
+) -> None:
+    frame = pd.DataFrame({**_MEASURES, column: values})
+
+    with pytest.raises(RefusedError, match=column):
+        list(fill_from_frame(measures_model.measures, frame))
+
+    assert _stored(measures_model) == []
+
+
+def test_a_nan_of_polars_is_a_missing_value(measures_model: _MeasuresModel) -> None:
+    """Not its null: `is_null` doesn't find it. SQLite would store it as NULL anyway."""
+    frame = pl.DataFrame({**_MEASURES, "level": [float("nan"), 1.5]})
+
+    with pytest.raises(RefusedError, match="no value for level"):
+        list(fill_from_frame(measures_model.measures, frame))
+
+    assert _stored(measures_model) == []
+
+
+def test_a_frame_without_an_optional_column_gives_its_field_s_default(
+    measures_model: _MeasuresModel,
+) -> None:
+    columns = {name: values for name, values in _MEASURES.items() if name != "extra"}
+
+    list(fill_from_frame(measures_model.measures, pl.DataFrame(columns)))
+
+    assert [row[-1] for row in _stored(measures_model)] == [None, None]
+
+
+def test_a_frame_s_value_converts_when_nothing_is_lost(
+    measures_model: _MeasuresModel,
+) -> None:
+    """Pandas holds an int column with a null as floats, and any date as a date and time."""
+    midnight = datetime.datetime.combine(_DAY, datetime.time())
+    frame = pd.DataFrame(
+        {**_MEASURES, "count": [1.0, 2.0], "day": pd.to_datetime([midnight, midnight])}
+    )
+
+    list(fill_from_frame(measures_model.measures, frame))
+
+    assert _stored(measures_model) == _STORED
+
+
+def test_a_date_of_a_frame_fits_a_date_field_with_a_format(
+    measures_model: _MeasuresModel,
+) -> None:
+    """A date column in a field of date and time: no text to parse with the format."""
+    frame = pl.DataFrame({**_MEASURES, "taken at": [_DAY, _DAY]})
+
+    list(fill_from_frame(measures_model.measures, frame))
+
+    assert _stored(measures_model)[0][4] == "2026-01-02T00:00:00"

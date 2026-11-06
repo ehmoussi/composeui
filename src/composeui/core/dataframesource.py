@@ -23,13 +23,14 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Hashable, Mapping, Sequence
+    from collections.abc import Generator, Hashable, Iterator, Mapping, Sequence
 
     from narwhals.typing import IntoFrame
 
+    from composeui.core.sqlitemodel import CSVSqliteTable
     from composeui.core.view import Filter, Sort
 
-__all__ = ["DataFrameSource", "points_of", "series_of"]
+__all__ = ["DataFrameSource", "fill_from_frame", "points_of", "series_of"]
 
 #: the column of the rows' ids added to a frame without an `id_column`
 ROW_ID = "__composeui_id"
@@ -312,3 +313,42 @@ def _python_value(value: Any) -> Any:
 
 def _collected(frame: Union[nw.DataFrame[Any], nw.LazyFrame[Any]]) -> nw.DataFrame[Any]:
     return frame.collect() if isinstance(frame, nw.LazyFrame) else frame
+
+
+def _frame_rows(frame: nw.DataFrame[Any], window: int) -> Iterator[dict[str, Any]]:
+    """Get the rows of `frame` as dictionaries, a window of them in Python at a time."""
+    for start in range(0, len(frame), window):
+        part = frame[start : start + window]
+        # a library's own mark for a missing value, such as pandas' NaN or NaT, becomes None
+        columns = [
+            [
+                None if is_null else value
+                for value, is_null in zip(part[name].to_list(), part[name].is_null().to_list())
+            ]
+            for name in part.columns
+        ]
+        for values in zip(*columns):
+            yield dict(zip(part.columns, values))
+
+
+def fill_from_frame(
+    table: CSVSqliteTable,
+    frame: IntoFrame,
+    *,
+    batch_size: int = 100_000,
+    limit: Optional[int] = None,
+) -> Generator[int]:
+    """Import the rows of a frame into `table`, and yield cumulative row counts.
+
+    Build the frame with any library that `narwhals` reads, such as a Parquet file read with
+    ``polars.read_parquet``. A column gives the field of its name, and its null values give
+    None. A lazy frame is collected first: the data stays in memory during the import.
+
+    Exhaust the generator to commit, or use ``contextlib.closing`` to roll back when
+    stopping early, as with `CSVSqliteTable.fill`. A row that its row class refuses raises
+    `RefusedError`.
+    """
+    collected = _collected(nw.from_native(frame))
+    yield from table.fill_rows(
+        _frame_rows(collected, batch_size), batch_size=batch_size, limit=limit
+    )

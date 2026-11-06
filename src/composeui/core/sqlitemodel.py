@@ -16,6 +16,7 @@ import functools
 import gzip
 import io
 import itertools
+import math
 import operator
 import os
 import re
@@ -322,12 +323,38 @@ def _csv_structure_hook(field: attrs.Attribute[Any]) -> Callable[[Any, Any], Any
         raise TypeError(msg)
 
     def structure(value: Any, _type: Any) -> datetime.date | None:
-        if value is None and nullable:
+        # first: a CSV's cell is text, and this runs for each of them
+        if type(value) is str:
+            parsed = _parsed_date(value, date_format)
+        elif value is None:  # `row_parameters` refuses it for a required field
             return None
-        parsed = _parsed_date(value, date_format)
+        # a frame's date, already in the field's type (see `_typed_value`)
+        elif isinstance(value, datetime.date):
+            return value
+        else:
+            parsed = _parsed_date(value, date_format)
         return parsed.date() if field_type is datetime.date else parsed
 
     return structure
+
+
+def _typed_value(value: Any, value_type: Any, header: str) -> Any:
+    """Get `value` in the type of its field when nothing is lost; refuse it else."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if value_type is int and isinstance(value, float):
+        if not value.is_integer():
+            msg = f"{header} takes a whole number, not {value}"
+            raise RefusedError(msg)
+        return int(value)
+    if value_type is datetime.date and isinstance(value, datetime.datetime):
+        if value.time() != datetime.time():
+            msg = f"{header} takes a date, not {value}"
+            raise RefusedError(msg)
+        return value.date()
+    if value_type is datetime.datetime and type(value) is datetime.date:
+        return datetime.datetime.combine(value, datetime.time())
+    return value
 
 
 class _CSVField(NamedTuple):
@@ -335,6 +362,10 @@ class _CSVField(NamedTuple):
     alias: str
     field_type: Any
     structure: Callable[[Any, Any], Any] | None
+    #: whether None is refused: converted, it would read as a value, such as the text "None"
+    is_required: bool
+    #: the field's type without its Optional
+    value_type: Any
 
 
 @contextlib.contextmanager
@@ -444,6 +475,10 @@ class CSVSqliteTable(SqliteTable):
                 alias=field.alias,
                 field_type=field.type,
                 structure=_csv_structure_hook(field),
+                is_required=field.converter is None and type(None) not in get_args(field.type),
+                value_type=next(
+                    (arg for arg in get_args(field.type) if arg is not type(None)), field.type
+                ),
             )
             for field in fields
             if field.init
@@ -485,9 +520,12 @@ class CSVSqliteTable(SqliteTable):
         values = {}
         try:
             # unpacked, and no call for a value SQLite stores as it is: this runs for each row
-            for header, alias, field_type, structure in self._csv_fields:
+            for header, alias, field_type, structure, is_required, _ in self._csv_fields:
                 if header in row:
                     value = row[header]
+                    if value is None and is_required:
+                        msg = f"The row has no value for {header}"
+                        raise RefusedError(msg)
                     values[alias] = value if structure is None else structure(value, field_type)
             instance = self.row_type(**values)
         except (ValueError, TypeError) as error:
@@ -517,9 +555,35 @@ class CSVSqliteTable(SqliteTable):
         `SqliteTable.insert_batches`'s rules.
         """
         reader = csv.DictReader(text, **csv_options)
+        # not `fill_rows`: a CSV's cells are text, and this runs for each of them
         rows = (self.row_parameters(row) for row in _dict_rows(reader))
+        yield from self._insert_rows(rows, batch_size=batch_size, limit=limit)
+
+    def fill_rows(
+        self,
+        rows: Iterable[dict[str, Any]],
+        *,
+        batch_size: int = 100_000,
+        limit: int | None = None,
+    ) -> Generator[int]:
+        """Import rows, each a dictionary by CSV header, and yield cumulative row counts.
+
+        The values go through the row class as a CSV's text does. A value may also have the
+        field's own type, such as a date, or one that converts without a loss: a whole float
+        for an int, a date at midnight for a date and time, or the reverse. NaN is None. Any
+        other value raises `RefusedError`, as a float with a fraction does for an int.
+        Transactions follow `fill`.
+        """
+        parameters = (self.row_parameters(self._typed_row(row)) for row in rows)
+        yield from self._insert_rows(parameters, batch_size=batch_size, limit=limit)
+
+    def _insert_rows(
+        self, parameters: Iterable[Parameters], *, batch_size: int, limit: int | None
+    ) -> Generator[int]:
         try:
-            yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
+            yield from self.insert_batches(
+                self.insert, parameters, batch_size=batch_size, limit=limit
+            )
         finally:
             _parsed_date.cache_clear()
             _naive_date_text.cache_clear()
@@ -596,6 +660,16 @@ class CSVSqliteTable(SqliteTable):
             ) as batches,
         ):
             yield from batches
+
+    def _typed_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Convert a row's values for their fields; the converters would read them as text."""
+        typed = dict(row)
+        for csv_field_ in self._csv_fields:
+            if csv_field_.header in typed:
+                typed[csv_field_.header] = _typed_value(
+                    typed[csv_field_.header], csv_field_.value_type, csv_field_.header
+                )
+        return typed
 
     def _fill_stream(
         self,

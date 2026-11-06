@@ -205,6 +205,9 @@ delimiter, with `csv.Sniffer`.
   reads, after the decompression and the decoding. For long headers or rows, give a larger
   sample, for example `sniff_sample_size=65536`. With `sniff=True`, a size that is not
   positive raises `ValueError`. Without it, the size is ignored.
+- **A file from a user.** Keep the default size, or a smaller one. The sniffer's time grows with
+  the square of the size, and it stops every thread of the server while it runs. On a crafted
+  file, it took about 0.3 s for 8192 characters, and 18 s for 65536.
 - **No seek.** The import reads the sample again from memory, with its partial lines and
   its quoted newlines. So an HTTP stream works too. The sample can read past the rows of a
   batch or of `limit`, but the import keeps only the rows asked for.
@@ -218,3 +221,56 @@ delimiter, with `csv.Sniffer`.
   format, leave sniffing off and give its options.
 - **Errors.** An import with sniffing rolls back as one without: on an error, or when the
   loop stops early.
+
+## A frame or a Parquet file
+
+`fill_from_frame`, from `composeui.core.dataframesource`, imports the rows of a dataframe into a
+`CSVSqliteTable`. It needs the `dataframe` extra. The app reads a Parquet file with its own
+library, such as Polars or pandas, so ComposeUI needs no Parquet reader:
+
+```python
+import contextlib
+from pathlib import Path
+
+import polars as pl
+
+from composeui.core.dataframesource import fill_from_frame
+from composeui.core.sqlitemodel import CSVSqliteTable, define_csv_row
+
+
+@define_csv_row
+class Reading:
+    name: str
+    value: float
+
+
+class Readings(CSVSqliteTable, row_type=Reading, name="readings"):
+    pass
+
+
+def read_parquet(readings: Readings, path: Path, job) -> None:
+    frame = pl.read_parquet(path)
+    with contextlib.closing(fill_from_frame(readings, frame)) as batches:
+        for count in batches:
+            if job.is_canceled:
+                return
+            job.report_progress(count)
+```
+
+- **Columns.** A column gives the field of the same name, or of its `csv_field` name. The import
+  ignores the other columns.
+- **Values.** A date stays a date, and a field's `date_format` is not used for it. A missing
+  value gives `None`, including `NaN`, `NaT` and `pd.NA`. A value converts only when nothing is
+  lost: `2.0` fits an `int` field, and a date and time at midnight fits a date field. So `1.9`
+  in an `int` field raises `RefusedError`, as a row class that refuses a value does.
+- **Transactions.** The import works as `fill` does: exhaust the generator to commit, and close
+  it to roll back.
+- **Memory.** The whole frame stays in memory during the import, and a lazy frame is collected
+  first. The rows reach SQLite in batches, but the file is not read in batches. For a file larger
+  than the memory, read it in parts with its library, and give the rows to
+  `CSVSqliteTable.fill_rows`.
+
+`fill_rows` takes any iterable of rows, each a dictionary by CSV header. It follows the same rules.
+
+A frame can also stay a frame: [`DataFrameSource`](tables.md) shows it in a large table without
+SQLite.

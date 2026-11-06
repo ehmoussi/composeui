@@ -11,6 +11,7 @@ import io
 import subprocess
 import sys
 import tempfile
+import threading
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -29,10 +30,12 @@ from composeui.core.sqlitemodel import (
     define_csv_row,
     table,
 )
-from composeui.core.view import Sort, SourceColumn, parse_filter
+from composeui.core.view import MainView, Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from composeui.core.jobs import Job
 
 
 @define_csv_row
@@ -484,6 +487,60 @@ class Measure:
 
 
 _MEASURE_INDEX = "CREATE INDEX measure_value ON measure(value);"
+
+
+def test_a_job_canceled_partway_through_an_import_keeps_no_row(tmp_path: Path) -> None:
+    """On the job's own thread, as an app's long import runs, past a first batch of rows."""
+    path = tmp_path / "many.csv"
+    path.write_text("first,second\n" + "a,b\n" * 10, encoding="utf-8")
+    model = _TwoTextsModel()
+    main_view = MainView()
+    first_batch = threading.Event()
+    canceled = threading.Event()
+    read: list[int] = []
+
+    def load(job: Job[None, int]) -> None:
+        with contextlib.closing(model.texts.fill_from_file(path, batch_size=2)) as batches:
+            for count in batches:
+                read.append(count)
+                first_batch.set()
+                assert canceled.wait(30)
+                if job.is_canceled:
+                    return
+
+    try:
+        job = main_view.jobs.start(load)
+        assert first_batch.wait(30)
+        job.cancel()
+        canceled.set()
+        main_view.jobs.wait()
+        assert read == [2]
+        assert model.texts.fetch_column("SELECT COUNT(*) FROM two_texts") == [0]
+    finally:
+        model.close()
+
+
+@define_csv_row
+class _TwoTexts:
+    first: str
+    second: str
+
+
+class _TwoTextsTable(CSVSqliteTable, row_type=_TwoTexts, name="two_texts"):
+    pass
+
+
+class _TwoTextsModel(SqliteModel):
+    texts = table(_TwoTextsTable)
+
+
+def test_a_short_row_refuses_a_required_text_rather_than_storing_none() -> None:
+    model = _TwoTextsModel()
+    try:
+        with pytest.raises(RefusedError, match="no value for second"):
+            list(model.texts.fill(["first,second\n", "only\n"]))
+    finally:
+        model.close()
 
 
 class IndexedMeasures(CSVSqliteTable, row_type=Measure, name="measure"):
