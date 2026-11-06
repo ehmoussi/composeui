@@ -263,17 +263,17 @@ uv run python benchmarks/sessions.py --output benchmarks/results/sessions-<commi
 ```
 
 The defaults run 1, 2 and 4 sessions once, and each session moves the hour 5 times. They take
-about 6 minutes. `--examples`, `--sessions`, `--levels`, `--repeat`, `--rounds` and `--left-repeat` change
-this. With `--levels 8`, the SQLite example takes about 20 minutes for its load alone. The JSON file
-holds a summary, not each sample.
+about 6 minutes. `--examples`, `--sessions`, `--levels`, `--repeat`, `--rounds` and
+`--left-repeat` change this. With `--levels 8`, the SQLite example takes about 20 minutes for its
+load alone. The JSON file holds a summary, not each sample.
 
 ### Sessions results
 
 The results come from `3c647a3`, on the same machine and Python as above, in
 [`results/sessions-3c647a3.json`](results/sessions-3c647a3.json). They ran with
 `--levels 1 2 4 8 --repeat 2 --rounds 3 --left-repeat 3`, on a longer version of the script that
-also measured Python's memory. Other work ran on the machine during part of these runs. A second run of 4 SQLite
-sessions, with nothing else running, gives a load of 213 s and a move of 4.2 s.
+also measured Python's memory. Other work ran on the machine during part of these runs. A second
+run of 4 SQLite sessions, with nothing else running, gives a load of 213 s and a move of 4.2 s.
 
 What each session costs, after the first session:
 
