@@ -127,7 +127,7 @@ Build one thin slice from end to end before the full catalog:
 
 1. **Measure.** The [Uber benchmark](benchmarks/README.md) measures 0.3.0 and main: loading,
    hour moves, sorting and filtering, row-ID memory, web responses, and cleanup on the core.
-   It found P07. Measure a web session's cleanup and concurrent sessions next, then
+   Measure a web session's cleanup and concurrent sessions next, then
    specify the scientific and shared-tool workflows.
 2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
@@ -521,7 +521,7 @@ the main thread. Do not rebuild it. New work comes from T02, T03, N06 and L01.
 | L06 | PyQt6 as a second Qt binding, with a `pyqt6` extra | When an app asks for it |
 | L07 | Optional filesystem adapters: paths between Windows and WSL, and opening a folder on the app's host | When an app asks for it |
 | L08 | Recent folders in the picker of the server's files (`server_roots`) | When an app asks for it |
-| P07 | `CSVSqliteTable` imports about 50,000 rows a second: 20 s for the Uber CSV, which Polars reads in 0.15 to 0.4 s | M1, with N07 |
+| L09 | Import a CSV file into SQLite through Polars or PyArrow, which read the Uber CSV in 0.15 to 0.4 s; the typed import takes about 10 s, with its row checks in Python | When a data app needs a faster import, with its own rules for checks and error messages |
 
 For A02, test the Qt package on a clean machine. An app with a map needs `map.qml`, the Qt
 Location and Qt Positioning QML modules, and the location plugins. Document each recipe in
@@ -576,10 +576,6 @@ and state who owns it: the web session, or the local user. A folder outside the 
 never shows, even if a root that held it was allowed before. Done when a test changes the roots
 and finds that the history shows no folder outside them.
 
-For P07, profile the import before choosing a fix: the CSV parsing, the row checks, and the
-inserts. Keep the typed rows, the batches in a transaction, and the progress. Done when the Uber
-CSV imports several times faster, measured by `benchmarks/uber.py`.
-
 ## Reference apps
 
 Three apps test each milestone against real use.
@@ -601,7 +597,8 @@ of `largetable.py`, and an uploaded dataset within the limits.
 Set numeric budgets after the M0 baseline, before judging the work against them. The first
 budget: an hour move in the SQLite Uber example takes less than 500 ms on the web, as
 `benchmarks/uber.py` measures it, with the 200 ms debounce of the map's job. A browser can get
-the map's points up to 300 ms later, at its next poll of `/jobs`. Keep
+the map's points up to 300 ms later, at its next poll of `/jobs`. The second budget: the Uber
+CSV loads in less than 10 s, as `benchmarks/uber.py` measures it. Keep
 regression thresholds in CI where results are reproducible. Report differences in workloads
 when comparing with other frameworks, rather than crediting every gap to the execution model.
 

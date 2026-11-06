@@ -36,6 +36,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- `CSVSqliteTable` imports a CSV file about twice as fast when dates repeat in it. The 1,028,136
+  rows of the Uber pickups example take about 10 s, down from about 20 s, with the same checks on
+  each row. An import holds more memory for its dates, about 5 MiB for this file, and frees it
+  at its end.
 - In the SQLite Uber pickups example, moving the hour takes about 0.3 to 0.4 s on the web, down
   from about 1.7 s, and sorting its table about 70 ms, down from about 860 ms. An index on the
   hour replaces a scan of every row. A study saved before the index opens through a migration.

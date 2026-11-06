@@ -45,7 +45,7 @@ uv run python benchmarks/uber.py --repeat 3 --output benchmarks/results/uber-<co
 ```
 
 `--examples` and `--backends` select fewer cases. A timed run of a SQLite case takes about
-30 s.
+15 s.
 
 To measure another version, copy `uber.py` out of the repository first. Then check out the
 version, such as the `v0.3.0` tag, and run the copy from the repository's root.
@@ -191,15 +191,35 @@ again.
   62.4 MiB, and opening a study takes 1.64 s instead of 0.35 s. `benchmarks/uber.py` does not
   measure this.
 
+### The faster CSV import
+
+This change makes `CSVSqliteTable` faster, on top of the hour index. Its results are in
+[`results/uber-csv-import.json`](results/uber-csv-import.json), with the same machine, Python,
+rows and points. The Polars example does not use this code, and was not measured again.
+
+| Measure | Core, before | Core, after | Web, before | Web, after |
+| --- | ---: | ---: | ---: | ---: |
+| Load | 20.2 s | 9.67 s | 21.0 s | 9.95 s |
+| Python peak of the load | 48.9 MiB | 54.3 MiB | 47.6 MiB | 53.0 MiB |
+| Process peak (RSS) | 97 MiB | 102 MiB | 112 MiB | 117 MiB |
+
+- **Most of the gain comes from repeated dates.** The file has 42,907 distinct dates in its
+  1,028,136 rows. An import keeps each date parsed, and its text, until the import ends. A file
+  whose dates rarely repeat gains less. This was not measured.
+- **Each row keeps its checks.** The row class still converts and validates each row.
+- **The web's margin is small.** Two runs can differ by about 10%, so a run can take more than
+  the 10 s budget of [the roadmap](../ROADMAP.md).
+
 ### Findings
 
 - **The hour index removed most of a SQLite hour move's time.** A move took 1.6 to 1.8 s on
   `d321c3a`, and took 0.6 to 0.75 s in 0.3.0, which did not filter the table. Each of its three
   queries scanned the 1,028,136 rows, and computed `strftime('%H', date_time)` on each row. With
   the index, a move takes 0.23 to 0.4 s.
-- **A SQLite load takes about 20 s on both versions.** The CSV import parses and checks each
-  row in Python, at about 50,000 rows per second. Polars reads the same file in 0.15 to
-  0.4 s, but its process takes three to four times the memory.
+- **A SQLite load took about 20 s on both versions, and takes about 10 s since the faster CSV
+  import.** The import parses and checks each row in Python, now at about 100,000 rows per
+  second. Polars reads the same file in 0.15 to 0.4 s, but its process takes about three times
+  the memory.
 - **A sort or a filter of a SQLite source took 0.4 to 1.8 s before the hour index.** With it,
   a sort takes 58 to 71 ms, and a filter 21 ms. The same operations on Polars took 8 to 26 ms
   on `d321c3a`. The time follows the number of rows that the table reads.

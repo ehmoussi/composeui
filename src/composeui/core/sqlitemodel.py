@@ -16,6 +16,7 @@ import functools
 import gzip
 import io
 import itertools
+import operator
 import os
 import re
 import sqlite3
@@ -264,6 +265,50 @@ def define_csv_row(cls: _RowClassT) -> _RowClassT:
     return cast("_RowClassT", attrs.define(cls))
 
 
+#: the exact types whose values `_sql_value` gives back as they are
+_STORED_AS_IS = frozenset({str, int, float, bool, bytes, type(None)})
+
+
+def _dict_rows(reader: csv.DictReader[str]) -> Generator[dict[Any, Any]]:
+    """Get the rows of `reader` as iterating over it does, without its Python call per row."""
+    names = reader.fieldnames
+    if names is None:
+        return
+    nb_names = len(names)
+    for cells in reader.reader:
+        if len(cells) == 0:  # a blank line is no row
+            continue
+        row: dict[Any, Any] = dict(zip(names, cells))
+        if len(cells) > nb_names:
+            row[reader.restkey] = cells[nb_names:]
+        elif len(cells) < nb_names:
+            row.update(dict.fromkeys(names[len(cells) :], reader.restval))
+        yield row
+
+
+@functools.lru_cache(maxsize=65536)
+def _parsed_date(value: Any, date_format: str) -> datetime.datetime:
+    """Parse a CSV date: a file often repeats one, and `strptime` is the import's slowest part.
+
+    `fill` empties the cache at its end, so that it holds no memory between two imports. It
+    holds a month of dates to the minute, as a file may go through its dates several times.
+    """
+    return datetime.datetime.strptime(value, date_format)  # noqa: DTZ007 (preserve CSV timezone semantics)
+
+
+@functools.lru_cache(maxsize=65536)
+def _naive_date_text(value: datetime.datetime) -> str:
+    return value.isoformat()
+
+
+def _csv_cell(cell: Any) -> Any:
+    """Get a CSV cell as SQLite stores it, a date repeated in the file from the cache."""
+    # naive only: two aware dates of the same instant are equal, but their texts differ
+    if type(cell) is datetime.datetime and cell.tzinfo is None:
+        return _naive_date_text(cell)
+    return _sql_value(cell)
+
+
 def _csv_structure_hook(field: attrs.Attribute[Any]) -> Callable[[Any, Any], Any] | None:
     date_format = field.metadata.get("csv_date_format")
     if date_format is None:
@@ -279,7 +324,7 @@ def _csv_structure_hook(field: attrs.Attribute[Any]) -> Callable[[Any, Any], Any
     def structure(value: Any, _type: Any) -> datetime.date | None:
         if value is None and nullable:
             return None
-        parsed = datetime.datetime.strptime(value, date_format)  # noqa: DTZ007 (preserve CSV timezone semantics)
+        parsed = _parsed_date(value, date_format)
         return parsed.date() if field_type is datetime.date else parsed
 
     return structure
@@ -348,6 +393,7 @@ class CSVSqliteTable(SqliteTable):
     indexes: ClassVar[str] = ""
     _create_table: ClassVar[str] = ""
     _column_names: ClassVar[tuple[str, ...]]
+    _read_cells: ClassVar[operator.attrgetter[tuple[Any, ...]]]
     _csv_fields: ClassVar[tuple[_CSVField, ...]]
 
     def __init_subclass__(
@@ -390,6 +436,8 @@ class CSVSqliteTable(SqliteTable):
         cls.row_type = row_type
         cls.name = name
         cls._column_names = tuple(field.name for field in fields)
+        # the first name twice: `attrgetter` gives a tuple only for several names
+        cls._read_cells = operator.attrgetter(*cls._column_names, cls._column_names[0])
         cls._csv_fields = tuple(
             _CSVField(
                 header=field.metadata.get("csv_name", field.name),
@@ -436,18 +484,20 @@ class CSVSqliteTable(SqliteTable):
         """Convert CSV fields through the row class and return SQL parameters."""
         values = {}
         try:
-            for field in self._csv_fields:
-                if field.header in row:
-                    value = row[field.header]
-                    values[field.alias] = (
-                        value
-                        if field.structure is None
-                        else field.structure(value, field.field_type)
-                    )
+            # unpacked, and no call for a value SQLite stores as it is: this runs for each row
+            for header, alias, field_type, structure in self._csv_fields:
+                if header in row:
+                    value = row[header]
+                    values[alias] = value if structure is None else structure(value, field_type)
             instance = self.row_type(**values)
         except (ValueError, TypeError) as error:
             raise RefusedError(str(error)) from error
-        return tuple(_sql_value(getattr(instance, name)) for name in self._column_names)
+        return tuple(
+            [
+                cell if type(cell) in _STORED_AS_IS else _csv_cell(cell)
+                for cell in self._read_cells(instance)[:-1]
+            ]
+        )
 
     def fill(
         self,
@@ -466,8 +516,13 @@ class CSVSqliteTable(SqliteTable):
         early to roll back rows. Nested transactions follow
         `SqliteTable.insert_batches`'s rules.
         """
-        rows = (self.row_parameters(row) for row in csv.DictReader(text, **csv_options))
-        yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
+        reader = csv.DictReader(text, **csv_options)
+        rows = (self.row_parameters(row) for row in _dict_rows(reader))
+        try:
+            yield from self.insert_batches(self.insert, rows, batch_size=batch_size, limit=limit)
+        finally:
+            _parsed_date.cache_clear()
+            _naive_date_text.cache_clear()
 
     def fill_from_file(  # noqa: PLR0913 (keep decoding, detection and import options explicit)
         self,

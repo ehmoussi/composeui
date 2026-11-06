@@ -17,11 +17,18 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 import pytest
-from hypothesis import given, reject
+from hypothesis import example, given, reject
 from hypothesis import strategies as st
 
 from composeui.core.model import RefusedError
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
+from composeui.core.sqlitemodel import (
+    CSVSqliteTable,
+    SqliteModel,
+    _dict_rows,
+    csv_field,
+    define_csv_row,
+    table,
+)
 from composeui.core.view import Sort, SourceColumn, parse_filter
 
 if TYPE_CHECKING:
@@ -525,6 +532,65 @@ def test_indexes_serve_queries_after_an_import_and_in_a_reopened_study(
         assert reopened.measures.fetch_column("SELECT value FROM measure WHERE value = 2") == [2.0]
     finally:
         reopened.close()
+
+
+@example(lines=[[], []], names=None, options={})  # a blank header, then a blank line
+@given(
+    lines=st.lists(st.lists(st.sampled_from(["a", "b", ""]), max_size=4), max_size=5),
+    names=st.one_of(st.none(), st.lists(st.sampled_from(["a", "b", "c"]), max_size=3)),
+    options=st.sampled_from([{}, {"restkey": "more", "restval": "none"}]),
+)
+def test_csv_rows_are_the_rows_of_a_dict_reader(
+    lines: list[list[str]], names: Any, options: dict[str, Any]
+) -> None:
+    text = io.StringIO(newline="")
+    csv.writer(text).writerows(lines)  # an empty list of cells is a blank line
+
+    def reader() -> csv.DictReader[str]:
+        return csv.DictReader(io.StringIO(text.getvalue(), newline=""), names, **options)
+
+    assert list(_dict_rows(reader())) == list(reader())
+
+
+@define_csv_row
+class Dates:
+    day_first: datetime.date = csv_field("DayFirst", date_format="%d/%m/%Y")
+    month_first: datetime.date = csv_field("MonthFirst", date_format="%m/%d/%Y")
+    same_format: datetime.datetime = csv_field("SameFormat", date_format="%d/%m/%Y")
+    moment: datetime.datetime = csv_field("Moment", date_format="%Y-%m-%d %H:%M%z")
+
+
+class DatesTable(CSVSqliteTable, row_type=Dates, name="dates"):
+    pass
+
+
+class DatesModel(SqliteModel):
+    dates = table(DatesTable)
+
+
+def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
+    header = "DayFirst,MonthFirst,SameFormat,Moment\n"
+    # one text read by each format, as a date and as a datetime; one instant at two offsets
+    rows = (
+        "01/02/2020,01/02/2020,01/02/2020,2020-01-01 12:00+0000\n"
+        "01/02/2020,01/02/2020,01/02/2020,2020-01-01 13:00+0100\n"
+    )
+    model = DatesModel()
+    try:
+        deque(model.dates.fill(io.StringIO(header + rows)), maxlen=0)
+        with model.dates.connection() as db:
+            stored = db.execute("SELECT * FROM dates ORDER BY rowid").fetchall()
+        assert [tuple(row) for row in stored] == [
+            ("2020-02-01", "2020-01-02", "2020-02-01T00:00:00", "2020-01-01T12:00:00+00:00"),
+            ("2020-02-01", "2020-01-02", "2020-02-01T00:00:00", "2020-01-01T13:00:00+01:00"),
+        ]
+        invalid = header + "31/02/2020,01/02/2020,01/02/2020,2020-01-01 12:00+0000\n"
+        for _ in range(2):  # a date refused is refused each time
+            with pytest.raises(RefusedError, match="day is out of range"):
+                deque(model.dates.fill(io.StringIO(invalid)), maxlen=0)
+        assert model.dates.fetch_column("SELECT COUNT(*) FROM dates") == [2]
+    finally:
+        model.close()
 
 
 @define_csv_row
