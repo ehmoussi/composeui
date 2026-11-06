@@ -3033,6 +3033,25 @@ def test_an_idle_session_expires() -> None:
     assert len(app.session_views) == 2  # the reload started a fresh session
 
 
+def test_a_session_that_expires_cancels_its_jobs() -> None:
+    canceled = threading.Event()
+
+    def work(job: Job[None, None]) -> None:
+        if not job.sleep(30):
+            canceled.set()
+
+    class WorkingApp(_ShortLivedHelloApp):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            super().setup_session(main_view)
+            main_view.jobs.start(work)
+
+    with _Browser(WorkingApp().create_starlette_app()) as client:
+        client.get("/")
+        client.get("/jobs")  # finds the session expired, and starts no other
+
+    assert canceled.wait(10)
+
+
 class _TwoSessionsHelloApp(_HelloApp):
     max_sessions = 2
 

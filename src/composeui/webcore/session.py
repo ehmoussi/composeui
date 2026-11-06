@@ -82,6 +82,8 @@ class WebSession(RenderTarget):
         with self.lock:
             # weak references would free them too, but only once collected
             stop_reactions(self.main_view)
+            # not `drop`: its signals would run the app's code in another session's request
+            self.main_view.jobs.cancel()
             if self.model is not None:
                 self.model.close()
             if self._uploads is not None:

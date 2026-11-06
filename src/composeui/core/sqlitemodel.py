@@ -937,6 +937,8 @@ class SqliteModel(Model):
         # read never waits for the turn a write holds
         self._readers_lock = threading.Lock()
         self._closed = False
+        #: the turns held, which keep the connection open once the model is closed
+        self._turns = 0
         self._depth = 0
         self._changed: list[SqliteTable] = []
         self._database = self._new_database()
@@ -953,10 +955,35 @@ class SqliteModel(Model):
     def add_table(self, table_type: type[SqliteTableT]) -> SqliteTableT:
         """Add a table, created in the current database too, and return it."""
         table = table_type(self)
-        with self._lock:
-            self._database.connection.executescript(table.create)
+        with self._turn() as db:
+            db.executescript(table.create)
         self._tables.append(table)
         return table
+
+    @contextlib.contextmanager
+    def _turn(self) -> Generator[sqlite3.Connection]:
+        """Hold the turn on the database's connection, which `close` leaves open until its end.
+
+        Closing a connection during another thread's statement crashes the process.
+        """
+        with self._lock:
+            with self._readers_lock:
+                if self._closed:
+                    msg = "Cannot operate on a closed database."
+                    raise sqlite3.ProgrammingError(msg)
+                self._turns += 1
+            try:
+                yield self._database.connection
+            finally:
+                with self._readers_lock:
+                    self._turns -= 1
+                    self._close_if_unused(self._database)
+
+    def _close_if_unused(self, database: _Database) -> None:
+        """Close a replaced database, or a closed model's, once unused; hold the readers' lock."""
+        is_over = database is not self._database or (self._closed and self._turns == 0)
+        if is_over and database.readers == 0:
+            database.close()
 
     @contextlib.contextmanager
     def connection(self, *, changing: SqliteTable | None = None) -> Generator[sqlite3.Connection]:
@@ -970,8 +997,7 @@ class SqliteModel(Model):
         refreshes are.
         """
         changed: list[SqliteTable] = []
-        with self._lock:
-            db = self._database.connection
+        with self._turn() as db:
             before = db.total_changes
             outermost = self._depth == 0
             self._depth += 1
@@ -1033,8 +1059,7 @@ class SqliteModel(Model):
                 database.readers -= 1
                 if db is not None:
                     database.idle_readers.append(db)
-                if database.readers == 0 and (database is not self._database or self._closed):
-                    database.close()
+                self._close_if_unused(database)
 
     def new(self) -> None:
         self._replace_database(self._new_database())
@@ -1042,8 +1067,8 @@ class SqliteModel(Model):
     def save_data(self, path: Path) -> None:
         target = sqlite3.connect(str(path))
         try:
-            with self._lock:
-                self._database.connection.backup(target)
+            with self._turn() as db:
+                db.backup(target)
             # the backup copies the WAL journal: a file another app opens leaves none beside it
             target.execute("PRAGMA journal_mode = DELETE")
         finally:
@@ -1095,11 +1120,11 @@ class SqliteModel(Model):
             table.changed.emit()
 
     def close(self) -> None:
-        # not the write's turn: closing the app doesn't wait for a job's long write
+        # not the write's turn: closing the app doesn't wait for a job's long write, whose
+        # end closes it, as the last query `reading` it does
         with self._readers_lock:
             self._closed = True
-            if self._database.readers == 0:  # else the last query `reading` it closes it
-                self._database.close()
+            self._close_if_unused(self._database)
 
     def _new_database(self) -> _Database:
         database = _Database(self.pragmas)

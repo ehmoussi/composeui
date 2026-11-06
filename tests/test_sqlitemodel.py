@@ -408,14 +408,19 @@ def test_every_database_keeps_the_models_settings(
     model.close()
 
 
-def test_closing_a_model_waits_for_no_write_running() -> None:
+def test_closing_a_model_waits_for_no_write_running_whose_end_closes_it() -> None:
     model = PartsModel()
     writing, done = threading.Event(), threading.Event()
+    connections: list[sqlite3.Connection] = []
+    written: list[int] = []
 
     def write() -> None:  # as a job's long write, e.g. filling a table
-        with contextlib.suppress(sqlite3.Error), model.parts.connection():
+        with model.parts.connection() as db:
+            connections.append(db)
             writing.set()
             done.wait(10)
+            # closed under this statement, the connection can crash the whole process
+            written.append(db.execute("INSERT INTO part(name) VALUES ('bolt')").rowcount)
 
     writer = threading.Thread(target=write)
     writer.start()
@@ -428,6 +433,9 @@ def test_closing_a_model_waits_for_no_write_running() -> None:
     writer.join(5)
 
     assert is_closed
+    assert written == [1]
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        connections[0].execute("SELECT 1")
 
 
 def test_a_closed_model_reads_nothing_more_apart_as_its_connection() -> None:

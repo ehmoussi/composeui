@@ -36,6 +36,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
+  expires during a long import, no longer crashes the server. `SqliteModel.close` closed the
+  connection during the job's statement, which could end the process and every session in it.
+  `close` still returns at once: the connection now closes when the write's transaction ends. The
+  end of a session also cancels its jobs.
 - `CSVSqliteTable` imports a CSV file about twice as fast when dates repeat in it. The 1,028,136
   rows of the Uber pickups example take about 10 s, down from about 20 s, with the same checks on
   each row. An import holds more memory for its dates, about 5 MiB for this file, and frees it
