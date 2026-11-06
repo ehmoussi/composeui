@@ -66,6 +66,9 @@ Each case had 3 timed runs and 1 memory run, on two versions:
 - **main:** `d321c3a` (0.3.1.dev27), 27 commits later, in
   [`results/uber-d321c3a.json`](results/uber-d321c3a.json).
 
+The tables below compare these two versions. ["The hour index"](#the-hour-index) gives a later
+change to the SQLite example.
+
 The machine is an Intel Core i9-9900K (8 cores, 16 threads), with Linux in WSL2 and 15 GiB of
 memory. The Python is 3.9.23. The times are medians.
 
@@ -159,18 +162,47 @@ and both examples, the main view is freed when the app closes.
 
 A poll with nothing to send is 32 B.
 
+### The hour index
+
+This change adds an index on the hour of each row to the SQLite example, on top of `374e6f9`.
+Its results are in [`results/uber-hour-index.json`](results/uber-hour-index.json), with the same
+machine, Python, rows and points. The Polars example does not change, and was not measured
+again.
+
+| Step | Core, before | Core, with the index | Web, before | Web, with the index |
+| --- | ---: | ---: | ---: | ---: |
+| Hour 17 | 1.59 s | 308 ms | 1.72 s | 399 ms |
+| Hour 2 | 1.70 s | 232 ms | 1.79 s | 289 ms |
+| Hour 11 | 1.64 s | 274 ms | 1.75 s | 371 ms |
+| Hour 8 | 1.61 s | 275 ms | 1.72 s | 363 ms |
+| Hour 23 | 1.66 s | 269 ms | 1.75 s | 367 ms |
+| Sort | 853 ms | 58 ms | 863 ms | 71 ms |
+| Filter | 411 ms | 21 ms | | |
+| Clear filter | 844 ms | 58 ms | | |
+| Load | 20.3 s | 20.2 s | 21.8 s | 21.0 s |
+| Process peak (RSS) | 97 MiB | 97 MiB | 112 MiB | 112 MiB |
+
+- **The debounce is about 200 ms of each move.** `start_latest` waits 200 ms before it samples
+  the map's points. A profile of one run on the core gives 19 to 49 ms for the points' queries,
+  and 8 to 47 ms for the rest of the move.
+- **A browser can get the points later.** The times above stop after a poll of `/jobs`, sent
+  as soon as the job ends. A browser polls every 300 ms.
+- **A study costs more.** In one separate measurement, the saved database grows from 51.6 to
+  62.4 MiB, and opening a study takes 1.64 s instead of 0.35 s. `benchmarks/uber.py` does not
+  measure this.
+
 ### Findings
 
-- **A SQLite hour move takes 1.6 to 1.8 s on main, 0.6 to 0.75 s in 0.3.0.** On main, it filters the
-  table too. Each of its three queries scans the 1,028,136 rows: it computes
-  `strftime('%H', date_time)` on each row, and no index helps. The table's order (about
-  0.8 s) runs in the slider's request. The map's points (about 0.9 s, two scans) run in a
-  job.
+- **The hour index removed most of a SQLite hour move's time.** A move took 1.6 to 1.8 s on
+  `d321c3a`, and took 0.6 to 0.75 s in 0.3.0, which did not filter the table. Each of its three
+  queries scanned the 1,028,136 rows, and computed `strftime('%H', date_time)` on each row. With
+  the index, a move takes 0.23 to 0.4 s.
 - **A SQLite load takes about 20 s on both versions.** The CSV import parses and checks each
   row in Python, at about 50,000 rows per second. Polars reads the same file in 0.15 to
   0.4 s, but its process takes three to four times the memory.
-- **A sort or a filter of a SQLite source takes 0.4 to 1.8 s.** The same operation on
-  Polars takes 8 to 210 ms. The time follows the number of rows that the table shows.
+- **A sort or a filter of a SQLite source took 0.4 to 1.8 s before the hour index.** With it,
+  a sort takes 58 to 71 ms, and a filter 21 ms. The same operations on Polars took 8 to 26 ms
+  on `d321c3a`. The time follows the number of rows that the table reads.
 - **Main uses less memory.** The Polars process peaks at 285 MiB instead of 393 MiB. On
   the web, the process's Python memory peaks at 25 to 37 MiB instead of 71 to 81 MiB.
 - **The map's points make most of the web's responses.** Up to 10,000 points give 100 to

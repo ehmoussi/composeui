@@ -14,6 +14,7 @@ from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.renderer import RendererContainer
+from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, table
 from composeui.core.view import MapPoint
 from examples import uberpickups
 
@@ -340,5 +341,55 @@ def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> Non
         assert len(set(points)) == len(points)
         assert all(40.7 <= point.latitude <= 40.71 for point in points)
         assert sum(model.uber_data.pickups_by_hour()) == 10001
+    finally:
+        model.close()
+
+
+class _TableBeforeTheIndex(CSVSqliteTable, row_type=uberpickups.UberPickup, name="uber_data"):
+    pass
+
+
+class _ModelBeforeTheIndex(SqliteModel):
+    uber_data = table(_TableBeforeTheIndex)
+
+
+def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hour(
+    tmp_path: Path,
+) -> None:
+    other_hour = 5000
+    old = _ModelBeforeTheIndex()
+    try:
+        with old.uber_data.connection() as db:
+            db.executemany(
+                "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
+                [
+                    *(("2014-09-01 05:01:00", 40.7, -73.9, "B") for _ in range(other_hour)),
+                    ("2014-09-01 11:01:00", 40.8, -73.8, "B"),
+                ],
+            )
+        old.save_data(tmp_path / "study.db")
+    finally:
+        old.close()
+    model = uberpickups.UberPickupsModel()
+    try:
+        model.open_data(tmp_path / "study.db")
+        # SQLite's steps, not time: a query that reads each row takes several per row
+        steps_per_call = 100
+        calls = 0
+
+        def count() -> int:
+            nonlocal calls
+            calls += 1
+            return 0
+
+        with model.uber_data.connection() as db:
+            db.set_progress_handler(count, steps_per_call)
+        with model.uber_data.reading() as reader:
+            reader.set_progress_handler(count, steps_per_call)
+        source = model.uber_data.source_at(11)
+        assert source.count() == 1
+        assert source.ordered_ids(None, "", {}) == [other_hour + 1]
+        assert model.uber_data.pickup_points(11) == [MapPoint(latitude=40.8, longitude=-73.8)]
+        assert calls * steps_per_call < other_hour
     finally:
         model.close()

@@ -36,6 +36,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- In the SQLite Uber pickups example, moving the hour takes about 0.3 to 0.4 s on the web, down
+  from about 1.7 s, and sorting its table about 70 ms, down from about 860 ms. An index on the
+  hour replaces a scan of every row. A study saved before the index opens through a migration.
 - On Qt, closing a page of many widgets no longer freezes the app for seconds. Freeing a
   page of 1,000 rows took about 1.6 s, and four times as long for twice the rows. It now takes
   about 0.2 s, and about twice as long for twice the rows. A widget's Qt connections now hold

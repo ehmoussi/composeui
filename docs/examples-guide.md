@@ -447,6 +447,9 @@ It shows:
   [`start_latest`](user-guide/threads.md#run-the-latest-call-only) starts: the map shows the
   pickups of the latest hour. The map fits the pickups, and keeps the viewport once the user
   pans or zooms.
+- an [index](user-guide/csv-import.md#a-csv-table) on the hour of each row, so that a move of
+  the slider reads only the rows of that hour. A
+  [migration](user-guide/sqlite-model.md) adds it to a study saved before the index.
 - a `DashboardView`: a [wide main view](user-guide/organizing-the-window.md#page-width)
   without pages. This one keeps the File menu, so that a study saves the rows.
 - the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of the

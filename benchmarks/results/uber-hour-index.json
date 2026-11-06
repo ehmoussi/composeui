@@ -1,0 +1,966 @@
+{
+  "environment": {
+    "composeui": "0.3.1.dev27+gd321c3a0b",
+    "commit": "374e6f9dcea1985764efb3a7ed34a7a184c6a669",
+    "python": "3.9.23",
+    "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16,
+    "data": "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+  },
+  "cases": {
+    "uberpickups/core": {
+      "steps": {
+        "import": {
+          "median_s": 0.10473712499970134,
+          "min_s": 0.10460054200029845,
+          "kept_mib": 8.213334083557129,
+          "peak_mib": 8.51169204711914
+        },
+        "load": {
+          "median_s": 20.216987313000118,
+          "min_s": 20.100808550000238,
+          "kept_mib": 2.3623132705688477,
+          "peak_mib": 48.91095161437988
+        },
+        "hour 17": {
+          "median_s": 0.30831086600028357,
+          "min_s": 0.30776934400000755,
+          "kept_mib": 0.20853710174560547,
+          "peak_mib": 2.8365859985351562
+        },
+        "hour 02": {
+          "median_s": 0.2319528069997432,
+          "min_s": 0.23138112000015099,
+          "kept_mib": -0.8952178955078125,
+          "peak_mib": 0.39492225646972656
+        },
+        "hour 11": {
+          "median_s": 0.2736093889998301,
+          "min_s": 0.2730046880001282,
+          "kept_mib": 0.7322711944580078,
+          "peak_mib": 1.7793378829956055
+        },
+        "hour 08": {
+          "median_s": 0.2749772340002892,
+          "min_s": 0.27395075500044186,
+          "kept_mib": -0.03932952880859375,
+          "peak_mib": 1.6166048049926758
+        },
+        "hour 23": {
+          "median_s": 0.26861108799994327,
+          "min_s": 0.26839732199960054,
+          "kept_mib": -0.021709442138671875,
+          "peak_mib": 1.410475730895996
+        },
+        "show table": {
+          "median_s": 5.740000005971524e-05,
+          "min_s": 5.6599999879836105e-05,
+          "kept_mib": 0.002826690673828125,
+          "peak_mib": 0.004467010498046875
+        },
+        "sort": {
+          "median_s": 0.05837575299983655,
+          "min_s": 0.05735996900011742,
+          "kept_mib": 0.007264137268066406,
+          "peak_mib": 1.5605249404907227
+        },
+        "filter": {
+          "median_s": 0.020937982999839733,
+          "min_s": 0.020834687999922608,
+          "kept_mib": -0.19313526153564453,
+          "peak_mib": 0.4349813461303711
+        },
+        "clear filter": {
+          "median_s": 0.05746765499998219,
+          "min_s": 0.05699426899991522,
+          "kept_mib": 0.20736312866210938,
+          "peak_mib": 1.5581474304199219
+        },
+        "close": {
+          "median_s": 0.01202539300038552,
+          "min_s": 0.011989689999609254,
+          "kept_mib": -0.0071239471435546875,
+          "peak_mib": 0.0053119659423828125
+        },
+        "collect": {
+          "median_s": 0.007586694000110583,
+          "min_s": 0.007147595999867917,
+          "kept_mib": 0.000316619873046875,
+          "peak_mib": 0.000316619873046875
+        }
+      },
+      "peak_rss_mib": 96.7109375,
+      "traced_peak_mib": 8.654621124267578,
+      "facts": {
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "filtered_rows": 10017,
+        "cleanup": {
+          "main_view_freed": true
+        }
+      }
+    },
+    "uberpickups/web": {
+      "steps": {
+        "import": {
+          "median_s": 0.10407694400009859,
+          "min_s": 0.10380199000019275,
+          "kept_mib": 8.213394165039062,
+          "peak_mib": 8.511752128601074
+        },
+        "first page": {
+          "median_s": 0.0780312120000417,
+          "min_s": 0.042038789999878645,
+          "kept_mib": 1.4987154006958008,
+          "peak_mib": 1.6956548690795898
+        },
+        "load": {
+          "median_s": 21.002193824000187,
+          "min_s": 20.89595409900039,
+          "kept_mib": 1.3790626525878906,
+          "peak_mib": 47.56870079040527
+        },
+        "full page": {
+          "median_s": 0.11664675399970292,
+          "min_s": 0.11509316699994088,
+          "kept_mib": 0.31585693359375,
+          "peak_mib": 2.792696952819824
+        },
+        "hour 17": {
+          "median_s": 0.3984542139996847,
+          "min_s": 0.39676293499996973,
+          "kept_mib": 0.531712532043457,
+          "peak_mib": 3.086191177368164
+        },
+        "hour 02": {
+          "median_s": 0.28864036200002374,
+          "min_s": 0.28580182299992885,
+          "kept_mib": -0.6852407455444336,
+          "peak_mib": 0.8102397918701172
+        },
+        "hour 11": {
+          "median_s": 0.37091977999989467,
+          "min_s": 0.3699471509999057,
+          "kept_mib": 1.0381078720092773,
+          "peak_mib": 3.529193878173828
+        },
+        "hour 08": {
+          "median_s": 0.3626627869998629,
+          "min_s": 0.36257974799991644,
+          "kept_mib": 0.2511177062988281,
+          "peak_mib": 2.541865348815918
+        },
+        "hour 23": {
+          "median_s": 0.36688289299991084,
+          "min_s": 0.36592236700016656,
+          "kept_mib": 0.2733879089355469,
+          "peak_mib": 2.6059303283691406
+        },
+        "show table": {
+          "median_s": 0.011464591999811091,
+          "min_s": 0.01144849799993608,
+          "kept_mib": 0.0938262939453125,
+          "peak_mib": 0.47948265075683594
+        },
+        "sort": {
+          "median_s": 0.07071531999963554,
+          "min_s": 0.07054887899994355,
+          "kept_mib": 0.16680240631103516,
+          "peak_mib": 1.8484382629394531
+        },
+        "scroll": {
+          "median_s": 0.01325493500007724,
+          "min_s": 0.012937118000081682,
+          "kept_mib": 0.2279376983642578,
+          "peak_mib": 0.6666812896728516
+        }
+      },
+      "peak_rss_mib": 111.9453125,
+      "traced_peak_mib": 25.472820281982422,
+      "facts": {
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "response_bytes": {
+          "first page": 15080,
+          "load poll": 240941,
+          "full page": 248676,
+          "hour 17": 57182,
+          "hour 17 poll": 172981,
+          "hour 02": 57173,
+          "hour 02 poll": 101383,
+          "hour 11": 57174,
+          "hour 11 poll": 183026,
+          "hour 08": 57174,
+          "hour 08 poll": 167829,
+          "hour 23": 57180,
+          "hour 23 poll": 172354,
+          "show table": 54812,
+          "show table poll": 32,
+          "sort": 53535,
+          "sort poll": 32,
+          "scroll": 52365,
+          "scroll poll": 32
+        },
+        "sorted_rows": 36568,
+        "filtered_rows": 10017
+      }
+    }
+  },
+  "runs": {
+    "uberpickups/core": [
+      {
+        "example": "uberpickups",
+        "backend": "core",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "filtered_rows": 10017,
+        "cleanup": {
+          "main_view_freed": true
+        },
+        "steps": {
+          "import": {
+            "seconds": 0.1123124320001807
+          },
+          "load": {
+            "seconds": 20.216987313000118
+          },
+          "hour 17": {
+            "seconds": 0.31070561799970164
+          },
+          "hour 02": {
+            "seconds": 0.2638862759999938
+          },
+          "hour 11": {
+            "seconds": 0.27581709600008253
+          },
+          "hour 08": {
+            "seconds": 0.27395075500044186
+          },
+          "hour 23": {
+            "seconds": 0.2722592479999548
+          },
+          "show table": {
+            "seconds": 5.6599999879836105e-05
+          },
+          "sort": {
+            "seconds": 0.060052966000057495
+          },
+          "filter": {
+            "seconds": 0.020834687999922608
+          },
+          "clear filter": {
+            "seconds": 0.05699426899991522
+          },
+          "close": {
+            "seconds": 0.01202539300038552
+          },
+          "collect": {
+            "seconds": 0.007147595999867917
+          }
+        },
+        "peak_rss_mib": 96.7109375
+      },
+      {
+        "example": "uberpickups",
+        "backend": "core",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "filtered_rows": 10017,
+        "cleanup": {
+          "main_view_freed": true
+        },
+        "steps": {
+          "import": {
+            "seconds": 0.10460054200029845
+          },
+          "load": {
+            "seconds": 20.37977874399985
+          },
+          "hour 17": {
+            "seconds": 0.30776934400000755
+          },
+          "hour 02": {
+            "seconds": 0.2319528069997432
+          },
+          "hour 11": {
+            "seconds": 0.2736093889998301
+          },
+          "hour 08": {
+            "seconds": 0.2749772340002892
+          },
+          "hour 23": {
+            "seconds": 0.26839732199960054
+          },
+          "show table": {
+            "seconds": 5.779999992228113e-05
+          },
+          "sort": {
+            "seconds": 0.05735996900011742
+          },
+          "filter": {
+            "seconds": 0.021196324999891658
+          },
+          "clear filter": {
+            "seconds": 0.05972617199995511
+          },
+          "close": {
+            "seconds": 0.012432114000148431
+          },
+          "collect": {
+            "seconds": 0.00785931000018536
+          }
+        },
+        "peak_rss_mib": 96.6953125
+      },
+      {
+        "example": "uberpickups",
+        "backend": "core",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "filtered_rows": 10017,
+        "cleanup": {
+          "main_view_freed": true
+        },
+        "steps": {
+          "import": {
+            "seconds": 0.10473712499970134
+          },
+          "load": {
+            "seconds": 20.100808550000238
+          },
+          "hour 17": {
+            "seconds": 0.30831086600028357
+          },
+          "hour 02": {
+            "seconds": 0.23138112000015099
+          },
+          "hour 11": {
+            "seconds": 0.2730046880001282
+          },
+          "hour 08": {
+            "seconds": 0.27531228699990606
+          },
+          "hour 23": {
+            "seconds": 0.26861108799994327
+          },
+          "show table": {
+            "seconds": 5.740000005971524e-05
+          },
+          "sort": {
+            "seconds": 0.05837575299983655
+          },
+          "filter": {
+            "seconds": 0.020937982999839733
+          },
+          "clear filter": {
+            "seconds": 0.05746765499998219
+          },
+          "close": {
+            "seconds": 0.011989689999609254
+          },
+          "collect": {
+            "seconds": 0.007586694000110583
+          }
+        },
+        "peak_rss_mib": 96.80859375
+      },
+      {
+        "example": "uberpickups",
+        "backend": "core",
+        "memory": true,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "filtered_rows": 10017,
+        "cleanup": {
+          "main_view_freed": true
+        },
+        "steps": {
+          "import": {
+            "seconds": 0.320992244000081,
+            "kept_mib": 8.213334083557129,
+            "peak_mib": 8.51169204711914
+          },
+          "load": {
+            "seconds": 45.22540724700002,
+            "kept_mib": 2.3623132705688477,
+            "peak_mib": 48.91095161437988
+          },
+          "hour 17": {
+            "seconds": 0.3776685979996728,
+            "kept_mib": 0.20853710174560547,
+            "peak_mib": 2.8365859985351562
+          },
+          "hour 02": {
+            "seconds": 0.28304155899968464,
+            "kept_mib": -0.8952178955078125,
+            "peak_mib": 0.39492225646972656
+          },
+          "hour 11": {
+            "seconds": 0.3372037059998547,
+            "kept_mib": 0.7322711944580078,
+            "peak_mib": 1.7793378829956055
+          },
+          "hour 08": {
+            "seconds": 0.3403808400003072,
+            "kept_mib": -0.03932952880859375,
+            "peak_mib": 1.6166048049926758
+          },
+          "hour 23": {
+            "seconds": 0.35879615700014256,
+            "kept_mib": -0.021709442138671875,
+            "peak_mib": 1.410475730895996
+          },
+          "show table": {
+            "seconds": 0.00016966599969236995,
+            "kept_mib": 0.002826690673828125,
+            "peak_mib": 0.004467010498046875
+          },
+          "sort": {
+            "seconds": 0.06813144700026896,
+            "kept_mib": 0.007264137268066406,
+            "peak_mib": 1.5605249404907227
+          },
+          "filter": {
+            "seconds": 0.024235414000031597,
+            "kept_mib": -0.19313526153564453,
+            "peak_mib": 0.4349813461303711
+          },
+          "clear filter": {
+            "seconds": 0.06918976299994029,
+            "kept_mib": 0.20736312866210938,
+            "peak_mib": 1.5581474304199219
+          },
+          "close": {
+            "seconds": 0.012789021000116918,
+            "kept_mib": -0.0071239471435546875,
+            "peak_mib": 0.0053119659423828125
+          },
+          "collect": {
+            "seconds": 0.005562884000028134,
+            "kept_mib": 0.000316619873046875,
+            "peak_mib": 0.000316619873046875
+          }
+        },
+        "peak_rss_mib": 224.6953125,
+        "traced_peak_mib": 8.654621124267578
+      }
+    ],
+    "uberpickups/web": [
+      {
+        "example": "uberpickups",
+        "backend": "web",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "response_bytes": {
+          "first page": 15080,
+          "load poll": 240941,
+          "full page": 248676,
+          "hour 17": 57182,
+          "hour 17 poll": 172981,
+          "hour 02": 57173,
+          "hour 02 poll": 101383,
+          "hour 11": 57174,
+          "hour 11 poll": 183026,
+          "hour 08": 57174,
+          "hour 08 poll": 167829,
+          "hour 23": 57180,
+          "hour 23 poll": 172354,
+          "show table": 54812,
+          "show table poll": 32,
+          "sort": 53535,
+          "sort poll": 32,
+          "scroll": 52365,
+          "scroll poll": 32
+        },
+        "sorted_rows": 36568,
+        "filtered_rows": 10017,
+        "steps": {
+          "import": {
+            "seconds": 0.10380199000019275
+          },
+          "first page": {
+            "seconds": 0.0780312120000417
+          },
+          "load": {
+            "seconds": 21.002193824000187
+          },
+          "full page": {
+            "seconds": 0.11722625600032188
+          },
+          "hour 17": {
+            "seconds": 0.4012079999997695
+          },
+          "hour 02": {
+            "seconds": 0.28580182299992885
+          },
+          "hour 11": {
+            "seconds": 0.37091977999989467
+          },
+          "hour 08": {
+            "seconds": 0.36257974799991644
+          },
+          "hour 23": {
+            "seconds": 0.36688289299991084
+          },
+          "show table": {
+            "seconds": 0.011464591999811091
+          },
+          "sort": {
+            "seconds": 0.07054887899994355
+          },
+          "scroll": {
+            "seconds": 0.012937118000081682
+          }
+        },
+        "peak_rss_mib": 111.3984375
+      },
+      {
+        "example": "uberpickups",
+        "backend": "web",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "response_bytes": {
+          "first page": 15080,
+          "load poll": 240941,
+          "full page": 248676,
+          "hour 17": 57182,
+          "hour 17 poll": 172981,
+          "hour 02": 57173,
+          "hour 02 poll": 101383,
+          "hour 11": 57174,
+          "hour 11 poll": 183026,
+          "hour 08": 57174,
+          "hour 08 poll": 167829,
+          "hour 23": 57180,
+          "hour 23 poll": 172354,
+          "show table": 54812,
+          "show table poll": 32,
+          "sort": 53535,
+          "sort poll": 32,
+          "scroll": 52365,
+          "scroll poll": 32
+        },
+        "sorted_rows": 36568,
+        "filtered_rows": 10017,
+        "steps": {
+          "import": {
+            "seconds": 0.10407694400009859
+          },
+          "first page": {
+            "seconds": 0.08459849300015776
+          },
+          "load": {
+            "seconds": 21.46844619700005
+          },
+          "full page": {
+            "seconds": 0.11664675399970292
+          },
+          "hour 17": {
+            "seconds": 0.39676293499996973
+          },
+          "hour 02": {
+            "seconds": 0.28864036200002374
+          },
+          "hour 11": {
+            "seconds": 0.3699471509999057
+          },
+          "hour 08": {
+            "seconds": 0.36607095199997275
+          },
+          "hour 23": {
+            "seconds": 0.37297806000015044
+          },
+          "show table": {
+            "seconds": 0.011696088000007876
+          },
+          "sort": {
+            "seconds": 0.07094968399997015
+          },
+          "scroll": {
+            "seconds": 0.013398416999734764
+          }
+        },
+        "peak_rss_mib": 112.09375
+      },
+      {
+        "example": "uberpickups",
+        "backend": "web",
+        "memory": false,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "response_bytes": {
+          "first page": 15080,
+          "load poll": 240941,
+          "full page": 248676,
+          "hour 17": 57182,
+          "hour 17 poll": 172981,
+          "hour 02": 57173,
+          "hour 02 poll": 101383,
+          "hour 11": 57174,
+          "hour 11 poll": 183026,
+          "hour 08": 57174,
+          "hour 08 poll": 167829,
+          "hour 23": 57180,
+          "hour 23 poll": 172354,
+          "show table": 54812,
+          "show table poll": 32,
+          "sort": 53535,
+          "sort poll": 32,
+          "scroll": 52365,
+          "scroll poll": 32
+        },
+        "sorted_rows": 36568,
+        "filtered_rows": 10017,
+        "steps": {
+          "import": {
+            "seconds": 0.10435181800039572
+          },
+          "first page": {
+            "seconds": 0.042038789999878645
+          },
+          "load": {
+            "seconds": 20.89595409900039
+          },
+          "full page": {
+            "seconds": 0.11509316699994088
+          },
+          "hour 17": {
+            "seconds": 0.3984542139996847
+          },
+          "hour 02": {
+            "seconds": 0.29010356899971157
+          },
+          "hour 11": {
+            "seconds": 0.3756560699998772
+          },
+          "hour 08": {
+            "seconds": 0.3626627869998629
+          },
+          "hour 23": {
+            "seconds": 0.36592236700016656
+          },
+          "show table": {
+            "seconds": 0.01144849799993608
+          },
+          "sort": {
+            "seconds": 0.07071531999963554
+          },
+          "scroll": {
+            "seconds": 0.01325493500007724
+          }
+        },
+        "peak_rss_mib": 111.9453125
+      },
+      {
+        "example": "uberpickups",
+        "backend": "web",
+        "memory": true,
+        "total_rows": 1028136.0,
+        "hours": {
+          "17": {
+            "rows": 73373,
+            "points": 9170
+          },
+          "2": {
+            "rows": 10702,
+            "points": 5360
+          },
+          "11": {
+            "rows": 38821,
+            "points": 9702
+          },
+          "8": {
+            "rows": 44477,
+            "points": 8899
+          },
+          "23": {
+            "rows": 36568,
+            "points": 9137
+          }
+        },
+        "response_bytes": {
+          "first page": 15080,
+          "load poll": 240941,
+          "full page": 248676,
+          "hour 17": 57182,
+          "hour 17 poll": 172981,
+          "hour 02": 57173,
+          "hour 02 poll": 101383,
+          "hour 11": 57174,
+          "hour 11 poll": 183026,
+          "hour 08": 57174,
+          "hour 08 poll": 167829,
+          "hour 23": 57180,
+          "hour 23 poll": 172354,
+          "show table": 54812,
+          "show table poll": 32,
+          "sort": 53535,
+          "sort poll": 32,
+          "scroll": 52365,
+          "scroll poll": 32
+        },
+        "sorted_rows": 36568,
+        "filtered_rows": 10017,
+        "steps": {
+          "import": {
+            "seconds": 0.3235820230001991,
+            "kept_mib": 8.213394165039062,
+            "peak_mib": 8.511752128601074
+          },
+          "first page": {
+            "seconds": 0.1091152450003392,
+            "kept_mib": 1.4987154006958008,
+            "peak_mib": 1.6956548690795898
+          },
+          "load": {
+            "seconds": 46.670227049000005,
+            "kept_mib": 1.3790626525878906,
+            "peak_mib": 47.56870079040527
+          },
+          "full page": {
+            "seconds": 0.15101452199996857,
+            "kept_mib": 0.31585693359375,
+            "peak_mib": 2.792696952819824
+          },
+          "hour 17": {
+            "seconds": 0.5231567279997762,
+            "kept_mib": 0.531712532043457,
+            "peak_mib": 3.086191177368164
+          },
+          "hour 02": {
+            "seconds": 0.33801267599983476,
+            "kept_mib": -0.6852407455444336,
+            "peak_mib": 0.8102397918701172
+          },
+          "hour 11": {
+            "seconds": 0.46447765200036883,
+            "kept_mib": 1.0381078720092773,
+            "peak_mib": 3.529193878173828
+          },
+          "hour 08": {
+            "seconds": 0.4560556159999578,
+            "kept_mib": 0.2511177062988281,
+            "peak_mib": 2.541865348815918
+          },
+          "hour 23": {
+            "seconds": 0.4514133390002826,
+            "kept_mib": 0.2733879089355469,
+            "peak_mib": 2.6059303283691406
+          },
+          "show table": {
+            "seconds": 0.028976626999792643,
+            "kept_mib": 0.0938262939453125,
+            "peak_mib": 0.47948265075683594
+          },
+          "sort": {
+            "seconds": 0.09904843599997548,
+            "kept_mib": 0.16680240631103516,
+            "peak_mib": 1.8484382629394531
+          },
+          "scroll": {
+            "seconds": 0.0316066079999473,
+            "kept_mib": 0.2279376983642578,
+            "peak_mib": 0.6666812896728516
+          }
+        },
+        "peak_rss_mib": 238.10546875,
+        "traced_peak_mib": 25.472820281982422
+      }
+    ]
+  }
+}

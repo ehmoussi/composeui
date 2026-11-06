@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import attrs
@@ -35,6 +36,8 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from composeui.core.jobs import Job
 
 
@@ -53,6 +56,11 @@ class UberPickup:
 
 
 class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
+    # the queries below filter on this same expression: without it, each reads every row
+    indexes = """--sql
+    CREATE INDEX uber_data_hour ON uber_data(CAST(strftime('%H', date_time) AS INTEGER));
+    """
+
     def has_data(self) -> bool:
         with self.connection() as db:
             return db.execute("SELECT 1 FROM uber_data LIMIT 1").fetchone() is not None
@@ -105,7 +113,14 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
             return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows]
 
 
+def _index_hours(db: sqlite3.Connection) -> None:
+    db.execute(UberPickupsTable.indexes)
+
+
 class UberPickupsModel(SqliteModel):
+    schema_version = 2
+    migrations = MappingProxyType({1: _index_hours})
+
     uber_data = table(UberPickupsTable)
 
     def load_pickups(self, job: Job[list[int], int], url: str) -> list[int]:
