@@ -1196,6 +1196,44 @@ def test_a_file_upload_s_button_opens_the_picker_and_shows_the_file_s_name(
         context.close()
 
 
+def test_a_user_uploads_a_file_filters_its_rows_and_downloads_those_shown(
+    browser: Browser, tmp_path: Path
+) -> None:
+    """The example's journey: the page's poller alone brings the job's result to the page."""
+    explorer = pytest.importorskip("examples.dataexplorer")  # it needs Polars
+    data = tmp_path / "trips.csv"
+    data.write_text("base,count\nB02512,1\nB02764,2\nB02764,3\n", encoding="utf-8")
+    app = WebApplication(build_main_view=explorer.DataExplorerMainView).create_starlette_app()
+    with _serve(app) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        _intercept_file_choosers(page)
+        page.goto("/")
+        expect(page.get_by_text("Choose a CSV or Parquet file to explore.")).to_be_visible()
+        export = page.get_by_role("link", name="Export CSV")
+        expect(export).to_be_hidden()
+
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Choose a data file").click()
+        chooser.value.set_files(data)
+
+        expect(page.get_by_role("cell", name="B02512")).to_be_visible()
+        expect(page.get_by_role("cell", name="B02764")).to_have_count(2)
+        expect(page.get_by_text("Filter the rows, then export those shown as CSV.")).to_be_visible()
+
+        search = page.get_by_role("searchbox", name="Search")
+        search.press_sequentially("B02764")
+        expect(page.get_by_role("cell", name="B02512")).to_have_count(0)
+        expect(search).to_have_value("B02764")
+
+        with page.expect_download() as download:
+            export.click()
+        assert download.value.suggested_filename == "trips-filtered.csv"
+        saved = Path(download.value.path()).read_text(encoding="utf-8").splitlines()
+        assert saved == ["base,count", "B02764,2", "B02764,3"]
+        context.close()
+
+
 def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) -> None:
     page = help_page
     _intercept_file_choosers(page)

@@ -133,8 +133,7 @@ Build one thin slice from end to end before the full catalog:
    shared-tool workflows.
 2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
-3. **Load and export.** Use `FileUploadView` and filtered export in the data explorer, and add
-   the dashboard widgets that it needs (N13).
+3. **Load and export.** Add the dashboard widgets that the data explorer needs (N13).
 4. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
    memory and cleanup with the baseline before the API grows.
 
@@ -606,7 +605,7 @@ Three apps test each milestone against real use.
 
 | App | Workflow | It tests |
 | --- | --- | --- |
-| Data explorer | The Uber examples, plus uploads, Parquet, an editable grid, existing figures, export, shareable links, and a one-command deployment | Authoring effort, reactive methods, adapters, dashboard widgets, charts, caches, files, maps, and deployment |
+| Data explorer | [`dataexplorer.py`](src/examples/dataexplorer.py) and the Uber examples, plus an editable grid, existing figures, shareable links, and a one-command deployment | Authoring effort, reactive methods, adapters, dashboard widgets, charts, caches, files, maps, and deployment |
 | Scientific workbench | A study tree, a wizard, editable parameters, a background analysis, result tables and charts, save and open, a report | W, T and C items, jobs, the model, and the three backends |
 | Shared internal tool | Login, permitted data, record editing, a job, pages, recovery after a restart | Identity, authorization, isolation, sessions, and deployment |
 

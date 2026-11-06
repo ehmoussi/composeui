@@ -36,11 +36,13 @@ from playwright.sync_api import sync_playwright
 from qtpy.QtWidgets import QApplication
 
 from composeui.core.registry import RendererType
+from composeui.core.view import UploadedFile
 from composeui.qtcore.qtapplication import QtApplication, QtModelApplication
 from composeui.textualcore.textualapplication import TextualApplication, TextualModelApplication
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from examples import (
     batman,
+    dataexplorer,
     largetable,
     markdownviewer,
     pipecatalogue,
@@ -237,6 +239,16 @@ def _uberpickups(main_view: Any, _model: Optional[Model]) -> None:
     main_view.jobs.wait()
 
 
+def _dataexplorer(main_view: Any, _model: Optional[Model]) -> None:
+    lines = ["Base,Trips,Active vehicles"] + [
+        f"B02{500 + index},{1200 + index * 37},{80 + index}" for index in range(40)
+    ]
+    path = Path(tempfile.mkdtemp()) / "trips.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    main_view.upload.take_file(UploadedFile.of_path(path))
+    main_view.jobs.wait()
+
+
 def _quickstart_main_view() -> Callable[[], MainView]:
     """Get the main view of the README's quickstart, run from the README's own code."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -298,6 +310,9 @@ def _examples() -> list[Example]:
             uberpickupsframe.UberPickupsModel,
             _uberpickupsframe_setup,
             window=(1200, 1200),
+        ),
+        Example(
+            "dataexplorer", dataexplorer.DataExplorerMainView, _dataexplorer, window=(1200, 1200)
         ),
         Example("batman", batman.BatmanMainView),
         Example(

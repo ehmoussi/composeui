@@ -21,6 +21,7 @@ run them from a clone of the repository.
 - [Large table](#large-table)
 - [Uber pickups](#uber-pickups)
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe)
+- [Data explorer](#data-explorer)
 - [Batman](#batman)
 - [Web hello](#web-hello)
 - [Textual demo](#textual-demo)
@@ -53,6 +54,7 @@ options, such as `--language` and `-f FILE`.
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
 | [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
+| [`dataexplorer.py`](../src/examples/dataexplorer.py) | web | A user's CSV or Parquet file: an upload, a summary, a large table of any columns, and the rows shown exported |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
 | [`textual_demo.py`](../src/examples/textual_demo.py) | textual | A small form in a terminal |
@@ -77,6 +79,7 @@ The other examples each show one topic:
 
 - [Large table](#large-table): a million rows of SQLite in a large table.
 - [Uber pickups](#uber-pickups): a CSV download in a loading task, a bar chart, and a map.
+- [Data explorer](#data-explorer): a user's own file, uploaded, filtered and exported.
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe): the same app on a
   dataframe, in a large table.
 - [Batman](#batman): the look of a chart, and clicks on it.
@@ -502,6 +505,46 @@ It shows:
   The chart's series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and
   the map's points from the frame, with
   [`points_of`](user-guide/maps.md#coordinates-points-and-viewport).
+
+
+## Data explorer
+
+[`dataexplorer.py`](../src/examples/dataexplorer.py) explores a CSV or Parquet file that the user
+gives.
+
+```bash
+uv run python -m examples.dataexplorer   # web; or --backend qt, or textual
+```
+
+It needs the `dataframe` extra and Polars, which reads both formats. It finds a CSV file's
+separator (a comma, a semicolon, a tab or a bar) from the file's first line, and refuses a
+compressed CSV file. These screenshots use made-up rows.
+
+Each session reads its whole file into memory. A Parquet file is compressed, so it can take much
+more memory than its size. Before you give this app to the public, set `max_upload_size` for your
+server's memory, or read the file in a process with a memory limit.
+
+On Qt:
+
+![Data explorer on Qt](images/dataexplorer-qt.png)
+
+On Textual:
+
+![Data explorer on Textual](images/dataexplorer-textual.png)
+
+On the web:
+
+![Data explorer on the web](images/dataexplorer-web.png)
+
+It shows:
+
+- a [file upload](user-guide/widgets.md#file-upload), with a larger `max_upload_size` than the
+  default. On the web, each session keeps its own copy of the file.
+- a [reusable task](user-guide/threads.md#reusable-loading-tasks) that reads the file. A new file
+  replaces the one being read, and a file that can't be read says why.
+- [metrics](user-guide/widgets.md#metric) that summarize the file.
+- a [large table](user-guide/tables.md#a-large-table) on a `DataFrameSource`, which shows the
+  file's own columns. The user filters its rows, and exports those shown as CSV.
 
 ## Batman
 
