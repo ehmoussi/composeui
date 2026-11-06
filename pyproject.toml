@@ -38,6 +38,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+composeui = "composeui.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/ehmoussi/composeui"
 Documentation = "https://ehmoussi.github.io/composeui/"

@@ -8,6 +8,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- The `composeui run app.py` command starts an app from a Python file, and reloads it on a change.
+  A file that defines one `MainView` class needs no `run` call. A file with a model calls `run`
+  with its model. The options after the file, such as `--backend qt`, go to the app. The
+  `--no-reload` option goes before the file.
 - Reactive methods: `@reactive`, from `composeui.core.reactivity`, marks a view method that
   ComposeUI runs again each time a view field that it read changes. The application runs it
   once at start-up. One event, such as the callbacks of one signal, runs each method once,

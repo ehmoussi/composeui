@@ -61,6 +61,7 @@ agents). Run the examples with `uv run python -m examples.pipeform --backend qt`
 
 ```
 src/composeui/
+  cli.py         # the `composeui` command (`composeui run app.py`)
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend

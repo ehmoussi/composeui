@@ -31,6 +31,42 @@ browser gets its own copy of it.
   other sites. Read [Serve the app to other users](#serve-the-app-to-other-users) before
   other people use the app.
 
+### The composeui command
+
+The `composeui run` command starts an app from a Python file, and reloads the app on a change. The
+file needs no `run` call:
+
+```python
+from composeui.core.view import LabelView, MainView, child, define_view
+
+
+@define_view
+class HelloMainView(MainView):
+    label: LabelView = child(LabelView, text="Hello")
+```
+
+```bash
+composeui run hello.py                 # the web, reloading on a change
+composeui run hello.py --backend qt    # what follows the file goes to the app
+composeui run hello.py --help          # lists the app's options
+composeui run --no-reload hello.py     # the command's own option goes before the file
+```
+
+The command runs the file as `python hello.py` does, so `__name__` is `"__main__"`. Then:
+
+- **When the file starts an app,** for example with `run`, that app runs. A file with a model
+  starts its app in this way: `run(HelloMainView, build_model=HelloModel)`.
+- **When the file starts no app,** the command starts the `MainView` class that the file defines.
+  A class that the file only imports does not count. With no class or with several, the command
+  stops and says why. With several, call `run` with one of them.
+
+The command reloads the Python files under the current directory, as `--reload` does (see
+[Reloading the app on a change](#reloading-the-app-on-a-change)). The app of a file outside that
+directory starts, but it does not reload, and the command logs a warning.
+
+Reloading is for development. Before other people use the app, read
+[Serve the app to other users](#serve-the-app-to-other-users).
+
 ### Adapt the views to the backend
 
 The app knows its backend before it builds its main view. So the views can adapt to it as
@@ -115,8 +151,8 @@ starts and opens the study. So the terminal shows the app again as you left it, 
 same study file and language. Quit the app, for example with Ctrl+Q, to end the program.
 
 The program runs again on every change, so code that it runs at the start, such as a
-log's set-up, runs again too. Start the program as a script or with `-m`, for example
-`uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
+log's set-up, runs again too. Start the program with `composeui run`, as a script, or with `-m`,
+for example `uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
 (`watchfiles`), the system reports the changes. Without it, the backends check the files
 at a fixed interval. They also check them for a project on a Windows drive under WSL
 (`/mnt/c/...`), as the system does not report those changes. Set

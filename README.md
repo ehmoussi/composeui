@@ -65,7 +65,7 @@ Each extra adds a backend or a feature:
 | `tui` | Textual | The Textual backend, a terminal |
 | `report` | matplotlib | The report images of charts |
 | `dataframe` | narwhals | A large table of a pandas, Polars, or PyArrow frame |
-| `reload` | watchfiles | A faster `--reload` in development |
+| `reload` | watchfiles | Faster reloads in development |
 
 To try ComposeUI and its example apps, clone the repository and install every extra:
 
@@ -86,7 +86,6 @@ A minimal window with a text input. As you type your name, the status bar greets
 ```python
 from attrs import Factory
 
-from composeui.core.application import run
 from composeui.core.view import InputView, MainView, define_view
 
 
@@ -108,22 +107,23 @@ class HelloMainView(MainView):
     extension = ".hello"  # the file type of its studies, which the File menu saves
 
     greeting: GreetingInputView = Factory(GreetingInputView)
-
-
-if __name__ == "__main__":
-    run(HelloMainView)
 ```
 
-Run it with one of the backends. Each backend needs its extra:
+Save it as `hello.py`, and run it with one of the backends. Each backend needs its extra:
 
 ```bash
-uv run python hello.py --backend qt        # a window: the pyside6 extra
-uv run python hello.py --backend textual   # a terminal: the tui extra
-uv run python hello.py                     # a web page, the default: the web extra
+uv run composeui run hello.py                     # a web page, the default: the web extra
+uv run composeui run hello.py --backend qt        # a window: the pyside6 extra
+uv run composeui run hello.py --backend textual   # a terminal: the tui extra
 ```
 
-The web backend serves the page at http://127.0.0.1:8000. `run` imports only the backend
-that you choose, and leaves the rest of the command line to the app (`--help` lists it).
+With `pip`, leave out `uv run`. The web backend serves the page at http://127.0.0.1:8000. The
+app reloads each time that you save the file.
+
+The command imports only the backend that you choose. It gives the options after the file to
+the app, and `composeui run hello.py --help` lists them. To run an app without the command, or
+to serve it to other users, read
+[Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html).
 
 <img alt="The quickstart on the web: a text field holds Ada, and the status bar says Hello, Ada!" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/images/quickstart-web.png" width="600">
 

@@ -69,17 +69,17 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, `MainView.state_version` / `migrate_state`, and `MainView.loaded` to give again what a study doesn't hold |
 | Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, the controls that follow them, and runs that follow the latest input (`start_latest`) |
 | Deployment | One Uvicorn process behind nginx: TLS, proxy headers, request limits, and optional HTTP Basic Auth |
-| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, a coding-agent skill, and benchmarks of the Uber examples and of web sessions ([`benchmarks/`](benchmarks/README.md)) |
+| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, a coding-agent skill, the `composeui run` command, and benchmarks of the Uber examples and of web sessions ([`benchmarks/`](benchmarks/README.md)) |
 | Releases | PyPI, a changelog, Semantic Versioning, a public API per module, and automated publishing |
 
 The [Uber pickups example](src/examples/uberpickups.py) and its
 [dataframe version](src/examples/uberpickupsframe.py) are the starting point for dashboards.
 They load a CSV in a task, and a filter updates a table, a bar chart and a map.
 
-What is missing is mostly the path from analysis to app: a one-command start, short authoring
-helpers, common dashboard widgets (an image, a download button, a toggle, a range slider),
-adapters for plotting libraries, caches, editable sources, links that keep the
-app's state, one-command deployment, user identity, and sessions that survive a restart.
+What is missing is mostly the path from analysis to app: short authoring helpers, common
+dashboard widgets (an image, a download button, a toggle, a range slider), adapters for plotting
+libraries, caches, editable sources, links that keep the app's state, one-command deployment, user
+identity, and sessions that survive a restart.
 
 ## Principles
 
@@ -109,7 +109,7 @@ Change that contract, and its tests, explicitly for extensions.
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
 | M0 — Baseline | Compare future work with 0.3.0 | Specify the other two reference apps; prototype helpers; specify capabilities and data ownership | Three reference apps are specified and used to review the proposed APIs, and the data explorer is measured |
-| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid), N11 (`composeui run`) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
+| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
 | M4 — Shared apps | Deploy an app for a team | L01, N08, N09, end of N05 and N07 | Restart, isolation, access control and worker-topology tests pass |
@@ -135,8 +135,7 @@ Build one thin slice from end to end before the full catalog:
    helpers that build the existing views, sources and tasks (N01).
 3. **Load and export.** Add configurable uploads and filtered export to the data explorer
    (N07), and the dashboard widgets that it needs (N13).
-4. **Start in one command.** Add `composeui run app.py`, with reload on (N11).
-5. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
+4. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
    memory and cleanup with the baseline before the API grows.
 
 Continue the scientific backlog alongside, as capacity allows.
@@ -311,13 +310,11 @@ the [app-testing guide](docs/user-guide/testing.md). The guide already tests app
 window: `Application`, `ModelApplication`, signals, jobs, models, and saving and opening a
 study.
 
-Add a `composeui run app.py` command in M1, with reload on: the first thing a new user types.
-It runs a file that builds a main view, without a `run(...)` call or `python -m`. Add an app
-template, and a quick-dashboard tutorial beside the structured-app path. Add examples that
-debug signals and reactive methods, and fixtures where tests repeat their setup. List the
-optional adapters and their backends in the catalog. Cover keyboard navigation, focus, labels
-and errors in the reference apps. Work on it from M1 to M5; keep the public imports and the
-checks that run the docs' examples.
+Add an app template, and a quick-dashboard tutorial beside the structured-app path. Add examples
+that debug signals and reactive methods, and fixtures where tests repeat their setup. List the
+optional adapters and their backends in the catalog. Cover keyboard navigation, focus, labels and
+errors in the reference apps. Work on it from M1 to M5; keep the public imports and the checks that
+run the docs' examples.
 
 Add helpers for testing an app as it renders, not only its views. A scientific app's dialog
 had a table with its rows in Python, but the rendered dialog did not show the table: a test of

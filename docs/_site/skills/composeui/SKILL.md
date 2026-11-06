@@ -72,8 +72,12 @@ if __name__ == "__main__":
     run(HelloMainView)
 ```
 
-Run it with `--backend qt` (extra `pyside6`), `--backend textual` (extra `tui`), or without
-the option for the web (extra `web`, the default).
+Run it with `composeui run app.py`, which reloads on a change, or with `python app.py`. The web
+(extra `web`) is the default. After the file, add `--backend qt` (extra `pyside6`) or
+`--backend textual` (extra `tui`).
+
+With `composeui run`, a file that defines one `MainView` class needs no `run` call. A file with a
+model calls `run(HelloMainView, build_model=...)`.
 
 ## Find what ComposeUI already has
 

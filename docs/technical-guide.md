@@ -38,6 +38,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
 
 ```
 src/composeui/
+  cli.py         # the `composeui` command (`composeui run app.py`)
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
@@ -295,6 +296,11 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 what the user sees
 ([Reloading the app on a change](user-guide/running-the-app.md#reloading-the-app-on-a-change)). Qt
 and Textual use `composeui.core.reload`, without a toolkit. The web uses uvicorn's reload.
+
+Each backend runs the program again from `__main__`. So `composeui run` (`composeui/cli.py`) gives
+the file's `__main__` the module spec of `composeui.cli`. It keeps the file's path in the
+`COMPOSEUI_APP_FILE` environment variable. To run the file again, `composeui.cli` reads the
+variable.
 
 ### Reloading on Qt
 
