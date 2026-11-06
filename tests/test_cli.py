@@ -334,8 +334,10 @@ def test_the_command_shows_the_changed_code_of_a_file_without_run(
             program.wait(timeout=_TIMEOUT)
 
     runs = _runs(log)
-    first_app = next(run for run in runs if run[2] != str(program.pid))
+    # by their order, as `program.pid` on Windows is the launcher that starts the supervisor
+    supervisor, first_app = runs[:2]
     changed = next(run for run in runs if run[0] == "2")
+    assert first_app[2] != supervisor[2]
     assert first_app[:2] == ["1", backend.upper()]
     assert changed[1] == backend.upper()
     assert (changed[2] == first_app[2]) is in_place
