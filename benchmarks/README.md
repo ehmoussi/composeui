@@ -235,8 +235,157 @@ rows and points. The Polars example does not use this code, and was not measured
   first page by more.
 - **No network and no browser.** `TestClient` calls the app in the same process. A real
   browser adds the network, the page's parsing and drawing, and the poll's delay.
-- **One session.** The benchmark does not measure concurrent sessions, or the memory of each
-  session.
+- **One session.** This benchmark does not measure concurrent sessions, or the memory of each
+  session. See ["The web sessions benchmark"](#the-web-sessions-benchmark).
 - **The web's filter is not measured.** The filter editor posts a form that the benchmark
   does not send.
-- **The web's cleanup is not measured.** The benchmark does not end a web session.
+- **The web's cleanup is not measured here.** This benchmark does not end a web session. See
+  ["The web sessions benchmark"](#the-web-sessions-benchmark).
+
+## The web sessions benchmark
+
+[`sessions.py`](sessions.py) measures several web sessions of the two Uber pickups examples. It
+has three cases:
+
+- **Cleanup.** One process opens 4 sessions through Starlette's `TestClient`, one after another.
+  Each session loads the rows and moves the hour once. Then all the sessions expire.
+- **Left during a load.** A session expires 0.1 to 4 s after it opens. Each run is a process of
+  its own, because the process can crash.
+- **Concurrency.** A Uvicorn server runs in one process, and one HTTP client per session runs in
+  another. All the sessions load together, then each session moves the hour 15 times without a
+  pause. Then new sessions load while the first session moves the hour.
+
+### Run the sessions benchmark
+
+The benchmark reads `/proc`, so it runs on Linux only.
+
+```bash
+uv run python benchmarks/sessions.py --output benchmarks/results/sessions-<commit>.json
+```
+
+`--examples`, `--sessions`, `--levels`, `--repeat`, `--rounds` and `--left-repeat` select less
+work. The defaults take about two hours, because the SQLite example with 8 sessions is slow.
+
+### Sessions results
+
+The results come from `3c647a3`, on the same machine and Python as above, in
+[`results/sessions-3c647a3.json`](results/sessions-3c647a3.json). Each concurrency level had 2
+runs. Other work ran on the machine during part of these runs. A second run of 4 SQLite sessions,
+with nothing else running, gives a load of 213 s and a move of 4.2 s, in
+[`results/sessions-4-alone.json`](results/sessions-4-alone.json).
+
+What each session costs, after the first session:
+
+| Measure | SQLite | Polars |
+| --- | ---: | ---: |
+| Load | 10 s | 0.22 s |
+| Process memory (RSS) | 9.8 MiB | 54 MiB |
+| Python memory (`tracemalloc`) | 1.8 MiB | 1.7 MiB |
+| Temporary files | 125 MiB | none |
+| Open file descriptors | 5 | 0 |
+| Time to close | 11 ms | 0.5 ms |
+
+The first session also takes 34 MiB (SQLite) or 223 MiB (Polars) of process memory. Each session
+loads its own copy of the rows.
+
+A session's end frees its main view and its model:
+
+- **Nothing stays.** All 4 main views are freed, and no temporary file stays. The file
+  descriptors return to 8. The Python memory returns to about 1 MiB above its start.
+- **The process memory falls little.** With 4 SQLite sessions, it falls from 113 to 96 MiB. With
+  4 Polars sessions, it falls from 458 to 455 MiB. This benchmark does not show why.
+
+Sessions at once, with medians:
+
+| Sessions | SQLite load | SQLite move | SQLite moves/s | SQLite peak | Polars load | Polars move | Polars moves/s | Polars peak |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9.5 s | 0.37 s | 2.7 | 113 MiB | 0.46 s | 0.21 s | 4.9 | 292 MiB |
+| 2 | 17.7 s | 0.43 s | 4.0 | 147 MiB | 0.57 s | 0.28 s | 7.4 | 523 MiB |
+| 4 | 206 s | 3.9 s | 0.8 | 223 MiB | 0.62 s | 0.47 s | 8.9 | 1,012 MiB |
+| 8 | 1,083 s | 38 s | 0.2 | 385 MiB | 1.0 s | 0.96 s | 8.9 | 1,922 MiB |
+
+A move lasts until a poll of `/jobs` shows that no job runs. The benchmark polls every 50 ms
+during a move, and every 300 ms during a load.
+
+While new sessions load, an hour move of the first SQLite session takes a median of 1.1 s with
+2 sessions, 6.4 s with 4, and 36 s with 8. The Polars loads are too short to measure this.
+
+A session left during a SQLite load, in 3 runs at each moment:
+
+| Seconds after it opens | `3c647a3` | With the fix |
+| ---: | --- | --- |
+| 0.1 | The job fails 3 times | Clean 3 times |
+| 0.5 | The job fails 3 times | Clean 3 times |
+| 1 | The process crashes 3 times | Clean 3 times |
+| 2 | The job fails 3 times | Clean 3 times |
+| 4 | The job fails 3 times | Clean 3 times |
+
+- **The crash depends on timing.** In a separate check of `3c647a3` with the same moments, 5 of
+  15 runs crashed, at 1 s and at 2 s. The other 10 runs ended with a failed job.
+- **The fix.** The results with the fix are in
+  [`results/sessions-fix-left.json`](results/sessions-fix-left.json), from the change that
+  `d852cea` merged. The main view is freed within 1.5 s, and no temporary file stays.
+
+### Sessions findings
+
+- **The SQLite example does not scale past 2 sessions at once.** From 2 to 4 sessions, a load
+  takes about 12 times as long, and a move about 9 times as long. Moves also become slower after
+  the loads are over. ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the
+  cause.
+- **The budget holds for one SQLite session.** A move takes 0.37 s, within the 500 ms budget of
+  [the roadmap](../ROADMAP.md). With 2 sessions, the median is 0.43 s, but the 95th percentile is
+  0.80 s. Polars stays within the budget up to 4 sessions at the median, and its 95th percentile
+  at 4 sessions is 0.54 s.
+- **Polars pays with memory.** Its sessions move the hour faster, but 8 sessions take about
+  1.9 GiB. Throughput stops growing at about 9 moves per second, from 4 sessions.
+- **Disk limits the SQLite example.** At 125 MiB per session, the 1,000 sessions of
+  `max_sessions` would take about 125 GB.
+
+### Why SQLite sessions slow down
+
+The cause is the hand-over of Python's global interpreter lock (GIL) between CPUs, for nearly each
+row. As the measures below suggest, each row that SQLite reads or writes gives the GIL to another
+thread. On several CPUs, the system must wake that thread on another CPU, which is slow.
+
+These checks ran apart, with one `UberPickupsModel` per worker and no web code. A load reads the
+first 300,000 rows. A query run calls `pickup_points` 10 times. The times are of the slowest
+worker, in one run.
+
+| 4 workers | Load | Query run |
+| --- | ---: | ---: |
+| One worker alone | 2.9 s | 0.18 s |
+| 4 threads, all CPUs | 58 s | 22 s |
+| 4 threads, 4 CPUs | 59 s | 22 s |
+| 4 threads, 2 CPUs | 9.8 s | 3.6 s |
+| 4 threads, 1 CPU | 10.4 s | 0.75 s |
+| 4 processes, all CPUs | 3.0 s | 0.19 s |
+
+- **The time goes to the system.** A load of 4 threads on all CPUs takes 70 s of system time and
+  4.6 million voluntary context switches. On one CPU, it takes 0.3 s and 5,891.
+- **The switch interval does not matter.** `sys.setswitchinterval` from 0.05 ms to 50 ms gives
+  55 to 61 s for the load.
+- **The disk does not matter.** A database in `/dev/shm` gives 56.5 s for the load.
+- **Python 3.14 behaves the same.** 4 threads on all CPUs give 61 s for the load and 20 s for the
+  query run. One worker alone takes 1.8 s and 0.11 s.
+
+With the Uvicorn server alone on one CPU, in one run of the concurrency case:
+
+| Sessions | Load, all CPUs | Load, one CPU | Move, all CPUs | Move, one CPU |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 206 s | 36 s | 3.9 s | 0.67 s |
+| 8 | 1,083 s | 74 s | 38 s | 1.3 s |
+
+The move on one CPU is still above the 500 ms budget. The scripts of these checks are not in the
+repository. A machine without a virtual machine's layer can pay less for each hand-over: all of
+these results come from WSL2. Keeping a server on one CPU was not measured with Polars, whose own
+threads it would limit.
+
+### Sessions limits
+
+- **No pause between moves.** Each client moves the hour as soon as the last move ends, which is
+  more than a real user does. Real sessions with pauses can do better. This was not measured.
+- **Forced expiry.** The benchmark sets the store's private `_ttl` to 0 to end the sessions. In
+  use, an open page's polls keep its session alive.
+- **One machine, one Python.** The results come from Python 3.9 in WSL2, with few runs.
+- **One server process.** The benchmark does not measure several processes.
+- **No browser.** The clients send requests only. They do not parse or draw the pages.

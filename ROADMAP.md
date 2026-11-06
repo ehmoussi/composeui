@@ -68,7 +68,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, `MainView.state_version` / `migrate_state`, and `MainView.loaded` to give again what a study doesn't hold |
 | Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, the controls that follow them, and runs that follow the latest input (`start_latest`) |
 | Deployment | One Uvicorn process behind nginx: TLS, proxy headers, request limits, and optional HTTP Basic Auth |
-| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, a coding-agent skill, and a benchmark of the Uber examples ([`benchmarks/`](benchmarks/README.md)) |
+| Tooling | Tests on each backend and in a browser, an app-testing guide, several type checkers, CI on Python 3.9 to 3.14 and three OSes, a coding-agent skill, and benchmarks of the Uber examples and of web sessions ([`benchmarks/`](benchmarks/README.md)) |
 | Releases | PyPI, a changelog, Semantic Versioning, a public API per module, and automated publishing |
 
 The [Uber pickups example](src/examples/uberpickups.py) and its
@@ -126,9 +126,10 @@ conditional item blocks no milestone until its condition is met.
 Build one thin slice from end to end before the full catalog:
 
 1. **Measure.** The [Uber benchmark](benchmarks/README.md) measures 0.3.0 and main: loading,
-   hour moves, sorting and filtering, row-ID memory, web responses, and cleanup on the core.
-   Measure a web session's cleanup and concurrent sessions next, then
-   specify the scientific and shared-tool workflows.
+   hour moves, sorting and filtering, row-ID memory, web responses, and cleanup on the core. The
+   [web sessions benchmark](benchmarks/README.md#the-web-sessions-benchmark) measures the memory
+   and the cleanup of each session, and concurrent sessions. Next, specify the scientific and
+   shared-tool workflows.
 2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
 3. **Load and export.** Add configurable uploads and filtered export to the data explorer
@@ -507,6 +508,43 @@ detail recovered after a zoom.
 `SqliteModel` is complete for now: tables and SQL, transactions, typed rows, change signals,
 study files with migrations, a model per web session, and writes from jobs whose signals reach
 the main thread. Do not rebuild it. New work comes from T02, T03, N06 and L01.
+
+## Known problems
+
+### P05 — SQLite sessions slow down when they overlap
+
+In the SQLite Uber example on the web, a load takes 9.5 s with one session, 206 s with 4 sessions
+at once, and 1,083 s with 8. An hour move takes 0.37 s, 3.9 s and 38 s. Moves stay slow after the
+loads are over. Each client moves the hour without a pause, so this is a worst case.
+
+The cause is the hand-over of the GIL between CPUs, for nearly each row
+([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). Four threads take 58 s for a
+load of 300,000 rows on all CPUs, 10.4 s on one CPU, and four processes take 3.0 s. These results
+come from WSL2: measure a native Linux server first, as it can pay less for each hand-over.
+
+The options, from the largest gain for this example to the largest change:
+
+- **Share the data.** With N05, sessions that read the same file load it once.
+- **Insert many rows per statement.** `CSVSqliteTable` would need fewer hand-overs per row. This
+  is not measured, and it does not help queries.
+- **Run several processes.** L01 and N09 remove the contention between sessions in different
+  processes.
+- **Keep the server on one CPU.** `taskset` works today, and gives 36 s and 0.67 s with 4 sessions.
+  It also limits the threads of Polars. Document it only after a measure on native Linux.
+
+**Done when:** a budget for concurrent sessions is set, and `benchmarks/sessions.py` shows that 4
+SQLite sessions meet it.
+
+### P06 — A process that exits during a write may crash
+
+`SqliteModel.close` leaves the connection open until a write ends, so a session's end is safe. The
+model's finalizer still closes the connection when the process exits, while a job's daemon thread
+can be writing. The exit can then crash, and leave the temporary database behind. This case is not
+tested: it comes from reading the code. It would lose no other session, as the process is already
+ending.
+
+**Done when:** a test exits a process during a write, on Qt and on the web server, and the exit is
+clean and leaves no file.
 
 ## Later and conditional
 
