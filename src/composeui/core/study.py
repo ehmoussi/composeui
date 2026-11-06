@@ -30,8 +30,9 @@ _BAD_ARCHIVE_ERRORS = (zipfile.BadZipFile, zlib.error, EOFError)
 #: unpacks a bzip2 or LZMA member whole, whatever size is read, so a few bytes of one can
 #: unpack into gigabytes; another method it can't unpack at all (`NotImplementedError`)
 _COMPRESSIONS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
-#: a member's flag of an encrypted one, which `zipfile` won't read without a password
-_ENCRYPTED = 0x1
+#: a member's flags that `zipfile` won't read: encrypted, without a password, and patched
+#: data or strong encryption, which raise `NotImplementedError`
+_UNREADABLE_FLAGS = 0x1 | 0x20 | 0x40
 
 
 def has_data(model: Model | None) -> bool:
@@ -102,7 +103,7 @@ def open_study(
                 [VIEWS_NAME, model.data_name]
             ) or any(
                 member.compress_type not in _COMPRESSIONS
-                or member.flag_bits & _ENCRYPTED
+                or member.flag_bits & _UNREADABLE_FLAGS
                 # a member before the file's start, which reading would seek to (`OSError`)
                 or member.header_offset < 0
                 for member in members

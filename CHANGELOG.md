@@ -58,6 +58,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A study whose archive marks a member as patched data or as strongly encrypted is refused as an
+  invalid file. Before, opening it raised `NotImplementedError`, and the web answered with a server
+  error.
 - On the web, an upload whose name has only letters outside ASCII before its extension, such as
   `データ.csv`, is no longer refused for its type.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text

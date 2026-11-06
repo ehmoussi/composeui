@@ -583,6 +583,26 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
     assert app.main_view.state_filepath is None
 
 
+@pytest.mark.parametrize("flag", [0x1, 0x20, 0x40], ids=["encrypted", "patched", "strong"])
+def test_a_study_whose_members_zipfile_won_t_read_is_refused(
+    app: App, tmp_path: Path, flag: int
+) -> None:
+    """Hypothesis found "patched": `zipfile` raises `NotImplementedError` as it reads one."""
+    app.main_view.form.name.text = "Ada"
+    path = tmp_path / "study.hello"
+    _save(app, path)
+    data = bytearray(path.read_bytes())
+    # each member's flags, in the archive's directory
+    at = data.find(b"PK\x01\x02")
+    while at != -1:
+        data[at + 8] |= flag
+        at = data.find(b"PK\x01\x02", at + 1)
+    path.write_bytes(data)
+
+    with pytest.raises(InvalidStateError, match="valid"):
+        open_study(app.main_view, app.model, path)
+
+
 def test_a_damaged_study_opens_or_is_refused_leaving_the_study_as_it_was(
     app: App, tmp_path: Path
 ) -> None:
