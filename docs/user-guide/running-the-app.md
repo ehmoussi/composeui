@@ -202,9 +202,16 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   sets another limit in `max_upload_size`, in bytes, such as `max_upload_size = 200 * 1024 *
   1024`. The status bar says when a file is too large, and the page does not send that file.
   While an upload arrives, the server writes it to a file in the system's temporary folder, and
-  then moves this file without another copy. The `TMPDIR` environment variable sets this folder on Linux and macOS. Make sure that
-  it has room for the uploads that can arrive at the same time, and raise the proxy's limit too
-  (see [Deploy behind nginx](#deploy-behind-nginx)).
+  then moves this file without another copy. The `TMPDIR` environment variable sets this folder
+  on Linux and macOS. Raise the proxy's limit too (see
+  [Deploy behind nginx](#deploy-behind-nginx)).
+- **Uploads leave room on the disk.** A main view's `min_free_disk`, in bytes, is what uploads
+  leave free in that folder: 1 GiB by default. Below it, the server stops writing the file, and
+  the status bar says that the server has no room. On a small disk, such as a small container, set
+  a lower value, or the server refuses every upload. The server checks the free space, not what
+  each user holds: one user can take the room down to this limit, and block the uploads of the
+  others until that user's session ends. To keep uploads away from other data, point `TMPDIR` at
+  a disk of its own. A full disk gives the same message. Open does not check it: a study is small.
 - **`--reload` restarts the server when a Python file under the current directory
   changes.** Use it for development. The new server process runs the program again (the
   script, or the `-m` module) with the same command line, to build its app again. The

@@ -27,6 +27,7 @@ from composeui.core.study import has_data, open_study, save_study
 from composeui.core.view import UploadedFile
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
+from composeui.webcore.uploads import UploadRefusal
 from composeui.webcore.webrenderer import (
     RenderTarget,
     UnsupportedEventError,
@@ -58,6 +59,8 @@ MAX_STATE_SIZE = 5 * 1024 * 1024
 MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
 #: the longest name of an upload's copy
 _MAX_FILE_NAME_LENGTH = 200
+#: why the status bar refuses a file that the disk has no room for
+_NO_ROOM = "the server has no room for it right now"
 
 
 def safe_filename(name: str) -> str:
@@ -216,32 +219,69 @@ class WebSession(RenderTarget):
                 raise UnsupportedEventError(renderer, "file")
             if types and suffix not in types:
                 return self._refuse_file(filename, f"expected a {' or '.join(types)} file")
-            if isinstance(renderer, WebTableRenderer):
-                directory = self._cell_upload_directory(widget_id, renderer.file_paths())
-                shutil.move(str(received), str(directory / name))
-                return self._respond(functools.partial(renderer.pick_file, cell, directory / name))
-            if isinstance(renderer, WebActionRenderer):
-                with tempfile.TemporaryDirectory(prefix="composeui-") as scratch:
-                    shutil.move(str(received), str(Path(scratch, name)))
-                    return self._respond(functools.partial(renderer.pick_file, Path(scratch, name)))
-            directory = self._upload_directory(widget_id)
-            shutil.move(str(received), str(directory / name))
-            # only now: a move that fails leaves the field with the file it holds
-            self._hold_upload(widget_id, directory)
-            apply = (
-                functools.partial(self._hand_over, renderer, Path(filename).name, media_type)
-                if isinstance(renderer, WebFileUploadRenderer)
-                else renderer.pick_file
-            )
-            return self._respond(functools.partial(apply, directory / name))
+            apply = self._applying_upload(renderer, cell, Path(filename).name, media_type)
+            try:
+                path = self._moved_upload(renderer, widget_id, name, received)
+            except OSError:  # not the app's callbacks' errors, which aren't about the disk
+                return self._refuse_file(filename, _NO_ROOM)
+            try:
+                return self._respond(functools.partial(apply, path))
+            finally:
+                # an action's file is gone once its callbacks have run
+                if isinstance(renderer, WebActionRenderer):
+                    shutil.rmtree(path.parent, ignore_errors=True)
+
+    def _applying_upload(
+        self,
+        renderer: WebTableRenderer
+        | WebActionRenderer
+        | WebFilePathInputRenderer
+        | WebFileUploadRenderer,
+        cell: tuple[int, int] | None,
+        name: str,
+        media_type: str,
+    ) -> Callable[[Path], None]:
+        """Get what hands a kept upload, at its path, to `renderer`."""
+        if isinstance(renderer, WebTableRenderer):
+            return functools.partial(renderer.pick_file, cell)
+        if isinstance(renderer, WebFileUploadRenderer):
+            return functools.partial(self._hand_over, renderer, name, media_type)
+        return renderer.pick_file
+
+    def _moved_upload(
+        self,
+        renderer: WebTableRenderer
+        | WebActionRenderer
+        | WebFilePathInputRenderer
+        | WebFileUploadRenderer,
+        widget_id: str,
+        name: str,
+        received: Path,
+    ) -> Path:
+        """Move a received file where the session keeps it for `renderer`; get its path."""
+        if isinstance(renderer, WebActionRenderer):
+            path = Path(tempfile.mkdtemp(prefix="composeui-"), name)
+            shutil.move(str(received), str(path))
+            return path
+        if isinstance(renderer, WebTableRenderer):
+            path = self._cell_upload_directory(widget_id, renderer.file_paths()) / name
+            shutil.move(str(received), str(path))
+            return path
+        directory = self._upload_directory(widget_id)
+        shutil.move(str(received), str(directory / name))
+        # only now: a move that fails leaves the field with the file it holds
+        self._hold_upload(widget_id, directory)
+        return directory / name
 
     @staticmethod
     def _hand_over(renderer: WebFileUploadRenderer, name: str, media_type: str, path: Path) -> None:
         size = path.stat().st_size
         renderer.pick_file(UploadedFile(name, size, media_type, path, is_temporary=True))
 
-    def refuse_large_file(self, widget_id: str, filename: str) -> tuple[str, str | None] | None:
-        """Say that a file is over the limit; None if the widget takes no file."""
+    def refuse_upload(
+        self, widget_id: str, filename: str, refusal: UploadRefusal
+    ) -> tuple[str, str | None] | None:
+        """Say why a file that arrived isn't kept; None if the widget takes no file."""
         with self.lock:
             renderer = self.renderers.get(widget_id)
             if not isinstance(
@@ -254,11 +294,10 @@ class WebSession(RenderTarget):
                 ),
             ):
                 return None
-            return self._refuse_file(filename, self._too_large)
-
-    @property
-    def _too_large(self) -> str:
-        return f"the file is larger than {self.main_view.max_upload_size / 1024**2:g} MiB"
+            if refusal is UploadRefusal.NO_ROOM:
+                return self._refuse_file(filename, _NO_ROOM)
+            size = self.main_view.max_upload_size / 1024**2
+            return self._refuse_file(filename, f"the file is larger than {size:g} MiB")
 
     def _refuse_file(self, filename: str, error: str) -> tuple[str, str | None]:
         message = f"Can't open {filename!r}: {error}."

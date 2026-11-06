@@ -1307,6 +1307,10 @@ class MainView(View):
     #: not a study (Open has its own limit). A subclass sets it:
     #: ``max_upload_size = 200 * 1024 * 1024``
     max_upload_size: ClassVar[int] = 5 * 1024 * 1024
+    #: the bytes that an upload to the web app leaves free on the disk, 1 GiB by default: the
+    #: status bar refuses a file that goes below it. 0 refuses only when the disk is full.
+    #: A subclass sets it, e.g. for a small container: ``min_free_disk = 100 * 1024 * 1024``
+    min_free_disk: ClassVar[int] = 1024 * 1024 * 1024
     #: `app_title`, in the main view's language
     title: str = attrs.field(
         default=attrs.Factory(lambda self: self.app_title, takes_self=True),

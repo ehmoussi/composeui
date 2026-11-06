@@ -2,12 +2,14 @@
 
 Starlette's `Request.form` spools a file to a temporary file that a route can only copy. Here,
 the body goes to a file of a scratch folder as it arrives, and stops going there once it passes
-the limit. The session then moves that file where it keeps it (see `WebSession.pick_file`).
+the limit, or the disk runs short. The session then moves that file where it keeps it (see
+`WebSession.pick_file`).
 """
 
 from __future__ import annotations
 
 import contextlib
+import enum
 import shutil
 import tempfile
 from pathlib import Path
@@ -30,30 +32,44 @@ MAX_FIELDS = 100
 MAX_FIELD_SIZE = 1024 * 1024
 #: the most bytes of headers that a part of a form may have, kept in memory too
 MAX_PART_HEADERS_SIZE = 16 * 1024
+#: the bytes written between two checks of the disk's free space: uploads that arrive at once
+#: each passed a check at their start
+DISK_CHECK_BYTES = 1024 * 1024
+
+
+class UploadRefusal(enum.Enum):
+    """Why a file that arrived isn't kept."""
+
+    TOO_LARGE = enum.auto()
+    NO_ROOM = enum.auto()
 
 
 class ReceivedFile(NamedTuple):
-    """The file of a form, as it arrived; its path holds nothing when it is too large."""
+    """The file of a form, as it arrived; its path holds nothing useful when refused."""
 
     filename: str
     media_type: str
     path: Path
-    is_too_large: bool
+    refusal: UploadRefusal | None
 
 
 class _Receiver:
     """Keep a form's text fields, and write its one file part to `path`."""
 
-    def __init__(self, path: Path, max_size: int) -> None:
+    def __init__(self, path: Path, max_size: int, min_free_disk: int, *, has_room: bool) -> None:
         self._path = path
         self._max_size = max_size
+        self._min_free_disk = min_free_disk
         self._file: BinaryIO | None = None
         self._size = 0
+        #: the bytes written since the last check of the disk: the first write checks it
+        self._unchecked = DISK_CHECK_BYTES
+        self._has_no_room = not has_room
         #: what the current chunk of the body brought for the file, written off the event loop
         self.pending = bytearray()
         self.fields: dict[str, str] = {}
-        #: set once its part has ended: a body cut short has no file
-        self.received: ReceivedFile | None = None
+        #: whether the file's part ended: a body cut short has no file
+        self._has_whole_file = False
         self._has_file_part = False
         self._field_name = ""
         self._header_name = bytearray()
@@ -61,7 +77,11 @@ class _Receiver:
         self._part_headers_size = 0
         self._nb_parts = 0
         self._headers: dict[bytes, bytes] = {}
+        #: the file name of the current part, if it is the file
         self._filename: str | None = None
+        #: the file part's name and type, once seen: other parts may come after it
+        self._file_name: str | None = None
+        self._media_type = ""
         self._value = bytearray()
 
     def on_part_begin(self) -> None:
@@ -103,7 +123,12 @@ class _Receiver:
             raise HTTPException(400, "The form takes one file")
         self._has_file_part = True
         self._filename = options[b"filename"].decode("utf-8", "replace")
-        self._file = self._path.open("wb")
+        self._file_name = self._filename
+        if not self._has_no_room:
+            try:
+                self._file = self._path.open("wb")
+            except OSError:  # no room for even a name: the same message for the user
+                self._has_no_room = True
 
     def on_part_data(self, data: bytes, start: int, end: int) -> None:
         if self._filename is None:
@@ -112,6 +137,8 @@ class _Receiver:
             self._value += data[start:end]
             return
         self._size += end - start
+        if self._has_no_room:
+            return
         if self._size <= self._max_size:
             self.pending += data[start:end]
         else:
@@ -121,22 +148,47 @@ class _Receiver:
         if self._filename is None:
             self.fields[self._field_name] = self._value.decode("utf-8", "replace")
             return
-        self.received = ReceivedFile(
-            self._filename,
-            self._headers.get(b"content-type", b"").decode("latin-1"),
-            self._path,
-            is_too_large=self._size > self._max_size,
-        )
+        self._has_whole_file = True
+        self._media_type = self._headers.get(b"content-type", b"").decode("latin-1")
+
+    def received(self) -> ReceivedFile | None:
+        """Get the file, once the whole body is written: its last bytes may find no room."""
+        if not self._has_whole_file:
+            return None
+        assert self._file_name is not None  # its part ended
+        refusal = None
+        if self._size > self._max_size:
+            refusal = UploadRefusal.TOO_LARGE
+        elif self._has_no_room:
+            refusal = UploadRefusal.NO_ROOM
+        return ReceivedFile(self._file_name, self._media_type, self._path, refusal)
 
     def write_pending(self) -> None:
-        """Write what the file part brought: nothing once the file is over the limit."""
+        """Write what the file part brought; stop for good once the disk runs short."""
         assert self._file is not None  # a file part brought it
-        self._file.write(self.pending)
+        self._unchecked += len(self.pending)
+        try:
+            if self._unchecked >= DISK_CHECK_BYTES:
+                self._unchecked = 0
+                free = shutil.disk_usage(self._path.parent).free
+                self._has_no_room = free < self._min_free_disk
+            if not self._has_no_room:
+                self._file.write(self.pending)
+        except OSError:  # the disk is full, whatever the floor: the same message for the user
+            self._has_no_room = True
         self.pending.clear()
+        if self._has_no_room:
+            self.close()
+            # what it held is free again at once, not at the end of the body
+            self._path.unlink(missing_ok=True)
 
     def close(self) -> None:
         if self._file is not None:
-            self._file.close()
+            file, self._file = self._file, None
+            try:
+                file.close()
+            except OSError:  # its last bytes, still in the buffer, found no room: a cut file
+                self._has_no_room = True
 
 
 async def _feed(
@@ -149,12 +201,14 @@ async def _feed(
 
 
 async def _receive_multipart(
-    request: Request, directory: Path, max_size: int
+    request: Request, directory: Path | None, max_size: int, min_free_disk: int
 ) -> tuple[ReceivedFile | None, dict[str, str]]:
     _, options = parse_options_header(request.headers.get("content-type", ""))
     if b"boundary" not in options:
         raise HTTPException(400, "The form has no boundary")
-    receiver = _Receiver(directory / "upload", max_size)
+    # without a directory, the file is refused and its path never read
+    path = Path(directory or ".") / "upload"
+    receiver = _Receiver(path, max_size, min_free_disk, has_room=directory is not None)
     parser = python_multipart.MultipartParser(
         options[b"boundary"],
         {
@@ -173,24 +227,29 @@ async def _receive_multipart(
         raise HTTPException(400, "The form can't be read") from error
     finally:
         await run_in_threadpool(receiver.close)
-    return receiver.received, receiver.fields
+    return receiver.received(), receiver.fields
 
 
 @contextlib.asynccontextmanager
 async def receive_upload(
-    request: Request, max_size: int
+    request: Request, max_size: int, min_free_disk: int = 0
 ) -> AsyncIterator[tuple[ReceivedFile | None, dict[str, str]]]:
     """Get a form's file and text fields; its scratch file is gone on leaving, unless moved.
 
-    A file over `max_size` bytes stops going to the disk there. A malformed form raises
+    A file over `max_size` bytes, or one that would leave less than `min_free_disk` bytes free,
+    stops going to the disk there, and is marked refused. A malformed form raises
     `HTTPException`. A body that isn't a multipart form isn't read: the page sends no other.
     """
     content_type, _ = parse_options_header(request.headers.get("content-type"))
     if content_type != b"multipart/form-data":
         yield None, {}
         return
-    directory = Path(await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-"))
+    directory = None
+    # no room for a folder: the body is still read, for the status bar to say so
+    with contextlib.suppress(OSError):
+        directory = Path(await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-"))
     try:
-        yield await _receive_multipart(request, directory, max_size)
+        yield await _receive_multipart(request, directory, max_size, min_free_disk)
     finally:
-        await run_in_threadpool(shutil.rmtree, directory, ignore_errors=True)
+        if directory is not None:
+            await run_in_threadpool(shutil.rmtree, directory, ignore_errors=True)

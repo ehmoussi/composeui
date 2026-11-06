@@ -18,6 +18,9 @@ The notable changes of each release of ComposeUI. The format follows
   app a file on Qt, Textual and the web. Its `uploaded` signal gives an `UploadedFile`: the file's
   name, size, type and path. On the web, each session keeps its own copy until the view's next
   upload or `clear()`, once its jobs are over, or the end of the session. On Qt and Textual, the path is the user's own file.
+- `MainView.min_free_disk` sets what uploads leave free on the disk, 1 GiB by default. Below it, the
+  server stops writing the file, and the status bar says that it has no room. A full disk gives the
+  same message.
 - `MainView.max_upload_size` sets the largest file that a user can upload to the web app. It is
   5 MiB by default. The server refuses an upload's body of more than this size plus 1 MiB. A file
   over the limit stays in the browser, and the status bar says why. Before, a file far over the

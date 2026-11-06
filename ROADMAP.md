@@ -233,8 +233,9 @@ and handles a failed query without losing the user's work.
 ### N07 — Uploads and exports
 
 `FileUploadView`, `MainView.max_upload_size`, `fill_from_frame` and `AllowedUrls` give the API.
-What is left is the deployment settings, in M4: limits that an operator sets without a change of
-the code, and the disk that uploads may use at once.
+`MainView.min_free_disk` keeps room on the disk. What is left is the deployment settings, in M4:
+limits that an operator sets without a change of the code, and a share of the disk per user, once
+there are users (N08).
 
 **Done when:** an operator sets the limits of a deployed app, and a test of a fresh deployment
 imports a file near them.

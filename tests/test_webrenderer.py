@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import datetime
 import enum
+import errno
 import hashlib
 import json
 import logging
@@ -118,6 +119,7 @@ from composeui.webcore.uploads import (
     MAX_FIELD_SIZE,
     MAX_FIELDS,
     MAX_PART_HEADERS_SIZE,
+    UploadRefusal,
     receive_upload,
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -205,7 +207,8 @@ from tests.workers import WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
+    from typing import BinaryIO
 
     from starlette.applications import Starlette
     from starlette.types import ASGIApp
@@ -1116,11 +1119,149 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
     async def receive() -> bool:
         async with receive_upload(_receive(body()), 100_000) as (upload, _fields):
             assert upload is not None
-            return upload.is_too_large
+            return upload.refusal is UploadRefusal.TOO_LARGE
 
     assert asyncio.run(receive())
     assert 0 < max(written) <= 100_000
     assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
+
+
+def _disk_with(*free: int) -> mock.Mock:
+    """Get a stand-in for `shutil.disk_usage` that gives these free bytes, one per check."""
+    return mock.Mock(side_effect=[types.SimpleNamespace(free=bytes_free) for bytes_free in free])
+
+
+@pytest.mark.parametrize(
+    "disk",
+    [_disk_with(10**9, 10**9, 10), mock.Mock(side_effect=OSError("No space left on device"))],
+    ids=["below the floor partway", "full"],
+)
+def test_an_upload_stops_going_to_the_disk_once_it_runs_short(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, disk: mock.Mock
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(shutil, "disk_usage", disk)
+    sizes: list[int] = []
+
+    def body() -> Iterator[bytes]:
+        yield _FILE_PART
+        for _ in range(6):
+            yield b"x" * 600_000
+            sizes.extend(path.stat().st_size for path in tmp_path.rglob("upload"))
+        yield b"\r\n--b--\r\n"
+
+    async def receive() -> UploadRefusal | None:
+        async with receive_upload(_receive(body()), 10**9, 1000) as (upload, _fields):
+            assert upload is not None
+            return upload.refusal
+
+    assert asyncio.run(receive()) is UploadRefusal.NO_ROOM
+    assert sum(1 for size in sizes if size > 0) < 6  # it stopped, and its bytes are gone
+    assert list(tmp_path.iterdir()) == []
+
+
+class _BufferedTailFails:
+    """A file whose last bytes find no room as it closes, as on a full disk."""
+
+    def __init__(self, file: BinaryIO) -> None:
+        self._file = file
+
+    def write(self, data: bytes) -> int:
+        return self._file.write(data)
+
+    def close(self) -> None:
+        self._file.close()
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+
+def _scratch_file_opens_with(
+    monkeypatch: pytest.MonkeyPatch, wrap: Callable[[BinaryIO], Any]
+) -> None:
+    real_open = Path.open
+
+    def opening(path: Path, *args: Any, **kwargs: Any) -> Any:
+        file = real_open(path, *args, **kwargs)
+        return wrap(file) if path.name == "upload" else file
+
+    monkeypatch.setattr(Path, "open", opening)
+
+
+def _no_room_for_a_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tempfile, "mkdtemp", mock.Mock(side_effect=OSError(errno.ENOSPC, "full")))
+
+
+def _no_room_for_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(_file: BinaryIO) -> Any:
+        raise OSError(errno.ENOSPC, "full")
+
+    _scratch_file_opens_with(monkeypatch, refuse)
+
+
+def _no_room_for_its_last_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    _scratch_file_opens_with(monkeypatch, _BufferedTailFails)
+
+
+@pytest.mark.parametrize(
+    "fill_the_disk", [_no_room_for_a_folder, _no_room_for_the_file, _no_room_for_its_last_bytes]
+)
+def test_a_full_disk_says_so_and_never_hands_over_a_cut_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    fill_the_disk: Callable[[pytest.MonkeyPatch], None],
+) -> None:
+    monkeypatch.chdir(tmp_path)  # no scratch folder must not write the file here instead
+    views: list[DataFileMainView] = []
+
+    class DataApp(WebApplication[DataFileMainView]):
+        def setup_session(self, main_view: DataFileMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        dataset = main_view.form.dataset
+        fill_the_disk(monkeypatch)
+
+        response = client.post(
+            f"/widget/{_part(dataset, 'field').widget_id}/file",
+            files={"file": ("small.csv", b"1,2")},  # small: it all stays in the buffer
+        )
+
+        assert response.status_code == 200
+        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        assert status.text == "Can't open 'small.csv': the server has no room for it right now."
+        assert dataset.file is None
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    views: list[DataFileMainView] = []
+
+    class DataApp(WebApplication[DataFileMainView]):
+        def setup_session(self, main_view: DataFileMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        dataset = main_view.form.dataset
+        url = f"/widget/{_part(dataset, 'field').widget_id}/file"
+        client.post(url, files={"file": ("kept.csv", b"1")})
+        kept = dataset.file
+        assert kept is not None
+
+        # more than any disk holds: the check itself is real
+        monkeypatch.setattr(DataFileMainView, "min_free_disk", 2**62)
+        response = client.post(url, files={"file": ("new.csv", b"2")})
+
+        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        assert status.text == "Can't open 'new.csv': the server has no room for it right now."
+        assert dataset.file == kept
+        assert kept.path.read_bytes() == b"1"
 
 
 @pytest.mark.parametrize(
@@ -1661,11 +1802,13 @@ def test_an_upload_that_fails_to_arrive_keeps_the_file_the_view_holds(
     assert first is not None
 
     with monkeypatch.context() as patch:
-        patch.setattr(shutil, "move", mock.Mock(side_effect=OSError("cannot move")))
-        with pytest.raises(OSError, match="cannot move"):
-            _pick_file(session, field.widget_id, "second.csv", b"second")
+        patch.setattr(shutil, "move", mock.Mock(side_effect=OSError("No space left on device")))
+        result = _pick_file(session, field.widget_id, "second.csv", b"second")
     session.poll_jobs()  # the next request, which removes what was replaced
 
+    assert result is not None
+    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    assert "no room" in status.text
     assert dataset.file == first
     assert first.path.read_bytes() == b"first"
     session.close()

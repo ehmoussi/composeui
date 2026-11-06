@@ -18,7 +18,7 @@ from composeui.core import chartimage
 from composeui.webcore.icons import icon_path
 from composeui.webcore.order import form_order
 from composeui.webcore.session import MAX_STATE_SIZE
-from composeui.webcore.uploads import receive_upload
+from composeui.webcore.uploads import UploadRefusal, receive_upload
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
@@ -156,22 +156,27 @@ async def widget_file(request: Request) -> Response:
     if session is None:
         return Response(headers=_RELOAD)
     widget_id = request.path_params["widget_id"]
-    async with receive_upload(request, session.main_view.max_upload_size) as (upload, fields):
-        if upload is None:
-            # the name of a file over the limit, which the page kept: a refused body shows nothing
-            too_large = fields.get("too_large")
-            if too_large is None:
-                return PlainTextResponse("No file uploaded", status_code=400)
-        else:
-            too_large = upload.filename if upload.is_too_large else None
+    main_view = session.main_view
+    async with receive_upload(request, main_view.max_upload_size, main_view.min_free_disk) as (
+        upload,
+        fields,
+    ):
+        # the name of a file over the limit, which the page kept: a refused body shows nothing
+        kept_name = fields.get("too_large")
+        if upload is None and kept_name is None:
+            return PlainTextResponse("No file uploaded", status_code=400)
         try:
             async with session.post_order.turn(request.headers):
-                if too_large is not None:
+                if upload is None:
+                    assert kept_name is not None  # a form without one is answered above
                     result = await run_in_threadpool(
-                        session.refuse_large_file, widget_id, too_large
+                        session.refuse_upload, widget_id, kept_name, UploadRefusal.TOO_LARGE
+                    )
+                elif upload.refusal is not None:
+                    result = await run_in_threadpool(
+                        session.refuse_upload, widget_id, upload.filename, upload.refusal
                     )
                 else:
-                    assert upload is not None  # a form without one is answered above
                     result = await run_in_threadpool(
                         session.pick_file,
                         widget_id,
