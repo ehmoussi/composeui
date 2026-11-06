@@ -488,6 +488,8 @@ Every behavior change needs a test in `tests/`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one
   after another.
+- `tests/conftest.py` turns off automatic garbage collection, and collects on the main thread
+  after each test. PySide can crash when a job's thread collects a main view that a test dropped.
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
   number of pauses. After a Textual file action (Open, Save, Save As, `PickFileAction`),
   call `await app.workers.wait_for_complete()`. For a job, call `main_view.jobs.wait()`. On
