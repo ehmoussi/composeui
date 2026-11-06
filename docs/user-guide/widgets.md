@@ -126,7 +126,8 @@ What the "…" button opens:
 - Textual shows the file picker of textual-fspicker, in the directory of the field's path.
 - The web shows the browser's file picker. The browser cannot give the page a path, so it
   uploads the file. The session keeps a copy, and the field shows the path of that copy. The
-  session deletes the copy when the field gets its next upload, or when the session ends. With
+  session deletes the copy after the field's next upload, once the main view's jobs are over, or
+  when the session ends. With
   `server_roots`, the web lists the server's files instead (see
   [Files on the server](#files-on-the-server)).
 
@@ -228,6 +229,78 @@ class MeshForm(FormView):
 
 `FolderPathInputView` and `SavePathInputView` take `base_folder` too. The state does not save
 it: the app sets it, for example from the study that it opens.
+
+## File upload
+
+`FileUploadView` lets the user give the app a file, such as a dataset to explore. It shows a
+button and the file's name. It has no text field: the user can pick a file, but cannot type a
+path of the server. Use it for a public app. Use a [file path input](#file-path-input) when the
+user names a file that stays where it is.
+
+```python
+from composeui.core.view import (
+    FileUploadView,
+    LabelView,
+    MainView,
+    UploadedFile,
+    child,
+    define_view,
+)
+
+
+@define_view
+class ExplorerView(MainView):
+    upload: FileUploadView = child(FileUploadView, extensions={"CSV": (".csv",)})
+    summary: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.upload.uploaded.connect(self._show_file)
+
+    def _show_file(self, file: UploadedFile) -> None:
+        self.summary.text = f"{file.name}: {file.size:,} bytes"
+```
+
+`uploaded` gives an `UploadedFile`, and `file` holds the last one (`None` before the first):
+
+- **`name`** is the user's name for the file. Show it, but do not use it to build a path.
+- **`size`** is its size in bytes.
+- **`media_type`** is its type, such as `text/csv`, or an empty text when it is not known. The
+  browser sends this type: it is not a check of the content.
+- **`path`** is the file to read.
+- **`is_temporary`** tells whether `path` is a copy that the session owns.
+
+`clear()` empties the view. The file is not part of a study, so New and Open keep it, and a
+saved study holds no path to it. `extensions`, `browse_text`, `empty_text` and `uploading_text` set
+the file types and the texts.
+
+What each backend does:
+
+- Qt shows a `QPushButton` that opens its file dialog, and a `QLabel`. `path` is the user's own
+  file, without a copy.
+- Textual shows a button that opens the file picker of textual-fspicker, and a label. `path` is
+  the user's own file, without a copy.
+- The web shows a button that opens the browser's file picker. The browser uploads the file, and
+  each session keeps its own copy. While the file goes, the button takes no click, and
+  `uploading_text` shows beside it. A click elsewhere on the page does not wait for a long upload:
+  the app sees the new file only in `uploaded`. A main view's `max_upload_size` limits the size (see
+  [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The status bar says why a file
+  is refused.
+
+### When the copy is deleted
+
+The session keeps its copy while the view holds the file. After the view's next upload, or after
+`clear()`, the session deletes the copy once the main view's [jobs](threads.md) are over. So a job
+can read a large file, even if the user uploads another one before the job opens it. If that job's
+result no longer matters, cancel it, or start the next one with `Task.start_latest`, so that the
+copy goes sooner.
+
+While a job runs, each replaced copy stays on the disk. A thread that the app starts itself is not
+a job: the session can delete the file that this thread reads.
+
+The end of the session deletes every copy, also while a job reads it. A server that stops ends
+its sessions. A server that crashes, or that the system kills, leaves the copies in the temporary
+folder.
 
 ## Folder path input
 

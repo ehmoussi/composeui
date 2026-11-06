@@ -178,6 +178,7 @@ async def widget_file(request: Request) -> Response:
                         upload.filename,
                         upload.path,
                         fields,
+                        upload.media_type,
                     )
         except UnsupportedEventError as e:
             return PlainTextResponse(str(e), status_code=400)

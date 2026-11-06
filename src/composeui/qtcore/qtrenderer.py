@@ -104,6 +104,7 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
+    UploadedFile,
     VerticalView,
     View,
     date_hint,
@@ -120,6 +121,7 @@ from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
+from composeui.qtcore.widgets.qfileupload import QFileUpload
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
@@ -843,6 +845,68 @@ class QtFilePathInputRenderer(_QtPathInputRenderer[FilePathInputViewLike]):
     ) -> None:
         rendered_object.reload_button.setToolTip(plain_tool_tip(value))
         rendered_object.reload_button.setAccessibleName(value)
+
+
+class FileUploadViewLike(ViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    browse_text: str
+    empty_text: str
+    file: UploadedFile | None
+
+    def take_file(self, file: UploadedFile) -> None: ...
+
+
+class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
+    """A button opening Qt's file dialog, then the name of the file picked: never a copy."""
+
+    def __init__(self, view: FileUploadViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "browse_text": self._refresh_browse_text,
+                "empty_text": self._refresh_empty_text,
+                "file": self._refresh_file,
+                # read by the dialog each time it opens
+                "extensions": lambda _view, _rendered_object, _value: None,
+                # the web's only: here, the file needs no upload
+                "uploading_text": lambda _view, _rendered_object, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QFileUpload()
+            self._connect(self._rendered_object.button.clicked, self.browse)
+            self.refresh()
+
+    def browse(self) -> None:
+        """Hand the file the user picks in Qt's dialog to the view; nothing if cancelled."""
+        assert self._rendered_object is not None
+        picked = _ask_file(
+            self._rendered_object, self._view.browse_text, None, self._view.extensions
+        )
+        if picked != "":
+            self._view.take_file(UploadedFile.of_path(Path(picked)))
+
+    @staticmethod
+    def _refresh_browse_text(
+        _view: FileUploadViewLike, rendered_object: QFileUpload, value: str
+    ) -> None:
+        rendered_object.button.setText(value)
+
+    @staticmethod
+    def _refresh_file(
+        view: FileUploadViewLike, rendered_object: QFileUpload, value: UploadedFile | None
+    ) -> None:
+        # called before the view holds the value
+        rendered_object.name.setText(view.empty_text if value is None else value.name)
+
+    @staticmethod
+    def _refresh_empty_text(
+        view: FileUploadViewLike, rendered_object: QFileUpload, value: str
+    ) -> None:
+        if view.file is None:
+            rendered_object.name.setText(value)
 
 
 class SavePathInputViewLike(PathInputViewLike, Protocol):
@@ -3401,6 +3465,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "source_table": QtSourceTableRenderer,
     "date_input": QtDateInputRenderer,
     "file_path_input": QtFilePathInputRenderer,
+    "file_upload": QtFileUploadRenderer,
     "folder_path_input": QtFolderPathInputRenderer,
     "save_path_input": QtSavePathInputRenderer,
     "dialog": QtDialogRenderer,

@@ -34,6 +34,7 @@ from composeui.core.view import (
     TextStyle,
     TreeView,
     TypedFormDialogView,
+    UploadedFile,
     define_view,
     find_in_lines,
     follow_match,
@@ -538,3 +539,9 @@ def test_a_copy_of_a_view_s_list_is_a_plain_list_to_change() -> None:
         copied.append(["Eve"])
         assert type(copied) is list
     assert table.rows == [["Bob"]]
+
+
+def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_path: Path) -> None:
+    path = tmp_path / "notes.unknowntype"
+    path.write_bytes(b"12345")
+    assert UploadedFile.of_path(path) == UploadedFile("notes.unknowntype", 5, "", path)

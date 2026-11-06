@@ -8,6 +8,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `FileUploadView`, with `RowFileUploadView` and `LabelRowFileUploadView`, lets the user give the
+  app a file on Qt, Textual and the web. Its `uploaded` signal gives an `UploadedFile`: the file's
+  name, size, type and path. On the web, each session keeps its own copy until the view's next
+  upload or `clear()`, once its jobs are over, or the end of the session. On Qt and Textual, the path is the user's own file.
 - `MainView.max_upload_size` sets the largest file that a user can upload to the web app. It is
   5 MiB by default. The server refuses an upload's body of more than this size plus 1 MiB. A file
   over the limit stays in the browser, and the status bar says why. Before, a file far over the
@@ -47,6 +51,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 - On the web, an upload whose name has only letters outside ASCII before its extension, such as
   `データ.csv`, is no longer refused for its type.
+- On the web, an upload refused because its file path field is disabled no longer deletes the copy
+  that the field holds.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
   expires during a long import, no longer crashes the server. `SqliteModel.close` closed the
   connection during the job's statement, which could end the process and every session in it.

@@ -109,6 +109,7 @@ from composeui.core.view import (
     TabView,
     TextAreaView,
     TreeNode,
+    UploadedFile,
     replace_cell,
 )
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
@@ -118,6 +119,7 @@ from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
+from composeui.qtcore.widgets.qfileupload import QFileUpload
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
@@ -899,6 +901,46 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     assert field.line_edit.text() == ""
     assert field.line_edit.placeholderText() == "dd/mm/yyyy"
     assert len(changes) == 3
+
+
+def test_a_file_upload_gives_the_user_s_file_from_qt_s_dialog_without_a_copy(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = DataFileMainView()
+    view.render(RendererType.QT)
+    dataset = view.form.dataset
+    widget = _field_widget(dataset)
+    assert isinstance(widget, QFileUpload)
+    qtbot.addWidget(widget)
+    uploads: list[UploadedFile] = []
+    dataset.uploaded.connect(uploads.append)
+    assert (widget.button.text(), widget.name.text()) == ("Choose a file", "No file chosen")
+    filters: list[str] = []
+    answer = ("", "")
+
+    def ask(*args: object) -> tuple[str, str]:
+        filters.append(str(args[3]))
+        return answer
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask))
+    qtbot.mouseClick(widget.button, Qt.MouseButton.LeftButton)  # cancelled
+    assert (filters, uploads) == (["CSV (*.csv)"], [])
+
+    path = tmp_path / "flows.csv"
+    path.write_text("1,2", encoding="utf-8")
+    answer = (str(path), "CSV (*.csv)")
+    qtbot.mouseClick(widget.button, Qt.MouseButton.LeftButton)
+    assert uploads == [UploadedFile("flows.csv", 3, "text/csv", path)]
+    assert dataset.file == uploads[0]
+    assert widget.name.text() == "flows.csv"
+    assert widget.name.textFormat() == Qt.TextFormat.PlainText  # a name may look like HTML
+    dataset.empty_text = "Nothing yet"
+    assert widget.name.text() == "flows.csv"
+
+    # the user's own file stays
+    dataset.empty_text = "No file chosen"
+    dataset.clear()
+    assert (widget.name.text(), path.exists()) == ("No file chosen", True)
 
 
 def test_a_file_path_is_typed_or_picked_in_qt_s_dialog_and_reloaded(

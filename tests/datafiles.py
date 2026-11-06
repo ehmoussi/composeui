@@ -1,10 +1,17 @@
-"""A measurements file to read, shared by the backend tests of `FilePathInputView`."""
+"""A measurements file to read, shared by the backend tests of file fields."""
 
 from __future__ import annotations
 
 from attrs import Factory
 
-from composeui.core.view import FormView, LabelRowFilePathInputView, MainView, child, define_view
+from composeui.core.view import (
+    FormView,
+    LabelRowFilePathInputView,
+    LabelRowFileUploadView,
+    MainView,
+    child,
+    define_view,
+)
 
 
 @define_view
@@ -14,6 +21,9 @@ class DataFileForm(FormView):
         label="Measurements",
         extensions={"CSV": (".csv",), "Text": (".txt", ".text")},
         has_reload=True,
+    )
+    dataset: LabelRowFileUploadView = child(
+        LabelRowFileUploadView, label="Dataset", extensions={"CSV": (".csv",)}
     )
 
 

@@ -138,6 +138,7 @@ if TYPE_CHECKING:
         Series,
         TreeNode,
         TreePath,
+        UploadedFile,
     )
 
 TView = TypeVar("TView", bound=ViewLike)
@@ -1549,6 +1550,100 @@ class CheckBoxViewLike(ViewLike, Protocol):
     text: str
     is_checked: bool
     toggled: Signal[bool]
+
+
+class FileUploadViewLike(ViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    browse_text: str
+    empty_text: str
+    uploading_text: str
+    file: UploadedFile | None
+
+    def take_file(self, file: UploadedFile) -> None: ...
+
+
+class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
+    """A button opening the browser's picker, then the name of the file it uploaded.
+
+    The hidden file input beside the button uploads the file (`/widget/{id}/file`), and the
+    session keeps a copy (see `WebSession.pick_file`). An upload swaps only the name, so
+    the button keeps the focus.
+    """
+
+    _role = "file_upload"
+    is_labelable = False
+
+    def __init__(self, view: FileUploadViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "extensions": self._mark_dirty,
+                "browse_text": self._mark_dirty,
+                "uploading_text": self._mark_dirty,
+                "empty_text": self._mark_name_dirty,
+                "file": self._mark_name_dirty,
+            }
+        )
+        #: whether only the name changed since last sent
+        self._swaps_name = False
+        self._swaps_whole = False
+
+    @property
+    def file_types(self) -> list[str]:
+        return _file_types(self._view.extensions)
+
+    def _mark_dirty(self, view: FileUploadViewLike, rendered_object: str, value: Any) -> None:
+        self._swaps_whole = True
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _mark_name_dirty(self, view: FileUploadViewLike, rendered_object: str, value: Any) -> None:
+        self._swaps_name = True
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _name_html(self, *, oob: bool = False) -> Markup:
+        file = self._view.file
+        return Markup('<span id="{}-name" aria-live="polite"{}>{}</span>').format(
+            self.widget_id,
+            Markup(' hx-swap-oob="true"') if oob else Markup(),
+            self._view.empty_text if file is None else file.name,
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        only_name = self._swaps_name and not self._swaps_whole
+        self._swaps_name = self._swaps_whole = False
+        if oob and only_name:
+            return self._name_html(oob=True)
+        disabled = "" if self.is_enabled else " disabled"
+        types = ",".join(self.file_types)
+        return Markup(
+            '<div {root_attributes}{row_attributes} role="group"'
+            ' class="flex items-center gap-2">'
+            '<button type="button" class="btn" data-file-browse{disabled}>{browse}</button>'
+            # emptied once sent: picking the same file again is a change too
+            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
+            ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
+            ' data-clear-after-post data-uploading-text="{uploading}" autocomplete="off"{disabled}>'
+            "{name}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            disabled=disabled,
+            browse=self._view.browse_text,
+            accept=Markup(' accept="{}"').format(types) if types else "",
+            widget_id=self.widget_id,
+            uploading=self._view.uploading_text,
+            name=self._name_html(),
+        )
+
+    def holds_file_in(self, directory: Path) -> bool:
+        """Tell whether the view's file is the upload in `directory`."""
+        file = self._view.file
+        return file is not None and file.path.parent == directory
+
+    def pick_file(self, file: UploadedFile) -> None:
+        """Hand the view the file the picker uploaded, whose copy the session keeps."""
+        self._view.take_file(file)
 
 
 class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
@@ -6264,6 +6359,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "source_table": WebSourceTableRenderer,
     "date_input": WebDateInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
+    "file_upload": WebFileUploadRenderer,
     "folder_path_input": WebFolderPathInputRenderer,
     "save_path_input": WebSavePathInputRenderer,
     "dialog": WebDialogRenderer,

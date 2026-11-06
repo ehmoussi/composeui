@@ -55,6 +55,8 @@ not in the package: run them from a clone of the repository (see
   - [File path input](user-guide/widgets.md#file-path-input)
     - [Files on the server](user-guide/widgets.md#files-on-the-server)
     - [Relative paths](user-guide/widgets.md#relative-paths)
+  - [File upload](user-guide/widgets.md#file-upload)
+    - [When the copy is deleted](user-guide/widgets.md#when-the-copy-is-deleted)
   - [Folder path input](user-guide/widgets.md#folder-path-input)
   - [Save path input](user-guide/widgets.md#save-path-input)
   - [Slider](user-guide/widgets.md#slider)

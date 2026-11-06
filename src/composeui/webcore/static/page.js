@@ -700,6 +700,32 @@ document.addEventListener("htmx:configRequest", function (event) {
 document.addEventListener("htmx:afterRequest", function (event) {
   if ("clearAfterPost" in event.detail.elt.dataset) event.detail.elt.value = "";
 });
+/* a file upload's button takes no click while its file goes, and says so beside it. Marked,
+   not `disabled`: a disabled button would lose the focus. The answer swaps in the file's name;
+   a refused file brings none, and the text goes back. */
+var uploads = new Map();
+document.addEventListener("htmx:beforeRequest", function (event) {
+  var input = event.detail.elt;
+  if (!("uploadingText" in input.dataset)) return;
+  var button = input.parentElement.querySelector("[data-file-browse]");
+  var name = input.parentElement.querySelector("[aria-live]");
+  uploads.set(input, { button: button, nameId: name.id, text: name.textContent });
+  button.setAttribute("aria-disabled", "true");
+  button.classList.add("btn-disabled");
+  name.textContent = input.dataset.uploadingText;
+});
+document.addEventListener("htmx:afterRequest", function (event) {
+  var input = event.detail.elt;
+  var upload = uploads.get(input);
+  if (upload === undefined) return;
+  uploads.delete(input);
+  upload.button.removeAttribute("aria-disabled");
+  upload.button.classList.remove("btn-disabled");
+  var name = document.getElementById(upload.nameId);
+  if (name !== null && name.textContent === input.dataset.uploadingText) {
+    name.textContent = upload.text;
+  }
+});
 /* the server handles the page's posts in the order they leave (see `webcore/order.py`): a
    field's value, sent as it loses the focus, may else come after the click on the button
    that took it. Each post carries the page's id and its number, set as it leaves. Those
@@ -900,7 +926,7 @@ document.addEventListener("change", function (event) {
    beside it, which uploads the file picked (see `WebFilePathInputRenderer`) */
 document.addEventListener("click", function (event) {
   var button = event.target.closest("[data-file-browse]");
-  if (button === null) return;
+  if (button === null || button.getAttribute("aria-disabled") === "true") return;
   button.parentElement.querySelector('input[type="file"]').click();
 });
 /* the sidebar (see `WebSidebarRenderer`): on a wide screen, its button in the header

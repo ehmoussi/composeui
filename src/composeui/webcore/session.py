@@ -24,14 +24,17 @@ from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
+from composeui.core.view import UploadedFile
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.webrenderer import (
     RenderTarget,
+    UnsupportedEventError,
     WebActionRenderer,
     WebChartRenderer,
     WebConsoleRenderer,
     WebFilePathInputRenderer,
+    WebFileUploadRenderer,
     WebMainRenderer,
     WebSourceTableRenderer,
     WebTableRenderer,
@@ -74,6 +77,10 @@ class WebSession(RenderTarget):
         self._uploads: Path | None = None
         #: whether `close` ran: an upload that arrives after it has nowhere to stay
         self._has_ended = False
+        #: the directory of the upload that each file field holds, by its widget's id
+        self._held_uploads: dict[str, Path] = {}
+        #: the directories of uploads that were replaced, removed once no job may read them
+        self._replaced_uploads: list[Path] = []
         #: the order of each page's posts, which the routes handle in it
         self.post_order = PostOrder()
         with self.lock, rendering_into(self):
@@ -92,6 +99,8 @@ class WebSession(RenderTarget):
             if self._uploads is not None:
                 shutil.rmtree(self._uploads, ignore_errors=True)
                 self._uploads = None
+                self._held_uploads.clear()
+                self._replaced_uploads.clear()
 
     @property
     def closed(self) -> bool:
@@ -166,16 +175,17 @@ class WebSession(RenderTarget):
         filename: str,
         received: Path,
         form: Mapping[str, str] | None = None,
+        media_type: str = "",
     ) -> tuple[str, str | None] | None:
-        """Hand an uploaded file to a `PickFileAction`, a path field or a table's path cell.
+        """Hand an uploaded file to a `PickFileAction`, a file field or a table's path cell.
 
         None if `widget_id` is none of them; a table's cell is the `form`'s row and column.
         `received` holds the file: it is moved, not copied, and stays if refused.
-        The file then has its own name: for an action, gone once its callbacks have
-        run; for a file path field, whose text keeps its path, kept until the session ends
-        or the field's next upload; for a cell, until the session ends or a table's upload
-        finds no cell holding its path. One of a type they don't offer is refused in the
-        status bar. Returns what `handle_event` does.
+        The file then has its own name: for an action, gone once its callbacks have run; for
+        a file field, kept until the session ends or the field's next upload, and then until
+        the jobs are over (see `_remove_replaced_uploads`); for a cell, until the session ends
+        or a table's upload finds no cell holding its path. One of a type they don't offer is
+        refused in the status bar. Returns what `handle_event` does.
         """
         suffix = Path(filename).suffix.lower()
         name = safe_filename(Path(filename).name)
@@ -193,32 +203,55 @@ class WebSession(RenderTarget):
                 if cell is None:  # a stale page: the table as it now is
                     return self._respond(functools.partial(renderer.pick_file, None, None))
                 types = renderer.file_types(cell)
-            elif isinstance(renderer, (WebActionRenderer, WebFilePathInputRenderer)):
+            elif isinstance(
+                renderer, (WebActionRenderer, WebFilePathInputRenderer, WebFileUploadRenderer)
+            ):
                 types = renderer.file_types
             else:
                 return None
+            # before the move below replaces the file that the field holds
+            if isinstance(renderer, (WebFilePathInputRenderer, WebFileUploadRenderer)) and (
+                not renderer.is_enabled
+            ):
+                raise UnsupportedEventError(renderer, "file")
             if types and suffix not in types:
                 return self._refuse_file(filename, f"expected a {' or '.join(types)} file")
-            apply: Callable[[Path], None]
             if isinstance(renderer, WebTableRenderer):
                 directory = self._cell_upload_directory(widget_id, renderer.file_paths())
-                apply = functools.partial(renderer.pick_file, cell)
-            elif isinstance(renderer, WebFilePathInputRenderer):
-                directory = self._upload_directory(widget_id)
-                apply = renderer.pick_file
-            else:
+                shutil.move(str(received), str(directory / name))
+                return self._respond(functools.partial(renderer.pick_file, cell, directory / name))
+            if isinstance(renderer, WebActionRenderer):
                 with tempfile.TemporaryDirectory(prefix="composeui-") as scratch:
                     shutil.move(str(received), str(Path(scratch, name)))
                     return self._respond(functools.partial(renderer.pick_file, Path(scratch, name)))
+            directory = self._upload_directory(widget_id)
             shutil.move(str(received), str(directory / name))
+            # only now: a move that fails leaves the field with the file it holds
+            self._hold_upload(widget_id, directory)
+            apply = (
+                functools.partial(self._hand_over, renderer, Path(filename).name, media_type)
+                if isinstance(renderer, WebFileUploadRenderer)
+                else renderer.pick_file
+            )
             return self._respond(functools.partial(apply, directory / name))
+
+    @staticmethod
+    def _hand_over(renderer: WebFileUploadRenderer, name: str, media_type: str, path: Path) -> None:
+        size = path.stat().st_size
+        renderer.pick_file(UploadedFile(name, size, media_type, path, is_temporary=True))
 
     def refuse_large_file(self, widget_id: str, filename: str) -> tuple[str, str | None] | None:
         """Say that a file is over the limit; None if the widget takes no file."""
         with self.lock:
             renderer = self.renderers.get(widget_id)
             if not isinstance(
-                renderer, (WebTableRenderer, WebActionRenderer, WebFilePathInputRenderer)
+                renderer,
+                (
+                    WebTableRenderer,
+                    WebActionRenderer,
+                    WebFilePathInputRenderer,
+                    WebFileUploadRenderer,
+                ),
             ):
                 return None
             return self._refuse_file(filename, self._too_large)
@@ -232,13 +265,36 @@ class WebSession(RenderTarget):
         return self._respond(functools.partial(self.main_view.status_bar.show_message, message))
 
     def _upload_directory(self, widget_id: str) -> Path:
-        """Get an empty directory for a field's upload: the field's last one is removed."""
+        """Get a new directory for a field's upload, which `_hold_upload` makes the field's."""
         if self._uploads is None:
             self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
-        directory = self._uploads / widget_id
-        shutil.rmtree(directory, ignore_errors=True)
-        directory.mkdir()
-        return directory
+        field = self._uploads / widget_id
+        field.mkdir(exist_ok=True)
+        return Path(tempfile.mkdtemp(dir=field))
+
+    def _hold_upload(self, widget_id: str, directory: Path) -> None:
+        """Make `directory` the field's upload, once its file is there: the last one is replaced."""
+        if widget_id in self._held_uploads:
+            self._replaced_uploads.append(self._held_uploads[widget_id])
+        self._held_uploads[widget_id] = directory
+
+    def _remove_replaced_uploads(self) -> None:
+        """Remove the uploads replaced or cleared, once no job is running.
+
+        A job may read a replaced file, and may not have opened it yet: nothing says which
+        file a job reads, so any job running keeps them all. A request brings this here: while
+        jobs run, the page's poller does.
+        """
+        for widget_id, directory in list(self._held_uploads.items()):
+            renderer = self.renderers.get(widget_id)
+            if isinstance(renderer, WebFileUploadRenderer) and not renderer.holds_file_in(
+                directory
+            ):
+                self._replaced_uploads.append(self._held_uploads.pop(widget_id))
+        if not self.main_view.jobs.is_running:
+            for directory in self._replaced_uploads:
+                shutil.rmtree(directory, ignore_errors=True)
+            self._replaced_uploads.clear()
 
     def _cell_upload_directory(self, widget_id: str, kept: set[str]) -> Path:
         """Get a new directory for a table cell's upload, among the table's.
@@ -267,6 +323,7 @@ class WebSession(RenderTarget):
                 # the reactive methods run once for all of the event's changes
                 with batch():
                     apply()
+                self._remove_replaced_uploads()
                 # after: the event may hand changes over with `call_on_main_thread` too
                 body = render_dirty({**self.take_pending(), **dirty})
             if main_view.title != title and isinstance(main_view.renderer, WebMainRenderer):
@@ -385,6 +442,7 @@ class WebSession(RenderTarget):
         """
         with self.lock:
             pending = render_dirty(self.take_pending())
+            self._remove_replaced_uploads()
             return jobs_poller(is_running=self.main_view.jobs.is_running) + pending
 
 

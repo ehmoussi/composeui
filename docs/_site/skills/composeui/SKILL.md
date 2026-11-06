@@ -172,6 +172,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
   where `_check` returns an error message or `None`. Then call `form.check()` and read
   `form.is_valid`.
+- **Take a user's file with `FileUploadView`**, not a file path field, on a public app: it has no
+  text field, so the user cannot type a path of the server. Connect `uploaded`, which gives an
+  `UploadedFile`, and read its `path`. On the web, that copy stays for a job that reads it, until
+  the session's end at the latest; `MainView.max_upload_size` sets the largest file.
 - **Pick a file on the server with `server_roots`** when the app needs the file where it is,
   not a copy: on the web, a file path field otherwise uploads a copy. The web lists only
   the files in those folders, and `path` is `None` for a path typed outside them: read

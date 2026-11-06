@@ -69,6 +69,7 @@ from composeui.core.view import (
     TabView,
     ToolBar,
     TreeView,
+    UploadedFile,
     VerticalView,
     View,
     date_hint,
@@ -88,6 +89,7 @@ from composeui.textualcore.widgets.composefilepathinput import (
     ComposeFilePathInput,
     PickerKind,
 )
+from composeui.textualcore.widgets.composefileupload import ComposeFileUpload
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeinput import ComposeInput
@@ -1089,6 +1091,68 @@ class TextualFilePathInputRenderer(_TextualPathInputRenderer[FilePathInputViewLi
         _view: FilePathInputViewLike, rendered_object: ComposeFilePathInput, value: str
     ) -> None:
         rendered_object.reload_button.tooltip = Content(value)
+
+
+class FileUploadViewLike(ViewLike, Protocol):
+    extensions: dict[str, tuple[str, ...]]
+    browse_text: str
+    empty_text: str
+    file: UploadedFile | None
+
+    def take_file(self, file: UploadedFile) -> None: ...
+
+
+class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, ComposeFileUpload]):
+    """A button opening textual-fspicker's picker, then the file's name: never a copy."""
+
+    def __init__(self, view: FileUploadViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "browse_text": self._refresh_browse_text,
+                "empty_text": self._refresh_empty_text,
+                "file": self._refresh_file,
+                "extensions": self._refresh_extensions,
+                # the web's only: here, the file needs no upload
+                "uploading_text": lambda _view, _widget, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeFileUpload()
+            self._rendered_object.file_picked.connect(self._take_path)
+
+    def _take_path(self, path: Path) -> None:
+        self._view.take_file(UploadedFile.of_path(path))
+
+    @staticmethod
+    def _refresh_browse_text(
+        _view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: str
+    ) -> None:
+        rendered_object.button.label = value
+
+    @staticmethod
+    def _refresh_file(
+        view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: UploadedFile | None
+    ) -> None:
+        # called before the view holds the value
+        rendered_object.name_label.update(view.empty_text if value is None else value.name)
+
+    @staticmethod
+    def _refresh_empty_text(
+        view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: str
+    ) -> None:
+        if view.file is None:
+            rendered_object.name_label.update(value)
+
+    @staticmethod
+    def _refresh_extensions(
+        _view: FileUploadViewLike,
+        rendered_object: ComposeFileUpload,
+        value: dict[str, tuple[str, ...]],
+    ) -> None:
+        rendered_object.extensions = dict(value)
 
 
 class SavePathInputViewLike(PathInputViewLike, Protocol):
@@ -3205,6 +3269,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "source_table": TextualSourceTableRenderer,
     "date_input": TextualDateInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
+    "file_upload": TextualFileUploadRenderer,
     "folder_path_input": TextualFolderPathInputRenderer,
     "save_path_input": TextualSavePathInputRenderer,
     "dialog": TextualDialogRenderer,

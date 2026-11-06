@@ -65,6 +65,8 @@
   "Warning": "Avertissement",
   "Error": "Erreur",
   "Choose a file": "Choisir un fichier",
+  "No file chosen": "Aucun fichier choisi",
+  "Uploading...": "Envoi en cours...",
   "Choose a folder": "Choisir un dossier",
   "Choose this folder": "Choisir ce dossier",
   "Save as": "Enregistrer sous",

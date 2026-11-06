@@ -59,7 +59,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Core | Typed `attrs` views, reactive attributes, reactive methods (`@reactive`), signals, callback injection, lazy backend selection, and the backend's capabilities |
 | Backends | Qt, Textual, and the web (Starlette and htmx); maps on Qt and the web only. The web sends only the shown page of a router and the shown tab of a tab view; Qt builds each page and tab the first time it shows |
 | Forms and layout | Inputs, validation, buttons, progress, metrics, expanders, trees, Markdown, consoles, pages, tabs, splitters, sidebars, view lists, menus, toolbars, and typed form and content dialogs, with buttons and checks of their own |
-| Files and paths | File, folder and save path fields and table cells, files picked on the server (`server_roots`), paths relative to the study (`base_folder`), a path cell by the row's kind (`path_by`), and `MainView.write_file`, which asks before it replaces a file |
+| Files and paths | `FileUploadView` for an uploaded file with a stated lifecycle, file, folder and save path fields and table cells, files picked on the server (`server_roots`), paths relative to the study (`base_folder`), a path cell by the row's kind (`path_by`), and `MainView.write_file`, which asks before it replaces a file |
 | Tables | Editable tables, typed record tables, sorting, filtering, cell widgets and styles, header groups, and row headers |
 | Dashboards | `DashboardView`, `bar_chart`, `Task.show_state`, and `CheckBoxMixin.shows` (the first part of N01) |
 | Large tables | `SourceTableView` on `ListSource`, `SqliteSource` and `DataFrameSource`: rows read as they show, selection by row ID, and CSV export |
@@ -161,7 +161,7 @@ The first helpers are in place, and the Uber examples use them: `DashboardView` 
 `bar_chart` in `composeui.core.dashboard`, `Task.show_state`, and `CheckBoxMixin.shows`.
 The work left:
 
-- **Uploads and downloads,** once N13 has their widgets.
+- **Downloads,** once N13 has their widget. `FileUploadView` is there for uploads.
 - **More helpers from a second dashboard,** not by symmetry: a preset that only renames
   `child(...)` saves no code. Keep a helper when two dashboards repeat the same code. Build
   them on reactive methods, as `shows` and `show_state` are.
@@ -236,15 +236,10 @@ and handles a failed query without losing the user's work.
 CSV import, jobs with progress and cancellation, and streamed CSV export of a table already
 exist. Build on them.
 
-Add the lifecycle of temporary files, Parquet import, and tested
+Add Parquet import, and tested
 cancellation of long imports and exports. Keep study files, data uploads, and exported results
 apart in the UI and the API. An app that accepts URLs from users defines the allowed schemes,
 hosts, and redirects before it passes them to the import.
-
-On the web, a file path field without `server_roots` uploads the file, and gives the path of a
-copy in the session. Give an uploaded file instead: its name, its size, its type, and a
-temporary file whose lifecycle the API states. A file picked on the server (`server_roots`) is
-not an upload: it stays where it is.
 
 `MainView.max_upload_size` sets the web's limit. Deliver the API in M1 and the deployment
 settings in M4.
@@ -724,6 +719,13 @@ The user guide's "Web backend" section covers what users see.
   file with no lock held, and `WebSession.pick_file` moves that file. A file over the limit keeps
   being read, to answer in the status bar, but stops going to the disk. Open still reads through
   Starlette: a study is small.
+  A replaced upload stays until `jobs.is_running` is false: nothing says which file a job reads,
+  and a job may not have opened it yet. Holding a file through the app's code would bring the same
+  failure back each time an app forgets.
+- **A long upload and the order.** A file's post takes its turn (`order.py`) once its whole body
+  has arrived, so a later post runs first after `ORDER_TIMEOUT`. Waiting for the upload would hold
+  every click for as long as the network takes. So `page.js` marks only the upload's own button,
+  and the docs say that a click doesn't wait.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a
   bad file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.

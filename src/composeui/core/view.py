@@ -19,6 +19,7 @@ import io
 import json
 import logging
 import math
+import mimetypes
 import operator
 import re
 import sys
@@ -117,6 +118,8 @@ __all__ = [
     "FileMenu",
     "FilePathInputMixin",
     "FilePathInputView",
+    "FileUploadMixin",
+    "FileUploadView",
     "FileView",
     "Filter",
     "FilterError",
@@ -145,6 +148,7 @@ __all__ = [
     "LabelRowComboBoxView",
     "LabelRowDateInputView",
     "LabelRowFilePathInputView",
+    "LabelRowFileUploadView",
     "LabelRowFloatInputView",
     "LabelRowFolderPathInputView",
     "LabelRowInputView",
@@ -183,6 +187,7 @@ __all__ = [
     "RowComboBoxView",
     "RowDateInputView",
     "RowFilePathInputView",
+    "RowFileUploadView",
     "RowFloatInputView",
     "RowFolderPathInputView",
     "RowInputView",
@@ -218,6 +223,7 @@ __all__ = [
     "TreePath",
     "TreeView",
     "TypedFormDialogView",
+    "UploadedFile",
     "Validator",
     "ValuesGroupMixin",
     "VerticalView",
@@ -1959,6 +1965,64 @@ class FilePathInputMixin(PathInputMixin):
     reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
 
+@attrs.frozen
+class UploadedFile:
+    """A file that the user gave to a `FileUploadView`, and where to read it."""
+
+    #: the user's name for the file, as sent: to show, not to build a path with
+    name: str
+    #: its size in bytes
+    size: int
+    #: its type, such as ``text/csv``: what the browser says, not a check of the content;
+    #: empty when unknown
+    media_type: str
+    #: the file to read
+    path: Path
+    #: whether `path` is a copy that the app's session owns, on the web, rather than the
+    #: user's own file, on Qt and Textual
+    is_temporary: bool = False
+
+    @classmethod
+    def of_path(cls, path: Path) -> UploadedFile:
+        """Get the file that `path` names on this computer, without a copy."""
+        return cls(path.name, path.stat().st_size, mimetypes.guess_type(path.name)[0] or "", path)
+
+
+@define_view
+class FileUploadMixin:
+    """The fields of a file upload: the file the user gave, and `uploaded`.
+
+    The web's copy of the file stays until the view's next upload or `clear`, and then until
+    the main view's jobs are over, so a job can still read it. The end of the session removes
+    it in any case. The file is not part of a study.
+    """
+
+    #: the file types the picker offers, by name: ``{"CSV": (".csv",)}``; on the web, a
+    #: file of another type is refused
+    extensions: dict[str, tuple[str, ...]] = attrs.field(
+        factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
+    )
+    #: the button's text
+    browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
+    #: shown beside the button while the view holds no file
+    empty_text: str = attrs.field(default=T("No file chosen"), metadata={UI_TEXT: True})
+    #: shown beside the button while the web uploads the file, when the button takes no click
+    uploading_text: str = attrs.field(default=T("Uploading..."), metadata={UI_TEXT: True})
+    #: the file the user gave last; None before the first, and after `clear`
+    file: Optional[UploadedFile] = attrs.field(default=None, init=False, metadata={OMIT: True})
+    #: the user gave a file, now in `file`
+    uploaded: Signal[UploadedFile] = attrs.Factory(Signal[UploadedFile])
+
+    def take_file(self, file: UploadedFile) -> None:
+        """Hold `file` as the user's own choice, and emit `uploaded`."""
+        self.file = file
+        self.uploaded.emit(file)
+
+    def clear(self) -> None:
+        """Hold no file; on the web, the session deletes its copy once the jobs are over."""
+        self.file = None
+
+
 @define_view
 class FolderPathInputMixin(PathInputMixin):
     """A folder's path, typed in the field or picked with the "…" button beside it.
@@ -2074,6 +2138,13 @@ class FilePathInputView(FilePathInputMixin, View):
     """A file's path, e.g. a data file to read: typed, or picked from a file dialog."""
 
     _renderer_key = "file_path_input"
+
+
+@define_view
+class FileUploadView(FileUploadMixin, View):
+    """A button with which the user gives the app a file, then the file's name."""
+
+    _renderer_key = "file_upload"
 
 
 @define_view
@@ -5718,6 +5789,20 @@ class LabelRowDateInputView(FormLabelRowView, DateInputMixin):
     """A row of a form with a label and a date field."""
 
     _field_renderer_key = "date_input"
+
+
+@define_view
+class RowFileUploadView(FormRowView, FileUploadMixin):
+    """A row of a form with a file upload, without a label."""
+
+    _field_renderer_key = "file_upload"
+
+
+@define_view
+class LabelRowFileUploadView(FormLabelRowView, FileUploadMixin):
+    """A row of a form with a label and a file upload."""
+
+    _field_renderer_key = "file_upload"
 
 
 @define_view

@@ -44,6 +44,7 @@ from composeui.core.view import (
     SourceTableView,
     TreeNode,
     TreeView,
+    UploadedFile,
     _is_omitted_type,
     child,
     define_view,
@@ -1140,3 +1141,17 @@ def test_a_check_box_shows_its_views_however_it_changes() -> None:
     box.is_checked = False
     main_view.load_state_data(main_view.state_data())  # saved unchecked, then opened
     assert not raw_data.is_visible
+
+
+def test_a_study_keeps_no_uploaded_file(tmp_path: Path) -> None:
+    upload = tmp_path / "secret-path.csv"
+    upload.write_text("1", encoding="utf-8")
+    view = DataFileMainView()
+    view.form.dataset.take_file(UploadedFile.of_path(upload))
+    study = tmp_path / "study.measurements"
+    view.save_state(study)
+    assert "secret-path" not in study.read_text(encoding="utf-8")
+
+    reopened = DataFileMainView()
+    reopened.load_state(study)
+    assert reopened.form.dataset.file is None

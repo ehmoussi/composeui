@@ -76,6 +76,7 @@ from composeui.core.view import (
     TabPage,
     TabView,
     TreeNode,
+    UploadedFile,
     View,
     define_view,
     replace_cell,
@@ -99,6 +100,7 @@ from composeui.textualcore.widgets.composefilepathinput import (
     ComposeFilePathInput,
     ReplaceFileScreen,
 )
+from composeui.textualcore.widgets.composefileupload import ComposeFileUpload
 from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterBar,
     ComposeFilterChip,
@@ -420,6 +422,53 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         await pilot.pause()
         assert not isinstance(app.screen, ComposeCalendar)
         assert changes == [datetime.date(2026, 11, 25), datetime.date(2026, 12, 1)]
+
+
+@pytest.mark.asyncio
+async def test_a_file_upload_gives_the_user_s_file_from_the_picker_without_a_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "flows.csv"
+    path.write_text("1,2", encoding="utf-8")
+    view = DataFileMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    dataset = view.form.dataset
+    uploads: list[UploadedFile] = []
+    dataset.uploaded.connect(uploads.append)
+
+    async with app.run_test(size=(80, 40)) as pilot:
+        widget = _field_widget(dataset.renderer)
+        assert isinstance(widget, ComposeFileUpload)
+        await pilot.pause()
+        assert str(widget.name_label.render()) == "No file chosen"
+
+        # cancelled, then picked
+        widget.button.press()
+        await pilot.pause()
+        assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+        await pilot.press("escape")
+        await pilot.pause()
+        assert (len(app.screen_stack), uploads) == (1, [])
+
+        widget.button.press()
+        await pilot.pause()
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(path)
+        await pilot.pause()
+        await pilot.press("enter")
+        for _ in range(4):
+            await pilot.pause()
+        assert uploads == [UploadedFile("flows.csv", 3, "text/csv", path)]
+        assert str(widget.name_label.render()) == "flows.csv"
+        assert app.focused is widget.button
+        dataset.empty_text = "Nothing yet"
+        assert str(widget.name_label.render()) == "flows.csv"
+        dataset.clear()
+        assert str(widget.name_label.render()) == "Nothing yet"
 
 
 @pytest.mark.asyncio

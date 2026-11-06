@@ -21,6 +21,7 @@ import math
 import os
 import re
 import secrets
+import shutil
 import sys
 import tempfile
 import threading
@@ -92,6 +93,7 @@ from composeui.core.view import (
     TableView,
     TreeNode,
     TreeView,
+    UploadedFile,
     View,
     child,
     define_view,
@@ -743,6 +745,7 @@ class _NotesMainView(MainView):
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
+    DataFileMainView,
     PipeMainView,
     BatmanMainView,
     PipeChartMainView,
@@ -1188,13 +1191,13 @@ def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
     with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
         client.get("/")
         (main_view,) = views
-        field = _part(main_view.form.measurements, "field")
+        field = _part(main_view.form.dataset, "field")
         client.post(f"/widget/{field.widget_id}/file", files={"file": ("a.csv", b"1")})
-        upload = main_view.form.measurements.path
+        upload = main_view.form.dataset.file
         assert upload is not None
-        assert upload.exists()
+        assert upload.path.exists()
 
-    assert not upload.exists()
+    assert not upload.path.exists()
 
 
 def test_an_upload_that_arrives_after_its_session_ended_stays_nowhere(
@@ -1254,19 +1257,20 @@ def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
     with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
         client.get("/")
         (main_view,) = views
-        measurements = main_view.form.measurements
-        field = _part(measurements, "field")
+        dataset = main_view.form.dataset
+        field = _part(dataset, "field")
         files: list[list[Path]] = []
-        measurements.path_picked.connect(
-            lambda _path: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
+        dataset.uploaded.connect(
+            lambda _file: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
         )
         url = f"/widget/{field.widget_id}/file"
 
         client.post(url, files={"file": ("é.csv", b"x" * (2 * 1024 * 1024), "text/csv")})
 
-        assert measurements.path is not None
-        assert measurements.path.name == "upload.csv"
-        assert files == [[measurements.path]]
+        assert dataset.file is not None
+        assert dataset.file.name == "é.csv"
+        assert dataset.file.media_type == "text/csv"
+        assert files == [[dataset.file.path]]
 
 
 def test_a_file_the_page_kept_for_its_size_is_refused_by_name(
@@ -1493,13 +1497,211 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
 
 
 def _pick_file(
-    session: WebSession, widget_id: str, name: str, content: bytes
+    session: WebSession, widget_id: str, name: str, content: bytes, media_type: str = ""
 ) -> tuple[str, str | None] | None:
     """Hand the session a file as the route does, once the file has arrived."""
     with tempfile.TemporaryDirectory() as directory:
         received = Path(directory, "upload")
         received.write_bytes(content)
-        return session.pick_file(widget_id, name, received)
+        return session.pick_file(widget_id, name, received, None, media_type)
+
+
+def test_a_file_upload_holds_its_file_until_the_next_one_or_the_session_s_end() -> None:
+    main_view = DataFileMainView()
+    main_view.status_bar.timeout = 0
+    session = WebSession(main_view)
+    dataset = main_view.form.dataset
+    field = _part(dataset, "field")
+    uploads: list[UploadedFile] = []
+    dataset.uploaded.connect(uploads.append)
+    element = _element(field.to_html(), field.widget_id)
+    assert element.text == "Choose a fileNo file chosen"
+    (picker,) = [a for tag, a in element.descendants if tag == "input"]
+    assert (picker["accept"], picker["hx-post"]) == (".csv", f"/widget/{field.widget_id}/file")
+
+    name = "<b>a & b.csv"
+    result = _pick_file(session, field.widget_id, name, b"1,2", "text/csv")
+    assert result is not None
+    (first,) = uploads
+    assert dataset.file == first
+    assert (first.name, first.size, first.media_type) == (name, 3, "text/csv")
+    assert (first.path.read_bytes(), first.is_temporary) == (b"1,2", True)
+    # only the name is swapped, as text: the button keeps the focus
+    assert f'id="{field.widget_id}"' not in result[0]
+    assert _swapped(result[0], f"{field.widget_id}-name").text == name
+
+    # the next upload replaces the copy; a file of another type leaves it alone
+    _pick_file(session, field.widget_id, "b.csv", b"3")
+    second = uploads[-1]
+    assert (second.name, second.path.exists(), first.path.exists()) == ("b.csv", True, False)
+    _pick_file(session, field.widget_id, "c.txt", b"4")
+    assert (dataset.file, len(uploads)) == (second, 2)
+
+    # while disabled, the user can't replace it
+    dataset.is_enabled = False
+    with pytest.raises(UnsupportedEventError):
+        _pick_file(session, field.widget_id, "d.csv", b"5")
+    assert (dataset.file, second.path.read_bytes()) == (second, b"3")
+    dataset.is_enabled = True
+
+    dataset.clear()
+    assert (dataset.file, second.path.exists()) == (None, True)
+    session.poll_jobs()  # the next request, with no job running
+    assert not second.path.exists()
+    _pick_file(session, field.widget_id, "e.csv", b"6")
+    third = uploads[-1]
+    session.close()
+    assert not third.path.exists()
+
+
+def _wait_for_the_jobs(session: WebSession, main_view: MainView) -> None:
+    """Poll as the page does, until the jobs' outcomes have come back."""
+    for _ in range(600):
+        session.poll_jobs()
+        if not main_view.jobs.is_running:
+            break
+        time.sleep(0.05)
+    assert not main_view.jobs.is_running
+    session.poll_jobs()
+
+
+@pytest.mark.parametrize("replacement", ["upload", "clear"])
+def test_a_job_reads_a_file_replaced_before_it_opened_it(replacement: str) -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    dataset = main_view.form.dataset
+    field = _part(dataset, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = dataset.file
+    assert first is not None
+    replaced = threading.Event()
+    read: list[bytes] = []
+
+    def work(_job: Job[None, None], path: Path) -> None:
+        assert replaced.wait(30)
+        read.append(path.read_bytes())
+
+    main_view.jobs.start(work, first.path)
+    if replacement == "upload":
+        _pick_file(session, field.widget_id, "second.csv", b"second")
+    else:
+        dataset.clear()
+    session.poll_jobs()
+    assert first.path.exists()
+    replaced.set()
+
+    _wait_for_the_jobs(session, main_view)
+
+    assert read == [b"first"]
+    assert not first.path.exists()
+    # the file the view holds now stays
+    if replacement == "upload":
+        assert dataset.file is not None
+        assert dataset.file.path.read_bytes() == b"second"
+    session.close()
+
+
+def test_a_file_path_replaced_during_a_job_stays_until_the_job_is_over() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = measurements.path
+    assert first is not None
+    release = threading.Event()
+
+    def work(_job: Job[None, None]) -> None:
+        assert release.wait(30)
+
+    main_view.jobs.start(work)
+    _pick_file(session, field.widget_id, "second.csv", b"second")
+    assert first.read_bytes() == b"first"
+    release.set()
+    _wait_for_the_jobs(session, main_view)
+
+    assert not first.exists()
+    assert measurements.path is not None
+    assert measurements.path.read_bytes() == b"second"
+    session.close()
+
+
+def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    field = _part(main_view.form.dataset, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = main_view.form.dataset.file
+    assert first is not None
+    release = threading.Event()
+
+    def work(_job: Job[None, None]) -> None:
+        assert release.wait(30)
+
+    main_view.jobs.start(work)
+    main_view.form.dataset.clear()
+    session.poll_jobs()
+    assert first.path.exists()
+
+    session.close()
+    release.set()
+
+    assert not first.path.exists()
+
+
+def test_an_upload_that_fails_to_arrive_keeps_the_file_the_view_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    dataset = main_view.form.dataset
+    field = _part(dataset, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = dataset.file
+    assert first is not None
+
+    with monkeypatch.context() as patch:
+        patch.setattr(shutil, "move", mock.Mock(side_effect=OSError("cannot move")))
+        with pytest.raises(OSError, match="cannot move"):
+            _pick_file(session, field.widget_id, "second.csv", b"second")
+    session.poll_jobs()  # the next request, which removes what was replaced
+
+    assert dataset.file == first
+    assert first.path.read_bytes() == b"first"
+    session.close()
+
+
+def test_two_sessions_upload_files_of_the_same_name_apart() -> None:
+    views = [DataFileMainView(), DataFileMainView()]
+    sessions = [WebSession(view) for view in views]
+    for session, view, content in zip(sessions, views, (b"first", b"second")):
+        field = _part(view.form.dataset, "field")
+        _pick_file(session, field.widget_id, "data.csv", content)
+    files = [view.form.dataset.file for view in views]
+    assert files[0] is not None
+    assert files[1] is not None
+    assert files[0].path.read_bytes() == b"first"
+    assert files[1].path.read_bytes() == b"second"
+    sessions[0].close()
+    assert files[1].path.exists()
+    sessions[1].close()
+
+
+def test_a_disabled_file_path_keeps_the_copy_it_holds() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+    _pick_file(session, field.widget_id, "flows.csv", b"1,2")
+    held = measurements.path
+    assert held is not None
+
+    measurements.is_enabled = False
+    with pytest.raises(UnsupportedEventError):
+        _pick_file(session, field.widget_id, "other.csv", b"3")
+
+    assert held.read_bytes() == b"1,2"
+    session.close()
 
 
 def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends() -> None:

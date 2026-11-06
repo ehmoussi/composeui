@@ -1150,6 +1150,52 @@ def help_page(browser: Browser) -> Iterator[Page]:
         context.close()
 
 
+def test_a_file_upload_s_button_opens_the_picker_and_shows_the_file_s_name(
+    browser: Browser, tmp_path: Path
+) -> None:
+    app = WebApplication(build_main_view=DataFileMainView).create_starlette_app()
+    data = tmp_path / "flows.csv"
+    data.write_text("1,2", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a dataset", encoding="utf-8")
+    with _serve(app) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        _intercept_file_choosers(page)
+        page.goto("/")
+        group = page.get_by_role("group", name="Dataset")
+        button = group.get_by_role("button", name="Choose a file")
+        expect(group).to_contain_text("No file chosen")
+
+        # held on its way, as a long upload is: what the page shows meanwhile
+        held: list[Route] = []
+
+        def hold(route: Route) -> None:
+            held.append(route)
+
+        page.route("**/file", hold)
+        button.focus()
+        with page.expect_file_chooser() as chooser:
+            page.keyboard.press("Enter")
+        chooser.value.set_files(data)
+        expect(group).to_contain_text("Uploading...")
+        expect(button).to_have_attribute("aria-disabled", "true")
+        expect(button).to_be_focused()
+        with _posted(page):
+            held[0].continue_()
+
+        expect(group).to_contain_text("flows.csv")
+        expect(button).not_to_have_attribute("aria-disabled", "true")
+        expect(button).to_be_focused()
+
+        # a refused file brings no name: the last one shows again
+        page.unroute("**/file")
+        with _posted(page):
+            group.locator('input[type="file"]').set_input_files(tmp_path / "notes.txt")
+        expect(group).to_contain_text("flows.csv")
+        expect(group).not_to_contain_text("Uploading...")
+        context.close()
+
+
 def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) -> None:
     page = help_page
     _intercept_file_choosers(page)
@@ -1886,7 +1932,8 @@ def test_a_file_picked_in_the_browser_s_picker_is_uploaded_its_copy_s_path_shown
     page.goto("/")
     field = page.get_by_label("Measurements")
     with page.expect_file_chooser() as chooser, _posted(page):
-        page.get_by_role("button", name="Choose a file").click()
+        # the field's: the file upload's own comes after it
+        page.get_by_role("button", name="Choose a file").first.click()
         payload: FilePayload = {"name": "flows.csv", "mimeType": "text/csv", "buffer": b"1,2"}
         chooser.value.set_files(files=[payload])
     expect(field).to_have_value(re.compile(r"flows\.csv$"))
