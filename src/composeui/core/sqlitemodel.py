@@ -42,7 +42,7 @@ from typing import (
     overload,
 )
 from urllib.parse import urlsplit
-from urllib.request import urlopen
+from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 
 import attrs
 from typing_extensions import dataclass_transform
@@ -62,6 +62,9 @@ from composeui.core.view import (
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping, Sequence
+    from http.client import HTTPMessage
+    from typing import IO
+    from urllib.request import Request
 
     from attrs import AttrsInstance
     from typing_extensions import TypeAlias, Unpack
@@ -70,6 +73,7 @@ if TYPE_CHECKING:
     Parameters: TypeAlias = Union[Sequence[Any], Mapping[str, Any]]
 
 __all__ = [
+    "AllowedUrls",
     "CSVSqliteTable",
     "SqliteModel",
     "SqliteSource",
@@ -390,24 +394,106 @@ def _replay_csv_sample(sample: str, text: io.TextIOWrapper) -> Generator[str]:
     yield from text
 
 
+def _names(names: Iterable[str]) -> frozenset[str]:
+    return frozenset(names)
+
+
+def _ports(ports: Iterable[int]) -> frozenset[int]:
+    return frozenset(ports)
+
+
+#: the port of each scheme that `AllowedUrls` takes
+_DEFAULT_PORTS: Mapping[str, int] = MappingProxyType({"http": 80, "https": 443})
+
+
+@attrs.frozen
+class AllowedUrls:
+    """The URLs that an import takes from a user: the app's hosts, and never a local file."""
+
+    #: the host names allowed, compared without case, such as ``{"data.example.org"}``
+    hosts: frozenset[str] = attrs.field(converter=_names)
+    #: the schemes allowed, among ``http`` and ``https``
+    schemes: frozenset[str] = attrs.field(default=frozenset({"https"}), converter=_names)
+    #: the ports allowed beside the scheme's own, 80 for ``http`` and 443 for ``https``: a host
+    #: often serves more on its other ports, to the server that an import runs on
+    ports: frozenset[int] = attrs.field(default=frozenset(), converter=_ports)
+    #: whether to follow a redirect to an allowed URL; a redirect elsewhere is always refused
+    follows_redirects: bool = False
+
+    def check(self, url: str) -> None:
+        """Raise `RefusedError` unless `url` is allowed."""
+        try:
+            parts = urlsplit(url)
+            host = parts.hostname
+            port = parts.port
+        except ValueError as error:
+            msg = f"This address isn't valid: {url!r}"
+            raise RefusedError(msg) from error
+        allowed_hosts = {name.casefold() for name in self.hosts}
+        if (
+            parts.scheme not in self.schemes - {"file"}
+            or host is None
+            or host.casefold() not in allowed_hosts
+            or port not in {None, _DEFAULT_PORTS.get(parts.scheme), *self.ports}
+            # read in another way by some URL parsers, on either side of the host
+            or "\\" in url
+            or parts.username is not None
+        ):
+            msg = f"This address isn't allowed: {url!r}"
+            raise RefusedError(msg)
+
+
+class _CheckedRedirects(HTTPRedirectHandler):
+    """Check each redirect's address before its request is sent."""
+
+    def __init__(self, allowed: AllowedUrls) -> None:
+        self._allowed = allowed
+
+    def redirect_request(  # noqa: PLR0913 (urllib's signature)
+        self,
+        req: Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: HTTPMessage,
+        newurl: str,
+    ) -> Request | None:
+        if not self._allowed.follows_redirects:
+            refusal = f"This address redirects to another: {newurl!r}"
+            raise RefusedError(refusal)
+        self._allowed.check(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 @contextlib.contextmanager
 def open_csv_url(
-    url: str, *, encoding: str = "utf-8", timeout: float = 30.0
+    url: str,
+    *,
+    encoding: str = "utf-8",
+    timeout: float = 30.0,
+    allowed: AllowedUrls | None = None,
 ) -> Generator[io.TextIOWrapper]:
-    """Open a trusted HTTP, HTTPS or file URL as CSV text, and close its streams on exit.
+    """Open an HTTP, HTTPS or file URL as CSV text, and close its streams on exit.
 
     Detect gzip by its content, not its filename. Preserve CSV newlines and decode with
     ``encoding``. ``timeout`` sets the socket timeout in seconds, not a total download
     deadline. Network, decompression and decoding errors propagate to the caller.
-    Do not pass untrusted URLs: the helper does not restrict hosts or local file access.
+
+    Give a URL from a user only with ``allowed``, which raises `RefusedError` for a URL or a
+    redirect outside it, before its request. Without it, the URL is trusted: any host, any
+    redirect, and local files.
     """
+    # first: a URL from a user gets the refusal that the app expects, whatever its form
+    if allowed is not None:
+        allowed.check(url)
     if urlsplit(url).scheme not in {"http", "https", "file"}:
         msg = "CSV URLs must use http, https or file"
         raise ValueError(msg)
-    with (
-        urlopen(url, timeout=timeout) as response,  # noqa: S310 (schemes checked above; trusted URLs only)
-        _csv_text(response, encoding=encoding) as text,
-    ):
+    if allowed is None:
+        opened = urlopen(url, timeout=timeout)  # noqa: S310 (schemes checked above; trusted URLs only)
+    else:
+        opened = build_opener(_CheckedRedirects(allowed)).open(url, timeout=timeout)
+    with opened as response, _csv_text(response, encoding=encoding) as text:
         yield text
 
 
@@ -632,22 +718,24 @@ class CSVSqliteTable(SqliteTable):
         *,
         encoding: str = "utf-8",
         timeout: float = 30.0,
+        allowed: AllowedUrls | None = None,
         sniff: bool = False,
         sniff_sample_size: int = 8192,
         batch_size: int = 100_000,
         limit: int | None = None,
         **csv_options: Any,
     ) -> Generator[int]:
-        """Import CSV from a trusted URL and yield cumulative submitted-row counts.
+        """Import CSV from a URL and yield cumulative submitted-row counts.
 
-        `open_csv_url` handles decoding, gzip and stream cleanup. Other options follow
-        `fill`. Exhaust the generator to commit; use ``contextlib.closing`` if iteration
-        can stop early, to close the streams and roll back. Existing rows are retained.
+        `open_csv_url` handles decoding, gzip and stream cleanup, and ``allowed``, which a
+        URL from a user needs. Other options follow `fill`. Exhaust the generator to commit;
+        use ``contextlib.closing`` if iteration can stop early, to close the streams and roll
+        back. Existing rows are retained.
         ``sniff=True`` detects the dialect as in `fill_from_file`, without seeking.
         ``sniff_sample_size`` sets its limit in decoded characters (8192 by default).
         """
         with (
-            open_csv_url(url, encoding=encoding, timeout=timeout) as text,
+            open_csv_url(url, encoding=encoding, timeout=timeout, allowed=allowed) as text,
             contextlib.closing(
                 self._fill_stream(
                     text,

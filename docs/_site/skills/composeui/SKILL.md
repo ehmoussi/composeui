@@ -193,6 +193,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   widget follows the kind the user picks. Read a cell's path with
   `table.cell_widget(row, column).path(text)`.
   See https://ehmoussi.github.io/composeui/user-guide/tables.html#paths-by-the-rows-kind
+- **Give `allowed=AllowedUrls(hosts={...})` to `fill_from_url` for a URL from a user.** Without it,
+  the import trusts the URL: any host, any redirect, and local files.
 - **Import a Parquet file with `fill_from_frame(table, frame)`**, from
   `composeui.core.dataframesource`: the app reads the file with its own dataframe library.
 - **Write a file the user names with `main_view.write_file(field, write)`**: a path typed

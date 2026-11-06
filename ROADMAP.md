@@ -109,7 +109,7 @@ Change that contract, and its tests, explicitly for extensions.
 | Milestone | The developer can | Main work | Done when |
 | --- | --- | --- | --- |
 | M0 — Baseline | Compare future work with 0.3.0 | Specify the other two reference apps; prototype helpers; specify capabilities and data ownership | Three reference apps are specified and used to review the proposed APIs, and the data explorer is measured |
-| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N07 (uploads), N13, W06, T02 and N03 (an editable grid) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
+| M1 — First dashboard | Build a dashboard in minutes from a CSV or a dataframe | N01, N04 (Plotly), N05 (caches), N13, W06, T02 and N03 (an editable grid) | The CSV dashboard uses ordinary ComposeUI objects, stays responsive during queries, and meets the M0 targets |
 | M2 — Shared dashboards | Share a dashboard and reuse more existing code | N14, N15, N04 (Matplotlib), N06, N16, C01, C04 | A dashboard deploys in one command, its links keep its state, and it reads a SQL database |
 | M3 — Scientific workflows | Configure, compute, inspect and export a study | W01–W05, W07–W15, T03, the other C items, N04 (Altair) | The scientific workbench covers each W, T and C item, or records why it waits |
 | M4 — Shared apps | Deploy an app for a team | L01, N08, N09, end of N05 and N07 | Restart, isolation, access control and worker-topology tests pass |
@@ -133,8 +133,8 @@ Build one thin slice from end to end before the full catalog:
    shared-tool workflows.
 2. **Shorten.** Add a Plotly adapter with its backend capabilities (N04), then dashboard
    helpers that build the existing views, sources and tasks (N01).
-3. **Load and export.** Add configurable uploads and filtered export to the data explorer
-   (N07), and the dashboard widgets that it needs (N13).
+3. **Load and export.** Use `FileUploadView` and filtered export in the data explorer, and add
+   the dashboard widgets that it needs (N13).
 4. **Release.** Publish the slice as a 0.x version. Compare authoring effort, response time,
    memory and cleanup with the baseline before the API grows.
 
@@ -233,18 +233,12 @@ and handles a failed query without losing the user's work.
 
 ### N07 — Uploads and exports
 
-CSV import, jobs with progress and cancellation, and streamed CSV export of a table already
-exist. Build on them.
+`FileUploadView`, `MainView.max_upload_size`, `fill_from_frame` and `AllowedUrls` give the API.
+What is left is the deployment settings, in M4: limits that an operator sets without a change of
+the code, and the disk that uploads may use at once.
 
-Add tested cancellation of long imports and exports. Keep study files, data uploads, and exported results
-apart in the UI and the API. An app that accepts URLs from users defines the allowed schemes,
-hosts, and redirects before it passes them to the import.
-
-`MainView.max_upload_size` sets the web's limit. Deliver the API in M1 and the deployment
-settings in M4.
-
-**Done when:** a user imports a realistic dataset, inspects it, and exports filtered results,
-without needless copies of the file or files shared across sessions.
+**Done when:** an operator sets the limits of a deployed app, and a test of a fresh deployment
+imports a file near them.
 
 ### N08 — Users and access
 

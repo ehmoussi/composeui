@@ -188,8 +188,30 @@ with open_csv_url(url) as text:
 - An error of the network, of the decompression, or of the decoding goes to the caller. An
   error of conversion or of validation in `fill_from_url` becomes a `RefusedError`, as in
   `fill`. A URL of another scheme raises `ValueError`.
-- **Give these functions trusted URLs only.** They accept every host, follow redirects, and
-  read local files.
+- **Without `allowed`, give these functions trusted URLs only.** They then accept every host,
+  follow redirects, and read local files.
+
+### A URL from a user
+
+When a user types the URL, give `allowed` to `fill_from_url` or `open_csv_url`. It names what the
+app accepts:
+
+```python
+from composeui.core.sqlitemodel import AllowedUrls
+
+ALLOWED = AllowedUrls(hosts={"data.example.org"}, follows_redirects=True)
+```
+
+- **`hosts`** holds the host names, compared without case. An address with a user name or a
+  backslash is refused.
+- **`schemes`** holds the schemes, `{"https"}` by default. A `file` URL is always refused.
+- **`ports`** holds the ports allowed beside the scheme's own, 80 and 443. It is empty by default,
+  so `https://data.example.org:6379/` is refused.
+- **`follows_redirects`** is `False` by default, so a redirect is refused. When it is `True`, each
+  redirect must lead to an allowed address.
+
+A URL outside these rules raises `RefusedError` before the request is sent. The rules check names,
+not addresses: an allowed host must not lead to your internal network through its DNS.
 
 A download takes time: run it in a [job](threads.md). The
 [Uber pickups example](../../src/examples/uberpickups.py) imports its CSV with

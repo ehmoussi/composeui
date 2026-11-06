@@ -8,6 +8,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `AllowedUrls` limits the URLs that `fill_from_url` and `open_csv_url` take from a user: the hosts,
+  the schemes, and the redirects. They refuse any other URL before its request.
 - `fill_from_frame`, from `composeui.core.dataframesource`, imports the rows of a dataframe into a
   `CSVSqliteTable`, such as a Parquet file that the app read with Polars or pandas. It works as
   `fill` does, with progress, rollback and the row class's checks, and it needs the `dataframe`

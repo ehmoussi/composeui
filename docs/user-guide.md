@@ -118,6 +118,7 @@ not in the package: run them from a clone of the repository (see
   - [A CSV table](user-guide/csv-import.md#a-csv-table)
   - [CSV files](user-guide/csv-import.md#csv-files)
   - [CSV URLs](user-guide/csv-import.md#csv-urls)
+    - [A URL from a user](user-guide/csv-import.md#a-url-from-a-user)
   - [CSV dialect detection](user-guide/csv-import.md#csv-dialect-detection)
   - [A frame or a Parquet file](user-guide/csv-import.md#a-frame-or-a-parquet-file)
 - [Translating the app](user-guide/translation.md)

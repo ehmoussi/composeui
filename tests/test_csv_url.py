@@ -16,9 +16,11 @@ import attrs
 import pytest
 
 from composeui.core import sqlitemodel
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, open_csv_url
+from composeui.core.model import RefusedError
+from composeui.core.sqlitemodel import AllowedUrls, CSVSqliteTable, SqliteModel, open_csv_url
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 
@@ -127,4 +129,110 @@ def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> 
         server.shutdown()
         server.server_close()
         thread.join()
+        model.close()
+
+
+@pytest.fixture
+def redirecting_server() -> Iterator[tuple[str, list[str]]]:
+    """Serve a CSV at `/data`, and redirects to it and to another host; lists the requests."""
+    requests: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            requests.append(self.path)
+            if self.path == "/data":
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"name,value\nA,1.5\n")
+                return
+            self.send_response(302)
+            host = "evil.invalid" if self.path == "/away" else self.headers["Host"]
+            self.send_header("Location", f"http://{host}/data")
+            self.end_headers()
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}", requests
+    server.shutdown()
+    server.server_close()
+    thread.join()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://elsewhere.org/data.csv",
+        "https://data.example.org.elsewhere.org/data.csv",
+        "http://data.example.org/data.csv",
+        "file:///etc/passwd",
+        "file://data.example.org/etc/passwd",
+        "ftp://data.example.org/data.csv",
+        "https://user@data.example.org/data.csv",
+        "https://elsewhere.org\\@data.example.org/data.csv",
+        "https:///data.csv",
+        "https://[broken/data.csv",
+        "https://data.example.org:6379/data.csv",  # another service of the host
+        "https://data.example.org:80/data.csv",  # another scheme's port
+        "https://data.example.org:notaport/data.csv",
+    ],
+)
+def test_allowed_urls_refuse_a_url_outside_them_before_any_request(url: str) -> None:
+    allowed = AllowedUrls(hosts={"data.example.org"})
+    with pytest.raises(RefusedError, match="address"):
+        allowed.check(url)
+    allowed.check("https://DATA.example.org/data.csv?a=1")  # names without case
+    allowed.check("https://data.example.org:443/data.csv")  # the scheme's own port
+
+
+def test_allowed_urls_never_take_a_local_file_even_when_named() -> None:
+    allowed = AllowedUrls(hosts={""}, schemes={"file"})
+    with pytest.raises(RefusedError):
+        allowed.check("file:///etc/passwd")
+
+
+@pytest.mark.parametrize(
+    "url", ["ftp://data.example.org/a.csv", "https://[broken/a.csv", "https://elsewhere.org/a.csv"]
+)
+def test_opening_a_url_outside_the_allowed_ones_is_a_refusal(url: str) -> None:
+    """Not `ValueError`, which an app's `except RefusedError` would miss."""
+    with (
+        pytest.raises(RefusedError),
+        open_csv_url(url, allowed=AllowedUrls(hosts={"data.example.org"})),
+    ):
+        pass
+
+
+def test_allowed_urls_take_a_port_that_the_app_names() -> None:
+    AllowedUrls(hosts={"data.example.org"}, ports={8443}).check("https://data.example.org:8443/a")
+
+
+def test_a_url_from_a_user_imports_only_within_its_allowed_hosts_and_redirects(
+    redirecting_server: tuple[str, list[str]],
+) -> None:
+    url, requests = redirecting_server
+    port = int(url.rsplit(":", maxsplit=1)[1])
+    local = AllowedUrls(hosts={"127.0.0.1"}, schemes={"http"}, ports={port})
+    following = attrs.evolve(local, follows_redirects=True)
+    model = SqliteModel()
+    rows = model.add_table(DownloadRows)
+    try:
+        with pytest.raises(RefusedError, match="isn't allowed"):
+            list(rows.fill_from_url(f"{url}/data", allowed=AllowedUrls(hosts={"other.org"})))
+        assert requests == []  # refused before its request
+
+        assert list(rows.fill_from_url(f"{url}/data", allowed=local)) == [1]
+        requests.clear()
+
+        # a redirect, refused by default; followed only to an allowed host
+        with pytest.raises(RefusedError, match="redirects"):
+            list(rows.fill_from_url(f"{url}/near", allowed=local))
+        assert requests == ["/near"]
+        assert list(rows.fill_from_url(f"{url}/near", allowed=following)) == [1]
+        requests.clear()
+        with pytest.raises(RefusedError, match="isn't allowed"):
+            list(rows.fill_from_url(f"{url}/away", allowed=following))
+        assert requests == ["/away"]
+        assert rows.fetch_column("SELECT COUNT(*) FROM download") == [2]
+    finally:
         model.close()
