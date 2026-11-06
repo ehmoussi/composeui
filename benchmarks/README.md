@@ -252,8 +252,7 @@ has three cases:
 - **Left during a load.** A session expires 0.1 to 4 s after it opens. Each run is a process of
   its own, because the process can crash.
 - **Concurrency.** A Uvicorn server runs in one process, and one HTTP client per session runs in
-  another. All the sessions load together, then each session moves the hour 15 times without a
-  pause. Then new sessions load while the first session moves the hour.
+  another. All the sessions load together, then each session moves the hour without a pause.
 
 ### Run the sessions benchmark
 
@@ -263,16 +262,18 @@ The benchmark reads `/proc`, so it runs on Linux only.
 uv run python benchmarks/sessions.py --output benchmarks/results/sessions-<commit>.json
 ```
 
-`--examples`, `--sessions`, `--levels`, `--repeat`, `--rounds` and `--left-repeat` select less
-work. The defaults take about two hours, because the SQLite example with 8 sessions is slow.
+The defaults run 1, 2 and 4 sessions once, and each session moves the hour 5 times. They take
+about 6 minutes. `--examples`, `--sessions`, `--levels`, `--repeat`, `--rounds` and `--left-repeat` change
+this. With `--levels 8`, the SQLite example takes about 20 minutes for its load alone. The JSON file
+holds a summary, not each sample.
 
 ### Sessions results
 
 The results come from `3c647a3`, on the same machine and Python as above, in
-[`results/sessions-3c647a3.json`](results/sessions-3c647a3.json). Each concurrency level had 2
-runs. Other work ran on the machine during part of these runs. A second run of 4 SQLite sessions,
-with nothing else running, gives a load of 213 s and a move of 4.2 s, in
-[`results/sessions-4-alone.json`](results/sessions-4-alone.json).
+[`results/sessions-3c647a3.json`](results/sessions-3c647a3.json). They ran with
+`--levels 1 2 4 8 --repeat 2 --rounds 3 --left-repeat 3`, on a longer version of the script that
+also measured Python's memory. Other work ran on the machine during part of these runs. A second run of 4 SQLite
+sessions, with nothing else running, gives a load of 213 s and a move of 4.2 s.
 
 What each session costs, after the first session:
 
@@ -280,7 +281,6 @@ What each session costs, after the first session:
 | --- | ---: | ---: |
 | Load | 10 s | 0.22 s |
 | Process memory (RSS) | 9.8 MiB | 54 MiB |
-| Python memory (`tracemalloc`) | 1.8 MiB | 1.7 MiB |
 | Temporary files | 125 MiB | none |
 | Open file descriptors | 5 | 0 |
 | Time to close | 11 ms | 0.5 ms |
@@ -291,7 +291,7 @@ loads its own copy of the rows.
 A session's end frees its main view and its model:
 
 - **Nothing stays.** All 4 main views are freed, and no temporary file stays. The file
-  descriptors return to 8. The Python memory returns to about 1 MiB above its start.
+  descriptors return to 8.
 - **The process memory falls little.** With 4 SQLite sessions, it falls from 113 to 96 MiB. With
   4 Polars sessions, it falls from 458 to 455 MiB. This benchmark does not show why.
 
@@ -307,9 +307,6 @@ Sessions at once, with medians:
 A move lasts until a poll of `/jobs` shows that no job runs. The benchmark polls every 50 ms
 during a move, and every 300 ms during a load.
 
-While new sessions load, an hour move of the first SQLite session takes a median of 1.1 s with
-2 sessions, 6.4 s with 4, and 36 s with 8. The Polars loads are too short to measure this.
-
 A session left during a SQLite load, in 3 runs at each moment:
 
 | Seconds after it opens | `3c647a3` | With the fix |
@@ -322,9 +319,8 @@ A session left during a SQLite load, in 3 runs at each moment:
 
 - **The crash depends on timing.** In a separate check of `3c647a3` with the same moments, 5 of
   15 runs crashed, at 1 s and at 2 s. The other 10 runs ended with a failed job.
-- **The fix.** The results with the fix are in
-  [`results/sessions-fix-left.json`](results/sessions-fix-left.json), from the change that
-  `d852cea` merged. The main view is freed within 1.5 s, and no temporary file stays.
+- **The fix.** With the change that `d852cea` merged, the main view is freed within 1.5 s, and no
+  temporary file stays.
 
 ### Sessions findings
 
