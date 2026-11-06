@@ -336,11 +336,17 @@ def open_csv_url(
 
 
 class CSVSqliteTable(SqliteTable):
-    """A CSV table whose schema comes from an attrs row class."""
+    """A CSV table whose schema comes from an attrs row class.
+
+    The class builds `create` from the row class: set `indexes` to add to it, not `create`.
+    """
 
     row_type: ClassVar[type[AttrsInstance]]
     name: ClassVar[str]
     insert: ClassVar[str] = ""
+    #: the SQL script that creates the table's indexes, run after the ``CREATE TABLE``
+    indexes: ClassVar[str] = ""
+    _create_table: ClassVar[str] = ""
     _column_names: ClassVar[tuple[str, ...]]
     _csv_fields: ClassVar[tuple[_CSVField, ...]]
 
@@ -349,6 +355,8 @@ class CSVSqliteTable(SqliteTable):
     ) -> None:
         super().__init_subclass__(**kwargs)
         if row_type is None and name is None:
+            if "indexes" in vars(cls):
+                cls.create = cls._create_table + cls.indexes
             return
         if row_type is None or not name:
             msg = "CSVSqliteTable requires an attrs row_type and a table name"
@@ -392,7 +400,8 @@ class CSVSqliteTable(SqliteTable):
             for field in fields
             if field.init
         )
-        cls.create = f"CREATE TABLE {_identifier(name)} ({', '.join(columns)});"
+        cls._create_table = f"CREATE TABLE {_identifier(name)} ({', '.join(columns)});"
+        cls.create = cls._create_table + cls.indexes
         names = ", ".join(_identifier(field.name) for field in fields)
         placeholders = ", ".join("?" for _ in fields)
         cls.insert = f"INSERT INTO {_identifier(name)} ({names}) VALUES ({placeholders})"  # noqa: S608 (quoted identifiers)

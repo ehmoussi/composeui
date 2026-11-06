@@ -11,6 +11,7 @@ import io
 import subprocess
 import sys
 import tempfile
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -468,6 +469,62 @@ def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[s
             assert source.cells([1], list(names)) == {1: [42] * len(names)}
     finally:
         model.close()
+
+
+@define_csv_row
+class Measure:
+    value: float = csv_field("Value")
+
+
+_MEASURE_INDEX = "CREATE INDEX measure_value ON measure(value);"
+
+
+class IndexedMeasures(CSVSqliteTable, row_type=Measure, name="measure"):
+    indexes = _MEASURE_INDEX
+
+
+class Measures(CSVSqliteTable, row_type=Measure, name="measure"):
+    pass
+
+
+class InheritedIndexedMeasures(Measures):
+    indexes = _MEASURE_INDEX
+
+
+class IndexedMeasuresModel(SqliteModel):
+    measures = table(IndexedMeasures)
+
+
+class InheritedIndexedMeasuresModel(SqliteModel):
+    measures = table(InheritedIndexedMeasures)
+
+
+@pytest.mark.parametrize("model_type", [IndexedMeasuresModel, InheritedIndexedMeasuresModel])
+def test_indexes_serve_queries_after_an_import_and_in_a_reopened_study(
+    model_type: type[IndexedMeasuresModel | InheritedIndexedMeasuresModel], tmp_path: Path
+) -> None:
+    def plan(model: IndexedMeasuresModel | InheritedIndexedMeasuresModel) -> str:
+        with model.measures.reading() as db:
+            ((*_, detail),) = db.execute(
+                "EXPLAIN QUERY PLAN SELECT value FROM measure WHERE value = 2"
+            ).fetchall()
+        return str(detail)
+
+    model = model_type()
+    try:
+        deque(model.measures.fill(io.StringIO("Value\n2\n3\n")), maxlen=0)
+        assert "measure_value" in plan(model)
+        model.save_data(tmp_path / "study.db")
+    finally:
+        model.close()
+    reopened = model_type()
+    try:
+        # a study is refused unless it is made as a new one is, its indexes included
+        reopened.open_data(tmp_path / "study.db")
+        assert "measure_value" in plan(reopened)
+        assert reopened.measures.fetch_column("SELECT value FROM measure WHERE value = 2") == [2.0]
+    finally:
+        reopened.close()
 
 
 @define_csv_row

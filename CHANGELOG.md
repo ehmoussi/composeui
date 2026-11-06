@@ -18,6 +18,9 @@ The notable changes of each release of ComposeUI. The format follows
 - `Task.start_latest(*args)` starts a run that replaces the run going on, for an input that
   changes quickly, such as a slider. It waits `debounce` seconds first (0.2 by default, or
   `jobs.task(work, debounce=...)`), and the result of a replaced run never shows.
+- `CSVSqliteTable.indexes` holds the SQL script that creates a CSV table's indexes. Before, a
+  `create` set in the table's class was lost without an error, so a CSV table had no direct
+  way to declare an index.
 
 ### Changed
 

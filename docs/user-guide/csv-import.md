@@ -67,8 +67,18 @@ finally:
   - An `Optional` field accepts SQL `NULL`. The other fields are `NOT NULL`.
   - A default fills a column that the CSV data doesn't have, not an empty cell.
   - A computed field (`init=False`) is stored too.
-  - The table has no primary key and no index. Use SQLite's `rowid` to identify a row, and
-    add the indexes in the table's `create` script.
+  - The table has no primary key. Use SQLite's `rowid` to identify a row.
+- **Indexes.** The table has no index by default. Set `indexes` to the SQL script that creates
+  them. Do not set `create`: the table builds it from the row class.
+
+  ```python
+  class Readings(CSVSqliteTable, row_type=Reading, name="reading"):
+      indexes = "CREATE INDEX reading_station ON reading(station);"
+  ```
+
+  A study saved without an index no longer matches the table. To open it, raise the model's
+  `schema_version` and add a migration that creates the index (see
+  [A SQLite model](sqlite-model.md)).
 - **A source for a large table.** `model.readings.source()` gives a
   [`SqliteSource`](tables.md#rows-in-sqlite) of the rows, for a `SourceTableView`.
   - The types of its columns come from the row class, and their headers are the CSV

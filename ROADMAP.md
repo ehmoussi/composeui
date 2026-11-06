@@ -63,7 +63,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Dashboards | `DashboardView`, `bar_chart`, `Task.show_state`, and `CheckBoxMixin.shows` (the first part of N01) |
 | Large tables | `SourceTableView` on `ListSource`, `SqliteSource` and `DataFrameSource`: rows read as they show, selection by row ID, and CSV export |
 | Dataframes | The `dataframe` extra: pandas, Polars, PyArrow and lazy frames through Narwhals, with `series_of` and `points_of` |
-| CSV import | `CSVSqliteTable`: typed columns, column mapping, dialect detection, batches in a transaction, gzip, and URLs |
+| CSV import | `CSVSqliteTable`: typed columns, column mapping, indexes, dialect detection, batches in a transaction, gzip, and URLs |
 | Charts and maps | Line, step, scatter and bar charts, log axes, reference lines, report images, and `MapView` point overlays |
 | Models and studies | `SqliteModel`: transactions, typed rows, change signals, study files with migrations, `MainView.state_version` / `migrate_state`, and `MainView.loaded` to give again what a study doesn't hold |
 | Background work | Jobs with typed progress and cancellation, and reusable `Task` objects with their result, error, the controls that follow them, and runs that follow the latest input (`start_latest`) |
