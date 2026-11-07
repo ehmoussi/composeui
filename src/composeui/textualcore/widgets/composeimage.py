@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
@@ -23,6 +24,24 @@ class Graphics(NamedTuple):
     cell_size: Callable[[], tuple[int, int]]
 
 
+def _has_terminal() -> bool:
+    """Tell whether stdin and stdout are a terminal, which can answer `textual-image`'s probe.
+
+    The probe writes to stdout, then reads stdin until the answer comes: elsewhere, it waits
+    forever. Windows calls NUL a terminal, but NUL has no size: a test's app, its output sent
+    there (and stdin too, in a pytest-xdist worker), waited forever as it started.
+    """
+    stdin, stdout = sys.__stdin__, sys.__stdout__
+    if stdin is None or stdout is None or not (stdin.isatty() and stdout.isatty()):
+        return False
+    try:
+        # on Windows, stdout's console: stdin's handle has no size, even in a console
+        os.get_terminal_size(stdout.fileno())
+    except OSError:
+        return False
+    return True
+
+
 def terminal_graphics() -> Graphics | None:
     """Find how this terminal draws pixels; None without `textual-image`, or if it can't.
 
@@ -30,10 +49,7 @@ def terminal_graphics() -> Graphics | None:
     Textual takes the terminal over: this runs as the backend's module loads. Its own fallback
     draws in characters, which no figure reads well in: the view's description is better.
     """
-    # the probe writes to stdout and waits for the answer on stdin: with stdin elsewhere, it
-    # waits forever, as with stdout sent to NUL on Windows, which calls NUL a terminal
-    stdin, stdout = sys.__stdin__, sys.__stdout__
-    if stdin is None or stdout is None or not (stdin.isatty() and stdout.isatty()):
+    if not _has_terminal():
         return None
     try:
         renderable = import_module("textual_image.renderable")

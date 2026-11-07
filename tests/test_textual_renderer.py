@@ -4953,10 +4953,25 @@ def _fake_textual_image(drawn_by: str) -> dict[str, Any]:
     return {"textual_image.renderable": renderable, "textual_image.widget": widget}
 
 
-def _run_in_terminal(monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool) -> None:
-    """Make the process's stdin and stdout terminals or not, as `isatty` tells."""
+def _run_in_terminal(
+    monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool, sized: bool = True
+) -> None:
+    """Make the process's stdin and stdout terminals or not, as `isatty` tells.
+
+    Without `sized`, stdout's terminal has no size, as Windows answers for NUL.
+    """
+
+    def get_terminal_size(fd: int) -> os.terminal_size:
+        assert fd == 1
+        if not sized:
+            raise OSError(fd)
+        return os.terminal_size((80, 24))
+
     monkeypatch.setattr(sys, "__stdin__", types.SimpleNamespace(isatty=lambda: stdin))
-    monkeypatch.setattr(sys, "__stdout__", types.SimpleNamespace(isatty=lambda: stdout))
+    monkeypatch.setattr(
+        sys, "__stdout__", types.SimpleNamespace(isatty=lambda: stdout, fileno=lambda: 1)
+    )
+    monkeypatch.setattr(os, "get_terminal_size", get_terminal_size)
 
 
 @pytest.mark.parametrize(
@@ -4986,14 +5001,16 @@ def test_without_textual_image_a_terminal_has_no_graphics(
     assert composeimage.terminal_graphics() is None
 
 
-@pytest.mark.parametrize(("stdin", "stdout"), [(False, True), (True, False)])
+@pytest.mark.parametrize(
+    ("stdin", "stdout", "sized"), [(False, True, True), (True, False, True), (True, True, False)]
+)
 def test_textual_image_asks_nothing_without_a_terminal_to_answer(
-    monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool
+    monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool, sized: bool
 ) -> None:
     """Its import writes a question and waits for the answer: a pipe never answers.
 
-    Windows calls the NUL device a terminal: a Textual app with its output sent there waited
-    forever as it started.
+    Windows calls the NUL device a terminal, without a size: a Textual app with its stdin and
+    stdout sent there, as in a pytest-xdist worker, waited forever as it started.
     """
     imported: list[str] = []
 
@@ -5001,7 +5018,7 @@ def test_textual_image_asks_nothing_without_a_terminal_to_answer(
         imported.append(name)
         return _fake_textual_image("sixel")[name]
 
-    _run_in_terminal(monkeypatch, stdin=stdin, stdout=stdout)
+    _run_in_terminal(monkeypatch, stdin=stdin, stdout=stdout, sized=sized)
     monkeypatch.setattr(composeimage, "import_module", import_module)
 
     assert (composeimage.terminal_graphics(), imported) == (None, [])
