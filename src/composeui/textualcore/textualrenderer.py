@@ -1304,6 +1304,34 @@ class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, Label]):
         rendered_object.update(value)
 
 
+class ImageViewLike(ViewLike, Protocol):
+    image: Path | bytes | None
+    description: str
+    height: int | None
+
+
+class TextualImageRenderer(TextualWidgetRenderer[ImageViewLike, Label]):
+    """An image's description: a terminal's characters can't draw a figure that reads well."""
+
+    def __init__(self, view: ImageViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "image": lambda _view, _widget, _value: None,
+                "description": self._refresh_description,
+                "height": lambda _view, _widget, _value: None,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = Label(markup=False)
+
+    @staticmethod
+    def _refresh_description(_view: ImageViewLike, rendered_object: Label, value: str) -> None:
+        rendered_object.update(value)
+
+
 class MarkdownViewLike(ViewLike, Protocol):
     text: str
 
@@ -3288,6 +3316,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "list": TextualListRenderer,
     "log": TextualLogRenderer,
     "main": TextualMainRenderer,
+    "image": TextualImageRenderer,
     "markdown": TextualMarkdownRenderer,
     "console": TextualConsoleRenderer,
     "menu": TextualMenuRenderer,

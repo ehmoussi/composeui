@@ -43,6 +43,7 @@ from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from examples import (
     batman,
     dataexplorer,
+    figureviewer,
     largetable,
     markdownviewer,
     pipecatalogue,
@@ -170,6 +171,10 @@ def _largetable(main_view: Any, _model: Optional[Model]) -> None:
     # a click on the second row, then a Shift+click on the fourth
     main_view.table.select_at(1)
     main_view.table.extend_to(3)
+
+
+def _figureviewer(main_view: Any, _model: Optional[Model]) -> None:
+    main_view.loaded.emit()  # as `run` does, which the screenshots don't go through
 
 
 def _markdownviewer(main_view: Any, _model: Optional[Model]) -> None:
@@ -314,6 +319,7 @@ def _examples() -> list[Example]:
         Example(
             "dataexplorer", dataexplorer.DataExplorerMainView, _dataexplorer, window=(1200, 1200)
         ),
+        Example("figureviewer", figureviewer.FigureViewerMainView, _figureviewer),
         Example("batman", batman.BatmanMainView),
         Example(
             "largetable",

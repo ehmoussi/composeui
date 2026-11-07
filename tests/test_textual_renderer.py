@@ -63,6 +63,7 @@ from composeui.core.view import (
     ChartKind,
     DialogKind,
     EditRefusedError,
+    ImageView,
     LabelView,
     ListSource,
     LogType,
@@ -4805,3 +4806,31 @@ async def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
         await pilot.pause()
 
         assert combobox.value is Select.NULL
+
+
+@define_view
+class _ImageMainView(MainView):
+    picture: ImageView = Factory(lambda: ImageView(image=b"any image", description="A [b]curve"))
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_shows_an_image_s_description_as_plain_text() -> None:
+    view = _ImageMainView()
+    app = _app_of(view)
+
+    async with app.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        label = _widget(view.picture)
+        assert isinstance(label, Label)
+        assert label.render_line(0).text.rstrip() == "A [b]curve"
+
+        view.picture.description = "Another curve"
+        view.picture.image = None
+        view.picture.height = 64
+        await pilot.pause()
+        assert label.render_line(0).text.rstrip() == "Another curve"
+
+        # rendered again, it keeps its widget
+        assert isinstance(view.picture.renderer, TextualWidgetRenderer)
+        view.picture.renderer.render()
+        assert _widget(view.picture) is label

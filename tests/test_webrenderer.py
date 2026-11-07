@@ -70,6 +70,7 @@ from composeui.core.view import (
     FilePathInputMixin,
     FilePathInputView,
     FolderPathInputMixin,
+    ImageView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowIntInputView,
@@ -133,6 +134,7 @@ from composeui.webcore.webrenderer import (
     WebFilePathInputRenderer,
     WebFloatInputRenderer,
     WebFormLabelRenderer,
+    WebImageRenderer,
     WebInputRenderer,
     WebLabelRenderer,
     WebLogRenderer,
@@ -745,6 +747,14 @@ class _NotesMainView(MainView):
         self.notes.filters = {"text": "=" + _HOSTILE}
 
 
+@define_view
+class _PicturesMainView(MainView):
+    """An image's description is its `alt`, and its only text without an image."""
+
+    picture: ImageView = child(ImageView, image=b"\x89PNG\r\n\x1a\n", description="A curve")
+    no_picture: ImageView = child(ImageView, description="Nothing yet")
+
+
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
@@ -788,6 +798,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     StudyFilesTableMainView,
     RunMainView,
     _NotesMainView,
+    _PicturesMainView,
 ]
 
 
@@ -3568,6 +3579,7 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
             browser.get("/state"),
             browser.get("/static/htmx.min.js"),
             browser.get(icon_address),  # with a policy of its own
+            browser.get("/widget/any/picture"),  # with a policy of its own once found
             browser.get("/reload?instance=any"),  # only a `--reload` server's
             browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
@@ -7877,3 +7889,190 @@ def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
         client.post(f"/widget/{region_id}", data={region_id: "0", "event": "change"})
 
     assert region.value is None
+
+
+@define_view
+class _PictureMainView(MainView):
+    picture: ImageView = child(ImageView, description="A curve")
+
+
+class _PictureApp(WebApplication[_PictureMainView]):
+    """Serves `_PictureMainView`, keeping each session's main view."""
+
+    def __init__(self, image: Path | bytes | None = None, **kwargs: Any) -> None:
+        super().__init__(build_main_view=_PictureMainView, **kwargs)
+        self.image = image
+        self.session_views: list[_PictureMainView] = []
+
+    def setup_session(self, main_view: _PictureMainView) -> None:
+        main_view.picture.image = self.image
+        self.session_views.append(main_view)
+
+
+_PNG = b"\x89PNG\r\n\x1a\n image"
+_SVG = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
+
+
+def _picture_address(html: str) -> str:
+    match = re.search(r'src="(/widget/[^"]+/picture\?version=[^"]+)"', html)
+    assert match is not None, html
+    return match.group(1)
+
+
+@pytest.mark.parametrize(
+    ("content", "media_type"),
+    [
+        (_PNG, "image/png"),
+        (b"\xff\xd8\xff\xe0 image", "image/jpeg"),
+        (b"GIF87a image", "image/gif"),
+        (b"GIF89a image", "image/gif"),
+        (b"RIFF\x00\x00\x00\x00WEBP image", "image/webp"),
+        (b"BM image", "image/bmp"),
+        (b"\x00\x00\x01\x00 image", "image/x-icon"),
+        (_SVG, "image/svg+xml"),
+        (b"\xef\xbb\xbf<?xml version='1.0'?>\n<!-- a comment -->\n" + _SVG, "image/svg+xml"),
+    ],
+)
+def test_an_image_is_served_by_its_content_s_type_for_the_browser_to_keep(
+    content: bytes, media_type: str
+) -> None:
+    with _Browser(_PictureApp(content).create_starlette_app()) as browser:
+        page = browser.get("/")
+        assert 'alt="A curve"' in page.text
+        response = browser.get(_picture_address(page.text))
+
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"] == media_type
+    assert response.headers["cache-control"].startswith("private,")
+    # an SVG opened on its own runs no script
+    assert "default-src 'none'; style-src 'unsafe-inline'" in response.headers.get_list(
+        "content-security-policy"
+    )
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        None,
+        b"secret text, not an image",
+        b"RIFF\x00\x00\x00\x00WAVE sound",
+        b"<html><body>no vector here</body></html>",
+        b"text before <svg>",
+        Path("missing.png"),
+    ],
+)
+def test_what_is_no_image_shows_its_description_and_serves_nothing(
+    image: Path | bytes | None,
+) -> None:
+    app = _PictureApp(image)
+    with _Browser(app.create_starlette_app()) as browser:
+        page = browser.get("/")
+        (main_view,) = app.session_views
+        assert isinstance(main_view.picture.renderer, WebImageRenderer)
+        widget_id = main_view.picture.renderer.widget_id
+        answer = browser.get(f"/widget/{widget_id}/picture?version=any")
+
+    assert f'<span id="{widget_id}">A curve</span>' in page.text
+    assert answer.status_code == 404
+
+
+def test_a_file_that_is_no_image_is_never_served_under_any_version(tmp_path: Path) -> None:
+    """An app may set a path that a user typed: only an image of it may leave the server."""
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"not an image")
+    app = _PictureApp(secret)
+    with _Browser(app.create_starlette_app()) as browser:
+        browser.get("/")
+        (main_view,) = app.session_views
+        assert isinstance(main_view.picture.renderer, WebImageRenderer)
+        widget_id = main_view.picture.renderer.widget_id
+        digest = hashlib.sha256(b"not an image").hexdigest()[:16]
+        answer = browser.get(f"/widget/{widget_id}/picture?version={digest}")
+
+    assert answer.status_code == 404
+
+
+def test_a_new_image_swaps_its_address_and_the_old_one_answers_no_other_image(
+    tmp_path: Path,
+) -> None:
+    """A browser keeps an address for good: another image under it would show stale for ever."""
+    path = tmp_path / "logo.png"
+    path.write_bytes(_PNG)
+
+    @define_view
+    class ChangedPictureMainView(MainView):
+        picture: ImageView = child(ImageView, image=path, description="Logo")
+        change: ButtonView = child(ButtonView, text="Change")
+
+        def __attrs_post_init__(self) -> None:
+            super().__attrs_post_init__()
+            self.change.clicked.connect(self._change)
+
+        def _change(self) -> None:
+            self.picture.image = _PNG + b" other"
+
+    views: list[ChangedPictureMainView] = []
+
+    class ChangedPictureApp(WebApplication[ChangedPictureMainView]):
+        def setup_session(self, main_view: ChangedPictureMainView) -> None:
+            views.append(main_view)
+
+    app = ChangedPictureApp(build_main_view=ChangedPictureMainView)
+    with _Browser(app.create_starlette_app()) as browser:
+        old_address = _picture_address(browser.get("/").text)
+        assert browser.get(old_address).content == _PNG
+
+        button = views[0].change.renderer
+        assert isinstance(button, WebRenderer)
+        swapped = browser.post(f"/widget/{button.widget_id}", data={"event": "click"})
+
+        new_address = _picture_address(swapped.text)
+        assert 'hx-swap-oob="true"' in swapped.text
+        assert new_address != old_address
+        assert browser.get(new_address).content == _PNG + b" other"
+        assert browser.get(old_address).status_code == 404
+
+
+def test_an_image_s_height_sets_its_size_on_the_page() -> None:
+    @define_view
+    class TallPictureMainView(MainView):
+        picture: ImageView = child(ImageView, image=_PNG, height=120)
+
+    app: WebApplication[TallPictureMainView] = WebApplication(build_main_view=TallPictureMainView)
+    with _Browser(app.create_starlette_app()) as browser:
+        assert 'style="height: 120px"' in browser.get("/").text
+
+
+def test_an_image_is_only_served_to_its_own_session() -> None:
+    """A widget's id is guessable: an image can be private to the session that made it."""
+    app = _PictureApp(_PNG)
+    starlette_app = app.create_starlette_app()
+    with _Browser(starlette_app) as owner, _Browser(starlette_app) as other:
+        address = _picture_address(owner.get("/").text)
+        assert owner.get(address).status_code == 200
+        without_session = other.get(address)
+        other.get("/")
+        with_another_session = other.get(address)
+
+    assert without_session.status_code == 404
+    assert with_another_session.status_code == 404
+    assert "no-store" in with_another_session.headers["cache-control"]
+
+
+def test_a_widget_that_is_no_image_serves_nothing_at_an_image_s_address() -> None:
+    @define_view
+    class LabelMainView(MainView):
+        note: LabelView = child(LabelView, text="Note")
+
+    views: list[LabelMainView] = []
+
+    class LabelApp(WebApplication[LabelMainView]):
+        def setup_session(self, main_view: LabelMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(LabelApp(build_main_view=LabelMainView).create_starlette_app()) as browser:
+        browser.get("/")
+        note = views[0].note.renderer
+        assert isinstance(note, WebRenderer)
+        assert browser.get(f"/widget/{note.widget_id}/picture").status_code == 404

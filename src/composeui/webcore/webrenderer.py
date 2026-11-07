@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import enum
+import hashlib
 import json
 import math
 import re
@@ -106,6 +107,7 @@ from composeui.core.view import (
     View,
     as_pattern,
     date_hint,
+    image_content,
     is_within_roots,
     line_styles_after,
     lines_after,
@@ -4041,6 +4043,93 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
         return Markup("<span {}>{}</span>").format(self._root_attributes(oob=oob), self._view.text)
 
 
+class ImageViewLike(ViewLike, Protocol):
+    image: Path | bytes | None
+    description: str
+    height: int | None
+
+
+#: how the image types a browser shows start, with their media types; the rest of a view's
+#: content, such as a text file that a user named, is never served
+_IMAGE_STARTS = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"\x00\x00\x01\x00", "image/x-icon"),
+)
+#: the bytes of a file read to find its `<svg>` tag, after an XML header, a comment or a doctype
+_SVG_HEADER_SIZE = 4096
+
+
+def _image_media_type(content: bytes) -> str | None:
+    """Get the media type of an image from how it starts; None if it isn't one."""
+    for start, media_type in _IMAGE_STARTS:
+        if content.startswith(start):
+            return media_type
+    if content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return "image/webp"
+    header = content[:_SVG_HEADER_SIZE]
+    if header.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"<") and b"<svg" in header:
+        return "image/svg+xml"
+    return None
+
+
+def _image_version(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()[:16]
+
+
+class WebImageRenderer(WebRenderer[ImageViewLike]):
+    """An `<img>` that the session's own route serves, or its description without an image.
+
+    Not the process's registry of icons: an image can be private to its session. Not a
+    `data:` address either: each swap of the fragment would send it again.
+    """
+
+    _role = "image"
+
+    def __init__(self, view: ImageViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "image": self._mark_dirty,
+                "description": self._mark_dirty,
+                "height": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        content = image_content(self._view.image)
+        if content is None or _image_media_type(content) is None:
+            return Markup("<span {}>{}</span>").format(
+                self._root_attributes(oob=oob), self._view.description
+            )
+        height = self._view.height
+        return Markup(
+            '<img {} class="max-w-full self-start object-contain object-left" alt="{}"'
+            ' src="/widget/{}/picture?version={}"{}>'
+        ).format(
+            self._root_attributes(oob=oob),
+            self._view.description,
+            self.widget_id,
+            _image_version(content),
+            Markup("") if height is None else Markup(' style="height: {}px"').format(int(height)),
+        )
+
+    def picture(self, version: str) -> tuple[bytes, str] | None:
+        """Get the image's content and media type; None unless it is still at `version`.
+
+        Its address names its content, so a browser can keep it: an older version, or a
+        file that changed, must not answer another image under that address.
+        """
+        content = image_content(self._view.image)
+        if content is None or _image_version(content) != version:
+            return None
+        media_type = _image_media_type(content)
+        return None if media_type is None else (content, media_type)
+
+
 class MarkdownViewLike(ViewLike, Protocol):
     text: str
 
@@ -6378,6 +6467,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "list": WebListRenderer,
     "log": WebLogRenderer,
     "main": WebMainRenderer,
+    "image": WebImageRenderer,
     "markdown": WebMarkdownRenderer,
     "console": WebConsoleRenderer,
     "menu": WebMenuRenderer,

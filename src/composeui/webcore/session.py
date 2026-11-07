@@ -36,6 +36,7 @@ from composeui.webcore.webrenderer import (
     WebConsoleRenderer,
     WebFilePathInputRenderer,
     WebFileUploadRenderer,
+    WebImageRenderer,
     WebMainRenderer,
     WebSourceTableRenderer,
     WebTableRenderer,
@@ -441,6 +442,15 @@ class WebSession(RenderTarget):
             if not isinstance(renderer, WebChartRenderer):
                 return None
             return renderer.image(image_format, query)
+
+    def picture(self, widget_id: str, version: str) -> tuple[bytes, str] | None:
+        """Get the content and media type of one of this session's images; None if not one."""
+        with self.lock:
+            renderer = self.renderers.get(widget_id)
+        if not isinstance(renderer, WebImageRenderer):
+            return None
+        # outside the lock: a file can take a while to read, and the session's requests go on
+        return renderer.picture(version)
 
     def console_text(self, widget_id: str) -> tuple[str, str] | None:
         """Get the file name and the text of one of this session's consoles; None if not one."""

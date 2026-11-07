@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime
 import gc
+import io
 import json
 import math
 import sys
@@ -23,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyqtgraph as pg
 import pytest
+from PIL import Image
 from qtpy.QtCore import QDate, QEvent, QModelIndex, QObject, QPoint, QPointF, QSize, Qt, QUrl
 from qtpy.QtGui import (
     QAction,
@@ -90,6 +92,7 @@ from composeui.core.view import (
     EditRefusedError,
     FloatInputView,
     HeaderGroup,
+    ImageView,
     InputView,
     IntInputView,
     LabelView,
@@ -123,6 +126,7 @@ from composeui.qtcore.widgets.qfileupload import QFileUpload
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
+from composeui.qtcore.widgets.qimagelabel import QImageLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qsidebar import QSidebar
@@ -4756,3 +4760,88 @@ def test_a_none_choice_is_shown_selected_and_picked_back(qtbot: QtBot) -> None:
     combobox.setCurrentIndex(0)  # what the user's pick does
 
     assert (region.value, picked) == (None, [None])
+
+
+def _png(size: tuple[int, int], color: str = "red") -> bytes:
+    content = io.BytesIO()
+    Image.new("RGB", size, color).save(content, format="PNG")
+    return content.getvalue()
+
+
+def _image_label(qtbot: QtBot, view: ImageView) -> QImageLabel:
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    label = view.renderer.qt_object
+    assert isinstance(label, QImageLabel)
+    qtbot.addWidget(label)
+    return label
+
+
+def test_an_image_shrinks_in_its_proportions_and_never_grows(qtbot: QtBot) -> None:
+    label = _image_label(qtbot, ImageView(image=_png((40, 20))))
+
+    assert label.sizeHint() == QSize(40, 20)
+    assert label.minimumSizeHint().width() < 40  # a narrow column can shrink it
+    assert label.heightForWidth(20) == 10
+    assert label.heightForWidth(80) == 20
+
+    label.resize(20, 100)
+    drawn = label.grab().toImage()
+    assert drawn.pixelColor(19, 9).name() == "#ff0000"
+    assert drawn.pixelColor(19, 12).name() != "#ff0000"
+    label.resize(100, 100)
+    drawn = label.grab().toImage()
+    assert drawn.pixelColor(39, 19).name() == "#ff0000"
+    assert drawn.pixelColor(41, 19).name() != "#ff0000"
+
+
+def test_an_image_grows_to_the_height_it_is_given_and_back(qtbot: QtBot) -> None:
+    view = ImageView(image=_png((40, 20)), height=60)
+    label = _image_label(qtbot, view)
+
+    assert label.sizeHint() == QSize(120, 60)
+    assert (label.minimumHeight(), label.maximumHeight()) == (60, 60)
+    label.resize(200, 60)
+    assert label.grab().toImage().pixelColor(119, 59).name() == "#ff0000"
+
+    view.height = None
+
+    assert label.sizeHint() == QSize(40, 20)
+    assert label.minimumHeight() == 0
+
+
+@pytest.mark.parametrize(
+    "image", [None, b"not an image", Path("missing.png")], ids=["none", "unreadable", "no file"]
+)
+def test_an_image_it_cannot_draw_shows_its_description(
+    qtbot: QtBot, image: Path | bytes | None
+) -> None:
+    label = _image_label(qtbot, ImageView(image=image, description="A <b>curve"))
+
+    assert label.text() == "A <b>curve"
+    assert label.accessibleName() == "A <b>curve"
+    assert label.textFormat() == Qt.TextFormat.PlainText
+    assert label.sizeHint().width() > 1  # the text's size, not an image's
+    assert label.minimumSizeHint().width() > 1
+    assert label.heightForWidth(200) > 0
+    label.resize(200, 40)
+    assert not label.grab().toImage().isNull()
+
+
+def test_a_file_shows_as_an_image_and_a_new_image_replaces_it(qtbot: QtBot, tmp_path: Path) -> None:
+    path = tmp_path / "logo.png"
+    path.write_bytes(_png((10, 10)))
+    view = ImageView(image=path, description="Logo")
+    label = _image_label(qtbot, view)
+    assert label.sizeHint() == QSize(10, 10)
+
+    view.image = _png((30, 10), "blue")
+
+    assert label.sizeHint() == QSize(30, 10)
+    label.resize(30, 10)
+    assert label.grab().toImage().pixelColor(29, 9).name() == "#0000ff"
+
+    # rendered again, it keeps its widget
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    view.renderer.render()
+    assert view.renderer.qt_object is label

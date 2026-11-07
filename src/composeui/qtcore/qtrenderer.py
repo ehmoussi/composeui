@@ -109,6 +109,7 @@ from composeui.core.view import (
     View,
     date_hint,
     dialogs_in,
+    image_content,
     line_styles_after,
     lines_after,
     replace_cell,
@@ -125,6 +126,7 @@ from composeui.qtcore.widgets.qfileupload import QFileUpload
 from composeui.qtcore.widgets.qfiltertable import QFilterTable
 from composeui.qtcore.widgets.qformdialog import QFormDialog
 from composeui.qtcore.widgets.qformlabel import QFormLabel
+from composeui.qtcore.widgets.qimagelabel import QImageLabel
 from composeui.qtcore.widgets.qmarkicon import mark_icon
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
@@ -1063,6 +1065,50 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     @staticmethod
     def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
+
+
+class ImageViewLike(ViewLike, Protocol):
+    image: Path | bytes | None
+    description: str
+    height: int | None
+
+
+class QtImageRenderer(QtWidgetRenderer[ImageViewLike, QImageLabel]):
+    def __init__(self, view: ImageViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "image": self._refresh_image,
+                "description": self._refresh_description,
+                "height": self._refresh_height,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QImageLabel()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_image(
+        _view: ImageViewLike, rendered_object: QImageLabel, value: Path | bytes | None
+    ) -> None:
+        rendered_object.set_image(image_content(value))
+
+    @staticmethod
+    def _refresh_description(
+        _view: ImageViewLike, rendered_object: QImageLabel, value: str
+    ) -> None:
+        rendered_object.setText(value)
+        rendered_object.setAccessibleName(value)
+
+    @staticmethod
+    def _refresh_height(
+        _view: ImageViewLike, rendered_object: QImageLabel, value: int | None
+    ) -> None:
+        rendered_object.set_image_height(value)
+        rendered_object.setMinimumHeight(0 if value is None else value)
+        rendered_object.setMaximumHeight(_QWIDGETSIZE_MAX if value is None else value)
 
 
 class MarkdownViewLike(ViewLike, Protocol):
@@ -3484,6 +3530,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "list": QtListRenderer,
     "log": QtLogRenderer,
     "main": QtMainRenderer,
+    "image": QtImageRenderer,
     "markdown": QtMarkdownRenderer,
     "console": QtConsoleRenderer,
     "menu": QtMenuRenderer,

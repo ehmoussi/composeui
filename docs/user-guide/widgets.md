@@ -515,6 +515,53 @@ markup: Qt and the web show it as text, and Textual leaves out its tags.
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) shows a Markdown file
 (`uv run python -m examples.markdownviewer --markdown README.md --backend qt`).
 
+## Image
+
+An `ImageView` shows an image, for example a logo or a figure that an analysis made. Its `image`
+is a file's `Path` or a file's content as `bytes`. `show_figure` shows a Matplotlib figure, as a
+PNG image at the figure's own size:
+
+```python
+from pathlib import Path
+
+from matplotlib.figure import Figure
+
+from composeui.core.view import ImageView, MainView, child, define_view
+
+
+@define_view
+class ReportMainView(MainView):
+    logo: ImageView = child(ImageView, image=Path("logo.png"), description="The lab's logo")
+    curve: ImageView = child(ImageView, description="Pressure over time")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        figure = Figure(figsize=(6, 3))
+        figure.add_subplot().plot([0, 1, 2], [3, 1, 2])
+        self.curve.show_figure(figure)
+```
+
+Set `image` again to show another image. `show_figure` draws the figure once: call it again after
+the figure changes. A file is read each time the image shows, so set `image` again after the file
+changes.
+
+- **Size.** An image shows at its own size, and shrinks to the width that it has. It keeps its
+  proportions. `height` sets its height in pixels, and can make it grow.
+- **Description.** `description` says what the image shows, for a screen reader. Without an image,
+  or with one that the backend cannot draw, the view shows this text.
+- **Saved state.** A study saves the `description`, not `image` or `height`. A file that a user
+  gives must not name a file to show. To show an image again after a study opens, set it in
+  `MainView.loaded`.
+
+Qt shows the image in a `QLabel`, and reads the types that its plugins have, such as PNG, JPEG and
+SVG. Textual shows the `description`, not the image. For a chart in a terminal, use a
+[`ChartView`](charts.md). The web shows an `<img>` of PNG, JPEG, GIF,
+WebP, BMP, ICO or SVG, and only the session that shows the image can get it. It does not serve any
+other type of file, whatever its name.
+
+[`src/examples/figureviewer.py`](../../src/examples/figureviewer.py) shows a logo from a file, and
+a Matplotlib figure that a slider redraws in a [task](threads.md).
+
 ## Console
 
 A `ConsoleView` shows plain text that the app adds to as it comes, for example the output of a

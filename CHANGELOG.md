@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `ImageView` shows an image on Qt and the web: a file, bytes, or a Matplotlib figure
+  (`show_figure`). Textual shows its description. The new `figureviewer` example redraws a figure
+  as a slider moves.
 - `AllowedUrls` limits the URLs that `fill_from_url` and `open_csv_url` take from a user: the hosts,
   the schemes, and the redirects. They refuse any other URL before its request.
 - `fill_from_frame`, from `composeui.core.dataframesource`, imports the rows of a dataframe into a

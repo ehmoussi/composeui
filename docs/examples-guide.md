@@ -22,6 +22,7 @@ run them from a clone of the repository.
 - [Uber pickups](#uber-pickups)
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe)
 - [Data explorer](#data-explorer)
+- [Figure viewer](#figure-viewer)
 - [Batman](#batman)
 - [Web hello](#web-hello)
 - [Textual demo](#textual-demo)
@@ -55,6 +56,7 @@ options, such as `--language` and `-f FILE`.
 | [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`dataexplorer.py`](../src/examples/dataexplorer.py) | web | A user's CSV or Parquet file: an upload, a summary, a large table of any columns, and the rows shown exported |
+| [`figureviewer.py`](../src/examples/figureviewer.py) | web | An image from a file, and a Matplotlib figure that a slider redraws in a task |
 | [`batman.py`](../src/examples/batman.py) | qt | Series colors, fills, and clicks on a chart |
 | [`webhello.py`](../src/examples/webhello.py) | web only | A form on the web backend, built with `WebApplication` |
 | [`textual_demo.py`](../src/examples/textual_demo.py) | textual | A small form in a terminal |
@@ -82,6 +84,7 @@ The other examples each show one topic:
 - [Data explorer](#data-explorer): a user's own file, uploaded, filtered and exported.
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe): the same app on a
   dataframe, in a large table.
+- [Figure viewer](#figure-viewer): an analysis's own Matplotlib figure, redrawn by a slider.
 - [Batman](#batman): the look of a chart, and clicks on it.
 - [Web hello](#web-hello): an app that only the web shows.
 - [Textual demo](#textual-demo): an app in a terminal.
@@ -545,6 +548,41 @@ It shows:
 - [metrics](user-guide/widgets.md#metric) that summarize the file.
 - a [large table](user-guide/tables.md#a-large-table) on a `DataFrameSource`, which shows the
   file's own columns. The user filters its rows, and exports those shown as CSV.
+
+## Figure viewer
+
+[`figureviewer.py`](../src/examples/figureviewer.py) redraws a Matplotlib figure as a slider moves.
+
+```bash
+uv run python -m examples.figureviewer   # web; or --backend qt, or textual
+```
+
+It needs the `report` extra, for Matplotlib. An image suits a figure that the analysis already
+makes. For a chart with hover and zoom, and in a terminal, use a
+[`ChartView`](user-guide/charts.md).
+
+On Qt:
+
+![The figure viewer on Qt](images/figureviewer-qt.png)
+
+On Textual:
+
+![The figure viewer on Textual](images/figureviewer-textual.png)
+
+On the web:
+
+![The figure viewer on the web](images/figureviewer-web.png)
+
+It shows:
+
+- an [image](user-guide/widgets.md#image) from a file: a logo, with a `height`.
+- an [image](user-guide/widgets.md#image) of a Matplotlib figure, with `show_figure`. Textual
+  shows each image's description.
+- a [slider](user-guide/widgets.md#slider) that starts a
+  [task](user-guide/threads.md#reusable-loading-tasks) with `start_latest`, so only the latest
+  value shows.
+- `MainView.loaded`, which draws the figure again after a study opens, as a study doesn't save
+  an image.
 
 ## Batman
 

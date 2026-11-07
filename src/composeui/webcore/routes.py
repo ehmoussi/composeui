@@ -40,6 +40,8 @@ _ICON_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
     "X-Content-Type-Options": "nosniff",
 }
+#: as an icon's, but only this browser may keep it: an image can be private to its session
+_PICTURE_HEADERS = {**_ICON_HEADERS, "Cache-Control": "private, max-age=31536000, immutable"}
 #: key of the session id in Starlette's signed session cookie
 SESSION_KEY = "composeui_session"
 
@@ -227,6 +229,20 @@ async def chart_image(request: Request) -> Response:
     filename, body = result
     headers = {**_NO_STORE, "Content-Disposition": _attachment(filename)}
     return Response(body, media_type=chartimage.MEDIA_TYPES[image_format], headers=headers)
+
+
+async def picture(request: Request) -> Response:
+    """Serve the image of one of the session's `ImageView`s, at the version its page names."""
+    session = _session(request)
+    if session is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    result = await run_in_threadpool(
+        session.picture, request.path_params["widget_id"], request.query_params.get("version", "")
+    )
+    if result is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    content, media_type = result
+    return Response(content, media_type=media_type, headers=_PICTURE_HEADERS)
 
 
 def _attachment(filename: str) -> str:

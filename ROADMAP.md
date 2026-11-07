@@ -61,7 +61,7 @@ backends, and the [user guide](docs/user-guide.md) shows how to use them.
 | Forms and layout | Inputs, validation, buttons, progress, metrics, expanders, trees, Markdown, consoles, pages, tabs, splitters, sidebars, view lists, menus, toolbars, and typed form and content dialogs, with buttons and checks of their own |
 | Files and paths | `FileUploadView` for an uploaded file with a stated lifecycle, file, folder and save path fields and table cells, files picked on the server (`server_roots`), paths relative to the study (`base_folder`), a path cell by the row's kind (`path_by`), and `MainView.write_file`, which asks before it replaces a file |
 | Tables | Editable tables, typed record tables, sorting, filtering, cell widgets and styles, header groups, and row headers |
-| Dashboards | `DashboardView`, `bar_chart`, `Task.show_state`, and `CheckBoxMixin.shows` (the first part of N01) |
+| Dashboards | `DashboardView`, `bar_chart`, `Task.show_state`, `CheckBoxMixin.shows` (the first part of N01), and `ImageView` for a file, bytes or a Matplotlib figure |
 | Large tables | `SourceTableView` on `ListSource`, `SqliteSource` and `DataFrameSource`: rows read as they show, selection by row ID, and CSV export |
 | Dataframes | The `dataframe` extra: pandas, Polars, PyArrow and lazy frames through Narwhals, with `series_of` and `points_of` |
 | CSV import | `CSVSqliteTable`: typed columns, column mapping, indexes, dialect detection, batches in a transaction, gzip, and URLs; `fill_from_frame` imports a dataframe, such as a Parquet file that the app read |
@@ -77,7 +77,7 @@ The [Uber pickups example](src/examples/uberpickups.py) and its
 They load a CSV in a task, and a filter updates a table, a bar chart and a map.
 
 What is missing is mostly the path from analysis to app: short authoring helpers, common
-dashboard widgets (an image, a download button, a toggle, a range slider), adapters for plotting
+dashboard widgets (a download button, a toggle, a range slider), adapters for plotting
 libraries, caches, editable sources, links that keep the app's state, one-command deployment, user
 identity, and sessions that survive a restart.
 
@@ -190,7 +190,8 @@ record's identity, and memory budgets cover both the visible cells and the order
 
 Show Plotly figures in M1, Matplotlib figures in M2, and Altair (Vega-Lite) in M3, so an app
 reuses the analysis's own code. `ChartView`, `Series.bars` and `series_of` already work, and
-Matplotlib draws report images, but no adapter takes an existing figure yet. Send the supported
+Matplotlib draws report images, and `ImageView.show_figure` shows a figure as an image, but no
+adapter takes an existing figure with its interactions yet. Send the supported
 clicks and selections as typed signals. Define updates, export, and themes.
 
 Publish what each adapter supports on each backend. The web can be richer than the terminal.
@@ -342,7 +343,6 @@ extension without private APIs or maintainer-only instructions.
 The widget backlog (W items) comes from a scientific desktop app. Dashboards need other common
 widgets first:
 
-- **An image**, from a file, bytes, or a Matplotlib figure.
 - **A download button** for any file or bytes that the app makes. Today only chart images and
   table CSV exports download.
 - **A toggle**, a **range slider**, and a **date range** input.
@@ -742,6 +742,12 @@ The user guide's "Web backend" section covers what users see.
   image files a view has named are served, and `icon` is never loaded from a study, so
   no request can name a file. An SVG is drawn as a CSS mask in the text's color, so it
   follows the theme like the built-in New/Open/Save icons; another image shows as is.
+- **Images.** An `ImageView` has its own route, `/widget/{id}/picture`, that answers its session
+  only: an image can be private, so it stays out of the process's registry of icons. A `data:`
+  address would send it again with each swap. The address names the content by its digest, so a
+  browser can keep it, and an older digest answers 404, never another image. The route serves only
+  what starts as an image, as an app may set a path that a user typed. `image` is never loaded from
+  a study, as `icon` isn't.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown); action `data`
   isn't displayed; Ctrl shortcuts become Alt+Shift; an unknown page address is a 404, not
   a redirect (browsers ask for addresses of their own, like `/favicon.ico`).

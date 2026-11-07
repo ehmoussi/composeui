@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import enum
+import io
 import json
 import logging
 import math
@@ -29,6 +30,7 @@ from composeui.core.view import (
     CheckBoxView,
     ComboBoxView,
     FloatInputMixin,
+    ImageView,
     InputView,
     InvalidStateError,
     LabelView,
@@ -1155,3 +1157,41 @@ def test_a_study_keeps_no_uploaded_file(tmp_path: Path) -> None:
     reopened = DataFileMainView()
     reopened.load_state(study)
     assert reopened.form.dataset.file is None
+
+
+def test_a_study_neither_saves_nor_sets_an_image(tmp_path: Path) -> None:
+    """A study comes from a user: an image's path in it would show a file of the server."""
+
+    @define_view
+    class ImageMainView(MainView):
+        picture: ImageView = child(ImageView, image=Path("logo.png"), description="Logo")
+
+    view = ImageMainView()
+    filepath = tmp_path / "state.json"
+    view.save_state(filepath)
+    assert '"image"' not in filepath.read_text(encoding="utf-8")
+
+    data = view.state_data()
+    data["picture"]["image"] = "/etc/passwd"  # a study saved before, or forged
+    view.load_state_data(data)
+
+    assert view.picture.image == Path("logo.png")
+
+
+def test_a_matplotlib_figure_shows_as_a_png_of_its_own_size() -> None:
+    figure_module = pytest.importorskip("matplotlib.figure")
+    pillow = pytest.importorskip("PIL.Image")  # it comes with matplotlib
+    figure = figure_module.Figure(figsize=(4, 2), dpi=50)
+    view = ImageView()
+
+    view.show_figure(figure)
+
+    assert isinstance(view.image, bytes)
+    with pillow.open(io.BytesIO(view.image)) as image:
+        assert (image.format, image.size) == ("PNG", (200, 100))
+
+
+@pytest.mark.parametrize("height", [0, -1])
+def test_an_image_s_height_must_be_positive(height: int) -> None:
+    with pytest.raises(ValueError, match=r"ImageView\.height"):
+        ImageView(height=height)

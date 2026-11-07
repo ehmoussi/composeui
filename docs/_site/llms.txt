@@ -15,7 +15,7 @@
 - [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): views, signals, the model, studies, and the backends, and how ComposeUI maps to MVVM
 - [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and validation, the main view, saving and loading state
 - [Reactive methods](https://ehmoussi.github.io/composeui/user-guide/reactive-methods.html): view methods that run again when a view field they read changes, with slow work in a task
-- [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, metrics, expanders, trees, Markdown, and the File menu
+- [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, sliders, progress bars, metrics, expanders, trees, Markdown, images, and the File menu
 - [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): pages, tabs, resizable panes, a list of views, menus, toolbars, a sidebar, and dialogs
 - [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): a table of records with sorting, filtering, and widgets in cells; a large table read from a list, SQLite, or a dataframe
 - [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): line, scatter, step, and bar charts, log axes, reference lines, clicks, and report images

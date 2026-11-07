@@ -1196,6 +1196,37 @@ def test_a_file_upload_s_button_opens_the_picker_and_shows_the_file_s_name(
         context.close()
 
 
+def test_a_move_of_a_slider_brings_a_new_figure_at_the_figure_s_own_size(browser: Browser) -> None:
+    """The example's journey: the page's poller brings the task's image to the page."""
+    viewer = pytest.importorskip("examples.figureviewer")  # it needs matplotlib
+    app = WebApplication(build_main_view=viewer.FigureViewerMainView).create_starlette_app()
+    with _serve(app) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        wave = page.get_by_role("img", name="A damped wave")
+        logo = page.get_by_role("img", name="ComposeUI's logo")
+        # drawn, so the policy and the session's cookie let them through
+        expect(wave).not_to_have_js_property("naturalWidth", 0)
+        expect(logo).not_to_have_js_property("naturalWidth", 0)
+        # a column of the page stretches its views: the logo keeps to its height, at its
+        # proportions, and the figure, wider than the column, shrinks in its own
+        assert logo.evaluate("image => [image.clientWidth, image.clientHeight]") == [48, 48]
+        shrunk = wave.evaluate(
+            "image => image.clientHeight / image.clientWidth"
+            " - image.naturalHeight / image.naturalWidth"
+        )
+        assert abs(shrunk) < 0.01
+        first = wave.get_attribute("src")
+        assert first is not None
+
+        page.get_by_role("slider").press("ArrowRight")
+
+        expect(wave).not_to_have_attribute("src", first)
+        expect(wave).not_to_have_js_property("naturalWidth", 0)
+        context.close()
+
+
 def test_a_user_uploads_a_file_filters_its_rows_and_downloads_those_shown(
     browser: Browser, tmp_path: Path
 ) -> None:
@@ -1220,7 +1251,6 @@ def test_a_user_uploads_a_file_filters_its_rows_and_downloads_those_shown(
         expect(page.get_by_role("cell", name="B02512")).to_be_visible()
         expect(page.get_by_role("cell", name="B02764")).to_have_count(2)
         expect(page.get_by_text("Filter the rows, then export those shown as CSV.")).to_be_visible()
-
         search = page.get_by_role("searchbox", name="Search")
         search.press_sequentially("B02764")
         expect(page.get_by_role("cell", name="B02512")).to_have_count(0)

@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from typing import SupportsIndex
 
     from attrs import AttrsInstance
+    from matplotlib.figure import Figure
 
     from composeui.core.jobs import Job
 
@@ -139,6 +140,7 @@ __all__ = [
     "GroupFormView",
     "HeaderGroup",
     "HorizontalView",
+    "ImageView",
     "InputMixin",
     "InputView",
     "IntInputMixin",
@@ -2289,6 +2291,53 @@ class MarkdownView(MarkdownMixin, View):
     _renderer_key = "markdown"
 
 
+def _check_height(view: View, _attribute: attrs.Attribute[Any], height: Optional[int]) -> None:
+    if height is not None and height <= 0:
+        msg = f"Cannot set {type(view).__name__}.height to {height}: it must be positive."
+        raise ValueError(msg)
+
+
+def image_content(image: Union[Path, bytes, None]) -> Optional[bytes]:
+    """Get the bytes of an `ImageView.image`; None without one, or for a file it can't read."""
+    if isinstance(image, Path):
+        try:
+            return image.read_bytes()
+        except OSError:
+            return None
+    return image
+
+
+@define_view
+class ImageView(View):
+    """An image from a file, from bytes, or from a Matplotlib figure.
+
+    Without an image, or with one that the backend cannot draw, it shows its `description`.
+    A terminal shows only its `description`.
+    An image never grows past its own size unless `height` asks for it, and it shrinks to
+    the width it has. It keeps its proportions.
+
+    A study saves neither `image` nor `height`: they are the app's, and a study's file must
+    not name a file to show. Give the image again in `MainView.loaded`.
+    """
+
+    _renderer_key = "image"
+
+    #: a file's path, read each time the image shows, or a file's content
+    image: Union[Path, bytes, None] = attrs.field(default=None, metadata={OMIT: True})
+    #: what the image shows, for a screen reader and where it cannot show
+    description: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: its height on screen, in pixels (a terminal's rows of about 16); None: its own
+    height: Optional[int] = attrs.field(
+        default=None, validator=[_check_height], metadata={OMIT: True}
+    )
+
+    def show_figure(self, figure: Figure) -> None:
+        """Show a Matplotlib `figure` as it is now, as a PNG image at the figure's own size."""
+        content = io.BytesIO()
+        figure.savefig(content, format="png")
+        self.image = content.getvalue()
+
+
 #: what ends a line, or starts it again ("\r"), in a console's text
 _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
 #: a console's texts, by what they're for: its controls saving the text to a file, copying
@@ -2999,11 +3048,6 @@ class ChartView(View):
     """
 
     _renderer_key = "chart"
-
-    def _check_height(self, _attribute: attrs.Attribute[Any], height: Optional[int]) -> None:
-        if height is not None and height <= 0:
-            msg = f"Cannot set {type(self).__name__}.height to {height}: it must be positive."
-            raise ValueError(msg)
 
     #: how its series are drawn, unless one says otherwise (`Series.kind`)
     kind: ChartKind = attrs.field(default=ChartKind.LINE)
