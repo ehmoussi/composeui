@@ -1,4 +1,4 @@
-"""Measure the two Uber pickups examples: the M0 baseline of ROADMAP.md.
+"""Measure the two Uber pickups examples against the budgets of ROADMAP.md.
 
 Each case runs in a process of its own, so that its memory is its own. A case builds the
 app on a backend ("core": no renderer; "web": Starlette's test client), loads the

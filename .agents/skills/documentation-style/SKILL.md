@@ -26,9 +26,9 @@ Write them with the rules of "Write clear technical English" and
 - **Keep the markup of the site.** "Keep the documentation site building" says what a
   docstring must keep for Sphinx.
 - **Write for the API's users, not its maintainers.** The API reference shows every
-  public docstring. Leave out roadmap identifiers (N01), a prototype status, and "it can
-  change in any release": the whole API can before 1.0, as the README says. Put them in
-  `ROADMAP.md` or in a code comment.
+  public docstring. Leave out roadmap items, a prototype status, and "it can change in any
+  release": the whole API can before 1.0, as the README says. Put them in `ROADMAP.md` or in
+  a code comment.
 - **Keep it true as the code changes.** When code moves out of a module, or a function
   becomes a method, read the module's and the class's docstrings again. A summary that
   names "the helpers" must still match what the module holds.
@@ -53,7 +53,7 @@ Each document has one audience:
 | `docs/_site/llms.txt` | Language models | The site's `llms.txt`: a summary and one link with a one-line description per page of the site, which `html_extra_path` (`docs/_site/`) copies to the site root |
 | `docs/_site/skills/composeui/SKILL.md` | Coding agents that write a ComposeUI app | The skill that users install: the rules for an app's code, a minimal app, and links to the site |
 | `CHANGELOG.md` | Users who upgrade | The changes that users see, one section per release, with "Unreleased" at the top |
-| `ROADMAP.md` | Maintainers | The goal, where ComposeUI stands, the milestones, the work left to do, and the design notes for the web backend |
+| `ROADMAP.md` | Maintainers | The goal, the principles, and the work left to do, one item per line or two, by topic and horizon |
 | `AGENTS.md` | Coding agents | Setup, commands, architecture rules, code style, tests, commits, pull requests |
 | `.agents/skills/*/SKILL.md` | Coding agents | A focused workflow, such as `test-audit` |
 
@@ -79,9 +79,9 @@ Each document has one audience:
   follows the guide in order needs it, not always at the end.
 - Order sections for the intended audience. Add, remove, split, merge, or reorder
   sections when this improves the document or meets the user's request.
-- Put internal decisions that users do not see in `ROADMAP.md` under
-  "Design notes for the web backend", or in a code comment. Do not put them in the
-  user documentation.
+- Put internal decisions that users do not see in the technical guide, such as
+  "Design of the web backend", or in a code comment. Do not put them in the user
+  documentation, nor in `ROADMAP.md`, which keeps only the work that is left.
 - Put agent-only rules in `AGENTS.md` or in a skill. Do not put them in the user documentation.
 - Include examples and links to `src/examples/` when they help readers.
   Avoid explanations that only repeat obvious interface actions or nearby text.
@@ -147,9 +147,8 @@ Use only names that exist in `composeui.core`. A comment such as `# a TreeView` 
 stand for an application view that the example does not define.
 
 When the feature is a new widget, the widget catalog lists it from its class docstring.
-Delete its entry in `ROADMAP.md`, which keeps only the work that is left. When the feature
-adds a capability, also update the table in "Where ComposeUI stands" at the top of
-`ROADMAP.md`. Keep the list of pages in
+Delete its item in `ROADMAP.md`, which keeps only the work that is left. Keep the list of
+pages in
 `docs/user-guide.md` in step with the `##` and `###` headings of the pages.
 
 ## Document an example app

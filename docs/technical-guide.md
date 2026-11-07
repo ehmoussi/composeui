@@ -17,6 +17,14 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [A button click](#a-button-click)
   - [The web backend](#the-web-backend)
   - [A button click on the web](#a-button-click-on-the-web)
+- [Design of the web backend](#design-of-the-web-backend)
+  - [Requests and updates](#requests-and-updates)
+  - [Tables on the web](#tables-on-the-web)
+  - [Order and sessions](#order-and-sessions)
+  - [Uploads and Open](#uploads-and-open)
+  - [Pages, tabs, and dialogs](#pages-tabs-and-dialogs)
+  - [The header, icons, and images](#the-header-icons-and-images)
+  - [Testing the web backend](#testing-the-web-backend)
 - [Reloading on a change](#reloading-on-a-change)
   - [Reloading on Qt](#reloading-on-qt)
   - [Reloading on Textual](#reloading-on-textual)
@@ -231,8 +239,8 @@ it over:
 ### The web backend
 
 The web backend renders HTML on the server and updates the page with htmx. Its design
-decisions are in "Design notes for the web backend" in [`ROADMAP.md`](../ROADMAP.md). Read
-them before you change `composeui.webcore`.
+decisions are in [Design of the web backend](#design-of-the-web-backend). Read them before you
+change `composeui.webcore`.
 
 - **The id is the rendered object.** The web has no live widget between two requests. A web
   renderer's rendered object is the id of its HTML fragment, `cui-{id(view)}-{role}`.
@@ -289,6 +297,130 @@ renderers dirty, as in step 6, so their fragments go out in the same response.
 
 The other routes follow the same steps. `widget_file` gives an upload to the session in place of
 a form. `jobs_poll` runs no event: its response sends the changes that the threads made.
+
+## Design of the web backend
+
+These are the decisions of `composeui.webcore` that the code does not make obvious. Keep them in
+mind when you change it. The user guide's [Web backend](user-guide/running-the-app.md#web-backend)
+section covers what users see.
+
+### Requests and updates
+
+- **htmx requests and responses.** The page and the server talk through htmx requests and
+  responses, with Starlette (not FastAPI) and no JavaScript framework. Each renderer writes its
+  HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
+- **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
+  files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value or
+  trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
+  triggers on a custom event (`enter-key`, `escape-key`, `activate`), and `static/page.js` does
+  the rest.
+- **Hidden fragments keep their id.** A hidden fragment's root keeps its id (`hidden`
+  attribute), so a later swap has a target.
+- **Updates.** Setting a view attribute marks its renderer dirty in a request-scoped set
+  (`collect_dirty`, a no-op outside requests). The route then renders every dirty fragment as
+  an OOB swap (`render_dirty`). Controls use `hx-swap="none"` and the sender is never swapped
+  back, so typing is never interrupted. The one exception is a float field left with
+  unparsable text, swapped back to the view's value.
+- **Changes from threads.** `call_on_main_thread` runs its callback under the session's lock,
+  and keeps what it changed in the session's `pending`. They are sent with the next event's
+  response or fetch (a full page drops them). While the main view's jobs run, the page's
+  `cui-jobs` poller fetches `/jobs` every `JOBS_POLL_MS`, which brings them. The server pushes
+  nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
+  the poller in, as it does the page's marker.
+
+### Tables on the web
+
+- **A large table's frame.** `WebSourceTableRenderer` draws a window of rows between two filler
+  rows (`style` heights, which the policy allows) that give the scroll bar every row's height.
+  `page.js` posts the first row shown once the scroll stops outside the window. Only the
+  `<tbody>` comes back (in a `<template>`, as a table's parts), so the scroll position stays.
+  Browsers cap an element's height: past `SOURCE_TABLE_SCROLLED_ROWS`, a filler's row height
+  stands for more than one row. The page maps the scroll position through the fillers as drawn,
+  and posts the row under the headers with its offset. The server sizes the filler above the
+  new window so that this row stays there, the frame's height kept. A new order swaps the whole
+  frame, back at the top.
+- **A table's parts.** A sort, a search or a filter swaps only what it changes (the headers'
+  row, the `<tbody>`, the count, the filter bar), never the search field being typed in. The
+  bar goes last in the response: it may hold the element that sent the request (the filter
+  editor's form), and htmx swaps no fragment after that one is gone. The `<tr>` and `<tbody>`
+  go each in a `<template>` of its own: bare, they switch htmx's parsing of the whole answer to
+  a table's rules, which mangles the fragments after them. An invalid filter value swaps only
+  its message, which `syncInvalidFields` marks the field by.
+
+### Order and sessions
+
+- **Order.** The server handles a page's posts in the order that the page sends them
+  (`order.py`). Without it, a field's value, posted as a click on a button blurs the field, can
+  reach the server after the click. `page.js` sets a page id and a number on each post in
+  `htmx:beforeSend`. The routes await its turn on the event loop, no thread held, for at most
+  `ORDER_TIMEOUT` (2 s) for a post that never comes. Scroll windows (`hx-sync="this:replace"`)
+  carry none: one that is replaced may never be sent. A session keeps the order of `MAX_PAGES`
+  (32) pages. Save's form (`cui-save`), submitted without htmx, carries no header: `page.js`
+  sets its hidden `page` and `post` fields as it is submitted. Holding the posts back in
+  `page.js` fails instead: htmx drops a held request whose element a swap has since replaced,
+  and gives no promise to wait on for a trigger's request.
+- **Sessions.** A signed cookie maps to a `WebSession`, which holds its renderers by id and an
+  `RLock` (the status bar timer takes it through `call_on_main_thread`). A request whose session
+  is gone answers `HX-Refresh`.
+
+### Uploads and Open
+
+- **Uploads.** `widget_file` reads the multipart body itself (`uploads.py`), not through
+  Starlette's form parser, whose spooled file a route can only copy. The body goes to a scratch
+  file with no lock held, and `WebSession.pick_file` moves that file. A file over the limit
+  keeps being read, to answer in the status bar, but stops going to the disk. Open still reads
+  through Starlette: a study is small. A replaced upload stays until `jobs.is_running` is false:
+  nothing says which file a job reads, and a job may not have opened it yet. Holding a file
+  through the app's code would bring the same failure back each time an app forgets.
+- **A long upload and the order.** A file's post takes its turn (`order.py`) once its whole body
+  has arrived, so a later post runs first after `ORDER_TIMEOUT`. Waiting for the upload would
+  hold every click for as long as the network takes. So `page.js` marks only the upload's own
+  button, and the docs say that a click doesn't wait.
+- **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a bad
+  file never half-loads. Responses send `Cache-Control: no-store` and controls set
+  `autocomplete="off"`, so a reload always shows the server's state.
+
+### Pages, tabs, and dialogs
+
+- **Pages and tabs.** The router sends only the shown page. A change on another page isn't
+  sent: the page brings it once shown, as navigating swaps the router. Tabs send only the shown
+  tab's views, and the other panels stay empty. The browser shows the tab picked at once. Then
+  the answer to its post fills the tab picked and empties the tab left.
+- **Dialogs** render at the end of the page, outside the shown page's slot: a page not shown
+  isn't sent, and would take them with it. The browser opens a modal `<dialog>` only from a
+  script: `page.js` opens each one swapped in shown, once. A button closes its dialog in the
+  browser first, so the focus returns where it was, then posts its answer. The server swaps it
+  closed.
+
+### The header, icons, and images
+
+- **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are buttons
+  of their own (Save As and Exit left out). Any other menu is a dropdown under its title, marked
+  with a chevron so it reads apart from the buttons. A `ToolBar`'s buttons go before the menus.
+  A dropdown is as wide as its longest item, the shortcut a faded hint beside it. On a phone,
+  the buttons with an icon keep only their icon and the app's title is cut short, so the header
+  holds on one line, with the pages' toolbar on a row of its own.
+- **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the file at
+  `/icon/<digest><suffix>`, an address naming its content, cached for good. Only image files
+  that a view has named are served, and `icon` is never loaded from a study, so no request can
+  name a file. An SVG is drawn as a CSS mask in the text's color, so it follows the theme like
+  the built-in New, Open and Save icons. Another image shows as it is.
+- **Images.** An `ImageView` has its own route, `/widget/{id}/picture`, that answers its session
+  only: an image can be private, so it stays out of the process's registry of icons. A `data:`
+  address would send it again with each swap. The address names the content by its digest, so a
+  browser can keep it, and an older digest answers 404, never another image. The route serves
+  only what starts as an image, as an app may set a path that a user typed. `image` is never
+  loaded from a study, as `icon` isn't.
+- **By design:** `Menu.is_visible` is ignored (a dropdown is always shown). An action's `data`
+  isn't displayed. Ctrl shortcuts become Alt+Shift. An unknown page address is a 404, not a
+  redirect: browsers ask for addresses of their own, like `/favicon.ico`.
+
+### Testing the web backend
+
+Tests drive the examples over HTTP with Starlette's `TestClient`
+(`tests/test_webrenderer.py`). The behavior that only a browser shows (the caret, shortcuts,
+the `aria-invalid` sync, the offline page, history, opening dialogs) is in
+`tests/test_browser.py` (`make browser-test`).
 
 ## Reloading on a change
 
@@ -407,7 +539,7 @@ another process answers with `HX-Refresh`.
 
 3. Add tests for each backend that exercise the real rendered widgets. See
    [Tests](#tests).
-4. Document the widget in the [user guide](user-guide.md), and delete its entry in
+4. Document the widget in the [user guide](user-guide.md), and delete its item in
    [`ROADMAP.md`](../ROADMAP.md). When an example app uses the widget, update the
    [examples guide](examples-guide.md) too.
 

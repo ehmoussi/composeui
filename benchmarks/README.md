@@ -1,10 +1,31 @@
 # Benchmarks
 
-These benchmarks measure the example apps. They give the baseline that the milestones of
-[the roadmap](../ROADMAP.md) report against (M0). They are not part of the test suite.
+These benchmarks measure the example apps, against the [budgets](../ROADMAP.md#budgets) of the
+roadmap. They are not part of the test suite.
 
 Run a benchmark before and after work on speed, or when someone reports a slow case. No schedule
 refreshes the results: each result names its commit.
+
+## What to measure
+
+Add a benchmark for an example app when work on its speed needs one. Measure:
+
+- the cold start, and the first useful render;
+- the latency of a filter, a sort, and a chart's update;
+- the size of the responses on the web;
+- the memory of each session, and of the data that the sessions share;
+- the throughput with concurrent sessions;
+- the cleanup once a session closes.
+
+Use a small dataset, the million-row SQLite table of
+[`largetable.py`](../src/examples/largetable.py), and an uploaded dataset within the upload
+limits. Publish each result with its versions, hardware, data and settings, as the sections
+below do. When you compare with another Python dashboard framework, turn its caching on, and
+report the differences between the workloads rather than credit every gap to the execution
+model.
+
+The hour move's budget is measured as `uber.py` measures it, with the 200 ms debounce of the
+map's job. A browser can get the map's points up to 300 ms later, at its next poll of `/jobs`.
 
 ## The Uber pickups benchmark
 
@@ -211,7 +232,7 @@ rows and points. The Polars example does not use this code, and was not measured
   whose dates rarely repeat gains less. This was not measured.
 - **Each row keeps its checks.** The row class still converts and validates each row.
 - **The web's margin is small.** Two runs can differ by about 10%, so a run can take more than
-  the 10 s budget of [the roadmap](../ROADMAP.md).
+  the 10 s budget of [the roadmap](../ROADMAP.md#budgets).
 
 ### Findings
 
@@ -332,9 +353,9 @@ A session left during a SQLite load, in 3 runs at each moment:
   the loads are over. ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the
   cause.
 - **The budget holds for one SQLite session.** A move takes 0.37 s, within the 500 ms budget of
-  [the roadmap](../ROADMAP.md). With 2 sessions, the median is 0.43 s, but the 95th percentile is
-  0.80 s. Polars stays within the budget up to 4 sessions at the median, and its 95th percentile
-  at 4 sessions is 0.54 s.
+  [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.43 s, but the 95th
+  percentile is 0.80 s. Polars stays within the budget up to 4 sessions at the median, and its
+  95th percentile at 4 sessions is 0.54 s.
 - **Polars pays with memory.** Its sessions move the hour faster, but 8 sessions take about
   1.9 GiB. Throughput stops growing at about 9 moves per second, from 4 sessions.
 - **Disk limits the SQLite example.** At 125 MiB per session, the 1,000 sessions of

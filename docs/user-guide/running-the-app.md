@@ -225,7 +225,8 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   each page is at `/<route>`, and `/` sends the browser to the first page. The toolbar of the pages
   is in the header. When the user changes pages, the browser's history gets the new address. So
   back, forward, bookmarks, and reloads land on that page. A route can't be `icon`, `jobs`,
-  `reload`, `state`, `static`, or `widget`, because the backend uses these addresses.
+  `reload`, `state`, `static`, or `widget`, because the backend uses these addresses. An
+  address that is no page's gives a 404 error, not the first page.
 - **Icons** are the image files that actions name (`action.icon = "icons/run.svg"`, the
   path that Qt reads). The backend serves them. An SVG icon is drawn in the color of the
   text, so it follows the light and dark themes: only its shape counts, as with a Lucide or
