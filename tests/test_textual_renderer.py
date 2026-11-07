@@ -18,6 +18,7 @@ import datetime
 import io
 import math
 import os
+import sys
 import threading
 import types
 from pathlib import Path
@@ -4952,6 +4953,12 @@ def _fake_textual_image(drawn_by: str) -> dict[str, Any]:
     return {"textual_image.renderable": renderable, "textual_image.widget": widget}
 
 
+def _run_in_terminal(monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool) -> None:
+    """Make the process's stdin and stdout terminals or not, as `isatty` tells."""
+    monkeypatch.setattr(sys, "__stdin__", types.SimpleNamespace(isatty=lambda: stdin))
+    monkeypatch.setattr(sys, "__stdout__", types.SimpleNamespace(isatty=lambda: stdout))
+
+
 @pytest.mark.parametrize(
     ("drawn_by", "expected"), [("sixel", "sixel"), ("tgp", "tgp"), ("halfcell", None)]
 )
@@ -4959,6 +4966,7 @@ def test_only_a_terminal_with_pixels_uses_textual_image(
     monkeypatch: pytest.MonkeyPatch, drawn_by: str, expected: str | None
 ) -> None:
     """Its own fallback draws in characters: the view's description reads better."""
+    _run_in_terminal(monkeypatch, stdin=True, stdout=True)
     monkeypatch.setattr(composeimage, "import_module", _fake_textual_image(drawn_by).__getitem__)
 
     graphics = composeimage.terminal_graphics()
@@ -4972,9 +4980,31 @@ def test_without_textual_image_a_terminal_has_no_graphics(
     def not_installed(name: str) -> None:
         raise ImportError(name)
 
+    _run_in_terminal(monkeypatch, stdin=True, stdout=True)
     monkeypatch.setattr(composeimage, "import_module", not_installed)
 
     assert composeimage.terminal_graphics() is None
+
+
+@pytest.mark.parametrize(("stdin", "stdout"), [(False, True), (True, False)])
+def test_textual_image_asks_nothing_without_a_terminal_to_answer(
+    monkeypatch: pytest.MonkeyPatch, *, stdin: bool, stdout: bool
+) -> None:
+    """Its import writes a question and waits for the answer: a pipe never answers.
+
+    Windows calls the NUL device a terminal: a Textual app with its output sent there waited
+    forever as it started.
+    """
+    imported: list[str] = []
+
+    def import_module(name: str) -> dict[str, Any]:
+        imported.append(name)
+        return _fake_textual_image("sixel")[name]
+
+    _run_in_terminal(monkeypatch, stdin=stdin, stdout=stdout)
+    monkeypatch.setattr(composeimage, "import_module", import_module)
+
+    assert (composeimage.terminal_graphics(), imported) == (None, [])
 
 
 @pytest.mark.asyncio

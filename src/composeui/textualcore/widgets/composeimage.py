@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import sys
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
@@ -29,6 +30,11 @@ def terminal_graphics() -> Graphics | None:
     Textual takes the terminal over: this runs as the backend's module loads. Its own fallback
     draws in characters, which no figure reads well in: the view's description is better.
     """
+    # the probe writes to stdout and waits for the answer on stdin: with stdin elsewhere, it
+    # waits forever, as with stdout sent to NUL on Windows, which calls NUL a terminal
+    stdin, stdout = sys.__stdin__, sys.__stdout__
+    if stdin is None or stdout is None or not (stdin.isatty() and stdout.isatty()):
+        return None
     try:
         renderable = import_module("textual_image.renderable")
         widget = import_module("textual_image.widget")
