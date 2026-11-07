@@ -92,6 +92,9 @@ class Example:
     web_application: Optional[Callable[..., Any]] = None
     #: the window's size on Qt and the page's on the web, in pixels
     window: tuple[int, int] = WINDOW
+    #: cut the Qt window and the terminal to the views' height: the height to spare goes under
+    #: them, which shows only as an empty area in an image
+    fits_height: bool = False
 
 
 def _quiet(main_view: MainView) -> None:
@@ -283,7 +286,9 @@ def _examples() -> list[Example]:
             backends=("web",),
             window=(900, 360),
         ),
-        Example("pipeform", pipeform.PipeMainView, _pipeform, window=(1200, 1200)),
+        Example(
+            "pipeform", pipeform.PipeMainView, _pipeform, window=(1200, 1200), fits_height=True
+        ),
         Example(
             "pipecatalogue",
             pipecatalogue.PipeCatalogueMainView,
@@ -307,6 +312,7 @@ def _examples() -> list[Example]:
             uberpickups.UberPickupsModel,
             _uberpickups_setup,
             window=(1200, 1200),
+            fits_height=True,
         ),
         Example(
             "uberpickupsframe",
@@ -315,12 +321,13 @@ def _examples() -> list[Example]:
             uberpickupsframe.UberPickupsModel,
             _uberpickupsframe_setup,
             window=(1200, 1200),
+            fits_height=True,
         ),
         Example(
             "dataexplorer", dataexplorer.DataExplorerMainView, _dataexplorer, window=(1200, 1200)
         ),
-        Example("figureviewer", figureviewer.FigureViewerMainView, _figureviewer),
-        Example("batman", batman.BatmanMainView),
+        Example("figureviewer", figureviewer.FigureViewerMainView, _figureviewer, fits_height=True),
+        Example("batman", batman.BatmanMainView, fits_height=True),
         Example(
             "largetable",
             largetable.LargeTableMainView,
@@ -329,7 +336,7 @@ def _examples() -> list[Example]:
             largetable.LargeTableMainView.connect_model,
         ),
         Example("markdownviewer", markdownviewer.MarkdownViewerMainView, _markdownviewer),
-        Example("studyinputs", studyinputs.StudyInputsMainView, _studyinputs),
+        Example("studyinputs", studyinputs.StudyInputsMainView, _studyinputs, fits_height=True),
         Example(
             "webhello",
             webhello.HelloMainView,
@@ -337,7 +344,7 @@ def _examples() -> list[Example]:
             backends=("web",),
             web_application=webhello.HelloApp,
         ),
-        Example("textual_demo", textual_demo.TextualDemoMainView, _textual_demo),
+        Example("textual_demo", textual_demo.TextualDemoMainView, _textual_demo, fits_height=True),
     ]
 
 
@@ -375,9 +382,29 @@ def qt_screenshot(example: Example, path: Path) -> None:
     for _ in range(100 if example.name == "uberpickups" else 10):
         qt_app.processEvents()
         time.sleep(0.05)
+    if example.fits_height:
+        window.setMinimumSize(0, 0)  # the app's own floor, under which its views still fit
+        window.resize(example.window[0], window.sizeHint().height())
+        for _ in range(10):
+            qt_app.processEvents()
+            time.sleep(0.05)
     window.grab().save(str(path))
     window.close()
     _close(app)
+
+
+def _content_rows(screen: Any) -> int:
+    """Get the rows that the screen's views take, with what is docked under them, as a footer."""
+    bottom = 0
+    docked = screen.size.height
+    for widget in screen.query("*"):
+        if widget.children or not widget.display:
+            continue
+        if any(node.styles.dock == "bottom" for node in widget.ancestors_with_self):
+            docked = min(docked, widget.region.y)
+        else:
+            bottom = max(bottom, widget.region.bottom)
+    return bottom + screen.size.height - docked
 
 
 def textual_svg(example: Example) -> str:
@@ -395,6 +422,18 @@ def textual_svg(example: Example) -> str:
                 if widget.is_scrollable:
                     widget.scroll_home(animate=False)
             await pilot.pause(0.2)
+            if example.fits_height:
+                rows = _content_rows(textual_app.screen)
+                await pilot.resize_terminal(TERMINAL[0], rows)
+                await pilot.pause(0.2)
+                # the rows that a container's own border and padding still push out of view
+                hidden = max(
+                    widget.max_scroll_y
+                    for widget in textual_app.screen.query("*")
+                    if all(node.display for node in widget.ancestors_with_self)
+                )
+                await pilot.resize_terminal(TERMINAL[0], rows + hidden)
+                await pilot.pause(0.2)
             return str(textual_app.export_screenshot())
 
     try:
