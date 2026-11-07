@@ -29,7 +29,7 @@ mypy:
 # Tests import every backend and Playwright; static checks need their packages, not Chromium.
 TYPECHECK_RUN = uv run --locked --group typecheck --group browser --all-extras
 
-.PHONY: typecheck pyright pyrefly ty zuban
+.PHONY: typecheck pyright pyrefly ty
 typecheck: mypy pyright pyrefly ty
 
 pyright:
@@ -40,10 +40,6 @@ pyrefly:
 
 ty:
 	$(TYPECHECK_RUN) ty check
-
-# Keep its nonzero exit visible locally; CI runs Zuban as a non-blocking job.
-zuban:
-	$(TYPECHECK_RUN) zuban mypy tests
 
 # the main views of the apps with catalogs, as module:Class
 TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView \

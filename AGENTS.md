@@ -24,7 +24,6 @@ make lint    # ruff format + ruff check --fix
 make mypy    # mypy on composeui, examples and tests, Qt binding resolved to PySide6
 make typecheck  # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
-make zuban   # optional test checker; currently reports known incompatibilities
 make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
@@ -44,8 +43,6 @@ for `TAILWIND_PLATFORM`). Keep it in step with the `Makefile`, including its
 `make mypy` checks source, examples and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
 also install the `typecheck` group. The same targets are available in `make.ps1`.
-Zuban is excluded from the aggregate target and retains its nonzero exit status when
-diagnostics remain.
 
 Run a single test file or test:
 
@@ -180,8 +177,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   Python 3.9 and 3.14. A change of
   the documentation only (`docs/`, Markdown files) runs only the docs build and its lint.
   The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
-  on tests on Python 3.9. Zuban runs in an additional non-blocking job while its known
-  incompatibilities remain.
+  on tests on Python 3.9.
 
 ## Documentation
 

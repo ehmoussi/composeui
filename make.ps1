@@ -11,7 +11,7 @@
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
-        'pyright', 'pyrefly', 'ty', 'zuban', 'translations', 'test',
+        'pyright', 'pyrefly', 'ty', 'translations', 'test',
         'browser-test', 'docs', 'screenshots', 'css', 'web-deps', 'clean', 'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
@@ -331,7 +331,6 @@ $actions = @{
     'pyright'      = { Invoke-TypeChecker -Arguments @('pyright') }
     'pyrefly'      = { Invoke-TypeChecker -Arguments @('pyrefly', 'check') }
     'ty'           = { Invoke-TypeChecker -Arguments @('ty', 'check') }
-    'zuban'        = { Invoke-TypeChecker -Arguments @('zuban', 'mypy', 'tests') }
     'translations' = { Invoke-Translations }
     'test'         = { Invoke-Test }
     'browser-test' = { Invoke-BrowserTest }

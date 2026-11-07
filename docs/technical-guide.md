@@ -451,7 +451,6 @@ make lint          # ruff format + ruff check --fix
 make mypy          # mypy on composeui, examples and tests, Qt binding resolved to PySide6
 make typecheck     # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
-make zuban         # optional test checker; currently reports known incompatibilities
 make test          # pytest in parallel, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
@@ -472,8 +471,6 @@ change it in `make.ps1` too.
 all extras so every test import resolves; Chromium is not needed. The other checker targets
 also install the `typecheck` group. Use an individual target to run one checker, or
 `.\make.ps1 typecheck` on Windows.
-Zuban is excluded from the aggregate target. `make zuban` retains its nonzero exit status
-when diagnostics remain.
 
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
 `web`.
@@ -649,9 +646,8 @@ the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.1
 
 The existing mypy matrix checks source, examples and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
-configuration. Failures in these jobs fail the workflow. An additional
-`make zuban` job is non-blocking while its known incompatibilities remain. Run
-`make typecheck` locally to run all four blocking type checkers.
+configuration. Failures in these jobs fail the workflow. Run `make typecheck` locally to
+run all four type checkers.
 
 A change of the documentation only, in `docs/` and the Markdown files, runs only the `docs`
 job. That job also lints the Python files of `docs/`.

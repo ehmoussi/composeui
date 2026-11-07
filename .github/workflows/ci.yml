@@ -69,20 +69,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: pyright
-            experimental: false
-          - target: pyrefly
-            experimental: false
-          - target: ty
-            experimental: false
-          # Zuban has known attrs and variadic-callback limitations.
-          - target: zuban
-            experimental: true
+        target: [pyright, pyrefly, ty]
     steps:
       - uses: actions/checkout@v7
         with:

@@ -99,7 +99,6 @@ typecheck = [
     "pyrefly>=1.4.0",
     "pyright>=1.1.414",
     "ty>=0.0.92",
-    "zuban>=0.10.1",
 ]
 
 
@@ -136,9 +135,6 @@ extra-paths = ["src"]
 
 [tool.ty.src]
 include = ["tests"]
-
-[tool.zuban]
-mode = "mypy"
 
 [tool.pytest.ini_options]
 markers = [
