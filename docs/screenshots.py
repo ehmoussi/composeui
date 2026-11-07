@@ -74,6 +74,9 @@ IMAGES = ROOT / "docs" / "images"
 WINDOW = (1200, 800)
 #: the terminal's size on Textual, in columns and rows
 TERMINAL = (120, 40)
+BACKENDS = ("qt", "textual", "web")
+#: views that Qt stretches to its window, and that are taller than the others' windows
+TALL = ("textual", "web")
 
 Prepare = Callable[["Any", "Optional[Model]"], None]
 
@@ -87,14 +90,14 @@ class Example:
     prepare: Prepare = lambda _main_view, _model: None
     build_model: Optional[Callable[[], Model]] = None
     setup_model: Optional[Callable[[Any, Any], None]] = None
-    backends: tuple[str, ...] = ("qt", "textual", "web")
+    backends: tuple[str, ...] = BACKENDS
     #: the web app's class, when the example has its own
     web_application: Optional[Callable[..., Any]] = None
     #: the window's size on Qt and the page's on the web, in pixels
     window: tuple[int, int] = WINDOW
-    #: cut the Qt window and the terminal to the views' height: the height to spare goes under
-    #: them, which shows only as an empty area in an image
-    fits_height: bool = False
+    #: the backends whose window fits the views' height: the height to spare goes under them, an
+    #: empty area in an image, and a fixed window trims taller views. Not Qt where a view stretches
+    fits_height: tuple[str, ...] = ()
 
 
 def _quiet(main_view: MainView) -> None:
@@ -287,7 +290,7 @@ def _examples() -> list[Example]:
             window=(900, 360),
         ),
         Example(
-            "pipeform", pipeform.PipeMainView, _pipeform, window=(1200, 1200), fits_height=True
+            "pipeform", pipeform.PipeMainView, _pipeform, window=(1200, 1200), fits_height=BACKENDS
         ),
         Example(
             "pipecatalogue",
@@ -295,16 +298,18 @@ def _examples() -> list[Example]:
             _pipecatalogue,
             pipecatalogue.PipeCatalogueModel,
             pipecatalogue.PipeCatalogueMainView.connect_model,
+            fits_height=TALL,
         ),
-        Example("pipechart", pipechart.PipeChartMainView, _pipechart),
+        Example("pipechart", pipechart.PipeChartMainView, _pipechart, fits_height=TALL),
         Example(
             "pipesweep",
             pipesweep.PipeSweepMainView,
             _pipesweep,
             pipesweep.PipeSweepModel,
             pipesweep.PipeSweepMainView.connect_model,
+            fits_height=TALL,
         ),
-        Example("taskview", taskview.TaskMainView, _taskview),
+        Example("taskview", taskview.TaskMainView, _taskview, fits_height=TALL),
         Example(
             "uberpickups",
             uberpickups.UberPickupsMainView,
@@ -312,7 +317,7 @@ def _examples() -> list[Example]:
             uberpickups.UberPickupsModel,
             _uberpickups_setup,
             window=(1200, 1200),
-            fits_height=True,
+            fits_height=BACKENDS,
         ),
         Example(
             "uberpickupsframe",
@@ -321,13 +326,15 @@ def _examples() -> list[Example]:
             uberpickupsframe.UberPickupsModel,
             _uberpickupsframe_setup,
             window=(1200, 1200),
-            fits_height=True,
+            fits_height=BACKENDS,
         ),
         Example(
             "dataexplorer", dataexplorer.DataExplorerMainView, _dataexplorer, window=(1200, 1200)
         ),
-        Example("figureviewer", figureviewer.FigureViewerMainView, _figureviewer, fits_height=True),
-        Example("batman", batman.BatmanMainView, fits_height=True),
+        Example(
+            "figureviewer", figureviewer.FigureViewerMainView, _figureviewer, fits_height=BACKENDS
+        ),
+        Example("batman", batman.BatmanMainView, fits_height=BACKENDS),
         Example(
             "largetable",
             largetable.LargeTableMainView,
@@ -336,15 +343,18 @@ def _examples() -> list[Example]:
             largetable.LargeTableMainView.connect_model,
         ),
         Example("markdownviewer", markdownviewer.MarkdownViewerMainView, _markdownviewer),
-        Example("studyinputs", studyinputs.StudyInputsMainView, _studyinputs, fits_height=True),
+        Example("studyinputs", studyinputs.StudyInputsMainView, _studyinputs, fits_height=BACKENDS),
         Example(
             "webhello",
             webhello.HelloMainView,
             _webhello,
             backends=("web",),
             web_application=webhello.HelloApp,
+            fits_height=("web",),
         ),
-        Example("textual_demo", textual_demo.TextualDemoMainView, _textual_demo, fits_height=True),
+        Example(
+            "textual_demo", textual_demo.TextualDemoMainView, _textual_demo, fits_height=BACKENDS
+        ),
     ]
 
 
@@ -382,7 +392,7 @@ def qt_screenshot(example: Example, path: Path) -> None:
     for _ in range(100 if example.name == "uberpickups" else 10):
         qt_app.processEvents()
         time.sleep(0.05)
-    if example.fits_height:
+    if "qt" in example.fits_height:
         window.setMinimumSize(0, 0)  # the app's own floor, under which its views still fit
         window.resize(example.window[0], window.sizeHint().height())
         for _ in range(10):
@@ -422,15 +432,20 @@ def textual_svg(example: Example) -> str:
                 if widget.is_scrollable:
                     widget.scroll_home(animate=False)
             await pilot.pause(0.2)
-            if example.fits_height:
+            if "textual" in example.fits_height:
                 rows = _content_rows(textual_app.screen)
                 await pilot.resize_terminal(TERMINAL[0], rows)
                 await pilot.pause(0.2)
                 # the rows that a container's own border and padding still push out of view
+                screen = textual_app.screen
                 hidden = max(
-                    widget.max_scroll_y
-                    for widget in textual_app.screen.query("*")
-                    if all(node.display for node in widget.ancestors_with_self)
+                    (
+                        widget.max_scroll_y
+                        for widget in (screen, *screen.query("*"))
+                        if widget.show_vertical_scrollbar
+                        and all(node.display for node in widget.ancestors_with_self)
+                    ),
+                    default=0,
                 )
                 await pilot.resize_terminal(TERMINAL[0], rows + hidden)
                 await pilot.pause(0.2)
@@ -512,6 +527,12 @@ def web_screenshot(browser: Browser, example: Example, path: Path) -> None:
         if example.name == "uberpickups":
             page.locator('[data-map][aria-busy="false"]').wait_for()
         page.wait_for_timeout(500)
+        if "web" in example.fits_height:
+            # the page's own height, under a smaller window than its views: `min-h-screen` is out
+            page.set_viewport_size({"width": example.window[0], "height": 100})
+            height = page.evaluate("document.documentElement.scrollHeight")
+            page.set_viewport_size({"width": example.window[0], "height": height})
+            page.wait_for_timeout(500)
         page.screenshot(path=str(path), full_page=True)
         context.close()
 
