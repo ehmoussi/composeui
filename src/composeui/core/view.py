@@ -2312,7 +2312,7 @@ class ImageView(View):
     """An image from a file, from bytes, or from a Matplotlib figure.
 
     Without an image, or with one that the backend cannot draw, it shows its `description`.
-    A terminal shows only its `description`.
+    Textual shows it too, unless the terminal can draw the image with the `terminal-images` extra.
     An image never grows past its own size unless `height` asks for it, and it shrinks to
     the width it has. It keeps its proportions.
 

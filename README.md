@@ -64,6 +64,7 @@ Each extra adds a backend or a feature:
 | `pyside6` | PySide6 | The Qt backend, a desktop window |
 | `tui` | Textual | The Textual backend, a terminal |
 | `report` | matplotlib | The report images of charts |
+| `terminal-images` | textual-image | [Images](https://ehmoussi.github.io/composeui/user-guide/widgets.html#image) in pixels on Textual, on Python 3.12 or later |
 | `dataframe` | narwhals | A large table of a pandas, Polars, or PyArrow frame |
 | `reload` | watchfiles | Faster reloads in development |
 

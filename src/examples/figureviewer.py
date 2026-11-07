@@ -2,7 +2,8 @@
 
 `wave_figure` stands for the code of an analysis, which knows nothing of ComposeUI. A task
 calls it with the slider's value, so a move of the handle doesn't hold up the app, and an
-`ImageView` shows the figure. Textual shows each image's description.
+`ImageView` shows the figure. Textual shows each image's description, unless the terminal can
+draw pixels (see the `terminal-images` extra).
 """
 
 from __future__ import annotations

@@ -898,6 +898,9 @@ report = [
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
+terminal-images = [
+    { name = "textual-image", marker = "python_full_version >= '3.12'" },
+]
 tui = [
     { name = "textual" },
     { name = "textual-fspicker", version = "0.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -984,12 +987,13 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'web'", specifier = ">=0.49.3" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=8.2.8" },
     { name = "textual-fspicker", marker = "extra == 'tui'", specifier = ">=0.6.0" },
+    { name = "textual-image", marker = "python_full_version >= '3.12' and extra == 'terminal-images'", specifier = ">=0.14.2" },
     { name = "textual-plotext", marker = "extra == 'tui'", specifier = ">=1.0.1" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.39.0" },
     { name = "watchfiles", marker = "extra == 'reload'", specifier = ">=1.1.1" },
 ]
-provides-extras = ["pyside6", "tui", "web", "report", "reload", "dataframe"]
+provides-extras = ["pyside6", "tui", "web", "report", "terminal-images", "reload", "dataframe"]
 
 [package.metadata.requires-dev]
 browser = [{ name = "playwright", specifier = ">=1.60.0" }]
@@ -6449,6 +6453,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/1d/1c078f971363d6b2fcfcccf3008b3c6d98cb78ba92d4d6152051bfeec76e/textual_fspicker-1.0.1.tar.gz", hash = "sha256:58f7fa983ded7a5ed69b7279f66de57a0ef6fad0e3acb622f217682e85986c9c", size = 16538, upload-time = "2026-05-20T15:56:36.264Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/f9/716c82823d1bd93b499a2ab42eaa8ca3c4d57211576c9b569b329a16e8e2/textual_fspicker-1.0.1-py3-none-any.whl", hash = "sha256:12ba71314790008c37f4bf9bb008e430b844bb63d9b615cd8738ca3c1fe1ebbb", size = 24949, upload-time = "2026-05-20T15:56:34.804Z" },
+]
+
+[[package]]
+name = "textual-image"
+version = "0.14.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e8/32/7844d7c06cfc540caeb3ad8e7f96e66a12daac8934f4d45a86cab879e7e1/textual_image-0.14.2.tar.gz", hash = "sha256:0ec2ac1e2a9b30bfc478708ea011eb31e7844c377322ed2094976c1a84c131ba", size = 181319, upload-time = "2026-10-20T20:15:50.992Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/da/80883aab94e35ff27b3fc6f28eeb1824c19422090344b15d54d24e9dd02f/textual_image-0.14.2-py3-none-any.whl", hash = "sha256:f698d883959637515ab6c7086ffbc17fffc204a90010562b4f3bd1fba963ade4", size = 183633, upload-time = "2026-10-20T20:15:49.47Z" },
 ]
 
 [[package]]

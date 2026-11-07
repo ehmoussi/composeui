@@ -15,19 +15,23 @@ pytest.importorskip("textual_fspicker")
 
 import asyncio
 import datetime
+import io
 import math
 import os
 import threading
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
 from attrs import Factory
+from PIL import Image as PILImage
 from rich.color import Color
 from rich.style import Style
 from rich.text import Text
 from textual.color import Color as TextualColor
 from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
+from textual.geometry import Region
 from textual.screen import Screen
 from textual.widgets import (
     Button,
@@ -87,6 +91,7 @@ from composeui.textualcore.textualrenderer import (
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
+from composeui.textualcore.widgets import composeimage
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
@@ -108,6 +113,7 @@ from composeui.textualcore.widgets.composefiltertable import (
     ComposeFilterTable,
 )
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
+from composeui.textualcore.widgets.composeimage import ComposeImage
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
@@ -4808,29 +4814,183 @@ async def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
         assert combobox.value is Select.NULL
 
 
+def _picture(size: tuple[int, int]) -> bytes:
+    content = io.BytesIO()
+    PILImage.new("RGB", size, "red").save(content, format="PNG")
+    return content.getvalue()
+
+
 @define_view
 class _ImageMainView(MainView):
-    picture: ImageView = Factory(lambda: ImageView(image=b"any image", description="A [b]curve"))
+    picture: ImageView = Factory(lambda: ImageView(description="A [b]curve"))
+
+
+class _Pixels(Static):
+    """Stands for a widget of `textual-image`, which only a terminal with graphics can draw."""
+
+    image: Any = None
+
+
+@pytest.fixture
+def graphics(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(composeimage, "GRAPHICS", composeimage.Graphics(_Pixels, lambda: (10, 20)))
+
+
+def _shown_text(image: ComposeImage) -> str:
+    return image.query_one(Label).render_line(0).text.rstrip()
 
 
 @pytest.mark.asyncio
-async def test_a_terminal_shows_an_image_s_description_as_plain_text() -> None:
+async def test_a_terminal_without_graphics_shows_an_image_s_description_as_plain_text() -> None:
     view = _ImageMainView()
+    view.picture.image = _picture((40, 20))
     app = _app_of(view)
 
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        label = _widget(view.picture)
-        assert isinstance(label, Label)
-        assert label.render_line(0).text.rstrip() == "A [b]curve"
+        image = _widget(view.picture)
+        assert isinstance(image, ComposeImage)
+        assert _shown_text(image) == "A [b]curve"
+        assert not image.query(_Pixels)
 
         view.picture.description = "Another curve"
-        view.picture.image = None
         view.picture.height = 64
         await pilot.pause()
-        assert label.render_line(0).text.rstrip() == "Another curve"
+        assert _shown_text(image) == "Another curve"
 
         # rendered again, it keeps its widget
         assert isinstance(view.picture.renderer, TextualWidgetRenderer)
         view.picture.renderer.render()
-        assert _widget(view.picture) is label
+        assert _widget(view.picture) is image
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("graphics")
+async def test_graphics_draw_an_image_at_its_size_or_shrunk_to_the_width() -> None:
+    view = _ImageMainView()
+    view.picture.image = _picture((400, 200))  # 40 by 10 cells of 10 by 20 pixels
+    app = _app_of(view)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        image = _widget(view.picture)
+        assert isinstance(image, ComposeImage)
+        pixels = image.query_one(_Pixels)
+        assert pixels.display
+        assert not image.query_one(Label).display
+        assert pixels.image is not None
+        assert pixels.image.size == (400, 200)
+        assert (pixels.size.width, pixels.size.height) == (40, 10)
+
+        await pilot.resize_terminal(20, 30)
+        await pilot.pause()
+        assert (pixels.size.width, pixels.size.height) == (image.size.width, image.size.width // 4)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("graphics")
+async def test_graphics_draw_an_image_at_the_height_it_is_given_and_back() -> None:
+    view = _ImageMainView()
+    view.picture.image = _picture((40, 20))
+    view.picture.height = 100  # 5 cells of 20 pixels, and so five times its width
+    app = _app_of(view)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        pixels = _widget(view.picture).query_one(_Pixels)
+        assert (pixels.size.width, pixels.size.height) == (20, 5)
+
+        view.picture.height = None
+        await pilot.pause()
+        assert (pixels.size.width, pixels.size.height) == (4, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("graphics")
+@pytest.mark.parametrize(
+    "unreadable",
+    [
+        None,
+        b"not an image",
+        b"<svg xmlns='http://www.w3.org/2000/svg'/>",
+        _picture((40, 20))[:40],  # cut short
+        Path("missing.png"),
+    ],
+    ids=["none", "not an image", "svg", "cut short", "no file"],
+)
+async def test_graphics_show_the_description_for_what_pillow_cannot_read(
+    unreadable: Path | bytes | None,
+) -> None:
+    view = _ImageMainView()
+    view.picture.image = unreadable
+    app = _app_of(view)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        image = _widget(view.picture)
+        assert isinstance(image, ComposeImage)
+        pixels = image.query_one(_Pixels)
+        assert not pixels.display
+        assert _shown_text(image) == "A [b]curve"
+
+        view.picture.image = _picture((40, 20))
+        await pilot.pause()
+        assert pixels.display
+        assert not image.query_one(Label).display
+
+
+def _fake_textual_image(drawn_by: str) -> dict[str, Any]:
+    """Get the modules of `textual-image`, its renderer chosen as if it had asked the terminal."""
+    renderers = {"sixel": object(), "tgp": object(), "halfcell": object()}
+    renderable = types.SimpleNamespace(
+        Image=renderers[drawn_by], SixelImage=renderers["sixel"], TGPImage=renderers["tgp"]
+    )
+    widget = types.SimpleNamespace(SixelImage="sixel", TGPImage="tgp", get_cell_size=object())
+    return {"textual_image.renderable": renderable, "textual_image.widget": widget}
+
+
+@pytest.mark.parametrize(
+    ("drawn_by", "expected"), [("sixel", "sixel"), ("tgp", "tgp"), ("halfcell", None)]
+)
+def test_only_a_terminal_with_pixels_uses_textual_image(
+    monkeypatch: pytest.MonkeyPatch, drawn_by: str, expected: str | None
+) -> None:
+    """Its own fallback draws in characters: the view's description reads better."""
+    monkeypatch.setattr(composeimage, "import_module", _fake_textual_image(drawn_by).__getitem__)
+
+    graphics = composeimage.terminal_graphics()
+
+    assert (None if graphics is None else graphics.widget) == expected
+
+
+def test_without_textual_image_a_terminal_has_no_graphics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def not_installed(name: str) -> None:
+        raise ImportError(name)
+
+    monkeypatch.setattr(composeimage, "import_module", not_installed)
+
+    assert composeimage.terminal_graphics() is None
+
+
+@pytest.mark.asyncio
+async def test_textual_image_s_sixel_widget_draws_an_image_in_the_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its real widget, on the Textual installed: it reads the terminal's cells and its layout."""
+    widget = pytest.importorskip("textual_image.widget")
+    graphics = composeimage.Graphics(widget.SixelImage, lambda: (10, 20))
+    monkeypatch.setattr(composeimage, "GRAPHICS", graphics)
+    view = _ImageMainView()
+    view.picture.image = _picture((400, 200))
+    app = _app_of(view)
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        pixels = _widget(view.picture).query_one(widget.SixelImage)
+        assert (pixels.size.width, pixels.size.height) == (40, 10)
+        (drawing,) = pixels.children
+        lines = drawing.render_lines(Region(0, 0, 40, 10))
+
+    assert "\x1bP" in "".join(segment.text for line in lines for segment in line)

@@ -60,6 +60,8 @@ web = [
     "uvicorn>=0.39.0",
 ]
 report = ["matplotlib>=3.9"]
+# images in pixels on Textual: it needs Python 3.12 or later
+terminal-images = ["textual-image>=0.14.2; python_version >= '3.12'"]
 reload = ["watchfiles>=1.1.1"]
 dataframe = ["narwhals>=2.21.0"]
 

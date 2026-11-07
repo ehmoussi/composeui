@@ -73,6 +73,7 @@ from composeui.core.view import (
     VerticalView,
     View,
     date_hint,
+    image_content,
     line_styles_after,
     lines_after,
     replace_cell,
@@ -92,6 +93,7 @@ from composeui.textualcore.widgets.composefilepathinput import (
 from composeui.textualcore.widgets.composefileupload import ComposeFileUpload
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
+from composeui.textualcore.widgets.composeimage import ComposeImage
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
@@ -1310,26 +1312,38 @@ class ImageViewLike(ViewLike, Protocol):
     height: int | None
 
 
-class TextualImageRenderer(TextualWidgetRenderer[ImageViewLike, Label]):
-    """An image's description: a terminal's characters can't draw a figure that reads well."""
-
+class TextualImageRenderer(TextualWidgetRenderer[ImageViewLike, ComposeImage]):
     def __init__(self, view: ImageViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
-                "image": lambda _view, _widget, _value: None,
+                "image": self._refresh_image,
                 "description": self._refresh_description,
-                "height": lambda _view, _widget, _value: None,
+                "height": self._refresh_height,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Label(markup=False)
+            self._rendered_object = ComposeImage()
 
     @staticmethod
-    def _refresh_description(_view: ImageViewLike, rendered_object: Label, value: str) -> None:
-        rendered_object.update(value)
+    def _refresh_image(
+        _view: ImageViewLike, rendered_object: ComposeImage, value: Path | bytes | None
+    ) -> None:
+        rendered_object.set_image(image_content(value))
+
+    @staticmethod
+    def _refresh_description(
+        _view: ImageViewLike, rendered_object: ComposeImage, value: str
+    ) -> None:
+        rendered_object.set_description(value)
+
+    @staticmethod
+    def _refresh_height(
+        _view: ImageViewLike, rendered_object: ComposeImage, value: int | None
+    ) -> None:
+        rendered_object.set_image_height(value)
 
 
 class MarkdownViewLike(ViewLike, Protocol):

@@ -554,10 +554,21 @@ changes.
   `MainView.loaded`.
 
 Qt shows the image in a `QLabel`, and reads the types that its plugins have, such as PNG, JPEG and
-SVG. Textual shows the `description`, not the image. For a chart in a terminal, use a
-[`ChartView`](charts.md). The web shows an `<img>` of PNG, JPEG, GIF,
+SVG. The web shows an `<img>` of PNG, JPEG, GIF,
 WebP, BMP, ICO or SVG, and only the session that shows the image can get it. It does not serve any
 other type of file, whatever its name.
+
+Textual shows the `description`, unless all of these are true. Then it draws the image in pixels:
+
+- The app has the `terminal-images` extra, which installs
+  [textual-image](https://github.com/lnqs/textual-image).
+- Python is 3.12 or later.
+- The terminal supports Sixel or Kitty graphics. Textual-image asks the terminal when the app
+  starts.
+- Pillow can read the image: an SVG shows its `description`.
+
+The other terminals show the `description`, not an image in characters, which no figure reads well
+in. For a chart in any terminal, use a [`ChartView`](charts.md).
 
 [`src/examples/figureviewer.py`](../../src/examples/figureviewer.py) shows a logo from a file, and
 a Matplotlib figure that a slider redraws in a [task](threads.md).

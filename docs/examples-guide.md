@@ -577,7 +577,8 @@ It shows:
 
 - an [image](user-guide/widgets.md#image) from a file: a logo, with a `height`.
 - an [image](user-guide/widgets.md#image) of a Matplotlib figure, with `show_figure`. Textual
-  shows each image's description.
+  shows each image's description, unless it can
+  [draw the image in pixels](user-guide/widgets.md#image).
 - a [slider](user-guide/widgets.md#slider) that starts a
   [task](user-guide/threads.md#reusable-loading-tasks) with `start_latest`, so only the latest
   value shows.
