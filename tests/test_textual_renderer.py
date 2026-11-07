@@ -33,6 +33,7 @@ from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.geometry import Region
 from textual.screen import Screen
+from textual.widget import AwaitMount
 from textual.widgets import (
     Button,
     Checkbox,
@@ -462,6 +463,8 @@ async def test_a_file_upload_gives_the_user_s_file_from_the_picker_without_a_cop
 
         widget.button.press()
         await pilot.pause()
+        # the picker focuses its list as it mounts: on a slow runner, after a pause
+        await AwaitMount(app.screen, [app.screen])
         file_input = app.screen.query_one(Input)
         file_input.focus()
         file_input.value = str(path)
