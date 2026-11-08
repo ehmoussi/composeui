@@ -1694,7 +1694,8 @@ def test_a_saved_session_naming_other_uploads_never_deletes_them(tmp_path: Path)
     created = store.create()
     assert created is not None
     session_id, session = created
-    measurements = session.main_view.form.measurements  # type: ignore[attr-defined]
+    assert isinstance(session.main_view, DataFileMainView)
+    measurements = session.main_view.form.measurements
     _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
     store.save_all()
     unrelated = tmp_path / "unrelated"
