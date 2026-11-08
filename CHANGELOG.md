@@ -81,6 +81,8 @@ The notable changes of each release of ComposeUI. The format follows
   that the field holds.
 - `DataFrameSource` with an `id_column` keeps the frame's order for rows with equal cells, as
   `ordered_ids` promises. Before, it ordered them by ID.
+- A disabled or hidden web control refuses the events of a stale or crafted post, as a button does,
+  and a disabled tab can't be selected.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
   expires during a long import, no longer crashes the server. `SqliteModel.close` closed the
   connection during the job's statement, which could end the process and every session in it.

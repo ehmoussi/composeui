@@ -65,12 +65,15 @@ from composeui.core.view import (
     CellWidget,
     ChartKind,
     ChartView,
+    CheckBoxView,
+    ComboBoxView,
     DialogView,
     EditRefusedError,
     FilePathInputMixin,
     FilePathInputView,
     FolderPathInputMixin,
     ImageView,
+    InputView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowIntInputView,
@@ -90,9 +93,12 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     Series,
+    SliderView,
     SourceTableView,
     StatusBar,
     TableView,
+    TabPage,
+    TabView,
     TreeNode,
     TreeView,
     UploadedFile,
@@ -1574,6 +1580,83 @@ def test_a_server_side_value_wins_over_the_last_typed_text(rows: _RowsMainView) 
     # "-" again is a new edit against the server's 7.0, not a duplicate post
     handle_event(field, "input", {"value": "-"})
     assert edited == ["-", "-"]
+
+
+class _DisabledCombo(ComboBoxView[str]):
+    pass
+
+
+@define_view
+class _DisabledTabs(TabView):
+    first: TabPage = child(TabPage, title="First")
+    second: TabPage = child(TabPage, title="Second")
+
+
+@define_view
+class _DisabledControlsMainView(MainView):
+    text: InputView = child(InputView, text="before")
+    check: CheckBoxView = child(CheckBoxView)
+    slider: SliderView = child(SliderView, maximum=10)
+    combo: _DisabledCombo = child(_DisabledCombo, values={"A": "a", "B": "b"}, value="a")
+    tabs: _DisabledTabs = child(_DisabledTabs)
+
+
+_DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], object]] = {
+    "text": ("change", {"value": "after"}, lambda view: view.text.text, "before"),
+    "check": ("change", {"checked": "on"}, lambda view: view.check.is_checked, False),
+    "slider": ("change", {"value": "5"}, lambda view: view.slider.value, 0),
+    "combo": ("change", {}, lambda view: view.combo.value, "a"),  # see `_posted`
+    "tabs": ("select", {"index": "1"}, lambda view: view.tabs.current_index, 0),
+}
+
+
+def _posted(control: Any, form: dict[str, str]) -> dict[str, str]:
+    """Get what a control posts: a combo box names its field after its widget."""
+    return form or {control.renderer.widget_id: "b"}
+
+
+def _disabled_session() -> tuple[_DisabledControlsMainView, WebSession, list[object]]:
+    view = _DisabledControlsMainView()
+    session = WebSession(view)
+    signals: list[object] = []
+    view.text.text_changed.connect(signals.append)
+    view.check.toggled.connect(signals.append)
+    view.slider.value_changed.connect(signals.append)
+    view.combo.value_changed.connect(signals.append)
+    view.tabs.current_changed.connect(signals.append)
+    return view, session, signals
+
+
+@pytest.mark.parametrize("name", _DISABLED_EVENTS)
+@pytest.mark.parametrize("how", ["disabled", "hidden"])
+def test_a_disabled_or_hidden_control_refuses_its_events(name: str, how: str) -> None:
+    view, session, signals = _disabled_session()
+    event, form, value_of, before = _DISABLED_EVENTS[name]
+    control = getattr(view, name)
+    assert isinstance(control.renderer, WebRenderer)
+    if how == "disabled" and name == "tabs":
+        view.tabs.second.is_enabled = False
+    elif how == "disabled":
+        control.is_enabled = False
+    else:
+        control.is_visible = False
+
+    with pytest.raises(UnsupportedEventError):
+        session.handle_event(control.renderer.widget_id, event, _posted(control, form))
+
+    assert value_of(view) == before
+    assert signals == []
+    session.close()
+
+
+def test_a_control_accepts_its_events_while_enabled() -> None:
+    view, session, signals = _disabled_session()
+    for name, (event, form, value_of, before) in _DISABLED_EVENTS.items():
+        control = getattr(view, name)
+        session.handle_event(control.renderer.widget_id, event, _posted(control, form))
+        assert value_of(view) != before, name
+    assert len(signals) == len(_DISABLED_EVENTS)
+    session.close()
 
 
 def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
