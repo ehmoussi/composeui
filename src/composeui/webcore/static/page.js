@@ -756,6 +756,32 @@ document.addEventListener("htmx:beforeSend", function (event) {
   event.detail.xhr.setRequestHeader("X-ComposeUI-Page", PAGE_ID);
   event.detail.xhr.setRequestHeader("X-ComposeUI-Post", String(postNumber));
 });
+/* Answers can arrive in another order than the requests left: a fragment already shown
+   from a later request isn't replaced by an older answer. The rest of it still applies,
+   each answer sending what it changed alone. Polls count, as their fragments age too. */
+var requestNumber = 0;
+var fragmentNumbers = {};  // the number of the latest request that showed each fragment
+document.addEventListener("htmx:beforeSend", function (event) {
+  requestNumber += 1;
+  event.detail.xhr.composeuiNumber = requestNumber;
+});
+document.addEventListener("htmx:beforeSwap", function (event) {
+  var number = event.detail.xhr.composeuiNumber;
+  if (number === undefined) return;
+  var answer = document.createElement("template");
+  answer.innerHTML = event.detail.serverResponse;
+  var isStale = false;
+  Array.from(answer.content.children).forEach(function (fragment) {
+    if (fragment.id === "" || !fragment.hasAttribute("hx-swap-oob")) return;
+    if ((fragmentNumbers[fragment.id] || 0) > number) {
+      fragment.remove();
+      isStale = true;
+    } else {
+      fragmentNumbers[fragment.id] = number;
+    }
+  });
+  if (isStale) event.detail.serverResponse = answer.innerHTML;
+});
 /* Save and Save As submit a form, which carries no header: its fields carry the same */
 document.addEventListener("submit", function (event) {
   var form = event.target;

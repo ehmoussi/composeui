@@ -138,6 +138,8 @@ The notable changes of each release of ComposeUI. The format follows
   file".
 - On Textual, the shortcut of a disabled action does nothing. Before, it still ran the action, such
   as a disabled New.
+- On the web, an answer that arrives late no longer overwrites a fragment that a newer answer
+  already showed.
 - On the web, a click on a chart whose pointer moves a little, up to 3 pixels, is a click
   again: `clicked` emits it. uPlot took any move for a drag. It lost the click, and zoomed
   the chart into the pixels that the pointer moved across.
