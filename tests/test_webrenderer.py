@@ -1805,6 +1805,30 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     assert not first.path.exists()
 
 
+def test_a_closed_session_runs_none_of_its_jobs_callbacks() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    release, threads = threading.Event(), list[threading.Thread]()
+    called: list[object] = []
+
+    def work(job: Job[None, int]) -> None:
+        threads.append(threading.current_thread())
+        assert release.wait(30)
+        job.report_progress(1)
+        job.call_on_main_thread(lambda: called.append("handed over"))
+
+    job = main_view.jobs.start(work)
+    job.progress.connect(called.append)
+    job.finished.connect(lambda _result: called.append("finished"))
+    job.failed.connect(called.append)
+    session.close()
+    release.set()
+    threads[0].join(30)
+
+    assert not threads[0].is_alive()
+    assert called == []
+
+
 def test_an_upload_that_fails_to_arrive_keeps_the_file_the_view_holds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

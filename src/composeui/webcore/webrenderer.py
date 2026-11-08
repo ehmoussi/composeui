@@ -228,6 +228,8 @@ class RenderTarget:
         #: the renderers changed outside any request (`call_on_main_thread` from another
         #: thread), to send with the next response: no response was there to carry them
         self.pending: dict[str, WebRenderer[Any]] = {}
+        #: the session closed: nothing runs in it anymore, a job's outcome included
+        self.has_ended = False
 
     def take_pending(self) -> dict[str, WebRenderer[Any]]:
         """Get the renderers changed outside any request, sending them is then the caller's."""
@@ -245,6 +247,8 @@ def call_in_session(target: RenderTarget | None, callback: Callable[[], None]) -
         callback()  # rendered outside any session: nothing else touches the tree
         return
     with target.lock, collect_dirty() as dirty:
+        if target.has_ended:
+            return
         callback()
         target.pending.update(dirty)
 

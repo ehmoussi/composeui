@@ -75,6 +75,8 @@ The notable changes of each release of ComposeUI. The format follows
   `データ.csv`, is no longer refused for its type.
 - Chart image exports that overlap, such as two web sessions saving a chart at once, no longer
   corrupt Matplotlib's global settings. Each export keeps its own, one at a time.
+- A closed web session no longer runs the callbacks of its jobs, whose progress or outcome arrives
+  after the close.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text
   field stored the text "None", and a boolean field stored false.
 - Check-all and a Textual row edit of several cells stay on their records when a `cell_edited`
