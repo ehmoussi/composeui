@@ -1715,12 +1715,20 @@ def _structure_date(value: Any, _type: type) -> datetime.date:
     return datetime.date.fromisoformat(str(value))
 
 
+#: a UTC offset of less than a second, which `fromisoformat` reads as UTC on older Pythons
+_OFFSET_UNDER_A_SECOND = re.compile(r"([+-])00:00:00\.(\d{6})$")
+
+
 def _structure_datetime(value: Any, _type: type) -> datetime.datetime:
-    return (
-        value
-        if isinstance(value, datetime.datetime)
-        else datetime.datetime.fromisoformat(str(value))
-    )
+    if isinstance(value, datetime.datetime):
+        return value
+    text = str(value)
+    parsed = datetime.datetime.fromisoformat(text)
+    offset = _OFFSET_UNDER_A_SECOND.search(text)
+    if offset is None:
+        return parsed
+    microseconds = int(offset[1] + offset[2])
+    return parsed.replace(tzinfo=datetime.timezone(datetime.timedelta(microseconds=microseconds)))
 
 
 def _unstructure_decimal(value: decimal.Decimal) -> str:

@@ -114,7 +114,17 @@ _OFFSETS = st.builds(
 )
 
 
+_UNDER_A_SECOND_AHEAD = datetime.datetime(
+    2000, 1, 1, tzinfo=datetime.timezone(datetime.timedelta(microseconds=1))
+)
+_UNDER_A_SECOND_BEHIND = datetime.datetime(
+    2000, 1, 1, tzinfo=datetime.timezone(datetime.timedelta(microseconds=-1))
+)
+
+
 @given(st.datetimes(timezones=st.none() | _OFFSETS))
+@example(_UNDER_A_SECOND_AHEAD)
+@example(_UNDER_A_SECOND_BEHIND)
 def test_any_datetime_saved_as_json_loads_back_the_same(value: datetime.datetime) -> None:
     saved = json.loads(json.dumps(CONVERTER.unstructure(value)))
     restored = CONVERTER.structure(saved, datetime.datetime)
