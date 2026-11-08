@@ -90,6 +90,8 @@ The notable changes of each release of ComposeUI. The format follows
   rows of the Uber pickups example take about 10 s, down from about 20 s, with the same checks on
   each row. An import holds more memory for its dates, about 5 MiB for this file, and frees it
   at its end.
+- The web server answers a post sent twice with nothing: it no longer repeats its effects, or lets
+  later posts run before the original ends.
 - On Textual, the date field's calendar opens on the first and last valid dates, and its keys stop
   there. Before, it crashed on December 9999.
 - In the SQLite Uber pickups example, moving the hour takes about 0.3 to 0.4 s on the web, down
