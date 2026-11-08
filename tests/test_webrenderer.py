@@ -3719,6 +3719,17 @@ class _ReleasedModel(Model):
         self.is_released = True
 
 
+class _CountedModel(Model):
+    """A session's model, which counts how many times it's closed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closes = 0
+
+    def close(self) -> None:
+        self.closes += 1
+
+
 class _SessionStoreMachine(RuleBasedStateMachine):
     """A store of 3 sessions, idle 10 seconds at most, used in any order.
 
@@ -3799,6 +3810,61 @@ class _SessionStoreMachine(RuleBasedStateMachine):
 
 TestASessionStoreUsedInAnyOrder = _SessionStoreMachine.TestCase
 TestASessionStoreUsedInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
+
+
+def test_a_failed_session_setup_closes_its_model_and_a_retry_owns_its_own() -> None:
+    models: list[_CountedModel] = []
+    failures = [True, True, True, False]
+
+    def build_model() -> _CountedModel:
+        models.append(_CountedModel())
+        return models[-1]
+
+    def setup_model(_main_view: HelloMainView, _model: _CountedModel) -> None:
+        if failures.pop(0):
+            msg = "the setup failed"
+            raise RuntimeError(msg)
+
+    class App(WebModelApplication[HelloMainView, _CountedModel]):
+        pass
+
+    app = App(build_main_view=HelloMainView, build_model=build_model, setup_model=setup_model)
+    with TestClient(app.create_starlette_app(), raise_server_exceptions=False) as client:
+        for _ in range(3):
+            assert client.get("/").status_code == 500
+        assert [model.closes for model in models] == [1, 1, 1]
+        assert client.get("/").status_code == 200
+        assert models[-1].closes == 0
+    assert [model.closes for model in models] == [1, 1, 1, 1]
+
+
+class _UnrenderableMainView(HelloMainView):
+    def render(self, renderer_type: RendererType) -> None:
+        msg = "no renderer for it"
+        raise RuntimeError(msg)
+
+
+@pytest.mark.parametrize("has_model", [True, False])
+def test_a_session_failing_to_render_closes_its_model_if_it_has_one(*, has_model: bool) -> None:
+    model = _CountedModel() if has_model else None
+    store = SessionStore(lambda: (_UnrenderableMainView(), model), ttl=10.0, max_sessions=1)
+    with pytest.raises(RuntimeError, match="no renderer"):
+        store.create()
+    assert model is None or model.closes == 1
+
+
+def test_a_failed_setup_of_a_session_without_a_model_keeps_its_own_error() -> None:
+    class App(WebApplication[HelloMainView]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            msg = "the setup failed"
+            raise RuntimeError(msg)
+
+    app = App(build_main_view=HelloMainView)
+    with (
+        TestClient(app.create_starlette_app()) as client,
+        pytest.raises(RuntimeError, match="the setup failed"),
+    ):
+        client.get("/")
 
 
 def test_a_session_used_expires_its_timeout_after_its_last_use() -> None:
