@@ -172,6 +172,9 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if renderer is None:
                 return None
+            # as its page shows it: a stale or crafted post can't reach it
+            if not renderer.takes_events:
+                raise UnsupportedEventError(renderer, event)
             return self._respond(functools.partial(renderer.dispatch, event, form))
 
     def pick_file(

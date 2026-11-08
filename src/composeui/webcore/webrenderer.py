@@ -298,6 +298,15 @@ class WebRenderer(Renderer[TView, str]):
                 self._target = target
 
     @property
+    def takes_events(self) -> bool:
+        """Whether a browser's event may act on the view: enabled and shown, as its page says."""
+        return self.is_enabled and self._is_view_shown
+
+    @property
+    def _is_view_shown(self) -> bool:
+        return self._view.is_visible and (self.parent is None or self.parent._is_view_shown)  # noqa: SLF001
+
+    @property
     def is_enabled(self) -> bool:
         """Whether the view and every container around it are enabled.
 
@@ -3315,9 +3324,6 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._mark_dirty(self._view, self.widget_id, self._view.rows)
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        # a disabled table can't be clicked: a post saying otherwise is refused
-        if not self.is_enabled:
-            super().dispatch(event, form)
         if event in ("start_edit", "edit"):
             self._edit(event, form)
             return
@@ -3609,6 +3615,11 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     writes to the clipboard. A link above the frame downloads the rows shown as CSV
     (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
     """
+
+    #: its `dispatch` decides by event: a disabled table still scrolls and is read
+    @property
+    def takes_events(self) -> bool:
+        return True
 
     _role = "source_table"
 
@@ -5121,6 +5132,11 @@ class WebDialogRenderer(WebRenderer[DialogView]):
     closed already.
     """
 
+    #: its `dispatch` decides by event: a second click on a dialog just closed does nothing
+    @property
+    def takes_events(self) -> bool:
+        return True
+
     _role = "dialog"
 
     def __init__(self, view: DialogView) -> None:
@@ -6081,6 +6097,8 @@ class WebTabsRenderer(WebRenderer[TabView]):
             return
         if not 0 <= index < len(self._view.tabs) or index == self._view.current_index:
             return
+        if not self._view.tabs[index].is_enabled:
+            raise UnsupportedEventError(self, event)
         left = self._view.tabs[self._view.current_index]
         with self.stop_refresh():
             self._view.current_index = index
