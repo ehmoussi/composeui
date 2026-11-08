@@ -132,16 +132,21 @@ class ComposeMonth(Widget, can_focus=True):
         """Get the cursor's month a week a list, Monday first, None out of the month."""
         month = calendar.Calendar(firstweekday=0)
         return [
-            [day if day.month == self.cursor.month else None for day in week]
-            for week in month.monthdatescalendar(self.cursor.year, self.cursor.month)
+            # day numbers: the grid of December 9999 has days after the last date there is
+            [None if day == 0 else self.cursor.replace(day=day) for day in week]
+            for week in month.monthdayscalendar(self.cursor.year, self.cursor.month)
         ]
 
     def action_move(self, days: int) -> None:
-        self._move_to(self.cursor + datetime.timedelta(days=days))
+        first, last = datetime.date.min.toordinal(), datetime.date.max.toordinal()
+        self._move_to(
+            datetime.date.fromordinal(min(max(self.cursor.toordinal() + days, first), last))
+        )
 
     def action_move_month(self, months: int) -> None:
-        month = self.cursor.month - 1 + months
-        year, month = self.cursor.year + month // 12, month % 12 + 1
+        months += self.cursor.year * 12 + self.cursor.month - 1
+        months = min(max(months, datetime.MINYEAR * 12), datetime.MAXYEAR * 12 + 11)
+        year, month = months // 12, months % 12 + 1
         day = min(self.cursor.day, calendar.monthrange(year, month)[1])
         self._move_to(datetime.date(year, month, day))
 
