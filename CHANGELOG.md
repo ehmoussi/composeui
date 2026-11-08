@@ -100,6 +100,8 @@ The notable changes of each release of ComposeUI. The format follows
   archive may place its directory or its files before the file's start, or ask for a newer
   zip version. The app now refuses such a study as any invalid one: "it isn't a valid ...
   file".
+- On Textual, the shortcut of a disabled action does nothing. Before, it still ran the action, such
+  as a disabled New.
 - On the web, a click on a chart whose pointer moves a little, up to 3 pixels, is a click
   again: `clicked` emits it. uPlot took any move for a drag. It lost the click, and zoomed
   the chart into the pixels that the pointer moved across.
