@@ -69,6 +69,8 @@ The notable changes of each release of ComposeUI. The format follows
   error.
 - On the web, an upload whose name has only letters outside ASCII before its extension, such as
   `データ.csv`, is no longer refused for its type.
+- Chart image exports that overlap, such as two web sessions saving a chart at once, no longer
+  corrupt Matplotlib's global settings. Each export keeps its own, one at a time.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text
   field stored the text "None", and a boolean field stored false.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy

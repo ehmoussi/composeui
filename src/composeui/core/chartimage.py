@@ -16,6 +16,7 @@ import contextlib
 import importlib.util
 import io
 import math
+import threading
 from typing import TYPE_CHECKING, Any
 
 import attrs
@@ -114,38 +115,47 @@ def _require() -> None:
         raise ImportError(msg)
 
 
+#: held while a block depends on Matplotlib's global settings, which every thread shares
+#: (reentrant: a block can call `chart_figure`, which enters `image_style` again)
+_STYLE_LOCK = threading.RLock()
+
+
 @contextlib.contextmanager
 def image_style(options: ImageOptions = DEFAULT_OPTIONS) -> Iterator[None]:
     """Draw and save figures with the options' fonts while the block runs.
 
     Text stays text in a vector image: TrueType fonts in a PDF or EPS, ``<text>`` in an
     SVG. So its labels can still be edited or searched. Matplotlib's global settings are
-    left as they were: wrap a `chart_figure` saved with `Figure.savefig` in it too.
+    left as they were: wrap a `chart_figure` saved with `Figure.savefig` in it too. One
+    thread at a time runs such a block: an export of another thread waits for it to end.
     """
     _require()
     import matplotlib as mpl  # noqa: PLC0415
 
     size = options.font_size
-    with mpl.rc_context(
-        {
-            "pdf.fonttype": 42,
-            "ps.fonttype": 42,
-            "svg.fonttype": "none",
-            "font.size": size,
-            "axes.titlesize": size * 1.1,
-            "axes.labelsize": size,
-            "xtick.labelsize": size * 0.9,
-            "ytick.labelsize": size * 0.9,
-            "legend.fontsize": size * 0.9,
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "savefig.facecolor": "white",
-            "axes.edgecolor": "#333333",
-            "axes.grid": True,
-            "grid.color": "#e5e5e5",
-            "grid.linewidth": 0.5,
-            "axes.axisbelow": True,
-        }
+    with (
+        _STYLE_LOCK,
+        mpl.rc_context(
+            {
+                "pdf.fonttype": 42,
+                "ps.fonttype": 42,
+                "svg.fonttype": "none",
+                "font.size": size,
+                "axes.titlesize": size * 1.1,
+                "axes.labelsize": size,
+                "xtick.labelsize": size * 0.9,
+                "ytick.labelsize": size * 0.9,
+                "legend.fontsize": size * 0.9,
+                "figure.facecolor": "white",
+                "axes.facecolor": "white",
+                "savefig.facecolor": "white",
+                "axes.edgecolor": "#333333",
+                "axes.grid": True,
+                "grid.color": "#e5e5e5",
+                "grid.linewidth": 0.5,
+                "axes.axisbelow": True,
+            }
+        ),
     ):
         yield
 
