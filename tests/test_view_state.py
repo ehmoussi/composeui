@@ -46,6 +46,7 @@ from composeui.core.view import (
     Series,
     SliderView,
     SourceTableView,
+    TextRole,
     TreeNode,
     TreeView,
     UploadedFile,
@@ -838,6 +839,21 @@ def test_any_state_a_view_takes_is_saved_and_opened_unchanged(
     opened = main_view_type()
     opened.load_state_data(opened.state_data_from_file(saved))
     assert opened.state_data() == saved["views"]
+
+
+@define_view
+class _NoteMainView(MainView):
+    note: LabelView = child(LabelView)
+
+
+def test_a_label_s_role_stays_out_of_the_state_as_its_text_does() -> None:
+    view = _NoteMainView()
+    view.note.role = TextRole.ERROR
+
+    opened = _NoteMainView()
+    opened.load_state_data(view.state_data())
+
+    assert opened.note.role is TextRole.BODY
 
 
 def test_a_study_file_holds_its_versions_and_an_older_one_is_upgraded(tmp_path: Path) -> None:

@@ -85,6 +85,7 @@ from composeui.core.view import (
     T,
     TabPage,
     TabView,
+    TextRole,
     TreeNode,
     UploadedFile,
     View,
@@ -4242,6 +4243,40 @@ def test_a_main_view_rendered_again_keeps_every_widget(main_view_type: type[Main
     view.render(RendererType.TEXTUAL)
 
     assert [id(widget) for widget in _textual_widgets_of(view)] == [id(widget) for widget in before]
+
+
+@define_view
+class _LabelMainView(MainView):
+    note: LabelView = Factory(lambda: LabelView(text="Plan"))
+
+
+@pytest.mark.asyncio
+async def test_a_label_s_role_sets_its_look_and_body_takes_it_back() -> None:
+    view = _LabelMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(view.note.renderer, TextualWidgetRenderer)
+        widget = view.note.renderer.widget
+        assert widget is not None
+        body_color = widget.styles.color
+
+        view.note.role = TextRole.TITLE
+        await pilot.pause()
+        assert widget.styles.text_style.bold
+
+        view.note.role = TextRole.ERROR
+        await pilot.pause()
+        assert not widget.styles.text_style.bold
+        assert widget.styles.color != body_color
+
+        view.note.role = TextRole.BODY
+        await pilot.pause()
+        assert widget.styles.color == body_color
 
 
 def test_a_view_shown_before_its_widget_is_built_raises() -> None:

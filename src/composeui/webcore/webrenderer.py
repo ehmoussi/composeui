@@ -101,6 +101,7 @@ from composeui.core.view import (
     StatusBar,
     TabPage,
     TabView,
+    TextRole,
     TextStyle,
     ToolBar,
     TreeView,
@@ -4075,6 +4076,20 @@ class WebComboBoxRenderer(_WebValuesRenderer[TValue]):
 
 class LabelViewLike(ViewLike, Protocol):
     text: str
+    role: TextRole
+
+
+#: the tag of a role's text and its classes; the page's `<h1>` is the app's title
+_ROLE_MARKUP = {
+    TextRole.BODY: ("span", ""),
+    TextRole.TITLE: ("h2", "text-xl font-bold"),
+    TextRole.SUBTITLE: ("h3", "font-semibold text-base-content/70"),
+    TextRole.CAPTION: ("span", "text-sm text-base-content/70"),
+    TextRole.MUTED: ("span", "text-base-content/70"),
+    TextRole.ERROR: ("span", "text-error"),
+    TextRole.WARNING: ("span", "text-warning"),
+    TextRole.SUCCESS: ("span", "text-success"),
+}
 
 
 class WebLabelRenderer(WebRenderer[LabelViewLike]):
@@ -4082,10 +4097,16 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
 
     def __init__(self, view: LabelViewLike) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"text": self._mark_dirty})
+        self._refresh_dispatcher.update({"text": self._mark_dirty, "role": self._mark_dirty})
 
     def to_html(self, *, oob: bool = False) -> Markup:
-        return Markup("<span {}>{}</span>").format(self._root_attributes(oob=oob), self._view.text)
+        tag, classes = _ROLE_MARKUP[self._view.role]
+        return Markup('<{tag} {attributes} class="{classes}">{text}</{tag}>').format(
+            tag=tag,
+            attributes=self._root_attributes(oob=oob),
+            classes=classes,
+            text=self._view.text,
+        )
 
 
 class ImageViewLike(ViewLike, Protocol):

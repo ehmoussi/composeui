@@ -225,6 +225,7 @@ __all__ = [
     "TableView",
     "TextAreaMixin",
     "TextAreaView",
+    "TextRole",
     "TextStyle",
     "ToolBar",
     "TreeNode",
@@ -2370,11 +2371,25 @@ class LogView(LogMixin, View):
     _renderer_key = "log"
 
 
+class TextRole(enum.Enum):
+    """What a text is, which each backend shows in its own way."""
+
+    BODY = enum.auto()
+    TITLE = enum.auto()
+    SUBTITLE = enum.auto()
+    CAPTION = enum.auto()
+    MUTED = enum.auto()
+    ERROR = enum.auto()
+    WARNING = enum.auto()
+    SUCCESS = enum.auto()
+
+
 @define_view
 class LabelMixin:
-    """The fields of a label: its `text`."""
+    """The fields of a label: its `text` and its `role`."""
 
     text: str = attrs.field(default="", metadata={UI_TEXT: True})
+    role: TextRole = attrs.field(default=TextRole.BODY, metadata={OMIT: True})
 
 
 @define_view
