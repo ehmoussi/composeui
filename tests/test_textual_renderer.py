@@ -3852,11 +3852,12 @@ async def test_a_callback_that_raises_runtime_error_runs_once_on_the_app_s_threa
         if through_a_job:
             job = view.jobs.start(lambda job: job.call_on_main_thread(callback))
             job.failed.connect(errors.append)
-            for _ in range(200):
-                await pilot.pause(0.01)
-                if errors:
+            for _ in range(600):  # the job's end, not time: a slow runner takes seconds
+                await pilot.pause(0.05)
+                if not view.jobs.is_running:
                     break
-            assert len(errors) == 1
+            assert app.is_running  # its error is logged: no thread waits for the callback
+            assert errors == []
         else:
             await asyncio.to_thread(from_a_thread)
 

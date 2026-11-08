@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import logging
 import weakref
 from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
@@ -174,6 +175,20 @@ def _call_on_app_thread(app: App[Any] | None, callback: Callable[[], None]) -> N
         if started:
             raise
         callback()
+
+
+LOGGER = logging.getLogger("COMPOSEUI")
+
+
+def _logging_errors(callback: Callable[[], None]) -> None:
+    """Call a job's `callback`, which no thread waits for: its error is only logged.
+
+    Textual ends the app at an error in a message's handler; Qt, here, goes on.
+    """
+    try:
+        callback()
+    except Exception:
+        LOGGER.exception("A job's callback failed")
 
 
 #: the class a row's field widget has while the row is invalid (`FormRowView.is_invalid`),
@@ -3259,7 +3274,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         # callback asks for it, would stop both
         app = self._rendered_object
         if app is not None and app.is_running:
-            app.call_later(callback)
+            app.call_later(functools.partial(_logging_errors, callback))
         else:
             _call_on_app_thread(app, callback)
 
