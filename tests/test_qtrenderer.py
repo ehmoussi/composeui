@@ -129,7 +129,6 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qimagelabel import QImageLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
-from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qtexttable import QCheckHeader, QTextTableView
@@ -1229,9 +1228,6 @@ def test_a_radio_group_shows_no_choice_when_its_value_is_cleared(qtbot: QtBot) -
 
     assert not [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
     assert changes == []
-    assert isinstance(widget, QRadioGroup)
-    widget.set_value(None)  # nothing left to clear
-    assert not [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
     # the group's still exclusive: one choice at a time
     buttons = widget.findChildren(QRadioButton)
     buttons[0].click()

@@ -49,12 +49,11 @@ class QRadioGroup(QWidget):
             if value == value_raw:
                 self._button_group.button(button_id).setChecked(True)
                 return
-        checked = self._button_group.checkedButton()
-        if checked is not None:
-            # an exclusive group refuses to leave no button checked
-            self._button_group.setExclusive(False)
-            checked.setChecked(False)
-            self._button_group.setExclusive(True)
+        # an exclusive group refuses to leave no button checked
+        self._button_group.setExclusive(False)
+        for button in self._button_group.buttons():
+            button.setChecked(False)
+        self._button_group.setExclusive(True)
 
     @Slot()
     def _emit_value_changed_signal(self, button_id: int) -> None:
