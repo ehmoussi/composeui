@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
 
     from playwright.sync_api import (
+        APIResponse,
         BrowserContext,
         ConsoleMessage,
         FilePayload,
@@ -2467,6 +2468,55 @@ def test_a_library_that_failed_to_load_loads_again_on_the_next_swap(
             page.evaluate("new Promise(requestAnimationFrame)")
         assert is_ready
         assert len(requests) == 2
+
+
+@define_view
+class _TwoAnswersMainView(MainView):
+    first: ButtonView = child(ButtonView, text="First")
+    second: ButtonView = child(ButtonView, text="Second")
+    answer: LabelView = child(LabelView, text="none")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.first.clicked.connect(lambda: setattr(self.answer, "text", "first"))
+        self.second.clicked.connect(lambda: setattr(self.answer, "text", "second"))
+
+
+def test_a_late_answer_does_not_overwrite_a_newer_one(browser: Browser) -> None:
+    views: list[_TwoAnswersMainView] = []
+
+    def build_view() -> _TwoAnswersMainView:
+        views.append(_TwoAnswersMainView())
+        return views[-1]
+
+    app = WebApplication(build_main_view=build_view).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        held: list[tuple[Route, APIResponse]] = []
+
+        def hold_the_first(route: Route) -> None:
+            if len(held) == 0 and route.request.method == "POST":
+                held.append((route, route.fetch()))
+            else:
+                route.continue_()
+
+        page.route("**/widget/*", hold_the_first)
+        page.goto("/")
+        page.get_by_role("button", name="First").click()
+        for _ in range(600):  # frames: the server answers it, and the test keeps the answer
+            if len(held) > 0:
+                break
+            page.evaluate("new Promise(requestAnimationFrame)")
+        page.get_by_role("button", name="Second").click()
+        expect(page.get_by_text("second", exact=True)).to_be_visible()
+
+        route, answer = held[0]
+        with page.expect_response(lambda response: response.request.method == "POST"):
+            route.fulfill(response=answer)
+        page.evaluate("new Promise(requestAnimationFrame)")
+
+        expect(page.get_by_text("second", exact=True)).to_be_visible()
+        assert views[-1].answer.text == "second"
 
 
 def test_a_chart_draws_its_series_with_their_legend(chart_page: Page) -> None:
