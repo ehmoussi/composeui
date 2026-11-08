@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import math
 import struct
+import threading
 from typing import TYPE_CHECKING
 
 import pytest
@@ -20,6 +22,7 @@ from composeui.core.chartimage import (
     chart_figure,
     chart_image_bytes,
     image_name,
+    image_style,
     save_chart_image,
 )
 from composeui.core.view import ChartKind, ChartView, ReferenceLine, Series
@@ -134,6 +137,44 @@ def test_vector_images_keep_their_text_as_text(tmp_path: Path) -> None:
     assert pdf.startswith(b"%PDF")
     assert b"/FontFile2" in pdf  # TrueType embedded, not outlines
     assert dict(mpl.rcParams) == defaults  # its settings were its own
+
+
+def test_overlapping_exports_keep_their_settings_and_restore_the_global_ones() -> None:
+    defaults = dict(mpl.rcParams)
+    first_entered, first_may_read, first_exited, second_entered = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    sizes: dict[str, float] = {}
+
+    def first() -> None:
+        with contextlib.suppress(ValueError), image_style(ImageOptions(font_size=20)):
+            first_entered.set()
+            first_may_read.wait(10)
+            sizes["first"] = mpl.rcParams["font.size"]
+            msg = "an export that fails"
+            raise ValueError(msg)
+        first_exited.set()
+
+    def second() -> None:
+        with image_style(ImageOptions(font_size=30)):
+            second_entered.set()
+            first_exited.wait(10)  # inside its block while the first one ends, if it can be
+            sizes["second"] = mpl.rcParams["font.size"]
+
+    threads = [threading.Thread(target=first), threading.Thread(target=second)]
+    threads[0].start()
+    assert first_entered.wait(10)
+    threads[1].start()
+    second_entered.wait(0.2)  # time for the second to change the settings, if it can
+    first_may_read.set()
+    for thread in threads:
+        thread.join(20)
+
+    assert sizes == {"first": 20, "second": 30}
+    assert dict(mpl.rcParams) == defaults
 
 
 def test_an_unknown_format_is_refused(tmp_path: Path) -> None:
