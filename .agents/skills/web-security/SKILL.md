@@ -133,6 +133,17 @@ Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the ov
 9. **Don't frame the app**, not even from itself. If a feature needs a frame, ask the user
    first: it means `frame-ancestors 'self'` and `SAMEORIGIN` instead.
 
+10. **The server enforces what the page shows.** HTML that disables or hides a control is not a
+    check: a stale or crafted post from the same origin still arrives. `WebSession.handle_event`
+    refuses an event when `WebRenderer.takes_events` is false. A renderer that overrides it, as a
+    table that still scrolls while disabled, checks each event in its `dispatch`.
+11. **Expect a post twice, late, or out of order.** `PostOrder` serves a page's posts in order and
+    answers a number that it has seen with 204: don't repeat an effect. The page drops a fragment
+    of an older answer once a later one showed it. See the `state-machines` skill.
+12. **Check what a restored session names.** A saved state holds paths: the session owns a
+    folder only after `_saved_uploads` checks that it is ComposeUI's. Never delete a path that a
+    saved file gives without such a check.
+
 ## Testing
 
 `tests/test_webrenderer.py` (HTTP, `starlette.testclient`):

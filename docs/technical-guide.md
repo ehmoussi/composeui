@@ -718,6 +718,10 @@ To update one of them:
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that isn't `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
+- Before you change code that holds state over time, write down its states and events, and what
+  each event does in each state. The `state-machines` skill gives the method. It applies to jobs,
+  threads and timers, `SqliteModel` locking, web sessions and post order, `page.js` loaders and
+  swaps, reload, dialogs and screens, or a file being replaced.
 - The `__all__` of each module of `composeui.core` is its public API. The API reference
   shows only these names, and `tests/test_docs.py` checks that the docs and the examples
   import no other name. Add a name that apps use to `__all__`. The other names, also those
