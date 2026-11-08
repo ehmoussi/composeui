@@ -81,6 +81,8 @@ The notable changes of each release of ComposeUI. The format follows
   field stored the text "None", and a boolean field stored false.
 - Check-all and a Textual row edit of several cells stay on their records when a `cell_edited`
   callback sorts, replaces or removes the rows. Before, the next edit could land on another record.
+- A web session whose setup fails closes the model it built. Before, each failed request leaked one
+  model's resources.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy
   that the field holds.
 - `DataFrameSource` with an `id_column` keeps the frame's order for rows with equal cells, as

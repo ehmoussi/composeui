@@ -431,23 +431,28 @@ class WebApplication(Application[MainViewT]):
         """Build a new session's main view, wired, and its model."""
         main_view = self._build_main_view()
         model = self._new_session_model()
-        _add_reference_to_signals(main_view, model)
-        main_view.is_visible = True
-        for connection in self._connections:
-            self._replay(connection, main_view)
-        self.setup_session(main_view)
-        if model is not None:
-            self._setup_model(main_view, model)
-        if self._args is not None and self._args.language is not None:
-            main_view.set_language(self._args.language)
-        start_reactions(main_view)
-        # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
-        if self._args is not None and self._args.f is not None:
-            open_study(main_view, model, self._args.f)  # emits `loaded`
-        else:
-            main_view.loaded.emit()  # the study the session starts with is in place too
-        if self._args is not None:
-            main_view.apply_arguments(self._args)
+        try:
+            _add_reference_to_signals(main_view, model)
+            main_view.is_visible = True
+            for connection in self._connections:
+                self._replay(connection, main_view)
+            self.setup_session(main_view)
+            if model is not None:
+                self._setup_model(main_view, model)
+            if self._args is not None and self._args.language is not None:
+                main_view.set_language(self._args.language)
+            start_reactions(main_view)
+            # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
+            if self._args is not None and self._args.f is not None:
+                open_study(main_view, model, self._args.f)  # emits `loaded`
+            else:
+                main_view.loaded.emit()  # the study the session starts with is in place too
+            if self._args is not None:
+                main_view.apply_arguments(self._args)
+        except BaseException:
+            if model is not None:  # no session owns it yet
+                model.close()
+            raise
         return main_view, model
 
     def _new_session_model(self) -> Model | None:

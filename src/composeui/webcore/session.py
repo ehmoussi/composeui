@@ -557,7 +557,7 @@ class SessionStore:
             self._building += 1
         try:
             # built outside the store's lock: building runs app code, which may be slow
-            session = WebSession(*self._build_session())
+            session = self._built_session()
             session_id = secrets.token_urlsafe(32)
             with self._lock:
                 self._sessions[session_id] = (session, time.monotonic())
@@ -565,6 +565,16 @@ class SessionStore:
             with self._lock:
                 self._building -= 1
         return session_id, session
+
+    def _built_session(self) -> WebSession:
+        """Build a session, closing its model if the session can't take it."""
+        main_view, model = self._build_session()
+        try:
+            return WebSession(main_view, model)
+        except BaseException:
+            if model is not None:
+                model.close()
+            raise
 
     def save_all(self) -> None:
         """Save every live session into `saved`, as a ``--reload`` server's process stops."""
@@ -596,7 +606,7 @@ class SessionStore:
         directory = self._saved / session_id
         if not directory.is_dir():
             return None
-        session = WebSession(*self._build_session())
+        session = self._built_session()
         session.open_saved(directory)
         shutil.rmtree(directory, ignore_errors=True)
         self._sessions[session_id] = (session, time.monotonic())
