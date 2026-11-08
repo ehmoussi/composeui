@@ -182,7 +182,9 @@ class RendererContainer(Generic[TView]):
         """
         next(iter(self._renderers.values())).call_on_main_thread(callback)
 
-    def post_on_main_thread(self, callback: Callable[[], None]) -> None:
+    def post_on_main_thread(  # pragma: no cover (a main view, which `Jobs` asks, has one renderer)
+        self, callback: Callable[[], None]
+    ) -> None:
         """Have `callback` run on the GUI's thread, as `Renderer.post_on_main_thread` says."""
         next(iter(self._renderers.values())).post_on_main_thread(callback)
 
