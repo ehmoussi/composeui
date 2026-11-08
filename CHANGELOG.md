@@ -69,6 +69,8 @@ The notable changes of each release of ComposeUI. The format follows
   error.
 - On Qt and Textual, setting a radio group's value to `None` clears its selection, as the view holds
   no choice.
+- On Textual, a job that reports progress inside a SQLite transaction no longer deadlocks when its
+  callback reads the same model: a job's results are delivered without waiting for them.
 - On the web, an upload whose name has only letters outside ASCII before its extension, such as
   `データ.csv`, is no longer refused for its type.
 - Chart image exports that overlap, such as two web sessions saving a chart at once, no longer

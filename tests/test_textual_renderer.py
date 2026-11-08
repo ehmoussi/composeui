@@ -18,6 +18,7 @@ import datetime
 import io
 import math
 import os
+import subprocess
 import sys
 import threading
 import types
@@ -3772,6 +3773,58 @@ def _app_of(view: MainView) -> App[Any]:
     app = view.renderer.app
     assert app is not None
     return app
+
+
+_PROGRESS_IN_A_TRANSACTION = """
+import asyncio, faulthandler
+faulthandler.dump_traceback_later(30, exit=True)
+from composeui.core.registry import RendererType
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.view import MainView
+
+class Numbers(SqliteTable):
+    create = "CREATE TABLE number(value INTEGER);"
+
+class NumbersModel(SqliteModel):
+    def __init__(self):
+        super().__init__()
+        self.numbers = self.add_table(Numbers)
+
+async def main():
+    model, view = NumbersModel(), MainView()
+    view.render(RendererType.TEXTUAL)
+    read = []
+
+    def work(job):
+        with model.numbers.connection() as db:
+            db.execute("INSERT INTO number VALUES (1)")
+            job.report_progress(1)
+
+    def show_progress(_value):
+        read.append(model.numbers.fetch_column("SELECT value FROM number"))
+
+    async with view.renderer.app.run_test() as pilot:
+        job = view.jobs.start(work)
+        job.progress.connect(show_progress)
+        while not read or view.jobs.is_running:
+            await pilot.pause(0.01)
+    assert read == [[1]], read
+    print("finished")
+
+asyncio.run(main())
+"""
+
+
+def test_a_job_reporting_inside_a_transaction_and_a_callback_reading_the_model_both_end() -> None:
+    result = subprocess.run(  # noqa: S603 (the script above)
+        [sys.executable, "-c", _PROGRESS_IN_A_TRANSACTION],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr  # the stacks of a deadlock
+    assert "finished" in result.stdout
 
 
 @pytest.mark.asyncio
