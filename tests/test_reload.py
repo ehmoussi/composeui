@@ -634,6 +634,72 @@ def test_a_qt_app_without_a_model_shows_the_changed_code_in_its_window(
     assert changed == ["render", "2", app]  # in the same window and process
 
 
+#: a Qt app whose first save of its state fails, then reloads as any other
+_FAILED_SAVE_APP = textwrap.dedent(
+    """
+    import os, pathlib
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QApplication
+    from composeui.core.view import MainView
+    import composeui.qtcore.qtapplication as qt_application
+    from composeui.qtcore.qtapplication import QtApplication
+
+    VERSION = 1
+
+    def log(text):
+        with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
+            file.write(text + "\\n")
+
+    real_save = getattr(qt_application, "real_save", qt_application.save_reloaded_state)
+    qt_application.real_save = real_save
+
+    def failing_once(*args):
+        if not hasattr(qt_application, "has_failed"):
+            qt_application.has_failed = True
+            log("save failed")
+            raise OSError(28, "injected save failure")
+        real_save(*args)
+
+    qt_application.save_reloaded_state = failing_once
+
+    class LoggingApplication(QtApplication):
+        def render(self, renderer_type):
+            super().render(renderer_type)
+            log(f"render|{VERSION}")
+            if VERSION == 3:
+                QTimer.singleShot(0, QApplication.quit)
+
+    LoggingApplication(build_main_view=MainView).run()
+    """
+)
+
+
+def test_a_failed_save_of_the_state_keeps_the_qt_app_and_later_changes_reload(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("qtpy.QtWidgets")
+    log = tmp_path / "runs.log"
+    script = tmp_path / "app.py"
+    script.write_text(_FAILED_SAVE_APP)
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--reload"],
+        cwd=tmp_path,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for(lambda: "render|1" in _text(log))
+        script.write_text(_FAILED_SAVE_APP.replace("VERSION = 1", "VERSION = 2"))
+        _wait_for(lambda: "save failed" in _text(log))
+        script.write_text(_FAILED_SAVE_APP.replace("VERSION = 1", "VERSION = 3"))
+        assert program.wait(timeout=_TIMEOUT) == 0
+    finally:
+        _stop(program)
+
+    assert log.read_text().splitlines() == ["render|1", "save failed", "render|3"]
+
+
 #: a Textual app logging its process and what its main view shows. The first run changes
 #: the state once mounted, then waits for a change; the next exits once mounted
 _TEXTUAL_APP = textwrap.dedent(
