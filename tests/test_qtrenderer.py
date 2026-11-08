@@ -336,6 +336,25 @@ def test_an_unloaded_qml_map_reports_a_deployment_error(qtbot: QtBot) -> None:
         _ = widget.root
 
 
+def test_a_failed_refresh_leaves_the_widget_s_signals_as_they_were(qtbot: QtBot) -> None:
+    view = InputView(text="before")
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    widget = view.renderer.qt_object
+    assert isinstance(widget, QLineEdit)
+    qtbot.addWidget(widget)
+    with pytest.raises(AttributeError):
+        view.renderer.refresh_attribute("no_such_attribute", 1)
+    qtbot.keyClicks(widget, "!")
+    assert view.text == "before!"
+    widget.blockSignals(True)  # noqa: FBT003
+    with pytest.raises(AttributeError):
+        view.renderer.refresh_attribute("no_such_attribute", 1)
+    assert widget.signalsBlocked()
+    view.renderer.refresh()
+    assert widget.signalsBlocked()
+
+
 def test_label_renderer_pushes_view_state_to_the_widget(qtbot: QtBot) -> None:
     view = LabelView()
     view.render(RendererType.QT)
