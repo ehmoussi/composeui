@@ -4035,6 +4035,32 @@ class _TwinShortcutsMainView(MainView):
 
 
 @pytest.mark.asyncio
+async def test_the_shortcuts_of_disabled_actions_do_nothing_until_they_are_enabled() -> None:
+    view = _TwinShortcutsMainView()
+    view.second.shortcut = "Ctrl+y"
+    app = _app_of(view)
+    triggered: list[str] = []
+    view.first.triggered.connect(lambda: triggered.append("custom"))
+    view.file_menu.new.triggered.connect(lambda: triggered.append("new"))
+    view.file_menu.open_file.triggered.connect(lambda: triggered.append("open"))
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        for action in (view.first, view.file_menu.new, view.file_menu.open_file):
+            action.is_enabled = False
+        await pilot.pause()
+        await pilot.press("ctrl+e", "ctrl+n", "ctrl+o")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert triggered == []
+
+        view.first.is_enabled = True
+        await pilot.press("ctrl+e")
+        await pilot.pause()
+        assert triggered == ["custom"]
+
+
+@pytest.mark.asyncio
 async def test_a_key_moved_off_an_action_still_runs_the_other_bound_to_it() -> None:
     view = _TwinShortcutsMainView()
     app = _app_of(view)

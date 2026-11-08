@@ -3128,6 +3128,8 @@ class _ComposeUIApp(App[None]):
 
     def trigger(self, action_view: ActionView) -> None:
         """Trigger an action from its key binding or its toolbar button."""
+        if not action_view.is_enabled:  # its key stays bound while its button is disabled
+            return
         if isinstance(action_view, _FILE_DIALOG_ACTIONS):
             # `ask_open_filepath`/`ask_save_filepath` block waiting for a modal file
             # picker; blocking the app's own thread that way would freeze the very
