@@ -88,6 +88,8 @@ The notable changes of each release of ComposeUI. The format follows
   about 0.2 s, and about twice as long for twice the rows. A widget's Qt connections now hold
   its views weakly, as on Textual and the web: an open window no longer keeps alive the views
   that the app dropped.
+- On Textual, a callback handed to the app's thread runs once when it raises `RuntimeError`. Before,
+  it ran a second time, on the worker's thread.
 - On the web, a job's `finished` callback can start another job or task. It raised
   `CalledInJobError`: the web hands a job's outcome over in the job's thread, which took the
   callback for the job's own function.

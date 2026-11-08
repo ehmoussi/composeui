@@ -3680,6 +3680,42 @@ def _app_of(view: MainView) -> App[Any]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("through_a_job", [False, True])
+async def test_a_callback_that_raises_runtime_error_runs_once_on_the_app_s_thread(
+    *, through_a_job: bool
+) -> None:
+    view = MainView()
+    app = _app_of(view)
+    renderer = view.renderer
+    assert isinstance(renderer, TextualMainRenderer)
+    threads: list[int] = []
+    errors: list[Exception] = []
+
+    def callback() -> None:
+        threads.append(threading.get_ident())
+        msg = "after a side effect"
+        raise RuntimeError(msg)
+
+    def from_a_thread() -> None:
+        with pytest.raises(RuntimeError, match="after a side effect"):
+            renderer.call_on_main_thread(callback)
+
+    async with app.run_test() as pilot:
+        if through_a_job:
+            job = view.jobs.start(lambda job: job.call_on_main_thread(callback))
+            job.failed.connect(errors.append)
+            for _ in range(200):
+                await pilot.pause(0.01)
+                if errors:
+                    break
+            assert len(errors) == 1
+        else:
+            await asyncio.to_thread(from_a_thread)
+
+    assert threads == [threading.get_ident()]
+
+
+@pytest.mark.asyncio
 async def test_a_dialog_opened_before_the_app_runs_shows_and_its_cancel_rejects() -> None:
     view = DialogsMainView()
     app = _app_of(view)
