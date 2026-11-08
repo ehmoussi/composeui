@@ -4891,6 +4891,14 @@ async def test_graphics_draw_an_image_at_its_size_or_shrunk_to_the_width() -> No
         assert (pixels.size.width, pixels.size.height) == (image.size.width, image.size.width // 4)
 
 
+async def _wait_for_size(pilot: Pilot[Any], widget: Widget, size: tuple[int, int]) -> None:
+    """Wait for `widget`'s layout to give it `size`, or give up: a slow runner lays out later."""
+    for _ in range(100):
+        await pilot.pause(0.05)
+        if (widget.size.width, widget.size.height) == size:
+            break
+
+
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("graphics")
 async def test_graphics_draw_an_image_at_the_height_it_is_given_and_back() -> None:
@@ -4902,10 +4910,11 @@ async def test_graphics_draw_an_image_at_the_height_it_is_given_and_back() -> No
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         pixels = _widget(view.picture).query_one(_Pixels)
+        await _wait_for_size(pilot, pixels, (20, 5))
         assert (pixels.size.width, pixels.size.height) == (20, 5)
 
         view.picture.height = None
-        await pilot.pause()
+        await _wait_for_size(pilot, pixels, (4, 1))
         assert (pixels.size.width, pixels.size.height) == (4, 1)
 
 
