@@ -79,8 +79,6 @@ class WebSession(RenderTarget):
         self.model = model
         #: where the file path fields' uploads are kept, made by the first one
         self._uploads: Path | None = None
-        #: whether `close` ran: an upload that arrives after it has nowhere to stay
-        self._has_ended = False
         #: the directory of the upload that each file field holds, by its widget's id
         self._held_uploads: dict[str, Path] = {}
         #: the directories of uploads that were replaced, removed once no job may read them
@@ -93,7 +91,7 @@ class WebSession(RenderTarget):
     def close(self) -> None:
         """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
         with self.lock:
-            self._has_ended = True
+            self.has_ended = True
             # weak references would free them too, but only once collected
             stop_reactions(self.main_view)
             # not `drop`: its signals would run the app's code in another session's request
@@ -101,7 +99,10 @@ class WebSession(RenderTarget):
             if self.model is not None:
                 self.model.close()
             if self._uploads is not None:
-                shutil.rmtree(self._uploads, ignore_errors=True)
+                # a job may still read them, even dropped: its thread goes on
+                self.main_view.jobs.after_workers(
+                    functools.partial(shutil.rmtree, self._uploads, ignore_errors=True)
+                )
                 self._uploads = None
                 self._held_uploads.clear()
                 self._replaced_uploads.clear()
@@ -171,6 +172,9 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if renderer is None:
                 return None
+            # as its page shows it: a stale or crafted post can't reach it
+            if not renderer.takes_events:
+                raise UnsupportedEventError(renderer, event)
             return self._respond(functools.partial(renderer.dispatch, event, form))
 
     def pick_file(
@@ -200,7 +204,7 @@ class WebSession(RenderTarget):
         name = name[-_MAX_FILE_NAME_LENGTH:]
         with self.lock:
             # after its session: its body took a while, and nothing would remove what is kept
-            renderer = None if self._has_ended else self.renderers.get(widget_id)
+            renderer = None if self.has_ended else self.renderers.get(widget_id)
             cell = None
             if isinstance(renderer, WebTableRenderer):
                 cell = renderer.file_path_cell(form or {})
@@ -331,7 +335,7 @@ class WebSession(RenderTarget):
                 directory
             ):
                 self._replaced_uploads.append(self._held_uploads.pop(widget_id))
-        if not self.main_view.jobs.is_running:
+        if not self.main_view.jobs.has_workers:
             for directory in self._replaced_uploads:
                 shutil.rmtree(directory, ignore_errors=True)
             self._replaced_uploads.clear()
@@ -553,7 +557,7 @@ class SessionStore:
             self._building += 1
         try:
             # built outside the store's lock: building runs app code, which may be slow
-            session = WebSession(*self._build_session())
+            session = self._built_session()
             session_id = secrets.token_urlsafe(32)
             with self._lock:
                 self._sessions[session_id] = (session, time.monotonic())
@@ -561,6 +565,16 @@ class SessionStore:
             with self._lock:
                 self._building -= 1
         return session_id, session
+
+    def _built_session(self) -> WebSession:
+        """Build a session, closing its model if the session can't take it."""
+        main_view, model = self._build_session()
+        try:
+            return WebSession(main_view, model)
+        except BaseException:
+            if model is not None:
+                model.close()
+            raise
 
     def save_all(self) -> None:
         """Save every live session into `saved`, as a ``--reload`` server's process stops."""
@@ -592,7 +606,7 @@ class SessionStore:
         directory = self._saved / session_id
         if not directory.is_dir():
             return None
-        session = WebSession(*self._build_session())
+        session = self._built_session()
         session.open_saved(directory)
         shutil.rmtree(directory, ignore_errors=True)
         self._sessions[session_id] = (session, time.monotonic())

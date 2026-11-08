@@ -22,8 +22,10 @@ import math
 import mimetypes
 import operator
 import re
+import shutil
 import sys
 import threading
+import uuid
 import weakref
 from collections import Counter, OrderedDict, deque
 from collections.abc import Callable, Hashable, Mapping, Sequence
@@ -1532,8 +1534,14 @@ class MainView(View):
 
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file, with its versions (`file_data`)."""
-        with filepath.open("w") as f:
-            json.dump(self.file_data(), f)
+        path = filepath.resolve()
+        partial = _partial_path(path)
+        try:
+            with partial.open("w") as f:
+                json.dump(self.file_data(), f)
+            _publish(partial, path)
+        finally:
+            partial.unlink(missing_ok=True)
         self.state_filepath = filepath
 
     def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
@@ -4793,24 +4801,36 @@ SOURCE_TABLE_CACHE = 1_000
 SOURCE_TABLE_JOB_ROWS = 100_000
 
 
-def _write_csv(job: Optional[Job[None]], chunks: Iterator[str], path: Path) -> None:
+def _partial_path(path: Path) -> Path:
+    """Get a name beside `path`, its own, to write a file before it replaces `path`."""
+    return path.with_name(f".{path.name}.{uuid.uuid4().hex}.partial")
+
+
+def _publish(partial: Path, path: Path) -> None:
+    """Replace `path` with the whole file `partial`, as one step, keeping `path`'s mode."""
+    if path.exists():
+        shutil.copymode(path, partial)
+    partial.replace(path)
+
+
+def _write_csv(job: Optional[Job[bool]], chunks: Iterator[str], path: Path) -> bool:
     """Write a large table's CSV, as `SourceTableView.csv_chunks` gives it, in a job or not.
 
     A job canceled (New, Open, closing the app) stops. Stopped, or failed (e.g. a cell the
-    source can't read, a full disk), it leaves no part of the file: none that looks whole.
+    source can't read, a full disk), it leaves the file `path` as it was. Tell if it wrote it.
     """
-    is_written = False
+    path = path.resolve()
+    partial = _partial_path(path)
     try:
-        with path.open("w", encoding="utf-8", newline="") as file:
+        with partial.open("w", encoding="utf-8", newline="") as file:
             for chunk in chunks:
                 if job is not None and job.is_canceled:
-                    break
+                    return False
                 file.write(chunk)
-            else:
-                is_written = True
+        _publish(partial, path)
     finally:
-        if not is_written:
-            path.unlink(missing_ok=True)
+        partial.unlink(missing_ok=True)
+    return True
 
 
 class _WeakCallback:
@@ -5193,7 +5213,12 @@ class SourceTableView(View):
         done = self.tr("Exported {count} rows to {name}.")
         failed = self.tr("Can't export to {name}: {error}.")
         show = main_view.status_bar.show_message
-        job.finished.connect(lambda _: show(done.format(count=f"{count:,}", name=path.name)))
+
+        def report(is_written: bool) -> None:
+            if is_written:
+                show(done.format(count=f"{count:,}", name=path.name))
+
+        job.finished.connect(report)
         job.failed.connect(lambda error: show(failed.format(name=path.name, error=error)))
 
     def is_selected(self, row_id: Any) -> bool:

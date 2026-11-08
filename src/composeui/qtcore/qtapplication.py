@@ -112,7 +112,13 @@ class _Reloads:
         if self._changed is None or QThread.currentThread().loopLevel() > 1:
             return
         changed, self._changed = self._changed, None
-        save_reloaded_state(self._run.main_view, self._run.model)
+        try:
+            save_reloaded_state(self._run.main_view, self._run.model)
+        except Exception:
+            # answered, or the supervisor waits for this running app forever
+            LOGGER.exception("The state can't be saved: the window keeps the previous code")
+            acknowledge_changes()
+            return
         if not can_reload_in_place(changed):
             # the supervisor runs the program in a new process, which opens the state saved
             self._timer.stop()

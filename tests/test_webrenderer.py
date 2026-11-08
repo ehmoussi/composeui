@@ -65,12 +65,15 @@ from composeui.core.view import (
     CellWidget,
     ChartKind,
     ChartView,
+    CheckBoxView,
+    ComboBoxView,
     DialogView,
     EditRefusedError,
     FilePathInputMixin,
     FilePathInputView,
     FolderPathInputMixin,
     ImageView,
+    InputView,
     LabelRowFloatInputView,
     LabelRowInputView,
     LabelRowIntInputView,
@@ -90,9 +93,12 @@ from composeui.core.view import (
     SelectionMode,
     SeparatorAction,
     Series,
+    SliderView,
     SourceTableView,
     StatusBar,
     TableView,
+    TabPage,
+    TabView,
     TreeNode,
     TreeView,
     UploadedFile,
@@ -112,6 +118,7 @@ from composeui.webcore.order import (
     PAGE_HEADER,
     POST_FIELD,
     POST_HEADER,
+    DuplicatePostError,
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS
@@ -529,6 +536,66 @@ async def _send(order: PostOrder, handled: list[tuple[str, int]], page: str, num
     for _ in range(20):  # turns of the event loop, not time: a post waiting never ends
         await asyncio.sleep(0)
     return task
+
+
+def test_a_duplicate_post_repeats_nothing_and_releases_no_later_post(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 60)
+
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        may_end = asyncio.Event()
+
+        async def original() -> None:
+            async with order.turn({PAGE_HEADER: _PAGE, POST_HEADER: "1"}):
+                await may_end.wait()
+                handled.append((_PAGE, 1))
+
+        first = asyncio.ensure_future(original())
+        await asyncio.sleep(0)
+        with pytest.raises(DuplicatePostError):
+            await (await _send(order, handled, _PAGE, 1))
+        second = await _send(order, handled, _PAGE, 2)
+        assert not second.done()  # the original is still running
+
+        may_end.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 10)
+        with pytest.raises(DuplicatePostError):  # once ended too
+            await (await _send(order, handled, _PAGE, 2))
+        return handled
+
+    assert asyncio.run(handle_all()) == [(_PAGE, 1), (_PAGE, 2)]
+
+
+def test_a_page_remembers_only_its_latest_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("composeui.webcore.order._MAX_SEEN", 1)
+
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        await _send(order, handled, _PAGE, 1)
+        await _send(order, handled, _PAGE, 2)
+        await _send(order, handled, _PAGE, 1)  # forgotten: as a new post
+        return handled
+
+    assert asyncio.run(handle_all()) == [(_PAGE, 1), (_PAGE, 2), (_PAGE, 1)]
+
+
+def test_a_duplicate_post_gets_an_empty_answer_and_changes_nothing(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    age_id = _field_id(main_view.form.age)
+    headers = {PAGE_HEADER: _PAGE, POST_HEADER: "1"}
+    data = {"value": "3", "event": "input"}
+    assert client.post(f"/widget/{age_id}", data=data, headers=headers).status_code == 200
+    main_view.form.age.value = 9.0
+
+    response = client.post(f"/widget/{age_id}", data=data, headers=headers)
+
+    assert (response.status_code, response.text) == (204, "")
+    assert main_view.form.age.value == 9.0
 
 
 def test_a_post_waits_for_a_missing_one_only_so_long(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1576,6 +1643,85 @@ def test_a_server_side_value_wins_over_the_last_typed_text(rows: _RowsMainView) 
     assert edited == ["-", "-"]
 
 
+class _DisabledCombo(ComboBoxView[str]):
+    pass
+
+
+@define_view
+class _DisabledTabs(TabView):
+    first: TabPage = child(TabPage, title="First")
+    second: TabPage = child(TabPage, title="Second")
+
+
+@define_view
+class _DisabledControlsMainView(MainView):
+    text: InputView = child(InputView, text="before")
+    check: CheckBoxView = child(CheckBoxView)
+    slider: SliderView = child(SliderView, maximum=10)
+    combo: _DisabledCombo = attrs.Factory(
+        lambda: _DisabledCombo(values={"A": "a", "B": "b"}, value="a")
+    )
+    tabs: _DisabledTabs = child(_DisabledTabs)
+
+
+_DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], object]] = {
+    "text": ("change", {"value": "after"}, lambda view: view.text.text, "before"),
+    "check": ("change", {"checked": "on"}, lambda view: view.check.is_checked, False),
+    "slider": ("change", {"value": "5"}, lambda view: view.slider.value, 0),
+    "combo": ("change", {}, lambda view: view.combo.value, "a"),  # see `_posted`
+    "tabs": ("select", {"index": "1"}, lambda view: view.tabs.current_index, 0),
+}
+
+
+def _posted(control: Any, form: dict[str, str]) -> dict[str, str]:
+    """Get what a control posts: a combo box names its field after its widget."""
+    return form or {control.renderer.widget_id: "b"}
+
+
+def _disabled_session() -> tuple[_DisabledControlsMainView, WebSession, list[object]]:
+    view = _DisabledControlsMainView()
+    session = WebSession(view)
+    signals: list[object] = []
+    view.text.text_changed.connect(signals.append)
+    view.check.toggled.connect(signals.append)
+    view.slider.value_changed.connect(signals.append)
+    view.combo.value_changed.connect(signals.append)
+    view.tabs.current_changed.connect(signals.append)
+    return view, session, signals
+
+
+@pytest.mark.parametrize("name", _DISABLED_EVENTS)
+@pytest.mark.parametrize("how", ["disabled", "hidden"])
+def test_a_disabled_or_hidden_control_refuses_its_events(name: str, how: str) -> None:
+    view, session, signals = _disabled_session()
+    event, form, value_of, before = _DISABLED_EVENTS[name]
+    control = getattr(view, name)
+    assert isinstance(control.renderer, WebRenderer)
+    if how == "disabled" and name == "tabs":
+        view.tabs.second.is_enabled = False
+    elif how == "disabled":
+        control.is_enabled = False
+    else:
+        control.is_visible = False
+
+    with pytest.raises(UnsupportedEventError):
+        session.handle_event(control.renderer.widget_id, event, _posted(control, form))
+
+    assert value_of(view) == before
+    assert signals == []
+    session.close()
+
+
+def test_a_control_accepts_its_events_while_enabled() -> None:
+    view, session, signals = _disabled_session()
+    for name, (event, form, value_of, before) in _DISABLED_EVENTS.items():
+        control = getattr(view, name)
+        session.handle_event(control.renderer.widget_id, event, _posted(control, form))
+        assert value_of(view) != before, name
+    assert len(signals) == len(_DISABLED_EVENTS)
+    session.close()
+
+
 def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
     field = _part(rows.length, "field")
 
@@ -1757,6 +1903,45 @@ def test_a_job_reads_a_file_replaced_before_it_opened_it(replacement: str) -> No
     session.close()
 
 
+@pytest.mark.parametrize("ending", ["dropped", "closed"])
+def test_an_upload_stays_until_a_dropped_worker_that_may_read_it_has_ended(ending: str) -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = measurements.path
+    assert first is not None
+    release = threading.Event()
+    threads: list[threading.Thread] = []
+    contents: list[bytes] = []
+
+    def work(_job: Job[None, None]) -> None:
+        threads.append(threading.current_thread())
+        assert release.wait(30)
+        contents.append(first.read_bytes())
+
+    main_view.jobs.start(work)
+    if ending == "closed":
+        session.close()
+    else:
+        _pick_file(session, field.widget_id, "second.csv", b"second")
+        main_view.jobs.drop()
+        session.poll_jobs()  # what runs the cleanup
+    assert first.read_bytes() == b"first"
+
+    release.set()
+    threads[0].join(30)
+
+    assert contents == [b"first"]
+    if ending == "closed":
+        assert not first.exists()
+    else:
+        session.poll_jobs()
+        assert not first.exists()
+        session.close()
+
+
 def test_a_file_path_replaced_during_a_job_stays_until_the_job_is_over() -> None:
     main_view = DataFileMainView()
     session = WebSession(main_view)
@@ -1790,8 +1975,10 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     first = main_view.form.dataset.file
     assert first is not None
     release = threading.Event()
+    threads: list[threading.Thread] = []
 
     def work(_job: Job[None, None]) -> None:
+        threads.append(threading.current_thread())
         assert release.wait(30)
 
     main_view.jobs.start(work)
@@ -1800,9 +1987,35 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     assert first.path.exists()
 
     session.close()
+    assert first.path.exists()  # the job may still read it
     release.set()
+    threads[0].join(30)
 
     assert not first.path.exists()
+
+
+def test_a_closed_session_runs_none_of_its_jobs_callbacks() -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    release, threads = threading.Event(), list[threading.Thread]()
+    called: list[object] = []
+
+    def work(job: Job[None, int]) -> None:
+        threads.append(threading.current_thread())
+        assert release.wait(30)
+        job.report_progress(1)
+        job.call_on_main_thread(lambda: called.append("handed over"))
+
+    job = main_view.jobs.start(work)
+    job.progress.connect(called.append)
+    job.finished.connect(lambda _result: called.append("finished"))
+    job.failed.connect(called.append)
+    session.close()
+    release.set()
+    threads[0].join(30)
+
+    assert not threads[0].is_alive()
+    assert called == []
 
 
 def test_an_upload_that_fails_to_arrive_keeps_the_file_the_view_holds(
@@ -3719,6 +3932,17 @@ class _ReleasedModel(Model):
         self.is_released = True
 
 
+class _CountedModel(Model):
+    """A session's model, which counts how many times it's closed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closes = 0
+
+    def close(self) -> None:
+        self.closes += 1
+
+
 class _SessionStoreMachine(RuleBasedStateMachine):
     """A store of 3 sessions, idle 10 seconds at most, used in any order.
 
@@ -3799,6 +4023,61 @@ class _SessionStoreMachine(RuleBasedStateMachine):
 
 TestASessionStoreUsedInAnyOrder = _SessionStoreMachine.TestCase
 TestASessionStoreUsedInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
+
+
+def test_a_failed_session_setup_closes_its_model_and_a_retry_owns_its_own() -> None:
+    models: list[_CountedModel] = []
+    failures = [True, True, True, False]
+
+    def build_model() -> _CountedModel:
+        models.append(_CountedModel())
+        return models[-1]
+
+    def setup_model(_main_view: HelloMainView, _model: _CountedModel) -> None:
+        if failures.pop(0):
+            msg = "the setup failed"
+            raise RuntimeError(msg)
+
+    class App(WebModelApplication[HelloMainView, _CountedModel]):
+        pass
+
+    app = App(build_main_view=HelloMainView, build_model=build_model, setup_model=setup_model)
+    with TestClient(app.create_starlette_app(), raise_server_exceptions=False) as client:
+        for _ in range(3):
+            assert client.get("/").status_code == 500
+        assert [model.closes for model in models] == [1, 1, 1]
+        assert client.get("/").status_code == 200
+        assert models[-1].closes == 0
+    assert [model.closes for model in models] == [1, 1, 1, 1]
+
+
+class _UnrenderableMainView(HelloMainView):
+    def render(self, renderer_type: RendererType) -> None:
+        msg = "no renderer for it"
+        raise RuntimeError(msg)
+
+
+@pytest.mark.parametrize("has_model", [True, False])
+def test_a_session_failing_to_render_closes_its_model_if_it_has_one(*, has_model: bool) -> None:
+    model = _CountedModel() if has_model else None
+    store = SessionStore(lambda: (_UnrenderableMainView(), model), ttl=10.0, max_sessions=1)
+    with pytest.raises(RuntimeError, match="no renderer"):
+        store.create()
+    assert model is None or model.closes == 1
+
+
+def test_a_failed_setup_of_a_session_without_a_model_keeps_its_own_error() -> None:
+    class App(WebApplication[HelloMainView]):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            msg = "the setup failed"
+            raise RuntimeError(msg)
+
+    app = App(build_main_view=HelloMainView)
+    with (
+        TestClient(app.create_starlette_app()) as client,
+        pytest.raises(RuntimeError, match="the setup failed"),
+    ):
+        client.get("/")
 
 
 def test_a_session_used_expires_its_timeout_after_its_last_use() -> None:

@@ -30,6 +30,12 @@ ORDER_TIMEOUT = 2.0
 MAX_PAGES = 32
 _PAGE_PATTERN = re.compile(r"[0-9a-f]{32}")
 _POST_PATTERN = re.compile(r"[1-9][0-9]{0,8}")
+#: the numbers a page's posts are remembered by, to tell a post sent twice
+_MAX_SEEN = 1024
+
+
+class DuplicatePostError(Exception):
+    """A post with a number already handled, or being handled: it has no effect to repeat."""
 
 
 class PostOrder:
@@ -37,6 +43,8 @@ class PostOrder:
 
     def __init__(self) -> None:
         self._next: OrderedDict[str, int] = OrderedDict()
+        #: the numbers of each page's posts admitted, the oldest first
+        self._seen: dict[str, OrderedDict[int, None]] = {}
         # made in the event loop, by the first post that waits its turn
         self._turn: asyncio.Condition | None = None
 
@@ -45,7 +53,8 @@ class PostOrder:
         """Wait for the turn of the post with `headers`, then let the block handle it.
 
         At most `ORDER_TIMEOUT`: then the post is handled anyway. A post without the
-        headers, or with invalid ones, has no turn to wait for.
+        headers, or with invalid ones, has no turn to wait for. Raises `DuplicatePostError`
+        for a number seen before: it neither waits, nor moves the later posts' turns.
         """
         post = _post(headers)
         if post is None:
@@ -58,6 +67,13 @@ class PostOrder:
         if page not in self._next:
             self._keep(page, 1)
         self._next.move_to_end(page)
+        # no `await` since the check: two arrivals can't both pass it
+        seen = self._seen.setdefault(page, OrderedDict())
+        if number in seen:
+            raise DuplicatePostError
+        seen[number] = None
+        if len(seen) > _MAX_SEEN:
+            seen.popitem(last=False)
         async with turn:
             # a page forgotten meanwhile has no turn to wait for
             with contextlib.suppress(asyncio.TimeoutError):
@@ -75,7 +91,8 @@ class PostOrder:
     def _keep(self, page: str, number: int) -> None:
         self._next[page] = number
         if len(self._next) > MAX_PAGES:
-            self._next.popitem(last=False)
+            forgotten, _ = self._next.popitem(last=False)
+            self._seen.pop(forgotten, None)
 
 
 def form_order(form: Mapping[str, object]) -> dict[str, str]:

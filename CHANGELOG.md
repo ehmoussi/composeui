@@ -64,6 +64,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 - On Qt, a refresh that raises no longer leaves the widget's signals blocked, which cut the user's
   later edits off from the view. A widget blocked before a refresh stays blocked.
+- A failed JSON save or a canceled CSV export keeps the previous file, and a canceled export no
+  longer reports success. Before, the failure or the cancel destroyed it.
 - A study whose archive marks a member as patched data or as strongly encrypted is refused as an
   invalid file. Before, opening it raised `NotImplementedError`, and the web answered with a server
   error.
@@ -75,14 +77,20 @@ The notable changes of each release of ComposeUI. The format follows
   `データ.csv`, is no longer refused for its type.
 - Chart image exports that overlap, such as two web sessions saving a chart at once, no longer
   corrupt Matplotlib's global settings. Each export keeps its own, one at a time.
+- A closed web session no longer runs the callbacks of its jobs, whose progress or outcome arrives
+  after the close.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text
   field stored the text "None", and a boolean field stored false.
 - Check-all and a Textual row edit of several cells stay on their records when a `cell_edited`
   callback sorts, replaces or removes the rows. Before, the next edit could land on another record.
+- A web session whose setup fails closes the model it built. Before, each failed request leaked one
+  model's resources.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy
   that the field holds.
 - `DataFrameSource` with an `id_column` keeps the frame's order for rows with equal cells, as
   `ordered_ids` promises. Before, it ordered them by ID.
+- A disabled or hidden web control refuses the events of a stale or crafted post, as a button does,
+  and a disabled tab can't be selected.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
   expires during a long import, no longer crashes the server. `SqliteModel.close` closed the
   connection during the job's statement, which could end the process and every session in it.
@@ -92,11 +100,15 @@ The notable changes of each release of ComposeUI. The format follows
   rows of the Uber pickups example take about 10 s, down from about 20 s, with the same checks on
   each row. An import holds more memory for its dates, about 5 MiB for this file, and frees it
   at its end.
+- The web server answers a post sent twice with nothing: it no longer repeats its effects, or lets
+  later posts run before the original ends.
 - On Textual, the date field's calendar opens on the first and last valid dates, and its keys stop
   there. Before, it crashed on December 9999.
 - In the SQLite Uber pickups example, moving the hour takes about 0.3 to 0.4 s on the web, down
   from about 1.7 s, and sorting its table about 70 ms, down from about 860 ms. An index on the
   hour replaces a scan of every row. A study saved before the index opens through a migration.
+- When Qt reloads in place and the state can't be saved, the window keeps the previous code, and
+  later changes still reload. Before, the reload stopped for good.
 - On Qt, closing a page of many widgets no longer freezes the app for seconds. Freeing a
   page of 1,000 rows took about 1.6 s, and four times as long for twice the rows. It now takes
   about 0.2 s, and about twice as long for twice the rows. A widget's Qt connections now hold
@@ -109,11 +121,15 @@ The notable changes of each release of ComposeUI. The format follows
   callback for the job's own function.
 - A `DataFrameSource` sorted by a text column keeps its empty cells, "" and missing ones
   alike, in the frame's order, as `ListSource` and `SqliteSource` do. Before, "" came first.
+- A job dropped by New or Open can't write into the study that replaced its own, and a web session's
+  uploads stay until every worker that may read them has ended.
 - On Textual, a form or message dialog that the app closes while another dialog covers it no longer
   comes back as a modal that Escape can't remove.
 - On the web, a download whose `export_filename` holds a control character no longer fails:
   the server refused its header. A quote, a backslash or a "/" in the name no longer goes
   into the header as it is. It broke the name that the browser shows.
+- On the web, a chart, map or calendar whose library failed to load asks for it again on the page's
+  next change, without a full reload.
 - Opening a damaged study no longer fails with an error that the app doesn't catch. Its
   archive may place its directory or its files before the file's start, or ask for a newer
   zip version. The app now refuses such a study as any invalid one: "it isn't a valid ...
