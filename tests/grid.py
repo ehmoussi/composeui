@@ -5,35 +5,28 @@ from __future__ import annotations
 import attrs
 
 from composeui.core.view import (
-    GRID_POSITION,
     ButtonView,
     GridPosition,
     GridView,
     MainView,
     TableView,
     define_view,
+    grid_cell,
 )
 
 
 @define_view
 class TablesGrid(GridView):
-    first: TableView = attrs.field(factory=TableView, metadata={GRID_POSITION: (0, 0)})
-    # its cell stays empty: the button doesn't move into it
-    hidden: TableView = attrs.field(factory=TableView, metadata={GRID_POSITION: (0, 1)})
-    button: ButtonView = attrs.field(factory=ButtonView, metadata={GRID_POSITION: (0, 2)})
-    spanning: TableView = attrs.field(
-        factory=TableView, metadata={GRID_POSITION: GridPosition(1, 0, column_span=3)}
+    # taller than the button beside it, so the next row starts below the table
+    first: TableView = grid_cell(
+        (0, 0), TableView, headers=["First"], rows=[["North"], ["South"], ["East"]]
     )
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.first.headers = ["First"]
-        # taller than the button beside it, so the next row starts below the table
-        self.first.rows = [["North"], ["South"], ["East"]]
-        self.hidden.headers = ["Hidden"]
-        self.hidden.is_visible = False
-        self.button.text = "Add"
-        self.spanning.headers = ["Spanning"]
+    # its cell stays empty: the button doesn't move into it
+    hidden: TableView = grid_cell((0, 1), TableView, headers=["Hidden"], is_visible=False)
+    button: ButtonView = grid_cell((0, 2), ButtonView, text="Add")
+    spanning: TableView = grid_cell(
+        GridPosition(1, 0, column_span=3), TableView, headers=["Spanning"]
+    )
 
 
 @define_view

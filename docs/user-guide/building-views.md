@@ -119,8 +119,11 @@ or text built from other fields.
   start or the end of the row. On the web, a row narrower than 42rem stacks its views.
 - **A `VerticalView` puts its view fields one above the other,** for a column in a
   `HorizontalView`, for example a table above its buttons.
-- **A `GridView` puts each view field in a cell,** from its `GRID_POSITION` metadata:
-  `metadata={GRID_POSITION: (1, 0)}`, or `GridPosition(1, 0, column_span=2)`.
+- **A `GridView` puts each view field in a cell.** `grid_cell` gives the cell, the view,
+  and the view's fields, as `child` does: `grid_cell((1, 0), ButtonView, text="Add")`. To
+  span cells, give a `GridPosition`:
+  `grid_cell(GridPosition(1, 0, column_span=2), TableView, headers=["Name"])`. A field that
+  needs other metadata sets its cell itself: `metadata={GRID_POSITION: (1, 0)}`.
 
 For panes that the user resizes, see [Resizable panes](organizing-the-window.md#resizable-panes).
 

@@ -242,6 +242,7 @@ __all__ = [
     "define_view",
     "find_in_lines",
     "format_date",
+    "grid_cell",
     "notify_renderer",
     "parse_date",
     "replace_cell",
@@ -6771,14 +6772,33 @@ class GridPositionError(ValueError):
     """A `GridView`'s view field has no cell, or one outside the grid or another view's."""
 
 
+def grid_cell(
+    position: Union[GridPosition, tuple[int, int]],
+    cls: Callable[_P, _ViewT],
+    /,
+    *args: _P.args,
+    **kwargs: _P.kwargs,
+) -> _ViewT:
+    """Get a `GridView` field's default: a `cls` view in the cell at `position`.
+
+    E.g. ``chart: ChartView = grid_cell((1, 0), ChartView, title="Sales")``. The arguments
+    after `cls` build the view, as those of `child` do.
+    """
+    return cast(
+        "_ViewT",
+        attrs.field(default=child(cls, *args, **kwargs), metadata={GRID_POSITION: position}),
+    )
+
+
 @define_view
 class GridView(View):
     """Its view fields laid out in a grid: equally wide columns, rows as tall as their views.
 
-    Each field sets its cell with its `GRID_POSITION` metadata:
-    ``chart: ChartView = attrs.field(factory=ChartView, metadata={GRID_POSITION: (1, 0)})``,
-    or ``GridPosition(1, 0, column_span=2)`` to span two columns. Cells no view takes are
-    left empty, as are those of a hidden view. A view shorter than its row stays at its
+    Each field sets its cell with `grid_cell`:
+    ``chart: ChartView = grid_cell((1, 0), ChartView, title="Sales")``,
+    or ``grid_cell(GridPosition(1, 0, column_span=2), ChartView)`` to span two columns. A
+    field that needs other metadata sets its `GRID_POSITION` metadata itself. Cells no view
+    takes are left empty, as are those of a hidden view. A view shorter than its row stays at its
     top. A view with no share of a row (`default_stretch` 0, e.g. a button) keeps its
     content's width, at its cell's start. On the web, a grid narrower than 42rem stacks
     its views in one column, row by row.

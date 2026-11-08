@@ -16,6 +16,8 @@ The notable changes of each release of ComposeUI. The format follows
 - `LabelView.role` (`TextRole`) says what a text is: a title, a subtitle, a caption, muted text,
   an error, a warning or a success. Each backend shows the role in its own way, and on the web a
   title and a subtitle are real headings.
+- `grid_cell` declares a view field of a `GridView` on one line: its cell, its view, and the view's
+  fields, such as `grid_cell((1, 0), ButtonView, text="Add")`.
 - `ImageView` shows an image on Qt and the web: a file, bytes, or a Matplotlib figure
   (`show_figure`). The new `figureviewer` example redraws a figure as a slider moves. Textual shows
   its description, or the image with the `terminal-images` extra, on Python 3.12 or later, in a
