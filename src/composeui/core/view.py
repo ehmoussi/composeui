@@ -50,6 +50,7 @@ from typing import (
 import attrs
 import cattrs
 from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
+from cattrs.strategies import configure_tagged_union
 from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
@@ -98,6 +99,7 @@ __all__ = [
     "UI_TEXT",
     "ActionView",
     "Align",
+    "ArrowShape",
     "ButtonVariant",
     "ButtonView",
     "CellKind",
@@ -107,6 +109,7 @@ __all__ = [
     "ChartView",
     "CheckBoxMixin",
     "CheckBoxView",
+    "CircleShape",
     "Column",
     "ComboBoxView",
     "ConsoleView",
@@ -116,6 +119,7 @@ __all__ = [
     "DialogButtonView",
     "DialogKind",
     "DialogView",
+    "DrawingView",
     "EditRefusedError",
     "ExpanderView",
     "FileMenu",
@@ -166,7 +170,9 @@ __all__ = [
     "LabelRowTextAreaView",
     "LabelView",
     "LanguageMenu",
+    "LineShape",
     "LineStyle",
+    "LineWeight",
     "ListSource",
     "ListView",
     "LogMixin",
@@ -185,6 +191,8 @@ __all__ = [
     "PageView",
     "PageWidth",
     "PickFileAction",
+    "PolygonShape",
+    "PolylineShape",
     "ProgressBarView",
     "RadioGroupView",
     "RecordTableView",
@@ -209,6 +217,7 @@ __all__ = [
     "SelectionMode",
     "SeparatorAction",
     "Series",
+    "Shape",
     "SidebarView",
     "SliderMixin",
     "SliderView",
@@ -223,9 +232,11 @@ __all__ = [
     "TableMixin",
     "TableSource",
     "TableView",
+    "TextAnchor",
     "TextAreaMixin",
     "TextAreaView",
     "TextRole",
+    "TextShape",
     "TextStyle",
     "ToolBar",
     "TreeNode",
@@ -3324,6 +3335,306 @@ class ChartView(View):
         if unit == "":
             return title
         return f"({unit})" if title == "" else f"{title} ({unit})"
+
+
+def _to_point(value: Iterable[float]) -> tuple[float, float]:
+    x, y = value
+    return float(x), float(y)
+
+
+def _to_points(values: Iterable[Iterable[float]]) -> list[tuple[float, float]]:
+    return [_to_point(value) for value in values]
+
+
+def _check_point(shape: Any, attribute: attrs.Attribute[Any], point: tuple[float, float]) -> None:
+    if not all(math.isfinite(value) for value in point):
+        msg = f"Cannot draw a {type(shape).__name__} with the {attribute.name} {point}."
+        raise ValueError(msg)
+
+
+def _check_points(
+    shape: Any, attribute: attrs.Attribute[Any], points: list[tuple[float, float]]
+) -> None:
+    for point in points:
+        _check_point(shape, attribute, point)
+
+
+def _check_shape_color(shape: Any, _attribute: attrs.Attribute[Any], color: Optional[str]) -> None:
+    if color is not None and _COLOR_PATTERN.fullmatch(color) is None:
+        msg = f"Cannot color a {type(shape).__name__} {color!r}: give it as #rrggbb."
+        raise ValueError(msg)
+
+
+def _check_radius(shape: Any, _attribute: attrs.Attribute[Any], radius: float) -> None:
+    if not (math.isfinite(radius) and radius > 0):
+        msg = f"Cannot draw a {type(shape).__name__} of radius {radius}: it must be positive."
+        raise ValueError(msg)
+
+
+class TextAnchor(enum.Enum):
+    """Which end of a `TextShape` stands at its position, across the text."""
+
+    START = enum.auto()
+    MIDDLE = enum.auto()
+    END = enum.auto()
+
+
+class LineWeight(enum.Enum):
+    """How heavy a line of a `DrawingView` is, which each backend shows in its own way."""
+
+    #: e.g. a dimension or a construction line
+    LIGHT = enum.auto()
+    NORMAL = enum.auto()
+    #: e.g. what the diagram is about
+    HEAVY = enum.auto()
+
+
+@attrs.frozen
+class LineShape:
+    """A straight line of a `DrawingView`, from `start` to `end`."""
+
+    start: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    end: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: how heavy its line is
+    weight: LineWeight = LineWeight.NORMAL
+
+
+@attrs.frozen
+class PolylineShape:
+    """Lines of a `DrawingView` joining its points in order, at least 2."""
+
+    points: list[tuple[float, float]] = attrs.field(
+        converter=_to_points, validator=[attrs.validators.min_len(2), _check_points]
+    )
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: how heavy its line is
+    weight: LineWeight = LineWeight.NORMAL
+
+
+@attrs.frozen
+class PolygonShape:
+    """A closed shape of a `DrawingView` through its points, at least 3."""
+
+    points: list[tuple[float, float]] = attrs.field(
+        converter=_to_points, validator=[attrs.validators.min_len(3), _check_points]
+    )
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: whether its inside has its color too
+    fill: bool = False
+    #: how heavy its line is
+    weight: LineWeight = LineWeight.NORMAL
+
+
+@attrs.frozen
+class CircleShape:
+    """A circle of a `DrawingView`, its radius in the drawing's coordinates."""
+
+    center: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    radius: float = attrs.field(converter=float, validator=[_check_radius])
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: whether its inside has its color too
+    fill: bool = False
+    #: how heavy its line is
+    weight: LineWeight = LineWeight.NORMAL
+
+
+@attrs.frozen
+class ArrowShape:
+    """A line of a `DrawingView` with a head at `end`, the same size at any scale."""
+
+    start: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    end: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: how heavy its line is
+    weight: LineWeight = LineWeight.NORMAL
+
+
+@attrs.frozen
+class TextShape:
+    """A text of a `DrawingView` at a position, the same size at any scale.
+
+    It is the app's data, as a series' name: the app translates it before making the shape.
+    """
+
+    position: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    text: str
+    #: as #rrggbb, the same in every theme; None: the theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: which part of the text stands at `position`
+    anchor: TextAnchor = TextAnchor.START
+    #: what it is: each backend shows a title or a caption in its own way. `color` goes first
+    role: TextRole = TextRole.BODY
+
+
+#: a shape of a `DrawingView`
+Shape = Union[LineShape, PolylineShape, PolygonShape, CircleShape, ArrowShape, TextShape]
+
+#: a drawing's area without shapes
+_EMPTY_BOUNDS = (0.0, 0.0, 1.0, 1.0)
+#: the room around shapes fitted to the view, as a share of their longer side
+_FIT_MARGIN = 0.08
+#: an arrow head's width on each side of its line, as a share of its length
+_ARROW_HEAD_SIDE = 0.4
+
+
+def _is_drawable(bounds: tuple[float, float, float, float]) -> bool:
+    """Check that an area has a size a float holds: the renderers divide by its sides."""
+    x_min, y_min, x_max, y_max = bounds
+    return (
+        x_min < x_max
+        and y_min < y_max
+        and math.isfinite(x_max - x_min)
+        and math.isfinite(y_max - y_min)
+    )
+
+
+def _check_bounds(
+    view: View,
+    _attribute: attrs.Attribute[Any],
+    bounds: Optional[tuple[float, float, float, float]],
+) -> None:
+    if bounds is None:
+        return
+    if not _is_drawable(bounds):
+        msg = (
+            f"Cannot set {type(view).__name__}.bounds to {bounds}:"
+            " give finite x_min, y_min, x_max, y_max, each minimum below its maximum."
+        )
+        raise ValueError(msg)
+
+
+def _extent_points(shape: Shape) -> list[tuple[float, float]]:
+    """Get the points that a shape's extent reaches."""
+    if isinstance(shape, (LineShape, ArrowShape)):
+        return [shape.start, shape.end]
+    if isinstance(shape, (PolylineShape, PolygonShape)):
+        return shape.points
+    if isinstance(shape, CircleShape):
+        (x, y), radius = shape.center, shape.radius
+        return [(x - radius, y - radius), (x + radius, y + radius)]
+    return [shape.position]
+
+
+@attrs.frozen
+class DrawingPlacement:
+    """Where a drawing's area stands on a surface: one scale, centered, y flipped."""
+
+    scale: float
+    left: float
+    top: float
+    x_min: float
+    y_max: float
+
+    def point(self, point: tuple[float, float]) -> tuple[float, float]:
+        """Get the surface's position of a point of the drawing, y going down."""
+        return (
+            self.left + (point[0] - self.x_min) * self.scale,
+            self.top + (self.y_max - point[1]) * self.scale,
+        )
+
+
+@define_view
+class DrawingView(View):
+    """A diagram of lines, shapes and text that scales with the view.
+
+    Assign a new `shapes` list to redraw it, e.g. when a slider moves. The shapes are in the
+    drawing's own coordinates, y going up, with one scale for both axes: a circle stays
+    round. A text, the lines' width and an arrow's head keep their size on screen.
+
+    Qt and the web draw it exactly. A terminal draws it with braille characters, the text
+    readable over them, and its description below.
+    """
+
+    _renderer_key = "drawing"
+
+    shapes: list[Shape] = attrs.field(factory=list[Shape])
+    #: the only area shown: x_min, y_min, x_max, y_max, e.g. fixed so that a moving shape doesn't
+    #: rescale the rest; None: fitted to the shapes
+    bounds: Optional[tuple[float, float, float, float]] = attrs.field(
+        default=None, validator=[_check_bounds]
+    )
+    #: what it shows, for a screen reader and a terminal; empty: the shapes' text
+    description: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: its height on screen, in pixels (a terminal's rows of about 16); None: the backend's
+    #: own. The app's layout, not a study's
+    height: Optional[int] = attrs.field(
+        default=None, validator=[_check_height], metadata={OMIT: True}
+    )
+
+    @staticmethod
+    def shown_bounds(
+        shapes: list[Shape], bounds: Optional[tuple[float, float, float, float]]
+    ) -> tuple[float, float, float, float]:
+        """Get the area drawn: `bounds`, or the shapes' extent and a margin."""
+        if bounds is not None:
+            return bounds
+        points = [point for shape in shapes for point in _extent_points(shape)]
+        if len(points) == 0:
+            return _EMPTY_BOUNDS
+        xs, ys = [x for x, _y in points], [y for _x, y in points]
+        # one lone point, or a single text, still gets an area
+        margin = max(max(xs) - min(xs), max(ys) - min(ys)) * _FIT_MARGIN or 1.0
+        fitted = (min(xs) - margin, min(ys) - margin, max(xs) + margin, max(ys) + margin)
+        # at 1e20, a margin is lost to rounding; between -1e308 and 1e308, the side overflows
+        return fitted if _is_drawable(fitted) else _EMPTY_BOUNDS
+
+    @staticmethod
+    def in_bounds(point: tuple[float, float], bounds: tuple[float, float, float, float]) -> bool:
+        """Check that a point stands in the area: a text or an arrow's head is drawn only so."""
+        return bounds[0] <= point[0] <= bounds[2] and bounds[1] <= point[1] <= bounds[3]
+
+    @staticmethod
+    def placement(
+        bounds: tuple[float, float, float, float], width: float, height: float
+    ) -> DrawingPlacement:
+        """Fit an area in a surface of `width` by `height`, keeping its proportions."""
+        x_min, y_min, x_max, y_max = bounds
+        scale = min(width / (x_max - x_min), height / (y_max - y_min))
+        return DrawingPlacement(
+            scale=scale,
+            left=(width - (x_max - x_min) * scale) / 2,
+            top=(height - (y_max - y_min) * scale) / 2,
+            x_min=x_min,
+            y_max=y_max,
+        )
+
+    @staticmethod
+    def arrow_head(
+        tail: tuple[float, float], tip: tuple[float, float], length: float
+    ) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Get the back corners of a head of `length` at `tip`, on a surface's coordinates.
+
+        A line without a direction has its head pointing right.
+        """
+        dx, dy = tip[0] - tail[0], tip[1] - tail[1]
+        distance = math.hypot(dx, dy)
+        ux, uy = (dx / distance, dy / distance) if distance > 0 else (1.0, 0.0)
+        back_x, back_y = tip[0] - ux * length, tip[1] - uy * length
+        side = length * _ARROW_HEAD_SIDE
+        return (back_x - uy * side, back_y + ux * side), (back_x + uy * side, back_y - ux * side)
+
+    @staticmethod
+    def shown_description(description: str, shapes: list[Shape]) -> str:
+        """Get what describes the drawing: `description`, or the text of its shapes."""
+        return description or ", ".join(
+            shape.text for shape in shapes if isinstance(shape, TextShape) and shape.text
+        )
 
 
 class SelectionMode(enum.Enum):
@@ -7284,3 +7595,8 @@ class TreeView(View):
         """Get `expanded` with the node at `path` expanded or collapsed, the others kept."""
         kept = [expanded for expanded in self.expanded if expanded != path]
         return [*kept, path] if is_expanded else kept
+
+
+# the fields of a line and an arrow match: the saved state names each shape's class. Here, as
+# making its hooks needs every view of the unstructure hook above
+configure_tagged_union(Shape, CONVERTER)

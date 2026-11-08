@@ -411,6 +411,13 @@ section covers what users see.
   browser can keep it, and an older digest answers 404, never another image. The route serves
   only what starts as an image, as an app may set a path that a user typed. `image` is never
   loaded from a study, as `icon` isn't.
+- **Drawings.** A `DrawingView` is SVG that the server makes from validated shapes, with no
+  script. The element keeps the proportions of `bounds`, so a percentage of it places a point.
+  Each shape is in a nested `<svg>` with a `viewBox`, which clips it to `bounds`, and its stroke
+  doesn't scale. A text and an arrow head stand at a percentage and are sized in pixels, so they
+  keep their size. They stay outside the nested `<svg>`: a text near the edge isn't cut. Only the
+  browser knows the scale on the page, so an arrow's line stops inside its head by a length
+  computed at the largest size that the view can have.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown). An action's `data`
   isn't displayed. Ctrl shortcuts become Alt+Shift. An unknown page address is a 404, not a
   redirect: browsers ask for addresses of their own, like `/favicon.ico`.

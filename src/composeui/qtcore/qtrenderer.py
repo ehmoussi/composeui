@@ -13,10 +13,8 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import (
     QAction,
     QDoubleValidator,
-    QFont,
     QIcon,
     QKeySequence,
-    QPalette,
     QTextDocument,
 )
 from qtpy.QtWidgets import (
@@ -124,6 +122,7 @@ from composeui.qtcore.qtslot import connect_slot
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
+from composeui.qtcore.widgets.qdrawing import QDrawing
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfileupload import QFileUpload
@@ -139,6 +138,7 @@ from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
 from composeui.qtcore.widgets.qtextarea import QTextArea
+from composeui.qtcore.widgets.qtextrole import role_color, role_font, role_palette_color
 from composeui.qtcore.widgets.qvaluecombobox import QValueComboBox
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
@@ -156,6 +156,7 @@ if TYPE_CHECKING:
         HeaderGroup,
         ReferenceLine,
         Series,
+        Shape,
         TreeNode,
         TreePath,
     )
@@ -1088,20 +1089,6 @@ class LabelViewLike(ViewLike, Protocol):
     role: TextRole
 
 
-#: the size of a role's text, as a factor of the app's font, and its weight
-_ROLE_FONTS = {
-    TextRole.TITLE: (1.5, QFont.Weight.Bold),
-    TextRole.SUBTITLE: (1.2, QFont.Weight.DemiBold),
-    TextRole.CAPTION: (0.85, QFont.Weight.Normal),
-}
-_ROLE_COLORS = {
-    TextRole.ERROR: "red",
-    TextRole.WARNING: "orange",
-    TextRole.SUCCESS: "green",
-}
-_MUTED_ROLES = (TextRole.CAPTION, TextRole.MUTED, TextRole.SUBTITLE)
-
-
 class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     def __init__(self, view: LabelViewLike) -> None:
         super().__init__(view)
@@ -1124,23 +1111,9 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     @staticmethod
     def _refresh_role(_view: LabelViewLike, rendered_object: QLabel, value: TextRole) -> None:
         # a font that sets nothing takes all of the parent's, so the body text follows the app
-        font = QFont()
-        if value in _ROLE_FONTS:
-            factor, weight = _ROLE_FONTS[value]
-            app_font = QApplication.font()
-            # a font has its size in points or in pixels: the other one reads as -1
-            if app_font.pixelSize() > 0:
-                font.setPixelSize(round(app_font.pixelSize() * factor))
-            else:
-                font.setPointSizeF(app_font.pointSizeF() * factor)
-            font.setWeight(weight)
-        rendered_object.setFont(font)
-        rendered_object.setForegroundRole(
-            QPalette.ColorRole.PlaceholderText
-            if value in _MUTED_ROLES
-            else QPalette.ColorRole.NoRole
-        )
-        color = _ROLE_COLORS.get(value)
+        rendered_object.setFont(role_font(value))
+        rendered_object.setForegroundRole(role_palette_color(value))
+        color = role_color(value)
         rendered_object.setStyleSheet(f"QLabel {{ color : {color}; }}" if color else "")
 
 
@@ -1641,6 +1614,60 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         x_range, y_range = chart.shown_range()
         options = chartimage.ImageOptions(x_range=x_range, y_range=y_range)
         chartimage.save_chart_image(view, filepath, options)
+
+
+class DrawingViewLike(ViewLike, Protocol):
+    shapes: list[Shape]
+    bounds: tuple[float, float, float, float] | None
+    description: str
+    height: int | None
+
+
+class QtDrawingRenderer(QtWidgetRenderer[DrawingViewLike, QDrawing]):
+    def __init__(self, view: DrawingViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "shapes": self._refresh_shapes,
+                "bounds": self._refresh_bounds,
+                "description": self._refresh_description,
+                "height": self._refresh_height,
+            }
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QDrawing()
+            self.refresh()
+
+    @staticmethod
+    def _refresh_shapes(
+        _view: DrawingViewLike, rendered_object: QDrawing, value: list[Shape]
+    ) -> None:
+        rendered_object.shapes = value
+        rendered_object.set_drawing()
+
+    @staticmethod
+    def _refresh_bounds(
+        _view: DrawingViewLike,
+        rendered_object: QDrawing,
+        value: tuple[float, float, float, float] | None,
+    ) -> None:
+        rendered_object.bounds = value
+        rendered_object.set_drawing()
+
+    @staticmethod
+    def _refresh_description(_view: DrawingViewLike, rendered_object: QDrawing, value: str) -> None:
+        rendered_object.description = value
+        rendered_object.set_drawing()
+
+    @staticmethod
+    def _refresh_height(
+        _view: DrawingViewLike, rendered_object: QDrawing, value: int | None
+    ) -> None:
+        rendered_object.setMinimumHeight(0 if value is None else value)
+        rendered_object.setMaximumHeight(_QWIDGETSIZE_MAX if value is None else value)
+        rendered_object.updateGeometry()
 
 
 class MetricViewLike(ViewLike, Protocol):
@@ -3582,6 +3609,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "button": QtButtonRenderer,
     "dialog_button": QtDialogButtonRenderer,
     "chart": QtChartRenderer,
+    "drawing": QtDrawingRenderer,
     "map": _map_renderer,
     "checkbox": QtCheckBoxRenderer,
     "combobox": QtComboBoxRenderer,

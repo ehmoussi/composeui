@@ -610,6 +610,88 @@ in. For a chart in any terminal, use a [`ChartView`](charts.md).
 [`src/examples/figureviewer.py`](../../src/examples/figureviewer.py) shows a logo from a file, and
 a Matplotlib figure that a slider redraws in a [task](threads.md).
 
+## Drawing
+
+A `DrawingView` shows a diagram made of lines, shapes, and text. To update the diagram, assign a
+new `shapes` list. Each backend draws the shapes itself, without an image.
+
+```python
+from composeui.core.view import (
+    ArrowShape,
+    DrawingView,
+    LineShape,
+    MainView,
+    PolygonShape,
+    TextAnchor,
+    TextShape,
+    child,
+    define_view,
+)
+
+
+@define_view
+class BeamMainView(MainView):
+    app_title = "Beam"
+    extension = ".beam"
+
+    beam: DrawingView = child(
+        DrawingView,
+        bounds=(-1, -1, 11, 3),
+        description="A beam with a point load",
+        shapes=[
+            LineShape((0, 0), (10, 0)),
+            PolygonShape([(0, 0), (-0.3, -0.5), (0.3, -0.5)], fill=True),
+            ArrowShape((4, 2), (4, 0), color="#dc2626"),
+            TextShape((4, 2.4), "F = 25 kN", anchor=TextAnchor.MIDDLE),
+        ],
+    )
+```
+
+The shapes are drawn in order, the later ones on top. A point is an `(x, y)` pair:
+
+| Shape | Required | Optional |
+| --- | --- | --- |
+| `LineShape` | `start`, `end` | `color`, `style`, `weight` |
+| `PolylineShape` | `points`, at least 2 | `color`, `style`, `weight` |
+| `PolygonShape` | `points`, at least 3 | `color`, `style`, `fill`, `weight` |
+| `CircleShape` | `center`, `radius`, above 0 | `color`, `style`, `fill`, `weight` |
+| `ArrowShape` | `start`, `end`, which has the head | `color`, `style`, `weight` |
+| `TextShape` | `position`, `text` | `color`, `anchor`, `role` |
+
+A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. A `style` is a
+[`LineStyle`](charts.md#reference-lines). A `TextAnchor` (`START`, `MIDDLE`, or `END`) says which
+part of the text stands at its position. A `weight` (`LineWeight.LIGHT`, `NORMAL`, or `HEAVY`)
+says how heavy a line is. A `role` is a [`TextRole`](#label), as on a label. A shape's `color`
+goes before the color of its role. A value that is not finite, a radius of 0 or less, a bad
+color, or too few points raise a `ValueError` when the app makes the shape.
+
+The view has these fields:
+
+- **`bounds`** is the area shown: `(x_min, y_min, x_max, y_max)`. Without it, the view fits the
+  shapes. Set it when a shape moves, so that the scale stays the same. Each minimum must be
+  below its maximum. The view shows only this area. A text that starts inside it can run past
+  its edge.
+- **`description`** says what the drawing shows, for a screen reader and for Textual. Without
+  it, the text of the shapes is used.
+- **`height`** is the height on screen, in pixels (a terminal row is about 16 pixels). Without
+  it, Qt fills the room that the layout gives, Textual takes 16 rows, and the web is at most 288
+  pixels high. On a narrow page, the web makes the drawing smaller than its height.
+
+The y axis goes up, and both axes have one scale, so a circle stays round. When the view changes
+size, three things keep their size on screen: a text, the width of the lines, and the head of an
+arrow. A study saves the shapes and the bounds, but not the `height`. A shape's text is the app's
+data: translate it before making the shape.
+
+Qt paints the shapes on a `QWidget`, and the web shows them as SVG. Textual draws them with colored
+braille characters. It writes the text over them, and the description on the last row. Textual
+differs in four ways:
+
+- **Each line is solid.** Textual ignores `style`.
+- **A line's weight is its width or its look.** `HEAVY` is two dots wide. `LIGHT` is dimmed, as
+  a terminal has nothing thinner than a dot.
+- **A character has one color.** Where lines of two colors cross, the last shape's color shows.
+- **A text does not cover another text.** Textual moves it to the nearest free row.
+
 ## Console
 
 A `ConsoleView` shows plain text that the app adds to as it comes, for example the output of a

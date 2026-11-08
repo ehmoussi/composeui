@@ -226,6 +226,7 @@ Larger views have sections of their own:
   [menus](organizing-the-window.md#menus).
 - `TableView`, `RecordTableView`, and `SourceTableView` for [tables](tables.md).
 - `ChartView` for [charts](charts.md), and `MapView` for [maps](maps.md).
+- `DrawingView` for a [diagram of shapes](widgets.md#drawing).
 
 ## The main view
 
