@@ -68,7 +68,9 @@ from composeui.core.view import (
     CellWidget,
     ChartKind,
     DialogKind,
+    DialogView,
     EditRefusedError,
+    FormDialogView,
     ImageView,
     LabelView,
     ListSource,
@@ -1400,6 +1402,67 @@ async def test_a_tab_view_shows_the_tab_the_user_picks() -> None:
         assert str(tabbed.get_tab(history).label) == "Changes"
         assert tabbed.get_tab(notes).disabled
         assert not tabbed.get_tab(notes).display
+
+
+@define_view
+class _CoveredDialogsMainView(MainView):
+    form: FormDialogView = Factory(FormDialogView)
+    message: DialogView = Factory(DialogView)
+    above: FormDialogView = Factory(FormDialogView)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("covered_name", ["form", "message"])
+async def test_a_dialog_closed_under_another_does_not_come_back(covered_name: str) -> None:
+    view = _CoveredDialogsMainView()
+    app = _app_of(view)
+    covered = getattr(view, covered_name)
+
+    async with app.run_test() as pilot:
+        base = app.screen
+        covered.open()
+        await pilot.pause()
+        covered_screen = app.screen
+        view.above.open()
+        await pilot.pause()
+        above_screen = app.screen
+        covered.reject()
+        await pilot.pause()
+        assert app.screen is above_screen  # the dialog above stays
+
+        view.above.reject()
+        await pilot.pause()
+        await pilot.pause()
+
+        assert app.screen is base
+        assert covered_screen not in app.screen_stack
+
+
+@pytest.mark.asyncio
+async def test_a_form_dialog_opened_again_under_another_is_on_the_stack_once() -> None:
+    view = _CoveredDialogsMainView()
+    app = _app_of(view)
+
+    async with app.run_test() as pilot:
+        base = app.screen
+        view.form.open()
+        await pilot.pause()
+        form_screen = app.screen
+        view.above.open()
+        await pilot.pause()
+        view.form.reject()
+        view.form.open()
+        await pilot.pause()
+        assert app.screen_stack.count(form_screen) == 1
+
+        view.above.reject()
+        await pilot.pause()
+        await pilot.pause()
+        assert app.screen is form_screen  # open, so it stays
+
+        view.form.reject()
+        await pilot.pause()
+        assert app.screen is base
 
 
 @pytest.mark.asyncio

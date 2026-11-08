@@ -63,6 +63,8 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
         self.reject_button = Button(Content(view.reject_text), id="reject")
         self.reject_button.display = view.kind is DialogKind.CONFIRM
         self.is_enabled = view.is_enabled
+        #: closed by the app under another screen: it leaves once uncovered
+        self.closed_while_covered = False
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -75,6 +77,10 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
     def on_mount(self) -> None:
         self.set_enabled(is_enabled=self.is_enabled)
         self.accept_button.focus()
+
+    def on_screen_resume(self) -> None:
+        if self.closed_while_covered:
+            self.dismiss(None)
 
     def set_enabled(self, *, is_enabled: bool) -> None:
         self.is_enabled = is_enabled

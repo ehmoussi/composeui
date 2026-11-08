@@ -453,9 +453,11 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             app.push_screen(screen, functools.partial(self._answer, screen))
         elif not value and self.screen is not None:
             screen, self.screen = self.screen, None
-            # current under another screen too: not only once popped, which `_answer` sees
-            if screen.is_current:  # pragma: no branch
-                screen.dismiss()  # no longer `self.screen`: `_answer` ignores it
+            # no longer `self.screen`: `_answer` ignores its dismissal
+            if screen.is_active:
+                screen.dismiss()
+            else:  # dismissing it now would pop the screen above it
+                screen.closed_while_covered = True
 
     def _answer(self, screen: ComposeDialog, answer: bool | None) -> None:
         if screen is not self.screen:
@@ -532,12 +534,24 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
             self.form_screen.answered.connect(self._answer_form)
             # its form's widgets mount with it, first pushed: their state only then
             self.form_screen.mounted.connect(self._refresh_screen)
+            self.form_screen.resumed.connect(self._pop_if_closed)
 
     def _refresh_screen(self) -> None:
         view = self._form_view
         for shown in (view.content, view.log_view, *view.buttons):
             _refresh_tree(shown)
         self.refresh()  # the screen's title, text and buttons
+
+    def _pop_if_closed(self) -> None:
+        """Pop the screen uncovered, if the app closed its dialog under another one."""
+        app, screen = self.app, self.form_screen
+        if (
+            app is not None
+            and screen is not None
+            and screen.is_active
+            and not self._view.is_visible
+        ):
+            app.pop_screen()
 
     def _answer_form(self, answer: str) -> None:
         {"accept": self._view.accept, "reject": self._view.reject}.get(answer, self._view.dismiss)()
@@ -548,12 +562,12 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         if app is None or not app.is_running:
             return
         assert screen is not None
-        if value and not screen.is_current:
+        if value and screen not in app.screen_stack:  # closed while covered, it's still there
             name = f"cui-{id(view)}-dialog"
             if not app.is_screen_installed(screen):
                 app.install_screen(screen, name)
             app.push_screen(name)
-        elif not value and screen.is_current:
+        elif not value and screen.is_active:  # covered: `_pop_if_closed`, once uncovered
             app.pop_screen()
 
     def _refresh_enabled(
