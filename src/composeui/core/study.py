@@ -74,8 +74,9 @@ def _archive(file: IO[bytes], invalid: str) -> zipfile.ZipFile:
     try:
         return zipfile.ZipFile(file)
     # Python 3.9 raises `OSError` for a directory that the file places before its start,
-    # and every Python `NotImplementedError` for a member of a version newer than it reads
-    except (zipfile.BadZipFile, OSError, NotImplementedError) as error:
+    # every Python `NotImplementedError` for a member of a version newer than it reads, and
+    # `UnicodeDecodeError` for a member's name that isn't the UTF-8 that its flag says
+    except (zipfile.BadZipFile, OSError, NotImplementedError, UnicodeDecodeError) as error:
         raise InvalidStateError(invalid) from error
 
 

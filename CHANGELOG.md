@@ -72,6 +72,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A study whose archive holds a member's name that can't be decoded is refused as invalid. Before,
+  opening it raised an uncaught error.
 - A study keeps a date's UTC offset of less than a second on Python versions that read it as UTC.
 - On Qt, a refresh that raises no longer leaves the widget's signals blocked, which cut the user's
   later edits off from the view. A widget blocked before a refresh stays blocked.
