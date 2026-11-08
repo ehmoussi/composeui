@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import datetime
 import enum
+import errno
 import io
 import json
 import logging
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import IO, TYPE_CHECKING, Any, Optional, Union
 
 import attrs
 import pytest
@@ -142,6 +143,35 @@ def test_unstructure_includes_radio_group_values() -> None:
     view = _RadioMainView()
     data = CONVERTER.unstructure(view)
     assert data["radio"]["values"] == {"a": "a", "b": "b"}
+
+
+@pytest.mark.parametrize("failure", ["serialize", "write"])
+def test_a_failed_save_keeps_the_previous_file_and_a_retry_works(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    filepath = tmp_path / "study.json"
+    view = MainView()
+    view.save_state(filepath)
+    view.save_state(filepath)  # the file now names itself, as each next save does
+    previous = filepath.read_bytes()
+    real_dump = json.dump
+
+    def failing(_data: Any, file: IO[str]) -> None:
+        if failure == "write":
+            file.write('{"partial": ')
+            raise OSError(errno.ENOSPC, "No space left on device")
+        msg = "not serializable"
+        raise TypeError(msg)
+
+    monkeypatch.setattr("composeui.core.view.json.dump", failing)
+    with pytest.raises((OSError, TypeError)):
+        view.save_state(filepath)
+    assert filepath.read_bytes() == previous
+    assert [file.name for file in tmp_path.iterdir()] == ["study.json"]
+
+    monkeypatch.setattr("composeui.core.view.json.dump", real_dump)
+    view.save_state(filepath)
+    assert filepath.read_bytes() == previous
 
 
 def test_load_state_ignores_values_even_though_saved(tmp_path: Path) -> None:
