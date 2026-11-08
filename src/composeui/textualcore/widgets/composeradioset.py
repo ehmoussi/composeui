@@ -37,6 +37,7 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
     def set_values(self, values: dict[str, TValue]) -> None:
         """Rebuild the radio buttons for a new set of options."""
         self.remove_children()
+        self._pressed_button = None  # not one of the new buttons
         self._values = dict(values)
         for label in self._values:
             self.mount(RadioButton(Content(label)))
@@ -44,8 +45,15 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
     def set_value(self, value: Optional[TValue]) -> None:
         for button, candidate in zip(self.query(RadioButton), self._values.values()):
             # None presses its button only when it's one of the values
-            if value == candidate and not button.value:
-                button.value = True
+            if value == candidate:
+                if not button.value:
+                    button.value = True
+                return
+        pressed = self.pressed_button
+        if pressed is not None:  # not as the user's: a `RadioSet` presses a button back on
+            with self.prevent(RadioButton.Changed):
+                pressed.value = False
+            self._pressed_button = None
 
     def value(self) -> TValue:
         assert self.pressed_index != -1  # asked once a button is pressed

@@ -129,6 +129,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qimagelabel import QImageLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
+from composeui.qtcore.widgets.qradiogroup import QRadioGroup
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qtexttable import QCheckHeader, QTextTableView
@@ -1192,6 +1193,31 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     chamfer_widget = chamfer_renderer.qt_object
     assert chamfer_widget is not None
     assert chamfer_widget.isVisible() is True  # edge_type -> group visibility
+
+
+def test_a_radio_group_shows_no_choice_when_its_value_is_cleared(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.status_bar.timeout = 0  # its click shows a message: no timer after the test
+    view.render(RendererType.QT)
+    edge = view.pages.inputs.pipe_form.edge_type
+    widget = _field_widget(edge)
+    qtbot.addWidget(widget)
+    changes: list[object] = []
+    edge.value_changed.connect(changes.append)
+    assert [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
+
+    edge.value = None
+
+    assert not [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
+    assert changes == []
+    assert isinstance(widget, QRadioGroup)
+    widget.set_value(None)  # nothing left to clear
+    assert not [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
+    # the group's still exclusive: one choice at a time
+    buttons = widget.findChildren(QRadioButton)
+    buttons[0].click()
+    buttons[1].click()
+    assert [button.isChecked() for button in buttons[:2]] == [False, True]
 
 
 def test_radio_buttons_sit_together_at_the_start_of_their_row(qtbot: QtBot) -> None:
