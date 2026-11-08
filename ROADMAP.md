@@ -114,17 +114,10 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 ## Widgets
 
-- **A 2D drawing view** (Now). Reactive lines, polylines, polygons, circles, arrows and
-  positioned text for scientific diagrams, such as a beam with supports, loads and dimensions.
-  Logical coordinates scale with the view, preserving proportions and readable text and symbols.
-  Qt draws natively, the web uses safe generated SVG, and Textual draws a colored Unicode
-  approximation with readable labels and a textual description. Evaluate
-  [textual-canvas](https://github.com/davep/textual-canvas) first for Textual, checking label
-  placement and diagonal quality while keeping Python 3.9 support. Also evaluate
-  [textual-hires-canvas](https://github.com/davidfokkema/textual-hires-canvas) for finer lines
-  and positioned text, noting its Python 3.10 minimum and NumPy dependency. Done when sliders update
-  a beam diagram without making an image. Picking, dragging and diagram editing are outside
-  the first version.
+- **Interactive drawings** (When needed). Picking, dragging and editing the shapes of a
+  `DrawingView`.
+- **Saving a drawing as an image** (When needed). A report's image of a `DrawingView`, with a
+  title that names the file and shows in the image, as a chart's does.
 - **Download** (Now). A file or bytes that the app makes: a download on the web, a save path on
   Qt and Textual.
 - **Choices of several values** (Now). A multi-select combobox and a check list with a check-all
@@ -180,7 +173,7 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Evaluate `textual-plot`** (Now). A candidate to replace `textual-plotext`, with interactive
   zooming and panning. [textual-plot](https://github.com/davidfokkema/textual-plot) depends on
-  `textual-hires-canvas`, which could also draw the 2D view. Check parity for filled and stepped
+  `textual-hires-canvas`, which could also draw `DrawingView`. Check parity for filled and stepped
   curves, NaN gaps, logarithmic axes, grouped bars, legends and labeled reference lines before
   replacing the current renderer. Resolve its Python 3.10 minimum and NumPy dependency without
   silently dropping Python 3.9 support.

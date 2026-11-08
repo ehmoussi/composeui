@@ -55,6 +55,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
@@ -3152,3 +3153,52 @@ def test_ctrl_c_writes_a_large_table_s_selected_row_to_the_clipboard(
     expect(page.locator("[data-copied]")).to_have_text("4\t1.0")
     assert _clipboard_becomes(page, "4\t1.0")
     context.close()
+
+
+@pytest.fixture(scope="module")
+def drawing_base_url() -> Iterator[str]:
+    """Serve an app whose slider moves a drawing, for the whole module."""
+    with _serve(WebApplication(build_main_view=DrawingMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture
+def drawing_page(browser: Browser, drawing_base_url: str) -> Iterator[Page]:
+    """Open the app with a drawing like `page`, in a session of its own."""
+    context = browser.new_context(
+        base_url=drawing_base_url, viewport={"width": 1000, "height": 900}
+    )
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+def test_a_slider_moves_a_drawing_that_keeps_its_proportions_and_text_size(
+    drawing_page: Page,
+) -> None:
+    """The scale and the swap of the SVG show only once a browser lays it out."""
+    page = drawing_page
+    page.goto("/")
+    diagram = page.get_by_role("img", name="A moving load")
+    load = page.locator("svg text", has_text="Load")
+    expect(load).to_be_visible()
+    before = load.get_attribute("x")
+    assert before is not None
+
+    with _posted(page):
+        page.get_by_label("Position").press("ArrowRight")
+
+    expect(load).not_to_have_attribute("x", before)
+
+    wide, wide_text = diagram.bounding_box(), load.bounding_box()
+    page.set_viewport_size({"width": 420, "height": 900})
+    narrow, narrow_text = diagram.bounding_box(), load.bounding_box()
+    assert wide is not None
+    assert narrow is not None
+    assert wide_text is not None
+    assert narrow_text is not None
+    assert narrow["width"] < wide["width"]
+    # its bounds: 4 wide and 2 tall
+    assert wide["width"] / wide["height"] == pytest.approx(2, abs=0.02)
+    assert narrow["width"] / narrow["height"] == pytest.approx(2, abs=0.02)
+    assert narrow_text["height"] == pytest.approx(wide_text["height"], abs=1)

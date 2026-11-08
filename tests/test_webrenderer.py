@@ -185,6 +185,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, STEP_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
 from tests.folderform import StudyMainView
@@ -837,6 +838,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     PipeMainView,
     BatmanMainView,
     PipeChartMainView,
+    DrawingMainView,
     PipeCatalogueMainView,
     PipeSweepMainView,
     MarkdownViewerMainView,

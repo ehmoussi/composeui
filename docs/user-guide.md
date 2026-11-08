@@ -68,6 +68,7 @@ not in the package: run them from a clone of the repository (see
   - [Tree](user-guide/widgets.md#tree)
   - [Markdown](user-guide/widgets.md#markdown)
   - [Image](user-guide/widgets.md#image)
+  - [Drawing](user-guide/widgets.md#drawing)
   - [Console](user-guide/widgets.md#console)
   - [The File menu and picking a file](user-guide/widgets.md#the-file-menu-and-picking-a-file)
 - [Organizing the window](user-guide/organizing-the-window.md)

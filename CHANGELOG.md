@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `DrawingView` shows a diagram of lines, polygons, circles, arrows, and text on Qt,
+  Textual, and the web, without an image. A new `shapes` list redraws it. The text and the arrow
+  heads keep their size at any scale. A line has a `LineWeight`, and a text a `TextRole`.
 - `is_filled` on `SliderView` and `FloatSliderView` turns off the accent color on the track up to
   the handle, on Qt, Textual and the web.
 - `FloatSliderView`, with `RowFloatSliderView` and `LabelRowFloatSliderView`, picks a decimal
