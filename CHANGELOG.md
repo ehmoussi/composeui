@@ -108,6 +108,7 @@ The notable changes of each release of ComposeUI. The format follows
   cell now takes a member's value, as the cell shows it, and an enum that is also a `str`
   gets its member, not a plain `str`. A study saves a `Decimal` as its exact text: saving
   one failed.
+- The timer of an old status message no longer clears a newer message when it was already firing.
 - The catalog check finds a translation that drops or adds a `{}` value, or a value in a
   format such as `{count:{width}}`. It took each `{}` for the same one, and left out the
   values in a format. It no longer tells `{name.real}` and `{name}` apart: both format

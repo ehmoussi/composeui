@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
@@ -23,6 +24,9 @@ qtpy = pytest.importorskip("qtpy")
 from qtpy.QtWidgets import QApplication  # noqa: E402
 
 from composeui.core.view import RendererType, StatusBar  # noqa: E402
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @pytest.fixture(scope="module")
@@ -61,3 +65,38 @@ def test_clear_message_runs_on_the_gui_thread(
         f"clear_message ran on {clear_message_threads[0].name!r}, "
         f"not the GUI thread {gui_thread.name!r}"
     )
+
+
+class _HeldTimer:
+    """A `threading.Timer` that fires when the test says: one past its cancel's reach."""
+
+    created: ClassVar[list[_HeldTimer]] = []
+
+    def __init__(self, _interval: float, function: Callable[[], None]) -> None:
+        self.fire = function
+        _HeldTimer.created.append(self)
+
+    def start(self) -> None:
+        pass
+
+    def cancel(self) -> None:
+        pass
+
+
+@pytest.mark.parametrize("new_timeout", [5.0, 0.0])
+def test_an_old_timer_already_firing_leaves_a_newer_message(
+    monkeypatch: pytest.MonkeyPatch, new_timeout: float
+) -> None:
+    monkeypatch.setattr(_HeldTimer, "created", [])
+    monkeypatch.setattr("composeui.core.view.threading.Timer", _HeldTimer)
+    bar = StatusBar(timeout=5.0)
+    bar.show_message("old")
+    bar.timeout = new_timeout
+    bar.show_message("new")
+
+    _HeldTimer.created[0].fire()
+    assert bar.message == "new"
+
+    if new_timeout > 0:  # its own timer still clears it
+        _HeldTimer.created[1].fire()
+        assert bar.message == ""

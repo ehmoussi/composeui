@@ -835,11 +835,13 @@ class StatusBar(View):
         self.message = message
         if self._timer is not None:
             self._timer.cancel()
+            self._timer = None
         if self.timeout > 0:
-            self._timer = threading.Timer(self.timeout, self._dispatch_clear_message)
-            self._timer.start()
+            timer = threading.Timer(self.timeout, lambda: self._dispatch_clear_message(timer))
+            self._timer = timer
+            timer.start()
 
-    def _dispatch_clear_message(self) -> None:
+    def _dispatch_clear_message(self, timer: threading.Timer) -> None:
         """Run `clear_message` on the renderer's thread, not the timer's own thread.
 
         `threading.Timer` calls its target on a dedicated background thread; a bound
@@ -847,9 +849,15 @@ class StatusBar(View):
         mutation has to be marshaled through `Renderer.call_on_main_thread` instead
         of calling `clear_message` here directly.
         """
+        clear = functools.partial(self._clear_message_of, timer)
         if self.renderer is not None:
-            self.renderer.call_on_main_thread(self.clear_message)
+            self.renderer.call_on_main_thread(clear)
         else:
+            clear()
+
+    def _clear_message_of(self, timer: threading.Timer) -> None:
+        # canceling a timer can't take back a clear already on its way
+        if self._timer is timer:
             self.clear_message()
 
     def clear_message(self) -> None:
