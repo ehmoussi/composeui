@@ -79,8 +79,6 @@ class WebSession(RenderTarget):
         self.model = model
         #: where the file path fields' uploads are kept, made by the first one
         self._uploads: Path | None = None
-        #: whether `close` ran: an upload that arrives after it has nowhere to stay
-        self._has_ended = False
         #: the directory of the upload that each file field holds, by its widget's id
         self._held_uploads: dict[str, Path] = {}
         #: the directories of uploads that were replaced, removed once no job may read them
@@ -93,7 +91,7 @@ class WebSession(RenderTarget):
     def close(self) -> None:
         """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
         with self.lock:
-            self._has_ended = True
+            self.has_ended = True
             # weak references would free them too, but only once collected
             stop_reactions(self.main_view)
             # not `drop`: its signals would run the app's code in another session's request
@@ -200,7 +198,7 @@ class WebSession(RenderTarget):
         name = name[-_MAX_FILE_NAME_LENGTH:]
         with self.lock:
             # after its session: its body took a while, and nothing would remove what is kept
-            renderer = None if self._has_ended else self.renderers.get(widget_id)
+            renderer = None if self.has_ended else self.renderers.get(widget_id)
             cell = None
             if isinstance(renderer, WebTableRenderer):
                 cell = renderer.file_path_cell(form or {})
