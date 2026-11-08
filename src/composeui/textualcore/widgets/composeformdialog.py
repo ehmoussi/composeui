@@ -70,6 +70,11 @@ class ComposeFormDialog(ModalScreen[None]):
         self.answered: Signal[str] = Signal()
         #: the screen's widgets are mounted, its form's among them: once, as it's installed
         self.mounted: SignalNoArgs = SignalNoArgs()
+        #: the screen is on top again, e.g. the one above it closed
+        self.resumed: SignalNoArgs = SignalNoArgs()
+
+    def on_screen_resume(self) -> None:
+        self.resumed.emit()
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
