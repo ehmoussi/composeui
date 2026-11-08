@@ -180,6 +180,12 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 ## Charts
 
+- **Evaluate `textual-plot`** (Now). A candidate to replace `textual-plotext`, with interactive
+  zooming and panning. [textual-plot](https://github.com/davidfokkema/textual-plot) depends on
+  `textual-hires-canvas`, which could also draw the 2D view. Check parity for filled and stepped
+  curves, NaN gaps, logarithmic axes, grouped bars, legends and labeled reference lines before
+  replacing the current renderer. Resolve its Python 3.10 minimum and NumPy dependency without
+  silently dropping Python 3.9 support.
 - **Split the page's scripts** (Now, first). `charts.js` and `maps.js`, loaded with their
   libraries, and `tables.js`, out of `page.js`.
 - **Layers** (Now). Every kind of series on shared axes, bars included, and a second y axis.
