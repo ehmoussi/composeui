@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from qtpy.QtCore import QMargins, QPoint, QRect, QSize, Qt, QTimer, Signal
+from qtpy.QtCore import QMargins, QPoint, QRect, QSignalBlocker, QSize, Qt, QTimer, Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -251,13 +251,12 @@ class QTableFilterBar(QWidget):
     def set_columns(self, columns: list[tuple[int, str]]) -> None:
         """Offer `columns`, each its index and its header, in the editor."""
         column = self.column.currentData()
-        self.column.blockSignals(True)  # noqa: FBT003
-        self.column.clear()
-        for index, header in columns:
-            self.column.addItem(header, index)
-        found = self.column.findData(column)
-        self.column.setCurrentIndex(max(found, 0))
-        self.column.blockSignals(False)  # noqa: FBT003
+        with QSignalBlocker(self.column):
+            self.column.clear()
+            for index, header in columns:
+                self.column.addItem(header, index)
+            found = self.column.findData(column)
+            self.column.setCurrentIndex(max(found, 0))
         self._show_placeholder()
 
     def set_search(self, text: str) -> None:
