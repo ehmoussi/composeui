@@ -14,7 +14,6 @@ from qtpy.QtGui import (
     QAction,
     QDoubleValidator,
     QFont,
-    QFontInfo,
     QIcon,
     QKeySequence,
     QPalette,
@@ -1128,8 +1127,12 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
         font = QFont()
         if value in _ROLE_FONTS:
             factor, weight = _ROLE_FONTS[value]
-            # `QFontInfo`: the size of a font set in pixels reads as -1 on the font itself
-            font.setPointSizeF(QFontInfo(QApplication.font()).pointSizeF() * factor)
+            app_font = QApplication.font()
+            # a font has its size in points or in pixels: the other one reads as -1
+            if app_font.pixelSize() > 0:
+                font.setPixelSize(round(app_font.pixelSize() * factor))
+            else:
+                font.setPointSizeF(app_font.pointSizeF() * factor)
             font.setWeight(weight)
         rendered_object.setFont(font)
         rendered_object.setForegroundRole(

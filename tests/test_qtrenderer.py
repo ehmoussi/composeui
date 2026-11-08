@@ -397,6 +397,26 @@ def test_a_label_s_role_sets_its_look_and_body_takes_it_back(qtbot: QtBot) -> No
     assert widget.styleSheet() == ""
 
 
+def test_a_label_s_role_scales_an_app_font_set_in_pixels(qtbot: QtBot) -> None:
+    app_font = QApplication.font()
+    pixel_font = QFont(app_font)
+    pixel_font.setPixelSize(20)
+    QApplication.setFont(pixel_font)
+    try:
+        view = LabelView(text="Plan")
+        view.render(RendererType.QT)
+        assert isinstance(view.renderer, QtWidgetRenderer)
+        widget = view.renderer.qt_object
+        assert isinstance(widget, QLabel)
+        qtbot.addWidget(widget)
+
+        view.role = TextRole.TITLE
+
+        assert widget.font().pixelSize() == 30
+    finally:
+        QApplication.setFont(app_font)
+
+
 def _blocks(browser: QTextBrowser) -> list[tuple[str, int, bool]]:
     """Each paragraph of `browser`: its text, its heading level and whether it's listed."""
     blocks = []
