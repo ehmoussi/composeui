@@ -268,8 +268,8 @@ rows that it read.
 
 ### The status bar
 
-The `status_bar` of the main view is a line at the bottom of the window. It shows a short
-message to the user, for example "Saved", or why an edit was refused:
+The `status_bar` of the main view, a `StatusBar`, is a line at the bottom of the window. It shows
+a short message to the user, for example "Saved", or why an edit was refused:
 
 ```python
 main_view.status_bar.show_message("Saved")

@@ -471,7 +471,8 @@ each pipe changes the pipe in a form dialog.
 
 A content dialog holds any view with OK and Cancel, for example a table to pick a file
 from. Use it when the dialog shows something other than a form. Subclass
-`ContentDialogView[YourView]`, and give it its `content`:
+`ContentDialogView[YourView]`, and give it its `content`. `OkCancelDialogView` is the base of
+`ContentDialogView` and `TypedFormDialogView`:
 
 ```python
 from attrs import Factory

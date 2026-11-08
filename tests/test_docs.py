@@ -17,6 +17,7 @@ import pytest
 from packaging.version import Version
 
 import composeui
+from composeui.core import view
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -132,6 +133,20 @@ def test_each_complete_example_runs(
 def _anchor(heading: str) -> str:
     """Give the anchor of a heading, as MyST and GitHub make it."""
     return re.sub(r"[^\w\- ]", "", heading.replace("`", "").lower()).replace(" ", "-")
+
+
+def test_the_user_guide_names_each_public_view() -> None:
+    guide = "".join(page.read_text(encoding="utf-8") for page in (DOCS / "user-guide").glob("*.md"))
+    views = [
+        name
+        for name in view.__all__
+        if isinstance(getattr(view, name), type)
+        and issubclass(getattr(view, name), view.View)
+        and getattr(view, name)._renderer_key is not None  # noqa: SLF001 (what the catalog reads)
+    ]
+
+    assert len(views) > 0
+    assert [name for name in views if re.search(rf"\b{name}\b", guide) is None] == []
 
 
 def test_the_user_guide_lists_the_sections_of_its_pages() -> None:

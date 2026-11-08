@@ -190,8 +190,10 @@ document owns what, and the checks.
 
 - **Change the docs in the commit that changes the behavior.** A change that users see gets
   a line under "Unreleased" in `CHANGELOG.md`. A new view gets a section
-  in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. In
-  `ROADMAP.md`, delete its item. A new example gets its
+  in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. Add
+  it to the summary of its page in `docs/_site/llms.txt`, to the list of larger views in
+  "Building views" if it is one, and to "Design of the web backend" in the technical guide if
+  its web renderer makes a decision that isn't obvious. In `ROADMAP.md`, delete its item. A new example gets its
   section, its overview row, its contents entry, and its screenshots in
   `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/`
   and the docstrings for it, and fix every place.

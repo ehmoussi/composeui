@@ -707,7 +707,7 @@ Escape clears it on Qt. On Textual, `/` shows a search field, Escape hides it, a
 
 ## The File menu and picking a file
 
-The File menu has New, Open, Save, Save As, and Exit. An app without studies sets
+The File menu, a `FileMenu`, has New, Open, Save, Save As, and Exit. An app without studies sets
 `has_file_menu = False` on its `MainView` to leave out the File menu.
 
 A `PickFileAction` is a menu or toolbar action that picks a file for the app to read (not a
