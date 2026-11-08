@@ -44,7 +44,14 @@ import attrs
 from attrs import Factory
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
-from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, multiple, rule
+from hypothesis.stateful import (
+    Bundle,
+    RuleBasedStateMachine,
+    invariant,
+    multiple,
+    precondition,
+    rule,
+)
 from markupsafe import escape
 from starlette.requests import Request
 from starlette.testclient import TestClient
@@ -4070,6 +4077,149 @@ class _SessionStoreMachine(RuleBasedStateMachine):
 
 TestASessionStoreUsedInAnyOrder = _SessionStoreMachine.TestCase
 TestASessionStoreUsedInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
+
+
+class _WorkerRun:
+    """A job of `_SessionUploadsMachine`, whose thread waits for `may_end`."""
+
+    def __init__(self) -> None:
+        self.started, self.may_end = threading.Event(), threading.Event()
+        self.thread: threading.Thread | None = None
+        self.called: list[str] = []
+        self.has_ended = self.should_report = False
+
+
+class _SessionUploadsMachine(RuleBasedStateMachine):
+    """A session's uploads and jobs: uploads, clears, drops, polls and its close, in any order.
+
+    What each file should be, as the session must keep it: `current` the field's, `stale` those
+    replaced or cleared, kept while a worker may read them, and `deleted`.
+    """
+
+    runs = Bundle("runs")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.main_view = DataFileMainView()
+        self.session = WebSession(self.main_view)
+        self.dataset = self.main_view.form.dataset
+        self.field_id = _part(self.dataset, "field").widget_id
+        self.current: Path | None = None
+        self.stale: list[Path] = []
+        self.deleted: list[Path] = []
+        self.all_runs: list[_WorkerRun] = []
+        self.is_closed = False
+
+    @property
+    def _has_threads(self) -> bool:
+        return not all(run.has_ended for run in self.all_runs)
+
+    def _clean_up(self) -> None:
+        """Delete what the session no longer needs, as each request does: once no worker runs."""
+        if not self._has_threads:
+            self.deleted += self.stale
+            self.stale = []
+
+    @rule()
+    def upload(self) -> None:
+        answer = _pick_file(self.session, self.field_id, "data.csv", b"data")
+        if self.is_closed:
+            assert answer is None
+            return
+        assert self.dataset.file is not None
+        if self.current is not None:
+            self.stale.append(self.current)
+        self.current = self.dataset.file.path
+        self._clean_up()
+
+    @precondition(lambda machine: not machine.is_closed)
+    @rule()
+    def clear(self) -> None:
+        self.dataset.clear()
+        if self.current is not None:
+            self.stale.append(self.current)
+        self.current = None
+
+    @precondition(lambda machine: not machine.is_closed)
+    @rule()
+    def poll(self) -> None:
+        self.session.poll_jobs()
+        self._clean_up()
+
+    @precondition(lambda machine: not machine.is_closed)
+    @rule(target=runs)
+    def start(self) -> _WorkerRun:
+        run = _WorkerRun()
+
+        def work(_job: Job[None, int]) -> None:
+            run.thread = threading.current_thread()
+            run.started.set()
+            assert run.may_end.wait(30)
+            job.report_progress(1)
+
+        job = self.main_view.jobs.start(work)
+        job.progress.connect(lambda _value: run.called.append("progress"))
+        job.finished.connect(lambda _result: run.called.append("finished"))
+        assert run.started.wait(30)
+        run.should_report = True
+        self.all_runs.append(run)
+        return run
+
+    @rule(run=runs)
+    def end(self, run: _WorkerRun) -> None:
+        if run.has_ended:
+            return
+        run.may_end.set()
+        assert run.thread is not None
+        run.thread.join(30)
+        assert not run.thread.is_alive()
+        run.has_ended = True
+        if self.is_closed:
+            self._clean_up()
+
+    @precondition(lambda machine: not machine.is_closed)
+    @rule()
+    def drop(self) -> None:
+        self.main_view.jobs.drop()
+        for run in self.all_runs:
+            run.should_report = run.should_report and run.has_ended
+
+    @precondition(lambda machine: not machine.is_closed)
+    @rule()
+    def close(self) -> None:
+        self.session.close()
+        self.is_closed = True
+        for run in self.all_runs:
+            run.should_report = run.should_report and run.has_ended
+        if self.current is not None:
+            self.stale.append(self.current)
+            self.current = None
+        self._clean_up()
+
+    @invariant()
+    def a_file_stays_until_no_worker_can_read_it(self) -> None:
+        for path in ([] if self.current is None else [self.current]) + self.stale:
+            assert path.exists()
+        for path in self.deleted:
+            assert not path.exists()
+
+    @invariant()
+    def a_job_reports_only_while_it_counts(self) -> None:
+        for run in self.all_runs:
+            expected = ["progress", "finished"] if run.has_ended and run.should_report else []
+            assert run.called == expected
+
+    def teardown(self) -> None:
+        for run in self.all_runs:
+            run.may_end.set()
+            assert run.thread is not None
+            run.thread.join(30)
+        if not self.is_closed:
+            self.session.close()
+
+
+TestASessionsUploadsInAnyOrder = _SessionUploadsMachine.TestCase
+TestASessionsUploadsInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
 
 
 def test_a_failed_session_setup_closes_its_model_and_a_retry_owns_its_own() -> None:
