@@ -106,6 +106,7 @@ from composeui.core.view import (
     TableView,
     TabPage,
     TabView,
+    TextRole,
     TreeNode,
     TreeView,
     UploadedFile,
@@ -1599,6 +1600,31 @@ def rows() -> _RowsMainView:
     main_view = _RowsMainView()
     main_view.render(RendererType.WEB)
     return main_view
+
+
+@pytest.mark.parametrize(
+    ("role", "tag", "class_name"),
+    [
+        (TextRole.BODY, "span", ""),
+        (TextRole.TITLE, "h2", "font-bold"),
+        (TextRole.SUBTITLE, "h3", "font-semibold"),
+        (TextRole.ERROR, "span", "text-error"),
+    ],
+)
+def test_a_label_s_role_picks_its_tag_and_keeps_its_text_as_set(
+    rows: _RowsMainView, role: TextRole, tag: str, class_name: str
+) -> None:
+    hostile = '<b onclick="x">Plan</b>'
+    rows.note.text = hostile
+    rows.note.role = role
+    renderer = rows.note.renderer
+    assert isinstance(renderer, WebRenderer)
+
+    element = _element(renderer.to_html(), renderer.widget_id)
+
+    assert element.tag == tag
+    assert class_name in (element.attributes["class"] or "")
+    assert element.text == hostile
 
 
 def test_float_input_ignores_transient_text(rows: _RowsMainView) -> None:

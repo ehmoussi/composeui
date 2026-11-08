@@ -19,8 +19,24 @@ from composeui.core.view import LabelView, child
 summary: LabelView = child(LabelView, text="No pipe yet")
 ```
 
-Qt shows a `QLabel`, Textual a `Label`, and the web a line of text. For several lines with
-headings and links, use a [Markdown view](#markdown).
+Its `role` (`TextRole`) says what the text is, and each backend shows the role in its own way:
+
+- **`BODY`,** the default, is ordinary text.
+- **`TITLE`** and **`SUBTITLE`** name a part of a page.
+- **`CAPTION`** and **`MUTED`** are secondary text. A caption is smaller on Qt and the web.
+- **`ERROR`,** **`WARNING`** and **`SUCCESS`** report a result.
+
+```python
+from composeui.core.view import LabelView, TextRole, child
+
+heading: LabelView = child(LabelView, text="Results", role=TextRole.TITLE)
+```
+
+Qt shows a `QLabel`, Textual a `Label`, and the web a line of text. On the web, a title is an
+`<h2>` heading and a subtitle an `<h3>`. A terminal has one text size, so Textual shows a title
+in bold and a subtitle in bold and a muted color. For several lines with headings and links, use
+a [Markdown view](#markdown). The state saves neither the `text` nor the `role`: the app's code
+sets them.
 
 ## Buttons
 

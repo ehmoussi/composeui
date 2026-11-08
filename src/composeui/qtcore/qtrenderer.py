@@ -13,8 +13,11 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import (
     QAction,
     QDoubleValidator,
+    QFont,
+    QFontInfo,
     QIcon,
     QKeySequence,
+    QPalette,
     QTextDocument,
 )
 from qtpy.QtWidgets import (
@@ -103,6 +106,7 @@ from composeui.core.view import (
     StatusBar,
     TabPage,
     TabView,
+    TextRole,
     ToolBar,
     TreeView,
     UploadedFile,
@@ -1082,6 +1086,21 @@ class QtFloatSliderRenderer(QtSliderRenderer):
 
 class LabelViewLike(ViewLike, Protocol):
     text: str
+    role: TextRole
+
+
+#: the size of a role's text, as a factor of the app's font, and its weight
+_ROLE_FONTS = {
+    TextRole.TITLE: (1.5, QFont.Weight.Bold),
+    TextRole.SUBTITLE: (1.2, QFont.Weight.DemiBold),
+    TextRole.CAPTION: (0.85, QFont.Weight.Normal),
+}
+_ROLE_COLORS = {
+    TextRole.ERROR: "red",
+    TextRole.WARNING: "orange",
+    TextRole.SUCCESS: "green",
+}
+_MUTED_ROLES = (TextRole.CAPTION, TextRole.MUTED, TextRole.SUBTITLE)
 
 
 class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
@@ -1090,6 +1109,7 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
         self._refresh_dispatcher.update(
             {
                 "text": self._refresh_text,
+                "role": self._refresh_role,
             }
         )
 
@@ -1101,6 +1121,24 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     @staticmethod
     def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
         rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_role(_view: LabelViewLike, rendered_object: QLabel, value: TextRole) -> None:
+        # a font that sets nothing takes all of the parent's, so the body text follows the app
+        font = QFont()
+        if value in _ROLE_FONTS:
+            factor, weight = _ROLE_FONTS[value]
+            # `QFontInfo`: the size of a font set in pixels reads as -1 on the font itself
+            font.setPointSizeF(QFontInfo(QApplication.font()).pointSizeF() * factor)
+            font.setWeight(weight)
+        rendered_object.setFont(font)
+        rendered_object.setForegroundRole(
+            QPalette.ColorRole.PlaceholderText
+            if value in _MUTED_ROLES
+            else QPalette.ColorRole.NoRole
+        )
+        color = _ROLE_COLORS.get(value)
+        rendered_object.setStyleSheet(f"QLabel {{ color : {color}; }}" if color else "")
 
 
 class ImageViewLike(ViewLike, Protocol):

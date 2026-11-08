@@ -114,6 +114,7 @@ from composeui.core.view import (
     TableView,
     TabView,
     TextAreaView,
+    TextRole,
     TreeNode,
     UploadedFile,
     replace_cell,
@@ -367,6 +368,33 @@ def test_label_renderer_pushes_view_state_to_the_widget(qtbot: QtBot) -> None:
 
     view.text = "hello"
     assert widget.text() == "hello"
+
+
+def test_a_label_s_role_sets_its_look_and_body_takes_it_back(qtbot: QtBot) -> None:
+    view = LabelView(text="Plan")
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    widget = view.renderer.qt_object
+    assert isinstance(widget, QLabel)
+    qtbot.addWidget(widget)
+    body_font, body_color_role = QFont(widget.font()), widget.foregroundRole()
+
+    view.role = TextRole.TITLE
+    assert widget.font().bold()
+    assert widget.font().pointSizeF() > body_font.pointSizeF()
+
+    view.role = TextRole.CAPTION
+    assert not widget.font().bold()
+    assert widget.font().pointSizeF() < body_font.pointSizeF()
+    assert widget.foregroundRole() == QPalette.ColorRole.PlaceholderText
+
+    view.role = TextRole.ERROR
+    assert widget.font() == body_font
+    assert widget.foregroundRole() == body_color_role
+    assert "red" in widget.styleSheet()
+
+    view.role = TextRole.BODY
+    assert widget.styleSheet() == ""
 
 
 def _blocks(browser: QTextBrowser) -> list[tuple[str, int, bool]]:

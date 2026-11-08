@@ -97,6 +97,7 @@ from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeimage import ComposeImage
 from composeui.textualcore.widgets.composeinput import ComposeInput
+from composeui.textualcore.widgets.composelabel import ComposeLabel
 from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
@@ -131,6 +132,7 @@ if TYPE_CHECKING:
         NodeMark,
         ReferenceLine,
         Series,
+        TextRole,
         TreeNode,
         TreePath,
     )
@@ -1357,24 +1359,30 @@ class TextualFloatSliderRenderer(TextualSliderRenderer):
 
 class LabelViewLike(ViewLike, Protocol):
     text: str
+    role: TextRole
 
 
-class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, Label]):
+class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, ComposeLabel]):
     def __init__(self, view: LabelViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
                 "text": self._refresh_text,
+                "role": self._refresh_role,
             }
         )
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = Label(markup=False)
+            self._rendered_object = ComposeLabel(markup=False)
 
     @staticmethod
-    def _refresh_text(_view: LabelViewLike, rendered_object: Label, value: str) -> None:
+    def _refresh_text(_view: LabelViewLike, rendered_object: ComposeLabel, value: str) -> None:
         rendered_object.update(value)
+
+    @staticmethod
+    def _refresh_role(_view: LabelViewLike, rendered_object: ComposeLabel, value: TextRole) -> None:
+        rendered_object.show_role(value)
 
 
 class ImageViewLike(ViewLike, Protocol):
