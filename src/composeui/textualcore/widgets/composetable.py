@@ -432,9 +432,7 @@ class ComposeTable(DataTable[Text]):
         )
 
     def _set_cell(self, row: int, column: int, text: str) -> None:
-        """Show a cell the user changed and emit it, unless the rows no longer have its row."""
-        if row >= len(self._rows):
-            return
+        """Show a cell the user changed and emit it; its row is one of the rows shown."""
         self._rows = replace_cell(self._rows, row, column, text)
         check = 1 if self._is_multiple else 0
         # the whole row: a path cell's widget may follow the kind this cell gives
@@ -529,13 +527,35 @@ class ComposeTable(DataTable[Text]):
             # the rows the editor was opened on, or the edit would land on another row
             if texts is None or self._rows is not rows:
                 return
+            at: int | None = row
+            current = list(cells)
             for column, text in texts.items():
                 # an app answering an edit with fewer rows leaves none to edit
-                if text != (cells[column] if column < len(cells) else ""):
-                    self._set_cell(row, column, text)
+                if at is None or text == (current[column] if column < len(current) else ""):
+                    continue
+                self._set_cell(at, column, text)
+                edited = replace_cell([current], 0, column, text)[0]
+                at, current = self._follow(at, current, edited)
 
         rows = self._rows
         self.app.push_screen(editor, apply)
+
+    def _follow(
+        self, row: int, before: list[str], edited: list[str]
+    ) -> tuple[int | None, list[str]]:
+        """Find a record after a cell's edit, which its callbacks may have moved or refused.
+
+        Rows have no identity but their cells. Get its row and its cells, None if it's gone.
+        """
+        at_row = list(self._rows[row]) if row < len(self._rows) else None
+        if at_row == edited:
+            return row, edited
+        if at_row == before:  # refused: the next cells are still its own
+            return row, before
+        for moved, cells in enumerate(self._rows):
+            if list(cells) == edited:
+                return moved, edited
+        return None, edited
 
     def action_select_cursor(self) -> None:
         if self._is_multiple and self.show_cursor:

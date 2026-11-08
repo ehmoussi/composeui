@@ -4701,6 +4701,38 @@ async def test_a_table_emptied_under_its_cursor_answers_no_key() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("removes", "expected"),
+    [(False, [["b", "2"], ["za", "91"]]), (True, [["b", "2"]])],
+)
+async def test_a_row_s_edit_of_several_cells_stays_on_its_record(
+    *, removes: bool, expected: list[list[str]]
+) -> None:
+    view = EditableTableMainView()
+    view.places.editable_columns = [0, 1]
+    view.places.rows = [["a", "1"], ["b", "2"]]
+    app = _app_of(view)
+
+    def answer(row: int, column: int, text: str) -> None:
+        rows = replace_cell(view.places.rows, row, column, text)
+        view.places.rows = [*rows[:row], *rows[row + 1 :]] if removes else sorted(rows)
+
+    view.places.cell_edited.connect(answer)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        table = _widget(view.places)
+        assert isinstance(table, ComposeFilterTable)
+        await pilot.click(table.table, offset=(2, 1))
+        await pilot.press("f2")
+        await pilot.pause()
+        await pilot.press("ctrl+a", "z", "tab", "ctrl+a", "9", "enter")
+        await pilot.pause()
+
+    assert view.places.rows == expected
+
+
+@pytest.mark.asyncio
 async def test_an_edit_whose_answer_empties_the_table_leaves_its_other_cells() -> None:
     view = EditableTableMainView()
     view.places.editable_columns = [0, 1]

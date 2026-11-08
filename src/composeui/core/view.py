@@ -25,7 +25,7 @@ import re
 import sys
 import threading
 import weakref
-from collections import OrderedDict, deque
+from collections import Counter, OrderedDict, deque
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from pathlib import Path
 from typing import (
@@ -4229,22 +4229,38 @@ class TableMixin:
         unless its callbacks assigned `rows` or refused it. A disabled cell stays as it is.
         """
         text = CHECKED_TEXTS[is_checked]
-        for row in list(self.shown_rows):
+        positions, position = list(self.shown_rows), 0
+        # rows have no identity but their cells: those already tried, by their cells, are
+        # left alone when a callback's new rows are read from the start
+        tried: Counter[tuple[str, ...]] = Counter()
+        seen: Counter[tuple[str, ...]] = Counter()
+        edits_left = len(positions)  # a callback that keeps answering can't make it endless
+        while position < len(positions) and edits_left > 0:
+            row = positions[position]
+            position += 1
             if (
                 row >= len(self.rows)
                 or self.is_checked(row, column) == is_checked
                 or not self.cell_style(row, column).is_enabled
             ):
                 continue
+            cells = tuple(self.rows[row])
+            seen[cells] += 1
+            if seen[cells] <= tried[cells]:
+                continue
+            tried[cells] += 1
+            edits_left -= 1
             rows = self.rows
             self.emit_cell_edited(row, column, text)
-            if self.rows is rows:
-                # as edited, for the selection to stay on its row
-                self._edited_rows = replace_cell(rows, row, column, text)
-                try:
-                    self.rows = self._edited_rows
-                finally:
-                    self._edited_rows = None
+            if self.rows is not rows:  # another row may now be at any position
+                positions, position, seen = list(self.shown_rows), 0, Counter()
+                continue
+            # as edited, for the selection to stay on its row
+            self._edited_rows = replace_cell(rows, row, column, text)
+            try:
+                self.rows = self._edited_rows
+            finally:
+                self._edited_rows = None
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None:
         """Emit `cell_edited` for the user's edit, `rows` still holding the old text.

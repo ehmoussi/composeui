@@ -75,6 +75,8 @@ The notable changes of each release of ComposeUI. The format follows
   corrupt Matplotlib's global settings. Each export keeps its own, one at a time.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text
   field stored the text "None", and a boolean field stored false.
+- Check-all and a Textual row edit of several cells stay on their records when a `cell_edited`
+  callback sorts, replaces or removes the rows. Before, the next edit could land on another record.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy
   that the field holds.
 - `DataFrameSource` with an `id_column` keeps the frame's order for rows with equal cells, as
