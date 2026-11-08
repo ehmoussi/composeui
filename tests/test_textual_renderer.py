@@ -4785,6 +4785,38 @@ async def test_the_filter_bar_offers_the_columns_set_before_the_app_runs_and_add
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("edge", "keys", "title"),
+    [
+        (datetime.date.max, ("right", "down", "pagedown"), "9999"),
+        (datetime.date.min, ("left", "up", "pageup"), " 1 "),
+    ],
+)
+async def test_a_date_input_s_calendar_opens_and_stops_on_the_first_and_last_dates(
+    edge: datetime.date, keys: tuple[str, str, str], title: str
+) -> None:
+    view, app, _ = await _booking_app()
+    arrival = view.form.arrival
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        field = _field_widget(arrival.renderer)
+        assert isinstance(field, ComposeDateInput)
+        arrival.minimum, arrival.maximum = None, None
+        arrival.value = edge
+        await pilot.pause()
+        await pilot.click(field.button)
+        await pilot.pause()
+        month = app.screen.query_one(ComposeMonth)
+        for key in keys:
+            await pilot.press(key)
+            await pilot.pause()
+            assert month.cursor == edge
+        rendered = month.render()
+        assert isinstance(rendered, Text)
+        assert title in rendered.plain.split("\n")[0]
+
+
+@pytest.mark.asyncio
 async def test_a_date_input_s_calendar_picks_no_day_outside_a_range_changed_while_open() -> None:
     view, app, changes = await _booking_app()
     arrival = view.form.arrival
