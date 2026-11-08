@@ -37,10 +37,12 @@ from composeui.core.study import open_study
 from composeui.core.view import View
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
+from composeui.webcore.order import DuplicatePostError
 from composeui.webcore.origin import SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
     console_text,
+    duplicate_post,
     homepage,
     icon,
     jobs_poll,
@@ -178,6 +180,7 @@ def create_starlette_app(
             # the stylesheet, the scripts and a chart's points shrink several times
             Middleware(GZipMiddleware, minimum_size=1024),
         ],
+        exception_handlers={DuplicatePostError: duplicate_post},
         lifespan=_saving(sessions) if reloading else _closing(sessions),
     )
     app.state.sessions = sessions

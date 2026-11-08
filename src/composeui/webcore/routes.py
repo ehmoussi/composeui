@@ -118,6 +118,11 @@ def reload_poll(request: Request) -> Response:
     return Response(headers=_RELOAD)
 
 
+async def duplicate_post(_request: Request, _error: Exception) -> Response:
+    """Answer a post sent twice with nothing: the first one's answer brings its changes."""
+    return Response(status_code=204, headers=_NO_STORE)
+
+
 async def widget_event(request: Request) -> Response:
     """Dispatch a browser event to a widget; respond with every fragment it changed."""
     session = _session(request)

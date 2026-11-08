@@ -112,6 +112,7 @@ from composeui.webcore.order import (
     PAGE_HEADER,
     POST_FIELD,
     POST_HEADER,
+    DuplicatePostError,
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS
@@ -529,6 +530,66 @@ async def _send(order: PostOrder, handled: list[tuple[str, int]], page: str, num
     for _ in range(20):  # turns of the event loop, not time: a post waiting never ends
         await asyncio.sleep(0)
     return task
+
+
+def test_a_duplicate_post_repeats_nothing_and_releases_no_later_post(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("composeui.webcore.order.ORDER_TIMEOUT", 60)
+
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        may_end = asyncio.Event()
+
+        async def original() -> None:
+            async with order.turn({PAGE_HEADER: _PAGE, POST_HEADER: "1"}):
+                await may_end.wait()
+                handled.append((_PAGE, 1))
+
+        first = asyncio.ensure_future(original())
+        await asyncio.sleep(0)
+        with pytest.raises(DuplicatePostError):
+            await (await _send(order, handled, _PAGE, 1))
+        second = await _send(order, handled, _PAGE, 2)
+        assert not second.done()  # the original is still running
+
+        may_end.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 10)
+        with pytest.raises(DuplicatePostError):  # once ended too
+            await (await _send(order, handled, _PAGE, 2))
+        return handled
+
+    assert asyncio.run(handle_all()) == [(_PAGE, 1), (_PAGE, 2)]
+
+
+def test_a_page_remembers_only_its_latest_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("composeui.webcore.order._MAX_SEEN", 1)
+
+    async def handle_all() -> list[tuple[str, int]]:
+        order = PostOrder()
+        handled: list[tuple[str, int]] = []
+        await _send(order, handled, _PAGE, 1)
+        await _send(order, handled, _PAGE, 2)
+        await _send(order, handled, _PAGE, 1)  # forgotten: as a new post
+        return handled
+
+    assert asyncio.run(handle_all()) == [(_PAGE, 1), (_PAGE, 2), (_PAGE, 1)]
+
+
+def test_a_duplicate_post_gets_an_empty_answer_and_changes_nothing(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    age_id = _field_id(main_view.form.age)
+    headers = {PAGE_HEADER: _PAGE, POST_HEADER: "1"}
+    data = {"value": "3", "event": "input"}
+    assert client.post(f"/widget/{age_id}", data=data, headers=headers).status_code == 200
+    main_view.form.age.value = 9.0
+
+    response = client.post(f"/widget/{age_id}", data=data, headers=headers)
+
+    assert (response.status_code, response.text) == (204, "")
+    assert main_view.form.age.value == 9.0
 
 
 def test_a_post_waits_for_a_missing_one_only_so_long(monkeypatch: pytest.MonkeyPatch) -> None:
