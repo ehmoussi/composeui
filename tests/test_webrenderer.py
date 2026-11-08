@@ -1597,7 +1597,9 @@ class _DisabledControlsMainView(MainView):
     text: InputView = child(InputView, text="before")
     check: CheckBoxView = child(CheckBoxView)
     slider: SliderView = child(SliderView, maximum=10)
-    combo: _DisabledCombo = child(_DisabledCombo, values={"A": "a", "B": "b"}, value="a")
+    combo: _DisabledCombo = attrs.Factory(
+        lambda: _DisabledCombo(values={"A": "a", "B": "b"}, value="a")
+    )
     tabs: _DisabledTabs = child(_DisabledTabs)
 
 
