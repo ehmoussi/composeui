@@ -137,7 +137,8 @@ download's name, a damaged study, a record's `Decimal` field. Use one where:
   parser (filters, a catalog's placeholders), a cache, or a security check (no
   posted name leads out of the server roots).
 - **A state machine has a small model.** A `RuleBasedStateMachine` runs the
-  session store's create, look up, drop and expiry in any order, on a fake clock.
+  session store's create, look up, drop and expiry in any order, on a fake clock. To
+  find the states and the orders to test, see the `state-machines` skill.
 
 Don't use one for rendered widgets or the browser: they are too slow for many
 inputs. Don't copy the rule from the code under test: compare with an oracle of
