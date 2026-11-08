@@ -102,6 +102,8 @@ The notable changes of each release of ComposeUI. The format follows
   that the app dropped.
 - On Textual, a callback handed to the app's thread runs once when it raises `RuntimeError`. Before,
   it ran a second time, on the worker's thread.
+- A web session restored by `--reload` owns its uploads, and deletes them when it closes or expires.
+  Before, they stayed on the disk.
 - On the web, a job's `finished` callback can start another job or task. It raised
   `CalledInJobError`: the web hands a job's outcome over in the job's thread, which took the
   callback for the job's own function.

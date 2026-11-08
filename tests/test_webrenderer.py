@@ -1662,6 +1662,52 @@ def _pick_file(
         return session.pick_file(widget_id, name, received, None, media_type)
 
 
+def _store_of_data_files(saved: Path) -> SessionStore:
+    return SessionStore(lambda: (DataFileMainView(), None), ttl=60.0, max_sessions=2, saved=saved)
+
+
+def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None:
+    store = _store_of_data_files(tmp_path)
+    created = store.create()
+    assert created is not None
+    session_id, session = created
+    assert isinstance(session.main_view, DataFileMainView)
+    measurements = session.main_view.form.measurements
+    _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
+    path = measurements.path
+    assert path is not None
+    store.save_all()
+
+    restored_store = _store_of_data_files(tmp_path)
+    restored = restored_store.get(session_id)
+
+    assert restored is not None
+    assert isinstance(restored.main_view, DataFileMainView)
+    assert restored.main_view.form.measurements.path == path
+    assert path.read_bytes() == b"first"
+    restored_store.drop(session_id)
+    assert not path.exists()
+
+
+def test_a_saved_session_naming_other_uploads_never_deletes_them(tmp_path: Path) -> None:
+    store = _store_of_data_files(tmp_path)
+    created = store.create()
+    assert created is not None
+    session_id, session = created
+    measurements = session.main_view.form.measurements  # type: ignore[attr-defined]
+    _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
+    store.save_all()
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    (tmp_path / session_id / "uploads").write_text(str(unrelated))
+
+    restored_store = _store_of_data_files(tmp_path)
+    assert restored_store.get(session_id) is not None
+    restored_store.drop(session_id)
+
+    assert unrelated.is_dir()
+
+
 def test_a_file_upload_holds_its_file_until_the_next_one_or_the_session_s_end() -> None:
     main_view = DataFileMainView()
     main_view.status_bar.timeout = 0

@@ -62,11 +62,22 @@ MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
 _MAX_FILE_NAME_LENGTH = 200
 #: why the status bar refuses a file that the disk has no room for
 _NO_ROOM = "the server has no room for it right now"
+#: the file of a saved session that names the directory of its uploads
+_UPLOADS_NAME = "uploads"
 
 
 def safe_filename(name: str) -> str:
     """Reduce `name` to letters, digits, `.`, `_` and `-`, safe in a response header."""
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.") or "state"
+
+
+def _saved_uploads(file: Path) -> Path | None:
+    """Get the uploads' directory that a saved session names, only if it's one of ours."""
+    if not file.exists():
+        return None
+    path = Path(file.read_text(encoding="utf-8"))
+    is_ours = path.parent == Path(tempfile.gettempdir()) and path.name.startswith("composeui-")
+    return path if is_ours and path.is_dir() and not path.is_symlink() else None
 
 
 class WebSession(RenderTarget):
@@ -152,11 +163,14 @@ class WebSession(RenderTarget):
         """Save the session's study, its file and language, for `open_saved` to open."""
         with self.lock:
             save_reloaded_state(self.main_view, self.model, directory)
+            if self._uploads is not None:
+                (directory / _UPLOADS_NAME).write_text(str(self._uploads), encoding="utf-8")
 
     def open_saved(self, directory: Path) -> None:
         """Open what `save_to` saved, if it still fits the main view (else it's dropped)."""
         with self.lock, collect_dirty():  # the whole page is sent next: drop the fragments
             load_reloaded_state(self.main_view, self.model, directory)
+            self._uploads = _saved_uploads(directory / _UPLOADS_NAME)
 
     def handle_event(
         self, widget_id: str, event: str, form: Mapping[str, str]
