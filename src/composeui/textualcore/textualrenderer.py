@@ -155,14 +155,24 @@ def _call_on_app_thread(app: App[Any] | None, callback: Callable[[], None]) -> N
 
     `App.call_from_thread` raises `RuntimeError` both when the app isn't running yet
     and when it's called from the app's own thread (nothing to marshal in either
-    case) - both fall back to calling directly, matching `Renderer`'s default.
+    case) - both fall back to calling directly, matching `Renderer`'s default. A
+    `RuntimeError` of the callback itself goes to the caller: it never runs twice.
     """
     if app is None:
         callback()
         return
+    started = False
+
+    def run() -> None:
+        nonlocal started
+        started = True
+        callback()
+
     try:
-        app.call_from_thread(callback)
+        app.call_from_thread(run)
     except RuntimeError:
+        if started:
+            raise
         callback()
 
 
