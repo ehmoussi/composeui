@@ -597,6 +597,38 @@ async def test_textual_radio_group_with_nonnull_initial_value_mounts_without_cra
 
 
 @pytest.mark.asyncio
+async def test_a_radio_group_shows_no_choice_when_its_value_or_its_choice_is_gone() -> None:
+    view = PipeMainView()
+    app = _app_of(view)
+    edge = view.pages.inputs.pipe_form.edge_type
+    changes: list[object] = []
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.pause()
+        widget = _field_widget(edge.renderer)
+        assert isinstance(widget, ComposeRadioSet)
+        assert widget.pressed_index != -1
+        edge.value_changed.connect(changes.append)  # after its first value shows
+
+        edge.value = None
+        await pilot.pause()
+        await pilot.pause()
+        assert widget.pressed_index == -1
+        assert changes == []
+
+        edge.value = EdgeType.Chamfer
+        await pilot.pause()
+        await pilot.pause()
+        assert widget.value() == EdgeType.Chamfer
+        edge.values = {"Normal": EdgeType.Normal}  # without the choice selected
+        await pilot.pause()
+        await pilot.pause()
+        assert edge.value is None
+        assert widget.pressed_index == -1
+
+
+@pytest.mark.asyncio
 async def test_editing_finished_fires_on_blur_not_just_enter() -> None:
     """Check that editing_finished fires on blur, not just Enter.
 
