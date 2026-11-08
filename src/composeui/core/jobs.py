@@ -89,8 +89,15 @@ class Job(Generic[R, ProgressT]):
         #: progress values reported by the worker, on the main thread
         self.progress = Signal[ProgressT]()
         self._canceled = threading.Event()
+        # set by `Jobs.drop`: its outcome no longer counts, though its thread goes on
+        self._dropped = False
         # set before `_canceled` when a newer run replaces it (`Task.start_latest`)
         self._superseded = False
+
+    @property
+    def is_dropped(self) -> bool:
+        """Tell whether New, Open or closing the app forgot the job, whose thread may go on."""
+        return self._dropped
 
     @property
     def is_canceled(self) -> bool:
@@ -387,6 +394,10 @@ class Jobs:
         self.running_changed.set_main_view(main_view)
         # the jobs started and not over yet: only changed on the main thread
         self._running: set[Job[Any, Any]] = set()
+        #: the jobs' threads not yet over, dropped jobs' included, and what waits for them
+        self._workers = 0
+        self._after_workers: list[Callable[[], None]] = []
+        self._workers_lock = threading.Lock()
         self._tasks: list[Task[Any, Any, Any]] = []
         # the results handed back while the main view isn't rendered, for `wait`, or for its
         # renderer once it has one (`hand_over_to`)
@@ -469,9 +480,46 @@ class Jobs:
         self._running.add(job)
         if len(self._running) == 1:
             self.running_changed.emit(True)  # noqa: FBT003
+        with self._workers_lock:
+            self._workers += 1
         # a daemon: closing the app doesn't wait for it
-        thread = threading.Thread(target=self._run, args=(job, work, args, kwargs), daemon=True)
+        thread = threading.Thread(target=self._work, args=(job, work, args, kwargs), daemon=True)
         thread.start()
+
+    @property
+    def has_workers(self) -> bool:
+        """Tell whether a job's thread is still alive, a dropped job's included."""
+        with self._workers_lock:
+            return self._workers > 0
+
+    def after_workers(self, callback: Callable[[], None]) -> None:
+        """Call `callback` once every job's thread has ended: now if none is alive.
+
+        On the last thread's end otherwise: `callback` touches no view.
+        """
+        with self._workers_lock:
+            if self._workers > 0:
+                self._after_workers.append(callback)
+                return
+        callback()
+
+    def _work(
+        self,
+        job: Job[Any, Any],
+        work: Callable[..., object],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> None:
+        try:
+            self._run(job, work, args, kwargs)
+        finally:
+            with self._workers_lock:
+                self._workers -= 1
+                callbacks: list[Callable[[], None]] = []
+                if self._workers == 0:
+                    callbacks, self._after_workers = self._after_workers, []
+            for callback in callbacks:
+                callback()
 
     def _forget(self, job: Job[Any, Any]) -> None:
         """Drop `job`, replaced by a newer one: its progress and outcome won't be emitted."""
@@ -493,6 +541,8 @@ class Jobs:
         Raises `CalledInJobError` in a job's thread.
         """
         _check_main_thread("Jobs.drop")
+        for job in self._running:
+            job._dropped = True  # noqa: SLF001 (the jobs' own bookkeeping)
         self.cancel()
         was_running = self.is_running
         self._running.clear()

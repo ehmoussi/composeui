@@ -113,6 +113,8 @@ The notable changes of each release of ComposeUI. The format follows
   callback for the job's own function.
 - A `DataFrameSource` sorted by a text column keeps its empty cells, "" and missing ones
   alike, in the frame's order, as `ListSource` and `SqliteSource` do. Before, "" came first.
+- A job dropped by New or Open can't write into the study that replaced its own, and a web session's
+  uploads stay until every worker that may read them has ended.
 - On Textual, a form or message dialog that the app closes while another dialog covers it no longer
   comes back as a modal that Escape can't remove.
 - On the web, a download whose `export_filename` holds a control character no longer fails:
