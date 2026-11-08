@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from composeui.core.view import CellStyle, HeaderGroup, TableView
+from composeui.core.view import (
+    CellStyle,
+    EditRefusedError,
+    HeaderGroup,
+    TableView,
+    replace_cell,
+)
 from tests.tables import StyledTablesMainView
 
 if TYPE_CHECKING:
@@ -45,6 +51,37 @@ def test_checking_every_row_leaves_a_disabled_cell_as_it_is() -> None:
     assert [row[4] for row in table.rows] == ["True", "False", "True"]
     assert table.is_cell_editable(0, 4)
     assert not table.is_cell_editable(1, 4)
+
+
+def _sorting_table() -> TableView:
+    """Get a table whose app sorts its rows by the second column on every edit."""
+    table = TableView(rows=[["false", "b"], ["false", "a"]], editable_columns=[0])
+
+    def sort(row: int, column: int, text: str) -> None:
+        table.rows = sorted(replace_cell(table.rows, row, column, text), key=lambda r: r[1])
+
+    table.cell_edited.connect(sort)
+    return table
+
+
+def test_checking_every_row_reaches_each_record_when_a_callback_sorts_the_rows() -> None:
+    table = _sorting_table()
+    table.check_all(0, is_checked=True)
+    assert table.rows == [["True", "a"], ["True", "b"]]
+
+
+def test_checking_every_row_ends_when_a_callback_refuses_each_edit() -> None:
+    table = TableView(rows=[["false", "b"], ["false", "a"]], editable_columns=[0])
+    edited: list[int] = []
+
+    def refuse(row: int, _column: int, _text: str) -> None:
+        edited.append(row)
+        raise EditRefusedError
+
+    table.cell_edited.connect(refuse)
+    table.check_all(0, is_checked=True)
+    assert table.rows == [["false", "b"], ["false", "a"]]
+    assert edited == [0, 1]
 
 
 def test_a_cell_s_text_is_black_or_white_whichever_reads_on_its_background() -> None:

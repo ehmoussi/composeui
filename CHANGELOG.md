@@ -69,6 +69,8 @@ The notable changes of each release of ComposeUI. The format follows
   `データ.csv`, is no longer refused for its type.
 - A CSV row without a value for a required field, such as a short row, is refused. Before, a text
   field stored the text "None", and a boolean field stored false.
+- Check-all and a Textual row edit of several cells stay on their records when a `cell_edited`
+  callback sorts, replaces or removes the rows. Before, the next edit could land on another record.
 - On the web, an upload refused because its file path field is disabled no longer deletes the copy
   that the field holds.
 - On the web, a session that ends while a job writes to its `SqliteModel`, such as a session that
