@@ -183,7 +183,7 @@ from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.unlabelled import NoteMainView
 from tests.vertical import VerticalMainView
-from tests.workers import WorkersMainView
+from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -1183,6 +1183,26 @@ def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: Q
     workers.step = 1
     workers.minimum = 0
     assert (slider.maximum(), slider.shown_value()) == (16, 6)
+
+
+def test_a_decimal_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> None:
+    view = OpacityMainView()
+    view.render(RendererType.QT)
+    opacity = view.form.opacity
+    slider = _field_widget(opacity)
+    assert isinstance(slider, QValueSlider)
+    qtbot.addWidget(slider)
+    moves: list[float] = []
+    opacity.value_changed.connect(moves.append)
+    assert (slider.maximum(), slider.shown_value()) == (3, 0.1)
+
+    slider.show()
+    slider.setFocus()
+    qtbot.keyClick(slider, Qt.Key.Key_End)
+    assert (opacity.value, moves) == (0.3, [0.3])
+
+    opacity.value = 0.14  # set in code: shown at its nearest step, and not reported
+    assert (slider.shown_value(), moves) == (0.1, [0.3])
 
 
 def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbot: QtBot) -> None:

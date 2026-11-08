@@ -212,7 +212,7 @@ from tests.tabs import TabsMainView
 from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
-from tests.workers import WorkersMainView
+from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
     import argparse
@@ -850,6 +850,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     TabsMainView,
     ToolBarMainView,
     WorkersMainView,
+    OpacityMainView,
     LoneRowsMainView,
     GridMainView,
     HorizontalMainView,
@@ -3143,6 +3144,26 @@ def test_a_slider_is_a_range_input_named_by_its_label_and_stopping_on_its_steps(
     assert (workers.value, moves) == (14, [8, 14])
     handle_event(field, "input", {"value": "abc"})
     assert workers.value == 14
+
+
+def test_a_decimal_slider_posts_exact_steps_and_ignores_what_is_not_a_finite_number() -> None:
+    view = OpacityMainView()
+    view.render(RendererType.WEB)
+    opacity = view.form.opacity
+    field = _part(opacity, "field")
+    moves: list[float] = []
+    opacity.value_changed.connect(moves.append)
+    slider = _element(field.to_html(), field.widget_id)
+    (range_input,) = [a for tag, a in slider.descendants if tag == "input"]
+    names = ("min", "max", "step", "value", "data-decimals")
+    assert [range_input[name] for name in names] == ["0.0", "0.3", "0.1", "0.1", "1"]
+    assert slider.text == "0.1"
+
+    handle_event(field, "input", {"value": "0.30000000000000004"})  # snapped to its step
+    assert (opacity.value, moves) == (0.3, [0.3])
+    for posted in ("nan", "inf", "-inf", "1e999", "abc"):
+        handle_event(field, "input", {"value": posted})
+    assert (opacity.value, moves) == (0.3, [0.3])
 
 
 def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:

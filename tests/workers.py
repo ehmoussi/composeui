@@ -1,4 +1,4 @@
-"""A number of workers, shared by the backend tests of `SliderView`."""
+"""Forms shared by the backend tests of `SliderView` and `FloatSliderView`."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from attrs import Factory
 
 from composeui.core.view import (
     FormView,
+    LabelRowFloatSliderView,
     LabelRowIntInputView,
     LabelRowSliderView,
     MainView,
@@ -30,3 +31,19 @@ class WorkersMainView(MainView):
     extension = ".workers"
 
     form: WorkersForm = Factory(WorkersForm)
+
+
+@define_view
+class OpacityForm(FormView):
+    # steps 0.0, 0.1, 0.2 and 0.3: in floats, 0.3 // 0.1 is 2.0, and 3 * 0.1 isn't 0.3
+    opacity: LabelRowFloatSliderView = child(
+        LabelRowFloatSliderView, label="Opacity", maximum=0.3, step=0.1, value=0.1
+    )
+
+
+@define_view
+class OpacityMainView(MainView):
+    app_title = "Opacity"
+    extension = ".opacity"
+
+    form: OpacityForm = Factory(OpacityForm)

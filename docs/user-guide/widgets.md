@@ -407,6 +407,22 @@ step. The value shows beside the track, so the row is no taller than the other r
 Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
 move, and the web a range input.
 
+### Decimal slider
+
+A `FloatSliderView` is a slider for a decimal number, for example an opacity from 0 to 1. It has
+the same fields and signal as a `SliderView`, as `float` values.
+
+```python
+from composeui.core.view import FloatSliderView
+
+opacity = FloatSliderView(minimum=0.0, maximum=1.0, step=0.1, value=0.5)
+assert FloatSliderView.value_at(3, opacity.minimum, opacity.step) == 0.3
+```
+
+The steps are exact: three steps of `0.1` give `0.3`, not `0.30000000000000004`. Every value shows
+with the same decimals, those of `step` or `minimum`, the most. A `value` that is not on a step
+shows at its nearest step. A `nan` or infinite number raises `ValueError`.
+
 ## Progress bar
 
 A `ProgressBarView` shows how far a long task has gone: `value` steps out of `maximum`.
