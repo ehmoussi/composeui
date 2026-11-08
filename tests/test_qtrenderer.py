@@ -63,6 +63,9 @@ from qtpy.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QStyle,
+    QStyleFactory,
+    QStyleOptionSlider,
     QTableView,
     QTabWidget,
     QTextBrowser,
@@ -1203,6 +1206,49 @@ def test_a_decimal_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> None:
 
     opacity.value = 0.14  # set in code: shown at its nearest step, and not reported
     assert (slider.shown_value(), moves) == (0.1, [0.3])
+
+
+def test_a_slider_without_fill_paints_its_track_alike_on_both_sides_of_its_handle(
+    qtbot: QtBot,
+) -> None:
+    view = OpacityMainView()
+    view.render(RendererType.QT)
+    opacity = view.form.opacity
+    opacity.value = 0.2
+    slider = _field_widget(opacity)
+    assert isinstance(slider, QValueSlider)
+    qtbot.addWidget(slider)
+    slider.setStyle(QStyleFactory.create("Fusion"))  # a style that fills, on every platform
+    slider.resize(300, slider.sizeHint().height())
+
+    option = QStyleOptionSlider()
+    slider.initStyleOption(option)
+    handle = slider.style().subControlRect(
+        QStyle.ComplexControl.CC_Slider, option, QStyle.SubControl.SC_SliderHandle, slider
+    )
+    y = handle.center().y()
+    before = handle.left() // 2
+    after = (handle.right() + slider.value_rect().left()) // 2
+
+    def pixels() -> tuple[QColor, QColor, QColor]:
+        image = slider.grab().toImage()
+        at_handle = handle.center().x()
+        return (
+            image.pixelColor(before, y),
+            image.pixelColor(after, y),
+            image.pixelColor(at_handle, y),
+        )
+
+    filled_before, filled_after, _ = pixels()
+    assert filled_before != filled_after
+
+    opacity.is_filled = False
+    empty_before, empty_after, at_handle = pixels()
+    assert empty_before == empty_after
+    assert at_handle != empty_before  # the handle stays where the value is
+
+    opacity.is_filled = True
+    assert pixels()[0] == filled_before
 
 
 def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbot: QtBot) -> None:

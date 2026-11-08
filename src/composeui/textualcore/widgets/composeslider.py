@@ -72,6 +72,7 @@ class ComposeSlider(Widget, can_focus=True):
         super().__init__()
         self.first: float = 0
         self.step: float = 1
+        self.is_filled = True
         #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
         self.steps: Any = SliderMixin
         self.last = 0
@@ -100,7 +101,10 @@ class ComposeSlider(Widget, can_focus=True):
             return ""
         handle = self._handle_column(width)
         text = Text(no_wrap=True, overflow="crop")
-        text.append("━" * handle, style=self.get_component_rich_style("slider--filled"))
+        if self.is_filled:
+            text.append("━" * handle, style=self.get_component_rich_style("slider--filled"))
+        else:
+            text.append("─" * handle, style=self.get_component_rich_style("slider--empty"))
         text.append("●", style=self.get_component_rich_style("slider--handle"))
         empty = "─" * (width - handle - 1)
         text.append(empty, style=self.get_component_rich_style("slider--empty"))

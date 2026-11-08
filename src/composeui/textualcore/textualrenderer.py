@@ -1269,6 +1269,7 @@ class SliderViewLike(ViewLike, Protocol):
     minimum: float
     maximum: float
     step: float
+    is_filled: bool
     value_changed: Signal[float]
 
 
@@ -1285,6 +1286,7 @@ class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]
                 "minimum": self._refresh_minimum,
                 "maximum": self._refresh_maximum,
                 "step": self._refresh_step,
+                "is_filled": self._refresh_is_filled,
             }
         )
 
@@ -1317,6 +1319,13 @@ class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]
         cls, view: SliderViewLike, rendered_object: ComposeSlider, value: float
     ) -> None:
         cls._show(rendered_object, view.value, view.minimum, view.maximum, value)
+
+    @staticmethod
+    def _refresh_is_filled(
+        _view: SliderViewLike, rendered_object: ComposeSlider, value: bool
+    ) -> None:
+        rendered_object.is_filled = value
+        rendered_object.refresh()
 
     @classmethod
     def _show(

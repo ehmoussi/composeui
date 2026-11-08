@@ -1820,6 +1820,7 @@ class SliderViewLike(ViewLike, Protocol):
     minimum: float
     maximum: float
     step: float
+    is_filled: bool
     value_changed: Signal[float]
 
 
@@ -1848,6 +1849,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
                 "minimum": self._mark_dirty,
                 "maximum": self._mark_dirty,
                 "step": self._mark_dirty,
+                "is_filled": self._mark_dirty,
             }
         )
 
@@ -1867,7 +1869,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             '<div {root_attributes} class="cui-slider"'
             ' style="--slider-digits: {digits}">'
             '<input id="{input_id}"{row_attributes} type="range" data-slider'
-            ' data-decimals="{decimals}" class="range range-primary" name="value"'
+            ' data-decimals="{decimals}"{fill} class="range range-primary" name="value"'
             ' min="{minimum}" max="{top}" step="{step}" value="{value}"'
             ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
@@ -1886,6 +1888,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             value=value,
             text=self._steps.shown_text(value, minimum, step),
             decimals=self._steps.decimals(minimum, step),
+            fill=Markup() if self._view.is_filled else Markup(' style="--range-fill: 0"'),
             widget_id=self.widget_id,
             disabled=disabled,
         )

@@ -2188,6 +2188,8 @@ class SliderMixin:
     #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
     maximum: int = attrs.field(default=100)
     step: int = attrs.field(default=1, validator=[_check_step])
+    #: the track is drawn in the accent color up to the handle
+    is_filled: bool = attrs.field(default=True)
     #: the user moved the handle; not emitted when `value` is set in code
     value_changed: Signal[int] = attrs.Factory(Signal[int])
 
@@ -2261,6 +2263,8 @@ class FloatSliderMixin:
     #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
     maximum: float = attrs.field(default=1.0, validator=[_check_finite])
     step: float = attrs.field(default=0.1, validator=[_check_finite, _check_step])
+    #: the track is drawn in the accent color up to the handle
+    is_filled: bool = attrs.field(default=True)
     #: the user moved the handle; not emitted when `value` is set in code
     value_changed: Signal[float] = attrs.Factory(Signal[float])
 

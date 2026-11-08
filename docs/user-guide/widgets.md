@@ -407,6 +407,11 @@ step. The value shows beside the track, so the row is no taller than the other r
 Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
 move, and the web a range input.
 
+The track shows in the accent color up to the handle. Set `is_filled` to `False` when the value is
+a position and not an amount, for example a balance from -1 to 1. The track then shows the same
+on both sides of the handle. On Qt, a style that never fills the track, such as `Windows`, looks
+the same with both values.
+
 ### Decimal slider
 
 A `FloatSliderView` is a slider for a decimal number, for example an opacity from 0 to 1. It has

@@ -8,6 +8,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `is_filled` on `SliderView` and `FloatSliderView` turns off the accent color on the track up to
+  the handle, on Qt, Textual and the web.
 - `FloatSliderView`, with `RowFloatSliderView` and `LabelRowFloatSliderView`, picks a decimal
   number by dragging a handle on Qt, Textual and the web. Its steps are exact: three steps of `0.1`
   give `0.3`.
