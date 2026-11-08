@@ -65,6 +65,7 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A study keeps a date's UTC offset of less than a second on Python versions that read it as UTC.
 - On Qt, a refresh that raises no longer leaves the widget's signals blocked, which cut the user's
   later edits off from the view. A widget blocked before a refresh stays blocked.
 - A failed JSON save or a canceled CSV export keeps the previous file, and a canceled export no
