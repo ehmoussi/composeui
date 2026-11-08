@@ -616,7 +616,7 @@ class Jobs:
                 self._results.put(callback)
                 return
         # outside the lock: a web session's renderer takes the session's lock
-        renderer.call_on_main_thread(functools.partial(_as_main_thread, callback))
+        renderer.post_on_main_thread(functools.partial(_as_main_thread, callback))
 
     def hand_over_to(self, renderer: Renderer[Any, Any] | RendererContainer[Any]) -> None:
         """Hand the results queued before the main view was rendered to `renderer`, its own.

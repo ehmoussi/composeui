@@ -87,6 +87,14 @@ class Renderer(ABC, Generic[TView, TObject]):
         """
         callback()
 
+    def post_on_main_thread(self, callback: Callable[[], None]) -> None:
+        """Have `callback` run on the GUI's thread, in order, if possible without waiting for it.
+
+        For a job's thread, which may hold a lock that the callback needs. Default: as
+        `call_on_main_thread`. A renderer whose `call_on_main_thread` waits overrides it.
+        """
+        self.call_on_main_thread(callback)
+
     @abstractmethod
     def render(self) -> None:
         """Build the widget that shows the view."""
@@ -173,6 +181,10 @@ class RendererContainer(Generic[TView]):
         Delegates to one of its renderers: they all share the same toolkit and thread.
         """
         next(iter(self._renderers.values())).call_on_main_thread(callback)
+
+    def post_on_main_thread(self, callback: Callable[[], None]) -> None:
+        """Have `callback` run on the GUI's thread, as `Renderer.post_on_main_thread` says."""
+        next(iter(self._renderers.values())).post_on_main_thread(callback)
 
     def get_renderer(self, name: str) -> Renderer[TView, Any]:
         return self._renderers[name]

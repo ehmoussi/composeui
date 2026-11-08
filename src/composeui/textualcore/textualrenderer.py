@@ -3254,6 +3254,15 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self._rendered_object, callback)
 
+    def post_on_main_thread(self, callback: Callable[[], None]) -> None:
+        # `call_from_thread` waits for the callback: a job holding the model's lock, whose
+        # callback asks for it, would stop both
+        app = self._rendered_object
+        if app is not None and app.is_running:
+            app.call_later(callback)
+        else:
+            _call_on_app_thread(app, callback)
+
     def refresh(self) -> None:
         # see `TextualWidgetRenderer.refresh` - same cross-thread hazard applies here.
         self.call_on_main_thread(super().refresh)
