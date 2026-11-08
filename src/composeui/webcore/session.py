@@ -101,7 +101,10 @@ class WebSession(RenderTarget):
             if self.model is not None:
                 self.model.close()
             if self._uploads is not None:
-                shutil.rmtree(self._uploads, ignore_errors=True)
+                # a job may still read them, even dropped: its thread goes on
+                self.main_view.jobs.after_workers(
+                    functools.partial(shutil.rmtree, self._uploads, ignore_errors=True)
+                )
                 self._uploads = None
                 self._held_uploads.clear()
                 self._replaced_uploads.clear()
@@ -331,7 +334,7 @@ class WebSession(RenderTarget):
                 directory
             ):
                 self._replaced_uploads.append(self._held_uploads.pop(widget_id))
-        if not self.main_view.jobs.is_running:
+        if not self.main_view.jobs.has_workers:
             for directory in self._replaced_uploads:
                 shutil.rmtree(directory, ignore_errors=True)
             self._replaced_uploads.clear()

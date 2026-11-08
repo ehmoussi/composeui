@@ -1757,6 +1757,45 @@ def test_a_job_reads_a_file_replaced_before_it_opened_it(replacement: str) -> No
     session.close()
 
 
+@pytest.mark.parametrize("ending", ["dropped", "closed"])
+def test_an_upload_stays_until_a_dropped_worker_that_may_read_it_has_ended(ending: str) -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    measurements = main_view.form.measurements
+    field = _part(measurements, "field")
+    _pick_file(session, field.widget_id, "first.csv", b"first")
+    first = measurements.path
+    assert first is not None
+    release = threading.Event()
+    threads: list[threading.Thread] = []
+    contents: list[bytes] = []
+
+    def work(_job: Job[None, None]) -> None:
+        threads.append(threading.current_thread())
+        assert release.wait(30)
+        contents.append(first.read_bytes())
+
+    main_view.jobs.start(work)
+    if ending == "closed":
+        session.close()
+    else:
+        _pick_file(session, field.widget_id, "second.csv", b"second")
+        main_view.jobs.drop()
+        session.poll_jobs()  # what runs the cleanup
+    assert first.read_bytes() == b"first"
+
+    release.set()
+    threads[0].join(30)
+
+    assert contents == [b"first"]
+    if ending == "closed":
+        assert not first.exists()
+    else:
+        session.poll_jobs()
+        assert not first.exists()
+        session.close()
+
+
 def test_a_file_path_replaced_during_a_job_stays_until_the_job_is_over() -> None:
     main_view = DataFileMainView()
     session = WebSession(main_view)
@@ -1790,8 +1829,10 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     first = main_view.form.dataset.file
     assert first is not None
     release = threading.Event()
+    threads: list[threading.Thread] = []
 
     def work(_job: Job[None, None]) -> None:
+        threads.append(threading.current_thread())
         assert release.wait(30)
 
     main_view.jobs.start(work)
@@ -1800,7 +1841,9 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     assert first.path.exists()
 
     session.close()
+    assert first.path.exists()  # the job may still read it
     release.set()
+    threads[0].join(30)
 
     assert not first.path.exists()
 
