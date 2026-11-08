@@ -66,6 +66,7 @@ from composeui.core.view import (
     DialogView,
     ExitAppAction,
     ExpanderView,
+    FloatSliderMixin,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -1806,11 +1807,11 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
 
 
 class SliderViewLike(ViewLike, Protocol):
-    value: int
-    minimum: int
-    maximum: int
-    step: int
-    value_changed: Signal[int]
+    value: float
+    minimum: float
+    maximum: float
+    step: float
+    value_changed: Signal[float]
 
 
 class WebSliderRenderer(WebRenderer[SliderViewLike]):
@@ -1827,6 +1828,8 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
 
     _role = "slider"
     is_labelable = False
+    #: the arithmetic of its steps
+    _steps: ClassVar[Any] = SliderMixin
 
     def __init__(self, view: SliderViewLike) -> None:
         super().__init__(view)
@@ -1841,24 +1844,27 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         minimum, step = self._view.minimum, self._view.step
-        last = SliderMixin.last_position(minimum, self._view.maximum, step)
-        position = SliderMixin.position(self._view.value, minimum, self._view.maximum, step)
-        value = minimum + position * step
-        top = minimum + last * step
-        digits = max(len(str(minimum)), len(str(top)))
+        last = self._steps.last_position(minimum, self._view.maximum, step)
+        position = self._steps.position(self._view.value, minimum, self._view.maximum, step)
+        value = self._steps.value_at(position, minimum, step)
+        top = self._steps.value_at(last, minimum, step)
+        digits = max(
+            len(self._steps.shown_text(minimum, minimum, step)),
+            len(self._steps.shown_text(top, minimum, step)),
+        )
         disabled = "" if self.is_enabled else " disabled"
         input_id = f"{self.widget_id}-input"
         return Markup(
             '<div {root_attributes} class="cui-slider"'
             ' style="--slider-digits: {digits}">'
             '<input id="{input_id}"{row_attributes} type="range" data-slider'
-            ' class="range range-primary" name="value"'
+            ' data-decimals="{decimals}" class="range range-primary" name="value"'
             ' min="{minimum}" max="{top}" step="{step}" value="{value}"'
             ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
             # read out by the input itself, as its value
-            '<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{value}</output>'
+            '<output for="{input_id}" class="cui-slider-value" aria-hidden="true">{text}</output>'
             "</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
@@ -1869,25 +1875,49 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             top=top,
             step=step,
             value=value,
+            text=self._steps.shown_text(value, minimum, step),
+            decimals=self._steps.decimals(minimum, step),
             widget_id=self.widget_id,
             disabled=disabled,
         )
 
+    @staticmethod
+    def _posted(text: str) -> float | None:
+        """Get the number that the page posted, None for anything else."""
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event not in ("input", "change"):
             super().dispatch(event, form)
-        try:
-            posted = int(form.get("value", ""))
-        except ValueError:
+        posted = self._posted(form.get("value", ""))
+        if posted is None:
             return  # a range input always posts a number; nothing else is a move
         minimum, maximum, step = self._view.minimum, self._view.maximum, self._view.step
-        value = minimum + SliderMixin.position(posted, minimum, maximum, step) * step
+        position = self._steps.position(posted, minimum, maximum, step)
+        value = self._steps.value_at(position, minimum, step)
         # `change` posts the value of a still-debounced `input` too: emitted once
         if value == self._view.value:
             return
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+
+
+class WebFloatSliderRenderer(WebSliderRenderer):
+    """A range input stopping on each decimal step."""
+
+    _steps = FloatSliderMixin
+
+    @staticmethod
+    def _posted(text: str) -> float | None:
+        try:
+            number = float(text)
+        except ValueError:
+            return None
+        return number if math.isfinite(number) else None  # `float` reads "nan" and "inf"
 
 
 class MapViewLike(ViewLike, Protocol):
@@ -6479,6 +6509,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "page": WebPageRenderer,
     "progress_bar": WebProgressBarRenderer,
     "slider": WebSliderRenderer,
+    "float_slider": WebFloatSliderRenderer,
     "radio_group": WebRadioGroupRenderer,
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,

@@ -900,7 +900,10 @@ document.addEventListener("change", function (event) {
 document.addEventListener("input", function (event) {
   var slider = event.target;
   if (!("slider" in slider.dataset)) return;
-  slider.parentElement.querySelector("output").value = slider.value;
+  /* the same decimals at every step: the browser writes 1 for 1.0 */
+  slider.parentElement.querySelector("output").value = Number(slider.value).toFixed(
+    Number(slider.dataset.decimals),
+  );
 });
 /* the date fields' calendar, Cally's `<calendar-date>`: the page loads it only once it
    shows its first date field, from a swap too, as it does uPlot */

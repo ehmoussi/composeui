@@ -188,7 +188,7 @@ from tests.toolbar import ToolBarMainView
 from tests.translated import Size, TranslatedMainView
 from tests.unlabelled import NoteMainView
 from tests.vertical import VerticalMainView
-from tests.workers import WorkersMainView
+from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
     from textual.app import App
@@ -568,6 +568,35 @@ async def test_a_slider_stops_on_its_steps_its_value_drawn_beside_the_track() ->
         workers.value = 6  # set in code: shown at its nearest step, and not reported
         await pilot.pause()
         assert (_track_and_value(slider)[1], moves) == ("5", [8, 14, 2, 14])
+
+
+@pytest.mark.asyncio
+async def test_a_decimal_slider_stops_on_exact_decimal_steps() -> None:
+    view = OpacityMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    opacity = view.form.opacity
+    moves: list[float] = []
+    opacity.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(opacity.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        assert _track_and_value(slider)[1] == "0.1"
+
+        slider.focus()
+        await pilot.press("end")
+        assert (opacity.value, moves) == (0.3, [0.3])
+        assert _track_and_value(slider)[1] == "0.3"
+        await pilot.press("home")
+        assert (opacity.value, _track_and_value(slider)[1]) == (0.0, "0.0")
+
+        opacity.value = 0.14  # set in code: shown at its nearest step, and not reported
+        await pilot.pause()
+        assert (_track_and_value(slider)[1], moves) == ("0.1", [0.3, 0.0])
 
 
 @pytest.mark.asyncio

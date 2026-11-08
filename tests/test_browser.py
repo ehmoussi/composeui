@@ -75,7 +75,7 @@ from tests.tables import (
 )
 from tests.tabs import TabsMainView
 from tests.vertical import VerticalMainView
-from tests.workers import WorkersMainView
+from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
@@ -1774,6 +1774,21 @@ def test_a_slider_shows_its_value_beside_the_track_as_tall_as_a_text_field(
     assert _box(value) == shown  # its slot as wide whatever the value: the track keeps its length
     expect(slider).to_be_focused()  # never swapped back
     context.close()
+
+
+def test_a_decimal_slider_s_value_keeps_its_decimals_as_its_handle_moves(
+    browser: Browser,
+) -> None:
+    with _serve(WebApplication(build_main_view=OpacityMainView).create_starlette_app()) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        value = page.locator("output")
+        expect(value).to_have_text("0.1")
+        with _posted(page):
+            page.get_by_role("slider", name="Opacity").press("Home")
+        expect(value).to_have_text("0.0")  # the browser's own value is "0"
+        context.close()
 
 
 def test_a_console_keeps_its_last_lines_at_its_end_unless_the_user_scrolled_up(

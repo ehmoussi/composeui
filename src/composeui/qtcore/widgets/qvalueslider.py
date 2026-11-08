@@ -7,6 +7,8 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPaintEvent
 from qtpy.QtWidgets import QSlider, QStyleOptionSlider
 
+from composeui.core.view import SliderMixin
+
 #: pixels between the track and the value
 _GAP = 8
 
@@ -23,16 +25,24 @@ class QValueSlider(QSlider):
     """
 
     #: the user moved the handle to the value; never while signals are blocked
-    shown_value_changed = QtSignal(int)
+    shown_value_changed = QtSignal(object)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(Qt.Orientation.Horizontal, *args, **kwargs)
-        self.first = 0
-        self.step = 1
+        self.first: float = 0
+        self.step: float = 1
+        #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
+        self.steps: Any = SliderMixin
         self.valueChanged.connect(self._emit_shown_value)
 
-    def shown_value(self) -> int:
-        return self.first + self.value() * self.step
+    def shown_value(self) -> float:
+        return self._value_at(self.value())  # type: ignore[no-any-return]
+
+    def _value_at(self, position: int) -> Any:
+        return self.steps.value_at(position, self.first, self.step)
+
+    def _text_at(self, position: int) -> str:
+        return self.steps.shown_text(self._value_at(position), self.first, self.step)  # type: ignore[no-any-return]
 
     def value_rect(self) -> QRect:
         """Get the value's slot, on the right of the track, as tall as the slider."""
@@ -41,8 +51,7 @@ class QValueSlider(QSlider):
 
     def _slot_width(self) -> int:
         metrics = self.fontMetrics()
-        ends = (self.first, self.first + self.maximum() * self.step)
-        return max(metrics.horizontalAdvance(str(end)) for end in ends)
+        return max(metrics.horizontalAdvance(self._text_at(end)) for end in (0, self.maximum()))
 
     def initStyleOption(self, option: QStyleOptionSlider) -> None:  # noqa: N802
         super().initStyleOption(option)
@@ -57,7 +66,7 @@ class QValueSlider(QSlider):
         super().paintEvent(event)
         painter = QPainter(self)
         align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        painter.drawText(self.value_rect(), align, str(self.shown_value()))
+        painter.drawText(self.value_rect(), align, self._text_at(self.value()))
         painter.end()
 
     def _emit_shown_value(self, _position: int) -> None:

@@ -130,6 +130,8 @@ __all__ = [
     "FilterProblem",
     "FloatInputMixin",
     "FloatInputView",
+    "FloatSliderMixin",
+    "FloatSliderView",
     "FolderPathInputMixin",
     "FolderPathInputView",
     "FormDialogView",
@@ -154,6 +156,7 @@ __all__ = [
     "LabelRowFilePathInputView",
     "LabelRowFileUploadView",
     "LabelRowFloatInputView",
+    "LabelRowFloatSliderView",
     "LabelRowFolderPathInputView",
     "LabelRowInputView",
     "LabelRowIntInputView",
@@ -193,6 +196,7 @@ __all__ = [
     "RowFilePathInputView",
     "RowFileUploadView",
     "RowFloatInputView",
+    "RowFloatSliderView",
     "RowFolderPathInputView",
     "RowInputView",
     "RowIntInputView",
@@ -2202,6 +2206,21 @@ class SliderMixin:
         # a value halfway between two steps goes up, whatever the step (`round` goes even)
         return min(max(0, (value - minimum + step // 2) // step), last)
 
+    @staticmethod
+    def value_at(position: int, minimum: int, step: int) -> int:
+        """Get the value at `position` steps from `minimum`."""
+        return minimum + position * step
+
+    @staticmethod
+    def decimals(_minimum: int, _step: int) -> int:
+        """Get the decimals that a value shows: none."""
+        return 0
+
+    @staticmethod
+    def shown_text(value: int, _minimum: int, _step: int) -> str:
+        """Get the text that shows `value`."""
+        return str(value)
+
 
 @define_view
 class SliderView(SliderMixin, View):
@@ -2211,6 +2230,82 @@ class SliderView(SliderMixin, View):
     """
 
     _renderer_key = "slider"
+
+
+#: wider than the digits between any two floats, so that no count of steps is rounded
+_EXACT_CONTEXT = decimal.Context(prec=1000)
+
+
+def _exact(number: float) -> decimal.Decimal:
+    # by its text: `Decimal(0.1)` would hold the binary float's 55 decimals, not 0.1
+    return decimal.Decimal(str(number))
+
+
+@define_view
+class FloatSliderMixin:
+    """The fields of a decimal slider: its `value`, its range and its `step`."""
+
+    def _check_finite(self, attribute: attrs.Attribute[Any], number: float) -> None:
+        if not math.isfinite(number):
+            msg = f"Cannot set {type(self).__name__}.{attribute.name} to {number}: not finite."
+            raise ValueError(msg)
+
+    def _check_step(self, _attribute: attrs.Attribute[Any], step: float) -> None:
+        if step <= 0:
+            msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
+            raise ValueError(msg)
+
+    #: from `minimum` to `maximum` by `step`; shown at its nearest step
+    value: float = attrs.field(default=0.0, validator=[_check_finite])
+    minimum: float = attrs.field(default=0.0, validator=[_check_finite])
+    #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
+    maximum: float = attrs.field(default=1.0, validator=[_check_finite])
+    step: float = attrs.field(default=0.1, validator=[_check_finite, _check_step])
+    #: the user moved the handle; not emitted when `value` is set in code
+    value_changed: Signal[float] = attrs.Factory(Signal[float])
+
+    @staticmethod
+    def last_position(minimum: float, maximum: float, step: float) -> int:
+        """Get the steps from `minimum` to the last one at most `maximum`; 0 if none."""
+        with decimal.localcontext(_EXACT_CONTEXT):
+            return max(0, int((_exact(maximum) - _exact(minimum)) // _exact(step)))
+
+    @staticmethod
+    def position(value: float, minimum: float, maximum: float, step: float) -> int:
+        """Get the handle's position, in steps from `minimum`: `value`'s nearest, in range."""
+        last = FloatSliderMixin.last_position(minimum, maximum, step)
+        with decimal.localcontext(_EXACT_CONTEXT):
+            # a value halfway between two steps goes up, as on `SliderMixin`
+            exact_step = _exact(step)
+            steps = (_exact(value) - _exact(minimum) + exact_step / 2) // exact_step
+            return min(max(0, int(steps)), last)
+
+    @staticmethod
+    def value_at(position: int, minimum: float, step: float) -> float:
+        """Get the value at `position` steps from `minimum`: 3 steps of 0.1 are 0.3."""
+        with decimal.localcontext(_EXACT_CONTEXT):
+            return float(_exact(minimum) + position * _exact(step))
+
+    @staticmethod
+    def decimals(minimum: float, step: float) -> int:
+        """Get the decimals that every value shows: those of `minimum` or `step`, the most."""
+        exponents = (_exact(minimum).as_tuple().exponent, _exact(step).as_tuple().exponent)
+        return max(0, *(-int(exponent) for exponent in exponents))
+
+    @staticmethod
+    def shown_text(value: float, minimum: float, step: float) -> str:
+        """Get the text that shows `value`, with the same decimals at every step."""
+        return f"{_exact(value):.{FloatSliderMixin.decimals(minimum, step)}f}"
+
+
+@define_view
+class FloatSliderView(FloatSliderMixin, View):
+    """A decimal number picked by dragging a handle, e.g. an opacity from 0 to 1.
+
+    Its value is shown beside the track, with the decimals of its `step`.
+    """
+
+    _renderer_key = "float_slider"
 
 
 class LogType(enum.Enum):
@@ -5956,6 +6051,20 @@ class LabelRowSliderView(FormLabelRowView, SliderMixin):
     """A row of a form with a label and a slider."""
 
     _field_renderer_key = "slider"
+
+
+@define_view
+class RowFloatSliderView(FormRowView, FloatSliderMixin):
+    """A row of a form with a decimal slider, without a label."""
+
+    _field_renderer_key = "float_slider"
+
+
+@define_view
+class LabelRowFloatSliderView(FormLabelRowView, FloatSliderMixin):
+    """A row of a form with a label and a decimal slider."""
+
+    _field_renderer_key = "float_slider"
 
 
 @define_view

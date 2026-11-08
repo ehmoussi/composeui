@@ -37,6 +37,7 @@ from composeui.core.view import (
     DialogKind,
     DialogView,
     ExpanderView,
+    FloatSliderMixin,
     FormLabelRowView,
     FormRowView,
     FormView,
@@ -1249,15 +1250,17 @@ class TextualFolderPathInputRenderer(_TextualPathInputRenderer[PathInputViewLike
 
 
 class SliderViewLike(ViewLike, Protocol):
-    value: int
-    minimum: int
-    maximum: int
-    step: int
-    value_changed: Signal[int]
+    value: float
+    minimum: float
+    maximum: float
+    step: float
+    value_changed: Signal[float]
 
 
 class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]):
     _marks_invalid = True
+    #: the arithmetic of its steps
+    _steps: ClassVar[Any] = SliderMixin
 
     def __init__(self, view: SliderViewLike) -> None:
         super().__init__(view)
@@ -1273,39 +1276,59 @@ class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeSlider()
+            self._rendered_object.steps = self._steps
             self._rendered_object.moved.connect(self._update_value)
 
-    @staticmethod
-    def _refresh_value(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
-        TextualSliderRenderer._show(rendered_object, value, view.minimum, view.maximum, view.step)
+    @classmethod
+    def _refresh_value(
+        cls, view: SliderViewLike, rendered_object: ComposeSlider, value: float
+    ) -> None:
+        cls._show(rendered_object, value, view.minimum, view.maximum, view.step)
 
-    @staticmethod
-    def _refresh_minimum(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
-        TextualSliderRenderer._show(rendered_object, view.value, value, view.maximum, view.step)
+    @classmethod
+    def _refresh_minimum(
+        cls, view: SliderViewLike, rendered_object: ComposeSlider, value: float
+    ) -> None:
+        cls._show(rendered_object, view.value, value, view.maximum, view.step)
 
-    @staticmethod
-    def _refresh_maximum(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
-        TextualSliderRenderer._show(rendered_object, view.value, view.minimum, value, view.step)
+    @classmethod
+    def _refresh_maximum(
+        cls, view: SliderViewLike, rendered_object: ComposeSlider, value: float
+    ) -> None:
+        cls._show(rendered_object, view.value, view.minimum, value, view.step)
 
-    @staticmethod
-    def _refresh_step(view: SliderViewLike, rendered_object: ComposeSlider, value: int) -> None:
-        TextualSliderRenderer._show(rendered_object, view.value, view.minimum, view.maximum, value)
+    @classmethod
+    def _refresh_step(
+        cls, view: SliderViewLike, rendered_object: ComposeSlider, value: float
+    ) -> None:
+        cls._show(rendered_object, view.value, view.minimum, view.maximum, value)
 
-    @staticmethod
+    @classmethod
     def _show(
-        rendered_object: ComposeSlider, value: int, minimum: int, maximum: int, step: int
+        cls,
+        rendered_object: ComposeSlider,
+        value: float,
+        minimum: float,
+        maximum: float,
+        step: float,
     ) -> None:
         rendered_object.set_steps(
             minimum,
             step,
-            SliderMixin.last_position(minimum, maximum, step),
-            SliderMixin.position(value, minimum, maximum, step),
+            cls._steps.last_position(minimum, maximum, step),
+            cls._steps.position(value, minimum, maximum, step),
         )
 
-    def _update_value(self, value: int) -> None:
+    def _update_value(self, value: float) -> None:
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+
+
+class TextualFloatSliderRenderer(TextualSliderRenderer):
+    """A slider stopping on each decimal step."""
+
+    _steps = FloatSliderMixin
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -3364,6 +3387,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "page": TextualPageRenderer,
     "progress_bar": TextualProgressBarRenderer,
     "slider": TextualSliderRenderer,
+    "float_slider": TextualFloatSliderRenderer,
     "radio_group": TextualRadioGroupRenderer,
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,

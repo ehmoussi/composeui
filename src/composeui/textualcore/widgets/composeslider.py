@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.widget import Widget
 
 from composeui.core.signal import Signal
+from composeui.core.view import SliderMixin
 
 if TYPE_CHECKING:
     from textual import events
@@ -69,18 +70,26 @@ class ComposeSlider(Widget, can_focus=True):
 
     def __init__(self) -> None:
         super().__init__()
-        self.first = 0
-        self.step = 1
+        self.first: float = 0
+        self.step: float = 1
+        #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
+        self.steps: Any = SliderMixin
         self.last = 0
         self.position = 0
         self._is_dragging = False
-        self.moved: Signal[int] = Signal()
+        self.moved: Signal[float] = Signal()
 
     @property
-    def shown_value(self) -> int:
-        return self.first + self.position * self.step
+    def shown_value(self) -> float:
+        return self._value_at(self.position)  # type: ignore[no-any-return]
 
-    def set_steps(self, first: int, step: int, last: int, position: int) -> None:
+    def _value_at(self, position: int) -> Any:
+        return self.steps.value_at(position, self.first, self.step)
+
+    def _text_at(self, position: int) -> str:
+        return self.steps.shown_text(self._value_at(position), self.first, self.step)  # type: ignore[no-any-return]
+
+    def set_steps(self, first: float, step: float, last: int, position: int) -> None:
         """Show `position` out of `last` steps of `step` from `first`, without `moved`."""
         self.first, self.step, self.last, self.position = first, step, last, position
         self.refresh()
@@ -95,12 +104,12 @@ class ComposeSlider(Widget, can_focus=True):
         text.append("●", style=self.get_component_rich_style("slider--handle"))
         empty = "─" * (width - handle - 1)
         text.append(empty, style=self.get_component_rich_style("slider--empty"))
-        value = str(self.shown_value).rjust(self._slot_width())
+        value = self._text_at(self.position).rjust(self._slot_width())
         text.append(f" {value}", style=self.get_component_rich_style("slider--value"))
         return text
 
     def _slot_width(self) -> int:
-        return max(len(str(self.first)), len(str(self.first + self.last * self.step)))
+        return max(len(self._text_at(0)), len(self._text_at(self.last)))
 
     def _track_width(self) -> int:
         """Get the track's columns: the content's, less the value's slot and a space."""

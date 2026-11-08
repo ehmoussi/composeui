@@ -154,6 +154,7 @@ The fields:
 | `RadioGroupView` | `value`, one of `values` | Picks one of a few choices |
 | `ComboBoxView` | `value`, one of `values` | Picks one choice in a drop-down list |
 | `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](widgets.md#slider)) | Drags a handle |
+| `FloatSliderView` | `value`, a decimal number from `minimum` to `maximum` by `step` (see [Decimal slider](widgets.md#decimal-slider)) | Drags a handle |
 
 Each field has its row views too, for example `RowFloatInputView` and
 `LabelRowFloatInputView`, or `LabelRowDateInputView` for a date. The
@@ -207,8 +208,8 @@ checks of several rows.
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
 available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
-`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`,
-`TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `CheckBoxMixin`,
+`ValuesGroupMixin`, `TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
 
 Larger views have sections of their own:
 

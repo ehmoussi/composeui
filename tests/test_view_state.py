@@ -15,7 +15,7 @@ from typing import IO, TYPE_CHECKING, Any, Optional, Union
 import attrs
 import pytest
 from attrs import Factory, evolve
-from hypothesis import given, reject
+from hypothesis import example, given, reject
 from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication, _add_reference_to_signals
@@ -31,6 +31,7 @@ from composeui.core.view import (
     CheckBoxView,
     ComboBoxView,
     FloatInputMixin,
+    FloatSliderView,
     ImageView,
     InputView,
     InvalidStateError,
@@ -570,6 +571,59 @@ def test_a_slider_s_handle_is_at_the_step_in_range_nearest_any_value(
             assert distance(position) < distance(other) or (
                 distance(position) == distance(other) and position > other
             )
+
+
+# tenths of a unit: small numbers, so that values halfway between two steps come often
+@given(st.integers(-30, 30), st.integers(-30, 30), st.integers(-30, 30), st.integers(1, 8))
+@example(1, 0, 3, 1)  # 0.3 // 0.1 is 2.0 in floats: the last step lost
+@example(3, 0, 3, 1)  # 3 * 0.1 is 0.30000000000000004 in floats
+@example(1, 0, 10, 2)  # halfway between two steps: goes up
+def test_a_decimal_slider_steps_as_a_whole_number_slider_does_in_tenths(
+    value: int, minimum: int, maximum: int, step: int
+) -> None:
+    decimal_range = (minimum / 10, maximum / 10, step / 10)
+    last = SliderView.last_position(minimum, maximum, step)
+    position = SliderView.position(value, minimum, maximum, step)
+
+    assert FloatSliderView.last_position(*decimal_range) == last
+    assert FloatSliderView.position(value / 10, *decimal_range) == position
+    expected = (minimum + position * step) / 10
+    assert FloatSliderView.value_at(position, minimum / 10, step / 10) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "minimum", "step", "text"),
+    [
+        (0.5, 0.0, 0.25, "0.50"),  # the step's decimals, at every step
+        (1.0, 0.0, 0.1, "1.0"),
+        (0.15, 0.05, 0.1, "0.15"),  # the minimum's, when it has more
+        (0.00002, 0.0, 1e-05, "0.00002"),  # a float that `str` writes with an exponent
+        (2e16, 0, 1e16, "20000000000000000"),  # no decimals
+    ],
+)
+def test_a_decimal_slider_shows_the_same_decimals_at_every_step(
+    value: float, minimum: float, step: float, text: str
+) -> None:
+    assert FloatSliderView.shown_text(value, minimum, step) == text
+
+
+def test_a_decimal_slider_counts_steps_across_the_widest_range_of_floats() -> None:
+    # more digits than `decimal`'s default context holds: it would refuse to divide
+    assert FloatSliderView.last_position(0.0, 1e30, 1.0) == 10**30
+
+
+@pytest.mark.parametrize("field", ["value", "minimum", "maximum", "step"])
+@pytest.mark.parametrize("number", [math.nan, math.inf, -math.inf])
+def test_a_decimal_slider_refuses_a_number_that_is_not_finite(field: str, number: float) -> None:
+    view = FloatSliderView()
+    with pytest.raises(ValueError, match=field):
+        setattr(view, field, number)
+
+
+@pytest.mark.parametrize("step", [0.0, -0.1])
+def test_a_decimal_slider_refuses_a_step_that_is_not_positive(step: float) -> None:
+    with pytest.raises(ValueError, match="positive"):
+        FloatSliderView(step=step)
 
 
 def test_a_metric_badge_points_the_way_its_figure_changed() -> None:
