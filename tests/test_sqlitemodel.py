@@ -19,9 +19,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication
+from composeui.core.jobs import Job
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table, unique_name
-from composeui.core.study import open_study
+from composeui.core.study import new_study, open_study
 from composeui.core.view import ButtonView, InvalidStateError, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
@@ -140,6 +141,34 @@ def test_a_saved_study_opens_with_its_views_and_its_rows(app: App, tmp_path: Pat
     _open(other, path)
     assert other.model.runs.radii() == [80.0, 50.0]
     other.model.close()
+
+
+def test_a_dropped_worker_cannot_write_into_the_study_that_replaced_its_own() -> None:
+    model = RunsModel()
+    main_view = MainView()
+    release = threading.Event()
+    threads: list[threading.Thread] = []
+    errors: list[Exception] = []
+
+    def work(_job: Job[None, None]) -> None:
+        threads.append(threading.current_thread())
+        assert release.wait(30)
+        try:
+            model.runs.add(1.0)
+        except RefusedError as error:
+            errors.append(error)
+
+    job = main_view.jobs.start(work)
+    job.finished.connect(lambda _result: errors.append(RuntimeError("the outcome was emitted")))
+    main_view.jobs.drop()
+    new_study(main_view, model)
+
+    release.set()
+    threads[0].join(30)
+
+    assert model.runs.radii() == []
+    assert [type(error) for error in errors] == [RefusedError]
+    model.close()
 
 
 def test_new_empties_the_tables_and_resets_the_views(app: App) -> None:

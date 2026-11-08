@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-from typing import TYPE_CHECKING, cast
+import threading
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -99,6 +100,37 @@ def test_the_label_says_how_many_readings_are_selected_and_which_was_activated(
 
     sensor, site, temperature = table.rows(1, 2)[0][1][:3]
     assert main_view.picked.text == f"{sensor} in {site}: {float(temperature)} °C"
+
+
+def test_a_canceled_export_keeps_the_previous_file_and_reports_nothing(
+    main_view: LargeTableMainView, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table = main_view.table
+    path = tmp_path / "export.csv"
+    path.write_text("PREVIOUS VALID EXPORT", encoding="utf-8")
+    reading, may_read = threading.Event(), threading.Event()
+    source = table.source
+    assert source is not None
+    read_cells = type(source).cells
+
+    def paused(*args: Any, **kwargs: Any) -> Any:
+        reading.set()
+        assert may_read.wait(10)
+        return read_cells(*args, **kwargs)
+
+    monkeypatch.setattr(type(source), "cells", paused)
+    main_view.status_bar.timeout = 0
+    main_view.status_bar.show_message("before")
+
+    table.export_csv(path)
+    assert reading.wait(10)
+    main_view.jobs.cancel()
+    may_read.set()
+    main_view.jobs.wait()
+
+    assert path.read_text(encoding="utf-8") == "PREVIOUS VALID EXPORT"
+    assert main_view.status_bar.message == "before"
+    assert [file.name for file in tmp_path.iterdir()] == ["export.csv"]
 
 
 def test_an_export_writes_the_rows_shown_in_a_job_the_status_bar_saying_so(

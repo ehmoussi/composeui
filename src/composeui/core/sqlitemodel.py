@@ -1129,6 +1129,10 @@ class SqliteModel(Model):
         Closing a connection during another thread's statement crashes the process.
         """
         with self._lock:
+            job = current_job()
+            if job is not None and job.is_dropped:  # its study was replaced
+                msg = "A job dropped by a new study can't use the database."
+                raise RefusedError(msg)
             with self._readers_lock:
                 if self._closed:
                     msg = "Cannot operate on a closed database."

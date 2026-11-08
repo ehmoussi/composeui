@@ -32,6 +32,17 @@ from starlette.responses import HTMLResponse
 from starlette.routing import Route as StarletteRoute
 
 from composeui.core import chartimage
+from composeui.core.view import (
+    ButtonView,
+    ChartView,
+    DateInputView,
+    LabelView,
+    MainView,
+    MapView,
+    Series,
+    child,
+    define_view,
+)
 from composeui.webcore.webapplication import WebApplication
 from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
@@ -2390,6 +2401,72 @@ def _x_range(page: Page) -> list[float]:
         " return [chart.scales.x.min, chart.scales.x.max]; })()"
     )
     return x_range
+
+
+@define_view
+class _SwappingMainView(MainView):
+    """A button that swaps a label: a change of the page that a user makes."""
+
+    change: ButtonView = child(ButtonView, text="Change")
+    answer: LabelView = child(LabelView, text="0")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.change.clicked.connect(lambda: setattr(self.answer, "text", "1"))
+
+
+@define_view
+class _SwappingChartMainView(_SwappingMainView):
+    chart: ChartView = child(ChartView, series=[Series("Curve", x=[1.0, 2.0], y=[1.0, 2.0])])
+
+
+@define_view
+class _SwappingMapMainView(_SwappingMainView):
+    map: MapView = child(MapView, tiles=False)
+
+
+@define_view
+class _SwappingDateMainView(_SwappingMainView):
+    arrival: DateInputView = child(DateInputView)
+
+
+@pytest.mark.parametrize(
+    ("main_view", "library", "ready"),
+    [
+        (_SwappingChartMainView, "uPlot.iife.min.js", "typeof uPlot !== 'undefined'"),
+        (_SwappingMapMainView, "deckgl.min.js", "typeof deck !== 'undefined'"),
+        (_SwappingDateMainView, "cally.js", "customElements.get('calendar-date') !== undefined"),
+    ],
+)
+def test_a_library_that_failed_to_load_loads_again_on_the_next_swap(
+    browser: Browser, main_view: type[MainView], library: str, ready: str
+) -> None:
+    app = WebApplication(build_main_view=main_view).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        requests: list[str] = []
+
+        def fail_the_first(route: Route) -> None:
+            requests.append(route.request.url)
+            if len(requests) == 1:
+                route.abort()
+            else:
+                route.continue_()
+
+        page.route(f"**/{library}*", fail_the_first)
+        with page.expect_event("requestfailed"):
+            page.goto("/")
+        with page.expect_response(lambda response: library in response.url):
+            page.get_by_role("button", name="Change").click()
+
+        is_ready = False
+        for _ in range(600):  # frames, not time: the wait ends once the library runs
+            is_ready = page.evaluate(ready)
+            if is_ready:
+                break
+            page.evaluate("new Promise(requestAnimationFrame)")
+        assert is_ready
+        assert len(requests) == 2
 
 
 def test_a_chart_draws_its_series_with_their_legend(chart_page: Page) -> None:
