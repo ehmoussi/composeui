@@ -118,6 +118,8 @@ The notable changes of each release of ComposeUI. The format follows
 - On the web, a download whose `export_filename` holds a control character no longer fails:
   the server refused its header. A quote, a backslash or a "/" in the name no longer goes
   into the header as it is. It broke the name that the browser shows.
+- On the web, a chart, map or calendar whose library failed to load asks for it again on the page's
+  next change, without a full reload.
 - Opening a damaged study no longer fails with an error that the app doesn't catch. Its
   archive may place its directory or its files before the file's start, or ask for a newer
   zip version. The app now refuses such a study as any invalid one: "it isn't a valid ...
