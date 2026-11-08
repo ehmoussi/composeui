@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QSignalBlocker, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtWidgets import QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
@@ -46,9 +46,8 @@ class QExpander(QWidget):
         self._show_expanded(is_expanded=False)
 
     def set_expanded(self, is_expanded: bool) -> None:
-        self.header.blockSignals(True)  # noqa: FBT003
-        self.header.setChecked(is_expanded)
-        self.header.blockSignals(False)  # noqa: FBT003
+        with QSignalBlocker(self.header):
+            self.header.setChecked(is_expanded)
         self._show_expanded(is_expanded=is_expanded)
 
     def _show_expanded(self, *, is_expanded: bool) -> None:
