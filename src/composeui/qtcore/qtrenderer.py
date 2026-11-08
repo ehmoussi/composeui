@@ -986,6 +986,7 @@ class SliderViewLike(ViewLike, Protocol):
     minimum: float
     maximum: float
     step: float
+    is_filled: bool
     value_changed: Signal[float]
 
 
@@ -1004,6 +1005,7 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
                 "minimum": self._refresh_minimum,
                 "maximum": self._refresh_maximum,
                 "step": self._refresh_step,
+                "is_filled": self._refresh_is_filled,
             }
         )
 
@@ -1042,6 +1044,13 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
         cls, view: SliderViewLike, rendered_object: QValueSlider, value: float
     ) -> None:
         cls._show(rendered_object, view.value, view.minimum, view.maximum, value)
+
+    @staticmethod
+    def _refresh_is_filled(
+        _view: SliderViewLike, rendered_object: QValueSlider, value: bool
+    ) -> None:
+        rendered_object.is_filled = value
+        rendered_object.update()
 
     @classmethod
     def _show(

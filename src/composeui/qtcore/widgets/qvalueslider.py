@@ -5,7 +5,7 @@ from typing import Any
 from qtpy.QtCore import QRect, QSize, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPaintEvent
-from qtpy.QtWidgets import QSlider, QStyleOptionSlider
+from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
 
 from composeui.core.view import SliderMixin
 
@@ -31,6 +31,7 @@ class QValueSlider(QSlider):
         super().__init__(Qt.Orientation.Horizontal, *args, **kwargs)
         self.first: float = 0
         self.step: float = 1
+        self.is_filled = True
         #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
         self.steps: Any = SliderMixin
         self.valueChanged.connect(self._emit_shown_value)
@@ -63,11 +64,27 @@ class QValueSlider(QSlider):
         return QSize(size.width() + self._slot_width() + _GAP, size.height())
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        super().paintEvent(event)
+        if self.is_filled:
+            super().paintEvent(event)
         painter = QPainter(self)
+        if not self.is_filled:
+            self._paint_unfilled(painter)
         align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         painter.drawText(self.value_rect(), align, self._text_at(self.value()))
         painter.end()
+
+    def _paint_unfilled(self, painter: QPainter) -> None:
+        # Qt has no setting for the fill, which each style paints up to the handle: the
+        # groove is painted with the handle at the start, then the handle where it is
+        option = QStyleOptionSlider()
+        self.initStyleOption(option)
+        position = option.sliderPosition
+        option.subControls = QStyle.SubControl.SC_SliderGroove
+        option.sliderPosition = option.sliderValue = option.minimum
+        self.style().drawComplexControl(QStyle.ComplexControl.CC_Slider, option, painter, self)
+        option.subControls = QStyle.SubControl.SC_SliderHandle
+        option.sliderPosition = option.sliderValue = position
+        self.style().drawComplexControl(QStyle.ComplexControl.CC_Slider, option, painter, self)
 
     def _emit_shown_value(self, _position: int) -> None:
         self.shown_value_changed.emit(self.shown_value())

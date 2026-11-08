@@ -3173,6 +3173,26 @@ def test_a_decimal_slider_posts_exact_steps_and_ignores_what_is_not_a_finite_num
     assert (opacity.value, moves) == (0.3, [0.3])
 
 
+def test_a_slider_without_fill_turns_off_the_range_input_s_fill() -> None:
+    view = OpacityMainView()
+    view.render(RendererType.WEB)
+    opacity = view.form.opacity
+    field = _part(opacity, "field")
+
+    def input_attributes() -> dict[str, str | None]:
+        slider = _element(field.to_html(), field.widget_id)
+        (range_input,) = [a for tag, a in slider.descendants if tag == "input"]
+        return range_input
+
+    assert "style" not in input_attributes()
+
+    with collect_dirty() as dirty:
+        opacity.is_filled = False
+
+    assert list(dirty) == [field.widget_id]
+    assert input_attributes()["style"] == "--range-fill: 0"
+
+
 def test_form_label_points_at_its_field_and_escapes_the_text(rows: _RowsMainView) -> None:
     label, field = _part(rows.name, "label"), _part(rows.name, "field")
 

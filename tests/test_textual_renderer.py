@@ -601,6 +601,36 @@ async def test_a_decimal_slider_stops_on_exact_decimal_steps() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_slider_without_fill_draws_its_track_alike_on_both_sides_of_its_handle() -> None:
+    view = OpacityMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    opacity = view.form.opacity
+    opacity.value = 0.2
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(opacity.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        filled, _ = _track_and_value(slider)
+        assert "━" in filled
+
+        assert "━" in app.export_screenshot()
+
+        opacity.is_filled = False
+        await pilot.pause()
+        unfilled, _ = _track_and_value(slider)
+        assert "━" not in app.export_screenshot()  # what the screen shows: redrawn
+        assert unfilled.index("●") == filled.index("●")
+
+        opacity.is_filled = True
+        await pilot.pause()
+        assert _track_and_value(slider)[0] == filled
+
+
+@pytest.mark.asyncio
 async def test_textual_radio_group_with_nonnull_initial_value_mounts_without_crashing() -> None:
     """A radio group whose `value` is already non-None on first render used to crash.
 
