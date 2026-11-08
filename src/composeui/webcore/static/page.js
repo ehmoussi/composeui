@@ -5,7 +5,30 @@ var PAGE_SCRIPT = document.currentScript;
 /* Maps load their renderer only when needed. Tile fetches identify the page by its
    origin, never its path, and never carry credentials to the tile provider. */
 var maps = new Map();
-var deckLoading = false;
+/* a library the page loads only once it needs it. A request that fails is forgotten, so a
+   later change of the page asks again, a few times: not at each change of a page offline. */
+var MAX_LIBRARY_FAILURES = 5;
+function newLoader() {
+  return {isLoading: false, failures: 0};
+}
+function loadLibrary(loader, url, onload, type) {
+  if (loader.isLoading || loader.failures >= MAX_LIBRARY_FAILURES) return;
+  loader.isLoading = true;
+  var script = document.createElement("script");
+  if (type) script.type = type;
+  // a module whose import failed stays failed at its address: another one asks again
+  script.src = loader.failures === 0
+    ? url
+    : url + (url.indexOf("?") < 0 ? "?" : "&") + "retry=" + loader.failures;
+  if (onload) script.onload = onload;
+  script.onerror = function () {
+    script.remove();
+    loader.isLoading = false;
+    loader.failures += 1;
+  };
+  document.head.appendChild(script);
+}
+var deckLoader = newLoader();
 function mapPost(element, event, state) {
   state = Object.assign({}, state, {
     latitude: Math.max(-85.05112878, Math.min(85.05112878, state.latitude)),
@@ -126,12 +149,7 @@ function syncMaps() {
   });
   if (document.querySelector("[data-map]") === null) return;
   if (typeof deck === "undefined") {
-    if (deckLoading) return;
-    deckLoading = true;
-    var script = document.createElement("script");
-    script.src = PAGE_SCRIPT.dataset.deckgl;
-    script.onload = syncMaps;
-    document.head.appendChild(script);
+    loadLibrary(deckLoader, PAGE_SCRIPT.dataset.deckgl, syncMaps);
     return;
   }
   document.querySelectorAll("[data-map]").forEach(function (element) {
@@ -146,14 +164,10 @@ function syncMaps() {
    zoomed into to the chart swapped in with its id (a job adding points). */
 var charts = new Map();  // each element drawn, or waiting for a width, to its chart
 var chartZooms = new Map();  // the zoom of a chart swapped out, by its element's id
-var uPlotLoading = false;
+var uPlotLoader = newLoader();
 function loadCharts() {
-  if (document.querySelector("[data-chart]") === null || uPlotLoading) return;
-  uPlotLoading = true;
-  var script = document.createElement("script");
-  script.src = PAGE_SCRIPT.dataset.uplot;
-  script.onload = syncCharts;
-  document.head.appendChild(script);
+  if (document.querySelector("[data-chart]") === null) return;
+  loadLibrary(uPlotLoader, PAGE_SCRIPT.dataset.uplot, syncCharts);
 }
 /* a CSS color as the canvas takes it: daisyUI's variables, mixed, resolved */
 function resolveColor(element, color) {
@@ -890,14 +904,10 @@ document.addEventListener("input", function (event) {
 });
 /* the date fields' calendar, Cally's `<calendar-date>`: the page loads it only once it
    shows its first date field, from a swap too, as it does uPlot */
-var callyLoading = false;
+var callyLoader = newLoader();
 function loadCalendars() {
-  if (callyLoading || document.querySelector("calendar-date") === null) return;
-  callyLoading = true;
-  var script = document.createElement("script");
-  script.type = "module";
-  script.src = PAGE_SCRIPT.dataset.cally;
-  document.head.appendChild(script);
+  if (document.querySelector("calendar-date") === null) return;
+  loadLibrary(callyLoader, PAGE_SCRIPT.dataset.cally, null, "module");
 }
 /* a date field's calendar (see `WebDateInputRenderer`), a popover its button opens: it
    names the months and days in the page's language, and starts on the date, focused,
