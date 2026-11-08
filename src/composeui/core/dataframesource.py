@@ -38,6 +38,8 @@ _EMPTY_KEY = "__composeui_empty"
 _SORT_KEY = "__composeui_key"
 #: the rows' ids in `cells`, apart from the id column that a column may show too
 _CELL_ID_KEY = "__composeui_cell_id"
+#: a frame's row positions, which break a sort's ties when the ids aren't them
+_POSITION_KEY = "__composeui_position"
 
 _TEXT_OPERATORS = (
     FilterOperator.CONTAINS,
@@ -77,7 +79,7 @@ class DataFrameSource:
     The frame's library sorts and filters: a text compares in lower case, which isn't
     Python's ``casefold`` ("ß" doesn't find "SS"), and a ``/regex/`` is in the library's
     syntax (Rust's ``regex`` for Polars, ``re`` for pandas). Equal cells, and the rows
-    unsorted, keep the frame's order.
+    unsorted, keep the frame's order; a lazy frame's equal cells are in the order of their ids.
     """
 
     def __init__(
@@ -178,13 +180,20 @@ class DataFrameSource:
             # an empty text's key is null, as a missing one's: the empty cells in the
             # frame's order, "" sorting before null otherwise
             key = nw.when(text != "").then(text.str.to_lowercase()) if is_text else cell
+            tie = self._id
+            if self._id_column is not None and isinstance(frame, nw.DataFrame):
+                frame, tie = frame.with_row_index(_POSITION_KEY), _POSITION_KEY
             ordered = (
-                frame.select(self._id, empty.alias(_EMPTY_KEY), key.alias(_SORT_KEY))
+                frame.select(
+                    *dict.fromkeys((self._id, tie)),
+                    empty.alias(_EMPTY_KEY),
+                    key.alias(_SORT_KEY),
+                )
                 # the empty cells last in both orders, equal cells in the frame's order
                 .sort(
                     _EMPTY_KEY,
                     _SORT_KEY,
-                    self._id,
+                    tie,
                     descending=[False, sort.descending, False],
                     nulls_last=True,
                 )

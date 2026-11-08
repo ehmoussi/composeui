@@ -313,6 +313,17 @@ def test_a_new_frame_changes_the_rows_and_emits_changed() -> None:
     assert source.cells([0, 1], ["name"]) == {0: ["c"]}
 
 
+@pytest.mark.parametrize("library", ["polars", "pandas"])
+@pytest.mark.parametrize("descending", [False, True])
+def test_equal_cells_keep_the_frame_s_order_whatever_their_ids(
+    library: str, *, descending: bool
+) -> None:
+    columns = {"id": [3, 1, 2], "score": [5, 5, 5]}
+    frame = pl.DataFrame(columns) if library == "polars" else pd.DataFrame(columns)
+    source = DataFrameSource(frame, id_column="id")
+    assert source.ordered_ids(Sort("score", descending), "", {}) == [3, 1, 2]
+
+
 def test_a_lazy_frame_needs_an_id_column() -> None:
     with pytest.raises(TypeError, match="lazy frame without an id_column"):
         DataFrameSource(pl.LazyFrame({"name": ["a"]}))
