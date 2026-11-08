@@ -64,6 +64,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 - On Qt, a refresh that raises no longer leaves the widget's signals blocked, which cut the user's
   later edits off from the view. A widget blocked before a refresh stays blocked.
+- A failed JSON save or a canceled CSV export keeps the previous file, and a canceled export no
+  longer reports success. Before, the failure or the cancel destroyed it.
 - A study whose archive marks a member as patched data or as strongly encrypted is refused as an
   invalid file. Before, opening it raised `NotImplementedError`, and the web answered with a server
   error.
