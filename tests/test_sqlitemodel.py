@@ -632,6 +632,21 @@ def test_a_study_whose_members_zipfile_won_t_read_is_refused(
         open_study(app.main_view, app.model, path)
 
 
+def test_an_archive_with_a_member_s_name_it_can_t_decode_is_refused(
+    app: App, tmp_path: Path
+) -> None:
+    path = tmp_path / "saved.hello"
+    _save(app, path)
+    data = bytearray(path.read_bytes())
+    at = data.find(b"PK\x01\x02")
+    data[at + 9] |= 0x08  # the bit that says the name is UTF-8
+    data[at + 46] = 0x80  # the name's first byte, which no UTF-8 text starts with
+    path.write_bytes(data)
+
+    with pytest.raises(InvalidStateError, match="valid"):
+        open_study(app.main_view, app.model, path)
+
+
 def test_a_damaged_study_opens_or_is_refused_leaving_the_study_as_it_was(
     app: App, tmp_path: Path
 ) -> None:
