@@ -112,10 +112,10 @@ class PipeTabs(TabView):
 The view starts on the first tab. Code shows another tab with `current_index`, counted from
 0. `current_tab` is the tab shown. `current_changed` reports the user's picks.
 
-- The tab shown is navigation, not study data, as for pages.
-- A hidden tab page hides its tab. The user can't pick a disabled tab page.
-- Tabs are not [pages](#pages): tabs live inside a page or a form, and have no address of
-  their own.
+- **Not study data.** The tab shown is navigation, as for pages.
+- **Hidden and disabled tabs.** A hidden tab page hides its tab. The user cannot pick a disabled
+  tab page.
+- **Not [pages](#pages).** Tabs live inside a page or a form, and have no address of their own.
 
 Qt shows a `QTabWidget`, Textual a `TabbedContent`, and the web a row of tabs. On the web,
 the arrow keys move between the tabs. The web sends only the shown tab's views: a tab's views
@@ -184,8 +184,7 @@ with the up and down keys.
 - Textual shares a height of 24 rows, and the web a height of 32rem. Each pane scrolls
   within its share.
 
-The web never stacks the panes of a vertical splitter any other way: it keeps their borders
-on a narrow screen.
+On a narrow screen, the web keeps the borders of the panes of a vertical splitter.
 
 ## A list of views
 
@@ -220,10 +219,10 @@ class PipeList(ListView[Pipe]):  # Pipe: an attrs record
 
 `item_key` tells the records apart. By default, the key is the record itself.
 
-- A new record gets a view of its own.
-- A record that is gone takes its view along.
-- A record that is still there keeps its view.
-- A changed record keeps its view if `update_item` shows the change in the view and returns
+- **A new record** gets a view of its own.
+- **A record that is gone** has its view removed.
+- **A record that is still there** keeps its view.
+- **A changed record** keeps its view if `update_item` shows the change in the view and returns
   True. The view then keeps what the user did to it: an expander stays expanded. Otherwise,
   the record gets a new view.
 
@@ -284,7 +283,7 @@ drop-down list in the page header. Browsers keep the Ctrl shortcuts, so a shortc
 and a letter or a digit becomes Alt+Shift: Ctrl+r becomes Alt+Shift+R. The web has no
 equivalent for other shortcuts, such as Ctrl+Shift+s. Textual has no menu bar: an
 entry with a `shortcut` is a key binding, which the footer lists. On Textual, the user
-can't reach an entry without a shortcut.
+cannot reach an entry without a shortcut.
 
 The File menu is built in (see
 [The File menu and picking a file](widgets.md#the-file-menu-and-picking-a-file)), and a
@@ -329,8 +328,8 @@ buttons of a router. The web puts its buttons in the page header, before the men
 
 The `icon` of an action is the path of an image file. Qt and the web show it, and a
 terminal shows the text. On the web, an SVG icon takes the color of the text (see
-[How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The app's code sets an
-icon, so an icon is not study data: it is never saved, loaded, or reset.
+[How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The
+app's code sets an icon, so an icon is not study data: it is never saved, loaded, or reset.
 
 ## Sidebar
 
@@ -356,7 +355,7 @@ class AppMainView(MainView):
     pages: Pages = Factory(Pages)
 ```
 
-Qt docks the sidebar on the left of the window, where the user can't close or move it.
+Qt docks the sidebar on the left of the window, where the user cannot close or move it.
 Textual shows it on the left of the content, and the web as a column on the left of the
 pages.
 
@@ -373,15 +372,15 @@ On a phone, the web shows the sidebar as a drawer over the page. The button in t
 opens it. A tap beside it, or Escape, closes it.
 
 In [`src/examples/pipecatalogue.py`](../../src/examples/pipecatalogue.py), the form of the
-sidebar adds pipes to the catalogue beside it.
+sidebar adds pipes to the catalog beside it.
 
 ## Dialogs
 
 A `DialogView` is a modal message, or a confirmation with an accept button and a reject
 button (`kind=DialogKind.CONFIRM`). It starts closed, and `open()` shows it.
 
-Nothing waits for the answer, because a web request can't wait. Connect to `accepted` and
-`rejected` instead. They fire once the dialog is closed.
+Nothing waits for the answer, because a web request cannot wait. Connect to `accepted` and
+`rejected` instead. They emit once the dialog is closed.
 
 ```python
 from attrs import Factory
@@ -416,8 +415,8 @@ A dialog is not study data: saving, opening, and New leave it alone.
 
 Qt shows a `QMessageBox`, Textual a modal screen, and the web a modal `<dialog>`, wherever
 the view is in the tree. On macOS, a message box has no title: Qt shows the `title` as its
-bold text, and the `text` under it. In [`src/examples/pipeform.py`](../../src/examples/pipeform.py), Reset
-Dimensions in the Pipe menu asks for a confirmation first.
+bold text, and the `text` under it. In [`src/examples/pipeform.py`](../../src/examples/pipeform.py),
+Reset Dimensions in the Pipe menu asks for a confirmation first.
 
 ### Form dialogs
 
@@ -452,10 +451,10 @@ dialog.form.name.text = "Main pipe"
   constructor or in an assignment. A subclass of `FormDialogView` with its own `form`
   works too, but a type checker reads its `form` as a `FormView`.
 - **The same dialog.** Both classes have the same renderers and the same behavior.
-- **OK follows the checks.** The user can't press OK while a check of the form fails.
+- **OK follows the checks.** The user cannot press OK while a check of the form fails.
   `is_accept_enabled` follows the checks as they run.
 - **OK runs every check.** Accepting runs every check first, even a check that the user
-  hasn't triggered yet. The dialog stays open while a check fails. `FormView.check` runs
+  has not triggered yet. The dialog stays open while a check fails. `FormView.check` runs
   all the checks, and `is_valid` tells whether they pass.
 - **The answer** comes through `accepted` or `rejected`.
 - **The form can hold other views.** A table or a button in the form shows in the dialog.
@@ -506,14 +505,14 @@ class OpenStudyDialog(ContentDialogView[FolderView]):
         if self.is_accept_enabled and self.selects_a_folder():
             self.show_selected_folder()  # the dialog stays open
             return
-        super().accept()  # closes the dialog, then `accepted` fires
+        super().accept()  # closes the dialog, then `accepted` emits
 ```
 
 - **The content.** Any view: a `VerticalView` of a table and buttons, tabs, or a chart.
   The dialog's `text` shows above it. A `ContentDialogView` needs `content=...`, unless its
   subclass gives a default, as above. A type checker then reads `content` as a `FolderView`.
 - **OK follows the app.** The app sets `is_accept_enabled`. While it is `False`, the user
-  can't press OK, and `accept()` does nothing.
+  cannot press OK, and `accept()` does nothing.
 - **The buttons of the content** act without closing the dialog, for example to show the
   parent folder in the table.
 - **OK can keep the dialog open.** A subclass overrides `accept()`, and calls
@@ -568,21 +567,21 @@ dialog.accepted.connect(lambda: print("Saved"))
 ```
 
 - **The buttons.** Each `DialogButtonView` field shows between Cancel and OK, in the order
-  of the fields (`buttons`). A click fires its `clicked`, and the dialog stays open.
-- **A button that closes.** With `closes=True`, `clicked` fires, then the dialog closes.
-  Neither `accepted` nor `rejected` fires, for example for "Close without saving".
+  of the fields (`buttons`). A click emits its `clicked`, and the dialog stays open.
+- **A button that closes.** With `closes=True`, `clicked` emits, then the dialog closes.
+  Neither `accepted` nor `rejected` emits, for example for "Close without saving".
 - **A button that checks.** By default (`checks=True`), a click runs every check first, as
-  OK does. While a check fails, the button does nothing, and the user can't press it
+  OK does. While a check fails, the button does nothing, and the user cannot press it
   (`is_blocked`). With `checks=False`, it acts whatever the checks say.
 - **The checks.** A check returns the message to show, or `None` when it passes. It runs
-  again whenever one of the signals given to `add_check` fires, and `validate` runs the
+  again whenever one of the signals given to `add_check` emits, and `validate` runs the
   checks now. A value set by code emits no signal, but OK and the checking buttons run the
   checks anyway.
 - **The message stays in the dialog.** While a check fails, its message shows above the
-  buttons (`log_view`), and the user can't press OK. The message goes once the value is
-  fixed: the dialog doesn't close and open again.
+  buttons (`log_view`), and the user cannot press OK. The message goes once the value is
+  fixed: the dialog does not close and open again.
 - **With a form.** In a form dialog, the dialog's checks come in addition to the form's. Use
-  them for what the form can't know, for example a name that another record already has.
+  them for what the form cannot know, for example a name that another record already has.
   The form shows its own messages.
 
 The model can still refuse what the checks let through, for example a value that only the
@@ -600,15 +599,15 @@ dialog.accepting.connect(lambda: save(dialog))
 dialog.apply.clicked.connect(lambda: save(dialog))
 ```
 
-- **`accepting`** fires when the user presses OK and every check passes, while the dialog
-  is still open. Then the dialog closes, and `accepted` fires.
+- **`accepting`** emits when the user presses OK and every check passes, while the dialog
+  is still open. Then the dialog closes, and `accepted` emits.
 - **A refusal keeps the dialog open.** In `accepting`, or in the `clicked` of one of the
   dialog's buttons, a `RefusedError` in `refusing` shows its message above the buttons, as a
   failing check's. The dialog stays open, with the user's values. The next click, or the next
   opening, takes the message away.
 - **Say a success in the dialog while it is open.** The status bar is out of sight behind
   the open dialog. After Apply, call `dialog.show_message("Saved")`: the message shows above
-  the buttons as information, not as an error, and doesn't stop OK. It goes on the next
+  the buttons as information, not as an error, and does not stop OK. It goes on the next
   click, the next run of a check, or the next opening. After OK, show "Saved" in the status
   bar from `accepted`, once the dialog is closed.
 
@@ -661,7 +660,7 @@ class ReportMainView(MainView):
 - **The data written is the data the user saw.** Give `write` the data as it is when the
   user saves, as `functools.partial` does above. The answer comes later, and the views may
   have changed by then.
-- **The texts** are the field's: `browse_text` as the title, `replace_question_text` and
+- **The texts** are the field's: `browse_text` as the title, `replace_question_text`, and
   `replace_text`. A path rather than a field, `write_file(path, write)`, asks with the
   main view's texts, in its language.
 

@@ -1,7 +1,7 @@
 # A SQLite model
 
 Views hold what is shown. Some data has many rows, relations between them, and queries over
-them, for example runs and their results, or a catalogue of parts. This data belongs in a
+them, for example runs and their results, or a catalog of parts. This data belongs in a
 `SqliteModel`: a SQLite database of the app's own, with its own schema and SQL. The study
 saves and opens it.
 
@@ -41,7 +41,7 @@ tables (`model.runs.add(...)`).
 - **Transactions.** `with self.connection() as db:` commits once the block ends, and rolls
   back if the block raises. A block inside another block joins it. The threads take turns
   on the model's connection.
-- **Reads apart.** `with self.reading() as db:` gives a connection that only reads, and takes no
+- **Separate reads.** `with self.reading() as db:` gives a connection that only reads, and takes no
   turn: it neither waits for a write nor holds one up. It reads the rows committed, not those of a
   transaction still open. The connection is reused: read each query's rows to the end in the block,
   else the next reader sees the rows as they were when the query started. A large table's
@@ -74,7 +74,7 @@ tables (`model.runs.add(...)`).
     back, or closes it. Take it from the table's `connection()`, so that the table emits
     `changed`.
 - **New names.** `unique_name(db, "run", "name", "Run")` gives "Run", or else "Run 2",
-  "Run 3", and so on: the first name that the column doesn't hold, whatever its case. Use it
+  "Run 3", and so on: the first name that the column does not hold, whatever its case. Use it
   for a row that the user adds, then renames.
 - **Refusals.** When a constraint fails, the transaction is refused: `connection()` raises a
   `RefusedError` (`composeui.core.model`). Its message is the table's message for the
@@ -102,18 +102,18 @@ tables (`model.runs.add(...)`).
   state of the views and the database together, as a zip archive with the app's `extension`.
   The model works on a scratch copy in a temporary file. So the user's file changes only
   when the user saves it, and a failed save leaves the file whole. Opening checks everything
-  first. When a file doesn't fit, the study stays as it was, and the status bar says why.
+  first. When a file does not fit, the study stays as it was, and the status bar says why.
 - **Versions.** Raise `schema_version` with every change to the tables. Add the step from
   the previous version to `migrations` (`{1: add_stress_column}`). When the user opens a
   study saved by an older version, the model brings it up to date. A study saved by a newer
   version is refused.
 - **Opened databases are checked.** A study can come from anyone, such as a web upload or
   an email. Its database must be made as a new one is: the same tables with the same
-  columns, and the same views, triggers and indexes, with the same SQL. Otherwise it is
+  columns, and the same views, triggers, and indexes, with the same SQL. Otherwise it is
   refused, because a view or a trigger in the file would run in the app. So each migration
   must leave the database as a new one at its version. For example, it recreates a view from
   the same SQL as `create`. The `CHECK` and `REFERENCES` of a table are not compared,
-  because `ALTER TABLE ... ADD COLUMN` can't add all of them. Opening a database, its
+  because `ALTER TABLE ... ADD COLUMN` cannot add all of them. Opening a database, its
   migrations included, stops after `open_time_limit` seconds (30 by default).
 - **Writing from a job.** The function of a [job](threads.md) can write to
   the tables: the model's lock lets one thread at a time use the connection. The `changed`
@@ -137,7 +137,7 @@ tables (`model.runs.add(...)`).
 [`src/examples/pipecatalogue.py`](../../src/examples/pipecatalogue.py) puts it together, on
 every backend (`uv run python -m examples.pipecatalogue --backend qt`):
 
-- The database checks the pipes of a catalogue as a form in a
+- The database checks the pipes of a catalog as a form in a
   [sidebar](organizing-the-window.md#sidebar) adds them.
 - A [list of views](organizing-the-window.md#a-list-of-views) shows an expander per pipe, beside a
   tree of the pipes by material.

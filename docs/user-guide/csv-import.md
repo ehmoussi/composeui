@@ -65,7 +65,7 @@ finally:
   - The types of the fields are `str`, `int`, `bool`, `float`, `bytes`, `decimal.Decimal`,
     `datetime.date`, and `datetime.datetime`, or an `Optional` of one of them.
   - An `Optional` field accepts SQL `NULL`. The other fields are `NOT NULL`.
-  - A default fills a column that the CSV data doesn't have, not an empty cell.
+  - A default fills a column that the CSV data does not have, not an empty cell.
   - A computed field (`init=False`) is stored too.
   - The table has no primary key. Use SQLite's `rowid` to identify a row.
 - **Indexes.** The table has no index by default. Set `indexes` to the SQL script that creates
@@ -121,7 +121,7 @@ finally:
 ## CSV files
 
 `fill_from_file(path, ...)` imports a CSV file, plain or gzip. The path is a string or a
-`pathlib.Path`, absolute or from the current directory. The method tells a gzip file by
+`pathlib.Path`, absolute or from the current folder. The method tells a gzip file by
 its content, not by its suffix:
 
 ```python
@@ -282,7 +282,7 @@ def read_parquet(readings: Readings, path: Path, job) -> None:
 - **Columns.** A column gives the field of the same name, or of its `csv_field` name. The import
   ignores the other columns.
 - **Values.** A date stays a date, and a field's `date_format` is not used for it. A missing
-  value gives `None`, including `NaN`, `NaT` and `pd.NA`. A value converts only when nothing is
+  value gives `None`, including `NaN`, `NaT`, and `pd.NA`. A value converts only when nothing is
   lost: `2.0` fits an `int` field, and a date and time at midnight fits a date field. So `1.9`
   in an `int` field raises `RefusedError`, as a row class that refuses a value does.
 - **Transactions.** The import works as `fill` does: exhaust the generator to commit, and close
@@ -294,5 +294,5 @@ def read_parquet(readings: Readings, path: Path, job) -> None:
 
 `fill_rows` takes any iterable of rows, each a dictionary by CSV header. It follows the same rules.
 
-A frame can also stay a frame: [`DataFrameSource`](tables.md) shows it in a large table without
-SQLite.
+A frame can also stay a frame: [`DataFrameSource`](tables.md#rows-in-a-dataframe) shows it in a
+large table without SQLite.

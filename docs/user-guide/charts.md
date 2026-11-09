@@ -4,6 +4,9 @@ A `ChartView` plots results, for example a quantity against time or a swept dime
 `series` is a list of `Series`. Each series is a curve with its own `x` and `y` (as many of
 each) and a `name` for the legend. A NaN leaves a gap in its curve.
 
+These sections cover the kinds of chart, axes and reference lines, colors, what each backend
+draws, clicks, and report images.
+
 ```python
 from composeui.core.view import ChartView, Series, child
 
@@ -14,7 +17,7 @@ chart: ChartView = child(
 chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
 ```
 
-As for the rows of a table, assign a new `series` list to draw the chart again. A job that
+As for the rows of a table, set a new `series` list to draw the chart again. A job that
 adds points does the same. The study saves the series.
 
 ## Kinds of chart
@@ -58,8 +61,8 @@ missing a value. Its `name` is the y column's, or the `name` that you give.
 
 ## Log axes
 
-`x_log` and `y_log` make an axis a log axis. A log axis leaves out what it can't show: the
-chart doesn't draw a point at an x of 0 or less, and a y of 0 or less leaves a gap.
+`x_log` and `y_log` make an axis a log axis. A log axis leaves out what it cannot show: the
+chart does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap.
 
 ## Reference lines
 
@@ -84,7 +87,7 @@ chart.reference_lines = [
   and `DASH_DOT`.
 
 The range of the chart includes the lines, so a line past the data still shows. On a log
-axis, the chart doesn't draw a line at 0 or less. Textual draws each line solid, because a
+axis, the chart does not draw a line at 0 or less. Textual draws each line solid, because a
 terminal has no dashes.
 
 ## Colors, fill, steps, and height
@@ -92,16 +95,15 @@ terminal has no dashes.
 The view holds data and labels. Each backend draws the chart in the colors of its theme,
 with these exceptions:
 
-- A series can have a `color` of its own (`"#rrggbb"`), the same in every theme, for
+- **A color of its own.** A series can have a `color` (`"#rrggbb"`), the same in every theme, for
   example the color of a logo.
-- `fill=True` fills the area between the line of the series and 0, in the color of the line. With
-  `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for example a pale area
-  under a strong line. This color is the same in every theme.
-- A series with `step=True` holds each value until its next point, for example the number of
-  jobs running over time. With `fill`, it draws a step area. When the user hovers over the
+- **Fill.** `fill=True` fills the area between the line of the series and 0, in the color of the
+  line. With `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for example a
+  pale area under a strong line. This color is the same in every theme.
+- **Steps.** A series with `step=True` holds each value until its next point, for example the number
+  of jobs running over time. With `fill`, it draws a step area. When the user hovers over the
   series, the chart shows the value held at the cursor.
-  [`src/examples/taskview.py`](../../src/examples/taskview.py) charts its running tasks this
-  way.
+  [`src/examples/taskview.py`](../../src/examples/taskview.py) charts its running tasks this way.
 
 `height` sets the height of the chart on screen, in pixels, for example to keep the
 proportions of a shape. A terminal row is about 16 pixels. `None`, the default, leaves the
@@ -139,7 +141,7 @@ yellow and black, and says whether a click was on the bat
 
 A chart on screen follows its window and its theme. The figure of a report has the size and
 fonts of the page, and a light background. `composeui.core.chartimage` draws such a figure
-from the data of the chart with matplotlib (the `report` extra). The figure is the same
+from the data of the chart with Matplotlib (the `report` extra). The figure is the same
 whatever the backend, and needs no UI, for example in a batch run that writes the figures of
 a report:
 
@@ -149,7 +151,7 @@ from pathlib import Path
 from composeui.core.chartimage import ImageOptions, chart_figure, save_chart_image
 
 save_chart_image(chart, Path("drop.pdf"), ImageOptions(width_mm=80, font_size=8))
-figure = chart_figure(chart)  # a matplotlib `Figure`, to annotate before saving it
+figure = chart_figure(chart)  # a Matplotlib `Figure`, to annotate before saving it
 ```
 
 - The suffix of the file picks the format. PDF, SVG, and EPS keep their text as text. PNG is
@@ -158,9 +160,9 @@ figure = chart_figure(chart)  # a matplotlib `Figure`, to annotate before saving
 
 Each backend offers this as Save Image. Its text is translated like the other built-in text.
 
-- Qt offers it in the context menu of the chart, at the region shown.
-- The web offers it in the corner of the figure, with a format to pick, at the user's zoom.
-- Textual offers it with the `s` key on a chart.
+- **Qt** offers it in the context menu of the chart, at the region shown.
+- **The web** offers it in the corner of the figure, with a format to pick, at the user's zoom.
+- **Textual** offers it with the `s` key on a chart.
 
 Without the `report` extra, Qt keeps the Export of pyqtgraph, and the web page draws a PNG
 of the chart itself.

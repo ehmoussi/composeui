@@ -40,7 +40,8 @@ The notable changes of each release of ComposeUI. The format follows
 - `FileUploadView`, with `RowFileUploadView` and `LabelRowFileUploadView`, lets the user give the
   app a file on Qt, Textual and the web. Its `uploaded` signal gives an `UploadedFile`: the file's
   name, size, type and path. On the web, each session keeps its own copy until the view's next
-  upload or `clear()`, once its jobs are over, or the end of the session. On Qt and Textual, the path is the user's own file.
+  upload or `clear()`, once its jobs are over, or the end of the session. On Qt and Textual, the
+  path is the user's own file.
 - `MainView.min_free_disk` sets what uploads leave free on the disk, 1 GiB by default. Below it, the
   server stops writing the file, and the status bar says that it has no room. A full disk gives the
   same message.

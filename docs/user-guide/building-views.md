@@ -1,6 +1,7 @@
 # Building views
 
-This section builds a small form, with its layout and its checks:
+This page covers how to define views, lay them out, check forms, structure an app, and save
+its state. The first example is a small form, with its layout and its checks:
 
 ```python
 import enum
@@ -194,7 +195,7 @@ A check is a function without arguments. It returns an error message, or `None` 
 value is good:
 
 - **A row's own check.** `row.set_validator(check, *signals)` runs `check` each time one of
-  the signals fires, and shows its message under the row's field. It does not run at once:
+  the signals emits, and shows its message under the row's field. It does not run at once:
   call `run_validator()` to show the error before the first edit.
 - **A check of several rows.** `form.add_validator(check, *signals, rows=(...))` checks the
   values of several rows together. The form shows the messages of the failing checks at its
@@ -239,7 +240,7 @@ A subclass of `MainView` is the app. Its class variables configure it:
 - **`app_icon`** is the icon of the app (see [The app's icon](#the-apps-icon)).
 - **`width`** sets the default width of the web content, also in an app without pages
   (see [Page width](organizing-the-window.md#page-width)). Qt and Textual ignore it.
-- **`translations_dir`** is the directory of its catalogs (see
+- **`translations_dir`** is the folder of its catalogs (see
   [Translating the app](translation.md)).
 
 Its view fields are the content of the window, one above the other. Its `status_bar` shows
@@ -460,7 +461,7 @@ chart. Saving, opening, and New leave the rest alone:
 The main view emits `loaded` once the views and the model's data are in place: once as the
 app starts, after its setup, with the study that `-f FILE` opens or with a new one, then
 after each New and Open. On the web, each session emits it as it starts. Connect `loaded` to
-give again what a study doesn't hold, from the fields that it does hold, such as a filter:
+give again what a study does not hold, from the fields that it does hold, such as a filter:
 
 ```python
 from composeui.core.view import (
@@ -490,7 +491,7 @@ class ReadingsMainView(MainView):
 ```
 
 A load sets the fields without emitting their signals, such as the slider's `value_changed`,
-so a callback connected only to those doesn't run. On New and Open, a model reacts in
+so a callback connected only to those does not run. On New and Open, a model reacts in
 `Model.loaded`, which runs first, so a callback of `loaded` reads the data of the study.
 The app's own command-line options apply after `loaded` (see
 [Command-line options of your own](#command-line-options-of-your-own)).
@@ -501,7 +502,7 @@ A study file holds the state of the views, and two versions: the version of Comp
 file format, and the app's `state_version`, 1 by default.
 
 A file opens in any version of the app while the views can read its fields. When it has a
-field that the views don't have, the views skip that field. When it doesn't have a field of
+field that the views do not have, the views skip that field. When it does not have a field of
 the views, that field keeps its value. So most changes need no new version:
 
 - **No new version** for a new field, or a field that you remove. Older and newer versions
@@ -514,7 +515,7 @@ Raise `state_version` only for a change of the second kind. A raised version has
 effects:
 
 - **Older versions of the app refuse the new files,** and the status bar says why. An older
-  version can't read the changed field. It would show the study without that value, and a
+  version cannot read the changed field. It would show the study without that value, and a
   Save would then lose the value for good. Open also refuses a file of a newer ComposeUI
   file format.
 - **The new version upgrades the older files** in `MainView.migrate_state`, which you
@@ -542,5 +543,5 @@ class PipeMainView(MainView):
         return data
 ```
 
-When the upgrade fails, for example on a key that the file doesn't have, Open refuses the
+When the upgrade fails, for example on a key that the file does not have, Open refuses the
 file. A file saved before ComposeUI wrote the versions opens as version 1.

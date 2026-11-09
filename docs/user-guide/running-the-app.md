@@ -19,8 +19,8 @@ app can change its default with `run(MainViewClass, default_backend=RendererType
 
 `run` imports only the backend that you choose. Without the extra of that backend, `run`
 stops, and says which extra to install, for example `pip install "composeui[web]"`. `run`
-leaves the rest of the command line to the app (`--help` lists it). To always start one backend, build its application yourself,
-for example `QtApplication(build_main_view=HelloMainView).run()`.
+leaves the rest of the command line to the app (`--help` lists it). To always start one backend,
+build its application yourself, for example `QtApplication(build_main_view=HelloMainView).run()`.
 
 Every application takes a function that builds the main view, because on the web every
 browser gets its own copy of it.
@@ -60,9 +60,9 @@ The command runs the file as `python hello.py` does, so `__name__` is `"__main__
   A class that the file only imports does not count. With no class or with several, the command
   stops and says why. With several, call `run` with one of them.
 
-The command reloads the Python files under the current directory, as `--reload` does (see
+The command reloads the Python files under the current folder, as `--reload` does (see
 [Reloading the app on a change](#reloading-the-app-on-a-change)). The app of a file outside that
-directory starts, but it does not reload, and the command logs a warning.
+folder starts, but it does not reload, and the command logs a warning.
 
 Reloading is for development. Before other people use the app, read
 [Serve the app to other users](#serve-the-app-to-other-users).
@@ -74,7 +74,7 @@ they are built:
 
 - **`renders(view_type)`** tells whether the backend shows views of that type. For example,
   Textual shows no `MapView`, and an app can show a table of the points instead. Without
-  it, a view that the backend doesn't show is left out, with no error.
+  it, a view that the backend does not show is left out, with no error.
 - **`current_backend()`** gives the backend, a `RendererType`, for what depends on it in
   another way, such as a hint that names a mouse action.
 
@@ -113,7 +113,7 @@ Before an app is built, for example in a test that builds the main view itself,
 ## Reloading the app on a change
 
 Use `--reload` for development, on every backend: the app runs the changed code when a
-Python file under the current directory changes. The web restarts its server (see
+Python file under the current folder changes. The web restarts its server (see
 [Web backend](#web-backend)). On Qt and Textual, the process that you start does not show
 the app. That process runs the program again in a child process, with the same command
 line, and the child shows the app.
@@ -130,7 +130,7 @@ On Qt:
 - **When the changed code fails,** for example on a syntax error, the window keeps the
   previous code, and the error is logged. The next change runs the code again.
 - **On a change of ComposeUI's own code,** the app saves the study and stops, and a new
-  child process starts and opens the study. Its window opens again. A running app can't
+  child process starts and opens the study. Its window opens again. A running app cannot
   import ComposeUI again, because its objects keep the old classes. An app that does not
   answer within 5 seconds, for example while it is busy, is terminated, and its state
   since the previous change is lost. While a dialog is open, the app runs the changed code
@@ -142,7 +142,7 @@ one. The previous model stays open until the new main view shows, because the wi
 the previous code if the changed code fails. So for a moment, two models are open. Most
 models allow it: the SQLite model, for example, works on its own copy of the data. A model
 that takes something only one user can hold, for example a locked file, a network port, or
-an instrument's connection, can't: the new model fails to open it while the previous model
+an instrument's connection, cannot: the new model fails to open it while the previous model
 holds it. Then every change fails as the changed code does, and the window keeps the
 previous code. For such a model, start the app again yourself after a change.
 
@@ -158,7 +158,7 @@ does not count, and a value that a callback computes does not change until the c
 show such a value again, connect the callback to the `loaded` signal of the main view.
 
 The program runs again on every change, so code that it runs at the start, such as a
-log's set-up, runs again too. Start the program with `composeui run`, as a script, or with `-m`,
+log's setup, runs again too. Start the program with `composeui run`, as a script, or with `-m`,
 for example `uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra
 (`watchfiles`), the system reports the changes. Without it, the backends check the files
 at a fixed interval. They also check them for a project on a Windows drive under WSL
@@ -192,10 +192,10 @@ When the app runs, it shows the `info` messages and above. These options of ever
 The result of `get_logger` is a standard `logging.Logger`. Add a handler to it to write its messages
 to a file too.
 
-Textual draws the app on the terminal. So while a Textual app runs, from its start, ComposeUI writes these
-messages to `composeui.log` in the current directory. Use `--log-file FILE` to choose another file.
-ComposeUI creates the file with the first message, and shows its path when the app exits. At 5 MiB,
-the file starts again, and the previous content moves to `composeui.log.1`.
+Textual draws the app on the terminal. So while a Textual app runs, from its start, ComposeUI writes
+these messages to `composeui.log` in the current folder. Use `--log-file FILE` to choose another
+file. ComposeUI creates the file with the first message, and shows its path when the app exits. At 5
+MiB, the file starts again, and the previous content moves to `composeui.log.1`.
 
 The app refuses to start with a `--log-file` that it cannot write. If it cannot write
 `composeui.log`, the app starts, shows a warning, and does not keep the messages. ComposeUI does not
@@ -238,10 +238,11 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   return, so the other browsers would show stale views.
 - **Save and Open** download the state as a file and upload a file. The File menu is in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves), because browsers keep the
-  Ctrl shortcuts for themselves. A study can be at most 5 MB, and the status bar says when a
+  Ctrl shortcuts for themselves. A study can be at most 5 MiB, and the status bar says when a
   file is too large.
 - **Uploads have a limit that the app sets.** A user can upload a file of at most 5 MiB by
-  default, to a `PickFileAction`, a file path field or a table's file path cell. A main view
+  default. The limit applies to a `PickFileAction`, a file path input, and a table's file path
+  cell. A main view
   sets another limit in `max_upload_size`, in bytes, such as `max_upload_size = 200 * 1024 *
   1024`. The status bar says when a file is too large, and the page does not send that file.
   While an upload arrives, the server writes it to a file in the system's temporary folder, and
@@ -255,7 +256,7 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   each user holds: one user can take the room down to this limit, and block the uploads of the
   others until that user's session ends. To keep uploads away from other data, point `TMPDIR` at
   a disk of its own. A full disk gives the same message. Open does not check it: a study is small.
-- **`--reload` restarts the server when a Python file under the current directory
+- **`--reload` restarts the server when a Python file under the current folder
   changes.** Use it for development. The new server process runs the program again (the
   script, or the `-m` module) with the same command line, to build its app again. The
   sessions stay: the stopping process saves each session's study (the view state, and the
@@ -267,7 +268,7 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 - **Pages have their own address.** With a router (see [Pages](organizing-the-window.md#pages)),
   each page is at `/<route>`, and `/` sends the browser to the first page. The toolbar of the pages
   is in the header. When the user changes pages, the browser's history gets the new address. So
-  back, forward, bookmarks, and reloads land on that page. A route can't be `icon`, `jobs`,
+  back, forward, bookmarks, and reloads land on that page. A route cannot be `icon`, `jobs`,
   `reload`, `state`, `static`, or `widget`, because the backend uses these addresses. An
   address that is no page's gives a 404 error, not the first page.
 - **Icons** are the image files that actions name (`action.icon = "icons/run.svg"`, the
@@ -288,9 +289,9 @@ Read this section before other people use the app, on a network or behind a reve
   of it, for example with a password in the reverse proxy (see
   [Deploy behind nginx](#deploy-behind-nginx)).
 - **Single process only.** The sessions live in the memory of one server process. A restart
-  starts them all over: the server signs the session cookie with a key that it makes when
-  it starts, so after a restart each browser gets a new, empty session, and the work that
-  its user didn't save is lost.
+  starts them all over. The server signs the session cookie with a key that it makes when it
+  starts. So after a restart, each browser gets a new, empty session, and the work that its
+  user did not save is lost.
 - **Sessions have limits.** The server drops a session after an hour without use
   (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
   full, a new browser gets an error (503) until a session ends, and the open sessions keep
@@ -351,22 +352,22 @@ Each line keeps a part of the app working:
 - **`proxy_set_header Host $http_host`** gives the app the address that the browser used,
   with its port. Without it, nginx sends `127.0.0.1:8000`. With `$host`, the port is lost.
   In both cases, the server refuses the actions of a browser that sends only an `Origin`
-  header (403), because the origin doesn't match the address that the app sees. Browsers
+  header (403), because the origin does not match the address that the app sees. Browsers
   send `Sec-Fetch-Site` only over HTTPS and to `localhost`, so on plain HTTP this applies
   to every action.
 - **`proxy_set_header X-Forwarded-Proto $scheme`** tells the app that the browser used
   HTTPS. The server reads it only from the addresses in the `FORWARDED_ALLOW_IPS`
   environment variable, `127.0.0.1` by default. If nginx runs on another machine, set this
   variable to its address.
-- **`client_max_body_size 6m`** lets a study or a file of up to 5 MB through. nginx's own
-  limit is 1 MB: above it, nginx refuses Open and the file inputs (413) before the app
+- **`client_max_body_size 6m`** lets a study or a file of up to 5 MiB through. nginx's own
+  limit is 1 MiB: above it, nginx refuses Open and the file inputs (413) before the app
   sees the request. With a larger `max_upload_size`, set this limit to that size plus 1 MiB.
 - **`Strict-Transport-Security`** makes the browser use HTTPS for the site from then on. The
   session cookie has no `Secure` flag, so serve the app over HTTPS only. Redirect plain
   HTTP to HTTPS in a `server` block of its own.
 
 nginx passes the `Origin`, `Referer`, and `Sec-Fetch-*` headers on as the browser sent
-them. Don't remove them: the server needs them to accept the app's own requests.
+them. Do not remove them: the server needs them to accept the app's own requests.
 
 The app has no login. To ask for a password, add these lines to the `location` block:
 
@@ -383,4 +384,4 @@ printf "ada:%s\n" "$(openssl passwd -apr1)" >> /etc/nginx/app.htpasswd
 
 nginx then asks for a user and a password before the first page, and the browser sends
 them with each of the app's requests. Each user still gets their own session in each
-browser: the app doesn't know which user is logged in.
+browser: the app does not know which user is logged in.

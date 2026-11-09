@@ -11,7 +11,7 @@ view.
 ## Label
 
 A `LabelView` shows a line of read-only `text`, for example a caption or a result. Code sets
-the text. The user can't edit it.
+the text. The user cannot edit it.
 
 ```python
 from composeui.core.view import LabelView, child
@@ -24,7 +24,7 @@ Its `role` (`TextRole`) says what the text is, and each backend shows the role i
 - **`BODY`,** the default, is ordinary text.
 - **`TITLE`** and **`SUBTITLE`** name a part of a page.
 - **`CAPTION`** and **`MUTED`** are secondary text. A caption is smaller on Qt and the web.
-- **`ERROR`,** **`WARNING`** and **`SUCCESS`** report a result.
+- **`ERROR`,** **`WARNING`**, and **`SUCCESS`** report a result.
 
 ```python
 from composeui.core.view import LabelView, TextRole, child
@@ -56,7 +56,7 @@ red text. Textual and the web color the button by its variant.
 
 ## Help on a form row
 
-The `help` of a labelled row says what to enter. A "?" button beside the label shows it.
+The `help` of a labeled row says what to enter. A "?" button beside the label shows it.
 A click, a tap, or the keyboard opens it. Textual shows the help as a hint under the label.
 
 ## Text area
@@ -64,11 +64,12 @@ A click, a tap, or the keyboard opens it. Textual shows the help as a hint under
 A `TextAreaView` takes several lines of text, for example a comment. Its `text` holds the
 lines, separated by `"\n"`. In a form, use `LabelRowTextAreaView`.
 
-- Enter starts a new line. The field emits `editing_finished` when it loses the focus after
+- **Enter** starts a new line. The field emits `editing_finished` when it loses the focus after
   a change.
-- Tab goes to the next field, and does not go into the text.
-- Qt shows a `QPlainTextEdit`, Textual a `TextArea`, and the web a `<textarea>`. Each one
-  is four lines high.
+- **Tab** goes to the next field, and does not go into the text.
+
+Qt shows a `QPlainTextEdit`, Textual a `TextArea`, and the web a `<textarea>`. Each one
+is four lines high.
 
 The comment of [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is a text area.
 
@@ -77,8 +78,8 @@ The comment of [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is a
 An `IntInputView` takes a whole number between its `minimum` and `maximum`, for example
 an hour of the day.
 
-- Qt shows a spin box, which keeps the number in range.
-- The other backends show a text field for digits. They do not refuse a number out of
+- **Qt** shows a spin box, which keeps the number in range.
+- **The other backends** show a text field for digits. They do not refuse a number out of
   range (Textual marks it), so validate the number.
 
 ## Date input
@@ -92,10 +93,10 @@ follows the main view's language: "MM/dd/yyyy" in English, "dd/MM/yyyy" in Frenc
 
 The user can also pick the date from a calendar beside the field:
 
-- Qt shows its own calendar. It names the months and days in the system's language.
-- The web shows [Cally](https://wicky.nillia.ms/cally/), in the colors of the theme and in
+- **Qt** shows its own calendar. It names the months and days in the system's language.
+- **The web** shows [Cally](https://wicky.nillia.ms/cally/), in the colors of the theme and in
   the page's language.
-- Textual shows ComposeUI's own calendar. It names the months and days with the view's
+- **Textual** shows ComposeUI's own calendar. It names the months and days with the view's
   `month_names` and `day_names`.
 
 The calendar offers only the dates from `minimum` to `maximum`. But not every backend
@@ -122,29 +123,28 @@ class DataForm(FormView):
     )
 ```
 
-- `text` holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
+- **`text`** holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
   the field is empty.
-- `extensions` names the file types that the "…" button offers. On the web, the backend
+- **`extensions`** names the file types that the "…" button offers. On the web, the backend
   refuses a file of another type.
-- `path_picked` emits the path of a file that the user picks with the "…" button. A typed
+- **`path_picked`** emits the path of a file that the user picks with the "…" button. A typed
   path comes through the signals of any text field: `text_edited` and `editing_finished`.
-- With `has_reload`, a reload button shows beside the "…" button. It emits
+- **`has_reload`** adds a reload button beside the "…" button. It emits
   `reload_clicked`, for example to read the file again after it changed.
-- `browse_text` and `reload_text` name the two buttons in a tooltip and for a screen
+- **`browse_text`** and **`reload_text`** name the two buttons in a tooltip and for a screen
   reader. The catalogs translate them.
 
-The state saves `text` and `has_reload`, but not `extensions`, `server_roots` or `base_folder`,
+The state saves `text` and `has_reload`, but not `extensions`, `server_roots`, or `base_folder`,
 which the app sets.
 
 What the "…" button opens:
 
-- Qt shows its file dialog, in the directory of the field's path.
-- Textual shows the file picker of textual-fspicker, in the directory of the field's path.
-- The web shows the browser's file picker. The browser cannot give the page a path, so it
+- **Qt** shows its file dialog, in the folder of the field's path.
+- **Textual** shows the file picker of `textual-fspicker`, in the folder of the field's path.
+- **The web** shows the browser's file picker. The browser cannot give the page a path, so it
   uploads the file. The session keeps a copy, and the field shows the path of that copy. The
   session deletes the copy after the field's next upload, once the main view's jobs are over, or
-  when the session ends. With
-  `server_roots`, the web lists the server's files instead (see
+  when the session ends. With `server_roots`, the web lists the server's files instead (see
   [Files on the server](#files-on-the-server)).
 
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) opens a Markdown file
@@ -186,12 +186,12 @@ class StudyForm(FormView):
 ```
 
 - **What the web lists.** The "…" button opens a dialog with the folders and the files of
-  `extensions` in a folder, starting in the folder of the field's file, else in the only
-  root. A folder's item shows its files, and "Parent folder" goes up, as far as a root. With
+  `extensions` in a folder. The dialog starts in the folder of the field's file, else in the
+  only root. A folder's item shows its files, and "Parent folder" goes up, as far as a root. With
   several roots, the dialog starts with the list of the roots.
 - **Only the roots.** The dialog shows nothing outside the roots. It leaves out hidden items,
   whose name starts with a dot, and items that a symbolic link leads out of the roots to. A
-  root that doesn't exist is left out. A folder of more than 2,000 items is listed only in
+  root that does not exist is left out. A folder of more than 2,000 items is listed only in
   part: the dialog asks the user to type the file's path.
 - **The path picked.** A file's item puts the file's path on the server in the field, and
   `path_picked` emits it. The web copies nothing, so the files beside it stay beside it.
@@ -200,7 +200,7 @@ class StudyForm(FormView):
   show why it is `None`, as `_check_study` does above.
 - **Qt and Textual** open their dialogs in the first root while the field is empty. The user
   can leave the roots: the app runs on the user's own machine.
-- **The texts** of the dialog are `parent_folder_text`, `cancel_text`, `unreadable_folder_text`
+- **The texts** of the dialog are `parent_folder_text`, `cancel_text`, `unreadable_folder_text`,
   and `partial_folder_text`. The catalogs translate them.
 
 Every user of a web app sees the names of the folders and files in the roots. Give only the
@@ -287,21 +287,21 @@ class ExplorerView(MainView):
 - **`is_temporary`** tells whether `path` is a copy that the session owns.
 
 `clear()` empties the view. The file is not part of a study, so New and Open keep it, and a
-saved study holds no path to it. `extensions`, `browse_text`, `empty_text` and `uploading_text` set
+saved study holds no path to it. `extensions`, `browse_text`, `empty_text`, and `uploading_text` set
 the file types and the texts.
 
 What each backend does:
 
-- Qt shows a `QPushButton` that opens its file dialog, and a `QLabel`. `path` is the user's own
+- **Qt** shows a `QPushButton` that opens its file dialog, and a `QLabel`. `path` is the user's own
   file, without a copy.
-- Textual shows a button that opens the file picker of textual-fspicker, and a label. `path` is
-  the user's own file, without a copy.
-- The web shows a button that opens the browser's file picker. The browser uploads the file, and
+- **Textual** shows a button that opens the file picker of `textual-fspicker`, and a label. `path`
+  is the user's own file, without a copy.
+- **The web** shows a button that opens the browser's file picker. The browser uploads the file, and
   each session keeps its own copy. While the file goes, the button takes no click, and
   `uploading_text` shows beside it. A click elsewhere on the page does not wait for a long upload:
   the app sees the new file only in `uploaded`. A main view's `max_upload_size` limits the size (see
-  [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The status bar says why a file
-  is refused.
+  [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The
+  status bar says why a file is refused.
 
 ### When the copy is deleted
 
@@ -338,22 +338,22 @@ class OutputForm(FormView):
     )
 ```
 
-- `text` holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
+- **`text`** holds the path as the user typed it. `path` reads it as a `Path`, or `None` while
   the field is empty.
-- `path_picked` emits the path of a folder that the user picks with the "…" button. A typed
+- **`path_picked`** emits the path of a folder that the user picks with the "…" button. A typed
   path comes through the signals of any text field: `text_edited` and `editing_finished`.
-- `browse_text` names the "…" button in a tooltip and for a screen reader. The catalogs
+- **`browse_text`** names the "…" button in a tooltip and for a screen reader. The catalogs
   translate it.
 
 The state saves `text`, but not `server_roots` or `base_folder`, which the app sets.
 
 What the "…" button opens:
 
-- Qt shows its folder dialog (`QFileDialog.getExistingDirectory`), in the field's folder,
+- **Qt** shows its folder dialog (`QFileDialog.getExistingDirectory`), in the field's folder,
   else in the first of `server_roots`.
-- Textual shows the folder picker of textual-fspicker (`SelectDirectory`), in the same
+- **Textual** shows the folder picker of `textual-fspicker` (`SelectDirectory`), in the same
   folder.
-- The browser cannot give the page a folder's path. On the web, without `server_roots`,
+- **The web.** The browser cannot give the page a folder's path. On the web, without `server_roots`,
   the field has no "…" button: the user types the path. With `server_roots`, the button
   lists the server's folders in them, as a file field lists its files (see
   [Files on the server](#files-on-the-server)). A folder's item shows its folders, and
@@ -382,36 +382,35 @@ class ReportForm(FormView):
     )
 ```
 
-- `text` holds the path as the user typed it. `path` reads it as a `Path`, with the first of
+- **`text`** holds the path as the user typed it. `path` reads it as a `Path`, with the first of
   `extensions` added when the name has none of them: "report" reads as `report.pdf`.
   `path` is `None` while the field is empty.
-- `path_picked` emits the path that the user picks with the "…" button. A typed path comes
+- **`path_picked`** emits the path that the user picks with the "…" button. A typed path comes
   through the signals of any text field: `text_edited` and `editing_finished`.
-- With `confirms_overwrite` (on by default), the user agrees to replace a file that exists
-  before it is picked. `is_replace_agreed` remembers it. A path typed in the field isn't
+- **`confirms_overwrite`** (on by default) makes the user agree to replace a file that exists
+  before picking it. `is_replace_agreed` remembers it. A path typed in the field is not
   asked about: write the file with the main view's
   [`write_file`](organizing-the-window.md#replacing-a-file), which asks when the user saves.
-- `browse_text` ("Save as"), `file_name_text`, `save_text`, `replace_question_text` and
+- **`browse_text`** ("Save as"), `file_name_text`, `save_text`, `replace_question_text`, and
   `replace_text` name the button and the texts of the dialog. The catalogs translate them.
 
-The state saves `text`, but not `extensions`, `confirms_overwrite`, `server_roots` or
+The state saves `text`, but not `extensions`, `confirms_overwrite`, `server_roots`, or
 `base_folder`, which the app sets.
 
 What the "…" button opens:
 
-- Qt shows its save dialog, on the field's path, else in the first of `server_roots`. It
+- **Qt** shows its save dialog, on the field's path, else in the first of `server_roots`. It
   asks before it replaces a file. When the first extension, added to the name typed, names
   a file that exists, the field asks too.
-- Textual shows the save picker of textual-fspicker, on the same path. Before it replaces a
+- **Textual** shows the save picker of `textual-fspicker`, on the same path. Before it replaces a
   file, the field asks in a dialog of its own; Escape keeps the file.
-- The browser cannot give the page a path. On the web, without `server_roots`, the field has
-  no "…" button: the user types the path. With `server_roots`, the button lists the server's
-  folders in them and their files of `extensions` (see
-  [Files on the server](#files-on-the-server)). A file's item puts its name in the "File
-  name" box. "Save", or Enter in the box, picks the folder shown with that name. The
-  dialog asks there before it replaces a file, and refuses a name that is not a file's,
-  such as one with a separator, or a folder's. On the web, `path` is `None` for a path typed
-  outside the roots.
+- **The web.** The browser cannot give the page a path. On the web, without `server_roots`, the
+  field has no "…" button: the user types the path. With `server_roots`, the button lists the
+  server's folders in them and their files of `extensions` (see
+  [Files on the server](#files-on-the-server)). A file's item puts its name in the "File name" box.
+  "Save", or Enter in the box, picks the folder shown with that name. The dialog asks there before
+  it replaces a file, and refuses a name that is not a file's, such as one with a separator, or a
+  folder's. On the web, `path` is `None` for a path typed outside the roots.
 
 ## Slider
 
@@ -441,8 +440,8 @@ assert FloatSliderView.value_at(3, opacity.minimum, opacity.step) == 0.3
 ```
 
 The steps are exact: three steps of `0.1` give `0.3`, not `0.30000000000000004`. Every value shows
-with the same decimals, those of `step` or `minimum`, the most. A `value` that is not on a step
-shows at its nearest step. A `nan` or infinite number raises `ValueError`.
+with the same number of decimals: the larger of those of `step` and `minimum`. A `value` that is not
+on a step shows at its nearest step. A `nan` or infinite number raises `ValueError`.
 
 ## Progress bar
 
@@ -528,7 +527,7 @@ TreeNode(
   not. The app's code sets it, so it is never saved or loaded: build the nodes again from
   the model after a load.
 - **`mark`** is a `NodeMark` after the label: `DONE` (a green check), `WARNING` (an orange
-  "!") or `ERROR` (a red cross). The tree's `done_text`, `warning_text` and `error_text`
+  "!") or `ERROR` (a red cross). The tree's `done_text`, `warning_text`, and `error_text`
   name the marks: Qt shows the name as the mark's tooltip, and the web gives it to screen
   readers as the node's description.
 - **`is_bold`** and **`is_underlined`** style the label.
@@ -586,33 +585,32 @@ changes.
   proportions. `height` sets its height in pixels, and can make it grow.
 - **Description.** `description` says what the image shows, for a screen reader. Without an image,
   or with one that the backend cannot draw, the view shows this text.
-- **Saved state.** A study saves the `description`, not `image` or `height`. A file that a user
-  gives must not name a file to show. To show an image again after a study opens, set it in
-  `MainView.loaded`.
+- **Saved state.** A study saves the `description`, not `image` or `height`. A study can come from a
+  user, so it must not name a file for the app to show. To show an image again after a study opens,
+  set it in `MainView.loaded`.
 
-Qt shows the image in a `QLabel`, and reads the types that its plugins have, such as PNG, JPEG and
-SVG. The web shows an `<img>` of PNG, JPEG, GIF,
-WebP, BMP, ICO or SVG, and only the session that shows the image can get it. It does not serve any
-other type of file, whatever its name.
+Qt shows the image in a `QLabel`, and reads the types that its plugins have, such as PNG, JPEG, and
+SVG. The web shows an `<img>` of PNG, JPEG, GIF, WebP, BMP, ICO, or SVG, and only the session that
+shows the image can get it. It does not serve any other type of file, whatever its name.
 
 Textual shows the `description`, unless all of these are true. Then it draws the image in pixels:
 
 - The app has the `terminal-images` extra, which installs
-  [textual-image](https://github.com/lnqs/textual-image).
+  [`textual-image`](https://github.com/lnqs/textual-image).
 - Python is 3.12 or later.
-- The terminal supports Sixel or Kitty graphics. Textual-image asks the terminal when the app
+- The terminal supports Sixel or Kitty graphics. `textual-image` asks the terminal when the app
   starts.
 - Pillow can read the image: an SVG shows its `description`.
 
-The other terminals show the `description`, not an image in characters, which no figure reads well
-in. For a chart in any terminal, use a [`ChartView`](charts.md).
+The other terminals show the `description`. They show no image in characters, because a figure
+is hard to read that way. For a chart in any terminal, use a [`ChartView`](charts.md).
 
 [`src/examples/figureviewer.py`](../../src/examples/figureviewer.py) shows a logo from a file, and
 a Matplotlib figure that a slider redraws in a [task](threads.md).
 
 ## Drawing
 
-A `DrawingView` shows a diagram made of lines, shapes, and text. To update the diagram, assign a
+A `DrawingView` shows a diagram made of lines, shapes, and text. To update the diagram, set a
 new `shapes` list. Each backend draws the shapes itself, without an image.
 
 ```python
@@ -659,17 +657,21 @@ The shapes are drawn in order, the later ones on top. A point is an `(x, y)` pai
 | `TextShape` | A text at a position | `position`, `text` | `color`, `anchor`, `role` |
 | `DimensionShape` | A measurement: a line with a tick at each end and a label | `start`, `end`, `text` | `color`, `style`, `weight`, `role` |
 
-A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. With `fill`, the
-inside of a shape has the shape's `color`, or its `fill_color` if you set one, such as a pale area
-in a dark outline. A `style` is a
-[`LineStyle`](charts.md#reference-lines). A `TextAnchor` (`START`, `MIDDLE`, or `END`) says which
-part of the text stands at its position. A `weight` (`LineWeight.LIGHT`, `NORMAL`, or `HEAVY`)
-says how heavy a line is. A `role` is a [`TextRole`](#label), as on a label. A shape's `color`
-goes before the color of its role. A `DimensionShape` has a `LineWeight.LIGHT` line by default. Its
-label stands on the right of the line that goes from `start` to `end`, so it is below the line
-when `start` is on the left. On a sloped or vertical line, the text starts at the label's position
-and runs away from the line. A value that is not finite, a radius of 0 or less, a bad
-color, or too few points raise a `ValueError` when the app makes the shape.
+- **`color`** is `#rrggbb`. Without a color, the shape has the theme's text color. A shape's
+  `color` overrides the color of its role.
+- **`fill`** gives the inside of a shape the shape's `color`, or its `fill_color` if you set one,
+  such as a pale area in a dark outline.
+- **`style`** is a [`LineStyle`](charts.md#reference-lines).
+- **`anchor`** is a `TextAnchor` (`START`, `MIDDLE`, or `END`). It says which part of the text
+  stands at its position.
+- **`weight`** is a `LineWeight` (`LIGHT`, `NORMAL`, or `HEAVY`). It says how heavy a line is.
+- **`role`** is a [`TextRole`](#label), as on a label.
+- **A `DimensionShape`** has a `LineWeight.LIGHT` line by default. Its label stands on the right
+  of the line that goes from `start` to `end`, so it is below the line when `start` is on the
+  left. On a sloped or vertical line, the text starts at the label's position and runs away from
+  the line.
+- **Invalid values.** A value that is not finite, a radius of 0 or less, a bad color, or too few
+  points raise a `ValueError` when the app makes the shape.
 
 The view has these fields:
 
@@ -685,8 +687,9 @@ The view has these fields:
 
 The y axis goes up, and both axes have one scale, so a circle stays round. When the view changes
 size, these things keep their size on screen: a text, the width of the lines, the head of an
-arrow, and the ticks of a dimension, with the distance of its label from its line. A study saves the shapes and the bounds, but not the `height`. A shape's text is the app's
-data: translate it before making the shape.
+arrow, and the ticks of a dimension, with the distance of its label from its line. A study saves the
+shapes and the bounds, but not the `height`. A shape's text is the app's data: translate it before
+making the shape.
 
 Qt paints the shapes on a `QWidget`, and the web shows them as SVG. Textual draws them with colored
 braille characters. It writes the text over them, and the description on the last row. Textual
@@ -705,7 +708,6 @@ solver that a [job](threads.md) runs. To show one message to the user, such as a
 [log message](#log-message) instead.
 
 Call `append` with the new text, such as each line that the job reports as its progress:
-
 
 ```python
 import io
@@ -754,7 +756,7 @@ assert main_view.output.text == "Step 1\nDone\n"
 - **The text as it is.** The view never reads the text as markup: a tag shows as text.
 - **Scrolling.** The view scrolls to its end as text comes. When the user scrolls up to read,
   it stays there, until the user scrolls back to the end.
-- **Not study data.** The text is the app's output: a study never saves, loads or resets it.
+- **Not study data.** The text is the app's output: a study never saves, loads, or resets it.
 - **Save or copy the output.** The user saves the text to a file, named `export_filename`
   (`output.txt` by default) at first, or copies the whole text to the clipboard. In code,
   `export_text(path)` writes it in UTF-8, and the status bar says how it went.
@@ -766,8 +768,8 @@ assert main_view.output.text == "Step 1\nDone\n"
   Enter the next. New lines keep the current match, or the next one if it went with the
   oldest lines. `find_in_lines` finds the matches as the search does.
 - **Colors.** The view removes the escape sequences of a terminal from the text, such as
-  the ANSI codes that color a solver's output: the text reads, searches, copies and saves
-  as plain text. With `ansi_colors`, the view shows the colors and the bold, italic and
+  the ANSI codes that color a solver's output: the text reads, searches, copies, and saves
+  as plain text. With `ansi_colors`, the view shows the colors and the bold, italic, and
   underlined text that those codes ask for: 16, 256, or 24-bit colors. `line_styles` and
   `last_line_styles` give each line's styled parts, as `TextStyle`s.
 
@@ -780,18 +782,24 @@ assert main_view.output.text == "Step 1\nDone\n"
   assert output.line_styles[0] == ((0, 6, TextStyle(foreground="#cd3131", is_bold=True)),)
   ```
 
-Qt shows a read-only `QPlainTextEdit` in a fixed-width font, Textual a `Log`, and the web a
-box of preformatted text. Qt and the web wrap a long line; Textual scrolls sideways. The user
-selects and copies the text on each backend. On the web, a change sends only the new lines.
-To save the text, Qt has a "Save output…" button above it, which opens a save dialog;
-Textual has the key `s`, shown in the footer while the console has the focus; the web has a
-"Save output" link above it, which downloads the text. To copy it, Qt has a "Copy all"
-button, Textual the key `c`, and the web a "Copy all" button. Textual copies through the
-terminal, which must allow it. The web needs a secure page (HTTPS, or `localhost`) to write
-the clipboard: elsewhere, the button selects the text, for the user's Ctrl+C. To search it,
-Qt and the web have a search field above it, where Shift+Enter shows the previous match;
-Escape clears it on Qt. On Textual, `/` shows a search field, Escape hides it, and `n` and
-`N` show the next and the previous match.
+The user selects and copies the text on each backend. What each backend shows:
+
+- **Qt** shows a read-only `QPlainTextEdit` in a fixed-width font, and wraps a long line.
+  - A "Save output…" button above the text opens a save dialog.
+  - A "Copy all" button copies the text.
+  - A search field above the text finds the matches. Shift+Enter shows the previous match, and
+    Escape clears the field.
+- **Textual** shows a `Log`, and scrolls sideways for a long line.
+  - The key `s` saves the text. The footer shows the key while the console has the focus.
+  - The key `c` copies the text through the terminal, which must allow it.
+  - `/` shows a search field, and Escape hides it. `n` and `N` show the next and the previous
+    match.
+- **The web** shows a box of preformatted text, and wraps a long line. A change sends only the
+  new lines.
+  - A "Save output" link above the text downloads it.
+  - A "Copy all" button copies the text. To write the clipboard, the web needs a secure page
+    (HTTPS, or `localhost`). Elsewhere, the button selects the text, for the user's Ctrl+C.
+  - A search field above the text finds the matches. Shift+Enter shows the previous match.
 
 ## The File menu and picking a file
 
