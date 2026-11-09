@@ -4,6 +4,8 @@ A `MapView` shows geographic points over a street map that the user pans and zoo
 example the places of pickups or of measurements. For a plot on numeric axes, use a
 [`ChartView`](charts.md).
 
+These sections cover the coordinates and the viewport, the tiles, and what each backend draws.
+
 ```python
 from composeui.core.view import MainView, MapPoint, MapView, child, define_view
 
@@ -33,7 +35,7 @@ class PickupsMainView(MainView):
   longitude)` from `composeui.core.dataframesource` gives the points of two columns of a
   pandas, Polars, or PyArrow frame. It leaves out the rows that miss a coordinate, or that
   are out of the map's range.
-- **Points.** Assign a new `points` list to draw the blue dots again. The view does not
+- **Points.** Set a new `points` list to draw the blue dots again. The view does not
   limit the number of points: the app keeps a large dataset to a size that the map can show.
 - **Automatic fit.** `center` and `zoom` are `None` by default. The map then fits the
   points, with 32 pixels of padding on each side. It fits again when the points or the size
@@ -64,7 +66,8 @@ The map draws the streets from the standard raster tiles of OpenStreetMap,
 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. They need no API key, but they need
 internet access. Set `tiles=False` to draw only the points, with no tile requests.
 
-Follow the [tile usage policy of OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/):
+Follow the
+[tile usage policy of OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/):
 
 - **Keep the attribution.** The map shows **© OpenStreetMap contributors**.
 - **Identify the app.** `user_agent` is optional. By default, it gives the name and the
@@ -72,7 +75,7 @@ Follow the [tile usage policy of OpenStreetMap](https://operations.osmfoundation
   contact you. On the web, the browser sends its own identity, and the page's origin as its
   referrer.
 - **Keep the HTTP caching.** Neither backend downloads tiles in bulk or ahead of use.
-- **Don't count on the public server.** It does not promise to be available, or to accept
+- **Do not count on the public server.** It does not promise to be available, or to accept
   all traffic.
 
 The tile server receives the IP address of the user and the area of the map that it

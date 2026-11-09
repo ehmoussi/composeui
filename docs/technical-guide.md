@@ -82,7 +82,7 @@ toolkit.
 - A view names its renderer with its `_renderer_key` class variable, for example
   `"label"`.
 - `create_renderer(renderer_type, key, view)` imports the renderers module of the backend
-  and looks up the key. When the backend doesn't register the key, it returns `None`, and
+  and looks up the key. When the backend does not register the key, it returns `None`, and
   the view is not rendered. So a partial backend works.
 - A renderer class of the `"router"` or `"tabs"` key can set `renders_on_demand = True`, as
   Qt's do. `Router` and `TabView` read it with `renders_on_demand(renderer_type, key)`.
@@ -119,7 +119,7 @@ rendered object. It syncs them in both directions:
 handler. When a view attribute changes and it has no handler,
 `refresh_attribute` raises `MissingRefreshAttributeFunctionError`.
 
-Inside `stop_refresh()`, `is_updating_state()` is true. `notify_renderer` then doesn't
+Inside `stop_refresh()`, `is_updating_state()` is true. `notify_renderer` then does not
 refresh the toolkit with the values that came from it.
 
 `call_on_main_thread(callback)` calls the callback directly by default. Each backend of this
@@ -155,8 +155,9 @@ views. It costs nothing until a class with a `@reactive` method exists:
 - **A write tells the readers.** `_FieldReader.__set__` stores the value, then calls
   `Source.changed` when the value differs (`_differs`). So a write with `object.__setattr__`,
   which skips the renderer, still reaches the methods. The `__setattr__` refuses the write of
-  a field that the running method read (`check_write`), opens a batch, records no read in the
-  `on_setattr` hooks, and starts or stops the views that enter or leave the field.
+  a field that the running method read (`check_write`). It then opens a batch, and records no
+  read in the `on_setattr` hooks. It also starts or stops the views that enter or leave the
+  field.
 - **Batches.** `batch()` holds the methods to run in the `_PENDING` context variable, and runs
   them when the outermost batch ends. `Signal.emit`, `Renderer.stop_refresh`, the web session's
   handling of an event, New and Open (`_apply_state`, `_reset_state`), and `start_reactions`
@@ -168,7 +169,7 @@ views. It costs nothing until a class with a `@reactive` method exists:
 - **No leaks.** A `Source` holds its readers by weak key, and a `_Reaction` its view by weak
   reference. An ended web session calls `stop_reactions` on its main view.
 - **Tasks.** A `Task` has a `Source` too. Reading its state records it, its `changed` signal
-  calls `Source.changed`, and `start`, `start_latest` and `cancel` call `check_change`.
+  calls `Source.changed`, and `start`, `start_latest`, and `cancel` call `check_change`.
 
 `tests/test_reactivity.py` tests each of these rules.
 
@@ -180,7 +181,7 @@ be excluded:
 
 - Fields of the types in `_OMITTED_TYPES` (`Signal`, `Renderer`, `RendererContainer`,
   `threading.Timer`) are skipped automatically.
-- Other fields that can't be serialized, such as `Validator` fields, take the `OMIT`
+- Other fields that cannot be serialized, such as `Validator` fields, take the `OMIT`
   metadata key.
 - Text that the app's code sets, not the user, takes the `UI_TEXT` metadata key. See
   [Saving and loading state](user-guide/building-views.md#saving-and-loading-state).
@@ -310,7 +311,7 @@ section covers what users see.
   responses, with Starlette (not FastAPI) and no JavaScript framework. Each renderer writes its
   HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
-  files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value or
+  files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
   triggers on a custom event (`enter-key`, `escape-key`, `activate`), and `static/page.js` does
   the rest.
@@ -318,8 +319,8 @@ section covers what users see.
   attribute), so a later swap has a target.
 - **Updates.** Setting a view attribute marks its renderer dirty in a request-scoped set
   (`collect_dirty`, a no-op outside requests). The route then renders every dirty fragment as
-  an OOB swap (`render_dirty`). Controls use `hx-swap="none"` and the sender is never swapped
-  back, so typing is never interrupted. The one exception is a float field left with
+  an out-of-band (OOB) swap (`render_dirty`). Controls use `hx-swap="none"` and the sender is never
+  swapped back, so typing is never interrupted. The one exception is a float field left with
   unparsable text, swapped back to the view's value.
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's lock,
   and keeps what it changed in the session's `pending`. They are sent with the next event's
@@ -339,7 +340,7 @@ section covers what users see.
   and posts the row under the headers with its offset. The server sizes the filler above the
   new window so that this row stays there, the frame's height kept. A new order swaps the whole
   frame, back at the top.
-- **A table's parts.** A sort, a search or a filter swaps only what it changes (the headers'
+- **A table's parts.** A sort, a search, or a filter swaps only what it changes (the headers'
   row, the `<tbody>`, the count, the filter bar), never the search field being typed in. The
   bar goes last in the response: it may hold the element that sent the request (the filter
   editor's form), and htmx swaps no fragment after that one is gone. The `<tr>` and `<tbody>`
@@ -375,51 +376,51 @@ section covers what users see.
 - **A long upload and the order.** A file's post takes its turn (`order.py`) once its whole body
   has arrived, so a later post runs first after `ORDER_TIMEOUT`. Waiting for the upload would
   hold every click for as long as the network takes. So `page.js` marks only the upload's own
-  button, and the docs say that a click doesn't wait.
+  button, and the docs say that a click does not wait.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a bad
   file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.
 
 ### Pages, tabs, and dialogs
 
-- **Pages and tabs.** The router sends only the shown page. A change on another page isn't
+- **Pages and tabs.** The router sends only the shown page. A change on another page is not
   sent: the page brings it once shown, as navigating swaps the router. Tabs send only the shown
   tab's views, and the other panels stay empty. The browser shows the tab picked at once. Then
   the answer to its post fills the tab picked and empties the tab left.
 - **Dialogs** render at the end of the page, outside the shown page's slot: a page not shown
-  isn't sent, and would take them with it. The browser opens a modal `<dialog>` only from a
+  is not sent, and would take them with it. The browser opens a modal `<dialog>` only from a
   script: `page.js` opens each one swapped in shown, once. A button closes its dialog in the
   browser first, so the focus returns where it was, then posts its answer. The server swaps it
   closed.
 
 ### The header, icons, and images
 
-- **Header.** A web app's header, not a desktop menu bar: File's New, Open and Save are buttons
-  of their own (Save As and Exit left out). Any other menu is a dropdown under its title, marked
+- **Header.** A web app's header, not a desktop menu bar: File's New, Open, and Save are buttons
+  of their own (Save As and Exit left out). Any other menu is a drop-down under its title, marked
   with a chevron so it reads apart from the buttons. A `ToolBar`'s buttons go before the menus.
-  A dropdown is as wide as its longest item, the shortcut a faded hint beside it. On a phone,
-  the buttons with an icon keep only their icon and the app's title is cut short, so the header
-  holds on one line, with the pages' toolbar on a row of its own.
+  A drop-down is as wide as its longest item, the shortcut a faded hint beside it. On a phone,
+  the buttons with an icon keep only their icon, and the app's title is cut short. So the header
+  holds on one line. The pages' toolbar has a row of its own.
 - **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the file at
   `/icon/<digest><suffix>`, an address naming its content, cached for good. Only image files
   that a view has named are served, and `icon` is never loaded from a study, so no request can
   name a file. An SVG is drawn as a CSS mask in the text's color, so it follows the theme like
-  the built-in New, Open and Save icons. Another image shows as it is.
+  the built-in New, Open, and Save icons. Another image shows as it is.
 - **Images.** An `ImageView` has its own route, `/widget/{id}/picture`, that answers its session
   only: an image can be private, so it stays out of the process's registry of icons. A `data:`
   address would send it again with each swap. The address names the content by its digest, so a
   browser can keep it, and an older digest answers 404, never another image. The route serves
   only what starts as an image, as an app may set a path that a user typed. `image` is never
-  loaded from a study, as `icon` isn't.
+  loaded from a study, as `icon` is not.
 - **Drawings.** A `DrawingView` is SVG that the server makes from validated shapes, with no
   script. The element keeps the proportions of `bounds`, so a percentage of it places a point.
   Each shape is in a nested `<svg>` with a `viewBox`, which clips it to `bounds`, and its stroke
-  doesn't scale. A text, an arrow head, and a dimension's ticks stand at a percentage and are sized
-  in pixels, so they keep their size. They stay outside the nested `<svg>`: a text near the edge isn't cut. Only the
-  browser knows the scale on the page, so an arrow's line stops inside its head by a length
-  computed at the largest size that the view can have.
-- **By design:** `Menu.is_visible` is ignored (a dropdown is always shown). An action's `data`
-  isn't displayed. Ctrl shortcuts become Alt+Shift. An unknown page address is a 404, not a
+  does not scale. A text, an arrow head, and a dimension's ticks stand at a percentage and are sized
+  in pixels, so they keep their size. They stay outside the nested `<svg>`: a text near the edge
+  is not cut. Only the browser knows the scale on the page, so an arrow's line stops inside its head
+  by a length computed at the largest size that the view can have.
+- **By design:** `Menu.is_visible` is ignored (a drop-down is always shown). An action's `data`
+  is not displayed. Ctrl shortcuts become Alt+Shift. An unknown page address is a 404, not a
   redirect: browsers ask for addresses of their own, like `/favicon.ico`.
 
 ### Testing the web backend
@@ -466,7 +467,7 @@ On Qt, `--reload` works like this:
    study file's path, the language shown, and the state of a new main view of this code.
    `load_reloaded_state` compares that state with a new main view of the changed code. A
    field that differs takes the value of the changed code (`_with_code_edits`). Both views
-   come from the class, so that a build function can't make them differ without an edit.
+   come from the class, so that a build function cannot make them differ without an edit.
 4. **In place.** When only the app's own code changed (`can_reload_in_place`),
    `rerun_program` removes the program's modules from `sys.modules`. These are the modules
    under the current directory, without ComposeUI's. Then it runs the program again as a new
@@ -609,7 +610,7 @@ On Windows without `make`, run the same targets in PowerShell with `make.ps1`, s
 `TAILWIND_PLATFORM` as `-TailwindPlatform`. When you change a target in the `Makefile`,
 change it in `make.ps1` too.
 
-`make mypy` checks source, examples and tests together. It installs the `browser` group and
+`make mypy` checks source, examples, and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
 also install the `typecheck` group. Use an individual target to run one checker, or
 `.\make.ps1 typecheck` on Windows.
@@ -726,7 +727,7 @@ To update one of them:
   `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
   A widget's own slots are methods of a `QObject`, and need no `QtSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
-  an f-string. `format` escapes every value that isn't `Markup` itself.
+  an f-string. `format` escapes every value that is not `Markup` itself.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
 - Before you change code that holds state over time, write down its states and events, and what
   each event does in each state. The `state-machines` skill gives the method. It applies to jobs,
@@ -777,7 +778,7 @@ uv sync --group dev --group docs --all-extras
   Textual, and the web, in the light theme. The script sets each example up first, for
   example by filling in its form or running its job, so every backend shows the same
   state. It needs the `browser` group and Chromium, as `make browser-test` does. When an
-  example changes what it shows, update its set-up in the script, run
+  example changes what it shows, update its setup in the script, run
   `make screenshots EXAMPLES=<example>`, and commit the images. The script also takes
   `docs/images/quickstart-web.png` for the README. It runs the code of the README's
   quickstart, so run `make screenshots EXAMPLES=quickstart` when the quickstart changes.
@@ -790,7 +791,7 @@ the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.1
 `.\make.ps1 translations test`, and on macOS `make translations test`, on Python 3.9 and
 3.14. Run `make check test` before you commit.
 
-The existing mypy matrix checks source, examples and tests together. Separate jobs run
+The existing mypy matrix checks source, examples, and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
 configuration. Failures in these jobs fail the workflow. Run `make typecheck` locally to
 run all four type checkers.

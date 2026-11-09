@@ -45,11 +45,11 @@ options, such as `--language` and `-f FILE`.
 
 | Example | Default backend | Shows |
 | --- | --- | --- |
-| [`pipeform.py`](../src/examples/pipeform.py) | web | Forms, validation, pages, a menu, a confirm dialog, Markdown help, a French translation |
+| [`pipeform.py`](../src/examples/pipeform.py) | web | Forms and their checks, pages, a menu, a confirm dialog, Markdown help, a French translation |
 | [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
 | [`studyinputs.py`](../src/examples/studyinputs.py) | web | A table of a study's files: paths picked by each row's kind, relative to the study's folder; a summary saved after asking before replacing a file |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
-| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked and disabled cells, cells spanning rows, a header group, row headers |
+| [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked, and disabled cells, cells spanning rows, a header group, row headers |
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
@@ -79,9 +79,11 @@ Read the examples in this order. Each one adds a few features to the ones before
 
 The other examples each show one topic:
 
+- [Study inputs](#study-inputs): a table of a study's files, with a path widget for each row's
+  kind.
 - [Large table](#large-table): a million rows of SQLite in a large table.
 - [Uber pickups](#uber-pickups): a CSV download in a loading task, a bar chart, and a map.
-- [Data explorer](#data-explorer): a user's own file, uploaded, filtered and exported.
+- [Data explorer](#data-explorer): a user's own file, uploaded, filtered, and exported.
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe): the same app on a
   dataframe, in a large table.
 - [Figure viewer](#figure-viewer): an analysis's own Matplotlib figure, redrawn by a slider.
@@ -112,15 +114,15 @@ On the web:
 
 It shows:
 
-- [forms](user-guide/building-views.md#forms-and-their-fields) with labelled rows: text, float
-  inputs, a checkbox, radio groups, a combobox, and a comment of several lines;
-- validation on a row, such as the name, and across rows, such as a main pipe that must
-  fit the incident pipe;
+- [forms](user-guide/building-views.md#forms-and-their-fields) with labeled rows: text, float
+  inputs, a check box, radio groups, a combobox, and a comment of several lines.
+- checks on a row, such as the name, and across rows, such as a main pipe that must
+  fit the incident pipe.
 - three [pages](user-guide/organizing-the-window.md#pages): Inputs, Results (a read-only table of
-  the dimensions), and Help (a [Markdown](user-guide/widgets.md#markdown) page);
+  the dimensions), and Help (a [Markdown](user-guide/widgets.md#markdown) page).
 - a Pipe menu, whose Reset Dimensions asks for a
-  [confirmation](user-guide/organizing-the-window.md#dialogs) first;
-- the File menu, which saves and loads the study as a `.pipe` file;
+  [confirmation](user-guide/organizing-the-window.md#dialogs) first.
+- the File menu, which saves and loads the study as a `.pipe` file.
 - a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
 
@@ -129,7 +131,7 @@ It shows:
 [`markdownviewer.py`](../src/examples/markdownviewer.py) shows a Markdown file.
 
 ```bash
-uv run python -m examples.markdownviewer --markdown README.md --backend qt
+uv run python -m examples.markdownviewer --markdown README.md   # web; or --backend qt, or textual
 ```
 
 On Qt:
@@ -146,9 +148,9 @@ On the web:
 
 It shows:
 
-- a [Markdown view](user-guide/widgets.md#markdown);
+- a [Markdown view](user-guide/widgets.md#markdown).
 - an [option of the app's own](user-guide/building-views.md#command-line-options-of-your-own):
-  `--markdown`, beside the options of the backend;
+  `--markdown`, beside the options of the backend.
 - a [file path input](user-guide/widgets.md#file-path-input) at the top: the user types the path of
   a file, or picks the file with the "…" button. On the web, the browser uploads it. The
   reload button reads the file again, for example after the user edits it.
@@ -160,7 +162,7 @@ It shows:
 which the study reads or writes.
 
 ```bash
-uv run python -m examples.studyinputs --study ~/studies/beam --backend qt
+uv run python -m examples.studyinputs --study ~/studies/beam   # web; or --backend qt, or textual
 ```
 
 On Qt:
@@ -178,7 +180,7 @@ On the web:
 It shows:
 
 - a table with a [combobox](user-guide/tables.md#widgets-in-cells) of each row's kind: an input
-  file, an input folder, an output file, or an output folder;
+  file, an input folder, an output file, or an output folder.
 - [paths by the row's kind](user-guide/tables.md#paths-by-the-rows-kind): the "…" button of a
   row's path picks a file, a folder, or a file to write, as its kind says. When the user
   changes the kind, the button follows. An output file may not exist yet, and picking one
@@ -218,14 +220,14 @@ It shows:
   runs in a thread and never touches a view. Its job emits the status of the task on the main
   thread, where the views show it. A button cancels the jobs.
 - a configuration form with an [integer input](user-guide/widgets.md#integer-input) and a
-  [slider](user-guide/widgets.md#slider);
-- a [progress bar](user-guide/widgets.md#progress-bar) of the tasks done;
+  [slider](user-guide/widgets.md#slider).
+- a [progress bar](user-guide/widgets.md#progress-bar) of the tasks done.
 - [metrics](user-guide/widgets.md#metric) that count the tasks. Once a run is over, they show how
   each count changed since the last run.
 - a [step chart](user-guide/charts.md#colors-fill-steps-and-height) of the tasks running over the
-  time of the run;
+  time of the run.
 - an [expander](user-guide/widgets.md#expander) with the table of the tasks, which collapses to
-  leave only the metrics and the chart;
+  leave only the metrics and the chart.
 - [widgets in cells](user-guide/tables.md#widgets-in-cells): the Retry button of a task
   runs it again. The error of a failed task is a link that opens a dialog with its details.
 - a [French translation](user-guide/translation.md) and a Language menu.
@@ -254,31 +256,31 @@ On the web:
 It shows:
 
 - a [line chart](user-guide/charts.md): each click on Add Curve plots one curve for the
-  diameter in the form, with its own flow rates;
+  diameter in the form, with its own flow rates.
 - a gap in a curve: between laminar and turbulent flow neither law holds, so the curve
-  leaves a gap there (a NaN);
+  leaves a gap there (a NaN).
 - [scatter series](user-guide/charts.md#kinds-of-chart): Add Measurements plots, as dots over the
-  curves, what a test rig measured on that pipe;
-- a [reference line](user-guide/charts.md#reference-lines) at the pressure of the pump;
+  curves, what a test rig measured on that pipe.
+- a [reference line](user-guide/charts.md#reference-lines) at the pressure of the pump.
 - [tabs](user-guide/organizing-the-window.md#tabs): the chart on one tab, and the measurements in a
   [table of records](user-guide/tables.md#a-table-of-records) on the Measurements tab,
-  each against the computed drop;
+  each against the computed drop.
 - [how cells and headers look](user-guide/tables.md#how-cells-and-headers-look) on the
   Measurements tab:
-  - the pipe's cell spans the rows of its measurements;
-  - "Pressure Drop (kPa)" is a header over "Measured" and "Computed";
-  - a computed drop that the model can't give (NaN, in transitional flow) is red;
-  - a deviation over 10 % is orange, with a warning mark;
-  - the Kept check box of a NaN row is disabled: that measurement can't be compared with
-    the model;
-  - a summary under the table shows the measurements kept, with a header before each row;
+  - the pipe's cell spans the rows of its measurements.
+  - "Pressure Drop (kPa)" is a header over "Measured" and "Computed".
+  - a computed drop that the model cannot give (NaN, in transitional flow) is red.
+  - a deviation over 10 % is orange, with a warning mark.
+  - the Kept check box of a NaN row is disabled: that measurement cannot be compared with
+    the model.
+  - a summary under the table shows the measurements kept, with a header before each row.
 - [widgets in cells](user-guide/tables.md#widgets-in-cells): the Curves tab lists every
   curve. A check box shows or hides the curve, and the box in the header shows or hides them all. A
   combobox draws the curve as a line, in steps, or as dots.
 
 ## Pipe catalogue
 
-[`pipecatalogue.py`](../src/examples/pipecatalogue.py) is a catalogue of pipes, kept in a
+[`pipecatalogue.py`](../src/examples/pipecatalogue.py) is a catalog of pipes, kept in a
 SQLite database.
 
 ```bash
@@ -303,7 +305,7 @@ It shows:
   model's database, not view state. The database checks every pipe added or changed: a name,
   positive dimensions, and a wall thinner than the radius. A SQL view computes the mass of each pipe
   from its material.
-- a [sidebar](user-guide/organizing-the-window.md#sidebar) with a form that adds a pipe;
+- a [sidebar](user-guide/organizing-the-window.md#sidebar) with a form that adds a pipe.
 - a [list of views](user-guide/organizing-the-window.md#a-list-of-views): an
   [expander](user-guide/widgets.md#expander) per pipe, with its Edit and Delete buttons. A query
   filters the list by material, radius, and installation date.
@@ -313,9 +315,9 @@ It shows:
   user selects a pipe in the tree, its expander expands.
 - a [form dialog](user-guide/organizing-the-window.md#form-dialogs) that edits a pipe. Its
   [Apply button](user-guide/organizing-the-window.md#buttons-and-checks-of-a-dialog) saves the
-  pipe, says so in the dialog, and leaves the dialog open. The dialog checks that no other pipe has the name, and
-  shows why the database refuses a pipe;
-- a [date input](user-guide/widgets.md#date-input) for the installation date of a pipe;
+  pipe, says so in the dialog, and leaves the dialog open. The dialog checks that no other pipe has
+  the name, and shows why the database refuses a pipe.
+- a [date input](user-guide/widgets.md#date-input) for the installation date of a pipe.
 - studies saved as a `.pipes` file with the views and the database. A study saved before
   pipes had an installation date gets the column, empty, when it opens, through a
   migration (`PipeCatalogueModel.migrations`).
@@ -349,11 +351,11 @@ It shows:
   write is emitted on the main thread, where the views show the runs written so far. Cancel stops
   the sweep after the current run.
 - a form that checks the sweep before it starts, such as a wall thinner than the minimum
-  radius;
+  radius.
 - a [progress bar](user-guide/widgets.md#progress-bar) of the runs written, and two
   [tabs](user-guide/organizing-the-window.md#tabs): a [line chart](user-guide/charts.md) of the
-  runs, and a table of them;
-- the File menu, which saves and opens the runs with the views as a `.sweep` file;
+  runs, and a table of them.
+- the File menu, which saves and opens the runs with the views as a `.sweep` file.
 - a [French translation](user-guide/translation.md) and a Language menu. To start in
   French, add `--language fr`.
 
@@ -435,7 +437,7 @@ It shows:
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a
   job. `Task.show_state` shows its state in a status line: the count of rows read, or the
   error. It shows the chart and the map once the task has a result.
-- [reactive methods](user-guide/reactive-methods.md) that give the table, the chart and the
+- [reactive methods](user-guide/reactive-methods.md) that give the table, the chart, and the
   map their data, with no callback. One shows the task's result in the chart. One follows the
   slider: it gives the table the rows of the hour, marks the hour on the chart, and starts the
   query of the map's points. One shows the points in the map.
@@ -459,11 +461,10 @@ It shows:
 - a `DashboardView`: a [wide main view](user-guide/organizing-the-window.md#page-width)
   without pages. This one keeps the File menu, so that a study saves the rows.
 - the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of the
-  slider's hour. Its [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) selects them with
-  its own query. Its
-  [filter bar](user-guide/tables.md#sorting-and-filtering-a-large-table) filters them
-  further, such as by base, and keeps its filters when the hour changes.
-  `CheckBoxMixin.shows` shows the table only while the sidebar's check box is checked.
+  slider's hour. Its [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) selects them with its own
+  query. Its [filter bar](user-guide/tables.md#sorting-and-filtering-a-large-table) filters them
+  further, such as by base, and keeps its filters when the hour changes. `CheckBoxMixin.shows` shows
+  the table only while the sidebar's check box is checked.
 
 ## Uber pickups on a dataframe
 
@@ -498,7 +499,7 @@ It shows:
 
 - a [large table](user-guide/tables.md#a-large-table) on a
   [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe) of the pickups of the
-  slider's hour: Polars sorts, searches, and filters them;
+  slider's hour: Polars sorts, searches, and filters them.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
   file. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
   the main thread. One gives the chart its series. The other follows the slider: it gives the
@@ -508,7 +509,6 @@ It shows:
   The chart's series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and
   the map's points from the frame, with
   [`points_of`](user-guide/maps.md#coordinates-points-and-viewport).
-
 
 ## Data explorer
 
@@ -520,7 +520,7 @@ uv run python -m examples.dataexplorer   # web; or --backend qt, or textual
 ```
 
 It needs the `dataframe` extra and Polars, which reads both formats. It finds a CSV file's
-separator (a comma, a semicolon, a tab or a bar) from the file's first line, and refuses a
+separator (a comma, a semicolon, a tab, or a bar) from the file's first line, and refuses a
 compressed CSV file. These screenshots use made-up rows.
 
 Each session reads its whole file into memory. A Parquet file is compressed, so it can take much
@@ -544,7 +544,7 @@ It shows:
 - a [file upload](user-guide/widgets.md#file-upload), with a larger `max_upload_size` than the
   default. On the web, each session keeps its own copy of the file.
 - a [reusable task](user-guide/threads.md#reusable-loading-tasks) that reads the file. A new file
-  replaces the one being read, and a file that can't be read says why.
+  replaces the one being read, and a file that cannot be read says why.
 - [metrics](user-guide/widgets.md#metric) that summarize the file.
 - a [large table](user-guide/tables.md#a-large-table) on a `DataFrameSource`, which shows the
   file's own columns. The user filters its rows, and exports those shown as CSV.
@@ -582,7 +582,7 @@ It shows:
 - a [slider](user-guide/widgets.md#slider) that starts a
   [task](user-guide/threads.md#reusable-loading-tasks) with `start_latest`, so only the latest
   value shows.
-- `MainView.loaded`, which draws the figure again after a study opens, as a study doesn't save
+- `MainView.loaded`, which draws the figure again after a study opens, as a study does not save
   an image.
 
 ## Batman
@@ -608,7 +608,7 @@ On the web:
 It shows:
 
 - [series colors and fills](user-guide/charts.md#colors-fill-steps-and-height): a yellow oval and
-  the edges of the bat in black, each series in the color of the logo, whatever the theme;
+  the edges of the bat in black, each series in the color of the logo, whatever the theme.
 - [clicks on a chart](user-guide/charts.md#clicks-on-a-chart): `clicked` emits the point, and the
   view says whether it is on the bat. Textual draws the logo too, but a terminal has no
   pointer to click it with.
@@ -626,9 +626,9 @@ uv run python -m examples.webhello
 
 It serves http://127.0.0.1:8000. It shows:
 
-- an application built as a `WebApplication` subclass, without `run`;
-- a form with a text input, a float input, a radio group, and a combobox, with validation
-  on the name and the age;
+- an application built as a `WebApplication` subclass, without `run`.
+- a form with a text input, a float input, a radio group, and a combobox, with checks
+  on the name and the age.
 - one keystroke that updates the status bar, the log of the row, and a summary label at
   once.
 
@@ -637,7 +637,7 @@ It serves http://127.0.0.1:8000. It shows:
 [`textual_demo.py`](../src/examples/textual_demo.py) is a small form in a terminal.
 
 ```bash
-uv run python -m examples.textual_demo
+uv run python -m examples.textual_demo   # textual; or --backend qt, or web
 ```
 
 On Qt:

@@ -78,9 +78,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   `RENDERERS: dict[str, Callable[[Any], Renderer]]` mapping, and of its application module,
   exposing `APPLICATION` and `MODEL_APPLICATION` (what `core.application.run` starts),
   plus the extra that installs its dependencies and their top-level modules (`run` names
-  the extra when one is missing). A view picks its renderer by its `_renderer_key` class variable. A backend that doesn't
-  register a key simply doesn't render that view (returns `None`), so partial backends are
-  fine.
+  the extra when one is missing). A view picks its renderer by its `_renderer_key` class variable. A
+  backend that doesn't register a key simply doesn't render that view (returns `None`), so partial
+  backends are fine.
 - **Adding a widget:** define the view in `core/view.py` (set `_renderer_key`), then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
 - **Adding a backend:** add one `RendererType` member in `core/registry.py` (with its extra
@@ -193,10 +193,10 @@ document owns what, and the checks.
   in its page of `docs/user-guide/` and a class docstring, which the widget catalog shows. Add
   it to the summary of its page in `docs/_site/llms.txt`, to the list of larger views in
   "Building views" if it is one, and to "Design of the web backend" in the technical guide if
-  its web renderer makes a decision that isn't obvious. In `ROADMAP.md`, delete its item. A new example gets its
-  section, its overview row, its contents entry, and its screenshots in
-  `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/`
-  and the docstrings for it, and fix every place.
+  its web renderer makes a decision that isn't obvious. In `ROADMAP.md`, delete its item. A new
+  example gets its section, its overview row, its contents entry, and its screenshots in
+  `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/` and the
+  docstrings for it, and fix every place.
 - **Keep the path of a new user working:** the README's installation and quickstart, then
   the user guide's "Core concepts" and "Building views", then "Where to start" in the
   examples guide. Introduce a name before an example uses it, or link to its section. When

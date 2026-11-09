@@ -79,8 +79,9 @@ ComposeUI against these yet: each "What to check" is an open question, not a fin
 | `SqliteModel` and model code | [Query Parameterization](https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html) | Values go as query parameters; the one f-string query (`PRAGMA user_version`) passes through `int()`. |
 | Errors, `--debug`, refused requests | [Error Handling](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html), [Logging](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) | No traceback reaches the browser, even with `--debug`. Whether to log the origin check's refusals. |
 
-For a whole review, use [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
-Level 1 as the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
+For a whole review, use
+[OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/) Level 1 as
+the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
 
 ## What `webcore` already does
 

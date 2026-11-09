@@ -9,7 +9,7 @@ language has one `<language>.json` file, which maps each text to its translation
 
 Declare the text that a view shows with `T`, where the class of the view declares it. Or
 set the text through the `tr` of a view once the view is built. Point the main view at the
-directory of the catalogs:
+folder of the catalogs:
 
 ```python
 from pathlib import Path
@@ -66,7 +66,7 @@ base language (`fr.json`). Text that no catalog translates shows as written.
 - **A `LanguageMenu` field of the main view lets the user switch:**
   `language_menu: LanguageMenu = Factory(LanguageMenu)`. It offers `source_language` and a
   language per catalog in `translations_dir`, each named in itself ("Français"). It keeps
-  the language shown checked, and it is not study data. A language that it can't name shows
+  the language shown checked, and it is not study data. A language that it cannot name shows
   its code. Name it in a subclass: `names = {**LanguageMenu.names, "eo": "Esperanto"}`.
 
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is translated into French. Start
@@ -103,6 +103,6 @@ uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView 
 
 - The existing entries are kept.
 - A translation left empty counts as missing, and the text shows as written.
-- `--write` doesn't add text that the catalog of ComposeUI translates in that language (the
+- `--write` does not add text that the catalog of ComposeUI translates in that language (the
   File menu, OK, and so on).
 - A new regional catalog (`fr-CA`) starts from the catalog of its base language.

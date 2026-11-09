@@ -25,7 +25,7 @@ ComposeUI follows the Model-View-ViewModel pattern, but its names are not the us
 
 | MVVM | ComposeUI |
 | --- | --- |
-| Model | The model, a `Model` or a `SqliteModel`. It knows no view. It tells of its changes with signals. |
+| Model | The model, a `Model` or a `SqliteModel`. It knows no view. It reports its changes with signals. |
 | ViewModel | The views of `composeui.core.view`. They hold the state of the UI as typed fields, and their signals and callbacks act on the model. |
 | View | The widget of the backend: a Qt widget, a Textual widget, or an HTML element. Your code does not touch it. |
 | Binding | The renderer. It pushes each change of a view to its widget, and copies the widget's state back. |

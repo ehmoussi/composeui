@@ -52,8 +52,9 @@ Each case does these steps, in order:
 4. **Show the table**, then **sort** it by latitude. On the core, **filter** it
    (`>40.75`), then **clear the filter**. On the web, **scroll** to row 5,000.
 
-On the core, the benchmark moves the slider and checks the box as a renderer does. It sets
-the view's attribute, then emits its signal (`value_changed`, `toggled`).
+   On the core, the benchmark moves the slider and checks the box as a renderer does. It sets
+   the view's attribute, then emits its signal (`value_changed`, `toggled`).
+
 5. **Close** the model and drop the app (core only), then check that the main view is freed.
 
 Each run is a process of its own, so that its memory is its own. The timed runs and the

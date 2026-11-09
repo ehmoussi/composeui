@@ -3,11 +3,12 @@
 ComposeUI ships a skill for coding agents: a `SKILL.md` file that an agent loads when it
 writes or changes a ComposeUI app. It holds the rules that keep an app correct on every
 backend, a minimal app, and links to this documentation. It does not replace the guides: the
-agent reads them for the details.
+agent reads them for the details. These sections say how to install the skill, and how to
+point an agent at the documentation.
 
 ## Install the skill
 
-Download the file into `.agents/skills/composeui/` in your project, the skills directory
+Download the file into `.agents/skills/composeui/` in your project, the skills folder
 that many coding agents read:
 
 ```bash
@@ -17,7 +18,7 @@ curl -o .agents/skills/composeui/SKILL.md \
 ```
 
 Claude Code reads `.claude/skills/` instead. Make it a symbolic link to `.agents/skills/`,
-so that both directories hold the same files and one download updates them:
+so that both folders hold the same files and one download updates them:
 
 ```bash
 mkdir -p .claude
@@ -47,7 +48,7 @@ curl -o .agents/skills/composeui/SKILL.md \
 ```
 
 The version of a commit, such as `0.2.1.dev4+g1a2b3c4`, starts with the minor version of
-the previous release. So the agent can't tell from it that the copy is older than the code.
+the previous release. So the agent cannot tell from it that the copy is older than the code.
 
 The skill is for the app's code, not for ComposeUI's own: to change ComposeUI, read the
 [technical guide](../technical-guide.md) and `AGENTS.md`.

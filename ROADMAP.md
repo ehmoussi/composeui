@@ -140,7 +140,7 @@ The SQLite model is complete otherwise: do not rebuild it.
   means.
 - **Entries** (Next). A row with a title, a description, an icon, a badge and its actions, alone
   or in a list, such as recent files.
-- **Optional fields and durations** (Next). A field enabled by a checkbox beside it, whose value
+- **Optional fields and durations** (Next). A field enabled by a check box beside it, whose value
   is `None` while unchecked, and a duration field that reads "1d 2h 30m".
 - **Field widths and a compact density** (Next). Widths that follow a field's kind, and a
   compact look for apps with many fields.
@@ -171,12 +171,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 ## Charts
 
-- **Evaluate `textual-plot`** (Now). A candidate to replace `textual-plotext`, with interactive
-  zooming and panning. [textual-plot](https://github.com/davidfokkema/textual-plot) depends on
-  `textual-hires-canvas`, which could also draw `DrawingView`. Check parity for filled and stepped
-  curves, NaN gaps, logarithmic axes, grouped bars, legends and labeled reference lines before
-  replacing the current renderer. Resolve its Python 3.10 minimum and NumPy dependency without
-  silently dropping Python 3.9 support.
+- **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
+  on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
 - **Split the page's scripts** (Now, first). `charts.js` and `maps.js`, loaded with their
   libraries, and `tables.js`, out of `page.js`.
 - **Layers** (Now). Every kind of series on shared axes, bars included, and a second y axis.
@@ -204,14 +200,10 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 ## 3D and geometry
 
-- **Geometry files** (Next). Show a CAD file, such as STEP or IGES, read through OpenCASCADE,
-  with its solids, faces and edges, a tree of its parts, picked faces, an exploded view and
-  measurements. The server computes the triangles, and the web only draws them.
-  [cad-3d-viewer](https://github.com/tegos/cad-3d-viewer) is the model for the web's view.
-- **Meshes and 3D results** (Next). A VTK view of a mesh read from a file, such as STL, VTK,
-  Gmsh or MED, with its named groups, and of the fields on it, colored by a color scale, with the
-  deformed shape and a time step to pick. How the web draws it is to research: vtk.js, deck.gl's
-  mesh layers, or images rendered by the server.
+- **Geometry files** (Next). A CAD file, such as STEP or IGES, with a tree of its parts, picked
+  faces and measurements. [cad-3d-viewer](https://github.com/tegos/cad-3d-viewer) is the model.
+- **Meshes and 3D results** (Next). A mesh from a file, with its groups and the fields on it, in
+  a VTK view. How the web draws it is to research.
 
 ## The web page
 

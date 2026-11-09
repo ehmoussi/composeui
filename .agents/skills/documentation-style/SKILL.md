@@ -64,8 +64,8 @@ Each document has one audience:
   project before setup details. Make the next useful action easy to find.
 - Put detailed usage and backend information in the user guide, and architecture and
   development information in the technical guide. Put what an example app shows in the
-  examples guide, and link to the user guide for how each feature works. Add links from `README.md` where
-  readers need them.
+  examples guide, and link to the user guide for how each feature works. Add links from `README.md`
+  where readers need them.
 - When you move a section from `README.md` to `docs/`, leave a link in `README.md`
   where readers expect it.
 - Give each user-facing feature its own section or document, such as "Tabs" or
@@ -162,7 +162,7 @@ An example section in `docs/examples-guide.md` usually has this content, in this
 
 When you add an example, also add its row to the overview table, with its default backend
 (the `default_backend` of its `run` call, else web), and its entry in the contents list.
-When you add an example, also add its set-up to `docs/screenshots.py` and run
+When you add an example, also add its setup to `docs/screenshots.py` and run
 `make screenshots EXAMPLES=<example>`. When the README's quickstart changes, run
 `make screenshots EXAMPLES=quickstart`: the script runs the quickstart's code from the README.
 When an example changes what it shows, update its section, its row, and its screenshots. The

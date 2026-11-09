@@ -21,12 +21,12 @@ A `Renderer` binds each view to a toolkit widget, which plays the View role of M
 
 ## Why
 
-- **Declarative views.** A view is an `attrs` class with typed fields. You don't build
+- **Declarative views.** A view is an `attrs` class with typed fields. You do not build
   widgets or wire their signals by hand.
 - **Reactive by construction.** When you set an attribute of a view (`view.text = "..."`),
   the view pushes the change to its renderer. Normal state changes need no `update()` or
   `refresh()` calls.
-- **Toolkit-agnostic core.** `composeui.core` doesn't import Qt, Textual, or Starlette
+- **Toolkit-agnostic core.** `composeui.core` does not import Qt, Textual, or Starlette
   when Python imports it. Each backend is imported only when a view renders with it.
 - **Typed callback injection.** `Signal.connect` and `Application.connect` read the
   parameter names of a callback. They inject `view`, `main_view`, or `model` when the
@@ -63,7 +63,7 @@ Each extra adds a backend or a feature:
 | `web` | Starlette, uvicorn | The web backend, the default |
 | `pyside6` | PySide6 | The Qt backend, a desktop window |
 | `tui` | Textual | The Textual backend, a terminal |
-| `report` | matplotlib | The report images of charts |
+| `report` | Matplotlib | The report images of charts |
 | `terminal-images` | textual-image | [Images](https://ehmoussi.github.io/composeui/user-guide/widgets.html#image) in pixels on Textual, on Python 3.12 or later |
 | `dataframe` | narwhals | A large table of a pandas, Polars, or PyArrow frame |
 | `reload` | watchfiles | Faster reloads in development |
@@ -147,19 +147,21 @@ to serve it to other users, read
 The documentation site, at https://ehmoussi.github.io/composeui/, has the guides below, a
 widget catalog, and the API reference.
 
-- The [user guide](https://ehmoussi.github.io/composeui/user-guide.html) explains how to build an app: the
-  views, their layout, forms and their checks, the widgets, pages, tabs, dialogs, tables,
-  charts, [maps](https://ehmoussi.github.io/composeui/user-guide/maps.html), threads, SQLite models, CSV
-  imports, translations, the differences between the backends, testing an app, and a skill
-  for coding agents.
-- The [examples guide](https://ehmoussi.github.io/composeui/examples-guide.html) says what each example app
-  shows, and how to run it.
-- The [technical guide](https://ehmoussi.github.io/composeui/technical-guide.html) explains how ComposeUI
-  works inside, and how to develop it: the architecture, how to add a widget or a backend,
-  the tests, and the checks.
-- [`CHANGELOG.md`](https://github.com/ehmoussi/composeui/blob/main/CHANGELOG.md) lists the changes of each
-  release.
-- [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md) lists the work that is left.
+- The [user guide](https://ehmoussi.github.io/composeui/user-guide.html) explains how to build
+  an app. It covers the views, their layout, forms and their checks, reactive methods, and the
+  widgets. It also covers pages, tabs, dialogs, tables, charts,
+  [maps](https://ehmoussi.github.io/composeui/user-guide/maps.html), threads, SQLite models, CSV
+  imports, and translations. It ends with the differences between the backends, testing an app,
+  and a skill for coding agents.
+- The [examples guide](https://ehmoussi.github.io/composeui/examples-guide.html) says what each
+  example app shows, and how to run it.
+- The [technical guide](https://ehmoussi.github.io/composeui/technical-guide.html) explains how
+  ComposeUI works inside, and how to develop it: the architecture, how to add a widget or a
+  backend, the tests, and the checks.
+- [`CHANGELOG.md`](https://github.com/ehmoussi/composeui/blob/main/CHANGELOG.md) lists the
+  changes of each release.
+- [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md) lists the work that
+  is left.
 
 ## License
 

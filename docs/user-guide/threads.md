@@ -1,7 +1,8 @@
 # Running work in threads
 
 A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`
-runs `work(job, *args)` in a thread of its own instead.
+runs `work(job, *args)` in a thread of its own instead. These sections cover progress and
+canceling, reusable loading tasks, and how jobs behave.
 
 The function must not touch a view, because the widgets of a toolkit belong to the main
 thread. The function returns its result. The `finished` signal of its job emits the result
@@ -49,16 +50,16 @@ them.
   as `finished` and `failed` are. Its callbacks can ask for `main_view` and `model` too.
   - Annotate the function's job as `Job[ResultT, ProgressT]`: the second type is the type
     of the values, and of the callbacks' argument. `Job[ResultT]` is a job without
-    progress, its `ProgressT` `None`.
+    progress: its `ProgressT` is `None`.
   - A dropped job emits none of the values that still wait.
   - `job.call_on_main_thread(callback)` runs any other callback on the main thread, in the
     same order and with the same rule for a dropped job.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
-  stop. Python can't stop a thread, so each function checks `job.is_canceled`, or waits with
+  stop. Python cannot stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
   finishes, and `finished` emits what it returned.
 
-To report rows processed, connect a handler right after starting the job:
+To report rows processed, connect a callback right after starting the job:
 
 ```python
 from composeui.core.jobs import Job
@@ -86,7 +87,7 @@ main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their ev
 
 ## Reusable loading tasks
 
-Use `main_view.jobs.task(work)` when a view repeatedly runs the same worker and shows its
+Use `main_view.jobs.task(work)` when a view repeatedly runs the same function and shows its
 loading state. Configure the task once, then call `task.start(*args, **kwargs)` for each run.
 One `changed` signal reports starts, progress, success, failure, and resets on the main thread.
 After it, `finished` emits the result of a run that succeeds, and `failed` the exception of a
@@ -149,10 +150,10 @@ assert main_view.status.text == "Done: 3 rows"
   `job.cancel()`, it works from any thread, and the function still returns its outcome.
   `jobs.cancel()` cancels every run. New, Open, closing the app, and `jobs.drop()` clear
   the state of every task and emit `changed`, also for a task that is over. The progress
-  and the outcome of a dropped run never reach the task, so they can't overwrite a new run.
+  and the outcome of a dropped run never reach the task, so they cannot overwrite a new run.
 - **One callback per outcome.** Connect `finished` to show a result, and `failed` to show an
   error. Their callbacks get the result or the exception, so they read no state. `changed`
-  then only shows that a run is going on. New, Open, and `jobs.drop()` emit neither.
+  then only shows that a run is in progress. New, Open, and `jobs.drop()` emit neither.
 - **Callbacks and types.** The callbacks of `changed`, `finished`, and `failed` can ask for
   `main_view` and `model`. The annotations of the function give the types of `result`,
   `progress`, and the arguments of `start`.
@@ -207,13 +208,13 @@ assert main_view.count.text == "1400 pickups"
   default, or the `debounce` that `jobs.task(work, debounce=...)` gives. A newer call in that
   time replaces the run before the function starts. So a quick move of the slider calls the
   function once.
-- **The latest wins.** A newer call cancels the run that goes on, and drops its progress and
+- **The latest wins.** A newer call cancels the current run, and drops its progress and
   its outcome. `finished` and `failed` do not emit for a replaced run, and its result never
   replaces the newer one. The function of a replaced run goes on until it returns, unless it
   checks `job.is_canceled`.
 - **Its state.** `start_latest` clears `progress` and `error`, and emits `changed` with
   `is_running` true. `result` keeps the last result until the outcome of the new run. It
-  returns nothing. While its run goes on, `start` returns `False`, as for a run of `start`.
+  returns nothing. While its run is in progress, `start` returns `False`, as for a run of `start`.
 - **The main thread.** As `start`, call it on the main thread. From the function of a job, it
   raises `CalledInJobError`.
 - **From a reactive method.** A [reactive method](reactive-methods.md#slow-work-in-a-task) can
@@ -334,10 +335,10 @@ assert main_view.solver.result == "beam.comm: stopped"
 - **From now on.** The task sets `is_enabled` at once, then at each start and outcome: a
   success, a failure, or the end of a canceled run. New, Open, and `jobs.drop()` end the
   run, and the views come back too.
-- **Asked to stop.** `cancel_with`'s controls are enabled only while a run goes on, until
+- **Asked to stop.** `cancel_with`'s controls are enabled only while a run is in progress, until
   it is asked to stop. `task.cancel()` sets `is_canceled`, and `changed` emits: a
   `changed` callback can show "Stopping..." until the run is over.
-- **The task's views.** The task alone sets their `is_enabled`: don't set it from another
+- **The task's views.** The task alone sets their `is_enabled`: do not set it from another
   callback too.
 
 ## How jobs behave
@@ -345,7 +346,7 @@ assert main_view.solver.result == "beam.comm: stopped"
 These rules hold for every job, and for the jobs of a task.
 
 - **On the main thread only.** Call `jobs.start`, `jobs.cancel`, and `jobs.drop` from a
-  callback, never from the function of a job. The jobs aren't locked, because only the main
+  callback, never from the function of a job. The jobs are not locked, because only the main
   thread changes them (`job.cancel()` works from any thread). Called from the function of a
   job, they raise `CalledInJobError`. To start another job, return what it needs, and start
   it from the callback that gets it.
@@ -369,7 +370,7 @@ These rules hold for every job, and for the jobs of a task.
   - Without a toolkit, `jobs.wait()` runs this clean-up. It does not raise the error again.
   - A dropped job reports its programming errors too.
 - **New, Open, and closing the app** cancel the running jobs and drop their results,
-  because the results belong to the study replaced. Closing doesn't wait for the jobs either.
+  because the results belong to the study replaced. Closing does not wait for the jobs either.
   Open drops the jobs once the views' state in the file is checked, before the model's
   data changes. So an Open that fails still stops the jobs.
 - **On the web,** while any job runs, the page asks the server every 300 ms for the changes

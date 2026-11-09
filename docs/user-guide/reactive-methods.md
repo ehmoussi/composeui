@@ -5,6 +5,9 @@ read changes. Use it to show a value that comes from other fields, such as a tot
 chart, or a summary. It replaces the callbacks that you would connect to each signal of those
 fields.
 
+These sections cover when a method runs, what counts as a change, what a method must not do,
+slow work, helpers, errors, and each backend.
+
 Decorate the method with `reactive`, from `composeui.core.reactivity`. The method takes only
 `self`. Its body reads fields and sets fields, as other code does:
 
@@ -188,7 +191,7 @@ assert main_view.count.text == "1300 pickups"
 - **Read or start, not both.** A method that reads the state of a task, and then starts or
   cancels that task, would run again each time. It raises `ReactiveLoopError`. Read the state
   in one method, and start the task in another.
-- **The latest result wins.** `start_latest` replaces a run that is still going on. A result
+- **The latest result wins.** `start_latest` replaces a run that is still in progress. A result
   that is out of date never replaces the latest one.
 
 ## Helpers that follow their inputs
@@ -248,13 +251,12 @@ field does.
 - **The cost.** An app without a reactive method, and without the
   [helpers](#helpers-that-follow-their-inputs), runs as before. Once one class with a reactive
   method exists, or a helper runs, ComposeUI records the reads during the runs of the methods
-  only. A
-  write of a view field, in any view, then takes about twice as long. A page takes up to about
-  20% longer to build, and the web renders it up to about 10% slower.
+  only. A write of a view field, in any view, then costs about one Python call more, and views
+  build about as fast as without one.
 
 In the [Uber pickups example](../../src/examples/uberpickups.py), one slider of the hour
 filters the table and the map, and marks the hour on the chart. Its reactive methods do it, with
 no callback, and query the pickups of the slider's hour with `start_latest`. The chart's counts
 of each hour do not change. Its [dataframe version](../../src/examples/uberpickupsframe.py)
-builds its table, its chart and its map from the result of its loading task, with no state in
+builds its table, its chart, and its map from the result of its loading task, with no state in
 its model.

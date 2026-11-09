@@ -18,16 +18,17 @@ runs: RecordTableView[Run] = child(
 )
 ```
 
-- Assign `records` to update the table (`table.records = model.runs.above(0.1)`).
-- Read `selected_record`, or `selected_records`.
-- Connect to `row_activated` to open a row: a double click, or Enter, emits the row's
-  index in `rows`. A double click on a cell that edits, or on a button or a link, doesn't.
-  On Textual and the web, Enter also selects the row first.
-- The table parses an edited cell into the type of its field, through the `cattrs`
+- **Update.** Set `records` to update the table (`table.records = model.runs.above(0.1)`).
+- **Selection.** Read `selected_record`, or `selected_records`.
+- **Activation.** Connect to `row_activated` to open a row: a double click, or Enter, emits the
+  row's index in `rows`. A double click on a cell that edits, or on a button or a link, does not. On
+  Textual and the web, Enter also selects the row first.
+- **Edits.** The table parses an edited cell into the type of its field, through the `cattrs`
   converter of the views. In an enum's cell, the user types a member's value as the cell
   shows it, such as `1` or `red`, not the member's name. `record_edited` emits the old and
   the new record.
-- When a cell doesn't parse, the table refuses the edit and says why in the status bar.
+- **Refused edits.** When a cell does not parse, the table refuses the edit and says why in the
+  status bar.
 
 The study saves and loads the records by their type. So build the table as
 `RecordTableView[Run]`, or subclass it.
@@ -107,12 +108,11 @@ On a `TableView`, `cell_widgets` maps each column's index to its `CellWidget`.
 - **`CellWidget.link()`** shows the cell's text as a link.
 - **`CellWidget.file_path(extensions)`** shows a file's path, then a "…" button that picks a
   file, as a [file path input](widgets.md#file-path-input) does. The dialog offers the file
-  types of `extensions`, such as `{"CSV": (".csv",)}`; the web refuses a file of another
-  type. Its `text`, "Choose a file" by
-  default, names the button for a tooltip and a screen reader. With `server_roots`, such as
-  `CellWidget.file_path(extensions, server_roots=(studies,))`, the web lists the server's
-  files in those folders, as a [field with server roots](widgets.md#files-on-the-server)
-  does, instead of uploading a copy.
+  types of `extensions`, such as `{"CSV": (".csv",)}`; the web refuses a file of another type. Its
+  `text`, "Choose a file" by default, names the button for a tooltip and a screen reader. With
+  `server_roots`, such as `CellWidget.file_path(extensions, server_roots=(studies,))`, the web lists
+  the server's files in those folders, as a
+  [field with server roots](widgets.md#files-on-the-server) does, instead of uploading a copy.
 - **`CellWidget.folder_path()`** shows a folder's path, then a "…" button that picks a
   folder, as a [folder path input](widgets.md#folder-path-input) does.
 - **`CellWidget.save_path(extensions)`** shows a path to save a file to, then a "…" button
@@ -131,9 +131,10 @@ A check box, a combobox, or a path changes its cell only when the column is edit
 Otherwise it only shows the cell, and the "…" button picks nothing. The change is an edit, as
 when the user types in a cell: `cell_edited` emits it, and on a `RecordTableView`,
 `record_edited` too. The user also types in a path cell, but not in the other cells with a
-widget. On the web, a path typed outside a column's `server_roots` is refused, `..` and
-symbolic links followed: the cell keeps its text, and the status bar says why. `file_texts` holds the texts of the list
-of the server's files and of that message, by what they're for.
+widget. On the web, the server resolves `..` and symbolic links in a typed path, and refuses a path
+outside the column's `server_roots`: the cell keeps its text, and the status bar says why.
+`file_texts` holds the texts of the list of the server's files and of that message, by what they're
+for.
 
 A click on a button or a link emits `cell_clicked` with the row and the column. The row
 is an index into `rows`, whatever the order.
@@ -158,25 +159,27 @@ What each backend shows:
   cell, opens a `QFileDialog`: a file, a folder, or a save dialog. It opens on the cell's
   path, else in its `base_folder`, else in the first of its `server_roots`.
 - **Textual** shows the cell as text: a box (☑ or ☐), the text and ▾, the text and the
-  button's text in brackets, or underlined text. A click toggles a box, and so does Space
-  on the cursor's row. A click on an editable combobox cell opens a list of its options. A click on
-  a button or a link cell clicks it. A path shows its text and "[…]". A click on an
-  editable path cell opens the picker of a file, a folder, or a file to save, on the cell's
-  path, else in its `base_folder`, else in the first of its `server_roots`. F2's editor
-  types the path. A
-  check-all header shows its box (▣ when partly checked), and a click on the header
-  toggles it instead of sorting.
+  button's text in brackets, or underlined text.
+  - A click toggles a box, and so does Space on the cursor's row.
+  - A click on an editable combobox cell opens a list of its options.
+  - A click on a button or a link cell clicks it.
+  - A path shows its text and "[…]". A click on an editable path cell opens the picker of a
+    file, a folder, or a file to save. The picker opens on the cell's path, else in its
+    `base_folder`, else in the first of its `server_roots`. F2's editor types the path.
+  - A check-all header shows its box (▣ when partly checked), and a click on the header
+    toggles it instead of sorting.
 - **The web** shows a check box, a `<select>`, a button, or a link-like button. A click on
-  a widget does not select its row. A file path's "…" button uploads the file that the user
-  picks in the browser. The session keeps a copy of the file, and the cell shows the copy's
-  path. The session removes a copy when no cell of the table holds its path any more,
-  at the table's next upload, and all the copies when it ends. With `server_roots`, the
-  button opens the list of the server's files instead, and a file picked there puts its
-  path on the server in the cell. The browser cannot give the page a folder's path, or a
-  path to save to. Without `server_roots`, a folder or a save path cell has no button: the
-  user types the path. With them, the button lists the server's folders, as the
-  [folder](widgets.md#folder-path-input) and [save](widgets.md#save-path-input) path inputs
-  do.
+  a widget does not select its row.
+  - A file path's "…" button uploads the file that the user picks in the browser. The session
+    keeps a copy of the file, and the cell shows the copy's path.
+  - At the table's next upload, the session removes each copy whose path no cell of the table
+    holds any more. It removes all the copies when it ends.
+  - With `server_roots`, the button opens the list of the server's files instead, and a file
+    picked there puts its path on the server in the cell.
+  - The browser cannot give the page a folder's path, or a path to save to. Without
+    `server_roots`, a folder or a save path cell has no button: the user types the path. With
+    them, the button lists the server's folders, as the [folder](widgets.md#folder-path-input)
+    and [save](widgets.md#save-path-input) path inputs do.
 
 ### Paths by the row's kind
 
@@ -220,10 +223,10 @@ class StudyFilesMainView(MainView):
   widget follows: the app does nothing. The path's text stays as it is.
 - **A kind without a widget** shows a plain cell, which the user types in when the column is
   editable.
-- **`base_folder`** is that of the kinds' widgets that have none of their own.
-- **`cell_widget(row, column)`** gets a cell's widget, the kind's for `path_by`, for
-  example to read its path: `table.cell_widget(row, PATH).path(text)` gives the path that
-  `text` names from `base_folder`. It is `None` for a cell without a widget.
+- **`base_folder`** applies to the widgets of the kinds that have no `base_folder` of their own.
+- **`cell_widget(row, column)`** gets a cell's widget. For `path_by`, it gets the widget of the
+  row's kind. For example, to read its path: `table.cell_widget(row, PATH).path(text)` gives the
+  path that `text` names from `base_folder`. It is `None` for a cell without a widget.
 
 [`studyinputs.py`](../../src/examples/studyinputs.py) lists a study's files this way.
 
@@ -250,7 +253,8 @@ table.cell_styles = {
 - **`background`** is a color as `#rrggbb`, the same in every theme. The text on it is black
   or white, whichever reads better (`text_color`).
 - **`is_enabled`**, `True` by default, as for a view. `False` grays the cell. The user never
-  edits it, even in an editable column, and its widget is disabled. `check_all` leaves it as it is, and `column_checked` ignores it.
+  edits it, even in an editable column, and its widget is disabled. `check_all` leaves it as it is,
+  and `column_checked` ignores it.
 - **`mark`** shows a `NodeMark` before the text: done, warning, or error. `done_text`,
   `warning_text`, and `error_text` name it, as a tooltip (Qt, the web) and for screen
   readers (the web).
@@ -258,7 +262,7 @@ table.cell_styles = {
   over its rows. The span holds only while the table shows those rows right under the cell,
   in their order. A sort or a filter that moves or hides them shortens it.
 
-Assign `cell_styles` together with the rows that they describe. The styles go by index, so
+Set `cell_styles` together with the rows that they describe. The styles go by index, so
 new rows take the styles of the rows that were at their indexes.
 
 On a `RecordTableView`, `column_index(field)` gives the index of the column that shows a
@@ -334,7 +338,7 @@ A source of your own gives:
 | `changed` | A signal that the rows changed |
 
 When the app sets a new source, the view drops the sort and the filters on the columns that
-the new source doesn't have.
+the new source does not have.
 
 ### Sorting and filtering a large table
 
@@ -383,7 +387,7 @@ filters.
 - **Export CSV** writes the rows shown, in their order, to a CSV file in UTF-8
   (`export_csv`). The file has the headers, then each value in full, not in its
   `column_formats` format. In an app, a job writes the file, a window of rows at a time,
-  and the status bar says when the file is done. A new order during the export doesn't
+  and the status bar says when the file is done. A new order during the export does not
   change the file. `csv_chunks` gives the same text in pieces. `export_filename` is the
   name offered for the file (`table.csv`).
 
@@ -459,7 +463,7 @@ main_view.readings.source = SqliteSource(
 - **The search and the filters ignore the case of a text,** as for a `ListSource`, with
   one difference:
   - SQLite compares a text typed in ASCII only (`COLLATE NOCASE`), so an index serves it.
-    It doesn't find a cell whose letters fold into the text: "strasse" doesn't find
+    It does not find a cell whose letters fold into the text: "strasse" does not find
     "Straße".
   - For other text, SQLite calls Python on each row, as for a `/regex/` filter: "École"
     finds "ÉCOLE".
@@ -493,14 +497,14 @@ main_view.readings.source = DataFrameSource(
 - **A row's id is its position in the frame,** or the value of its `id_column` when the
   source has one. A lazy frame, such as a Polars `LazyFrame`, needs an `id_column`: its
   rows have no position of their own. The source then reads only the columns it needs.
-- **Assign a new `frame` to change the rows.** The source emits `changed`, and the table
-  reads the rows again. Assign it on the main thread, for example from a job's result.
+- **Set a new `frame` to change the rows.** The source emits `changed`, and the table
+  reads the rows again. Set it on the main thread, for example from a job's result.
 - **The cells are Python values.** A missing value of pandas (`NaN`, `NaT`, or `NA`) is
   `None`, and a numpy value is the Python value it holds.
 - **The search and the filters ignore the case of a text,** as for a `ListSource`, with
   two differences:
-  - They compare the text in lower case, which isn't Python's `casefold`: "strasse"
-    doesn't find "Straße".
+  - They compare the text in lower case, which is not Python's `casefold`: "strasse"
+    does not find "Straße".
   - A `/regex/` filter is in the syntax of the frame's library: Rust's `regex` for Polars,
     Python's `re` for pandas.
 
