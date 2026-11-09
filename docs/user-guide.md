@@ -131,6 +131,7 @@ not in the package: run them from a clone of the repository (see
     - [The composeui command](user-guide/running-the-app.md#the-composeui-command)
     - [Adapt the views to the backend](user-guide/running-the-app.md#adapt-the-views-to-the-backend)
   - [Reloading the app on a change](user-guide/running-the-app.md#reloading-the-app-on-a-change)
+  - [Logging](user-guide/running-the-app.md#logging)
   - [Web backend](user-guide/running-the-app.md#web-backend)
     - [How the web differs from a window](user-guide/running-the-app.md#how-the-web-differs-from-a-window)
     - [Serve the app to other users](user-guide/running-the-app.md#serve-the-app-to-other-users)

@@ -165,6 +165,33 @@ at a fixed interval. They also check them for a project on a Windows drive under
 (`/mnt/c/...`), as the system does not report those changes. Set
 `WATCHFILES_FORCE_POLLING` to choose for the web yourself.
 
+## Logging
+
+ComposeUI writes its log messages to the standard output, with the date and time. Call `get_logger`
+with a name to write the messages of your app in the same way:
+
+```python
+from composeui.core.application import get_logger
+
+LOGGER = get_logger("myapp")
+
+
+def save_results() -> None:
+    LOGGER.debug("Writing the results")
+    LOGGER.info("Results saved")
+```
+
+When the app runs, it shows the `info` messages and above. These options of every app show more:
+
+| Option | Shows |
+| --- | --- |
+| `--log` | The `debug` messages of ComposeUI and of the loggers of `get_logger` |
+| `--log-signals` | Each signal that is emitted |
+| `--debug` | All of the above |
+
+The result of `get_logger` is a standard `logging.Logger`. Add a handler to it to write its messages
+to a file too.
+
 ## Web backend
 
 The web backend serves the views as a web page instead of a window.
