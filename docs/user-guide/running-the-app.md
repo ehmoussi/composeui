@@ -150,6 +150,13 @@ On Textual, the app saves the study and exits on every change, and a new child p
 starts and opens the study. So the terminal shows the app again as you left it, with the
 same study file and language. Quit the app, for example with Ctrl+Q, to end the program.
 
+On every backend, the study brings back the values that you left in the app. A value that you
+change in the code goes first: when the initial value of a field changes, the field takes the new
+value, for example the `shapes` of a `DrawingView`. The other fields keep their values. Only the
+values that the view class sets count. A value that a function sets after it builds the main view
+does not count, and a value that a callback computes does not change until the callback runs. To
+show such a value again, connect the callback to the `loaded` signal of the main view.
+
 The program runs again on every change, so code that it runs at the start, such as a
 log's set-up, runs again too. Start the program with `composeui run`, as a script, or with `-m`,
 for example `uv run python -m examples.pipeform --backend qt --reload`. With the `reload` extra

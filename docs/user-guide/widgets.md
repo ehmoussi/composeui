@@ -649,14 +649,14 @@ class BeamMainView(MainView):
 
 The shapes are drawn in order, the later ones on top. A point is an `(x, y)` pair:
 
-| Shape | Required | Optional |
-| --- | --- | --- |
-| `LineShape` | `start`, `end` | `color`, `style`, `weight` |
-| `PolylineShape` | `points`, at least 2 | `color`, `style`, `weight` |
-| `PolygonShape` | `points`, at least 3 | `color`, `style`, `fill`, `weight` |
-| `CircleShape` | `center`, `radius`, above 0 | `color`, `style`, `fill`, `weight` |
-| `ArrowShape` | `start`, `end`, which has the head | `color`, `style`, `weight` |
-| `TextShape` | `position`, `text` | `color`, `anchor`, `role` |
+| Shape | What it draws | Required | Optional |
+| --- | --- | --- | --- |
+| `LineShape` | A straight line | `start`, `end` | `color`, `style`, `weight` |
+| `PolylineShape` | Connected lines that stay open | `points`, at least 2 | `color`, `style`, `weight` |
+| `PolygonShape` | A closed shape through its points | `points`, at least 3 | `color`, `style`, `fill`, `weight` |
+| `CircleShape` | A circle, with a radius in the coordinates of the drawing | `center`, `radius`, above 0 | `color`, `style`, `fill`, `weight` |
+| `ArrowShape` | A straight line with a head at its end | `start`, `end`, which has the head | `color`, `style`, `weight` |
+| `TextShape` | A text at a position | `position`, `text` | `color`, `anchor`, `role` |
 
 A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. A `style` is a
 [`LineStyle`](charts.md#reference-lines). A `TextAnchor` (`START`, `MIDDLE`, or `END`) says which
