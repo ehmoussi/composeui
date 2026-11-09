@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
+import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
-from composeui.core.application import Application, ModelApplication
+from composeui.core.application import (
+    Application,
+    ModelApplication,
+    check_writable,
+    logs_in_file,
+)
 from composeui.core.reload import (
     is_reloaded,
     load_reloaded_state,
@@ -16,7 +24,6 @@ from composeui.core.view import RendererType
 from composeui.textualcore.textualrenderer import TextualMainRenderer
 
 if TYPE_CHECKING:
-    import argparse
     from collections.abc import Callable
 
     from composeui.core.model import Model
@@ -25,16 +32,38 @@ if TYPE_CHECKING:
 
 #: seconds between two looks, in a reloaded app, at whether files changed
 _CHANGES_CHECK_INTERVAL = 0.2
+#: where the log messages go while the app is shown: on the terminal, they'd cover the app
+_LOG_FILE = Path("composeui.log")
+
+LOGGER = logging.getLogger("COMPOSEUI")
 
 MainViewT = TypeVar("MainViewT", bound="MainView")
 ModelT = TypeVar("ModelT", bound="Model")
 
 
-def _add_reload_argument(parser: argparse.ArgumentParser) -> None:
+def _log_file(text: str) -> Path:
+    """Get the file a user names, refused at once rather than losing its messages."""
+    path = Path(text)
+    try:
+        check_writable(path)
+    except OSError as error:
+        message = f"can't write to it: {error}"
+        raise argparse.ArgumentTypeError(message) from error
+    return path
+
+
+def _add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--reload",
         help="Run the app again when a Python file under the current directory changes.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--log-file",
+        metavar="FILE",
+        help=f"Write the log messages to FILE while the app is shown (default: {_LOG_FILE}).",
+        type=_log_file,
+        default=_LOG_FILE,
     )
 
 
@@ -56,13 +85,18 @@ def _exec(
         run_reloading()
         return
     try:
-        _show(main_view, model, render)
+        _show(main_view, model, render, args.log_file)
     finally:
         if model is not None:
             model.close()
 
 
-def _show(main_view: MainView, model: Model | None, render: Callable[[RendererType], None]) -> None:
+def _show(
+    main_view: MainView,
+    model: Model | None,
+    render: Callable[[RendererType], None],
+    log_file: Path,
+) -> None:
     if is_reloaded():
         load_reloaded_state(main_view, model)
     render(RendererType.TEXTUAL)
@@ -81,7 +115,12 @@ def _show(main_view: MainView, model: Model | None, render: Callable[[RendererTy
             app.set_interval(_CHANGES_CHECK_INTERVAL, exit_on_changes)
 
         app.mounted_callbacks.append(follow_changes)
-    app.run()
+    try:
+        check_writable(log_file)
+    except OSError as error:  # only the default: not worth refusing to run from such a folder
+        LOGGER.warning("No log file while the app is shown, choose one with --log-file: %s", error)
+    with logs_in_file(log_file):
+        app.run()
 
 
 class TextualApplication(Application[MainViewT]):
@@ -91,7 +130,7 @@ class TextualApplication(Application[MainViewT]):
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         super().__init__(build_main_view=build_main_view)
-        _add_reload_argument(self._parser)
+        _add_arguments(self._parser)
 
     def run(self) -> None:
         super().run()
@@ -113,7 +152,7 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
         super().__init__(
             build_main_view=build_main_view, build_model=build_model, setup_model=setup_model
         )
-        _add_reload_argument(self._parser)
+        _add_arguments(self._parser)
 
     def run(self) -> None:
         super().run()
