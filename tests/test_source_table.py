@@ -154,6 +154,37 @@ def test_rows_read_after_any_others_are_the_rows_a_new_table_reads(
         assert table.rows(start, start + length) == fresh.rows(start, start + length)
 
 
+@pytest.mark.parametrize(
+    ("id_field", "selected", "kept"),
+    [(None, 1, []), ("name", "s0001", ["s0001"])],
+)
+def test_new_records_clear_a_selection_of_positions_and_keep_one_of_ids(
+    id_field: Optional[str], selected: Hashable, kept: list[Hashable]
+) -> None:
+    source = ListSource(Sample, {"value": "Value"}, _samples(3), id_field=id_field)
+    table = SourceTableView(source=source, selection_mode=SelectionMode.MULTIPLE)
+    table.selected_ids = [selected]
+    emitted: list[list[Any]] = []
+    table.selection_changed.connect(emitted.append)
+
+    source.records = _samples(3)
+
+    assert table.selected_ids == kept
+    assert emitted == ([] if kept else [[]])
+
+
+def test_a_source_of_its_own_clears_the_selection_with_a_new_row_ids_scope() -> None:
+    source = ListSource(Sample, {"value": "Value"}, _samples(3), id_field="name")
+    table = SourceTableView(source=source)
+    table.selected_ids = ["s0001"]
+
+    source.changed.emit()  # the rows changed, the ids still naming the same ones
+    assert table.selected_ids == ["s0001"]
+    source.row_ids_scope = object()
+    source.changed.emit()
+    assert table.selected_ids == []
+
+
 def test_rows_known_by_text_ids_read_as_rows_known_by_numbers() -> None:
     samples = ListSource(Sample, {"value": "Value"}, _samples(3), id_field="name")
     table = SourceTableView(source=samples, sort_column="value", sort_descending=True)
