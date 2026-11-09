@@ -69,6 +69,8 @@ class _DrawingMainView(MainView):
         (lambda: TextShape((0, INF), "a"), "position"),
         (lambda: LineShape((0, 0), (1, 1), color="red"), "#rrggbb"),
         (lambda: TextShape((0, 0), "a", color="#ff"), "#rrggbb"),
+        (lambda: CircleShape((0, 0), 1, fill_color="red"), "#rrggbb"),
+        (lambda: PolygonShape([(0, 0), (1, 0), (0, 1)], fill_color="red"), "#rrggbb"),
         (lambda: DrawingView(bounds=(1, 0, 1, 2)), "bounds"),
         (lambda: DrawingView(bounds=(0, 3, 1, 2)), "bounds"),
         (lambda: DrawingView(bounds=(0, 0, INF, 2)), "bounds"),
@@ -87,7 +89,7 @@ def test_a_study_keeps_each_shape_with_its_own_kind() -> None:
         LineShape((0, 0), (1, 1), color=RED, style=LineStyle.DOTTED, weight=LineWeight.HEAVY),
         ArrowShape((0, 0), (1, 1)),
         PolylineShape([(0, 0), (1, 1)]),
-        PolygonShape([(0, 0), (1, 0), (0, 1)], fill=True),
+        PolygonShape([(0, 0), (1, 0), (0, 1)], fill=True, fill_color=BLUE),
         CircleShape((0, 0), 2.5),
         TextShape((1, 2), "F", anchor=TextAnchor.END, role=TextRole.TITLE),
     ]
@@ -279,6 +281,25 @@ def test_qt_fills_a_shape_only_when_asked(
 
     view.shapes = [make(fill=True)]
     assert _is_color(widget, x, y, RED)
+
+
+def test_qt_fills_a_shape_in_its_fill_color_inside_its_outline(
+    qt_drawing: tuple[DrawingView, QDrawing],
+) -> None:
+    view, widget = qt_drawing
+
+    view.shapes = [
+        PolygonShape(
+            [(0.5, 0.2), (1.5, 0.2), (1, 0.9)],
+            color=RED,
+            fill=True,
+            fill_color=BLUE,
+            weight=LineWeight.HEAVY,
+        )
+    ]
+
+    assert _is_color(widget, 100, 50, BLUE)
+    assert _is_color(widget, 100, 80, RED)
 
 
 def test_qt_joins_a_polyline_s_points(qt_drawing: tuple[DrawingView, QDrawing]) -> None:
@@ -653,6 +674,17 @@ async def test_textual_fills_a_shape_when_asked(shape: Shape) -> None:
     assert isinstance(shape, (PolygonShape, CircleShape))
     rows, _ = await _textual_rows([evolve(shape, fill=False)])
     assert rows[8][20] == " "
+
+
+@pytest.mark.asyncio
+async def test_textual_fills_a_shape_in_its_fill_color_inside_its_outline() -> None:
+    shape = PolygonShape([(20, 16), (60, 16), (40, 56)], color=RED, fill=True, fill_color=BLUE)
+
+    rows, strips = await _textual_rows([shape])
+
+    assert _color_at(strips[8], 20) == BLUE
+    edge = next(column for column, cell in enumerate(rows[8]) if cell != " ")
+    assert _color_at(strips[8], edge) == RED
 
 
 @pytest.mark.asyncio
@@ -1199,11 +1231,14 @@ def test_the_web_fills_a_shape_only_when_asked() -> None:
     shapes: list[Shape] = [
         CircleShape((0, 0), 1, color=RED, fill=True),
         CircleShape((5, 5), 1, color=RED),
+        CircleShape((9, 9), 1, color=RED, fill=True, fill_color=BLUE),
+        CircleShape((12, 12), 1, color=RED, fill_color=BLUE),
     ]
 
-    fills = [a["fill"] for tag, a in _web(DrawingView(shapes=shapes)).elements if tag == "circle"]
+    circles = [a for tag, a in _web(DrawingView(shapes=shapes)).elements if tag == "circle"]
 
-    assert fills == [RED, "none"]
+    assert [a["fill"] for a in circles] == [RED, "none", BLUE, "none"]
+    assert [a["stroke"] for a in circles] == [RED] * 4
 
 
 def test_the_web_points_an_arrow_s_head_along_its_line_at_its_end() -> None:

@@ -2893,6 +2893,31 @@ def _plot_monitor(chart: ComposeChart) -> _PlotMonitor:
 
 
 @pytest.mark.asyncio
+async def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color() -> None:
+    view = PipeChartMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.chart.renderer, TextualWidgetRenderer)
+    chart = view.chart.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 60)) as pilot:
+        await pilot.pause()
+        view.chart.series = [
+            Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
+        ]
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        plotted = _plot_monitor(chart)
+        area, line = (0xE2, 0xEB, 0xF7), (0x60, 0x96, 0xDD)
+        assert [colors[0] for colors in plotted.color] == [area, line]
+        assert [fill is not False for fill in plotted.fillx] == [True, False]  # the line is last
+        assert text.count("Load") == 1  # one entry in the legend
+
+
+@pytest.mark.asyncio
 async def test_a_scatter_series_is_plotted_as_dots() -> None:
     view = PipeChartMainView()
     view.render(RendererType.TEXTUAL)

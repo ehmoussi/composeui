@@ -204,6 +204,19 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
     np.testing.assert_allclose(np.asarray(filled.get_facecolor()), [to_rgba("#ffd700")])
 
 
+def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color() -> None:
+    chart = ChartView(
+        series=[Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")]
+    )
+
+    (axes,) = chart_figure(chart).axes
+
+    (line,) = axes.get_lines()
+    assert line.get_color() == "#6096dd"
+    (filled,) = axes.collections
+    np.testing.assert_allclose(np.asarray(filled.get_facecolor()), [to_rgba("#e2ebf7")])
+
+
 def test_reference_lines_are_styled_labeled_and_in_range() -> None:
     chart = ChartPagesMainView().router.chart.chart  # its lines past its data
     chart.y_log = True

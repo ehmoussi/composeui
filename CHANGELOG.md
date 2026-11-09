@@ -8,6 +8,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `fill_color` on `Series`, `PolygonShape` and `CircleShape` gives a filled area a color other than
+  its line's, on Qt, Textual and the web, and in a chart's image.
 - `DrawingView` shows a diagram of lines, polygons, circles, arrows, and text on Qt,
   Textual, and the web, without an image. A new `shapes` list redraws it. The text and the arrow
   heads keep their size at any scale. A line has a `LineWeight`, and a text a `TextRole`.

@@ -3711,6 +3711,17 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
     assert pg.mkPen(oval.opts["pen"]).color().name() == "#ffd700"  # the same in a dark theme
 
 
+def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color(qtbot: QtBot) -> None:
+    view, chart = _rendered_chart(qtbot)
+    view.chart.series = [
+        Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
+    ]
+    (load,) = (item for item in _plot_item(chart).items if isinstance(item, pg.PlotDataItem))
+
+    assert pg.mkPen(load.opts["pen"]).color().name() == "#6096dd"
+    assert pg.mkBrush(load.opts["fillBrush"]).color().name() == "#e2ebf7"
+
+
 def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     plot = _plot_item(chart)

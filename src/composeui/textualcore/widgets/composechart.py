@@ -129,6 +129,9 @@ class ComposeChart(PlotextPlot):
             x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
             if curve.step and not is_dots:
                 x, y = ChartView.step_points(x, y)
+            # plotext fills in the color of the line: an area of its own, under the line
+            if curve.fill and curve.fill_color is not None:
+                draw(x, y, color=Color.parse(curve.fill_color).rgb, marker="braille", fillx=True)
             # plotext leaves a gap at a NaN itself
             draw(
                 x,
@@ -137,7 +140,7 @@ class ComposeChart(PlotextPlot):
                 color=colors[index],
                 marker="braille",
                 # down to y = 0, e.g. a shape
-                fillx=curve.fill,
+                fillx=curve.fill and curve.fill_color is None,
             )
 
     def _extent(self) -> tuple[list[float], list[float]]:
