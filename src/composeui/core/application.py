@@ -231,10 +231,11 @@ def check_writable(path: Path) -> None:
 
 
 @contextlib.contextmanager
-def logs_in_file(path: Path) -> Iterator[None]:
+def logs_in_file(path: Path, *, names_file: bool = True) -> Iterator[None]:
     """Write ComposeUI's log messages to the file `path` instead of the standard output.
 
-    The first message creates the file. After the block, the standard output shows its path.
+    The first message creates the file. After the block, the standard output shows its path,
+    unless `names_file` is false.
     """
     log_file = _LogFile(
         path, maxBytes=_LOG_FILE_MAX_BYTES, backupCount=1, encoding="utf-8", delay=True
@@ -252,7 +253,7 @@ def logs_in_file(path: Path) -> Iterator[None]:
             logger.removeHandler(log_file)
         is_written = log_file.stream is not None
         log_file.close()
-        if is_written:
+        if is_written and names_file:
             LOGGER.info("Log messages written to %s", log_file.baseFilename)
 
 
@@ -342,6 +343,11 @@ class Application(Generic[MainViewT]):
 
     def run(self) -> None:
         self._args = self._parse_arguments()
+        self._start()
+
+    def _start(self) -> None:
+        """Apply the command line and emit `loaded`, what comes before showing the main view."""
+        assert self._args is not None
         if self._args.log or self._args.debug:
             LOGGER.setLevel(level=logging.DEBUG)
         else:
