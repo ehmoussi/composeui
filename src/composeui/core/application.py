@@ -13,7 +13,7 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TextIO, TypeVar, cast
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
@@ -201,8 +201,10 @@ class _LogFile(logging.handlers.RotatingFileHandler):
             self.release()
 
     def doRollover(self) -> None:  # noqa: N802
-        if self._is_replaced():  # posix only
-            self.stream.close()
+        stream = self.stream
+        assert stream is not None  # `shouldRollover` opened it
+        if self._is_replaced(stream):  # posix only
+            stream.close()
             self.stream = self._open()
             return
         try:
@@ -210,11 +212,11 @@ class _LogFile(logging.handlers.RotatingFileHandler):
         except OSError:  # Windows refuses to rename a file that another app has open
             self.stream = self._open()
 
-    def _is_replaced(self) -> bool:
+    def _is_replaced(self, stream: TextIO) -> bool:
         """Say whether another app rotated the file, which this one would rotate away."""
         try:
             on_disk = Path(self.baseFilename).stat()
-            return not os.path.samestat(os.fstat(self.stream.fileno()), on_disk)
+            return not os.path.samestat(os.fstat(stream.fileno()), on_disk)
         except FileNotFoundError:  # posix only
             return True
 

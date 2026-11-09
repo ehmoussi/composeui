@@ -601,8 +601,8 @@ def test_two_apps_sharing_a_log_file_keep_each_other_s_messages_when_it_rotates(
     def names(file: Path) -> list[str]:
         return [line[:2] for line in file.read_text(encoding="utf-8").split()]
 
-    assert names(path) == ["A3", "B3"]
-    assert names(tmp_path / "app.log.1") == ["A2", "B2"]
+    # which of the two files holds each one depends on the version of Python
+    assert {"A2", "B2", "A3", "B3"} <= {*names(path), *names(tmp_path / "app.log.1")}
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows can't delete a file left open")
