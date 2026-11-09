@@ -81,7 +81,7 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
-- A log message no longer draws over a Textual app: while the app is shown, the messages go to
+- A log message no longer draws over a Textual app: from the start of the app, the messages go to
   `composeui.log`, or the file of `--log-file`, and the app shows the path when it exits.
 - `--reload` shows a value changed in the code, such as the `shapes` of a `DrawingView`, instead of
   the value saved by the previous run. The other values stay as the user left them.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
@@ -32,7 +33,8 @@ if TYPE_CHECKING:
 
 #: seconds between two looks, in a reloaded app, at whether files changed
 _CHANGES_CHECK_INTERVAL = 0.2
-#: where the log messages go while the app is shown: on the terminal, they'd cover the app
+#: where the log messages go from the app's start: on the terminal, the app would cover them,
+#: or they'd cover it
 _LOG_FILE = Path("composeui.log")
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -61,7 +63,7 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--log-file",
         metavar="FILE",
-        help=f"Write the log messages to FILE while the app is shown (default: {_LOG_FILE}).",
+        help=f"Write the log messages to FILE while the app runs (default: {_LOG_FILE}).",
         type=_log_file,
         default=_LOG_FILE,
     )
@@ -69,33 +71,40 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _exec(
     args: argparse.Namespace | None,
+    start: Callable[[], None],
     main_view: MainView,
     model: Model | None,
     render: Callable[[RendererType], None],
 ) -> None:
-    """Show the main view until the app exits, or run it again on every change.
+    """Start the app, then show the main view until it exits, or run it again on every change.
 
-    Then close `model`; a supervisor, which never shows it, closes it first.
+    A supervisor never shows it, and closes `model` first: the child processes open their own.
     """
     assert args is not None
-    if args.reload and not is_reloaded():
-        # never shown here: closed first, as the child processes build and open their own
-        if model is not None:
-            model.close()
-        run_reloading()
-        return
+    is_supervisor = args.reload and not is_reloaded()
+    log_file = args.log_file
     try:
-        _show(main_view, model, render, args.log_file)
+        check_writable(log_file)
+    except OSError as error:  # only the default: not worth refusing to run from such a folder
+        LOGGER.warning("No log file for this run, choose one with --log-file: %s", error)
+        log_file = Path(os.devnull)  # a failed open would print its error on the terminal
+    try:
+        # a supervisor only starts: its line would flash before the app covers it
+        with logs_in_file(log_file, names_file=not is_supervisor and log_file == args.log_file):
+            start()
+            if not is_supervisor:
+                _show(main_view, model, render)
     finally:
         if model is not None:
             model.close()
+    if is_supervisor:
+        run_reloading()
 
 
 def _show(
     main_view: MainView,
     model: Model | None,
     render: Callable[[RendererType], None],
-    log_file: Path,
 ) -> None:
     if is_reloaded():
         load_reloaded_state(main_view, model)
@@ -115,12 +124,7 @@ def _show(
             app.set_interval(_CHANGES_CHECK_INTERVAL, exit_on_changes)
 
         app.mounted_callbacks.append(follow_changes)
-    try:
-        check_writable(log_file)
-    except OSError as error:  # only the default: not worth refusing to run from such a folder
-        LOGGER.warning("No log file while the app is shown, choose one with --log-file: %s", error)
-    with logs_in_file(log_file):
-        app.run()
+    app.run()
 
 
 class TextualApplication(Application[MainViewT]):
@@ -133,8 +137,8 @@ class TextualApplication(Application[MainViewT]):
         _add_arguments(self._parser)
 
     def run(self) -> None:
-        super().run()
-        _exec(self._args, self.main_view, None, self.render)
+        self._args = self._parse_arguments()
+        _exec(self._args, self._start, self.main_view, None, self.render)
 
 
 class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
@@ -155,8 +159,8 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
         _add_arguments(self._parser)
 
     def run(self) -> None:
-        super().run()
-        _exec(self._args, self.main_view, self.model, self.render)
+        self._args = self._parse_arguments()
+        _exec(self._args, self._start, self.main_view, self.model, self.render)
 
 
 #: the backend's applications, for `composeui.core.application.run`

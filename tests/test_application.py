@@ -319,6 +319,11 @@ _LOGGING_TEXTUAL_APP = textwrap.dedent(
     class CountMainView(MainView):
         app_title = "Count"
 
+    def build_main_view():
+        main_view = CountMainView()
+        main_view.loaded.connect(lambda: LOGGER.info("at loaded"))
+        return main_view
+
     class LoggingApplication(TextualApplication):
         def render(self, renderer_type):
             LOGGER.info("before the app")
@@ -329,17 +334,18 @@ _LOGGING_TEXTUAL_APP = textwrap.dedent(
                 app.exit()
             app.mounted_callbacks.append(log_and_exit)
 
-    LoggingApplication(build_main_view=CountMainView).run()
+    LoggingApplication(build_main_view=build_main_view).run()
     LOGGER.info("after the app")
     """
 )
 
 
 def _run_logging_textual_app(
-    cwd: Path, *options: str, check: bool = True
+    cwd: Path, *options: str, check: bool = True, script: str | None = None
 ) -> subprocess.CompletedProcess[str]:
+    program = ["-c", _LOGGING_TEXTUAL_APP] if script is None else [script]
     return subprocess.run(  # noqa: S603
-        [sys.executable, "-c", _LOGGING_TEXTUAL_APP, *options],
+        [sys.executable, *program, *options],
         cwd=cwd,
         env={
             **os.environ,
@@ -357,7 +363,7 @@ def _run_logging_textual_app(
     ("options", "name"),
     [([], "composeui.log"), (["--log-file", "other.log"], "other.log")],
 )
-def test_a_textual_app_writes_its_log_to_a_file_only_while_it_is_shown(
+def test_a_textual_app_writes_its_log_to_a_file_from_its_start_until_it_exits(
     options: list[str], name: str, tmp_path: Path
 ) -> None:
     pytest.importorskip("textual")
@@ -366,9 +372,11 @@ def test_a_textual_app_writes_its_log_to_a_file_only_while_it_is_shown(
 
     log = (tmp_path / name).read_text(encoding="utf-8")
     assert "while shown" in log
-    assert "before the app" not in log
+    assert "at loaded" in log
+    assert "before the app" in log
     assert "after the app" not in log
-    assert "before the app" in result.stdout
+    assert "at loaded" not in result.stdout
+    assert "before the app" not in result.stdout
     assert "while shown" not in result.stdout
     assert "after the app" in result.stdout
     assert f"Log messages written to {tmp_path / name}" in result.stdout
@@ -524,6 +532,18 @@ def test_a_callback_whose_signature_can_t_be_read_is_called_without_arguments(
     assert callback.calls == 1
 
 
+def test_the_supervisor_of_a_textual_app_keeps_its_start_off_the_terminal(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+    script = tmp_path / "app.py"
+    script.write_text(_LOGGING_TEXTUAL_APP)
+
+    result = _run_logging_textual_app(tmp_path, "--reload", script=str(script))
+
+    assert "at loaded" not in result.stdout
+    assert "Watching the Python files" in result.stdout
+    assert result.stdout.count("Log messages written") == 1  # from the app shown, at its exit
+
+
 def test_a_textual_app_refuses_a_log_file_it_cannot_write(tmp_path: Path) -> None:
     pytest.importorskip("textual")
 
@@ -542,8 +562,10 @@ def test_a_textual_app_runs_and_warns_when_its_default_log_file_cannot_be_writte
 
     result = _run_logging_textual_app(tmp_path)
 
-    assert "No log file while the app is shown" in result.stdout
-    assert "while shown" not in result.stdout.replace("No log file while the app is shown", "")
+    assert "No log file for this run" in result.stdout
+    assert "while shown" not in result.stdout
+    assert "at loaded" not in result.stdout
+    assert "Logging error" not in result.stderr
     assert "after the app" in result.stdout
     assert "Log messages written" not in result.stdout
 

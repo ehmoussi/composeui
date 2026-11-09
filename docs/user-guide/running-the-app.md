@@ -192,7 +192,7 @@ When the app runs, it shows the `info` messages and above. These options of ever
 The result of `get_logger` is a standard `logging.Logger`. Add a handler to it to write its messages
 to a file too.
 
-Textual draws the app on the terminal. So while a Textual app is shown, ComposeUI writes these
+Textual draws the app on the terminal. So while a Textual app runs, from its start, ComposeUI writes these
 messages to `composeui.log` in the current directory. Use `--log-file FILE` to choose another file.
 ComposeUI creates the file with the first message, and shows its path when the app exits. At 5 MiB,
 the file starts again, and the previous content moves to `composeui.log.1`.
