@@ -217,7 +217,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,
   `failed`, and `progress` (`job.report_progress(value)`), which emit on the main thread.
   Raise `RefusedError` for an expected refusal only. For a function that a view runs again
-  and again, create `self.jobs.task(work)` once in `__attrs_post_init__`, not as a field.
+  and again, create `self.jobs.task(work)` once in `__attrs_post_init__`, not as a field; in
+  a view that is not the main view, `self.build_task(work)`.
   Let the task set its controls' state: `task.disables(*views)` and
   `task.cancel_with(stop)`, rather than enabling them in each callback. For an input that
   changes quickly, such as a slider, call `task.start_latest(*args)`: it replaces the
