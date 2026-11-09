@@ -266,9 +266,10 @@ This is the click of [A button click](#a-button-click) on the web, step by step:
    `SameOriginMiddleware` (`origin.py`) refuses a request from another origin. Starlette's
    `SessionMiddleware` reads the signed session cookie.
 3. **The route finds the session.** `widget_event` (`routes.py`) gets the session from the
-   cookie's id. When the session is gone, the response has `HX-Refresh`, and the page reloads
-   with a new session. Otherwise, the route calls `WebSession.handle_event` in a thread: the
-   app's callbacks are synchronous code, and must not block the event loop.
+   cookie's id. When the session is gone, or did not serve the page, the response has
+   `HX-Refresh`. The page reloads, with the cookie's session or a new one. Otherwise, the
+   route calls `WebSession.handle_event` in a thread: the app's callbacks are synchronous
+   code, and must not block the event loop.
 4. **The session dispatches the event.** `handle_event` finds the renderer by its id in the
    session's own `renderers`. An id of another session is not found. `_respond` takes the
    session's lock and opens `collect_dirty()`, a set of dirty renderers for this request. Then
@@ -362,7 +363,14 @@ section covers what users see.
   and gives no promise to wait on for a trigger's request.
 - **Sessions.** A signed cookie maps to a `WebSession`, which holds its renderers by id and an
   `RLock` (the status bar timer takes it through `call_on_main_thread`). A request whose session
-  is gone answers `HX-Refresh`.
+  is gone answers `HX-Refresh`. The tabs of a browser share one cookie. So a tab left open on a
+  page of an ended session sends the cookie of a newer tab's session. The session ended when
+  the server restarted, or when it expired. The newer session doesn't have the views of the
+  page. Worse, `id()` can give one of its views an id that the page shows. So each page names
+  its session's `page_tag`. `page.js` sends it with each htmx request (`X-ComposeUI-Session`),
+  and Save's form in its `session` field. `_session` in `routes.py` answers a request with
+  another tag as if its session were gone. A plain link, such as a download, sends no tag and
+  is not checked: it only reads.
 
 ### Uploads and Open
 

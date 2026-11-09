@@ -903,6 +903,27 @@ def test_a_reload_server_s_page_reloads_on_its_session_once_the_server_restarts(
     context.close()
 
 
+def test_a_page_of_a_restarted_server_reloads_once_another_tab_has_a_new_session(
+    browser: Browser,
+) -> None:
+    with _serve(_BrowserHelloApp().create_starlette_app()) as base_url:
+        context = browser.new_context(base_url=base_url)
+        page = context.new_page()
+        page.goto("/")
+        with _posted(page):
+            page.get_by_label("Name").press_sequentially("Bob")
+    # restarted, e.g. for a change: its sessions are gone
+    with _serve(_BrowserHelloApp().create_starlette_app(), urlsplit(base_url).port):
+        other = context.new_page()
+        other.goto("/")  # a new session, whose cookie the first tab now sends too
+        with page.expect_event("load"):
+            page.get_by_label("Name").press_sequentially("A")
+
+        # the first tab shows the new session, rather than act on views it doesn't show
+        expect(page.get_by_label("Name")).to_have_value("")
+    context.close()
+
+
 def test_a_form_posted_from_another_port_is_refused(page: Page, base_url: str) -> None:
     """Same site (the cookie goes along), not same origin: the server refuses it."""
     page.goto("/")

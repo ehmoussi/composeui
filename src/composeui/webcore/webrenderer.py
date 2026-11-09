@@ -6636,8 +6636,11 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
 
-    def page_html(self, reload_instance: str | None = None) -> str:
-        """Get the whole page; with `reload_instance`, it reloads once its server restarts."""
+    def page_html(self, reload_instance: str | None = None, *, session_tag: str = "") -> str:
+        """Get the whole page; with `reload_instance`, it reloads once its server restarts.
+
+        Its requests carry `session_tag`, the `WebSession.page_tag` of its session, if any.
+        """
         menus: list[str] = []
         toolbars: list[str] = []
         content: list[str] = []
@@ -6712,6 +6715,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             pollers=jobs_poller(is_running=self._view.jobs.is_running)
             + reload_poller(reload_instance),
             max_upload_size=self._view.max_upload_size,
+            session_tag=session_tag,
             icon=self._app_icon_url(),
         )
 

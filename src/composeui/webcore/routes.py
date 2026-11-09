@@ -17,6 +17,7 @@ from starlette.responses import (
 from composeui.core import chartimage
 from composeui.webcore.icons import icon_path
 from composeui.webcore.order import form_order
+from composeui.webcore.page import SESSION_TAG_FIELD, SESSION_TAG_HEADER
 from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.uploads import UploadRefusal, receive_upload
 from composeui.webcore.webrenderer import UnsupportedEventError
@@ -51,13 +52,28 @@ def _store(request: Request) -> SessionStore:
     return store
 
 
-def _session(request: Request) -> WebSession | None:
-    return _store(request).get(request.session.get(SESSION_KEY))
+def _session(request: Request, tag: object = None) -> WebSession | None:
+    """Get the request's session; None if gone, or not the one that served its page.
+
+    A tab left open on a page of an ended session (e.g. before the server restarted)
+    shares its cookie with a newer tab: it names the newer tab's session, whose views it
+    doesn't show. Its htmx requests name its own session (`SESSION_TAG_HEADER`), and Save's
+    form gives it as `tag`, so it reloads, as for a session that is gone. A link names none.
+    """
+    session = _store(request).get(request.session.get(SESSION_KEY))
+    if tag is None:
+        tag = request.headers.get(SESSION_TAG_HEADER)
+    if session is not None and tag is not None and tag != session.page_tag:
+        return None
+    return session
 
 
 def _session_or_new(request: Request) -> WebSession | None:
-    """Get the request's session, or a new one; None while the server has too many."""
-    session = _session(request)
+    """Get the request's session, or a new one; None while the server has too many.
+
+    For a whole page, which the session then serves: whichever page asks.
+    """
+    session = _store(request).get(request.session.get(SESSION_KEY))
     if session is None:
         created = _store(request).create()
         if created is None:
@@ -313,12 +329,13 @@ async def state_save(request: Request) -> Response:
     """Fire Save's own `triggered`, then download the state as `state_download` does.
 
     A form's post rather than a link: the action changes the session, which a GET must
-    not (a link from another site would fire it).
+    not (a link from another site would fire it). Without the session that served its page,
+    the browser is sent to the page, as for `state_download`.
     """
-    session = _session(request)
+    form = await request.form()
+    session = _session(request, form.get(SESSION_TAG_FIELD))
     if session is None:
         return RedirectResponse("/", status_code=303)
-    form = await request.form()
     trigger = form.get("trigger")
     # after the page's posts sent before it, e.g. a field's value as Save took the focus
     async with session.post_order.turn(form_order(form)):

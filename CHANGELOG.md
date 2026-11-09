@@ -85,6 +85,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, a tab left open on a page of an ended session reloads when the user acts on it, also
+  after another tab opened the app. The session ended when the server restarted, or when it
+  expired. The tab's posts failed with `404 Unknown widget` before, and Save downloaded the other
+  tab's study.
 - A selection that a study restored stays when rows replace a source without rows, such as an empty
   `DataFrameSource` built before the data is loaded.
 - `selection_changed` emits `[]` for rows that replace a selection of positions once they are

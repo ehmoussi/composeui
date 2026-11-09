@@ -758,6 +758,14 @@ document.addEventListener("htmx:beforeSend", function (event) {
   event.detail.xhr.setRequestHeader("X-ComposeUI-Page", PAGE_ID);
   event.detail.xhr.setRequestHeader("X-ComposeUI-Post", String(postNumber));
 });
+/* each request names the session that served the page (`SESSION_TAG_HEADER`): a tab left
+   open on a page of an ended session (e.g. before the server restarted) shares its cookie
+   with a newer tab, and the server answers it with a reload rather than a newer session's
+   views. */
+document.addEventListener("htmx:configRequest", function (event) {
+  var tag = document.body.dataset.session;
+  if (tag) event.detail.headers["X-ComposeUI-Session"] = tag;
+});
 /* Answers can arrive in another order than the requests left: a fragment already shown
    from a later request isn't replaced by an older answer. The rest of it still applies,
    each answer sending what it changed alone. Polls count, as their fragments age too. */
