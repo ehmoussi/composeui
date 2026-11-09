@@ -359,6 +359,24 @@ def test_a_date_column_s_filter_is_hinted_with_a_date() -> None:
     assert table.filter_placeholder(1) == ">=2024-01-31"
 
 
+@attrs.frozen
+class _Run:
+    elapsed: datetime.timedelta
+    pause: Optional[datetime.timedelta] = None
+
+
+@pytest.mark.parametrize("column", [0, 1])
+def test_a_duration_column_s_filter_is_hinted_with_a_duration(column: int) -> None:
+    table = RecordTableView[_Run](
+        columns=[
+            Column("elapsed", T("Elapsed"), filterable=True),
+            Column("pause", T("Pause"), filterable=True),
+        ]
+    )
+
+    assert table.filter_placeholder(column) == ">=1d 2h, 1m..90m"
+
+
 def test_the_cell_styles_of_columns_gone_are_left_out() -> None:
     table = TableView(headers=["Room"], rows=[["Hall"]])
     table.cell_styles = {

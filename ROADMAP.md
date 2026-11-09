@@ -85,8 +85,6 @@ The order of the work for **Now**:
   shows it.
 - **Narwhals as a required dependency** (Now). Use `narwhals.stable.v2`, import it only where
   frames are used, and keep the `dataframe` extra as an empty alias for one release.
-- **A frame's types** (Now). Time zones, durations, categories (filtered as a choice of values)
-  and decimals, and PyArrow tested with pandas and Polars.
 - **Shared data** (Now). Data loaded once per process and shared by the sessions, read-only, and
   freed on shutdown and reload. Private data never goes in. Done when 4 web sessions of the Uber
   example load its CSV once.
@@ -120,7 +118,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **Download** (Now). A file or bytes that the app makes: a download on the web, a save path on
   Qt and Textual.
 - **Choices of several values** (Now). A multi-select combobox and a check list with a check-all
-  box, on one model, both with an optional search.
+  box, on one model, both with an optional search. A table's category column filtered as a choice
+  of its values.
 - **A searchable picker** (Now). A combobox that filters its values as the user types, searched
   on the server for long lists.
 - **A range slider and a date range** (Now).
@@ -225,6 +224,8 @@ The SQLite model is complete otherwise: do not rebuild it.
   intervals and on shutdown, and the cookies' signing key.
 - **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
   removes what a crash left.
+- **Turning off regular expressions in web filters** (Now). A setting, for a deployed app: a
+  crafted `/regex/` can run for a long time.
 - **Users** (Later). The user read from a login proxy's headers, for OIDC, SAML2 or Basic Auth,
   with recipes for the proxies.
 - **Access control** (Later). An authorization hook that the server enforces for pages, actions

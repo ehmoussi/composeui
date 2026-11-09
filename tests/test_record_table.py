@@ -126,6 +126,73 @@ def test_a_cell_that_doesn_t_parse_refuses_the_edit_and_says_why(
     assert main_view.status_bar.message == f"{header} : « {text} » n'est pas une valeur valide"
 
 
+@attrs.frozen
+class _Run:
+    elapsed: datetime.timedelta
+    pause: Optional[datetime.timedelta] = None
+
+
+def _run_table() -> RecordTableView[_Run]:
+    return RecordTableView[_Run](
+        records=[_Run(datetime.timedelta(minutes=2))],
+        columns=[Column("elapsed", T("Elapsed"), editable=True)],
+    )
+
+
+def test_a_duration_cell_is_edited_in_the_format_it_shows() -> None:
+    table = _run_table()
+    assert table.rows == [["2m"]]
+
+    table.emit_cell_edited(0, 0, "1d 2h")
+
+    assert table.records == [_Run(datetime.timedelta(days=1, hours=2))]
+    assert table.rows == [["1d 2h"]]
+
+
+def test_a_duration_cell_refuses_a_length_too_long() -> None:
+    table = _run_table()
+
+    table.emit_cell_edited(0, 0, "1e400")
+
+    assert table.rows == [["2m"]]
+
+
+@define_view
+class _RunsMainView(MainView):
+    runs: RecordTableView[_Run] = child(
+        RecordTableView[_Run], columns=[Column("elapsed", T("Elapsed"))]
+    )
+
+
+_RUNS = [
+    _Run(datetime.timedelta(days=1, hours=2), datetime.timedelta(microseconds=-15)),
+    _Run(datetime.timedelta(0)),
+]
+
+
+def test_a_study_saves_and_opens_durations(tmp_path: Path) -> None:
+    main_view = _RunsMainView()
+    main_view.runs.records = _RUNS
+    path = tmp_path / "runs.json"
+    main_view.save_state(path)
+
+    reopened = _RunsMainView()
+    reopened.load_state(path)
+
+    assert reopened.runs.records == _RUNS
+
+
+def test_a_study_with_a_duration_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
+    main_view = _RunsMainView()
+    main_view.runs.records = _RUNS
+    path = tmp_path / "runs.json"
+    main_view.save_state(path)
+    path.write_text(path.read_text().replace("1d 2h", "soon"))
+
+    with pytest.raises(InvalidStateError):
+        _RunsMainView().load_state(path)
+
+
 def test_a_refusal_in_record_edited_refuses_the_edit(main_view: RoomsMainView) -> None:
     table = main_view.rooms
     records = table.records

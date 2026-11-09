@@ -3747,6 +3747,55 @@ def _parse_bool(text: Any, _type: type) -> bool:
 
 #: parses a cell's text into a record's field; strict about booleans, which
 #: ``bool("False")`` would make true
+#: the longest duration read: the frames' libraries refuse a longer one in a filter
+_MAX_DURATION = datetime.timedelta(microseconds=2**63 - 1)
+_DURATION_TEXT = re.compile(
+    r"(-?)(?:([0-9]+)d)?\s*(?:([0-9]+)h)?\s*(?:([0-9]+)m)?\s*(?:([0-9]+(?:\.[0-9]*)?)s)?"
+)
+
+
+def _duration_text(duration: datetime.timedelta) -> str:
+    """Write a duration in full with its units, such as ``1d 2h 30m`` or ``-1.5s``."""
+    magnitude = abs(duration)
+    hours, rest = divmod(magnitude.seconds, 3600)
+    minutes, seconds = divmod(rest, 60)
+    fraction = f"{magnitude.microseconds:06d}".rstrip("0")
+    second_text = f"{seconds}.{fraction}" if fraction != "" else str(seconds)
+    parts = [
+        f"{value}{unit}"
+        for value, unit in ((magnitude.days, "d"), (hours, "h"), (minutes, "m"))
+        if value != 0
+    ]
+    if second_text != "0" or len(parts) == 0:
+        parts.append(f"{second_text}s")
+    return f"{'-' if duration < datetime.timedelta(0) else ''}{' '.join(parts)}"
+
+
+def _parse_duration(value: Any, _type: Any = None) -> datetime.timedelta:
+    """Read a duration as a cell shows it (``1d 2h 30m``), or a number of seconds."""
+    text = str(value).strip()
+    match = _DURATION_TEXT.fullmatch(text)
+    try:
+        if match is None or text in ("", "-"):
+            duration = datetime.timedelta(seconds=float(text))
+        else:
+            sign, days, hours, minutes, seconds = match.groups()
+            duration = datetime.timedelta(
+                days=int(days or 0),
+                hours=int(hours or 0),
+                minutes=int(minutes or 0),
+                seconds=float(seconds or 0),
+            )
+            duration = -duration if sign == "-" else duration
+    except OverflowError as error:
+        raise ValueError(text) from error
+    if abs(duration) > _MAX_DURATION:
+        raise ValueError(text)
+    return duration
+
+
+CONVERTER.register_unstructure_hook(datetime.timedelta, _duration_text)
+CONVERTER.register_structure_hook(datetime.timedelta, _parse_duration)
 _CELL_CONVERTER = CONVERTER.copy()
 _CELL_CONVERTER.register_structure_hook(bool, _parse_bool)
 
@@ -3880,7 +3929,7 @@ def column_kind(field_type: Any) -> ColumnKind:
         field_type = types[0]
     if field_type is bool:
         return ColumnKind.BOOLEAN
-    if field_type in (int, float, decimal.Decimal):
+    if field_type in (int, float, decimal.Decimal, datetime.timedelta):
         return ColumnKind.NUMBER
     if field_type in (datetime.date, datetime.datetime):
         return ColumnKind.DATE
@@ -3899,13 +3948,16 @@ def _parse_value(text: str, field_type: Any, kind: ColumnKind) -> Any:
     try:
         # as `_cell_text` writes a date: ISO, which the converter doesn't read
         if base is datetime.datetime:
-            return datetime.datetime.fromisoformat(text)
+            parsed = datetime.datetime.fromisoformat(text)
+            if parsed.tzinfo is not None:  # raises at the ends of the calendar, without UTC
+                parsed.astimezone(datetime.timezone.utc)
+            return parsed
         if base is datetime.date:
             return datetime.date.fromisoformat(text)
         if base is decimal.Decimal:
             return decimal.Decimal(text)
         return _CELL_CONVERTER.structure(text, base)
-    except (*_BAD_STATE_ERRORS, decimal.InvalidOperation) as error:
+    except (*_BAD_STATE_ERRORS, decimal.InvalidOperation, OverflowError) as error:
         raise FilterError(problems[kind], text) from error
 
 
@@ -3961,10 +4013,10 @@ def parse_filter(text: str, field_type: Any = str) -> Filter:
 
     In a text column, ignoring case: the cells that contain the text, or as `_parse_text`
     says (``=exact``, ``!=exact``, ``!not``, ``start*``, ``*end``, ``/regex/``). In a
-    number or a date column: a comparison (``>20``, ``>=20``, ``<20``, ``<=20``,
-    ``!=20``). Or a range (``18..24``, both ends included), or a bare value, which means
-    ``=``. In a boolean column: ``true`` or ``false``. In any column: ``=`` alone, for the
-    empty cells. Raise `FilterError` when the text doesn't parse.
+    number, a date or a duration column (``1d 2h`` or seconds): a comparison (``>20``, ``>=20``,
+    ``<20``, ``<=20``, ``!=20``). Or a range (``18..24``, both ends included), or a bare
+    value, which means ``=``. In a boolean column: ``true`` or ``false``. In any column:
+    ``=`` alone, for the empty cells. Raise `FilterError` when the text doesn't parse.
     """
     text = text.strip()
     if text == "":
@@ -3987,7 +4039,11 @@ def parse_filter(text: str, field_type: Any = str) -> Filter:
             _parse_value(lower, field_type, kind),
             _parse_value(upper, field_type, kind),
         )
-        if range_filter.value > range_filter.upper:
+        try:
+            is_reversed = range_filter.value > range_filter.upper
+        except TypeError as error:  # a time zone at one end only
+            raise FilterError(FilterProblem.NOT_A_DATE, text) from error
+        if is_reversed:
             raise FilterError(FilterProblem.REVERSED_RANGE, text)
         return range_filter
     return Filter(FilterOperator.EQUAL, _parse_value(text, field_type, kind))
@@ -4361,6 +4417,8 @@ def _filter_placeholder(tr: Callable[[str], str], field_type: Any, *, is_pattern
     kind = column_kind(field_type)
     if is_pattern and kind is ColumnKind.TEXT:
         return tr("a regular expression, as Room [1-3]")
+    if datetime.timedelta in (field_type, *get_args(field_type)):
+        return tr(">=1d 2h, 1m..90m")
     if kind is ColumnKind.NUMBER:
         return tr(">=20, 18..24")
     if kind is ColumnKind.DATE:

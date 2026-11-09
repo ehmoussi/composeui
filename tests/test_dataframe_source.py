@@ -1,9 +1,10 @@
-"""A large table's source of a dataframe's rows: pandas, Polars, and a Polars lazy frame."""
+"""A large table's source of a dataframe's rows: pandas, Polars, PyArrow, and a lazy frame."""
 
 from __future__ import annotations
 
 import contextlib
 import datetime
+import decimal
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import attrs
@@ -14,6 +15,7 @@ from hypothesis import strategies as st
 pytest.importorskip("narwhals")
 pytest.importorskip("polars")
 pytest.importorskip("pandas")
+pytest.importorskip("pyarrow")
 import pandas as pd
 import polars as pl
 
@@ -59,6 +61,7 @@ class Reading:
     count: Optional[int]
     at: Optional[datetime.datetime]
     ok: Optional[bool]
+    elapsed: Optional[datetime.timedelta] = None
 
 
 READINGS = [
@@ -70,13 +73,21 @@ READINGS = [
     Reading("bravo", 30.0, 1, datetime.datetime.fromisoformat("2024-01-05T00:00"), ok=True),
     Reading("Delta b", 12.0, 3, datetime.datetime.fromisoformat("2023-12-31T00:00"), ok=False),
 ]
-HEADERS = {"name": "Name", "value": "Value", "count": "Count", "at": "At", "ok": "OK"}
+HEADERS = {
+    "name": "Name",
+    "value": "Value",
+    "count": "Count",
+    "at": "At",
+    "ok": "OK",
+    "elapsed": "Elapsed",
+}
 SCHEMA = {
     "name": pl.String,
     "value": pl.Float64,
     "count": pl.Int64,
     "at": pl.Datetime,
     "ok": pl.Boolean,
+    "elapsed": pl.Duration,
 }
 
 
@@ -93,6 +104,7 @@ def _pandas(readings: list[Reading]) -> Any:
             "count": "Int64",
             "at": "datetime64[ns]",
             "ok": "boolean",
+            "elapsed": "timedelta64[ns]",
         }
     )
 
@@ -103,6 +115,9 @@ FRAMES: dict[str, Callable[[list[Reading]], DataFrameSource]] = {
         pl.DataFrame(_columns(readings), schema=SCHEMA), HEADERS
     ),
     "pandas": lambda readings: DataFrameSource(_pandas(readings), HEADERS),
+    "pyarrow": lambda readings: DataFrameSource(
+        pl.DataFrame(_columns(readings), schema=SCHEMA).to_arrow(), HEADERS
+    ),
     "lazy": lambda readings: DataFrameSource(
         pl.DataFrame(_columns(readings), schema=SCHEMA).with_row_index("key").lazy(),
         HEADERS,
@@ -166,6 +181,11 @@ _NAMES = st.sampled_from(["a", "A", "B", "b_", "_", "é", "É", "a.b"]) | st.tex
 )
 _VALUES = [12.0, 18.0, 20.5]
 _COUNTS = [1, 2, 10]
+_DURATIONS = [
+    datetime.timedelta(seconds=90),
+    datetime.timedelta(days=2),
+    datetime.timedelta(days=10),
+]
 _TIMES = [
     datetime.datetime.fromisoformat(text) for text in ("2024-01-01T09:00", "2024-01-03T08:00")
 ]
@@ -193,6 +213,7 @@ def _queries(draw: st.DrawFn) -> _Query:
                 st.none() | st.sampled_from(_COUNTS),
                 st.none() | st.sampled_from(_TIMES),
                 ok=st.none() | st.booleans(),
+                elapsed=st.none() | st.sampled_from(_DURATIONS),
             ),
             max_size=8,
         )
@@ -225,6 +246,10 @@ def _queries(draw: st.DrawFn) -> _Query:
             st.just("at"), compared(st.sampled_from(_TIMES).map(datetime.datetime.isoformat))
         ),
         st.tuples(st.just("ok"), st.sampled_from(["true", "false", "="])),
+        st.tuples(
+            st.just("elapsed"),
+            compared(st.sampled_from(_DURATIONS).map(lambda d: str(d.total_seconds()))),
+        ),
     )
     # mostly a sort, by name half the time: text has the most ways to sort apart
     sorted_by = st.builds(
@@ -268,8 +293,8 @@ def test_cells_give_python_values_by_id_and_leave_out_the_ids_gone(
     cells = source.cells([2, 0, 99], list(HEADERS))
 
     assert cells == {
-        2: ["", 18.0, None, None, True],
-        0: ["Bravo", 20.5, 2, datetime.datetime.fromisoformat("2024-01-03T08:00"), True],
+        2: ["", 18.0, None, None, True, None],
+        0: ["Bravo", 20.5, 2, datetime.datetime.fromisoformat("2024-01-03T08:00"), True, None],
     }
     assert type(cells[0][1]) is float  # not numpy's, which a cell's format would show
     assert source.cells([3], ["name", "value"]) == {3: [None, 25.0]}
@@ -301,11 +326,326 @@ def test_the_columns_types_come_from_the_frame_s_schema() -> None:
     assert [(column.name, column.header, column.type) for column in source.columns] == [
         ("day", "day", datetime.date),
         ("kind", "kind", str),
-        ("duration", "duration", str),
+        ("duration", "duration", datetime.timedelta),
     ]
     assert source.cells([0], ["day"]) == {0: [datetime.date(2024, 1, 1)]}
     # no text column holds a search
     assert DataFrameSource(frame, {"day": "Day"}).ordered_ids(None, "a", {}) == []
+
+
+_DAYS_AND_NONE: list[Optional[datetime.timedelta]] = [
+    datetime.timedelta(days=10),
+    None,
+    datetime.timedelta(days=2),
+    datetime.timedelta(seconds=90),
+]
+
+
+def _duration_frame(library: str) -> Any:
+    columns = {"elapsed": _DAYS_AND_NONE, "name": ["w", "x", "y", "z"]}
+    if library == "pandas":
+        return pd.DataFrame(columns).astype({"elapsed": "timedelta64[ns]"})
+    frame = pl.DataFrame(columns, schema={"elapsed": pl.Duration, "name": pl.String})
+    return frame if library == "polars" else frame.to_arrow()
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+def test_a_duration_column_sorts_by_length_and_a_search_passes_over_it(library: str) -> None:
+    source = DataFrameSource(_duration_frame(library))
+
+    assert source.ordered_ids(Sort("elapsed", descending=False), "", {}) == [3, 2, 0, 1]
+    assert source.ordered_ids(None, "x", {}) == [1]
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (">3600", [0, 2]),
+        ("<=90", [3]),
+        ("90", [3]),
+        ("100..172800", [2]),
+        ("=", [1]),
+        (">1d 12h", [0, 2]),
+        ("1m 30s", [3]),
+        ("1m..2m", [3]),
+        ("-1d..2d", [2, 3]),
+    ],
+)
+def test_a_duration_column_filters_in_seconds(library: str, text: str, expected: list[int]) -> None:
+    source = DataFrameSource(_duration_frame(library))
+    row_filter = parse_filter(text, datetime.timedelta)
+
+    assert source.ordered_ids(None, "", {"elapsed": row_filter}) == expected
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+def test_a_duration_cell_is_python_s_timedelta(library: str) -> None:
+    source = DataFrameSource(_duration_frame(library))
+
+    cell = source.cells([3], ["elapsed"])[3][0]
+
+    assert type(cell) is datetime.timedelta
+    assert cell == datetime.timedelta(seconds=90)
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+def test_a_duration_filter_near_the_longest_is_compared(library: str) -> None:
+    source = DataFrameSource(_duration_frame(library))
+    row_filter = parse_filter(">9223372036854", datetime.timedelta)
+
+    assert source.ordered_ids(None, "", {"elapsed": row_filter}) == []
+
+
+@given(
+    st.timedeltas(
+        min_value=datetime.timedelta(days=-30, seconds=-5),
+        max_value=datetime.timedelta(days=30, seconds=5),
+    )
+)
+def test_a_duration_reads_back_as_its_cell_shows_it(duration: datetime.timedelta) -> None:
+    table = SourceTableView(source=DataFrameSource(pl.DataFrame({"elapsed": [duration]})))
+    text = table.rows(0, 1)[0][1][0]
+
+    assert parse_filter(f"={text}", datetime.timedelta).value == duration
+
+
+@pytest.mark.parametrize(
+    "text", [">soon", ">1e400", ">9223372036855", ">1h 2d", ">-", ">1d 99999999999999d"]
+)
+def test_a_duration_filter_that_is_no_number_of_seconds_is_refused(text: str) -> None:
+    with pytest.raises(FilterError):
+        parse_filter(text, datetime.timedelta)
+
+
+@pytest.mark.parametrize(
+    ("duration", "text"),
+    [
+        (datetime.timedelta(0), "0s"),
+        (datetime.timedelta(minutes=2), "2m"),
+        (datetime.timedelta(days=1, hours=2, minutes=30), "1d 2h 30m"),
+        (datetime.timedelta(seconds=-1.5), "-1.5s"),
+        (datetime.timedelta(days=1, seconds=5, microseconds=10), "1d 5.00001s"),
+    ],
+)
+def test_a_duration_cell_shows_its_units(duration: datetime.timedelta, text: str) -> None:
+    table = SourceTableView(source=DataFrameSource(pl.DataFrame({"elapsed": [duration]})))
+
+    assert table.rows(0, 1) == [(0, [text])]
+
+
+_INSTANTS = [
+    datetime.datetime(2024, 1, 1, 23, 30, tzinfo=datetime.timezone.utc),  # 00:30 in Paris
+    datetime.datetime(2024, 1, 2, 0, 30, tzinfo=datetime.timezone.utc),  # 01:30 in Paris
+    None,
+]
+
+
+def _paris_frame(library: str) -> Any:
+    if library == "pandas":
+        return pd.DataFrame(
+            {"time": pd.to_datetime(pd.Series(_INSTANTS), utc=True).dt.tz_convert("Europe/Paris")}
+        )
+    utc = pl.DataFrame({"time": _INSTANTS}, schema={"time": pl.Datetime("us", "UTC")})
+    frame = utc.with_columns(pl.col("time").dt.convert_time_zone("Europe/Paris"))
+    return frame if library == "polars" else frame.to_arrow()
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # the clock of the column: read in UTC, the first row would be before it
+        (">2024-01-02", [0, 1]),
+        # an instant: on the clock of the column, the first row would be after it
+        (">2024-01-02T01:00:00+01:00", [1]),
+        ("2024-01-01T23:00:00+00:00..2024-01-02T01:00:00+01:00", [0]),
+        ("2024-01-02T00:00:00..2024-01-02T01:00:00", [0]),
+        ("=", [2]),
+    ],
+)
+def test_a_date_filter_on_a_column_with_a_time_zone(
+    library: str, text: str, expected: list[int]
+) -> None:
+    source = DataFrameSource(_paris_frame(library))
+    row_filter = parse_filter(text, datetime.datetime)
+
+    assert source.ordered_ids(None, "", {"time": row_filter}) == expected
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+def test_a_date_with_a_zone_filters_a_column_without_one_by_its_clock(library: str) -> None:
+    times = ["2024-01-02T00:30:00", "2024-01-01T00:00:00"]
+    columns = {"time": [datetime.datetime.fromisoformat(time) for time in times]}
+    frame: Any = pd.DataFrame(columns) if library == "pandas" else pl.DataFrame(columns)
+    frame = frame.to_arrow() if library == "pyarrow" else frame
+    source = DataFrameSource(frame)
+    row_filter = parse_filter(">2024-01-02T00:00:00+05:00", datetime.datetime)
+
+    assert source.ordered_ids(None, "", {"time": row_filter}) == [0]
+
+
+@pytest.mark.parametrize("text", [">0001-01-01T00:00:00+05:00", ">9999-12-31T23:59:59-05:00"])
+def test_a_date_with_a_zone_at_the_end_of_the_calendar_is_refused(text: str) -> None:
+    with pytest.raises(FilterError):
+        parse_filter(text, datetime.datetime)
+
+
+def test_a_date_range_with_a_time_zone_at_one_end_only_is_refused() -> None:
+    with pytest.raises(FilterError):
+        parse_filter("2024-01-02T00:00:00..2024-01-03T00:00:00+00:00", datetime.datetime)
+
+
+@pytest.mark.parametrize(
+    "column",
+    [
+        pd.Series(["apple", None], dtype=object),
+        pd.Series(["apple", float("nan")], dtype=object),
+        pd.Series(["apple", None], dtype="category"),
+    ],
+    ids=["none", "nan", "category"],
+)
+@pytest.mark.parametrize(("search", "row_filter"), [("n", None), ("", "/n/"), ("", "=none")])
+def test_an_empty_pandas_cell_has_no_text_to_find(
+    column: pd.Series, search: str, row_filter: Optional[str]
+) -> None:
+    source = DataFrameSource(pd.DataFrame({"name": column}))
+    filters = {} if row_filter is None else {"name": parse_filter(row_filter)}
+
+    assert source.ordered_ids(None, search, filters) == []
+
+
+@pytest.mark.parametrize("descending", [False, True])
+def test_empty_pandas_cells_sort_together_in_the_frame_s_order(*, descending: bool) -> None:
+    frame = pd.DataFrame({"name": pd.Series(["", None, "", "b"], dtype=object)})
+
+    ids = DataFrameSource(frame).ordered_ids(Sort("name", descending=descending), "", {})
+
+    assert ids == [3, 0, 1, 2]
+
+
+_DECIMALS = [decimal.Decimal("1.10"), decimal.Decimal("2.25"), None]
+
+
+def _decimal_frame(library: str) -> Any:
+    if library == "pandas":
+        return pd.DataFrame({"amount": pd.Series(_DECIMALS, dtype=object)})
+    frame = pl.DataFrame({"amount": _DECIMALS}, schema={"amount": pl.Decimal(10, 2)})
+    return frame if library == "polars" else frame.to_arrow()
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+@pytest.mark.parametrize(
+    ("text", "expected"), [("=1.10", [0]), (">1.5", [1]), ("1..2", [0]), ("=", [2])]
+)
+def test_a_decimal_column_filters_as_numbers(library: str, text: str, expected: list[int]) -> None:
+    source = DataFrameSource(_decimal_frame(library))
+    row_filter = parse_filter(text, source.columns[0].type)
+
+    assert source.ordered_ids(None, "", {"amount": row_filter}) == expected
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+def test_a_decimal_column_sorts_as_numbers_and_a_search_passes_over_it(library: str) -> None:
+    source = DataFrameSource(_decimal_frame(library))
+
+    assert source.ordered_ids(Sort("amount", descending=True), "", {}) == [1, 0, 2]
+    assert source.ordered_ids(None, "1", {}) == []
+    assert source.cells([0], ["amount"]) == {0: [decimal.Decimal("1.10")]}
+
+
+def test_a_pandas_object_column_not_all_decimals_is_text() -> None:
+    values = [decimal.Decimal("1.10"), "a", None]
+    source = DataFrameSource(pd.DataFrame({"amount": pd.Series(values, dtype=object)}))
+
+    assert source.columns[0].type is str
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "row_filter", "kept"),
+    [
+        (pl.DataFrame({"a": [1, 2]}), pl.DataFrame({"a": ["x", ">1"]}), ">1", [1]),
+        (pl.DataFrame({"a": ["x"]}), pl.DataFrame({"a": [1, 2]}), ">1", [1]),
+        (
+            pd.DataFrame({"a": pd.Series([decimal.Decimal(2)], dtype=object)}),
+            pd.DataFrame({"a": ["x", ">1"]}),
+            ">1",
+            [1],
+        ),
+        # a date that a duration column can't read filters nothing
+        (
+            pl.DataFrame({"a": [datetime.date(2024, 1, 1)]}),
+            pl.DataFrame({"a": [datetime.timedelta(days=1)]}),
+            ">2023-01-01",
+            [0],
+        ),
+    ],
+    ids=["number to text", "text to number", "decimal to text", "date to duration"],
+)
+def test_a_table_s_filter_follows_the_types_of_a_new_frame(
+    first: Any, second: Any, row_filter: str, kept: list[int]
+) -> None:
+    source = DataFrameSource(first)
+    table = SourceTableView(source=source, filters={"a": row_filter})
+
+    source.frame = second
+
+    assert table.ids(0, 5) == kept
+
+
+def test_a_new_frame_keeps_the_columns_and_their_headers() -> None:
+    source = DataFrameSource(pl.DataFrame({"a": [1]}), {"a": "First"})
+
+    source.frame = pl.DataFrame({"a": ["x"], "b": [2]})
+
+    assert [(c.name, c.header, c.type) for c in source.columns] == [("a", "First", str)]
+
+
+def test_a_new_frame_without_a_column_is_refused_and_changes_nothing() -> None:
+    first = pl.DataFrame({"a": [1], "id": [7]})
+    source = DataFrameSource(first)
+    changes: list[None] = []
+    source.changed.connect(lambda: changes.append(None))
+
+    with pytest.raises(ValueError, match="no column 'a'"):
+        source.frame = pl.DataFrame({"id": [8]})
+
+    assert source.frame is first
+    assert changes == []
+    assert source.columns[0].type is int
+
+
+def _list_frame(library: str, dtype: Any) -> Any:
+    frame = pl.DataFrame(
+        {"values": [[3, 1], [2, 2]], "name": ["a", "b"]},
+        schema={"values": dtype, "name": pl.String},
+    )
+    return frame if library == "polars" else frame.to_arrow()
+
+
+_LIST_FRAMES = [
+    ("polars", pl.List(pl.Int64)),
+    ("polars", pl.Array(pl.Int64, 2)),
+    ("pyarrow", pl.List(pl.Int64)),
+]
+
+
+@pytest.mark.parametrize(("library", "dtype"), _LIST_FRAMES)
+def test_a_search_passes_over_a_column_of_lists(library: str, dtype: Any) -> None:
+    source = DataFrameSource(_list_frame(library, dtype))
+
+    assert source.ordered_ids(None, "b", {}) == [1]
+
+
+@pytest.mark.parametrize(("library", "dtype"), _LIST_FRAMES)
+def test_a_filter_and_a_sort_on_a_column_of_lists_do_nothing(library: str, dtype: Any) -> None:
+    source = DataFrameSource(_list_frame(library, dtype))
+    row_filter = parse_filter("=nothing")
+
+    assert source.ordered_ids(Sort("values", descending=True), "", {"values": row_filter}) == [
+        0,
+        1,
+    ]
 
 
 def test_a_new_frame_changes_the_rows_and_emits_changed() -> None:
@@ -430,6 +770,7 @@ def test_a_dataframe_source_is_a_table_source(source: DataFrameSource) -> None:
         int,
         datetime.datetime,
         bool,
+        datetime.timedelta,
     ]
 
 
@@ -444,13 +785,14 @@ def test_a_series_reads_two_columns_leaving_out_the_rows_missing_a_value(library
     assert series_of(frame, "hour", "pickups", name="Pickups").name == "Pickups"
 
 
-@pytest.mark.parametrize("library", ["polars", "pandas", "lazy"])
+@pytest.mark.parametrize("library", ["polars", "pandas", "lazy", "pyarrow"])
 def test_map_points_leave_out_the_rows_missing_a_value_or_off_the_map(library: str) -> None:
     columns = {"lat": [40.7, None, 90.0, 40.8, 40.9], "lon": [-73.9, -73.8, 0.0, 200.0, None]}
     frames: dict[str, Callable[[], IntoFrame]] = {
         "polars": lambda: pl.DataFrame(columns),
         "pandas": lambda: pd.DataFrame(columns),
         "lazy": lambda: pl.LazyFrame(columns),
+        "pyarrow": lambda: pl.DataFrame(columns).to_arrow(),
     }
 
     assert points_of(frames[library](), "lat", "lon") == [MapPoint(latitude=40.7, longitude=-73.9)]
@@ -489,6 +831,7 @@ _MEASURES: dict[str, list[Any]] = {
 }
 _MEASURE_FRAMES: dict[str, Callable[[], IntoFrame]] = {
     "polars": lambda: pl.DataFrame(_MEASURES),
+    "pyarrow": lambda: pl.DataFrame(_MEASURES).to_arrow(),
     "lazy": lambda: pl.LazyFrame(_MEASURES),
     "pandas, NaN": lambda: pd.DataFrame(_MEASURES),
     "pandas, NA": lambda: pd.DataFrame(_MEASURES).astype({"extra": "Int64"}),
