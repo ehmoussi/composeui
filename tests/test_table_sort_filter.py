@@ -316,6 +316,65 @@ def test_a_study_reopens_sorted_and_filtered_dropping_what_its_columns_no_longer
     assert (other.rooms.sort_column, other.rooms.filters) == (None, {NAME: "en"})
 
 
+def test_turning_off_regular_expressions_refuses_them_and_keeps_the_other_filters(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, main_view: SortedRoomsMainView
+) -> None:
+    table = main_view.rooms
+    table.filters = {NAME: "/^k/"}
+    path = tmp_path / "rooms.sorted"
+    main_view.save_state(path)
+    assert _names(main_view) == ["kitchen"]
+
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", "off")
+    # a saved filter no longer loads
+    other = Application(build_main_view=SortedRoomsMainView).main_view
+    other.load_state(path)
+    assert other.rooms.filters == {}
+    # the app's own setting is refused, as any filter that doesn't parse
+    with pytest.raises(FilterError) as error:
+        other.rooms.filters = {NAME: "/^k/"}
+    assert error.value.problem is FilterProblem.PATTERNS_OFF
+    assert not other.rooms.filter_takes_pattern(NAME)
+    assert other.rooms.filter_error(NAME, "/^k/") == "This app doesn't accept regular expressions"
+    other.rooms.filters = {NAME: "kit*"}
+    assert _names(other) == ["kitchen"]
+
+
+@pytest.mark.parametrize(
+    ("setting", "is_refused"),
+    [
+        ("off", True),
+        ("OFF", True),
+        (" off ", True),
+        ("false", True),
+        ("0", True),
+        ("no", True),
+        ("on", False),
+        ("true", False),
+        ("1", False),
+        ("yes", False),
+        ("", False),
+    ],
+)
+def test_the_setting_of_regular_expressions_reads_its_usual_spellings(
+    monkeypatch: pytest.MonkeyPatch, setting: str, *, is_refused: bool
+) -> None:
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", setting)
+    if is_refused:
+        with pytest.raises(FilterError):
+            parse_filter("/^k/")
+    else:
+        parse_filter("/^k/")
+
+
+def test_a_mistyped_setting_of_regular_expressions_stops_the_app_from_starting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", "offf")
+    with pytest.raises(ValueError, match="COMPOSEUI_FILTER_PATTERNS must be off or on, not 'offf'"):
+        Application(build_main_view=SortedRoomsMainView)
+
+
 def test_a_column_no_longer_sortable_or_filterable_drops_its_sort_and_filters() -> None:
     table = SortedRoomsMainView().rooms
     table.sort_by(OCCUPANTS)

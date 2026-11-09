@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import gc
+import json
 import threading
 import tracemalloc
 import weakref
@@ -276,6 +277,16 @@ def test_the_filter_bar_reads_its_count_chips_errors_and_hints_by_column_name(
         table.filter_error("mass", "1")
 
 
+def test_turning_off_regular_expressions_hides_their_toggle_in_a_large_table(
+    monkeypatch: pytest.MonkeyPatch, table: SourceTableView
+) -> None:
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", "off")
+    assert not table.filter_takes_pattern("name")
+    assert table.filter_error("name", "/s09/") == "This app doesn't accept regular expressions"
+    table.filters = {"name": "s098"}
+    assert table.count_text == "10 of 1,000"
+
+
 def test_the_settings_name_the_source_s_columns(table: SourceTableView) -> None:
     with pytest.raises(ValueError, match="sort by SourceTableView's column 'mass'"):
         table.sort_column = "mass"
@@ -532,6 +543,39 @@ def test_a_million_rows_keep_their_ids_alone_and_read_a_window() -> None:
 @define_view
 class SamplesMainView(MainView):
     samples: SourceTableView = child(SourceTableView, selection_mode=SelectionMode.MULTIPLE)
+
+
+def test_a_study_opens_without_its_regular_expressions_when_they_are_turned_off(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    main_view = SamplesMainView()
+    main_view.samples.source = CountingSource(_samples(20))
+    main_view.samples.filters = {"name": " /s00(1|2)/ ", "kind": "=gauge"}
+    path = tmp_path / "samples.json"
+    main_view.save_state(path)
+
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", "off")
+    reopened = SamplesMainView()
+    reopened.samples.source = CountingSource(_samples(20))
+    reopened.load_state(path)
+    assert reopened.samples.filters == {"kind": "=gauge"}
+
+
+def test_a_study_drops_the_filters_that_its_source_no_longer_takes(tmp_path: Path) -> None:
+    main_view = SamplesMainView()
+    main_view.samples.source = CountingSource(_samples(20))
+    main_view.samples.filters = {"kind": "=gauge"}
+    path = tmp_path / "samples.json"
+    main_view.save_state(path)
+    data = json.loads(path.read_text())
+    filters = {"value": ">warm", "mass": ">1", "kind": "=gauge"}
+    data["views"]["samples"]["filters"] = filters
+    path.write_text(json.dumps(data))
+
+    reopened = SamplesMainView()
+    reopened.samples.source = CountingSource(_samples(20))
+    reopened.load_state(path)
+    assert reopened.samples.filters == {"kind": "=gauge"}
 
 
 def test_a_study_saves_the_settings_and_the_selection_never_the_rows(tmp_path: Path) -> None:

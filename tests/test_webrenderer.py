@@ -7775,6 +7775,46 @@ def test_the_filter_editor_s_toggle_makes_the_value_a_regular_expression(
     assert table.filters == {0: "/^(hall|attic)$/", 1: ">=20"}
 
 
+@pytest.mark.parametrize(
+    ("app_setting", "operator_setting", "is_taken"),
+    [(True, "on", True), (False, "on", False), (True, "off", False)],
+)
+def test_a_web_app_refuses_regular_expressions_when_it_or_its_operator_says_so(
+    monkeypatch: pytest.MonkeyPatch, operator_setting: str, *, app_setting: bool, is_taken: bool
+) -> None:
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", operator_setting)
+
+    class RoomsApp(WebApplication[SortedRoomsMainView]):
+        filter_patterns = app_setting
+
+    rooms = RoomsApp(build_main_view=SortedRoomsMainView).main_view.rooms
+    assert rooms.filter_takes_pattern(0) is is_taken
+    assert (rooms.filter_error(0, "/^k/") is None) is is_taken
+
+
+def test_a_post_can_t_filter_by_a_regular_expression_when_they_are_turned_off(
+    monkeypatch: pytest.MonkeyPatch, sorted_rooms: _SortedRooms
+) -> None:
+    monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", "off")
+    table, table_id = sorted_rooms.view.rooms, sorted_rooms.table_id
+
+    tags = _element(sorted_rooms.post("open_editor"), f"{table_id}-editor").descendants
+    assert any("data-filter-pattern" in tag and "hidden" in tag for _, tag in tags)
+    # slashes typed or posted are refused; the toggle's field makes no pattern of the text
+    body = sorted_rooms.post("add_filter", column="0", value="/(a+)+$/")
+    assert _swapped(body, f"{table_id}-value-error").text == (
+        "This app doesn't accept regular expressions"
+    )
+    assert table.filters == {}
+    # the bar drawn again keeps the text as typed: its slashes aren't dropped
+    table.filters = {1: ">=20"}
+    body = sorted_rooms.post("remove_filter", column="1")
+    assert _element(body, f"{table_id}-value").attributes["value"] == "/(a+)+$/"
+    table.filters = {}
+    sorted_rooms.post("add_filter", column="0", value="(a+)+$", pattern="1")
+    assert table.filters == {0: "(a+)+$"}
+
+
 def test_a_click_and_an_edit_on_a_sorted_filtered_table_reach_their_rows(
     sorted_rooms: _SortedRooms,
 ) -> None:

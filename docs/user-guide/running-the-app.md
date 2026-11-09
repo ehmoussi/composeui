@@ -298,6 +298,14 @@ Read this section before other people use the app, on a network or behind a reve
   working.
 - **Requests have a size limit.** The server refuses a request body larger than 6 MiB (413) before
   it reads it. A file upload's request can be `max_upload_size` plus 1 MiB.
+- **A crafted regular expression can stop the server for a long time.** A table's filter accepts
+  regular expressions, and Python can take minutes or more on a crafted one. All the sessions
+  wait until it ends. To refuse them, set `filter_patterns = False` in a subclass of
+  `WebApplication`, or set the environment variable `COMPOSEUI_FILTER_PATTERNS` to `off`. The
+  `.*` toggle of the filter editor then goes away, and a filter between
+  slashes shows an error. A saved filter of this kind is dropped when it loads, and an app's own
+  code that sets one gets a `FilterError`. `filter_patterns` applies to the web only, and the variable to every backend. The values
+  `false`, `0` and `no` also refuse them. An app does not start with a value that it cannot read.
 - **Only the app's own pages change a session.** The server refuses a POST from another
   origin (403), as protection against cross-site request forgery. Another origin includes
   another port of the same host. The browser tells the origin in its `Sec-Fetch-Site`,
@@ -325,7 +333,15 @@ process, on its default address `127.0.0.1:8000`, so that only the proxy reaches
 python app.py --backend web
 ```
 
-Keep the process running with your service manager, for example a systemd service. Then
+If you do not trust all the users, also refuse the regular expressions of table filters, as
+[Serve the app to other users](#serve-the-app-to-other-users) explains:
+
+```bash
+COMPOSEUI_FILTER_PATTERNS=off python app.py --backend web
+```
+
+Keep the process running with your service manager, for example a systemd service. In a
+systemd service, set the variable with `Environment=COMPOSEUI_FILTER_PATTERNS=off`. Then
 give nginx a `server` block such as this one:
 
 ```nginx

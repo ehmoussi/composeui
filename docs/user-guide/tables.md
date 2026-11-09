@@ -66,6 +66,9 @@ A filter accepts these values:
 - In a boolean column: `true` or `false`.
 - In any column: `=` alone, for the empty cells.
 
+A deployed app can refuse regular expressions: see
+[Serve the app to other users](running-the-app.md#serve-the-app-to-other-users).
+
 A `RecordTableView` sorts by the values of the fields, so numbers and dates sort as numbers
 and dates. A `TableView` sorts its text.
 

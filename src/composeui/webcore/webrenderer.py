@@ -2877,9 +2877,9 @@ class WebFilterBarRenderer(WebRenderer[TView]):
         columns = self._filterable_columns()
         column, typed = self._editor
         chosen = column if column in columns else columns[0]
-        text, is_pattern = split_pattern(typed)
         takes_pattern = self._filtered.filter_takes_pattern(chosen)
-        is_pattern = is_pattern and takes_pattern
+        # slashes are the pattern's only where a pattern is taken: else the text as typed
+        text, is_pattern = split_pattern(typed) if takes_pattern else (typed, False)
         options = Markup("").join(
             Markup(
                 '<option value="{option}"'

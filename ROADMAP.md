@@ -224,8 +224,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   intervals and on shutdown, and the cookies' signing key.
 - **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
   removes what a crash left.
-- **Turning off regular expressions in web filters** (Now). A setting, for a deployed app: a
-  crafted `/regex/` can run for a long time.
 - **Users** (Later). The user read from a login proxy's headers, for OIDC, SAML2 or Basic Auth,
   with recipes for the proxies.
 - **Access control** (Later). An authorization hook that the server enforces for pages, actions

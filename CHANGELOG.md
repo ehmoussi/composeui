@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `WebApplication.filter_patterns = False`, or the `COMPOSEUI_FILTER_PATTERNS` environment variable
+  set to `off`, refuses the regular expressions of table filters. A crafted one can stop a deployed
+  web app for a long time.
 - `get_logger` gives an app a logger that writes as ComposeUI does and follows `--log` and
   `--debug`.
 - `DimensionShape` shows a measurement in a `DrawingView`: a line with a tick at each end and a
@@ -89,6 +92,8 @@ The notable changes of each release of ComposeUI. The format follows
 - New `records` in a `ListSource` without an `id_field` clear a table's selection, as new rows in a
   `DataFrameSource` do, and `selection_changed` emits `[]`. The selection moved silently to the
   records now at those positions. A source of your own can do the same with `row_ids_scope`.
+- A study opens without a filter that a `SourceTableView`'s source no longer takes, as it does on
+  other tables. It raised an error before.
 - A study saves and opens a record's `timedelta` field, as the text a cell shows. Saving one failed.
 - A column of lists in a Polars or PyArrow frame no longer makes a large table's search fail. The
   search passes over it, and a filter or a sort on it does nothing.
