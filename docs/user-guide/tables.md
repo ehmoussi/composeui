@@ -61,7 +61,7 @@ A filter accepts these values:
   - with the `.*` toggle of the editor on, a regular expression, for example `Room [1-3]`.
     The chip reads "Room matches Room [1-3]". The app sets this filter as
     `as_pattern("Room [1-3]")`, between slashes.
-- In a number or a date column: `>20`, `>=20`, `<20`, `<=20`, `!=20`, a range `18..24`
+- In a number, a date, or a duration column (`1d 2h 30m`, or a number of seconds): `>20`, `>=20`, `<20`, `<=20`, `!=20`, a range `18..24`
   (both ends included), or a bare value, which means `=`.
 - In a boolean column: `true` or `false`.
 - In any column: `=` alone, for the empty cells.
@@ -493,16 +493,24 @@ main_view.readings.source = DataFrameSource(
 
 - **The headers select, order, and label the columns.** Without them, the table shows every
   column under its name. The types of the columns come from the frame's schema: a number, a
-  date, or a boolean sorts and filters as one, any other column as text.
+  date, a duration, or a boolean sorts and filters as one, any other column as text. A
+  duration shows as `1d 2h 30m` on each backend and in a CSV export.
 - **A row's id is its position in the frame,** or the value of its `id_column` when the
   source has one. A lazy frame, such as a Polars `LazyFrame`, needs an `id_column`: its
   rows have no position of their own. The source then reads only the columns it needs.
 - **Set a new `frame` to change the rows.** The source emits `changed`, and the table
-  reads the rows again. Set it on the main thread, for example from a job's result.
+  reads the rows again. Set it on the main thread, for example from a job's result. The new
+  frame must hold the columns of the source, else the source raises a `ValueError`. Their
+  types can differ. To show other columns, give the table a new `DataFrameSource`.
 - **New rows clear the selection of a source without an `id_column`.** A position does not
   say which row it was. The same applies to a new `DataFrameSource` on the table, and even
   when the rows are equal. `selection_changed` emits `[]`. To keep the selection when the
   rows change, give the source an `id_column`.
+- **A filter on a date with a time zone compares clock times.** `>2024-01-02` keeps the rows
+  whose time, in the zone of the column, is after that date. A value with its own zone, such as
+  `>2024-01-02T00:00+00:00`, compares instants.
+- **A column of lists has no text to compare.** The search passes over it, and a filter or a
+  sort on it does nothing.
 - **The cells are Python values.** A missing value of pandas (`NaN`, `NaT`, or `NA`) is
   `None`, and a numpy value is the Python value it holds.
 - **The search and the filters ignore the case of a text,** as for a `ListSource`, with
@@ -510,7 +518,7 @@ main_view.readings.source = DataFrameSource(
   - They compare the text in lower case, which is not Python's `casefold`: "strasse"
     does not find "Straße".
   - A `/regex/` filter is in the syntax of the frame's library: Rust's `regex` for Polars,
-    Python's `re` for pandas.
+    Python's `re` for pandas, and RE2 for PyArrow.
 
 The same module reads a chart's series ([`series_of`](charts.md#kinds-of-chart)) and a map's
 points ([`points_of`](maps.md#coordinates-points-and-viewport)) from a frame's columns.

@@ -28,6 +28,7 @@
   "The range's start is after its end": "Le début de l'intervalle est après sa fin",
   ">=20, 18..24": ">=20, 18..24",
   ">=2024-01-31": ">=2024-01-31",
+  ">=1d 2h, 1m..90m": ">=1d 2h, 1m..90m",
   "true or false": "true ou false",
   "\"{text}\" isn't a valid regular expression": "« {text} » n'est pas une expression régulière valide",
   "Edit the filter on {header}": "Modifier le filtre sur {header}",

@@ -82,8 +82,22 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A study saves and opens a record's `timedelta` field, as the text a cell shows. Saving one failed.
+- A column of lists in a Polars or PyArrow frame no longer makes a large table's search fail. The
+  search passes over it, and a filter or a sort on it does nothing.
+- A new `frame` of a `DataFrameSource` whose columns have other types no longer makes a table's
+  filter fail. A new frame without one of the source's columns is refused with a `ValueError`.
+- A pandas column of `Decimal` values sorts and filters as numbers in a large table, as with Polars
+  and PyArrow.
 - New rows in a `DataFrameSource` without an `id_column` clear a table's selection, and
   `selection_changed` emits `[]`. The selection moved silently to the rows now at those positions.
+- A duration column of a large table sorts by length, filters by a length such as `>1d 2h` or a
+  number of seconds, and shows as `1d 2h 30m`, with each dataframe library. With Polars, such a
+  column made any search of the table fail. A table of records edits a duration in the same format.
+- A date filter on a dataframe's column with a time zone no longer fails. A date without a zone
+  is the time in the column's zone, and a date with a zone is an instant.
+- An empty cell of a pandas text or category column no longer matches a search or a filter for
+  "none" or "nan" in a large table, and it sorts with the other empty cells.
 - A log message no longer draws over a Textual app: from the start of the app, the messages go to
   `composeui.log`, or the file of `--log-file`, and the app shows the path when it exits.
 - `--reload` shows a value changed in the code, such as the `shapes` of a `DrawingView`, instead of

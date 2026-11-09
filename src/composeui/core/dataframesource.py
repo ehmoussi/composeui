@@ -7,6 +7,7 @@ library sorts and filters the rows with its own expressions, never row by row in
 from __future__ import annotations
 
 import datetime
+import decimal
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import narwhals as nw
@@ -41,6 +42,12 @@ _CELL_ID_KEY = "__composeui_cell_id"
 #: a frame's row positions, which break a sort's ties when the ids aren't them
 _POSITION_KEY = "__composeui_position"
 
+_PYTHON_TYPES = (
+    (nw.Boolean, bool),
+    (nw.Datetime, datetime.datetime),
+    (nw.Date, datetime.date),
+    (nw.Duration, datetime.timedelta),
+)
 _TEXT_OPERATORS = (
     FilterOperator.CONTAINS,
     FilterOperator.NOT_CONTAINS,
@@ -53,16 +60,13 @@ _TEXT_OPERATORS = (
 
 def _python_type(dtype: Any) -> Any:
     """Get the Python type of a column's values, which sets how it sorts and filters."""
-    if dtype == nw.Boolean:
-        return bool
     if dtype.is_integer():
         return int
     if dtype.is_numeric():  # a float or a decimal
         return float
-    if dtype == nw.Datetime:
-        return datetime.datetime
-    if dtype == nw.Date:
-        return datetime.date
+    for frame_type, python_type in _PYTHON_TYPES:
+        if dtype == frame_type:
+            return python_type
     return str  # a text, a category, or a type shown as its text
 
 
@@ -74,13 +78,14 @@ class DataFrameSource:
     T("Latitude")})``, every column under its name without them. A row's id is its
     position in the frame, or its `id_column` when it has one: a lazy frame needs one, its
     rows having no position of their own. Assign a new `frame` to change the rows, which
-    emits `changed`. New rows without an `id_column` clear a table's selection, as a position
-    doesn't say which row it was.
+    emits `changed`: it must hold the same columns, whose types may differ. New rows without
+    an `id_column` clear a table's selection, as a position doesn't say which row it was.
 
     The frame's library sorts and filters. A text compares in lower case, which isn't
     Python's ``casefold`` ("ß" doesn't find "SS"), and a ``/regex/`` is in the library's
-    syntax (Rust's ``regex`` for Polars, ``re`` for pandas). Equal cells, and the rows
-    unsorted, keep the frame's order; a lazy frame's equal cells are in the order of their ids.
+    syntax (Rust's ``regex`` for Polars, ``re`` for pandas, RE2 for PyArrow). Equal cells, and
+    the rows unsorted, keep the frame's order; a lazy frame's equal cells are in the order of
+    their ids.
     """
 
     def __init__(
@@ -95,17 +100,24 @@ class DataFrameSource:
         self._native = frame
         self._frame = self._wrapped(frame)
         self._row_ids_scope = self._new_row_ids_scope()
-        schema = self._frame.collect_schema()
-        names = list(schema) if headers is None else list(headers)
-        for name in [*names, *([] if id_column is None else [id_column])]:
+        names = self._frame.collect_schema() if headers is None else headers
+        self._columns = self._read_columns(
+            self._frame, {name: name if headers is None else headers[name] for name in names}
+        )
+
+    def _read_columns(
+        self, frame: Union[nw.DataFrame[Any], nw.LazyFrame[Any]], headers: Mapping[str, str]
+    ) -> dict[str, SourceColumn]:
+        """Get the columns of `headers` with their types in `frame`, which must hold them."""
+        schema = frame.collect_schema()
+        id_columns = [] if self._id_column is None else [self._id_column]
+        for name in [*headers, *id_columns]:
             if name not in schema:
                 msg = f"Cannot build a DataFrameSource: the frame has no column {name!r}."
                 raise ValueError(msg)
-        self._columns = {
-            name: SourceColumn(
-                name, name if headers is None else headers[name], _python_type(schema[name])
-            )
-            for name in names
+        return {
+            name: SourceColumn(name, header, self._type_of(frame, name, schema[name]))
+            for name, header in headers.items()
             if name != ROW_ID
         }
 
@@ -125,13 +137,26 @@ class DataFrameSource:
     @frame.setter
     def frame(self, frame: IntoFrame) -> None:
         wrapped = self._wrapped(frame)
-        self._native, self._frame = frame, wrapped
+        # the same columns, for the headers that a table shows; their types can differ
+        columns = self._read_columns(
+            wrapped, {column.name: column.header for column in self._columns.values()}
+        )
+        self._native, self._frame, self._columns = frame, wrapped, columns
         self._row_ids_scope = self._new_row_ids_scope()
         self._changed.emit()
 
     @property
     def _id(self) -> str:
         return ROW_ID if self._id_column is None else self._id_column
+
+    @staticmethod
+    def _type_of(frame: Union[nw.DataFrame[Any], nw.LazyFrame[Any]], name: str, dtype: Any) -> Any:
+        """Get a column's Python type: pandas holds decimals as objects, so read the values."""
+        if dtype == nw.Object and isinstance(frame, nw.DataFrame):
+            values = frame.get_column(name).drop_nulls().to_list()
+            if all(isinstance(value, decimal.Decimal) for value in values):
+                return decimal.Decimal
+        return _python_type(dtype)
 
     def _new_row_ids_scope(self) -> Optional[object]:
         """Get what a table compares to tell that the ids now name other rows, if they can."""
@@ -156,15 +181,23 @@ class DataFrameSource:
             self._column(name)
         # the frame once: in a job, the main thread may assign a new one meanwhile
         frame = self._frame
+        schema = frame.collect_schema()
+        without_text = {name for name, dtype in schema.items() if dtype in (nw.List, nw.Array)}
+        if sort is not None and sort.column in without_text:
+            sort = None
+        filters = {name: value for name, value in filters.items() if name not in without_text}
         conditions = [
-            self._condition(self._column(name), row_filter) for name, row_filter in filters.items()
+            self._condition(
+                self._column(name), row_filter, getattr(schema[name], "time_zone", None)
+            )
+            for name, row_filter in filters.items()
         ]
         needle = search.strip().casefold()
         if needle != "":
             texts = [
                 _text(name)
                 for name, column in self._columns.items()
-                if column_kind(column.type) is ColumnKind.TEXT
+                if column_kind(column.type) is ColumnKind.TEXT and name not in without_text
             ]
             if len(texts) == 0:
                 return []  # no text column holds it, as a `ListSource` finds
@@ -182,7 +215,7 @@ class DataFrameSource:
             column = self._column(sort.column)
             is_text = column_kind(column.type) is ColumnKind.TEXT
             cell = nw.col(column.name)
-            text = cell.cast(nw.String)
+            text = _as_text(cell)
             empty = cell.is_null() | (text == "") if is_text else cell.is_null()
             # an empty text's key is null, as a missing one's: the empty cells in the
             # frame's order, "" sorting before null otherwise
@@ -228,10 +261,10 @@ class DataFrameSource:
         return column
 
     @staticmethod
-    def _condition(column: SourceColumn, row_filter: Filter) -> nw.Expr:
+    def _condition(column: SourceColumn, row_filter: Filter, time_zone: Optional[str]) -> nw.Expr:
         """Get the expression of `row_filter` on `column`, as `Filter.matches` reads a cell.
 
-        An empty cell's text is "", and it fails a comparison.
+        An empty cell's text is "", and it fails a comparison. `time_zone` is the column's.
         """
         cell = nw.col(column.name)
         operator, value = row_filter.operator, row_filter.value
@@ -242,12 +275,15 @@ class DataFrameSource:
         if operator in _TEXT_OPERATORS:
             return _text_condition(_text(column.name), operator, value)
         if operator is FilterOperator.MATCHES:
-            text = cell.cast(nw.String).fill_null("")
+            text = _as_text(cell)
             return text.str.contains(f"(?i){value.pattern}")
         if operator is FilterOperator.RANGE:
-            compared = cell.is_between(value, row_filter.upper)
+            on_one_clock, lower = _on_one_clock(cell, value, time_zone)
+            _, upper = _on_one_clock(cell, row_filter.upper, time_zone)
+            compared = on_one_clock.is_between(lower, upper)
         else:
-            compared = _comparison(cell, operator, value)
+            on_one_clock, compared_value = _on_one_clock(cell, value, time_zone)
+            compared = _comparison(on_one_clock, operator, compared_value)
         # an empty cell fails, though pandas' NaN differs from any value
         return ~cell.is_null() & compared
 
@@ -282,7 +318,12 @@ def points_of(frame: IntoFrame, latitude: str, longitude: str) -> list[MapPoint]
 
 def _text(name: str) -> nw.Expr:
     """Get a cell's text in lower case, an empty cell's being ""."""
-    return nw.col(name).cast(nw.String).fill_null("").str.to_lowercase()
+    return _as_text(nw.col(name)).str.to_lowercase()
+
+
+def _as_text(cell: nw.Expr) -> nw.Expr:
+    """Get a cell's text, an empty cell's being "": pandas casts it to "None" or "nan"."""
+    return nw.when(~cell.is_null()).then(cell.cast(nw.String)).otherwise(nw.lit(""))
 
 
 def _text_condition(text: nw.Expr, operator: FilterOperator, value: str) -> nw.Expr:
@@ -297,6 +338,23 @@ def _text_condition(text: nw.Expr, operator: FilterOperator, value: str) -> nw.E
     if operator is FilterOperator.STARTS_WITH:
         return text.str.starts_with(value)
     return text.str.ends_with(value)
+
+
+def _on_one_clock(cell: nw.Expr, value: Any, time_zone: Optional[str]) -> tuple[nw.Expr, Any]:
+    """Get a cell and a filter's value that the frame's library can compare.
+
+    A library refuses to compare a time with a zone and one without. A time typed without a zone is
+    the clock's in the column's zone, as the cell shows it. One typed with a zone is an instant.
+    A column without a zone has no instant to compare with: its clock is read instead.
+    """
+    if not isinstance(value, datetime.datetime):
+        return cell, value
+    if value.tzinfo is None:
+        return (cell if time_zone is None else cell.dt.replace_time_zone(None)), value
+    if time_zone is None:
+        return cell, value.replace(tzinfo=None)
+    utc = cell.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+    return utc, value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def _comparison(cell: nw.Expr, operator: FilterOperator, value: Any) -> nw.Expr:
@@ -322,6 +380,8 @@ def _python_value(value: Any) -> Any:
         return None
     if hasattr(value, "to_pydatetime"):  # a pandas Timestamp
         return value.to_pydatetime()
+    if hasattr(value, "to_pytimedelta"):  # a pandas Timedelta
+        return value.to_pytimedelta()
     if hasattr(value, "item"):  # a numpy scalar
         return value.item()
     return value
