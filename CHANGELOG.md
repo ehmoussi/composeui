@@ -82,6 +82,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- New rows in a `DataFrameSource` without an `id_column` clear a table's selection, and
+  `selection_changed` emits `[]`. The selection moved silently to the rows now at those positions.
 - A log message no longer draws over a Textual app: from the start of the app, the messages go to
   `composeui.log`, or the file of `--log-file`, and the app shows the path when it exits.
 - `--reload` shows a value changed in the code, such as the `shapes` of a `DrawingView`, instead of

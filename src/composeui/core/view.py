@@ -5310,6 +5310,8 @@ SOURCE_TABLE_WINDOW = 200
 SOURCE_TABLE_CACHE = 1_000
 #: the rows from which a `SourceTableView` orders its source's in a job, on Qt and Textual
 SOURCE_TABLE_JOB_ROWS = 100_000
+#: a table's row ids before its first source
+_NO_ROW_IDS = object()
 
 
 def _partial_path(path: Path) -> Path:
@@ -5563,6 +5565,10 @@ class SourceTableView(View):
     #: the source whose ids `_order` holds
     _order_source: Optional[TableSource[Any]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: which rows the ids of the last source name (see `_drop_selection_of_other_rows`)
+    _row_ids_scope: Optional[object] = attrs.field(
+        default=_NO_ROW_IDS, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
     #: a job is ordering the rows
     _ordering: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
@@ -5837,6 +5843,7 @@ class SourceTableView(View):
     def _source_changed(self) -> None:
         """Count the rows of the source, new or changed, then order them."""
         source = self.source
+        is_selection_dropped = self._drop_selection_of_other_rows(source)
         self._cache.clear()
         if source is None:
             self._total, self._recount = 0, False
@@ -5850,6 +5857,28 @@ class SourceTableView(View):
             self._order, self._order_source = [], None
             self._refresh_order()
         self._read_order()
+        if is_selection_dropped:  # once the new rows are ordered, for what it reads
+            self.selection_changed.emit([])
+
+    def _drop_selection_of_other_rows(self, source: Optional[TableSource[Any]]) -> bool:
+        """Clear the selection if `source`'s ids name other rows, and tell whether it did.
+
+        A row's position in a frame is its id there only: the same number in new rows is
+        another row. The first source keeps the selection, which a study may have restored.
+        """
+        if source is None:
+            return False
+        previous = self._row_ids_scope
+        # optional: a source whose ids are its rows' own has none
+        self._row_ids_scope = getattr(source, "_row_ids_scope", None)
+        if (
+            previous is _NO_ROW_IDS
+            or previous is self._row_ids_scope
+            or len(self.selected_ids) == 0
+        ):
+            return False
+        self.selected_ids = []
+        return True
 
     @property
     def total(self) -> int:

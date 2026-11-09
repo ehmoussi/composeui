@@ -85,9 +85,8 @@ The order of the work for **Now**:
   shows it.
 - **Narwhals as a required dependency** (Now). Use `narwhals.stable.v2`, import it only where
   frames are used, and keep the `dataframe` extra as an empty alias for one release.
-- **A frame's types and its rows' identity** (Now). First, a selection must never move to other
-  rows when a frame without an `id_column` is replaced. Then time zones, durations, categories
-  (filtered as a choice of values) and decimals, and PyArrow tested with pandas and Polars.
+- **A frame's types** (Now). Time zones, durations, categories (filtered as a choice of values)
+  and decimals, and PyArrow tested with pandas and Polars.
 - **Shared data** (Now). Data loaded once per process and shared by the sessions, read-only, and
   freed on shutdown and reload. Private data never goes in. Done when 4 web sessions of the Uber
   example load its CSV once.

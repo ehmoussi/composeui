@@ -499,6 +499,10 @@ main_view.readings.source = DataFrameSource(
   rows have no position of their own. The source then reads only the columns it needs.
 - **Set a new `frame` to change the rows.** The source emits `changed`, and the table
   reads the rows again. Set it on the main thread, for example from a job's result.
+- **New rows clear the selection of a source without an `id_column`.** A position does not
+  say which row it was. The same applies to a new `DataFrameSource` on the table, and even
+  when the rows are equal. `selection_changed` emits `[]`. To keep the selection when the
+  rows change, give the source an `id_column`.
 - **The cells are Python values.** A missing value of pandas (`NaN`, `NaT`, or `NA`) is
   `None`, and a numpy value is the Python value it holds.
 - **The search and the filters ignore the case of a text,** as for a `ListSource`, with
