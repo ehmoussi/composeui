@@ -203,7 +203,9 @@ def _run_as_main(previous_main: types.ModuleType) -> None:
     # as `__main__` for good, as the program's classes resolve their string annotations
     # through `sys.modules[cls.__module__]`
     program = types.ModuleType("__main__")
-    program.__spec__ = spec
+    # none for a script, as Python's own: the next run finds it by its file, as `__main__`
+    # is no module that an import can find
+    program.__spec__ = None if spec.name == "__main__" else spec
     program.__file__ = spec.origin
     program.__loader__ = spec.loader
     program.__package__ = spec.parent

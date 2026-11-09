@@ -1005,6 +1005,22 @@ def test_a_module_run_again_is_found_again_and_keeps_its_app(
     assert program_command() == [sys.executable, "-m", "counter", "--reload"]
 
 
+def test_a_script_runs_again_on_each_change_and_stays_a_script(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "app.py"
+    script.write_text("from composeui.core.reload import keep_rerun\nkeep_rerun('the app')\n")
+    program = types.ModuleType("__main__")
+    program.__file__ = str(script)  # `python app.py`
+    monkeypatch.setitem(sys.modules, "__main__", program)
+    monkeypatch.setattr("sys.argv", ["app.py", "--reload"])
+
+    assert rerun_program() == "the app"
+    assert rerun_program() == "the app"  # the first run's `__main__` is what it finds now
+    assert program_command() == [sys.executable, str(script.resolve()), "--reload"]
+
+
 def test_a_program_neither_a_script_nor_a_module_can_t_run_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
