@@ -25,7 +25,7 @@ def release_when_hidden(window: QWidget) -> None:
     """Destroy the native window of `window`, a dialog, each time it's hidden.
 
     WSLg's Wayland compositor can keep drawing a dialog Qt has hidden, e.g. in a window
-    holding a form beside another dialog: a click on its buttons answers, then it stays
+    holding a form beside another dialog. A click on its buttons answers, then it stays
     on screen. Without a native window there is nothing left to draw; Qt makes a new one
     when the dialog shows again, its widgets keeping their state.
     """

@@ -1,16 +1,16 @@
 """A catalogue of pipes kept in a SQLite database, runnable on every backend.
 
 `python -m examples.pipecatalogue --backend qt` (or `textual`, or `web`). The pipes are
-rows of the model's database, not view state: the catalogue lists them, an expander each,
+rows of the model's database, not view state. The catalogue lists them, an expander each,
 through a query filtered by material, radius and installation date, with their mass
 computed by a SQL view joining each pipe to its material, and beside them in a tree, under
-their material (in bold), a border the user drags between the two: each pipe there is
+their material (in bold), a border the user drags between the two. Each pipe there is
 marked done once its installation date is known, with a warning until then, and selecting
 it expands its expander. A form in the sidebar adds a
-pipe, which the catalogue beside it lists at once; each pipe's Edit button changes it in a
+pipe, which the catalogue beside it lists at once. Each pipe's Edit button changes it in a
 form dialog, whose Apply saves it and stays open, and its Delete button removes it. The
 database checks every pipe added or changed (a name, positive dimensions, a wall thinner
-than the radius) and File saves and opens the views and the database together; a study
+than the radius) and File saves and opens the views and the database together. A study
 saved before pipes had an installation date gets the column, empty, as it opens
 (`PipeCatalogueModel.migrations`).
 """

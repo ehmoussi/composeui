@@ -18,7 +18,7 @@ class QValueSlider(QSlider):
 
     Its own range counts steps (positions 0 to the last), so the handle only stops on
     a step; `shown_value` is the value at the handle. The value has a slot as wide as
-    the widest one, so the track keeps its length as the value changes; the style lays
+    the widest one. So the track keeps its length as the value changes. The style lays
     the slider out left of it (`initStyleOption`), which painting and the mouse both
     use. Beside the track rather than above the handle, the slider is no taller than a
     plain one, so its form row is as tall as the others.

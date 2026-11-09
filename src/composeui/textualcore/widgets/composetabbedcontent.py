@@ -10,7 +10,7 @@ class ComposeTabbedContent(TabbedContent):
 
     Textual posts `TabbedContent.TabActivated` for any change of `active`, set in code
     too; `set_active` keeps those quiet, as Qt's renderers block their widget's signals
-    while refreshing it, so `picked` only reports the tab the user picks, by its pane.
+    while refreshing it. So `picked` only reports the tab the user picks, by its pane.
     The message bubbles: one from tabs nested in a pane isn't this one's.
     """
 

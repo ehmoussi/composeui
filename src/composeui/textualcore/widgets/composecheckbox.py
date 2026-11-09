@@ -10,7 +10,7 @@ class ComposeCheckBox(Checkbox):
 
     Textual posts `Checkbox.Changed` for any change of `value`, set in code too;
     `set_checked` keeps those quiet, as Qt's renderers block their widget's signals
-    while refreshing it, so `toggled` only reports the user's toggles.
+    while refreshing it. So `toggled` only reports the user's toggles.
     """
 
     # a form row's field while the row is invalid (see `ROW_INVALID_CLASS`)

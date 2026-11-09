@@ -1,6 +1,6 @@
 """A model keeping the app's data in a SQLite database of its own.
 
-The app writes its schema and its queries, in `SqliteTable` classes; the model gives
+The app writes its schema and its queries, in `SqliteTable` classes. The model gives
 them a connection, runs each block of work as one transaction, and saves and opens the
 database with the study. It works on a scratch copy in a temporary file: the user's
 study only changes when it's saved.
@@ -865,7 +865,7 @@ class SqliteSource:
     It takes the `SqliteTable` whose rows the query reads, the query itself, the column
     of the rows' ids (e.g. a primary key) and the query's columns that the table shows.
     SQLite sorts and filters the rows: the order is a ``SELECT`` of the ids, and the cells
-    a ``SELECT`` of some ids' rows, so no more rows than those shown come to Python. The
+    a ``SELECT`` of some ids' rows. So no more rows than those shown come to Python. The
     table's `changed` reads them again. Only the declared columns sort and filter, by name:
     SQLite takes no column name as a parameter, the values are. It reads on connections
     of its own (`SqliteModel.reading`): the rows committed, never waiting for a write, nor
@@ -1197,7 +1197,7 @@ class SqliteModel(Model):
     def reading(self) -> Generator[sqlite3.Connection]:
         """Give a connection that only reads the database, for a long query.
 
-        Unlike `connection()`, it waits for no other thread's turn, and holds none: the
+        Unlike `connection()`, it waits for no other thread's turn, and holds none. The
         model's other queries run meanwhile, e.g. a large table's cells while a job orders
         its rows or writes some (`SqliteSource`). In the WAL journal, it reads the rows
         committed, during a write too. A database New or Open replace meanwhile, or the

@@ -1,9 +1,9 @@
 """A sweep of a pipe's radius, a worker thread writing its runs to a SQLite model.
 
 `python -m examples.pipesweep --backend qt` (or `textual`, or `web`). Run sweeps the
-outer radius of a pipe under pressure: a job, in a thread of its own, works out the wall's
+outer radius of a pipe under pressure. A job, in a thread of its own, works out the wall's
 hoop stress at each radius, one radius at a time, and writes each run to the model's
-database as it is done. The views never hear from the worker: each write's `changed` is
+database as it is done. The views never hear from the worker. Each write's `changed` is
 emitted on the main thread (see `Job.call_on_main_thread`), where the progress bar, and
 the chart and the table, each on a tab, show the runs written so far. Cancel stops the
 sweep after the run it's working on; File saves and opens the runs with the views. The

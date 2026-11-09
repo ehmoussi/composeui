@@ -137,7 +137,7 @@ class ComposeTable(DataTable[Text]):
     Selecting one row, the row cursor is the selection: hidden while nothing is
     selected, shown once the user clicks a row or presses Enter. Selecting several
     (`set_multiple_selection`), the cursor only moves, and a click or Enter adds or
-    removes its row, checked in a first column of its own: the cursor can't show
+    removes its row, checked in a first column of its own. The cursor can't show
     several rows. `selected_rows_changed` emits the selected rows, in order, only when
     the user changes them, re-emitting `DataTable`'s messages through a plain composeui
     `Signal` a renderer can connect to (see `ComposeRadioSet`). `row_activated` emits a
@@ -145,16 +145,16 @@ class ComposeTable(DataTable[Text]):
 
     The user edits the cells of `editable_columns` in a `ComposeRowEditor`: F2 opens it
     on the cursor's row, a double click on the clicked cell's. It types paths too, whose
-    cells show the path and "[…]": a click on an editable one opens textual-fspicker's
+    cells show the path and "[…]". A click on an editable one opens textual-fspicker's
     picker of a file, a folder or a file to save (see `file_picker`), the cell taking the
     path picked. A `CellWidget.path_by` column's widget is that of each row's kind.
     `cell_edited` emits each cell the user changed: its row, its column (without the check
     column) and its text.
 
     The columns of `cell_widgets` show widgets as text: a check box as a box, which a
-    click or Space (the cursor row's first) toggles when editable; a combobox as its text
+    click or Space (the cursor row's first) toggles when editable. A combobox as its text
     and an arrow, a click (or F2, without a typed column) opening a `ComposeOptionPicker`
-    on it; a button as its text and the button's in brackets, and a link underlined,
+    on it. A button as its text and the button's in brackets, and a link underlined,
     `cell_clicked` emitting a click on either. A check-all column's header starts with
     the box `set_checked_columns` shows, and its click emits `check_all_clicked`.
 

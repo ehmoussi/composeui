@@ -76,7 +76,7 @@ class DataFrameSource:
     rows having no position of their own. Assign a new `frame` to change the rows, which
     emits `changed`.
 
-    The frame's library sorts and filters: a text compares in lower case, which isn't
+    The frame's library sorts and filters. A text compares in lower case, which isn't
     Python's ``casefold`` ("ß" doesn't find "SS"), and a ``/regex/`` is in the library's
     syntax (Rust's ``regex`` for Polars, ``re`` for pandas). Equal cells, and the rows
     unsorted, keep the frame's order; a lazy frame's equal cells are in the order of their ids.

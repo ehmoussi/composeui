@@ -61,7 +61,7 @@ class ComposeSourceTable(ScrollView, can_focus=True):
     A cursor marks a row, which the arrow keys, Page Up, Page Down, Home and End move,
     the table scrolling to keep it shown. The table selects no row itself: `row_clicked`
     emits the position of the row the user clicked, or the cursor's on Space, and whether
-    Shift extends the selection to it; `row_activated` emits it on a double click or
+    Shift extends the selection to it. `row_activated` emits it on a double click or
     Enter. A selected row has the primary color. `copy_requested` emits on Ctrl+C. Its
     key `e` asks where to export the rows as CSV, which `export_path_chosen` emits.
     """

@@ -1,8 +1,8 @@
 """One `MainView` per browser session, kept in memory.
 
 A session is identified by a random id stored in Starlette's signed session cookie.
-Every tab of a browser shares that cookie, so they share one session (and one app
-state), the way two windows on the same document would; different browsers or users
+Every tab of a browser shares that cookie. So they share one session (and one app
+state), the way two windows on the same document would. Different browsers or users
 get their own. State lives in this process only: a restart starts every session over,
 except with ``--reload``, whose server keeps them across its restarts (`SessionStore`).
 """
@@ -203,9 +203,9 @@ class WebSession(RenderTarget):
 
         None if `widget_id` is none of them; a table's cell is the `form`'s row and column.
         `received` holds the file: it is moved, not copied, and stays if refused.
-        The file then has its own name: for an action, gone once its callbacks have run; for
+        The file then has its own name: for an action, gone once its callbacks have run. For
         a file field, kept until the session ends or the field's next upload, and then until
-        the jobs are over (see `_remove_replaced_uploads`); for a cell, until the session ends
+        the jobs are over (see `_remove_replaced_uploads`). For a cell, until the session ends
         or a table's upload finds no cell holding its path. One of a type they don't offer is
         refused in the status bar. Returns what `handle_event` does.
         """
@@ -560,7 +560,7 @@ class SessionStore:
     def create(self) -> tuple[str, WebSession] | None:
         """Build a new session; None while `max_sessions` are live.
 
-        A full store refuses new sessions rather than dropping old ones: requests without
+        A full store refuses new sessions rather than dropping old ones. Requests without
         a cookie, which anyone can send, would otherwise push out the users' own sessions
         and their unsaved work.
         """

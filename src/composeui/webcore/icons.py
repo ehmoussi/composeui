@@ -1,7 +1,7 @@
 """The image files the views name as icons, served at an address naming their content.
 
 Only a file a renderer has asked an address for is served: the views name them, from
-the app's code (`ActionView.icon` is never loaded from a study), so a request can't
+the app's code (`ActionView.icon` is never loaded from a study). So a request can't
 name a file of its own. One registry for the process: every session runs the same code.
 """
 

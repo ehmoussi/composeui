@@ -35,7 +35,7 @@ class ComposeSidebar(VerticalScroll):
     """A column on the screen's left: its title and an arrow, then its views, scrolling.
 
     As wide as a third of the screen at most: the content beside it keeps the rest. The
-    arrow retracts it to a strip holding only the arrow, and expands it back; `toggled`
+    arrow retracts it to a strip holding only the arrow, and expands it back. `toggled`
     reports those, and `set_expanded` is quiet, as Qt's renderers block their widget's
     signals while refreshing it.
     """

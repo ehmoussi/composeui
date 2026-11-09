@@ -211,7 +211,7 @@ class _Grid:
 def _one_line(text: str) -> str:
     """Get `text` for a row of cells: on one line, each character taking room.
 
-    A strip goes to the terminal as it is: a control character would act on it, and a
+    A strip goes to the terminal as it is. A control character would act on it, and a
     combining one, without a cell of its own, would replace the character before it.
     """
     return "".join(

@@ -9,7 +9,7 @@ class QFilePathField(QWidget):
     """A field typing a file's path, then a "…" button and a reload button, hidden by default.
 
     The buttons only report their clicks: the renderer opens the file dialog. Both are
-    squares as tall as the field: a tool button's own size depends on its text or icon,
+    squares as tall as the field. A tool button's own size depends on its text or icon,
     so "…" and the icon would differ from the field and from each other.
     """
 

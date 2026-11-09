@@ -74,8 +74,8 @@ class ComposeFilterBar(Horizontal):
 
     "+ Filter" opens an editor in the bar, of a column, a value and an Add button, and in
     a text column a toggle (`pattern`, primary while on) making the value a regular
-    expression: Enter or Add adds the filter, unless `check` says why its value can't
-    filter, marking the value field `-invalid` with the reason as its tooltip; Escape
+    expression. Enter or Add adds the filter, unless `check` says why its value can't
+    filter, marking the value field `-invalid` with the reason as its tooltip. Escape
     closes it. A chip's
     text opens the editor on its filter, its remove button removes it. The signals emit only for the
     user: `search_edited` the text typed, `filter_added` a column and its text,

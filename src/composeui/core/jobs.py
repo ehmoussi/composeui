@@ -222,8 +222,8 @@ class Task(Generic[R, P, ProgressT]):
         """Start the worker with these arguments, replacing a run still going on.
 
         For inputs that change quickly, e.g. a slider's value: the run waits `debounce`
-        seconds before it calls the work, and a newer call cancels it and drops its outcome,
-        so an obsolete result never replaces the latest. The last result stays until the
+        seconds before it calls the work, and a newer call cancels it and drops its outcome.
+        So an obsolete result never replaces the latest. The last result stays until the
         new run's outcome.
         """
         _check_main_thread("Task.start_latest")

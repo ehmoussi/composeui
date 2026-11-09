@@ -1,7 +1,7 @@
 """Refuse a request body larger than any upload the app accepts, before it is all read.
 
 A route reads a file only up to its limit (`MAX_STATE_SIZE`, `MainView.max_upload_size`), but
-it still reads the whole body, and Starlette's form parser spools files with no limit: an upload
+it still reads the whole body, and Starlette's form parser spools files with no limit. An upload
 of many gigabytes would fill the disk, or keep the server busy, before the route could answer.
 """
 

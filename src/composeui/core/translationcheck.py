@@ -1,12 +1,12 @@
 """Check an app's catalogs against the text its code translates.
 
-Run it on the app's main view; it fails on text a catalog misses or on a translation whose
+Run it on the app's main view. It fails on text a catalog misses or on a translation whose
 ``{placeholders}`` differ from the text's, and lists the entries no code uses::
 
     python -m composeui.core.translationcheck examples.pipeform:PipeMainView
 
 With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated as "" for a
-translator to fill; until then, the text shows as written.
+translator to fill. Until then, the text shows as written.
 
 The text is found two ways: the string literals passed to ``tr`` or ``T`` (or set in a
 ``SqliteTable``'s ``refusals``) in the source of every view of the main view, and the text

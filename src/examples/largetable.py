@@ -1,7 +1,7 @@
 """A large table: `python -m examples.largetable --backend qt` (or `textual`, or `web`).
 
 A million sensor readings (``--rows`` sets how many) in a SQLite model, shown by a
-`SourceTableView` through a `SqliteSource`: SQLite sorts and filters them, and the table
+`SourceTableView` through a `SqliteSource`. SQLite sorts and filters them, and the table
 reads only the rows it shows, as the user scrolls. Python holds the shown rows' ids, never
 the readings. A click on a header sorts them, and the table's bar searches and filters
 them, in a job on Qt and Textual: the window stays responsive. The label says how many
@@ -135,7 +135,7 @@ class ReadingsModel(SqliteModel):
 class TimedSource(SqliteSource):
     """The readings, keeping how long SQLite took to order them last (`seconds`).
 
-    The table may ask for the order in a job's thread: it keeps the time, which the
+    The table may ask for the order in a job's thread. It keeps the time, which the
     main thread reads once the table shows the order, rather than showing it itself.
     """
 
