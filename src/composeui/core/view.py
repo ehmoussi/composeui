@@ -5196,6 +5196,9 @@ class TableSource(Protocol[IdT]):
     reads them again. An id is a hashable value that stays its row's own while the rows
     change (e.g. a primary key), so that a table's selection stays on its rows.
     `ListSource` is a source of records in memory.
+
+    A source whose ids are only positions also has a ``row_ids_scope`` attribute: a new
+    object each time that new rows replace the others, which clears a table's selection.
     """
 
     @property
@@ -5298,6 +5301,8 @@ class ListSource(Generic[RecordT]):
             raise ValueError(msg)
         self._records = tuple(records)
         self._rows = rows
+        #: a new object for new rows: an index names another record in them (see `TableSource`)
+        self.row_ids_scope = None if self._id_field is not None else object()
 
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
@@ -5928,7 +5933,7 @@ class SourceTableView(View):
             return False
         previous = self._row_ids_scope
         # optional: a source whose ids are its rows' own has none
-        self._row_ids_scope = getattr(source, "_row_ids_scope", None)
+        self._row_ids_scope = getattr(source, "row_ids_scope", None)
         if (
             previous is _NO_ROW_IDS
             or previous is self._row_ids_scope

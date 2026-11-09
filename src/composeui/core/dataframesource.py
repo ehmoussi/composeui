@@ -99,7 +99,7 @@ class DataFrameSource:
         self._changed = SignalNoArgs()
         self._native = frame
         self._frame = self._wrapped(frame)
-        self._row_ids_scope = self._new_row_ids_scope()
+        self.row_ids_scope = self._new_row_ids_scope()
         names = self._frame.collect_schema() if headers is None else headers
         self._columns = self._read_columns(
             self._frame, {name: name if headers is None else headers[name] for name in names}
@@ -142,7 +142,7 @@ class DataFrameSource:
             wrapped, {column.name: column.header for column in self._columns.values()}
         )
         self._native, self._frame, self._columns = frame, wrapped, columns
-        self._row_ids_scope = self._new_row_ids_scope()
+        self.row_ids_scope = self._new_row_ids_scope()
         self._changed.emit()
 
     @property

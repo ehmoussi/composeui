@@ -337,6 +337,14 @@ A source of your own gives:
 | `cells` | The values of some rows |
 | `changed` | A signal that the rows changed |
 
+An id stays with its row, so the selection stays on its rows when they change. If the ids of your
+source are only positions, also give it a `row_ids_scope` attribute: a new object each time that
+new rows replace the others, before `changed`. The view then clears the selection, and
+`selection_changed` emits `[]`.
+
+A `ListSource` without an `id_field` does this: new `records` clear the selection, even if only
+one record changed. To keep the selection, give the source an `id_field`.
+
 When the app sets a new source, the view drops the sort and the filters on the columns that
 the new source does not have.
 

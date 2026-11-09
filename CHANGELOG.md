@@ -82,6 +82,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- New `records` in a `ListSource` without an `id_field` clear a table's selection, as new rows in a
+  `DataFrameSource` do, and `selection_changed` emits `[]`. The selection moved silently to the
+  records now at those positions. A source of your own can do the same with `row_ids_scope`.
 - A study saves and opens a record's `timedelta` field, as the text a cell shows. Saving one failed.
 - A column of lists in a Polars or PyArrow frame no longer makes a large table's search fail. The
   search passes over it, and a filter or a sort on it does nothing.
