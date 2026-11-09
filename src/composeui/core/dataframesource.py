@@ -74,7 +74,8 @@ class DataFrameSource:
     T("Latitude")})``, every column under its name without them. A row's id is its
     position in the frame, or its `id_column` when it has one: a lazy frame needs one, its
     rows having no position of their own. Assign a new `frame` to change the rows, which
-    emits `changed`.
+    emits `changed`. New rows without an `id_column` clear a table's selection, as a position
+    doesn't say which row it was.
 
     The frame's library sorts and filters. A text compares in lower case, which isn't
     Python's ``casefold`` ("ß" doesn't find "SS"), and a ``/regex/`` is in the library's
@@ -93,6 +94,7 @@ class DataFrameSource:
         self._changed = SignalNoArgs()
         self._native = frame
         self._frame = self._wrapped(frame)
+        self._row_ids_scope = self._new_row_ids_scope()
         schema = self._frame.collect_schema()
         names = list(schema) if headers is None else list(headers)
         for name in [*names, *([] if id_column is None else [id_column])]:
@@ -124,11 +126,16 @@ class DataFrameSource:
     def frame(self, frame: IntoFrame) -> None:
         wrapped = self._wrapped(frame)
         self._native, self._frame = frame, wrapped
+        self._row_ids_scope = self._new_row_ids_scope()
         self._changed.emit()
 
     @property
     def _id(self) -> str:
         return ROW_ID if self._id_column is None else self._id_column
+
+    def _new_row_ids_scope(self) -> Optional[object]:
+        """Get what a table compares to tell that the ids now name other rows, if they can."""
+        return None if self._id_column is not None else object()
 
     def _wrapped(self, frame: IntoFrame) -> Union[nw.DataFrame[Any], nw.LazyFrame[Any]]:
         wrapped = nw.from_native(frame)

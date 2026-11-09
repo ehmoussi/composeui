@@ -31,7 +31,17 @@ from composeui.core.sqlitemodel import (
     define_csv_row,
     table,
 )
-from composeui.core.view import FilterError, ListSource, MapPoint, Sort, parse_filter
+from composeui.core.view import (
+    FilterError,
+    ListSource,
+    MainView,
+    MapPoint,
+    Sort,
+    SourceTableView,
+    child,
+    define_view,
+    parse_filter,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Iterator
@@ -311,6 +321,75 @@ def test_a_new_frame_changes_the_rows_and_emits_changed() -> None:
     assert source.frame is second
     assert source.count() == 1
     assert source.cells([0, 1], ["name"]) == {0: ["c"]}
+
+
+_FIRST_ROWS = pl.DataFrame({"id": [10, 11, 12], "name": ["a", "b", "c"]})
+_OTHER_ROWS = pl.DataFrame({"id": [20, 21, 22], "name": ["x", "y", "z"]})
+
+
+def _assign_frame(table: SourceTableView) -> None:
+    source = table.source
+    assert isinstance(source, DataFrameSource)
+    source.frame = _OTHER_ROWS
+
+
+def _assign_source(table: SourceTableView) -> None:
+    table.source = DataFrameSource(_OTHER_ROWS)
+
+
+@pytest.mark.parametrize("replace", [_assign_frame, _assign_source])
+def test_new_rows_clear_the_selection_of_positions_and_emit_it(
+    replace: Callable[[SourceTableView], None],
+) -> None:
+    table = SourceTableView(source=DataFrameSource(_FIRST_ROWS))
+    table.selected_ids = [1]
+    emitted: list[list[Any]] = []
+    table.selection_changed.connect(emitted.append)
+
+    replace(table)
+
+    assert table.selected_ids == []
+    assert emitted == [[]]
+
+
+def test_a_positional_source_replacing_one_with_ids_clears_the_selection() -> None:
+    table = SourceTableView(source=DataFrameSource(_FIRST_ROWS, id_column="id"))
+    table.selected_ids = [11]
+
+    table.source = DataFrameSource(pl.DataFrame({"name": [str(n) for n in range(20)]}))
+
+    assert table.selected_ids == []
+
+
+def test_new_rows_with_ids_keep_the_selection_of_the_rows_still_there() -> None:
+    source = DataFrameSource(_FIRST_ROWS, id_column="id")
+    table = SourceTableView(source=source)
+    table.selected_ids = [11]
+    emitted: list[list[Any]] = []
+    table.selection_changed.connect(emitted.append)
+
+    source.frame = pl.DataFrame({"id": [11, 13], "name": ["new b", "d"]})
+
+    assert (table.selected_ids, emitted) == ([11], [])
+
+
+@define_view
+class _FrameMainView(MainView):
+    table: SourceTableView = child(SourceTableView)
+
+
+def test_a_study_opened_before_its_frame_is_given_keeps_the_selection(tmp_path: Path) -> None:
+    main_view = _FrameMainView()
+    main_view.table.source = DataFrameSource(_FIRST_ROWS)
+    main_view.table.selected_ids = [1]
+    path = tmp_path / "study.json"
+    main_view.save_state(path)
+
+    reopened = _FrameMainView()
+    reopened.load_state(path)
+    reopened.table.source = DataFrameSource(_FIRST_ROWS)
+
+    assert reopened.table.selected_ids == [1]
 
 
 @pytest.mark.parametrize("library", ["polars", "pandas"])
