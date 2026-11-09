@@ -73,7 +73,15 @@ class ChartPage(PageView):
         x_unit="h",
         # each count held until the next change; the queue's from 1 h, on its own x
         series=[
-            Series(name="Running", x=[0, 2, 5, 6], y=[1, 3, 2, 4], step=True, fill=True),
+            Series(
+                name="Running",
+                x=[0, 2, 5, 6],
+                y=[1, 3, 2, 4],
+                color="#204080",
+                step=True,
+                fill=True,
+                fill_color="#c0d0f0",
+            ),
             Series(name="Queued", x=[1, 4], y=[0.5, 1], step=True),
         ],
     )

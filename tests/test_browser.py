@@ -2775,6 +2775,43 @@ def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> Non
     assert "Flow Rate (L/s)" in Path(download.path()).read_text()
 
 
+def test_a_series_fill_color_paints_its_area_and_the_png_legend_keeps_its_line_color(
+    chart_pages_page: Page, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chartimage, "is_available", lambda: False)
+    chart_pages_page.goto("/chart")
+    jobs = chart_pages_page.locator("figure").filter(has_text="Jobs")
+    expect(jobs.locator("canvas")).to_have_count(1)
+    area = jobs.locator("[data-chart]").evaluate(
+        "element => { const chart = charts.get(element);"
+        " return chart.ctx.getImageData(Math.round(chart.valToPos(3.5, 'x', true)),"
+        "   Math.round(chart.valToPos(1.8, 'y', true)), 1, 1).data.slice(0, 3).join(); }"
+    )
+    assert _is_near(area, (192, 208, 240))
+
+    with chart_pages_page.expect_download() as download_info:
+        jobs.get_by_role("button", name="Save Image (PNG)").click()
+
+    # the colors of the row of the legend, below the plot
+    pixels = chart_pages_page.evaluate(
+        """async (bytes) => {
+            const image = await createImageBitmap(new Blob([new Uint8Array(bytes)]));
+            const canvas = new OffscreenCanvas(image.width, image.height);
+            const context = canvas.getContext("2d");
+            context.drawImage(image, 0, 0);
+            const data = context.getImageData(0, image.height - 70, image.width, 70).data;
+            const colors = new Set();
+            for (let i = 0; i < data.length; i += 4) {
+                colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+            }
+            return [...colors];
+        }""",
+        list(Path(download_info.value.path()).read_bytes()),
+    )
+    assert "32,64,128" in pixels
+    assert "192,208,240" not in pixels
+
+
 def test_without_matplotlib_the_page_draws_a_light_png(
     chart_page: Page, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -227,7 +227,12 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
             )
             if series.fill:  # down to 0, e.g. a shape
                 axes.fill_between(
-                    x, y, 0, color=color, linewidth=0, step="post" if series.step else None
+                    x,
+                    y,
+                    0,
+                    color=series.fill_color or color,
+                    linewidth=0,
+                    step="post" if series.step else None,
                 )
 
 

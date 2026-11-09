@@ -350,6 +350,8 @@ def test_a_series_color_is_given_as_rrggbb() -> None:
     for color in ("yellow", "#ffd70", "ffd700"):
         with pytest.raises(ValueError, match="#rrggbb"):
             Series(name="Oval", x=[0], y=[0], color=color)
+        with pytest.raises(ValueError, match="#rrggbb"):
+            Series(name="Oval", x=[0], y=[0], fill_color=color)
 
 
 def test_a_reference_line_s_color_is_given_as_rrggbb() -> None:

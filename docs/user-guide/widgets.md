@@ -653,12 +653,14 @@ The shapes are drawn in order, the later ones on top. A point is an `(x, y)` pai
 | --- | --- | --- | --- |
 | `LineShape` | A straight line | `start`, `end` | `color`, `style`, `weight` |
 | `PolylineShape` | Connected lines that stay open | `points`, at least 2 | `color`, `style`, `weight` |
-| `PolygonShape` | A closed shape through its points | `points`, at least 3 | `color`, `style`, `fill`, `weight` |
-| `CircleShape` | A circle, with a radius in the coordinates of the drawing | `center`, `radius`, above 0 | `color`, `style`, `fill`, `weight` |
+| `PolygonShape` | A closed shape through its points | `points`, at least 3 | `color`, `style`, `fill`, `fill_color`, `weight` |
+| `CircleShape` | A circle, with a radius in the coordinates of the drawing | `center`, `radius`, above 0 | `color`, `style`, `fill`, `fill_color`, `weight` |
 | `ArrowShape` | A straight line with a head at its end | `start`, `end`, which has the head | `color`, `style`, `weight` |
 | `TextShape` | A text at a position | `position`, `text` | `color`, `anchor`, `role` |
 
-A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. A `style` is a
+A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. With `fill`, the
+inside of a shape has the shape's `color`, or its `fill_color` if you set one, such as a pale area
+in a dark outline. A `style` is a
 [`LineStyle`](charts.md#reference-lines). A `TextAnchor` (`START`, `MIDDLE`, or `END`) says which
 part of the text stands at its position. A `weight` (`LineWeight.LIGHT`, `NORMAL`, or `HEAVY`)
 says how heavy a line is. A `role` is a [`TextRole`](#label), as on a label. A shape's `color`

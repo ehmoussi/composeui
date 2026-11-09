@@ -257,7 +257,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             color = curve.color or series_color(index, is_dark=is_dark)
             # filled down to 0, e.g. a shape
             item.setFillLevel(0 if curve.fill else None)
-            item.setBrush(color if curve.fill else None)
+            item.setBrush((curve.fill_color or color) if curve.fill else None)
             if ChartView.kind_of(curve, self._kind) is ChartKind.SCATTER:
                 item.setPen(None)
                 # past the palette, around again as triangles

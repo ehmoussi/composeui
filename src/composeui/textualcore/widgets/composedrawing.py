@@ -254,7 +254,7 @@ def _draw_shape(
         return
     points = _closed_points(placement, shape)
     if len(points) > 0 and shape.fill:
-        grid.fill(points[:-1], solid)
+        grid.fill(points[:-1], _Ink(shape.fill_color or shape.color))
     grid.outline(points, ink)
 
 

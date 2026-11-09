@@ -233,7 +233,7 @@ function chartOptions(element, spec, width) {
     } else {
       options.width = 2;
       // down to 0, uPlot's own fill, e.g. a shape
-      if (series.fill) options.fill = color;
+      if (spec.series[index].fill) options.fill = spec.series[index].fill_color || color;
       // past the theme's colors, around again dashed
       options.dash = index < SERIES_COLORS.length ? undefined : [6, 4];
       options.spanGaps = false;
@@ -508,7 +508,9 @@ function savePng(figure, name) {
   }
   // read before uPlot takes the options over
   var entries = options.series.slice(1).map(function (series, index) {
-    return { name: spec.series[index].name, color: series.fill || series.stroke };
+    // a bar's stroke is the background, and an area's fill may be paler than its line
+    var isBar = spec.series[index].kind === "bar";
+    return { name: spec.series[index].name, color: isBar ? series.fill : series.stroke };
   });
   var ink = resolveColor(plot, "var(--color-base-content)");
   var isSaved = false;

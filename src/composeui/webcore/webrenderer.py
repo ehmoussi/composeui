@@ -2165,6 +2165,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     # None: the theme's
                     "color": series.color,
                     "fill": series.fill,
+                    # None: the color of its line
+                    "fill_color": series.fill_color,
                     "step": series.step,
                     # its hovered values shown as integers, e.g. counts
                     "whole": ChartView.is_whole(series.y),
@@ -2438,7 +2440,9 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
     def _element_html(self, shape: Shape, bounds: tuple[float, float, float, float]) -> Markup:
         assert not isinstance(shape, (TextShape, ArrowShape))  # drawn on their own
         color = shape.color or "currentColor"
-        fill = color if isinstance(shape, (PolygonShape, CircleShape)) and shape.fill else "none"
+        fill = "none"
+        if isinstance(shape, (PolygonShape, CircleShape)) and shape.fill:
+            fill = shape.fill_color or color
         dashes = _DRAWING_DASHES[shape.style]
         paint = Markup(
             'stroke="{color}" fill="{fill}" stroke-width="{width}"'

@@ -3137,11 +3137,14 @@ class Series:
     #: its color, as #rrggbb, the same in every theme, e.g. a logo's or a code's; None:
     #: the backend's theme picks it
     color: Optional[str] = attrs.field(default=None, validator=[_check_color])
-    #: whether the area between its line and 0 is filled with its color, e.g. a shape
+    #: whether the area between its line and 0 is filled, e.g. a shape
     fill: bool = False
     #: whether its line holds each value until the next point, in steps, e.g. the jobs
     #: running over time; with `fill`, a step area. Dots are drawn as they are
     step: bool = False
+    #: with `fill`, the area's color, as #rrggbb, e.g. a pale area under a strong line;
+    #: None: the color of its line
+    fill_color: Optional[str] = attrs.field(default=None, validator=[_check_color])
 
     @classmethod
     def bars(cls, name: str, values: Iterable[float]) -> Series:
@@ -3439,10 +3442,13 @@ class PolygonShape:
     color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
     #: a terminal draws each solid
     style: LineStyle = LineStyle.SOLID
-    #: whether its inside has its color too
+    #: whether its inside is filled
     fill: bool = False
     #: how heavy its line is
     weight: LineWeight = LineWeight.NORMAL
+    #: with `fill`, its inside's color, as #rrggbb, e.g. a pale area in a dark outline; None:
+    #: its `color`
+    fill_color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
 
 
 @attrs.frozen
@@ -3455,10 +3461,13 @@ class CircleShape:
     color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
     #: a terminal draws each solid
     style: LineStyle = LineStyle.SOLID
-    #: whether its inside has its color too
+    #: whether its inside is filled
     fill: bool = False
     #: how heavy its line is
     weight: LineWeight = LineWeight.NORMAL
+    #: with `fill`, its inside's color, as #rrggbb, e.g. a pale area in a dark outline; None:
+    #: its `color`
+    fill_color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
 
 
 @attrs.frozen

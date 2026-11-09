@@ -122,7 +122,7 @@ class QDrawing(QWidget):
             painter.drawPolyline(QPolygonF([_point(placement, p) for p in shape.points]))
         else:
             if shape.fill:
-                painter.setBrush(QBrush(color))
+                painter.setBrush(QBrush(self._color(shape.fill_color or shape.color)))
             if isinstance(shape, PolygonShape):
                 painter.drawPolygon(QPolygonF([_point(placement, p) for p in shape.points]))
             else:

@@ -94,7 +94,9 @@ with these exceptions:
 
 - A series can have a `color` of its own (`"#rrggbb"`), the same in every theme, for
   example the color of a logo.
-- `fill=True` fills the area between the line of the series and 0, in its color.
+- `fill=True` fills the area between the line of the series and 0, in the color of the line. With
+  `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for example a pale area
+  under a strong line. This color is the same in every theme.
 - A series with `step=True` holds each value until its next point, for example the number of
   jobs running over time. With `fill`, it draws a step area. When the user hovers over the
   series, the chart shows the value held at the cursor.
