@@ -657,6 +657,7 @@ The shapes are drawn in order, the later ones on top. A point is an `(x, y)` pai
 | `CircleShape` | A circle, with a radius in the coordinates of the drawing | `center`, `radius`, above 0 | `color`, `style`, `fill`, `fill_color`, `weight` |
 | `ArrowShape` | A straight line with a head at its end | `start`, `end`, which has the head | `color`, `style`, `weight` |
 | `TextShape` | A text at a position | `position`, `text` | `color`, `anchor`, `role` |
+| `DimensionShape` | A measurement: a line with a tick at each end and a label | `start`, `end`, `text` | `color`, `style`, `weight`, `role` |
 
 A `color` is `#rrggbb`. Without a color, the shape has the theme's text color. With `fill`, the
 inside of a shape has the shape's `color`, or its `fill_color` if you set one, such as a pale area
@@ -664,7 +665,10 @@ in a dark outline. A `style` is a
 [`LineStyle`](charts.md#reference-lines). A `TextAnchor` (`START`, `MIDDLE`, or `END`) says which
 part of the text stands at its position. A `weight` (`LineWeight.LIGHT`, `NORMAL`, or `HEAVY`)
 says how heavy a line is. A `role` is a [`TextRole`](#label), as on a label. A shape's `color`
-goes before the color of its role. A value that is not finite, a radius of 0 or less, a bad
+goes before the color of its role. A `DimensionShape` has a `LineWeight.LIGHT` line by default. Its
+label stands on the right of the line that goes from `start` to `end`, so it is below the line
+when `start` is on the left. On a sloped or vertical line, the text starts at the label's position
+and runs away from the line. A value that is not finite, a radius of 0 or less, a bad
 color, or too few points raise a `ValueError` when the app makes the shape.
 
 The view has these fields:
@@ -680,8 +684,8 @@ The view has these fields:
   pixels high. On a narrow page, the web makes the drawing smaller than its height.
 
 The y axis goes up, and both axes have one scale, so a circle stays round. When the view changes
-size, three things keep their size on screen: a text, the width of the lines, and the head of an
-arrow. A study saves the shapes and the bounds, but not the `height`. A shape's text is the app's
+size, these things keep their size on screen: a text, the width of the lines, the head of an
+arrow, and the ticks of a dimension, with the distance of its label from its line. A study saves the shapes and the bounds, but not the `height`. A shape's text is the app's
 data: translate it before making the shape.
 
 Qt paints the shapes on a `QWidget`, and the web shows them as SVG. Textual draws them with colored

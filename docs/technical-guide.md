@@ -414,8 +414,8 @@ section covers what users see.
 - **Drawings.** A `DrawingView` is SVG that the server makes from validated shapes, with no
   script. The element keeps the proportions of `bounds`, so a percentage of it places a point.
   Each shape is in a nested `<svg>` with a `viewBox`, which clips it to `bounds`, and its stroke
-  doesn't scale. A text and an arrow head stand at a percentage and are sized in pixels, so they
-  keep their size. They stay outside the nested `<svg>`: a text near the edge isn't cut. Only the
+  doesn't scale. A text, an arrow head, and a dimension's ticks stand at a percentage and are sized
+  in pixels, so they keep their size. They stay outside the nested `<svg>`: a text near the edge isn't cut. Only the
   browser knows the scale on the page, so an arrow's line stops inside its head by a length
   computed at the largest size that the view can have.
 - **By design:** `Menu.is_visible` is ignored (a dropdown is always shown). An action's `data`

@@ -240,8 +240,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   See https://ehmoussi.github.io/composeui/user-guide/charts.html
 - **Use `DrawingView` for a diagram of shapes,** not an image or a `ChartView`. Assign a new
   `shapes` list of `LineShape`, `PolylineShape`, `PolygonShape`, `CircleShape`, `ArrowShape`,
-  and `TextShape` to redraw it. Its y axis goes up. Set `bounds` when a shape moves, so that
-  the scale stays the same.
+  `DimensionShape`, and `TextShape` to redraw it. Its y axis goes up. Set `bounds` when a shape
+  moves, so that the scale stays the same.
   See https://ehmoussi.github.io/composeui/user-guide/widgets.html#drawing
 - **Use `MapView` for geographic points**, not `ChartView`: `MapPoint(latitude=...,
   longitude=...)`. `center=None` and `zoom=None` fit the points. The study saves the

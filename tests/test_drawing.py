@@ -19,6 +19,7 @@ from composeui.core.registry import RendererType
 from composeui.core.view import (
     ArrowShape,
     CircleShape,
+    DimensionShape,
     DrawingView,
     LineShape,
     LineStyle,
@@ -60,6 +61,7 @@ class _DrawingMainView(MainView):
     [
         (lambda: LineShape((NAN, 0), (1, 1)), "start"),
         (lambda: ArrowShape((0, 0), (1, INF)), "end"),
+        (lambda: DimensionShape((NAN, 0), (1, 1), "a"), "start"),
         (lambda: PolylineShape([(0, 0)]), "points"),
         (lambda: PolylineShape([(0, 0), (NAN, 1)]), "points"),
         (lambda: PolygonShape([(0, 0), (1, 1)]), "points"),
@@ -92,6 +94,7 @@ def test_a_study_keeps_each_shape_with_its_own_kind() -> None:
         PolygonShape([(0, 0), (1, 0), (0, 1)], fill=True, fill_color=BLUE),
         CircleShape((0, 0), 2.5),
         TextShape((1, 2), "F", anchor=TextAnchor.END, role=TextRole.TITLE),
+        DimensionShape((0, 0), (1, 0), "1 m", color=RED, role=TextRole.TITLE),
     ]
     saved = _DrawingMainView()
     saved.drawing.shapes = shapes
@@ -138,6 +141,7 @@ def test_bounds_that_can_t_be_drawn_are_refused_when_set() -> None:
         ([], (0, 0, 1, 1)),
         ([LineShape((0, 0), (10, 5))], (-0.8, -0.8, 10.8, 5.8)),
         ([ArrowShape((10, 5), (0, 0))], (-0.8, -0.8, 10.8, 5.8)),
+        ([DimensionShape((10, 5), (0, 0), "L")], (-0.8, -0.8, 10.8, 5.8)),
         ([PolylineShape([(0, 0), (10, 5), (5, 1)])], (-0.8, -0.8, 10.8, 5.8)),
         ([PolygonShape([(0, 0), (10, 5), (5, 1)])], (-0.8, -0.8, 10.8, 5.8)),
         ([CircleShape((5, 5), 5)], (-0.8, -0.8, 10.8, 10.8)),
@@ -203,10 +207,45 @@ def test_a_drawing_is_described_by_its_description_else_by_its_text() -> None:
         TextShape((0, 0), "F"),
         LineShape((0, 0), (1, 1)),
         TextShape((1, 0), "L"),
+        DimensionShape((0, 0), (1, 0), "1 m"),
     ]
 
-    assert DrawingView.shown_description("", shapes) == "F, L"
+    assert DrawingView.shown_description("", shapes) == "F, L, 1 m"
     assert DrawingView.shown_description("A beam", shapes) == "A beam"
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "across", "anchor"),
+    [
+        ((0, 0), (2, 0), (0, 1), TextAnchor.MIDDLE),  # left to right: below
+        ((2, 0), (0, 0), (0, -1), TextAnchor.MIDDLE),
+        ((0, 0), (0, 2), (1, 0), TextAnchor.START),  # upward: on the right, clear of the line
+        ((0, 2), (0, 0), (-1, 0), TextAnchor.END),
+        # sloped: a centered text would cross the line
+        ((0, 0), (4, 3), (0.6, 0.8), TextAnchor.START),
+        ((0, 3), (4, 0), (-0.6, 0.8), TextAnchor.END),
+        ((0, 0), (20, 1), (0.04994, 0.99875), TextAnchor.MIDDLE),  # almost level: centered
+        ((1, 1), (1, 1), (0, 1), TextAnchor.MIDDLE),  # no direction
+        ((-1e308, 0), (1e308, 0), (0, 1), TextAnchor.MIDDLE),  # a side too long for a float
+    ],
+)
+def test_a_dimension_s_label_stands_on_the_right_of_its_line(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    across: tuple[float, float],
+    anchor: TextAnchor,
+) -> None:
+    shape = DimensionShape(start, end, "L", color=RED, role=TextRole.TITLE)
+
+    assert shape.across() == pytest.approx(across, abs=1e-4)
+    label = shape.label()
+    assert label.position == pytest.approx(((start[0] + end[0]) / 2, (start[1] + end[1]) / 2))
+    assert (label.text, label.color, label.anchor, label.role) == (
+        "L",
+        RED,
+        anchor,
+        TextRole.TITLE,
+    )
 
 
 # Qt -------------------------------------------------------------------------------------
@@ -338,6 +377,48 @@ def test_qt_gives_an_arrow_a_head_of_the_same_size_at_any_scale(
     view.bounds = (0, 0, 20, 10)  # 10 times smaller: the head isn't
     view.shapes = [ArrowShape((0, 5), (20, 5), color=RED)]
     assert _is_color(widget, 191, 47, RED)
+
+
+def test_qt_gives_a_dimension_ticks_and_a_label_of_the_same_size_at_any_scale(
+    qt_drawing: tuple[DrawingView, QDrawing],
+) -> None:
+    view, widget = qt_drawing
+
+    def check() -> None:
+        # at x = 50, 6 pixels on each side of the line at y = 50, and half a pen more at each end
+        assert _is_color(widget, 50, 46, RED)
+        assert not _is_color(widget, 50, 40, RED)
+        assert not _is_color(widget, 100, 46, RED)
+        image = widget.grab().toImage()
+        background = image.pixelColor(0, 0)
+        rows = [
+            y
+            for y in range(100)
+            if abs(y - 50) > 9 and any(image.pixelColor(x, y) != background for x in range(200))
+        ]
+        # the text, 14 pixels below the line
+        assert rows != []
+        assert min(rows) > 50
+
+    shape = DimensionShape((0.5, 0.5), (1.5, 0.5), "MM", color=RED, weight=LineWeight.HEAVY)
+    view.shapes = [shape]
+    check()
+
+    view.bounds = (0, 0, 20, 10)  # 10 times smaller: the ticks and the gap aren't
+    view.shapes = [DimensionShape((5, 5), (15, 5), "MM", color=RED, weight=LineWeight.HEAVY)]
+    check()
+
+
+def test_qt_leaves_out_a_dimension_s_tick_past_the_bounds(
+    qt_drawing: tuple[DrawingView, QDrawing],
+) -> None:
+    view, widget = qt_drawing
+    view.bounds = (0, 0, 1, 1)  # 100 pixels a unit, from x = 50: the widget shows past them
+
+    view.shapes = [DimensionShape((0.25, 0.5), (1.2, 0.5), "", RED, weight=LineWeight.HEAVY)]
+
+    assert _is_color(widget, 75, 46, RED)
+    assert not _is_color(widget, 170, 46, RED)
 
 
 def test_qt_draws_only_the_head_of_an_arrow_shorter_than_it(
@@ -694,6 +775,28 @@ async def test_textual_joins_a_polyline_s_points() -> None:
     assert rows[0][:20].count("⠤") == 20
     assert rows[8][20] != " "
     assert rows[8][30] == " "
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("end_x", "ticks"), [(70, 2), (90, 1)])  # 90: past the bounds
+async def test_textual_draws_a_dimension_s_ticks_and_its_label_below(
+    end_x: float, ticks: int
+) -> None:
+    dimension, _ = await _textual_rows(
+        [DimensionShape((10, 32), (end_x, 32), "6 m")], description="d"
+    )
+    line, _ = await _textual_rows([LineShape((10, 32), (end_x, 32))], description="d")
+
+    label_row = next(row for row, text in enumerate(dimension) if "6 m" in text)
+    line_row = next(row for row, text in enumerate(line) if text.strip("d ") != "")
+    assert label_row > line_row
+    changed = {
+        column
+        for column in range(40)
+        for row in range(len(line))
+        if row != label_row and dimension[row][column] != line[row][column]
+    }
+    assert len(changed) == ticks
 
 
 @pytest.mark.asyncio
@@ -1140,6 +1243,45 @@ def test_the_web_stops_an_arrow_s_line_inside_its_head() -> None:
 
     assert float(line["x2"]) == pytest.approx(3 - 11 / 72 / 2, abs=1e-3)
     assert line["y2"] == "3"
+
+
+def test_the_web_places_a_dimension_s_ticks_and_label_in_pixels_around_its_line() -> None:
+    shape = DimensionShape((2, 1), (6, 1), "<4 m>", color=RED)
+
+    parser = _web(DrawingView(shapes=[shape], bounds=(0, 0, 8, 4)))
+
+    lines = [attributes for tag, attributes in parser.elements if tag == "line"]
+    assert len(lines) == 3
+    line, *ticks = lines
+    assert (line["x1"], line["y1"], line["x2"], line["y2"]) == ("2", "3", "6", "3")
+    for tick in ticks:
+        assert (float(tick["x1"]), float(tick["y1"])) == (0, -6)
+        assert (float(tick["x2"]), float(tick["y2"])) == (0, 6)
+        assert tick["stroke"] == RED
+    tick_svgs = [a for tag, a in parser.elements if tag == "svg" and "x" in a]
+    assert [(a["x"], a["y"]) for a in tick_svgs] == [("25%", "75%"), ("75%", "75%")]
+    text = _element(parser, "text")
+    assert (text["x"], text["y"], text["dx"], text["dy"]) == ("50%", "75%", "0", "14")
+    assert text["text-anchor"] == "middle"
+    assert "<4 m>" in parser.texts
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "ticks", "has_label"),
+    [
+        ((2, 1), (9, 1), 1, True),  # one end out
+        ((9, 1), (11, 1), 0, False),  # all out, its middle too
+    ],
+)
+def test_the_web_leaves_out_a_dimension_s_marks_past_the_bounds(
+    start: tuple[float, float], end: tuple[float, float], ticks: int, has_label: bool
+) -> None:
+    shape = DimensionShape(start, end, "L")
+
+    parser = _web(DrawingView(shapes=[shape], bounds=(0, 0, 8, 4)))
+
+    assert len([1 for tag, _a in parser.elements if tag == "line"]) == 1 + ticks
+    assert ("text" in [tag for tag, _a in parser.elements]) is has_label
 
 
 def test_the_web_draws_only_the_head_of_an_arrow_shorter_than_it() -> None:

@@ -10,6 +10,7 @@ from qtpy.QtWidgets import QSizePolicy, QWidget
 from composeui.core.view import (
     ArrowShape,
     CircleShape,
+    DimensionShape,
     DrawingPlacement,
     DrawingView,
     LineShape,
@@ -31,6 +32,9 @@ if TYPE_CHECKING:
 #: a line's width and an arrow head's length, in pixels at any scale
 _LINE_WIDTHS = {LineWeight.LIGHT: 1.0, LineWeight.NORMAL: 2.0, LineWeight.HEAVY: 4.0}
 _ARROW_HEAD_LENGTH = 11.0
+#: how far a dimension's ticks reach on each side of its line, and its label stands from it
+_DIMENSION_TICK = 6.0
+_DIMENSION_LABEL_GAP = 14.0
 _DEFAULT_HEIGHT = 288
 _PEN_STYLES = {
     LineStyle.SOLID: Qt.PenStyle.SolidLine,
@@ -106,18 +110,15 @@ class QDrawing(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setClipping(True)
         if isinstance(shape, TextShape):
-            if DrawingView.in_bounds(shape.position, bounds):
-                # past the edge too: a label near it stays readable
-                painter.setClipping(False)
-                painter.setFont(role_font(shape.role).resolve(self.font()))
-                painter.setPen(self._text_color(shape))
-                _paint_text(painter, placement.point(shape.position), shape)
+            self._paint_text_shape(painter, placement, bounds, shape)
             return
         painter.setPen(QPen(color, _LINE_WIDTHS[shape.weight], _PEN_STYLES[shape.style]))
         if isinstance(shape, LineShape):
             painter.drawLine(_point(placement, shape.start), _point(placement, shape.end))
         elif isinstance(shape, ArrowShape):
             self._paint_arrow(painter, placement, bounds, shape, color)
+        elif isinstance(shape, DimensionShape):
+            self._paint_dimension(painter, placement, bounds, shape)
         elif isinstance(shape, PolylineShape):
             painter.drawPolyline(QPolygonF([_point(placement, p) for p in shape.points]))
         else:
@@ -129,6 +130,42 @@ class QDrawing(QWidget):
                 assert isinstance(shape, CircleShape)
                 radius = shape.radius * placement.scale
                 painter.drawEllipse(_point(placement, shape.center), radius, radius)
+
+    def _paint_text_shape(
+        self,
+        painter: QPainter,
+        placement: DrawingPlacement,
+        bounds: tuple[float, float, float, float],
+        shape: TextShape,
+        offset: tuple[float, float] = (0.0, 0.0),
+    ) -> None:
+        if not DrawingView.in_bounds(shape.position, bounds):
+            return
+        # past the edge too: a label near it stays readable
+        painter.setClipping(False)
+        painter.setFont(role_font(shape.role).resolve(self.font()))
+        painter.setPen(self._text_color(shape))
+        x, y = placement.point(shape.position)
+        _paint_text(painter, (x + offset[0], y + offset[1]), shape)
+
+    def _paint_dimension(
+        self,
+        painter: QPainter,
+        placement: DrawingPlacement,
+        bounds: tuple[float, float, float, float],
+        shape: DimensionShape,
+    ) -> None:
+        painter.drawLine(_point(placement, shape.start), _point(placement, shape.end))
+        across_x, across_y = shape.across()
+        tick_x, tick_y = across_x * _DIMENSION_TICK, across_y * _DIMENSION_TICK
+        # as an arrow's head: whole, or not at all
+        painter.setClipping(False)
+        for end in (shape.start, shape.end):
+            if DrawingView.in_bounds(end, bounds):
+                x, y = placement.point(end)
+                painter.drawLine(QPointF(x - tick_x, y - tick_y), QPointF(x + tick_x, y + tick_y))
+        offset = (across_x * _DIMENSION_LABEL_GAP, across_y * _DIMENSION_LABEL_GAP)
+        self._paint_text_shape(painter, placement, bounds, shape.label(), offset)
 
     @staticmethod
     def _paint_arrow(

@@ -13,6 +13,7 @@ from textual.widget import Widget
 from composeui.core.view import (
     ArrowShape,
     CircleShape,
+    DimensionShape,
     DrawingPlacement,
     DrawingView,
     LineShape,
@@ -38,6 +39,10 @@ _DOT_BITS = ((0x01, 0x08), (0x02, 0x10), (0x04, 0x20), (0x40, 0x80))
 _MAX_CIRCLE_POINTS = 2048
 #: an arrow head's length, in dots
 _ARROW_HEAD_DOTS = 5.0
+#: how far a dimension's ticks reach on each side of its line, and its label stands from it,
+#: in dots
+_DIMENSION_TICK_DOTS = 3.0
+_DIMENSION_LABEL_DOTS = 6.0
 
 
 class _Ink(NamedTuple):
@@ -241,6 +246,14 @@ def _draw_shape(
     )
     # a head and an inside have no line to weigh
     solid = _Ink(shape.color)
+    if isinstance(shape, DimensionShape):
+        grid.line(placement.point(shape.start), placement.point(shape.end), ink)
+        across_x, across_y = shape.across()
+        tick_x, tick_y = across_x * _DIMENSION_TICK_DOTS, across_y * _DIMENSION_TICK_DOTS
+        for end in (shape.start, shape.end):
+            x, y = placement.point(end)
+            grid.line((x - tick_x, y - tick_y), (x + tick_x, y + tick_y), ink)
+        return
     if isinstance(shape, (LineShape, ArrowShape)):
         tail, tip = placement.point(shape.start), placement.point(shape.end)
         grid.line(tail, tip, ink)
@@ -256,6 +269,29 @@ def _draw_shape(
     if len(points) > 0 and shape.fill:
         grid.fill(points[:-1], _Ink(shape.fill_color or shape.color))
     grid.outline(points, ink)
+
+
+def _write_text_shape(
+    grid: _Grid,
+    placement: DrawingPlacement,
+    bounds: tuple[float, float, float, float],
+    shape: TextShape,
+    offset: tuple[float, float] = (0.0, 0.0),
+) -> None:
+    x, y = placement.point(shape.position)
+    x, y = x + offset[0], y + offset[1]
+    # outside, it stays out, as its line does
+    if not (DrawingView.in_bounds(shape.position, bounds) and _all_finite(x, y)):
+        return
+    text = _one_line(shape.text)
+    width = cell_len(text)
+    shift = {TextAnchor.START: 0, TextAnchor.MIDDLE: width // 2, TextAnchor.END: width}
+    grid.label(
+        text,
+        math.floor(x / _DOTS_ACROSS) - shift[shape.anchor],
+        math.floor(y / _DOTS_DOWN),
+        shape,
+    )
 
 
 def _closed_points(
@@ -342,19 +378,11 @@ class ComposeDrawing(Widget):
             _draw_shape(grid, placement, bounds, shape)
         for shape in self.shapes:
             if isinstance(shape, TextShape):
-                x, y = placement.point(shape.position)
-                # outside, it stays out, as its line does
-                if not (DrawingView.in_bounds(shape.position, bounds) and _all_finite(x, y)):
-                    continue
-                text = _one_line(shape.text)
-                width = cell_len(text)
-                shift = {TextAnchor.START: 0, TextAnchor.MIDDLE: width // 2, TextAnchor.END: width}
-                grid.label(
-                    text,
-                    math.floor(x / _DOTS_ACROSS) - shift[shape.anchor],
-                    math.floor(y / _DOTS_DOWN),
-                    shape,
-                )
+                _write_text_shape(grid, placement, bounds, shape)
+            elif isinstance(shape, DimensionShape):
+                across_x, across_y = shape.across()
+                offset = (across_x * _DIMENSION_LABEL_DOTS, across_y * _DIMENSION_LABEL_DOTS)
+                _write_text_shape(grid, placement, bounds, shape.label(), offset)
         self._grid = grid
         return grid
 
