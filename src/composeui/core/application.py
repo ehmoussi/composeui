@@ -25,7 +25,7 @@ from composeui.core.signal import Signal
 from composeui.core.study import open_study
 from composeui.core.view import _STREAM_HANDLER as VIEW_STREAM_HANDLER
 from composeui.core.view import LOGGER as VIEW_LOGGER
-from composeui.core.view import set_references
+from composeui.core.view import set_references, take_filter_patterns
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
@@ -288,6 +288,7 @@ class Application(Generic[MainViewT]):
     backend: ClassVar[RendererType | None] = None
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
+        take_filter_patterns()  # a mistyped setting stops the app here, not at a first filter
         if self.backend is not None:
             _Running.backend = self.backend
         self._main_view = build_main_view()

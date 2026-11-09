@@ -34,7 +34,7 @@ from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
-from composeui.core.view import View
+from composeui.core.view import FILTER_PATTERNS_VARIABLE, View
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
 from composeui.webcore.order import DuplicatePostError
@@ -323,10 +323,16 @@ class WebApplication(Application[MainViewT]):
     #: most sessions live at once: past it, a new browser gets 503 until one is dropped
     #: (each holds a main view, and maybe a model, in memory)
     max_sessions: ClassVar[int] = 1000
+    #: whether table filters take regular expressions; a public app sets it to False, because a
+    #: crafted one can make every session wait for a long time
+    filter_patterns: ClassVar[bool] = True
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         self._build_main_view = build_main_view
         self._connections: list[_Connection] = []
+        if not self.filter_patterns:
+            # the only switch that the tables read, and a reloaded server process inherits it
+            os.environ[FILTER_PATTERNS_VARIABLE] = "off"
         super().__init__(build_main_view=build_main_view)
         self._parser.add_argument(
             "--host", metavar="HOST", help="Host to serve on.", default="127.0.0.1"

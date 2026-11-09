@@ -21,6 +21,7 @@ import logging
 import math
 import mimetypes
 import operator
+import os
 import re
 import shutil
 import sys
@@ -430,7 +431,7 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
                 states.append((current_field, new_value))
                 continue
             value = CONVERTER.structure(new_value, f.type)
-            if isinstance(current_view, TableMixin):
+            if isinstance(current_view, (TableMixin, SourceTableView)):
                 # a sort or a filter on a column the table no longer sorts or filters
                 value = current_view.loadable(f.name, value)
             setattr(current_view, f.name, value)
@@ -3815,6 +3816,8 @@ class FilterProblem(enum.Enum):
     REVERSED_RANGE = enum.auto()
     #: not a valid regular expression, for a text column's ``/pattern/``
     NOT_A_PATTERN = enum.auto()
+    #: a ``/pattern/`` while ``COMPOSEUI_FILTER_PATTERNS`` turns regular expressions off
+    PATTERNS_OFF = enum.auto()
 
 
 class FilterError(ValueError):
@@ -3961,6 +3964,24 @@ def _parse_value(text: str, field_type: Any, kind: ColumnKind) -> Any:
         raise FilterError(problems[kind], text) from error
 
 
+#: environment variable that a deployed app sets to ``off`` to refuse the regular expressions
+#: of filters: a crafted one can run for a long time in Python's ``re``, which no timeout
+#: stops and which holds the GIL, so that every session of the process waits
+FILTER_PATTERNS_VARIABLE = "COMPOSEUI_FILTER_PATTERNS"
+
+
+def take_filter_patterns() -> bool:
+    """Tell whether filters take regular expressions; a value nobody can read is an error."""
+    setting = os.environ.get(FILTER_PATTERNS_VARIABLE, "").strip().lower()
+    if setting in ("", "on", "true", "1", "yes"):
+        return True
+    if setting in ("off", "false", "0", "no"):
+        return False
+    # a security setting: a typo mustn't leave the regular expressions on, unnoticed
+    msg = f"{FILTER_PATTERNS_VARIABLE} must be off or on, not {setting!r}"
+    raise ValueError(msg)
+
+
 def as_pattern(text: str) -> str:
     """Write a regular expression as a text column's filter: between slashes."""
     return f"/{text}/"
@@ -3985,6 +4006,8 @@ def _parse_text(text: str) -> Filter:
     """
     pattern, is_pattern = split_pattern(text)
     if is_pattern:
+        if not take_filter_patterns():
+            raise FilterError(FilterProblem.PATTERNS_OFF, pattern)
         try:
             return Filter(FilterOperator.MATCHES, re.compile(pattern, re.IGNORECASE))
         except re.error as error:
@@ -4016,7 +4039,8 @@ def parse_filter(text: str, field_type: Any = str) -> Filter:
     number, a date or a duration column (``1d 2h`` or seconds): a comparison (``>20``, ``>=20``,
     ``<20``, ``<=20``, ``!=20``). Or a range (``18..24``, both ends included), or a bare
     value, which means ``=``. In a boolean column: ``true`` or ``false``. In any column:
-    ``=`` alone, for the empty cells. Raise `FilterError` when the text doesn't parse.
+    ``=`` alone, for the empty cells. Raise `FilterError` when the text doesn't parse, or for
+    a ``/regex/`` when the ``COMPOSEUI_FILTER_PATTERNS`` environment variable is ``off``.
     """
     text = text.strip()
     if text == "":
@@ -4407,6 +4431,7 @@ def _filter_error(tr: Callable[[str], str], text: str, field_type: Any) -> Optio
             FilterProblem.NOT_A_BOOLEAN: tr('"{text}" isn\'t true or false'),
             FilterProblem.REVERSED_RANGE: tr("The range's start is after its end"),
             FilterProblem.NOT_A_PATTERN: tr('"{text}" isn\'t a valid regular expression'),
+            FilterProblem.PATTERNS_OFF: tr("This app doesn't accept regular expressions"),
         }
         return messages[error.problem].format(text=error.text)
     return None
@@ -4715,7 +4740,7 @@ class TableMixin:
 
     def filter_takes_pattern(self, column: int) -> bool:
         """Tell whether a regular expression filters `column`: a text column."""
-        return column_kind(self._column_type(column)) is ColumnKind.TEXT
+        return take_filter_patterns() and column_kind(self._column_type(column)) is ColumnKind.TEXT
 
     def filter_placeholder(self, column: int, *, is_pattern: bool = False) -> str:
         """Hint at what filters `column`, translated: a regular expression, or else text."""
@@ -5498,6 +5523,17 @@ class SourceTableView(View):
         for column, text in filters.items():
             parse_filter(text, self._source_column(column, "filter").type)
 
+    def loadable(self, name: str, value: Any) -> Any:
+        """Get the part of the saved filters (`name`) that the source's columns still take."""
+        if name != "filters":
+            return value
+        names = None if self.source is None else {c.name for c in self.source.columns}
+        return {
+            column: text
+            for column, text in value.items()
+            if (names is None or column in names) and self.filter_error(column, text) is None
+        }
+
     def _check_selected_ids(self, _attribute: attrs.Attribute[Any], ids: list[Any]) -> None:
         name = type(self).__name__
         if self.selection_mode is SelectionMode.SINGLE and len(ids) > 1:
@@ -5713,7 +5749,8 @@ class SourceTableView(View):
 
     def filter_takes_pattern(self, column: str) -> bool:
         """Tell whether a regular expression filters `column`: a text column."""
-        return column_kind(self._source_column(column, "filter").type) is ColumnKind.TEXT
+        column_type = self._source_column(column, "filter").type
+        return take_filter_patterns() and column_kind(column_type) is ColumnKind.TEXT
 
     def filter_placeholder(self, column: str, *, is_pattern: bool = False) -> str:
         """Hint at what filters `column`, translated: a regular expression, or else text."""
