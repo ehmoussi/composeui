@@ -8,6 +8,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `DimensionShape` shows a measurement in a `DrawingView`: a line with a tick at each end and a
+  label, on Qt, Textual and the web. The ticks keep their size at any scale.
 - `fill_color` on `Series`, `PolygonShape` and `CircleShape` gives a filled area a color other than
   its line's, on Qt, Textual and the web, and in a chart's image.
 - `DrawingView` shows a diagram of lines, polygons, circles, arrows, and text on Qt,

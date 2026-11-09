@@ -119,6 +119,7 @@ __all__ = [
     "DialogButtonView",
     "DialogKind",
     "DialogView",
+    "DimensionShape",
     "DrawingView",
     "EditRefusedError",
     "ExpanderView",
@@ -3501,8 +3502,62 @@ class TextShape:
     role: TextRole = TextRole.BODY
 
 
+#: past about 10 degrees from level (the sine of it), a centered label would cross its line
+_DIMENSION_CENTERED_LEAN = 0.17
+
+
+@attrs.frozen
+class DimensionShape:
+    """A measurement of a `DrawingView`: a line with a tick at each end and a label.
+
+    The ticks and the label's distance from the line stay the same size at any scale. The
+    label stands on the right of the line going from `start` to `end`: below it when `start`
+    is on the left.
+    """
+
+    start: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    end: tuple[float, float] = attrs.field(converter=_to_point, validator=[_check_point])
+    #: the measure shown, e.g. "6 m"
+    text: str
+    #: of its line, its ticks and its text, as #rrggbb, the same in every theme; None: the
+    #: theme's text color
+    color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
+    #: a terminal draws each solid
+    style: LineStyle = LineStyle.SOLID
+    #: how heavy its lines are
+    weight: LineWeight = LineWeight.LIGHT
+    #: what its text is: each backend shows a title or a caption in its own way
+    role: TextRole = TextRole.BODY
+
+    def across(self) -> tuple[float, float]:
+        """Get the unit vector from the line toward its label, on a surface, y going down.
+
+        A line without a direction has its label below.
+        """
+        # halved: between -1e308 and 1e308, the side overflows
+        dx, dy = self.end[0] / 2 - self.start[0] / 2, self.end[1] / 2 - self.start[1] / 2
+        distance = math.hypot(dx, dy)
+        return (dy / distance, dx / distance) if distance > 0 else (0.0, 1.0)
+
+    def label(self) -> TextShape:
+        """Get its text at the line's middle, anchored so that it clears the line."""
+        across_x, _across_y = self.across()
+        anchor = TextAnchor.MIDDLE
+        if abs(across_x) > _DIMENSION_CENTERED_LEAN:
+            anchor = TextAnchor.START if across_x > 0 else TextAnchor.END
+        return TextShape(
+            (self.start[0] / 2 + self.end[0] / 2, self.start[1] / 2 + self.end[1] / 2),
+            self.text,
+            self.color,
+            anchor,
+            self.role,
+        )
+
+
 #: a shape of a `DrawingView`
-Shape = Union[LineShape, PolylineShape, PolygonShape, CircleShape, ArrowShape, TextShape]
+Shape = Union[
+    LineShape, PolylineShape, PolygonShape, CircleShape, ArrowShape, TextShape, DimensionShape
+]
 
 #: a drawing's area without shapes
 _EMPTY_BOUNDS = (0.0, 0.0, 1.0, 1.0)
@@ -3540,7 +3595,7 @@ def _check_bounds(
 
 def _extent_points(shape: Shape) -> list[tuple[float, float]]:
     """Get the points that a shape's extent reaches."""
-    if isinstance(shape, (LineShape, ArrowShape)):
+    if isinstance(shape, (LineShape, ArrowShape, DimensionShape)):
         return [shape.start, shape.end]
     if isinstance(shape, (PolylineShape, PolygonShape)):
         return shape.points
@@ -3574,7 +3629,8 @@ class DrawingView(View):
 
     Assign a new `shapes` list to redraw it, e.g. when a slider moves. The shapes are in the
     drawing's own coordinates, y going up, with one scale for both axes: a circle stays
-    round. A text, the lines' width and an arrow's head keep their size on screen.
+    round. A text, the lines' width, an arrow's head and a dimension's ticks keep their size
+    on screen.
 
     Qt and the web draw it exactly. A terminal draws it with braille characters, the text
     readable over them, and its description below.
@@ -3652,7 +3708,9 @@ class DrawingView(View):
     def shown_description(description: str, shapes: list[Shape]) -> str:
         """Get what describes the drawing: `description`, or the text of its shapes."""
         return description or ", ".join(
-            shape.text for shape in shapes if isinstance(shape, TextShape) and shape.text
+            shape.text
+            for shape in shapes
+            if isinstance(shape, (TextShape, DimensionShape)) and shape.text
         )
 
 

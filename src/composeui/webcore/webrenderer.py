@@ -66,6 +66,7 @@ from composeui.core.view import (
     DialogButtonView,
     DialogKind,
     DialogView,
+    DimensionShape,
     DrawingView,
     ExitAppAction,
     ExpanderView,
@@ -2334,6 +2335,9 @@ class DrawingViewLike(ViewLike, Protocol):
 #: a drawing's lines, an arrow head's length and a text's size, in pixels at any scale
 _DRAWING_LINE_WIDTHS: Final = {LineWeight.LIGHT: 1, LineWeight.NORMAL: 2, LineWeight.HEAVY: 4}
 _DRAWING_ARROW_HEAD: Final = 11.0
+#: how far a dimension's ticks reach on each side of its line, and its label stands from it
+_DRAWING_DIMENSION_TICK: Final = 6.0
+_DRAWING_DIMENSION_LABEL_GAP: Final = 14.0
 _DRAWING_FONT_SIZE: Final = 13
 #: the height of a drawing whose view has none, in pixels
 _DRAWING_HEIGHT: Final = 288
@@ -2358,8 +2362,8 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
     """A drawing as SVG made from the validated shapes, with no script.
 
     The element keeps the area's proportions, so that percentages of it place a point. The
-    geometry scales in a nested `<svg>` with a `viewBox`, its strokes not scaling. A text and
-    an arrow head stand at a percentage, in pixels, so they keep their size.
+    geometry scales in a nested `<svg>` with a `viewBox`, its strokes not scaling. A text, an
+    arrow head and a dimension's ticks stand at a percentage, in pixels, so they keep their size.
     """
 
     _role = "drawing"
@@ -2396,6 +2400,8 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
                 if DrawingView.in_bounds(shape.position, bounds)
                 else Markup()
             )
+        if isinstance(shape, DimensionShape):
+            return self._dimension_html(shape, bounds)
         if not isinstance(shape, ArrowShape):
             return self._geometry_html(shape, bounds)
         shaft = self._arrow_shaft(shape, bounds)
@@ -2438,23 +2444,11 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
         return shape.end[0] - dx / length * head / 2, shape.end[1] - dy / length * head / 2
 
     def _element_html(self, shape: Shape, bounds: tuple[float, float, float, float]) -> Markup:
-        assert not isinstance(shape, (TextShape, ArrowShape))  # drawn on their own
-        color = shape.color or "currentColor"
+        assert not isinstance(shape, (TextShape, ArrowShape, DimensionShape))  # drawn on their own
         fill = "none"
         if isinstance(shape, (PolygonShape, CircleShape)) and shape.fill:
-            fill = shape.fill_color or color
-        dashes = _DRAWING_DASHES[shape.style]
-        paint = Markup(
-            'stroke="{color}" fill="{fill}" stroke-width="{width}"'
-            ' vector-effect="non-scaling-stroke"{dashes}'
-        ).format(
-            color=color,
-            fill=fill,
-            width=_DRAWING_LINE_WIDTHS[shape.weight],
-            dashes=Markup("")
-            if dashes is None
-            else Markup(' stroke-dasharray="{}"').format(dashes),
-        )
+            fill = shape.fill_color or shape.color or "currentColor"
+        paint = self._stroke(shape, fill)
 
         def local(point: tuple[float, float]) -> tuple[str, str]:
             return _svg_number(point[0] - bounds[0]), _svg_number(bounds[3] - point[1])
@@ -2471,6 +2465,63 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
         points = " ".join(",".join(local(point)) for point in shape.points)
         tag = "polygon" if isinstance(shape, PolygonShape) else "polyline"
         return Markup('<{} points="{}" {}/>').format(tag, points, paint)
+
+    @staticmethod
+    def _stroke(shape: Shape, fill: str = "none") -> Markup:
+        """Get the attributes that paint a shape's line."""
+        assert not isinstance(shape, TextShape)  # has no line
+        dashes = _DRAWING_DASHES[shape.style]
+        return Markup(
+            'stroke="{color}" fill="{fill}" stroke-width="{width}"'
+            ' vector-effect="non-scaling-stroke"{dashes}'
+        ).format(
+            color=shape.color or "currentColor",
+            fill=fill,
+            width=_DRAWING_LINE_WIDTHS[shape.weight],
+            dashes=Markup("")
+            if dashes is None
+            else Markup(' stroke-dasharray="{}"').format(dashes),
+        )
+
+    def _tick_html(
+        self,
+        shape: DimensionShape,
+        end: tuple[float, float],
+        tick: tuple[float, float],
+        bounds: tuple[float, float, float, float],
+    ) -> Markup:
+        x, y = self._percent(end, bounds)
+        return Markup(
+            '<svg x="{x}" y="{y}" overflow="visible">'
+            '<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {paint}/></svg>'
+        ).format(
+            x=x,
+            y=y,
+            x1=_svg_number(-tick[0]),
+            y1=_svg_number(-tick[1]),
+            x2=_svg_number(tick[0]),
+            y2=_svg_number(tick[1]),
+            paint=self._stroke(shape),
+        )
+
+    def _dimension_html(
+        self, shape: DimensionShape, bounds: tuple[float, float, float, float]
+    ) -> Markup:
+        line = self._geometry_html(
+            LineShape(shape.start, shape.end, shape.color, shape.style, shape.weight), bounds
+        )
+        across_x, across_y = shape.across()
+        tick_x, tick_y = across_x * _DRAWING_DIMENSION_TICK, across_y * _DRAWING_DIMENSION_TICK
+        ticks = Markup("").join(
+            self._tick_html(shape, end, (tick_x, tick_y), bounds)
+            for end in (shape.start, shape.end)
+            if DrawingView.in_bounds(end, bounds)
+        )
+        label = shape.label()
+        if not DrawingView.in_bounds(label.position, bounds):
+            return line + ticks
+        offset = (across_x * _DRAWING_DIMENSION_LABEL_GAP, across_y * _DRAWING_DIMENSION_LABEL_GAP)
+        return line + ticks + self._text_html(label, bounds, offset)
 
     @staticmethod
     def _percent(
@@ -2495,15 +2546,23 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
             "</svg>"
         ).format(x=x, y=y, corners=corners, color=shape.color or "currentColor")
 
-    def _text_html(self, shape: TextShape, bounds: tuple[float, float, float, float]) -> Markup:
+    def _text_html(
+        self,
+        shape: TextShape,
+        bounds: tuple[float, float, float, float],
+        offset: tuple[float, float] = (0.0, 0.0),
+    ) -> Markup:
         x, y = self._percent(shape.position, bounds)
         classes = _ROLE_MARKUP[shape.role][1]
         return Markup(
-            '<text x="{x}" y="{y}" text-anchor="{anchor}" dominant-baseline="central"'
+            '<text x="{x}" y="{y}" dx="{dx}" dy="{dy}" text-anchor="{anchor}"'
+            ' dominant-baseline="central"'
             ' font-size="{size}" fill="{color}"{classes}>{text}</text>'
         ).format(
             x=x,
             y=y,
+            dx=_svg_number(offset[0]),
+            dy=_svg_number(offset[1]),
             anchor=_DRAWING_ANCHORS[shape.anchor],
             size=_DRAWING_FONT_SIZE,
             color=shape.color or "currentColor",
