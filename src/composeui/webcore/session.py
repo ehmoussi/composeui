@@ -86,6 +86,10 @@ class WebSession(RenderTarget):
     def __init__(self, main_view: MainView, model: Model | None = None) -> None:
         super().__init__()
         self.main_view = main_view
+        #: names this session in its pages, which send it back with their requests: a page
+        #: another session served (e.g. one before the server restarted, whose tab is still
+        #: open) then reloads, rather than act on views it doesn't show
+        self.page_tag = secrets.token_hex(16)
         # held here: the signals giving it to callbacks only keep a weak reference
         self.model = model
         #: where the file path fields' uploads are kept, made by the first one
@@ -158,7 +162,7 @@ class WebSession(RenderTarget):
         with self.lock:
             assert isinstance(self.main_view.renderer, WebMainRenderer)  # rendered when built
             self.take_pending()  # the whole page shows them
-            return self.main_view.renderer.page_html(reload_instance)
+            return self.main_view.renderer.page_html(reload_instance, session_tag=self.page_tag)
 
     def save_to(self, directory: Path) -> None:
         """Save the session's study, its file and language, for `open_saved` to open."""

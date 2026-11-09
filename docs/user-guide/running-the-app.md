@@ -222,7 +222,8 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 ### How the web differs from a window
 
 - **One app state per browser.** A signed session cookie gives each browser its own main
-  view. The tabs of one browser share it.
+  view. The tabs of one browser share it. A tab still on a page of an ended session, such as
+  one from before the server restarted, reloads when the user acts on it.
 - **Each session wires its own views.** Connect the signals in the views'
   `__attrs_post_init__`, as the quickstart does: each session builds its views, so each gets
   its connections. Two other places also run once per session:

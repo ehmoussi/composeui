@@ -129,7 +129,7 @@ from composeui.webcore.order import (
     DuplicatePostError,
     PostOrder,
 )
-from composeui.webcore.page import JOBS_POLL_MS
+from composeui.webcore.page import JOBS_POLL_MS, SESSION_TAG_FIELD, SESSION_TAG_HEADER
 from composeui.webcore.session import SessionStore, WebSession
 from composeui.webcore.uploads import (
     MAX_FIELD_SIZE,
@@ -5088,6 +5088,56 @@ def test_exit_ends_the_session(
     assert stale.headers["hx-refresh"] == "true"
     client.get("/")
     assert len(app.session_views) == 2  # the redirect lands on a fresh session
+
+
+def _session_tag(page: str) -> str:
+    """Get the session that `page` names, for its script's requests and in Save's form."""
+    script = re.search(r'data-session="([0-9a-f]+)"', page)
+    save = re.search(rf'name="{SESSION_TAG_FIELD}" value="([0-9a-f]+)"', page)
+    assert script is not None
+    assert save is not None
+    assert script[1] == save[1]
+    return script[1]
+
+
+def test_a_page_of_an_ended_session_reloads_rather_than_act_on_the_new_one(
+    app: _HelloApp, main_view: HelloMainView, client: TestClient
+) -> None:
+    ended_tag = _session_tag(client.get("/").text)
+    client.post(f"/widget/{_action_id(main_view.file_menu.exit_app)}", data={"event": "triggered"})
+    current_tag = _session_tag(client.get("/").text)  # e.g. another tab: the cookie's new session
+    _, new_view = app.session_views
+    # an id that the ended page shows can name a view of the new session: `id()` reuses them
+    field_id = _field_id(new_view.form.name)
+    save_id = _action_id(new_view.file_menu.save)
+    saves = _count(new_view.file_menu.save.triggered)
+
+    stale = client.post(
+        f"/widget/{field_id}",
+        data={"value": "x", "event": "input"},
+        headers={SESSION_TAG_HEADER: ended_tag},
+    )
+    # Save's form, which carries no header
+    stale_save = client.post(
+        "/state/download",
+        data={"trigger": save_id, SESSION_TAG_FIELD: ended_tag},
+        follow_redirects=False,
+    )
+    current = client.post(
+        f"/widget/{field_id}",
+        data={"value": "y", "event": "input"},
+        headers={SESSION_TAG_HEADER: current_tag},
+    )
+    current_save = client.post(
+        "/state/download", data={"trigger": save_id, SESSION_TAG_FIELD: current_tag}
+    )
+
+    assert stale.headers["hx-refresh"] == "true"
+    assert stale_save.headers["location"] == "/"  # the tab goes to the cookie's session
+    assert "hx-refresh" not in current.headers
+    assert "attachment" in current_save.headers["content-disposition"]
+    assert new_view.form.name.text == "y"
+    assert len(saves) == 1
 
 
 @pytest.mark.parametrize("action", ["save", "save_as"])

@@ -39,7 +39,8 @@ $icon_link
   data-deckgl="$deckgl_url"></script>
 </head>
 
-<body class="bg-base-200 min-h-screen" data-max-upload="$max_upload_size">
+<body class="bg-base-200 min-h-screen" data-max-upload="$max_upload_size"
+  data-session="$session_tag">
 <div id="app">
 $content
 </div>
@@ -47,7 +48,8 @@ $page_marker
 $pollers
 <form id="$save_form" method="post" action="/state/download" hidden>
 <input type="hidden" name="page" autocomplete="off">
-<input type="hidden" name="post" autocomplete="off"></form>
+<input type="hidden" name="post" autocomplete="off">
+<input type="hidden" name="$session_field" value="$session_tag" autocomplete="off"></form>
 </body>
 
 </html>
@@ -83,6 +85,12 @@ def page_marker(language: str, title: str, *, oob: bool = False) -> Markup:
 #: id of the form Save and Save As post, their button naming the action (`trigger`); the
 #: page sets its `page` and `post` fields, its order among the page's posts (`order.py`)
 SAVE_FORM_ID = "cui-save"
+
+
+#: the header in which the page's htmx requests name the session that served it
+SESSION_TAG_HEADER = "X-ComposeUI-Session"
+#: the same, as a field of the form that Save and Save As post: no headers
+SESSION_TAG_FIELD = "session"
 
 
 #: milliseconds the page waits, while jobs run, before asking for what they changed
@@ -134,12 +142,14 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
     *,
     pollers: Markup,
     max_upload_size: int,
+    session_tag: str = "",
     icon: str | None = None,
 ) -> str:
     """Get the app's page showing `content`, with the browser tab's `icon` at its address.
 
     `pollers` are the elements asking the server for news: `jobs_poller`'s, and
-    `reload_poller`'s. The page's script sends no file larger than `max_upload_size`.
+    `reload_poller`'s. The page's script sends no file larger than `max_upload_size`, and
+    `session_tag` with its requests (`SESSION_TAG_HEADER`, or Save's `SESSION_TAG_FIELD`).
     """
     return _PAGE.substitute(
         {
@@ -150,6 +160,8 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
             "page_marker": page_marker(language, title),
             "pollers": pollers,
             "max_upload_size": max_upload_size,
+            "session_tag": escape(session_tag),
+            "session_field": SESSION_TAG_FIELD,
             "save_form": SAVE_FORM_ID,
             **_STATIC_URLS,
         }
