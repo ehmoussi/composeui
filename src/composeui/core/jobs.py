@@ -129,7 +129,7 @@ class Job(Generic[R, ProgressT]):
 
 
 class Task(Generic[R, P, ProgressT]):
-    """A reusable worker with read-only loading state, built by `Jobs.task`.
+    """A reusable worker with read-only loading state, built by `View.build_task` or `Jobs.task`.
 
     `changed` emits on the main thread when a run starts, reports progress, finishes,
     fails, or is dropped. After it, `finished` emits a run's result, and `failed` its
@@ -141,11 +141,12 @@ class Task(Generic[R, P, ProgressT]):
 
     def __init__(
         self,
-        jobs: Jobs,
+        jobs: Jobs | None,
         work: Callable[Concatenate[Job[R, ProgressT], P], R],
         *,
         debounce: float = 0.2,
     ) -> None:
+        # None until the main view holding the task's view has its jobs (`Jobs._adopt`)
         self._jobs = jobs
         self._work = work
         #: seconds `start_latest` waits for a newer call before it runs the work
@@ -208,13 +209,14 @@ class Task(Generic[R, P, ProgressT]):
         # not `is_running`: a reactive method starting it doesn't read its state
         if self._job is not None:
             return False
+        jobs = self._bound_jobs()
         self._reset()
-        job = self._jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
+        job = jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
         self._job = job
         job.progress.connect(self._report_progress)
         job.finished.connect(self._finish)
         job.failed.connect(self._fail)
-        self._jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
         self.changed.emit()
         return True
 
@@ -228,8 +230,9 @@ class Task(Generic[R, P, ProgressT]):
         """
         _check_main_thread("Task.start_latest")
         check_change(self._source, f"starts the task {self._name}")
+        jobs = self._bound_jobs()
         old = self._job
-        job = self._jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
+        job = jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
         self._job = job
         self._progress = None
         self._error = None
@@ -237,12 +240,21 @@ class Task(Generic[R, P, ProgressT]):
         job.finished.connect(self._finish)
         job.failed.connect(self._fail)
         work = functools.partial(_debounced, self._work, self.debounce)
-        self._jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
         if old is not None:
-            old._superseded = True  # noqa: SLF001 (shared job lifecycle)
-            old.cancel()
-            self._jobs._forget(old)  # noqa: SLF001 (shared job lifecycle)
+            jobs._forget(old)  # noqa: SLF001 (shared job lifecycle)
         self.changed.emit()
+
+    def _bound_jobs(self) -> Jobs:
+        """Get the jobs that run this task; raise if its view is in no main view."""
+        if self._jobs is None:
+            msg = (
+                f"The task {self._name} can't start yet: its view isn't in a main view. Start"
+                " it once the main view is built, e.g. from a signal's callback or from the"
+                " main view's loaded signal"
+            )
+            raise RuntimeError(msg)
+        return self._jobs
 
     def cancel(self) -> None:
         """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`.
@@ -398,7 +410,10 @@ class Jobs:
         self._workers = 0
         self._after_workers: list[Callable[[], None]] = []
         self._workers_lock = threading.Lock()
-        self._tasks: list[Task[Any, Any, Any]] = []
+        # weak: a list's row view, gone, takes its tasks along
+        self._tasks: weakref.WeakValueDictionary[int, Task[Any, Any, Any]] = (
+            weakref.WeakValueDictionary()
+        )
         # the results handed back while the main view isn't rendered, for `wait`, or for its
         # renderer once it has one (`hand_over_to`)
         self._results: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
@@ -415,7 +430,7 @@ class Jobs:
         """Give `model` to the callbacks asking for it (the app does)."""
         self._model = weakref.ref(model)
         self.running_changed.set_model(model)
-        for task in self._tasks:
+        for task in self._live_tasks():
             for signal in (task.changed, task.finished, task.failed):
                 signal.set_model(model)
 
@@ -428,12 +443,35 @@ class Jobs:
         """
         _check_main_thread("Jobs.task")
         task = Task(self, work, debounce=debounce)
-        name = getattr(work, "__name__", "task")
+        self._adopt(task)
+        return task
+
+    def _adopt(self, task: Task[Any, Any, Any]) -> None:
+        """Run `task` from now on: a view's, built before its main view had these jobs."""
+        task._jobs = self  # noqa: SLF001 (shared task lifecycle)
+        name = task._name  # noqa: SLF001 (shared task lifecycle)
         self._bind_signal(task.changed, f"{name}.changed")
         self._bind_signal(task.finished, f"{name}.finished")
         self._bind_signal(task.failed, f"{name}.failed")
-        self._tasks.append(task)
-        return task
+        self._tasks[id(task)] = task
+
+    def _release(self, task: Task[Any, Any, Any]) -> None:
+        """Forget `task`, of a list's row view removed: its run's outcome reaches no view.
+
+        Its state is reset without `changed`, which would update the row's views.
+        """
+        job = task._job  # noqa: SLF001 (shared task lifecycle)
+        task._reset()  # noqa: SLF001 (shared task lifecycle)
+        task._jobs = None  # noqa: SLF001 (shared task lifecycle)
+        self._tasks.pop(id(task), None)
+        if job is not None:  # a task's run is running until its outcome resets it
+            self._forget(job)
+            if not self.is_running:
+                self.running_changed.emit(False)  # noqa: FBT003
+
+    def _live_tasks(self) -> list[Task[Any, Any, Any]]:
+        """Get the tasks still held, by their views or the app, in the order they came."""
+        return list(self._tasks.values())
 
     def start(
         self,
@@ -522,7 +560,12 @@ class Jobs:
                 callback()
 
     def _forget(self, job: Job[Any, Any]) -> None:
-        """Drop `job`, replaced by a newer one: its progress and outcome won't be emitted."""
+        """Cancel `job`, replaced or its task released: its progress and outcome won't be emitted.
+
+        Its debounced work (`Task.start_latest`) doesn't run.
+        """
+        job._superseded = True  # noqa: SLF001 (the jobs' own bookkeeping)
+        job.cancel()
         self._running.discard(job)
 
     def cancel(self) -> None:
@@ -546,13 +589,15 @@ class Jobs:
         self.cancel()
         was_running = self.is_running
         self._running.clear()
-        tasks = tuple(self._tasks)
+        tasks = self._live_tasks()
         for task in tasks:
             task._reset()  # noqa: SLF001 (reset all tasks before notifying their callbacks)
         if was_running:
             self.running_changed.emit(False)  # noqa: FBT003
         for task in tasks:
-            task.changed.emit()
+            # unless a callback before removed its list's row: its widgets may be deleted
+            if task._jobs is self:  # noqa: SLF001 (shared task lifecycle)
+                task.changed.emit()
 
     def wait(self, timeout: float = 10.0) -> None:
         """Wait for every job to be over, and emit the results here: for a main view not rendered.
@@ -655,7 +700,7 @@ class Jobs:
             return
         self._running.discard(job)
         try:
-            for task in self._tasks:
+            for task in self._live_tasks():
                 if task._job is job:  # noqa: SLF001 (shared job lifecycle)
                     task._reset()  # noqa: SLF001 (shared job lifecycle)
                     task.changed.emit()

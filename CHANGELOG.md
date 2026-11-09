@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `View.build_task(work)` builds a task in any view, such as a panel or a list's row, without the
+  main view. The main view's jobs run it. When a `ListView` removes a row, the run of the row's
+  task is canceled, and its outcome reaches no view.
 - `WebApplication.filter_patterns = False`, or the `COMPOSEUI_FILTER_PATTERNS` environment variable
   set to `off`, refuses the regular expressions of table filters. A crafted one can stop a deployed
   web app for a long time.

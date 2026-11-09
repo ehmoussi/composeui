@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import functools
+import gc
 import logging
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING
+import weakref
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -15,7 +17,17 @@ from composeui.core.application import ModelApplication
 from composeui.core.jobs import CalledInJobError
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
-from composeui.core.view import ActionView, ButtonView, LabelRowInputView, MainView
+from composeui.core.view import (
+    ActionView,
+    ButtonView,
+    LabelRowInputView,
+    LabelView,
+    ListView,
+    MainView,
+    View,
+    child,
+    define_view,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,6 +68,46 @@ def _double(_job: Job[int], value: int) -> int:
 
 def _sleep(job: Job[bool]) -> bool:
     return job.sleep(60)
+
+
+def _sleep_until_canceled(job: Job[None], slept: list[bool]) -> None:
+    slept.append(job.sleep(60))
+
+
+@define_view
+class _Panel(View):
+    """A view, not a main view, building its task as it is built."""
+
+    status: LabelView = child(LabelView)
+    result: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.build_task(_double)
+        self.loader.show_state(self.status, views=[self.result])
+        self.loader.disables(self.result)  # a callback holding the view
+
+
+@define_view
+class _Row(View):
+    status: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.build_task(_sleep_until_canceled)
+        self.loader.show_state(self.status, loading_text="Waiting")
+
+
+@define_view
+class _Rows(ListView[int]):
+    def build_item(self, item: int) -> View:
+        return _Row()
+
+
+@define_view
+class _PanelsView(MainView):
+    panel: _Panel = child(_Panel)
+    rows: _Rows = child(_Rows)
 
 
 def test_a_job_s_result_is_emitted_with_what_its_callbacks_ask_for(
@@ -112,7 +164,9 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
         assert record.exc_info[1] is error
 
 
-@pytest.mark.parametrize("method", ["start", "cancel", "drop", "task", "task.start", "task.cancel"])
+@pytest.mark.parametrize(
+    "method", ["start", "cancel", "drop", "task", "view.build_task", "task.start", "task.cancel"]
+)
 @pytest.mark.parametrize("tracked", [False, True])
 def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
     app: ModelApplication[MainView, _Model],
@@ -131,6 +185,7 @@ def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
         "cancel": jobs.cancel,
         "drop": jobs.drop,
         "task": lambda: jobs.task(_double),
+        "view.build_task": lambda: LabelView().build_task(_double),
         "task.start": lambda: task.start(1),
         "task.cancel": task.cancel,
     }
@@ -732,3 +787,92 @@ def test_drop_resets_all_tasks_before_a_handler_starts_another_run() -> None:
     assert not first.is_running
     assert second.has_result
     assert second.result == 42
+
+
+def test_a_views_tasks_built_before_or_after_its_main_view_run_with_its_jobs() -> None:
+    app = ModelApplication(build_main_view=_PanelsView, build_model=_Model)
+    panel = app.main_view.panel
+    later = panel.build_task(_double)
+    outcomes: list[int] = []
+
+    def finished(result: int, *, main_view: _PanelsView, model: _Model) -> None:
+        assert main_view is app.main_view
+        assert model is app.model
+        outcomes.append(result)
+
+    panel.loader.finished.connect(finished)
+    later.finished.connect(finished)
+    # `show_state` followed the task before its view was in a main view
+    assert panel.status.is_visible
+    assert not panel.result.is_visible
+    panel.loader.start(3)
+    later.start(4)
+    app.main_view.jobs.wait()
+    assert sorted(outcomes) == [6, 8]
+    assert not panel.status.is_visible
+    assert panel.result.is_visible
+
+
+def test_a_task_of_a_view_in_no_main_view_refuses_to_start() -> None:
+    panel = _Panel()
+    with pytest.raises(RuntimeError, match="its view isn't in a main view"):
+        panel.loader.start(1)
+    assert not panel.loader.is_running
+
+
+def test_removing_a_list_row_cancels_its_tasks_run_and_drops_its_outcome() -> None:
+    main_view = _PanelsView()
+    running: list[bool] = []
+    main_view.jobs.running_changed.connect(running.append)
+    main_view.rows.items = [1, 2, 3]  # rows built after the main view
+    rows = main_view.rows.item_views
+    assert all(isinstance(row, _Row) for row in rows)
+    removed, last, idle = cast("list[_Row]", rows)
+    outcomes: list[None] = []
+    slept: list[bool] = []
+    for row in (removed, last):
+        row.loader.finished.connect(outcomes.append)
+        assert row.loader.start(slept)
+    main_view.rows.items = [2]  # a running row and an idle one
+    assert running == [True]  # the last row's run goes on
+    assert not removed.loader.is_running
+    assert last.loader.is_running
+    main_view.rows.items = []
+    assert running == [True, False]
+    workers_over = threading.Event()
+    main_view.jobs.after_workers(workers_over.set)
+    assert workers_over.wait(5)
+    assert slept == [False, False]  # both canceled
+    # the next job's wait emits what the rows' runs queued: nothing
+    main_view.jobs.start(_double, 1)
+    main_view.jobs.wait()
+    assert outcomes == []
+    assert removed.status.text == "Waiting"
+    for row in (removed, last, idle):
+        with pytest.raises(RuntimeError, match="its view isn't in a main view"):
+            row.loader.start(slept)
+
+
+def test_a_row_removed_by_a_callback_of_drop_hears_no_more_of_its_task() -> None:
+    main_view = _PanelsView()
+    main_view.rows.items = [1]
+    (row,) = main_view.rows.item_views
+    assert isinstance(row, _Row)
+    heard: list[bool] = []
+    row.loader.changed.connect(lambda: heard.append(True))
+
+    def remove_the_row() -> None:
+        main_view.rows.items = []
+
+    # the panel's task, adopted before the row's, hears of the drop first
+    main_view.panel.loader.changed.connect(remove_the_row)
+    main_view.jobs.drop()
+    assert heard == []
+
+
+def test_a_view_replaced_in_its_main_view_is_freed_with_its_tasks_callbacks() -> None:
+    main_view = _PanelsView()
+    old = weakref.ref(main_view.panel.result)
+    main_view.panel = _Panel()
+    gc.collect()
+    assert old() is None

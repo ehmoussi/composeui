@@ -55,7 +55,7 @@ from cattrs.strategies import configure_tagged_union
 from typing_extensions import ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
-from composeui.core.jobs import Jobs
+from composeui.core.jobs import Jobs, Task, _check_main_thread
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.reactivity import (
     batch,
@@ -86,8 +86,9 @@ if TYPE_CHECKING:
 
     from attrs import AttrsInstance
     from matplotlib.figure import Figure
+    from typing_extensions import Concatenate
 
-    from composeui.core.jobs import Job
+    from composeui.core.jobs import Job, P, ProgressT, R
 
 __all__ = [
     "CHECKED_TEXTS",
@@ -508,6 +509,32 @@ def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
     return value
 
 
+def _attach_jobs(root: View, jobs: Jobs) -> None:
+    """Give `root` and its children the jobs that run their tasks, and adopt those built."""
+    reference = weakref.ref(jobs)
+    views: deque[View] = deque([root])
+    while len(views) > 0:
+        view = views.popleft()
+        # once: a view is in the main view as it is built, or a list builds it
+        view._task_jobs = reference  # noqa: SLF001
+        for task in view._own_tasks or ():  # noqa: SLF001
+            jobs._adopt(task)  # noqa: SLF001 (shared task lifecycle)
+        views.extend(view.children_views)
+
+
+def _release_tasks(root: View) -> None:
+    """Forget the tasks of `root` and its children, a list's row view removed."""
+    views: deque[View] = deque([root])
+    while len(views) > 0:
+        view = views.popleft()
+        jobs = None if view._task_jobs is None else view._task_jobs()  # noqa: SLF001
+        view._task_jobs = None  # noqa: SLF001
+        if jobs is not None:
+            for task in view._own_tasks or ():  # noqa: SLF001
+                jobs._release(task)  # noqa: SLF001 (shared task lifecycle)
+        views.extend(view.children_views)
+
+
 def set_references(root: View, main_view: MainView, model: Optional[Model]) -> None:
     """Give `root` and its children their main view, and their signals the main view and model.
 
@@ -752,6 +779,14 @@ class View:
     _main_view: Optional[Callable[[], Optional[MainView]]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
+    #: the jobs of the main view holding this view, which run its tasks; weak, as `_main_view`
+    _task_jobs: Optional[Callable[[], Optional[Jobs]]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: the tasks that `build_task` built, released with a list's row view removed
+    _own_tasks: Optional[list[Task[Any, Any, Any]]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
@@ -762,6 +797,25 @@ class View:
                 # as `_fix_lists` sets it: the hooks don't run in `__init__`
                 object.__setattr__(self, f.name, _fixed(value, f"{type(self).__name__}.{f.name}"))
         self.retranslate()
+
+    def build_task(
+        self, work: Callable[Concatenate[Job[R, ProgressT], P], R], *, debounce: float = 0.2
+    ) -> Task[R, P, ProgressT]:
+        """Build a reusable task for `work`, run by the jobs of this view's main view.
+
+        Call it on the main thread, e.g. in `__attrs_post_init__`. The task can start once a
+        main view holds this view: once the main view is built, or a list builds the row.
+        `debounce` is the seconds `Task.start_latest` waits for a newer call.
+        """
+        _check_main_thread("View.build_task")
+        jobs = None if self._task_jobs is None else self._task_jobs()
+        task: Task[R, P, ProgressT] = Task(None, work, debounce=debounce)
+        if jobs is not None:
+            jobs._adopt(task)  # noqa: SLF001 (shared task lifecycle)
+        if self._own_tasks is None:
+            self._own_tasks = []
+        self._own_tasks.append(task)
+        return task
 
     def tr(self, text: str) -> TranslatedText:
         """Translate `text`, as written in the code, into the main view's language.
@@ -1391,6 +1445,8 @@ class MainView(View):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
+        # the tasks that the views built as they were built start from now on
+        _attach_jobs(self, self.jobs)
         for menu in self._language_menus():
             menu.set_languages(self.languages)
             for action in menu.actions:
@@ -7618,6 +7674,10 @@ class ListView(View, Generic[ItemT]):
             if view is None or (old_item != item and not self.update_item(view, item)):
                 view = self._new_item_view(item)
             views.append(view)
+        kept = {id(view) for view in views}
+        for view in self.item_views:
+            if id(view) not in kept:
+                _release_tasks(view)
         self._items = new_items
         self.item_views = views
 
@@ -7650,6 +7710,9 @@ class ListView(View, Generic[ItemT]):
         main_view = None if self._main_view is None else self._main_view()
         if main_view is not None:
             set_references(view, main_view, None if self._model is None else self._model())
+        jobs = None if self._task_jobs is None else self._task_jobs()
+        if jobs is not None:
+            _attach_jobs(view, jobs)
         _retranslate(view, self._tr)
         return view
 

@@ -88,10 +88,11 @@ main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their ev
 ## Reusable loading tasks
 
 Use `main_view.jobs.task(work)` when a view repeatedly runs the same function and shows its
-loading state. Configure the task once, then call `task.start(*args, **kwargs)` for each run.
-One `changed` signal reports starts, progress, success, failure, and resets on the main thread.
-After it, `finished` emits the result of a run that succeeds, and `failed` the exception of a
-run that fails, as the signals of a job do.
+loading state. Another view builds its own with `self.build_task(work)` (see
+[A task of another view](#a-task-of-another-view)). Configure the task once, then call
+`task.start(*args, **kwargs)` for each run. One `changed` signal reports starts, progress,
+success, failure, and resets on the main thread. After it, `finished` emits the result of a run
+that succeeds, and `failed` the exception of a run that fails, as the signals of a job do.
 
 ```python
 from composeui.core.jobs import Job
@@ -165,6 +166,58 @@ assert main_view.status.text == "Done: 3 rows"
 - **Not study data.** Create the task in `__attrs_post_init__`, as an attribute of the
   instance, not as a view field. The study then does not save it. New and Open keep the
   same task, and clear its state with the jobs of the study.
+
+### A task of another view
+
+`view.build_task(work)` builds a task in a view that is not the main view, such as a panel or a row
+of a `ListView`. The jobs of the main view that holds the view run it. Build it in the view's
+`__attrs_post_init__`, as a main view does. A main view can call `self.build_task(work)` too.
+
+```python
+from composeui.core.jobs import Job
+from composeui.core.view import LabelView, MainView, View, child, define_view
+
+
+def read_rows(_job: Job[int], count: int) -> int:
+    return count
+
+
+@define_view
+class RowsPanel(View):
+    status: LabelView = child(LabelView)
+    rows: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.build_task(read_rows)
+        self.loader.show_state(self.status, views=[self.rows])
+        self.loader.finished.connect(self.show_rows)
+
+    def show_rows(self, count: int) -> None:
+        self.rows.text = f"{count} rows"
+
+
+@define_view
+class PanelView(MainView):
+    panel: RowsPanel = child(RowsPanel)
+
+
+main_view = PanelView()
+main_view.panel.loader.start(3)
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.panel.rows.text == "3 rows"
+```
+
+- **Its main view's jobs.** The view's task can start once a main view holds the view: once
+  the main view is built, or once a `ListView` builds the row. Until then, `start` and
+  `start_latest` raise `RuntimeError`. `show_state`, `disables`, `cancel_with`, and the
+  reactive methods follow the task before it starts.
+- **A row removed.** When a `ListView` removes the view of a row, the task of the view cancels
+  its run. The outcome of that run, and the task's `changed` signal, then reach no view. The
+  task cannot start again. A changed record also gets a new view, unless `update_item` shows
+  the change in the old one.
+- **The same task.** The rules of [Reusable loading tasks](#reusable-loading-tasks) apply to
+  it: New, Open, and `jobs.drop()` reset it with the other tasks.
 
 ### Run the latest call only
 
