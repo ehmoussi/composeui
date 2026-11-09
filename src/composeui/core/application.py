@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import importlib
 import importlib.util
 import inspect
 import logging
+import logging.handlers
 import os
 import sys
 from pathlib import Path
@@ -17,13 +19,16 @@ from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, overrid
 
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType, has_renderer
+from composeui.core.signal import _STREAM_HANDLER as SIGNAL_STREAM_HANDLER
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
+from composeui.core.view import _STREAM_HANDLER as VIEW_STREAM_HANDLER
+from composeui.core.view import LOGGER as VIEW_LOGGER
 from composeui.core.view import set_references
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterator, Sequence
 
     from composeui.core.model import Model
     from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
@@ -36,6 +41,13 @@ LOGGER = logging.getLogger("COMPOSEUI")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
 _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
 LOGGER.addHandler(_STREAM_HANDLER)
+#: the size at which a log file starts again, its previous content kept beside it
+_LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
+_LOG_OUTPUTS = (
+    (LOGGER, _STREAM_HANDLER),
+    (SIGNAL_LOGGER, SIGNAL_STREAM_HANDLER),
+    (VIEW_LOGGER, VIEW_STREAM_HANDLER),
+)
 
 # T = TypeVar("T", bound=MainView)
 Ts = TypeVarTuple("Ts")
@@ -167,6 +179,79 @@ class _Running:
 def get_logger(name: str) -> logging.Logger:
     """Get a logger for app code, with ComposeUI's output and the level `--log` sets."""
     return LOGGER.getChild(name)
+
+
+class _LogFile(logging.handlers.RotatingFileHandler):
+    """The file of the log messages, which another app can write and rotate too."""
+
+    _is_closed = False
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self._is_closed:  # from a thread already logging as the block ended
+            _STREAM_HANDLER.emit(record)
+        else:
+            super().emit(record)
+
+    def close(self) -> None:
+        self.acquire()  # `handle` holds it while it emits
+        try:
+            self._is_closed = True
+            super().close()
+        finally:
+            self.release()
+
+    def doRollover(self) -> None:  # noqa: N802
+        if self._is_replaced():  # posix only
+            self.stream.close()
+            self.stream = self._open()
+            return
+        try:
+            super().doRollover()
+        except OSError:  # Windows refuses to rename a file that another app has open
+            self.stream = self._open()
+
+    def _is_replaced(self) -> bool:
+        """Say whether another app rotated the file, which this one would rotate away."""
+        try:
+            on_disk = Path(self.baseFilename).stat()
+            return not os.path.samestat(os.fstat(self.stream.fileno()), on_disk)
+        except FileNotFoundError:  # posix only
+            return True
+
+
+def check_writable(path: Path) -> None:
+    """Raise an `OSError` if the file `path` can't be written; leave no new file behind."""
+    is_new = not path.exists()
+    with path.open("a", encoding="utf-8"):
+        pass
+    if is_new:
+        path.unlink()
+
+
+@contextlib.contextmanager
+def logs_in_file(path: Path) -> Iterator[None]:
+    """Write ComposeUI's log messages to the file `path` instead of the standard output.
+
+    The first message creates the file. After the block, the standard output shows its path.
+    """
+    log_file = _LogFile(
+        path, maxBytes=_LOG_FILE_MAX_BYTES, backupCount=1, encoding="utf-8", delay=True
+    )
+    log_file.setFormatter(_STREAM_HANDLER.formatter)
+    # each output is added before the other leaves: a job's thread can log at any time
+    for logger, stream_handler in _LOG_OUTPUTS:
+        logger.addHandler(log_file)
+        logger.removeHandler(stream_handler)
+    try:
+        yield
+    finally:
+        for logger, stream_handler in _LOG_OUTPUTS:
+            logger.addHandler(stream_handler)
+            logger.removeHandler(log_file)
+        is_written = log_file.stream is not None
+        log_file.close()
+        if is_written:
+            LOGGER.info("Log messages written to %s", log_file.baseFilename)
 
 
 def current_backend() -> RendererType | None:

@@ -192,6 +192,15 @@ When the app runs, it shows the `info` messages and above. These options of ever
 The result of `get_logger` is a standard `logging.Logger`. Add a handler to it to write its messages
 to a file too.
 
+Textual draws the app on the terminal. So while a Textual app is shown, ComposeUI writes these
+messages to `composeui.log` in the current directory. Use `--log-file FILE` to choose another file.
+ComposeUI creates the file with the first message, and shows its path when the app exits. At 5 MiB,
+the file starts again, and the previous content moves to `composeui.log.1`.
+
+The app refuses to start with a `--log-file` that it cannot write. If it cannot write
+`composeui.log`, the app starts, shows a warning, and does not keep the messages. ComposeUI does not
+change a handler that your app adds: a handler that writes to the terminal draws over the app.
+
 ## Web backend
 
 The web backend serves the views as a web page instead of a window.

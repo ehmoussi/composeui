@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
+import subprocess
 import sys
+import textwrap
 from typing import TYPE_CHECKING
 
 import attrs
@@ -14,8 +17,11 @@ from composeui.core.application import (
     BACKEND_VARIABLE,
     Application,
     ModelApplication,
+    _LogFile,
+    check_writable,
     current_backend,
     get_logger,
+    logs_in_file,
     renders,
     run,
 )
@@ -301,6 +307,128 @@ def test_an_app_s_logger_shows_its_debug_messages_with_the_log_option(
     assert ("The count is ready" in caplog.text) is is_shown
 
 
+_LOGGING_TEXTUAL_APP = textwrap.dedent(
+    """
+    from composeui.core.application import get_logger
+    from composeui.core.view import MainView, define_view
+    from composeui.textualcore.textualapplication import TextualApplication
+
+    LOGGER = get_logger("count")
+
+    @define_view
+    class CountMainView(MainView):
+        app_title = "Count"
+
+    class LoggingApplication(TextualApplication):
+        def render(self, renderer_type):
+            LOGGER.info("before the app")
+            super().render(renderer_type)
+            app = self.main_view.renderer.app
+            def log_and_exit():
+                LOGGER.info("while shown")
+                app.exit()
+            app.mounted_callbacks.append(log_and_exit)
+
+    LoggingApplication(build_main_view=CountMainView).run()
+    LOGGER.info("after the app")
+    """
+)
+
+
+def _run_logging_textual_app(
+    cwd: Path, *options: str, check: bool = True
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        [sys.executable, "-c", _LOGGING_TEXTUAL_APP, *options],
+        cwd=cwd,
+        env={
+            **os.environ,
+            # no terminal here
+            "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=check,
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "name"),
+    [([], "composeui.log"), (["--log-file", "other.log"], "other.log")],
+)
+def test_a_textual_app_writes_its_log_to_a_file_only_while_it_is_shown(
+    options: list[str], name: str, tmp_path: Path
+) -> None:
+    pytest.importorskip("textual")
+
+    result = _run_logging_textual_app(tmp_path, *options)
+
+    log = (tmp_path / name).read_text(encoding="utf-8")
+    assert "while shown" in log
+    assert "before the app" not in log
+    assert "after the app" not in log
+    assert "before the app" in result.stdout
+    assert "while shown" not in result.stdout
+    assert "after the app" in result.stdout
+    assert f"Log messages written to {tmp_path / name}" in result.stdout
+
+
+def test_a_log_file_is_created_and_named_only_after_a_first_message(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "app.log"
+
+    with caplog.at_level(logging.INFO, logger="COMPOSEUI"), logs_in_file(path):
+        pass
+
+    assert not path.exists()
+    assert "Log messages written" not in caplog.text
+
+
+def test_a_log_file_keeps_only_its_previous_content_when_it_grows(tmp_path: Path) -> None:
+    path = tmp_path / "app.log"
+    logger = get_logger("count")
+
+    with logs_in_file(path):
+        for letter in "abc":
+            logger.warning(letter * 6_000_000)
+
+    assert "c" * 100 in path.read_text(encoding="utf-8")
+    assert "b" * 100 in (tmp_path / "app.log.1").read_text(encoding="utf-8")
+    assert not (tmp_path / "app.log.2").exists()
+
+
+@pytest.mark.parametrize("name", ["COMPOSEUI", "COMPOSEUI_SIGNAL", "COMPOSEUI_VIEW"])
+def test_each_composeui_log_goes_to_the_file_until_the_code_raises(
+    name: str, tmp_path: Path
+) -> None:
+    logger = logging.getLogger(name)
+    path = tmp_path / "app.log"
+
+    def log_and_stop() -> None:
+        with logs_in_file(path):
+            logger.warning("inside the block")
+            raise ValueError("stop")  # noqa: EM101
+
+    with pytest.raises(ValueError, match="stop"):
+        log_and_stop()
+    logger.warning("after the block")
+
+    log = path.read_text(encoding="utf-8")
+    assert "inside the block" in log
+    assert "after the block" not in log
+
+
+def test_a_log_file_that_cannot_be_opened_does_not_stop_the_code_that_logs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with logs_in_file(tmp_path / "missing" / "app.log"):
+        get_logger("count").warning("Nowhere to write")
+
+    assert "Nowhere to write" in capsys.readouterr().err  # logging reports the failed message
+
+
 def test_a_file_of_another_app_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     other = tmp_path / "a.start"
     _StartMainView().save_state(other)
@@ -394,3 +522,116 @@ def test_a_callback_whose_signature_can_t_be_read_is_called_without_arguments(
     button.clicked.emit()
 
     assert callback.calls == 1
+
+
+def test_a_textual_app_refuses_a_log_file_it_cannot_write(tmp_path: Path) -> None:
+    pytest.importorskip("textual")
+
+    result = _run_logging_textual_app(tmp_path, "--log-file", "missing/app.log", check=False)
+
+    assert result.returncode == 2
+    assert "--log-file" in result.stderr
+    assert "while shown" not in result.stdout
+
+
+def test_a_textual_app_runs_and_warns_when_its_default_log_file_cannot_be_written(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("textual")
+    (tmp_path / "composeui.log").mkdir()  # no file can be opened at this path
+
+    result = _run_logging_textual_app(tmp_path)
+
+    assert "No log file while the app is shown" in result.stdout
+    assert "while shown" not in result.stdout.replace("No log file while the app is shown", "")
+    assert "after the app" in result.stdout
+    assert "Log messages written" not in result.stdout
+
+
+def test_checking_a_log_file_leaves_no_new_file_and_keeps_an_existing_one(tmp_path: Path) -> None:
+    new = tmp_path / "new.log"
+    existing = tmp_path / "existing.log"
+    existing.write_text("kept", encoding="utf-8")
+
+    check_writable(new)
+    check_writable(existing)
+
+    assert not new.exists()
+    assert existing.read_text(encoding="utf-8") == "kept"
+
+
+def _log_record(message: str) -> logging.LogRecord:
+    return logging.LogRecord("count", logging.WARNING, __file__, 0, message, None, None)
+
+
+def test_a_message_logged_as_the_block_ends_goes_to_the_output_without_reopening_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logger = logging.getLogger("COMPOSEUI")
+    stream_handler = logger.handlers[0]
+    output = io.StringIO()
+    monkeypatch.setattr(stream_handler, "stream", output)
+    path = tmp_path / "app.log"
+
+    with logs_in_file(path):
+        log_file = next(handler for handler in logger.handlers if handler is not stream_handler)
+    log_file.handle(_log_record("late message"))  # as a thread past the handlers' list does
+
+    assert "late message" in output.getvalue()
+    assert not path.exists()
+
+
+def _small_log_file(path: Path) -> _LogFile:
+    return _LogFile(path, maxBytes=50, backupCount=1, encoding="utf-8", delay=True)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows can't rename a file left open")
+def test_two_apps_sharing_a_log_file_keep_each_other_s_messages_when_it_rotates(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "app.log"
+    first, second = _small_log_file(path), _small_log_file(path)
+
+    for number in range(4):
+        first.handle(_log_record(f"A{number}{'x' * 20}"))
+        second.handle(_log_record(f"B{number}{'x' * 20}"))
+    first.close()
+    second.close()
+
+    def names(file: Path) -> list[str]:
+        return [line[:2] for line in file.read_text(encoding="utf-8").split()]
+
+    assert names(path) == ["A3", "B3"]
+    assert names(tmp_path / "app.log.1") == ["A2", "B2"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows can't delete a file left open")
+def test_a_log_file_deleted_while_in_use_is_created_again_when_it_is_full(tmp_path: Path) -> None:
+    path = tmp_path / "app.log"
+    log_file = _small_log_file(path)
+    log_file.handle(_log_record("x" * 60))
+    path.unlink()
+
+    log_file.handle(_log_record("after the deletion"))
+    log_file.close()
+
+    assert "after the deletion" in path.read_text(encoding="utf-8")
+
+
+def test_a_log_file_that_another_app_keeps_open_goes_on_without_rotating(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "app.log"
+    log_file = _small_log_file(path)
+
+    def refuse(_source: str, _destination: str) -> None:
+        raise PermissionError  # what Windows does
+
+    monkeypatch.setattr(log_file, "rotate", refuse)
+    for message in ("first" + "x" * 60, "second"):
+        log_file.handle(_log_record(message))
+    log_file.close()
+
+    log = path.read_text(encoding="utf-8")
+    assert "first" in log
+    assert "second" in log
