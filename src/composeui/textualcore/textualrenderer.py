@@ -161,7 +161,7 @@ def _call_on_app_thread(app: App[Any] | None, callback: Callable[[], None]) -> N
 
     `App.call_from_thread` raises `RuntimeError` both when the app isn't running yet
     and when it's called from the app's own thread (nothing to marshal in either
-    case) - both fall back to calling directly, matching `Renderer`'s default. A
+    case). Both fall back to calling directly, matching `Renderer`'s default. A
     `RuntimeError` of the callback itself goes to the caller: it never runs twice.
     """
     if app is None:
@@ -252,7 +252,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
     def _is_waiting_to_mount(self) -> bool:
         """Tell whether the app runs but hasn't mounted the widget yet, e.g. on a screen not shown.
 
-        Some widgets refuse their state until mounted (a `Select` its options); whatever
+        Some widgets refuse their state until mounted (a `Select` its options). Whatever
         mounts them later gives them their state then: the app's own mount, a list's new
         item, a form dialog's screen.
         """
@@ -528,7 +528,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     """A modal screen holding the form or other view, installed once: pushed open, popped closed.
 
     The view's widgets are built once, so its screen is too, unlike a message's. OK is
-    disabled while the view says so, e.g. while a check of the form fails; the view closes
+    disabled while the view says so, e.g. while a check of the form fails. The view closes
     the dialog once it accepts the answer, so OK on a form refusing it leaves the screen up.
     """
 
@@ -2836,7 +2836,7 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
 class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
     """The records' views one above the other, added, moved and removed as they change.
 
-    Widgets only mount in a running app: the column is put in step with the records once
+    Widgets only mount in a running app. The column is put in step with the records once
     it is mounted (`_refresh_tree` refreshes it then too), a record's widget built since
     mounted next to its neighbours, then given its view's state.
     """
@@ -3050,7 +3050,7 @@ class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
     Textual's grid flows its widgets into the next free cell: each view sits in a cell
-    widget, empty for cells no view takes, so a hidden view leaves its cell in place.
+    widget, empty for cells no view takes. So a hidden view leaves its cell in place.
     """
 
     def render(self) -> None:
@@ -3168,7 +3168,7 @@ def _refresh_tree(root: View) -> None:
 
     Widgets are constructed bottom-up before the app runs (mirroring the Qt
     backend), but Textual reactives like `Input.value` need a running app to be
-    *set* at all - so unlike Qt, the initial state can't be pushed in during that
+    *set* at all. So unlike Qt, the initial state can't be pushed in during that
     same construction pass. This walks the tree once the app has mounted, when it's
     finally safe to do so.
     """
@@ -3192,7 +3192,7 @@ _FILE_DIALOG_ACTIONS = (OpenFileAction, PickFileAction, SaveAction, SaveAsAction
 def _register_actions(app: _ComposeUIApp, root: View) -> None:
     """Turn every `ActionView` with a shortcut into a key binding, discoverable via `Footer`.
 
-    Menus aren't rendered as widgets under Textual (see `TextualMenuRenderer`); their
+    Menus aren't rendered as widgets under Textual (see `TextualMenuRenderer`). Their
     actions are exposed as app-wide key bindings instead, mirroring the "Menu/Action
     style: key bindings + Footer" scope chosen for this backend.
     """
@@ -3328,7 +3328,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         """Lay out the screen: the toolbars and the status bar docked, the rest scrolling.
 
         `StatusBar` is docked to the real bottom of the terminal (see
-        `TextualStatusBarRenderer`) and the toolbars to the top; everything else goes in
+        `TextualStatusBarRenderer`) and the toolbars to the top. Everything else goes in
         a `VerticalScroll` so content taller than the screen stays reachable instead of
         clipped, beside the sidebar, if any, scrolling on its own.
         """
@@ -3389,7 +3389,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def open_file(self) -> Path | None:
         """Return an existing file selected by the user.
 
-        Must be called from a worker thread (see `_ComposeUIApp.action_trigger`):
+        Must be called from a worker thread (see `_ComposeUIApp.action_trigger`).
         `call_from_thread` blocks the calling thread while the modal runs on the
         app's own thread, which would deadlock if they were the same thread.
         """

@@ -2,7 +2,7 @@
 
 On a change, the supervisor sends the app the files changed. The app saves its views'
 state and its model's data (a study), runs the program's changed code again in place
-(`rerun_program`), and opens the study in the new app, so its window stays as it was left.
+(`rerun_program`), and opens the study in the new app. So its window stays as it was left.
 When the app can't, e.g. ComposeUI itself changed, it exits instead, and the supervisor
 runs the program again in a new child process, which opens the study.
 """
@@ -422,7 +422,7 @@ def run_reloading(
 
     It returns once the app exits by itself without an error, e.g. its window is closed.
     An app that fails, e.g. on a syntax error, runs again only on the next change. On a
-    change, the running app is asked to run the changed code (`take_changes`); if it exits
+    change, the running app is asked to run the changed code (`take_changes`). If it exits
     instead, or doesn't take the files changed, it runs again in a new process.
     """
     command = program_command() if command is None else list(command)

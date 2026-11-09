@@ -12,7 +12,7 @@ _STATIC = Path(__file__).parent / "static"
 def _static_url(name: str) -> str:
     """Get the address of a static file, naming its content.
 
-    A new version of the file has a new address, so a browser never keeps using a copy it
+    A new version of the file has a new address. So a browser never keeps using a copy it
     cached of an older one (e.g. a stylesheet without the classes a new page uses).
     """
     digest = hashlib.sha256((_STATIC / name).read_bytes()).hexdigest()[:16]
@@ -92,7 +92,7 @@ JOBS_POLL_MS = 300
 def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
     """Get the element asking the server for what the jobs changed, while they run.
 
-    No response carries what a job's result changes (see `RenderTarget.pending`): while
+    No response carries what a job's result changes (see `RenderTarget.pending`). While
     the main view's jobs run, this element fetches itself every `JOBS_POLL_MS`, which
     brings the changes along, until it comes back without a fetch once they are over.
     """

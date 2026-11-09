@@ -32,7 +32,7 @@ class ComposeTree(Tree["TreePath"]):
     shows no icon.
 
     Enter or a click selects the node under the cursor, its label marked
-    (`tree--selected`), as the cursor moves on its own; Space or a click on its arrow
+    (`tree--selected`), as the cursor moves on its own. Space or a click on its arrow
     expands or collapses it. `selected` and `toggled` report the user's moves only:
     `set_nodes`, `set_expanded` and `set_selected` keep quiet, as Qt's renderers block
     their widget's signals while refreshing it.

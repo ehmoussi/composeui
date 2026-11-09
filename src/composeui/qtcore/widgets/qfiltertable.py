@@ -157,9 +157,9 @@ class QTableFilterBar(QWidget):
     """A table's filter bar: a search, the filters as chips and the count of rows shown.
 
     "+ Filter" opens an editor in the bar, of a column, a value and an Add button, and in
-    a text column a toggle (`pattern`) making the value a regular expression: Enter
+    a text column a toggle (`pattern`) making the value a regular expression. Enter
     or Add adds the filter, unless `check` says why its value can't filter, marking the
-    value field invalid; Escape closes it. Clicking a chip opens the editor on its
+    value field invalid. Escape closes it. Clicking a chip opens the editor on its
     filter, its remove button removes it. The signals emit only for the user: `search_edited` the
     text typed, `filter_added` a column and its text, `filter_removed` a column, and
     `filters_cleared`. `search_edited` waits `SEARCH_DELAY_MS` after the last key, but

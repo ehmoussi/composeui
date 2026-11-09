@@ -327,7 +327,7 @@ class _FieldReader:
 
     Its `__get__` and `__set__` exist only then (`_recording_reads`). Without them, a read
     finds the value in the view's ``__dict__``, and a write stores it there, without calling
-    Python, as before a reactive method existed: `__init__` sets each field that way. The
+    Python, as before a reactive method existed. `__init__` sets each field that way. The
     class's ``__setattr__`` finds the changes (`_track_fields`), and `set_value` those that
     a hook makes.
     """

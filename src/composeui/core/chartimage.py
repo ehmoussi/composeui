@@ -6,7 +6,7 @@ by a batch run writing a report's figures:
 
     save_chart_image(chart, Path("pressure.pdf"), ImageOptions(width_mm=80))
 
-It needs the `report` extra (matplotlib), imported only by these functions; without it
+It needs the `report` extra (matplotlib), imported only by these functions. Without it
 they raise an `ImportError` naming the extra, and `is_available` is False.
 """
 

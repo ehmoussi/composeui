@@ -28,7 +28,7 @@ class QSidebar(QDockWidget):
 
     The dock stays where it is: it can't be closed, moved or floated, as the sidebar is
     part of the app's layout. Its own title bar is left out for the header. The header's
-    button retracts the sidebar to a strip holding only the button, and expands it back;
+    button retracts the sidebar to a strip holding only the button, and expands it back.
     `expanded_changed` reports those clicks, and `set_expanded` is quiet, as is any change
     while the dock's signals are blocked (the renderers block them while refreshing).
     """

@@ -32,7 +32,7 @@ def _entry_styles(navigation: DirectoryNavigation) -> DirectoryEntryStyling:
     """Read the styles of a folder list's entries on the app's thread.
 
     textual-fspicker's `_load` worker reads them from its own thread, while the app's may be
-    applying the list's styles again, a theme changed or a test's parallel load: Textual
+    applying the list's styles again, a theme changed or a test's parallel load. Textual
     empties a widget's component styles, then fills them anew. Read in between, a style is
     missing (a `KeyError`). The worker waits for the app's thread, as it does already to
     show the entries it read (`call_from_thread`).
@@ -156,7 +156,7 @@ class ComposeFilePathInput(Horizontal):
     """A field typing a file's path, then a "…" button picking one, and a reload button.
 
     The picker is textual-fspicker's, a screen of its own, opening in the directory of
-    the field's path, if any, else in `start_folder`; `path_picked` reports the file
+    the field's path, if any, else in `start_folder`. `path_picked` reports the file
     picked, once the field shows it, relative to `base_folder` when inside it. The reload
     button only reports its presses, and shows with `has_reload`.
     """

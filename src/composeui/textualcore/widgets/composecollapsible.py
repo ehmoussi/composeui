@@ -16,7 +16,7 @@ class ComposeCollapsible(Collapsible):
 
     Textual posts `Collapsible.Expanded`/`Collapsed` for any change of `collapsed`, set
     in code too; `set_expanded` keeps those quiet, as Qt's renderers block their
-    widget's signals while refreshing it, so `toggled` only reports the user's toggles.
+    widget's signals while refreshing it. So `toggled` only reports the user's toggles.
     The messages bubble: one from a collapsible nested in this one isn't this one's.
     """
 

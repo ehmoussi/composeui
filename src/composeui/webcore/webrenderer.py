@@ -228,7 +228,7 @@ def handle_event(renderer: WebRenderer[Any], event: str, form: Mapping[str, str]
 class RenderTarget:
     """One session's view tree: its renderers by fragment id, and the lock guarding it.
 
-    Renderers register here as they render (see `rendering_into`), so a widget id only
+    Renderers register here as they render (see `rendering_into`). So a widget id only
     resolves within the session that rendered it: ids derive from `id()` and are
     guessable, and must not reach another session's views.
     """
@@ -323,8 +323,8 @@ class WebRenderer(Renderer[TView, str]):
     def is_enabled(self) -> bool:
         """Whether the view and every container around it are enabled.
 
-        As disabling a Qt or Textual container disables its children; the container
-        swaps whole, so its views come back disabled with it, and so do the dialogs
+        As disabling a Qt or Textual container disables its children. The container
+        swaps whole. So its views come back disabled with it, and so do the dialogs
         drawn apart from it (see `_refresh_enabled`).
         """
         return self._view.is_enabled and (self.parent is None or self.parent.is_enabled)
@@ -573,7 +573,7 @@ class _WebNumberFieldRenderer(_WebTextFieldRenderer[TNumberField]):
     unparsable text is ignored, the same as the Qt/Textual inputs. Like Textual,
     `minimum`/`maximum` (and `decimals`) are tracked on the view but not enforced on input.
 
-    Leaving the field (`change`) with unparsable text puts the value back: Qt never
+    Leaving the field (`change`) with unparsable text puts the value back. Qt never
     lets such text in at all, and a field showing "4a" while the view (and its
     validators) still sees 4 would contradict every message around it.
     """
@@ -703,8 +703,8 @@ class DateInputViewLike(TextFieldViewLike, Protocol):
 class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
     """A text field typing the date as the view's `date_format` says, then a calendar button.
 
-    The root is daisyUI's field holding both, so the button takes the field's colors in
-    every theme, and the field's border marks the row invalid (see `css/app.css`); a row's
+    The root is daisyUI's field holding both. So the button takes the field's colors in
+    every theme, and the field's border marks the row invalid (see `css/app.css`). A row's
     label names the text field with `aria-labelledby`, as a `<div>` can't be labelled. The
     text posts like a number's (see `_WebNumberFieldRenderer`): never swapped back while
     typed in, text that isn't a date ignored. Left (`change`), it is swapped back showing
@@ -712,7 +712,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
 
     The button opens a popover holding Cally's calendar (`<calendar-date>`, which daisyUI
     styles in the theme's colors), its months and days in the page's language (see
-    `page.js`); the date picked posts as its change (`pick`), in ISO 8601. Like the number
+    `page.js`). The date picked posts as its change (`pick`), in ISO 8601. Like the number
     fields, a date typed out of `minimum`/`maximum` isn't refused; the calendar offers only
     those in range.
     """
@@ -890,7 +890,7 @@ class _ServerFiles:
     server knows the folder shown: the page names an item by its name in it. Opened or
     closed, only the dialog swaps (`dialog_html`), and moving between folders only its
     list (`list_html`): the dialog open, and the button that opened it, stay the same
-    elements, so closing it gives that button the focus. The first item of a new list
+    elements. So closing it gives that button the focus. The first item of a new list
     takes the focus, the one clicked being gone with the old list.
 
     For a folder (`kind`), it lists only folders, and "Choose this folder" picks the one
@@ -937,7 +937,7 @@ class _ServerFiles:
         """Open, move or close it on `event`; get the path picked, a file's or a folder's.
 
         On "browse", it opens in the folder of `name`, a path, if inside the roots, else
-        in the folder `start` if inside them, else in the only root; for a list of
+        in the folder `start` if inside them, else in the only root. For a list of
         folders, in that folder itself. An item that is no longer there, or never was,
         moves nothing.
         """
@@ -1454,7 +1454,7 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
 class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
     """A text field typing a file's path, then a "…" button uploading one, and a reload button.
 
-    The browser can't hand a page its files' paths: the button opens the browser's
+    The browser can't hand a page its files' paths. The button opens the browser's
     picker, a hidden file input beside it (see `page.js`) uploading the file picked
     (`/widget/{id}/file`), and the session keeps a copy (see `WebSession.pick_file`),
     whose path the field then shows. With `server_roots`, the button instead opens the
@@ -1842,7 +1842,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
     The browser stops the handle on each step. The moves are posted debounced
     (`input`) and on release (`change`); meanwhile the page's script keeps the value
     in step (see `page.js`). Beside the track rather than above the handle, and in a
-    slot as wide as the widest value, so the row is as tall as a text field's and the
+    slot as wide as the widest value. So the row is as tall as a text field's and the
     track keeps its length. The root is a `<div>` holding both, so a row's label names
     the input with `aria-labelledby`. Like every control, never swapped back after a
     move; it is when the server changes it.
@@ -2107,12 +2107,12 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
     """A chart the page's script draws with uPlot, from the JSON in its `data-chart`.
 
     The user zooms by dragging across it, back out with a double click, and reads the
-    values at the cursor in its legend; a series' legend entry hides or shows it. A new
+    values at the cursor in its legend. A series' legend entry hides or shows it. A new
     `series` list swaps the figure, the page keeping the user's zoom (see `page.js`).
 
     A click on the plot, rather than the end of a drag, posts its point: `clicked` emits
-    it. Its corner downloads its image as a report's figure, in the format picked beside:
-    matplotlib draws it from the view's data at the user's zoom (see `image`), the same
+    it. Its corner downloads its image as a report's figure, in the format picked beside.
+    Matplotlib draws it from the view's data at the user's zoom (see `image`), the same
     file as Qt saves. Without matplotlib, the page draws a PNG of what it shows instead.
     """
 
@@ -2689,7 +2689,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
     The bar reads and sets `_filtered`, its columns known by their positions. The search
     posts as the user types; "+ Filter" opens an editor in the bar (a column, a value and
     Add), and the filters show as chips. A change swaps only the parts it changes
-    (`_mark_parts`): "bar", "count" or "error", never the field the user types in; a
+    (`_mark_parts`): "bar", "count" or "error", never the field the user types in. A
     value that can't filter swaps only its message in, the page marking the field invalid.
 
     A table adds its own parts (`_own_parts`), and what one holds (`_parts_inside`): a
@@ -2717,7 +2717,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
     def _table_part(markup: Markup, *, oob: bool) -> Markup:
         """Wrap a part of the `<table>` swapped out of band in a `<template>` of its own.
 
-        htmx parses an answer as a template's content: a `<tr>` or a `<tbody>` among the
+        htmx parses an answer as a template's content. A `<tr>` or a `<tbody>` among the
         rest would switch the parser to a table's rules for what follows, mangling the
         next fragments, e.g. another table swapped whole.
         """
@@ -3046,29 +3046,29 @@ class WebFilterBarRenderer(WebRenderer[TView]):
 class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     """A table under its filter bar, scrolling sideways on its own when wider than the page.
 
-    Clicking a row, or pressing Enter on it, selects it; the table is swapped back to
+    Clicking a row, or pressing Enter on it, selects it. The table is swapped back to
     show it selected, each row keeping its own id so htmx gives the focus back to the
     row that had it. Selecting one row, it is the current one (`aria-current`).
     Selecting several, the table is a grid whose rows are each selected or not
     (`aria-selected`), and a click adds or removes its row.
 
     Double clicking a cell of `editable_columns`, or pressing F2 on its row (see
-    `page.js`), edits it: the table comes back with a field in the cell, named by its
+    `page.js`), edits it. The table comes back with a field in the cell, named by its
     header, its text selected. Enter or leaving the field posts the text, Escape puts the
     old text back first; either way the cell is text again. The page keeps the text the
     user is typing through a swap of the table, e.g. answering the double click's clicks.
 
     A column of `cell_widgets` holds a widget in each cell: a check box or a select,
     posting its change and never swapped back for it (only a check-all box in the header
-    follows); a button after the cell's text, or the text as a link-like button, posting
+    follows). A button after the cell's text, or the text as a link-like button, posting
     a click. A check-all column's header starts with its box, partly checked (see
     `page.js`) while some rows are; its click swaps back the rows, not itself. A file
     path is typed as a plain cell, and its "…" button opens the browser's picker, a
     hidden file input uploading the file picked with its row and column
-    (`/widget/{id}/file`, see `WebSession.pick_file`); the cell then shows its copy's path.
+    (`/widget/{id}/file`, see `WebSession.pick_file`). The cell then shows its copy's path.
 
     A cell of `cell_styles` has its background color, its text black or white on it, and
-    its mark before its text, named for screen readers; a disabled one is grayed, its
+    its mark before its text, named for screen readers. A disabled one is grayed, its
     widget disabled and its text never edited. A cell spanning rows covers those under
     it (`rowspan`). The rows' headers start each row (`<th scope="row">`), and
     `header_groups` add a row of headers above the columns', each over its columns.
@@ -3078,7 +3078,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     above the table has a search, posted as the user types, and "+ Filter", opening an
     editor in the bar: a column, a value and Add. The filters show as chips. A sort, a
     search or a filter swaps only what it changes (the headers, the body, the count, the
-    bar), never the field the user types in; a value that can't filter swaps only its
+    bar), never the field the user types in. A value that can't filter swaps only its
     message in, the page marking the field invalid.
     """
 
@@ -4034,7 +4034,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         """Draw the window around the first row shown, a fifth of it above.
 
         The page posts the row under the headers (`start`) and how far down the frame it
-        is (`offset`, in rows' heights): the filler above the window gets the height that
+        is (`offset`, in rows' heights). The filler above the window gets the height that
         keeps that row there, the frame's scroll position kept.
         """
         shown = form.get("start", "")
@@ -4905,7 +4905,7 @@ def _web_shortcut(shortcut: str | None) -> tuple[str, str] | None:
     """Map a view's `Ctrl+<letter or digit>` shortcut to one the browser leaves free.
 
     Browsers keep most Ctrl shortcuts for themselves (Ctrl+N opens a window, Ctrl+O a
-    file, Ctrl+S saves the page, Ctrl+Q quits Firefox on Linux), so `Ctrl+x` becomes
+    file, Ctrl+S saves the page, Ctrl+Q quits Firefox on Linux). So `Ctrl+x` becomes
     `Alt+Shift+X`, the combination web apps use for their own shortcuts. Returns the
     label to show and the physical key (`KeyboardEvent.code`) the page's key handler
     matches (see `page.js`); None for any other shortcut, which has no free web
@@ -5032,7 +5032,7 @@ class WebMenuRenderer(WebRenderer[Menu]):
     A menu with New, Open or Save actions (`FileMenu`) puts them in plain sight as
     header buttons, Save highlighted, and any other action in a "⋯" dropdown named after
     the menu. Save As is left out next to Save, as in a browser both download the same
-    file, and so is Exit: a web page is left by closing its tab, and New already starts
+    file, and so is Exit. A web page is left by closing its tab, and New already starts
     over. Any other menu is a dropdown under its title.
 
     `Menu.is_visible` means "popped up" (it starts False, a Qt notion): a dropdown is
@@ -5536,10 +5536,10 @@ class WebFormDialogRenderer(WebDialogRenderer):
     """A modal `<dialog>` holding its form or other view, then Cancel and OK.
 
     OK is disabled while the view says so, e.g. while a check of the form fails, and only
-    it swaps when that changes:
-    the dialog itself, swapped while open, would take back what the user is typing.
+    it swaps when that changes.
+    The dialog itself, swapped while open, would take back what the user is typing.
     Unlike a message's, OK doesn't close the dialog in the browser: the form may refuse
-    it, the dialog then staying open with its checks shown; the server swaps it closed
+    it, the dialog then staying open with its checks shown. The server swaps it closed
     once accepted. Cancel and Escape close it first, as for any dialog.
     """
 
@@ -5733,8 +5733,8 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
     """Panes side by side, each in a cell as wide as its share, a border between two.
 
     A border is an ARIA window splitter (a focusable separator) the user drags, or moves
-    with the arrow keys; the browser shares the width between the panes beside it at
-    once (see `page.js`), then posts every pane's width (`resize`): like every control,
+    with the arrow keys. The browser shares the width between the panes beside it at
+    once (see `page.js`), then posts every pane's width (`resize`). Like every control,
     the splitter is never swapped back after one. A splitter narrower than 42rem stacks
     its panes, as a row does, without borders; side by side, a pane is at least 12rem
     wide, for its text to be read. A border shows only between panes shown (see
@@ -5837,7 +5837,7 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
     """A `<details>` (daisyUI's collapse): its title, then the views one above the other.
 
     The browser opens and closes it on a click or a key on the title, then posts its
-    `toggle`; like every control, it is never swapped back after one, only when the
+    `toggle`. Like every control, it is never swapped back after one, only when the
     server changes it. Its views swap on their own, shown or not. Disabled, its title
     can't be clicked or focused, as a disabled Qt button can't be pressed.
     """
@@ -5900,7 +5900,7 @@ class WebTreeRenderer(WebRenderer[TreeView]):
     A click or Enter on a node selects it (`aria-current`), on its arrow expands or
     collapses it (`aria-expanded`); a collapsed node's children are left out. Either way
     the tree is swapped back, each button keeping its own id, its node's position depth
-    first, so htmx gives the focus back to the button that had it, as a table's rows do.
+    first. So htmx gives the focus back to the button that had it, as a table's rows do.
     A button posts its node's path: a node a stale page still shows swaps the tree back.
     """
 
@@ -6068,7 +6068,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
     pages on a wide screen, and on a phone a drawer over them, closed by a click beside
     it. A button in the header (`toggle_html`; see `page.js`) retracts and expands the
     column, which the browser does before posting it (`toggle`), like every control
-    never swapped back after one; on a phone, it shows and hides the drawer instead.
+    never swapped back after one. On a phone, it shows and hides the drawer instead.
     The button isn't in the aside's fragment: a swap of the aside brings it along.
     """
 
@@ -6174,7 +6174,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
     """The records' views one above the other, each in an item of its own.
 
     As the records change, the response swaps only the items that changed: an item gone
-    is deleted and a new one goes in after its neighbour, so the items kept, the one the
+    is deleted and a new one goes in after its neighbour. So the items kept, the one the
     user is busy in among them, are never swapped back. A change reordering the items
     kept, or anything else changing on the list, swaps the whole list instead. A record's
     view built since is rendered into the session; one gone is dropped from it.
@@ -6487,7 +6487,7 @@ class WebRouterRenderer(WebRenderer[Router]):
     """The current page, and the toolbar of the pages' links.
 
     Only the current page is sent, in a slot of its own, which leaves the page's own
-    `is_visible` to the page: an app's many pages don't weigh on each response, nor the
+    `is_visible` to the page. An app's many pages don't weigh on each response, nor the
     browser's page. Navigating swaps the router, so the page left goes, and the page
     shown comes as it stands now. The toolbar has no fragment of its own: the main
     renderer puts it in the header, and each link swaps on its own.

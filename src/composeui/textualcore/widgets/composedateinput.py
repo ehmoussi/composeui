@@ -33,7 +33,7 @@ class ComposeMonth(Widget, can_focus=True):
     """A month's days in a grid, a week a line from Monday, the cursor on one day.
 
     Textual has no calendar. The arrows move the cursor a day or a week, Page Up/Down a
-    month, onto the next month's grid as needed; Enter picks the cursor's day, and a click
+    month, onto the next month's grid as needed. Enter picks the cursor's day, and a click
     picks the day under it (or, on the month's line, goes to the month before or after).
     Days out of `minimum`/`maximum` are dimmed and never picked.
     """

@@ -336,8 +336,8 @@ def _state_file(session: WebSession) -> Response:
 async def state_upload(request: Request) -> Response:
     """Load an uploaded state file, the web side of `MainView.load_state`.
 
-    A load can change any part of the tree, so instead of collecting fragments the page
-    reloads; a rejected file leaves the state alone and says why in the status bar.
+    A load can change any part of the tree. So instead of collecting fragments the page
+    reloads. A rejected file leaves the state alone and says why in the status bar.
     """
     session = _session(request)
     if session is None:

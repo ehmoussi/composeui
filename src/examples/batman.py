@@ -1,7 +1,7 @@
 """Click the bat: `python -m examples.batman --backend qt` (or `web`).
 
 The Batman logo: a yellow oval, its upper and lower halves filled down to 0, under the
-bat's upper and lower edges filled in black; each series has the logo's color, whatever
+bat's upper and lower edges filled in black. Each series has the logo's color, whatever
 the theme. Clicking the chart inside the bat says so: the chart's `clicked` emits the
 point, which the view checks against the bat's edges. Textual draws the logo too, but a
 terminal has no pointer to click it with.

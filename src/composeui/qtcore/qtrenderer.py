@@ -2616,7 +2616,7 @@ class QtFormDialogRenderer(QtWidgetRenderer[OkCancelDialogView, QFormDialog]):
     """A modal dialog holding its form or other view, shown without blocking.
 
     Its answer reaches the view. OK is disabled while the view says so, e.g. while a check
-    of the form fails; the view closes the dialog once it accepts the answer, so OK on a
+    of the form fails. The view closes the dialog once it accepts the answer, so OK on a
     form refusing it leaves the dialog open.
     """
 

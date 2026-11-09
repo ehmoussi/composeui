@@ -21,7 +21,7 @@ class QtSlot(QObject):
 
     A Python method of a `QObject`, so PySide connects it as a Qt slot. A connection to any
     other callable goes into a table of PySide that it searches whole each time a sender is
-    deleted, or a bound method's object is collected: freeing a page of many widgets took a
+    deleted, or a bound method's object is collected. Freeing a page of many widgets took a
     time that grew with the square of their number. A child of the widget that emits, it
     goes with it. It holds each method's object weakly, as PySide holds a bound method's, and
     passes only the first arguments that the method takes, as PySide does.

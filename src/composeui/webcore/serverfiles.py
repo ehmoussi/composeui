@@ -2,7 +2,7 @@
 
 The browser names an item by its name in the folder listed, never by a path. Each item
 is resolved, symbolic links and ``..`` included, and only one inside a root is listed or
-picked: a link leading out of the roots shows nothing of where it leads.
+picked. A link leading out of the roots shows nothing of where it leads.
 """
 
 from __future__ import annotations

@@ -1,12 +1,12 @@
 """The headers every response carries, whatever route or middleware answers it.
 
-- Scripts: the page runs only the app's own script files, so text that ever got past
+- Scripts: the page runs only the app's own script files. So text that ever got past
   the escaping (`Markup`) can't run as a script, inline or evaluated. Inline style
   attributes stay allowed: the renderers lay out with them, and they run nothing.
-- Clickjacking: another site could show the app in a hidden frame, so the user's clicks
+- Clickjacking: another site could show the app in a hidden frame. So the user's clicks
   reach it from the app's own page, which the origin check (`origin.py`) lets through. So
   no page of the app may be shown in a frame.
-- No MIME sniffing: a browser keeps to the content type each response says it is, so an
+- No MIME sniffing: a browser keeps to the content type each response says it is. So an
   uploaded or served file can't run as a script or a page it doesn't say it is.
 - Referrer: the app's addresses aren't sent to other sites, and its own requests still
   carry them, which the origin check falls back to.

@@ -2,7 +2,7 @@
 
 `--markdown` is the app's own command-line option, beside the backend's (`--backend
 textual`, `--language`, ...). The field at the top takes the file's path: typed, or
-picked with its "…" button, on the web too (the browser uploads it); its reload button
+picked with its "…" button, on the web too (the browser uploads it). Its reload button
 reads the file again, e.g. once edited.
 """
 

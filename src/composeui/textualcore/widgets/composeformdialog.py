@@ -22,7 +22,7 @@ class ComposeFormDialog(ModalScreen[None]):
 
     Installed once and pushed at each opening, so its form keeps its widgets: a screen
     dismissed can't be pushed again. It reports the user's answer (`answered`: "accept",
-    "reject", or "dismiss" for Escape) without closing; its renderer pops it once the
+    "reject", or "dismiss" for Escape) without closing. Its renderer pops it once the
     view closes the dialog, which stays open when its form refuses OK.
     """
 

@@ -3,7 +3,7 @@
 Each task is a job (`MainView.jobs`): a function run in a thread, which never touches a
 view. It returns the task's status, which its job emits on the main thread, where the
 views show it: in the table, and counted by metrics, which once a run is over show how
-each count changed since the last run; a step chart shows the tasks running over the
+each count changed since the last run. A step chart shows the tasks running over the
 run's time, each count held until a task ends. The table is a section that collapses,
 leaving only the metrics and the chart. A task's Retry button runs it again, and a failed
 task's error is a link opening a dialog that says more.

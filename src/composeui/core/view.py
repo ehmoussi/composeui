@@ -397,10 +397,10 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
     on_setattr hook refresh the UI as each value is applied.
 
     ``ValuesGroupMixin.value`` is handled separately: its declared type is an
-    unresolved generic ``TypeVar`` that cattrs can't structure statically, so it is
+    unresolved generic ``TypeVar`` that cattrs can't structure statically. So it is
     restored through `ValuesGroupMixin.deserialize_value` instead, which resolves it
     via the mixin's own `values` label lookup. ``ValuesGroupMixin.values`` is included
-    in saved state (for inspection/debugging) but never restored from it on load: it's
+    in saved state (for inspection/debugging) but never restored from it on load. It's
     app-defined config, not persisted user data, and has the same unresolved-`TValue`
     structuring problem `value` has, without an equivalent label-based workaround.
     ``RecordTableView.records`` is restored first, by `RecordTableView.record_type`: its
@@ -454,7 +454,7 @@ def _show_checked(view: View) -> None:
 def _reset_state(view: View, initial: View) -> None:
     """Set a live view tree back to `initial`'s state, in place.
 
-    `initial` is a freshly built instance of the same class: copying from it, rather than
+    `initial` is a freshly built instance of the same class. Copying from it, rather than
     from attrs defaults, also restores whatever its `__attrs_post_init__` set up (titles,
     `values`, an initial validator message...). Like `_apply_state`, it sets the existing
     attributes, so renderers and connected signals stay bound and only what actually
@@ -2118,7 +2118,7 @@ class SavePathInputMixin(PathInputMixin):
     `extensions` added if the name has none of them. On Qt and Textual, the button opens
     the toolkit's save dialog. The browser can't give the page a path: on the web, the
     user types it, and the field has no button. With `server_roots`, the web's button
-    lists the server's folders in them and their files of `extensions`: a file's item
+    lists the server's folders in them and their files of `extensions`. A file's item
     takes its name, and "Save" picks the folder shown with the name typed. With
     `confirms_overwrite`, a file that exists is picked only once the user agrees to
     replace it, and `is_replace_agreed` remembers it, for `MainView.write_file` not to ask
@@ -6689,7 +6689,7 @@ class OkCancelDialogView(DialogView):
     about any view it shows: while one fails, its message shows above the buttons, and OK
     can't be pressed. The answer comes through `accepted` or `rejected`. To do the work of
     OK while the dialog is open, e.g. a save that the model may refuse, connect to
-    `accepting` and do it in `refusing`: a refusal then keeps the dialog open. `show_message`
+    `accepting` and do it in `refusing`. A refusal then keeps the dialog open. `show_message`
     tells the user something else there, e.g. that Apply saved the changes.
     """
 

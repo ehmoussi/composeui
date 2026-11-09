@@ -52,8 +52,8 @@ class QSourceTableModel(QAbstractTableModel):
     selected again. The rows' headers are their positions, from 1. A selected row has the
     palette's highlight colors.
 
-    Qt asks for each cell's text and colors apart: the model keeps the row it read last,
-    so the view formats each row drawn once, not once a cell and a role.
+    Qt asks for each cell's text and colors apart: the model keeps the row it read last.
+    So the view formats each row drawn once, not once a cell and a role.
     """
 
     def __init__(self, table: SourceTableLike, parent: Optional[QObject] = None) -> None:
@@ -119,7 +119,7 @@ class QSourceTableView(QTableView):
     `set_sort_indicator` gives, the table never sorting its rows itself.
 
     The table selects no row itself: `row_clicked` emits the position the user clicked,
-    or the current one on Space, and whether Shift extends the selection to it;
+    or the current one on Space, and whether Shift extends the selection to it.
     `row_activated` emits it on a double click, Enter or Return. `copy_requested` emits
     on the platform's Copy shortcut (Ctrl+C), `export_requested` on `export_action`, in
     the table's context menu.

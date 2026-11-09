@@ -241,7 +241,7 @@ class QCellDelegate(QStyledItemDelegate):
     """Draws a button or a combobox cell, and reports a click on a button or a link.
 
     A button cell shows its text, then the button, a square as tall as the cell unless
-    its text is wider; `cell_clicked` emits a click on it, or anywhere on a link cell.
+    its text is wider. `cell_clicked` emits a click on it, or anywhere on a link cell.
     A path cell shows its path, then a "…" button, enabled in an editable column, whose
     click `browse_clicked` emits. A combobox cell is a combobox's frame around its
     text: a click on it, or editing it, opens a combobox of its options, the cell taking
@@ -529,7 +529,7 @@ class QTextTableView(QTableView):
     order `set_sort_indicator` gives, the table never sorting its rows itself.
 
     The columns of `set_cell_widgets` show widgets (see `QCellDelegate`): a click or
-    Space toggles an editable check box at once, `cell_edited` emitting it; a click on a
+    Space toggles an editable check box at once, `cell_edited` emitting it. A click on a
     button or a link, or Space on its cell, emits `cell_clicked`. A click on an editable
     path's button, or Space on its cell, emits `browse_clicked`, and `set_text` gives the
     cell the path picked, as the user's edit. A check-all column's
