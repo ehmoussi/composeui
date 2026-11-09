@@ -15,6 +15,7 @@ from composeui.core.application import (
     Application,
     ModelApplication,
     current_backend,
+    get_logger,
     renders,
     run,
 )
@@ -281,6 +282,23 @@ def test_the_log_options_show_the_app_s_or_the_signals_debug_messages(
     Application(build_main_view=_CountMainView).run()
 
     assert [logger.level for logger in loggers] == [app_level, signal_level]
+
+
+@pytest.mark.parametrize(("options", "is_shown"), [(["--log"], True), ([], False)])
+def test_an_app_s_logger_shows_its_debug_messages_with_the_log_option(
+    options: list[str],
+    is_shown: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("COMPOSEUI")
+    monkeypatch.setattr(logger, "level", logger.level)  # for the other tests
+    monkeypatch.setattr("sys.argv", ["count", *options])
+    Application(build_main_view=_CountMainView).run()
+
+    get_logger("count").debug("The count is ready")
+
+    assert ("The count is ready" in caplog.text) is is_shown
 
 
 def test_a_file_of_another_app_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

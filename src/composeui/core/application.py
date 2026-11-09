@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
     from composeui.core.view import MainView, View
 
-__all__ = ["Application", "ModelApplication", "current_backend", "renders", "run"]
+__all__ = ["Application", "ModelApplication", "current_backend", "get_logger", "renders", "run"]
 
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -162,6 +162,11 @@ class _Running:
     """The backend of the app this process runs, from the start of its build."""
 
     backend: ClassVar[RendererType | None] = None
+
+
+def get_logger(name: str) -> logging.Logger:
+    """Get a logger for app code, with ComposeUI's output and the level `--log` sets."""
+    return LOGGER.getChild(name)
 
 
 def current_backend() -> RendererType | None:
