@@ -31,10 +31,13 @@ from composeui.core.reload import (
     take_changes,
     watch_changes,
 )
-from composeui.core.view import MainView, define_view
+from composeui.core.study import open_study
+from composeui.core.view import CircleShape, DrawingView, MainView, child, define_view
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+
+    from composeui.core.view import Shape
 
 #: seconds a test waits for a child process before failing
 _TIMEOUT = 30.0
@@ -178,6 +181,65 @@ def test_a_state_that_no_longer_fits_is_dropped_with_the_language_it_was_shown_i
     assert "is dropped" in caplog.text
     assert changed.language == "en"  # as the app starts
     assert changed.count == 0
+
+
+@define_view
+class _DrawnMainView(MainView):
+    edited: DrawingView = child(DrawingView, shapes=[CircleShape((0, 0), 1)])
+    kept: DrawingView = child(DrawingView, shapes=[CircleShape((0, 0), 1)])
+
+
+@define_view
+class _DrawnEditedMainView(MainView):
+    """`_DrawnMainView` after an edit of the shapes of `edited` in its code."""
+
+    edited: DrawingView = child(DrawingView, shapes=[CircleShape((0, 0), 2)])
+    kept: DrawingView = child(DrawingView, shapes=[CircleShape((0, 0), 1)])
+
+
+def _saved_with_a_changed_drawing(directory: Path) -> None:
+    """Save a `_DrawnMainView` whose `kept` the user changed."""
+    previous = _DrawnMainView()
+    previous.kept.shapes = [CircleShape((0, 0), 9)]
+    save_reloaded_state(previous, None, directory)
+
+
+def test_a_value_edited_in_the_code_replaces_the_saved_one_before_loaded(tmp_path: Path) -> None:
+    _saved_with_a_changed_drawing(tmp_path)
+    reloaded = _DrawnEditedMainView()
+    at_loaded: list[list[Shape]] = []
+    reloaded.loaded.connect(lambda: at_loaded.append(reloaded.edited.shapes))
+
+    load_reloaded_state(reloaded, None, tmp_path)
+
+    assert at_loaded == [[CircleShape((0, 0), 2)]]  # so a redraw on `loaded` goes last
+    assert reloaded.kept.shapes == [CircleShape((0, 0), 9)]
+
+
+def test_a_view_filled_by_a_build_function_keeps_the_user_s_values(tmp_path: Path) -> None:
+    def build() -> _DrawnMainView:
+        main_view = _DrawnMainView()
+        main_view.kept.shapes = [CircleShape((0, 0), 5)]
+        return main_view
+
+    previous = build()
+    previous.kept.shapes = [CircleShape((0, 0), 9)]
+    save_reloaded_state(previous, None, tmp_path)
+    reloaded = build()
+
+    load_reloaded_state(reloaded, None, tmp_path)
+
+    assert reloaded.kept.shapes == [CircleShape((0, 0), 9)]
+
+
+def test_a_study_opened_after_a_reload_keeps_its_saved_values(tmp_path: Path) -> None:
+    _saved_with_a_changed_drawing(tmp_path)
+    load_reloaded_state(_DrawnEditedMainView(), None, tmp_path)
+    opened = _DrawnEditedMainView()
+
+    open_study(opened, None, tmp_path / "study")
+
+    assert opened.edited.shapes == [CircleShape((0, 0), 1)]
 
 
 def test_a_damaged_session_only_loses_what_the_study_doesn_t_hold(

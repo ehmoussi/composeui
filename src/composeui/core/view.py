@@ -380,6 +380,12 @@ _RECORD_TABLE_SETUP = (
 )
 
 
+#: set while a reload opens its study (`load_reloaded_state`): what changes the state to load
+_RELOADED_STATE: contextvars.ContextVar[Callable[[Any], Any] | None] = contextvars.ContextVar(
+    "composeui_reloaded_state", default=None
+)
+
+
 @batch()
 def _apply_state(view: View, data: dict[str, Any]) -> None:
     """Update a live view tree in place from previously saved state.
@@ -1514,6 +1520,10 @@ class MainView(View):
         it (see `check_state_data`).
         """
         self.check_state_data(data)
+        # after the check: a saved value that no longer fits drops the study, even if edited
+        adapt = _RELOADED_STATE.get()
+        if adapt is not None:
+            data = adapt(data)
         self.jobs.drop()  # working for the study replaced
         _apply_state(self, data)
         _show_checked(self)

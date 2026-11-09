@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from composeui.core.model import InvalidStateError
 from composeui.core.study import open_study, save_study
+from composeui.core.view import _RELOADED_STATE
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator, Sequence
@@ -225,6 +226,8 @@ def save_reloaded_state(
     session = {
         "state_filepath": None if state_filepath is None else str(state_filepath),
         "language": main_view.language,
+        # built now, while it's still the previous code: what its fields start as
+        "initial": type(main_view)().state_data(),
     }
     (directory / _SESSION_NAME).write_text(json.dumps(session))
 
@@ -234,17 +237,25 @@ def load_reloaded_state(
 ) -> None:
     """Open the state the previous run saved, if any and if it still fits the app.
 
-    From `directory`, else the one the supervisor shares with the app.
+    From `directory`, else the one the supervisor shares with the app. A field whose initial
+    value changed in the code takes the new value, not the one saved.
     """
     directory = _state_directory() if directory is None else directory
     if not (directory / _STUDY_NAME).exists():
         return
     session = _read_session(directory / _SESSION_NAME)
+    # built as `save_reloaded_state` builds it, not `main_view`, which a function may have
+    # filled: the two would differ with no edit, and the user's values be lost
+    code_state = json.loads(json.dumps(type(main_view)().state_data()))
+    previous_code_state = session.get("initial")
     language = main_view.language
     # first: the study's text was saved in it
     saved_language = session.get("language")
     if isinstance(saved_language, str) and saved_language != language:
         main_view.set_language(saved_language)
+    token = _RELOADED_STATE.set(
+        lambda state: _with_code_edits(state, previous_code_state, code_state)
+    )
     try:
         open_study(main_view, model, directory / _STUDY_NAME)
     except InvalidStateError as error:
@@ -252,8 +263,26 @@ def load_reloaded_state(
         if main_view.language != language:
             main_view.set_language(language)
         return
+    finally:
+        _RELOADED_STATE.reset(token)
     state_filepath = session.get("state_filepath")
     main_view.state_filepath = Path(state_filepath) if isinstance(state_filepath, str) else None
+
+
+def _with_code_edits(saved: dict[str, Any], previous: Any, code: dict[str, Any]) -> dict[str, Any]:
+    """Get the state `saved`, with each field whose initial value the code changed set to it.
+
+    `previous` is the state that a new main view of the previous code has, `code` that of
+    the changed code. The other fields keep what the user left in them.
+    """
+    if not isinstance(previous, dict):  # the session is missing or damaged, e.g. by a crash
+        return saved
+    state = dict(saved)
+    for name, value in code.items():
+        if name in saved and name in previous and previous[name] != value:
+            is_view = all(isinstance(state, dict) for state in (saved[name], previous[name], value))
+            state[name] = _with_code_edits(saved[name], previous[name], value) if is_view else value
+    return state
 
 
 def _read_session(path: Path) -> dict[str, Any]:

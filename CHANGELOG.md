@@ -75,6 +75,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- `--reload` shows a value changed in the code, such as the `shapes` of a `DrawingView`, instead of
+  the value saved by the previous run. The other values stay as the user left them.
 - A study whose archive holds a member's name that can't be decoded is refused as invalid. Before,
   opening it raised an uncaught error.
 - A study keeps a date's UTC offset of less than a second on Python versions that read it as UTC.

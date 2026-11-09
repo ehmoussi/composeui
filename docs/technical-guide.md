@@ -463,7 +463,10 @@ On Qt, `--reload` works like this:
    it closes: a dialog's own event loop also runs the timer, and its callback goes on with
    the app after it. Then the app saves the study to the same directory
    (`save_reloaded_state`): the view state, the model's data, and in `session.json` the
-   study file's path and the language shown.
+   study file's path, the language shown, and the state of a new main view of this code.
+   `load_reloaded_state` compares that state with a new main view of the changed code. A
+   field that differs takes the value of the changed code (`_with_code_edits`). Both views
+   come from the class, so that a build function can't make them differ without an edit.
 4. **In place.** When only the app's own code changed (`can_reload_in_place`),
    `rerun_program` removes the program's modules from `sys.modules`. These are the modules
    under the current directory, without ComposeUI's. Then it runs the program again as a new
