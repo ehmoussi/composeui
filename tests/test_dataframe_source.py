@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import decimal
+import sys
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import attrs
@@ -451,7 +452,20 @@ def _paris_frame(library: str) -> Any:
     return frame if library == "polars" else frame.to_arrow()
 
 
-@pytest.mark.parametrize("library", ["polars", "pandas", "pyarrow"])
+@pytest.mark.parametrize(
+    "library",
+    [
+        "polars",
+        "pandas",
+        pytest.param(
+            "pyarrow",
+            marks=pytest.mark.skipif(
+                sys.platform == "win32" and sys.version_info < (3, 10),
+                reason="PyArrow 21 has no time zone database on Windows",
+            ),
+        ),
+    ],
+)
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
