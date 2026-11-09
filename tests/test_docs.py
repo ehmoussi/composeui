@@ -112,6 +112,8 @@ def test_each_complete_example_runs(
     code: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    # an example runs outside an app, whatever app a test built before it in this process
+    monkeypatch.setattr("composeui.core.application._Running.backend", None)
     tests = [
         node
         for node in ast.parse(code).body

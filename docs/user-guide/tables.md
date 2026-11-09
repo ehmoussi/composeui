@@ -508,7 +508,8 @@ main_view.readings.source = DataFrameSource(
   rows change, give the source an `id_column`.
 - **A filter on a date with a time zone compares clock times.** `>2024-01-02` keeps the rows
   whose time, in the zone of the column, is after that date. A value with its own zone, such as
-  `>2024-01-02T00:00+00:00`, compares instants.
+  `>2024-01-02T00:00+00:00`, compares instants. On Windows, PyArrow 21 needs a time zone
+  database for such a filter (see its documentation); PyArrow 25 does not.
 - **A column of lists has no text to compare.** The search passes over it, and a filter or a
   sort on it does nothing.
 - **The cells are Python values.** A missing value of pandas (`NaN`, `NaT`, or `NA`) is
