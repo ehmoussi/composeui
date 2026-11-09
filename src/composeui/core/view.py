@@ -5198,7 +5198,8 @@ class TableSource(Protocol[IdT]):
     `ListSource` is a source of records in memory.
 
     A source whose ids are only positions also has a ``row_ids_scope`` attribute: a new
-    object each time that new rows replace the others, which clears a table's selection.
+    object each time that new rows replace the others, which clears a table's selection,
+    unless the source had no rows before.
     """
 
     @property
@@ -5647,6 +5648,14 @@ class SourceTableView(View):
     _order_pending: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
     #: the source changed since `_total` counted its rows: the next order counts them
     _recount: bool = attrs.field(default=False, init=False, repr=False, metadata={OMIT: True})
+    #: whether new rows cleared the selection, not yet emitted: they are still being ordered
+    _selection_cleared: bool = attrs.field(
+        default=False, init=False, repr=False, metadata={OMIT: True}
+    )
+    #: whether the source of `_row_ids_scope` had no rows, so that its ids named none
+    _scope_had_no_rows: bool = attrs.field(
+        default=False, init=False, repr=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -5906,7 +5915,7 @@ class SourceTableView(View):
     def _source_changed(self) -> None:
         """Count the rows of the source, new or changed, then order them."""
         source = self.source
-        is_selection_dropped = self._drop_selection_of_other_rows(source)
+        self._selection_cleared |= self._drop_selection_of_other_rows(source)
         self._cache.clear()
         if source is None:
             self._total, self._recount = 0, False
@@ -5920,22 +5929,31 @@ class SourceTableView(View):
             self._order, self._order_source = [], None
             self._refresh_order()
         self._read_order()
-        if is_selection_dropped:  # once the new rows are ordered, for what it reads
+
+    def _announce_cleared_selection(self) -> None:
+        """Emit the selection cleared by new rows, now ordered, for what a callback reads."""
+        is_announced, self._selection_cleared = self._selection_cleared, False
+        # a selection made while a job ordered the rows was emitted, and is the current one
+        if is_announced and len(self.selected_ids) == 0:
             self.selection_changed.emit([])
 
     def _drop_selection_of_other_rows(self, source: Optional[TableSource[Any]]) -> bool:
         """Clear the selection if `source`'s ids name other rows, and tell whether it did.
 
         A row's position in a frame is its id there only: the same number in new rows is
-        another row. The first source keeps the selection, which a study may have restored.
+        another row. The first source keeps the selection, which a study may have restored,
+        and so does a source that replaces one without rows: those ids named no row.
         """
         if source is None:
             return False
-        previous = self._row_ids_scope
+        previous, had_no_rows = self._row_ids_scope, self._scope_had_no_rows
         # optional: a source whose ids are its rows' own has none
         self._row_ids_scope = getattr(source, "row_ids_scope", None)
+        # counted only for positions, in memory: another source's count can cost a query
+        self._scope_had_no_rows = self._row_ids_scope is not None and source.count() == 0
         if (
             previous is _NO_ROW_IDS
+            or had_no_rows
             or previous is self._row_ids_scope
             or len(self.selected_ids) == 0
         ):
@@ -6009,8 +6027,10 @@ class SourceTableView(View):
         """
         self._set_ordering(is_ordering=False)
         if request == self._order_request:
-            if order is not None:  # else it failed, logged: the old order stays
+            if order is not None:
                 self._show_order(self.source, *order)
+            else:  # it failed, logged: the old order stays
+                self._announce_cleared_selection()
         elif self._order_pending:
             self._read_order()
 
@@ -6052,6 +6072,7 @@ class SourceTableView(View):
             if kept != self.selected_ids:
                 self.selected_ids = kept
                 self.selection_changed.emit(kept)
+        self._announce_cleared_selection()
 
     def _order_settings(
         self, source: TableSource[Any]

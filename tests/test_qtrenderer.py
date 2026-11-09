@@ -19,7 +19,7 @@ import sys
 import threading
 import weakref
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 import pyqtgraph as pg
@@ -4188,6 +4188,90 @@ def test_a_large_source_s_rows_are_ordered_in_a_job_the_old_order_shown_meanwhil
     other.gate.set()
     qtbot.waitUntil(lambda: not view.table.is_ordering)
     assert model.rowCount() == other.size
+
+
+class _PositionalGatedSource(GatedSource):
+    """Rows known by their positions, whose order fails once `fails` is set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.row_ids_scope = object()
+        self.fails = False
+
+    def new_rows(self, size: int) -> None:
+        self.size = size
+        self.row_ids_scope = object()
+        self.changed.emit()
+
+    def ordered_ids(
+        self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
+    ) -> range:
+        ids = super().ordered_ids(sort, search, filters)
+        if self.fails and threading.current_thread() is not threading.main_thread():
+            msg = "the rows can't be read"
+            raise RuntimeError(msg)
+        return ids
+
+
+def _positional_rows(
+    qtbot: QtBot,
+) -> tuple[GatedMainView, _PositionalGatedSource, list[tuple[list[Any], int]]]:
+    """Get a table ordering in a job, a row selected, and what each emission of it could read."""
+    view = GatedMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    qtbot.addWidget(_widget(view))
+    source = _PositionalGatedSource()
+    view.table.source = source
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    view.table.selected_ids = [3]
+    emitted: list[tuple[list[Any], int]] = []
+
+    def record(selected: list[Any]) -> None:
+        emitted.append((selected, view.table.total))
+
+    view.table.selection_changed.connect(record)
+    source.gate.clear()
+    return view, source, emitted
+
+
+def test_a_selection_cleared_by_new_rows_is_emitted_once_a_job_ordered_them(
+    qtbot: QtBot,
+) -> None:
+    view, source, emitted = _positional_rows(qtbot)
+    new_size = SOURCE_TABLE_JOB_ROWS + 5
+
+    source.new_rows(new_size)
+    assert (view.table.selected_ids, emitted) == ([], [])
+
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+    assert emitted == [([], new_size)]
+
+
+def test_a_selection_cleared_by_new_rows_is_emitted_when_their_order_fails(qtbot: QtBot) -> None:
+    view, source, emitted = _positional_rows(qtbot)
+
+    source.fails = True
+    source.new_rows(SOURCE_TABLE_JOB_ROWS)
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+
+    assert [selected for selected, _ in emitted] == [[]]
+
+
+def test_a_selection_made_while_new_rows_are_ordered_is_not_reported_as_cleared(
+    qtbot: QtBot,
+) -> None:
+    view, source, emitted = _positional_rows(qtbot)
+
+    source.new_rows(SOURCE_TABLE_JOB_ROWS)
+    view.table.selected_ids = [7]
+    source.gate.set()
+    qtbot.waitUntil(lambda: not view.table.is_ordering)
+
+    assert emitted == []
+    assert view.table.selected_ids == [7]
 
 
 def test_a_large_table_s_new_source_shows_its_columns_in_the_bar(qtbot: QtBot) -> None:

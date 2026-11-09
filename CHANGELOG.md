@@ -82,6 +82,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A selection that a study restored stays when rows replace a source without rows, such as an empty
+  `DataFrameSource` built before the data is loaded.
+- `selection_changed` emits `[]` for rows that replace a selection of positions once they are
+  ordered, also when a job orders them. A callback read the old order before.
 - New `records` in a `ListSource` without an `id_field` clear a table's selection, as new rows in a
   `DataFrameSource` do, and `selection_changed` emits `[]`. The selection moved silently to the
   records now at those positions. A source of your own can do the same with `row_ids_scope`.

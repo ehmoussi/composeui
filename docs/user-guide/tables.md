@@ -340,7 +340,8 @@ A source of your own gives:
 An id stays with its row, so the selection stays on its rows when they change. If the ids of your
 source are only positions, also give it a `row_ids_scope` attribute: a new object each time that
 new rows replace the others, before `changed`. The view then clears the selection, and
-`selection_changed` emits `[]`.
+`selection_changed` emits `[]` once the new rows are ordered. If the source had no rows before,
+the view keeps the selection, for example one that a study restored before the data was loaded.
 
 A `ListSource` without an `id_field` does this: new `records` clear the selection, even if only
 one record changed. To keep the selection, give the source an `id_field`.

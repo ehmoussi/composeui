@@ -173,6 +173,27 @@ def test_new_records_clear_a_selection_of_positions_and_keep_one_of_ids(
     assert emitted == ([] if kept else [[]])
 
 
+def test_a_study_s_selection_survives_rows_that_replace_a_source_without_rows(
+    tmp_path: Path,
+) -> None:
+    main_view = SamplesMainView()
+    main_view.samples.source = CountingSource(_samples(20))
+    main_view.samples.selected_ids = [2, 5]
+    path = tmp_path / "samples.json"
+    main_view.save_state(path)
+
+    placeholder = CountingSource([])
+    reopened = SamplesMainView()
+    reopened.samples.source = placeholder
+    reopened.load_state(path)
+    emitted: list[list[Any]] = []
+    reopened.samples.selection_changed.connect(emitted.append)
+    placeholder.records = _samples(20)
+
+    assert reopened.samples.selected_ids == [2, 5]
+    assert emitted == []
+
+
 def test_a_source_of_its_own_clears_the_selection_with_a_new_row_ids_scope() -> None:
     source = ListSource(Sample, {"value": "Value"}, _samples(3), id_field="name")
     table = SourceTableView(source=source)
