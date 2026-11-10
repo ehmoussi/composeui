@@ -330,9 +330,9 @@ section covers what users see.
   nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
   the poller in, as it does the page's marker.
 - **Downloads.** `MainView.download` can run in a job's callback, which no response answers.
-  So the session keeps the file under a ticket (`webcore/downloads.py`), and every response, the
-  jobs poll and the full page name the tickets kept in `#cui-downloads`, until the page fetches
-  them: a response can be lost, and the page reloaded. `page.js` follows each ticket's link once.
+  So the session keeps the file under a ticket (`webcore/downloads.py`). The answers to events,
+  the fragments, the jobs poll and the full page name the tickets kept in `#cui-downloads`, until
+  the page fetches them: an answer can be lost, and the page reloaded. `page.js` follows each ticket's link once.
   `GET /download/{ticket}` only reads: the app's code made the file in a POST, never in this GET
   (see the `web-security` skill). Without the session, it answers 404, not a redirect, which
   would save the page as the file. The link's `download` attribute keeps the page when the file
