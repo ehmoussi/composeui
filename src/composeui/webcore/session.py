@@ -25,6 +25,7 @@ from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
 from composeui.core.view import UploadedFile
+from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.uploads import UploadRefusal
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
 
     from composeui.core.model import Model
     from composeui.core.view import MainView, Router
+    from composeui.webcore.downloads import Download, Downloads
 
 
 #: largest state file accepted from an upload, in bytes
@@ -394,6 +396,7 @@ class WebSession(RenderTarget):
                 body += page_marker(main_view.language, main_view.title, oob=True)
             if main_view.jobs.is_running != jobs_running:
                 body += jobs_poller(is_running=main_view.jobs.is_running, oob=True)
+            body += self._downloads_marker()
             if router is None or router.current_route == route:
                 return body, None
             return body, page_path(router.current_route)
@@ -450,7 +453,7 @@ class WebSession(RenderTarget):
                 return None
             pending = self.take_pending()
             pending.pop(widget_id, None)  # swapped in already
-            return renderer.to_html() + render_dirty(pending)
+            return renderer.to_html() + render_dirty(pending) + self._downloads_marker()
 
     def chart_image(
         self, widget_id: str, image_format: str, query: Mapping[str, str]
@@ -514,7 +517,24 @@ class WebSession(RenderTarget):
         with self.lock:
             pending = render_dirty(self.take_pending())
             self._remove_replaced_uploads()
-            return jobs_poller(is_running=self.main_view.jobs.is_running) + pending
+            downloads = self._downloads_marker()
+            return jobs_poller(is_running=self.main_view.jobs.is_running) + pending + downloads
+
+    @property
+    def _downloads(self) -> Downloads:
+        renderer = self.main_view.renderer
+        assert isinstance(renderer, WebMainRenderer)  # the session rendered it on the web
+        return renderer.downloads
+
+    def _downloads_marker(self) -> str:
+        """Name the files the page hasn't fetched yet, swapped in its own; none without any."""
+        tickets = self._downloads.tickets()
+        return downloads_marker(tickets, oob=True) if tickets else ""
+
+    def take_download(self, ticket: str) -> Download | None:
+        """Get the file of one of this session's tickets, once; None if it has none."""
+        with self.lock:
+            return self._downloads.take(ticket)
 
 
 #: a session id, as `SessionStore.create` makes them: also the name of its saved directory

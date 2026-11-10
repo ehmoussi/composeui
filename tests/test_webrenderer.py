@@ -115,8 +115,15 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
+from composeui.webcore import downloads as downloads_module
 from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
+from composeui.webcore.downloads import (
+    DOWNLOAD_TTL,
+    MAX_DOWNLOADS,
+    Download,
+    Downloads,
+)
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE, max_upload_body_size
@@ -185,6 +192,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, STEP_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
@@ -3917,6 +3925,7 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
             browser.get(icon_address),  # with a policy of its own
             browser.get("/widget/any/picture"),  # with a policy of its own once found
             browser.get("/reload?instance=any"),  # only a `--reload` server's
+            browser.get("/download/any"),  # no such file
             browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
 
@@ -3946,6 +3955,7 @@ def test_a_request_without_a_live_session_reloads_the_page(
             stale.get(f"/widget/{field_id}/csv", follow_redirects=False),
             stale.get(f"/widget/{field_id}/text", follow_redirects=False),
         ]
+        ticket = stale.get("/download/any", follow_redirects=False)
 
     for response in (posted, fetched, uploaded, picked, polled):
         assert response.status_code == 200
@@ -3954,6 +3964,8 @@ def test_a_request_without_a_live_session_reloads_the_page(
     for downloaded in downloads:
         assert downloaded.status_code == 303
         assert downloaded.headers["location"] == "/"
+    # followed by the page's script, never by the user: a redirect would save the page
+    assert ticket.status_code == 404
 
 
 def test_a_session_is_built_once_and_kept_across_reloads(app: _HelloApp) -> None:
@@ -5868,6 +5880,80 @@ def test_a_console_s_link_downloads_its_text() -> None:
 _DISPOSITION = re.compile(
     r"attachment; filename=\"([ !#-\[\]-~]*)\"; filename\*=UTF-8''([A-Za-z0-9!#$&+.^_`|~%-]*)"
 )
+
+
+def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path) -> None:
+    views: list[ReportMainView] = []
+
+    class ReportApp(WebApplication[ReportMainView]):
+        def setup_session(self, main_view: ReportMainView) -> None:
+            views.append(main_view)
+
+    def links(markup: str) -> list[tuple[str, str]]:
+        """Get the address and the name of each file the markup tells the page to fetch."""
+        found = _element(markup, "cui-downloads").descendants
+        return [(a["href"] or "", a["download"] or "") for tag, a in found if tag == "a"]
+
+    starlette_app = ReportApp(build_main_view=ReportMainView).create_starlette_app()
+    with _Browser(starlette_app) as client, _Browser(starlette_app) as other:
+        assert links(client.get("/").text) == []
+        other.get("/")
+        view = views[0]
+        export_id = _widget_id(view.export.renderer)
+
+        body = client.post(f"/widget/{export_id}", data={"event": "click"}).text
+        _swapped(body, "cui-downloads")
+        ((address, name),) = links(body)
+        assert name == "report é.csv"  # without the folder
+        # named again until fetched: the answer may be lost, the page reloaded
+        assert links(client.get(f"/widget/{export_id}").text) == [(address, name)]
+        assert links(client.get("/").text) == [(address, name)]
+        stolen = other.get(address)  # the ticket is its session's alone
+        fetched = client.get(address)
+        again = client.get(address)
+        after = client.get(f"/widget/{export_id}").text
+
+        report = tmp_path / "report.csv"
+        report.write_bytes(b"x\n")
+        view.report = report
+        client.post(f"/widget/{export_id}", data={"event": "click"})
+        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        from_file = client.get(address)
+        client.post(f"/widget/{export_id}", data={"event": "click"})
+        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        report.unlink()
+        gone = client.get(address)
+        view.download("notes", b"# Notes", "text/markdown")  # outside any request
+        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        notes = client.get(address)
+
+    assert stolen.status_code == 404
+    assert fetched.content == b"a,b\n1,2\n"
+    assert fetched.headers["content-type"] == "text/csv; charset=utf-8"
+    assert fetched.headers["content-disposition"].endswith("''report%20%C3%A9.csv")
+    assert again.status_code == 404
+    assert 'id="cui-downloads"' not in after
+    assert from_file.content == b"x\n"
+    assert gone.status_code == 404
+    assert notes.headers["content-type"] == "text/markdown; charset=utf-8"
+
+
+def test_a_session_keeps_its_newest_files_within_its_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [0.0]
+    kept = Downloads(clock=lambda: now[0])
+    oldest = kept.add(Download("oldest", b"", "text/plain"))
+    tickets = [kept.add(Download(str(i), b"", "text/plain")) for i in range(MAX_DOWNLOADS)]
+    assert kept.take(oldest) is None  # one past the count
+    now[0] = DOWNLOAD_TTL + 1
+    assert kept.tickets() == []
+    assert kept.take(tickets[-1]) is None
+    monkeypatch.setattr(downloads_module, "MAX_DOWNLOAD_BYTES", 4)
+    kept.add(Download("a", b"ab", "text/plain"))
+    kept.add(Download("b", b"ab", "text/plain"))
+    kept.add(Download("c", b"a", "text/plain"))  # 5 bytes: the oldest goes
+    assert [name for _, name in kept.tickets()] == ["b", "c"]
 
 
 def test_a_download_of_whatever_name_has_a_header_naming_it() -> None:

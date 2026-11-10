@@ -93,5 +93,6 @@
   "{current} of {count}": "{current} sur {count}",
   "No match": "Aucun résultat",
   "Saved the output to {name}.": "Sortie enregistrée dans {name}.",
-  "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}."
+  "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}.",
+  "Saved {name}.": "{name} enregistré."
 }
