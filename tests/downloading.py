@@ -1,4 +1,4 @@
-"""A main view giving its user a file it made, shared by the backends' tests of downloads."""
+"""A main view giving its user files it makes, shared by the backends' tests of downloads."""
 
 from __future__ import annotations
 
@@ -7,16 +7,21 @@ from typing import Union
 
 import attrs
 
-from composeui.core.view import OMIT, ButtonView, MainView, define_view
+from composeui.core.view import OMIT, ButtonView, DownloadView, MainView, define_view
 
 
 @define_view
 class ReportMainView(MainView):
-    """Export gives the report, under a name that a folder comes before."""
+    """Export gives the report at once, Export later in a job, under a name with a folder."""
 
     has_file_menu = False
 
-    export: ButtonView = attrs.field(factory=lambda: ButtonView(text="Export"))
+    export: DownloadView = attrs.field(
+        factory=lambda: DownloadView(text="Export", filename="out/../report é.csv")
+    )
+    later: DownloadView = attrs.field(
+        factory=lambda: DownloadView(text="Export later", filename="later.csv", in_job=True)
+    )
     #: changes the page without giving a file
     note: ButtonView = attrs.field(factory=lambda: ButtonView(text="Note"))
     # private: no widget shows it
@@ -26,17 +31,17 @@ class ReportMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.export.clicked.connect(self._export)
+        self.export.content = self.later.content = self._make_report
         self.note.clicked.connect(lambda: self.status_bar.show_message("Noted."))
 
     @property
     def report(self) -> Union[bytes, Path]:
-        """Get what Export gives: bytes, or the path of a file the app wrote."""
+        """Get what the buttons give: bytes, or the path of a file the app wrote."""
         return self._report
 
     @report.setter
     def report(self, report: Union[bytes, Path]) -> None:
         self._report = report
 
-    def _export(self) -> None:
-        self.download("out/../report é.csv", self._report)
+    def _make_report(self) -> Union[bytes, Path]:
+        return self._report

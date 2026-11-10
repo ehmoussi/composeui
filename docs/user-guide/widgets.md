@@ -412,6 +412,60 @@ What the "…" button opens:
   it replaces a file, and refuses a name that is not a file's, such as one with a separator, or a
   folder's. On the web, `path` is `None` for a path typed outside the roots.
 
+## Download
+
+A `DownloadView` is a button that gives the user a file that the app makes, for example a
+report. The click calls `content`, which returns the file's bytes. The web downloads the file in
+the browser. Qt and Textual ask where to save it.
+
+```python
+from composeui.core.view import DownloadView, LabelView, VerticalView, child, define_view
+
+
+@define_view
+class ResultsView(VerticalView):
+    summary: LabelView = child(LabelView, text="2 pipes")
+    export: DownloadView = child(DownloadView, text="Export CSV", filename="pipes.csv")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.export.content = self.pipes_csv
+
+    def pipes_csv(self) -> bytes:
+        return b"name,length\nFeed,12.5\nDrain,8.0\n"
+```
+
+- **`content`** makes the file. It returns the bytes, or the `Path` of a file that the app wrote.
+  ComposeUI reads that file when the user saves it, and never deletes it. While `content` is
+  `None`, a click gives nothing.
+- **`filename`** is the name offered for the file. Only its last part counts: a folder before it
+  is dropped.
+- **`media_type`** says what the file holds, such as `"text/csv"`. When it is `None`, the type
+  comes from the extension of `filename`.
+- **`in_job`** runs `content` in a [job](threads.md), for a file that takes a while to make. The
+  button stays disabled until the file is made. If `content` raises an exception, the status bar
+  says why. New and Open drop the job, and give no file.
+
+It is a [button](#buttons) too: its `variant` is `SECONDARY` by default, and `clicked` emits
+before the file is made. The state saves none of its fields: the app's code sets them.
+
+To give a file without a button, call the main view's `download(filename, content, media_type)`,
+for example from a job's `finished` callback. Call it on the main thread. A main view that no
+backend shows refuses it with a `RuntimeError`, so a test does not lose the file without knowing.
+
+What each backend does with the file:
+
+- **The web** downloads it in the browser: the page stays. The session keeps the file until the
+  page fetches it, for 10 minutes at most. It keeps 16 files at most, and 256 MiB of bytes. Past
+  these limits, the oldest file goes. Only the page of the same session can fetch it, and only
+  once.
+- **Qt** shows its save dialog, with `filename` as the name. Qt asks before it replaces a file.
+- **Textual** shows the save picker of `textual-fspicker`, with `filename` as the name.
+
+On Qt and Textual, a file that comes while a dialog is open waits for that dialog. The file is
+written beside the target first, then replaces it, so a failed write leaves the target as it was.
+The status bar says when the file is saved, or why it can't be.
+
 ## Slider
 
 A `SliderView` picks a whole number when the user drags a handle, for example a number of

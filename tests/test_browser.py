@@ -870,7 +870,7 @@ def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser
         context = browser.new_context(base_url=url)
         page = context.new_page()
         page.goto("/")
-        export = page.get_by_role("button", name="Export")
+        export = page.get_by_role("button", name="Export", exact=True)
         downloads = []
         for _ in range(2):
             with page.expect_download() as download:
@@ -881,11 +881,20 @@ def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser
                 page.get_by_role("button", name="Note").click()
             expect(page.get_by_text("Noted.")).to_be_visible()
 
-        assert [download.suggested_filename for download in downloads] == ["report é.csv"] * 2
+        # made in a job: the jobs poll names it
+        with page.expect_download() as download:
+            page.get_by_role("button", name="Export later").click()
+        downloads.append(download.value)
+
+        assert [download.suggested_filename for download in downloads] == [
+            "report é.csv",
+            "report é.csv",
+            "later.csv",
+        ]
         assert Path(downloads[0].path()).read_bytes() == b"a,b\n1,2\n"
         expect(export).to_be_visible()  # the page stays
         context.close()
-    assert len(fetched) == len(set(fetched)) == 2
+    assert len(fetched) == len(set(fetched)) == 3
 
 
 def test_save_right_after_typing_saves_the_value_typed(page: Page) -> None:

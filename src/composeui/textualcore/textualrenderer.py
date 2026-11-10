@@ -1657,6 +1657,20 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
         rendered_object.variant = _BUTTON_VARIANTS[value]
 
 
+class TextualDownloadRenderer(TextualButtonRenderer):
+    """A button giving a file: what makes the file is read on each click."""
+
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("filename", "media_type", "content", "in_job"), self._noop)
+        )
+
+    @staticmethod
+    def _noop(_view: ButtonViewLike, _rendered_object: ComposeButton, _value: object) -> None:
+        pass
+
+
 class TextualDialogButtonRenderer(TextualButtonRenderer):
     """A dialog's own button, e.g. Apply: its click goes through its dialog, which checks first."""
 
@@ -3480,6 +3494,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": TextualActionRenderer,
     "button": TextualButtonRenderer,
+    "download": TextualDownloadRenderer,
     "dialog_button": TextualDialogButtonRenderer,
     "chart": TextualChartRenderer,
     "drawing": TextualDrawingRenderer,

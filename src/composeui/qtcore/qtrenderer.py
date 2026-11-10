@@ -1406,6 +1406,20 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
         self._view.clicked.emit()
 
 
+class QtDownloadRenderer(QtButtonRenderer):
+    """A button giving a file: what makes the file is read on each click."""
+
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("filename", "media_type", "content", "in_job"), self._noop)
+        )
+
+    @staticmethod
+    def _noop(_view: ButtonViewLike, _rendered_object: QPushButton, _value: object) -> None:
+        pass
+
+
 class QtDialogButtonRenderer(QtButtonRenderer):
     """A dialog's own button, e.g. Apply: its click goes through its dialog, which checks first."""
 
@@ -3627,6 +3641,7 @@ class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
 RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "action": QtActionRenderer,
     "button": QtButtonRenderer,
+    "download": QtDownloadRenderer,
     "dialog_button": QtDialogButtonRenderer,
     "chart": QtChartRenderer,
     "drawing": QtDrawingRenderer,
