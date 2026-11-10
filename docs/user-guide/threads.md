@@ -38,6 +38,8 @@ class PipeMainView(MainView):
   ask for, as for any signal.
 - **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
   emits it when it changes, for example to disable a Run button.
+- **From another view.** A view that is not the main view runs its work with
+  `self.build_task(work)` (see [A task of another view](#a-task-of-another-view)).
 
 [`src/examples/taskview.py`](../../src/examples/taskview.py) runs 25 jobs at once, and cancels
 them.
