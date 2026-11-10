@@ -293,7 +293,7 @@ def table_csv(request: Request) -> Response:
 
 
 def download(request: Request) -> Response:
-    """Give a file that the app made (`MainView.download`), once, to the page of its session.
+    """Give a file that the app made (`MainView.download`) to the page of its session.
 
     A plain link, which the page's script follows: it only reads, and the ticket names the
     file. Without the session, not found: a redirect would save the page as the file.

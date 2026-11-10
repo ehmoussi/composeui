@@ -332,11 +332,12 @@ section covers what users see.
 - **Downloads.** `MainView.download` can run in a job's callback, which no response answers.
   So the session keeps the file under a ticket (`webcore/downloads.py`). The answers to events,
   the fragments, the jobs poll and the full page name the tickets kept in `#cui-downloads`, until
-  the page fetches them: an answer can be lost, and the page reloaded. `page.js` follows each ticket's link once.
-  `GET /download/{ticket}` only reads: the app's code made the file in a POST, never in this GET
-  (see the `web-security` skill). Without the session, it answers 404, not a redirect, which
-  would save the page as the file. The link's `download` attribute keeps the page when the file
-  is gone.
+  the page fetches them: an answer can be lost, and the page reloaded. `page.js` follows each
+  ticket's link once. The file stays a minute after its first fetch: a `HEAD`, or a browser's
+  download manager, asks again. `GET /download/{ticket}` only reads: the app's code made the file
+  in a POST, never in this GET (see the `web-security` skill). Without the session, it answers
+  404, not a redirect, which would save the page as the file. The link's `download` attribute
+  keeps the page when the file is gone.
 
 ### Tables on the web
 

@@ -456,11 +456,12 @@ backend shows refuses it with a `RuntimeError`, so a test does not lose the file
 What each backend does with the file:
 
 - **The web** downloads it in the browser: the page stays. The session keeps the file until the
-  page fetches it, for 10 minutes at most. It keeps 16 files at most, and 256 MiB of bytes. Past
-  these limits, the oldest file goes. Only the page of the same session can fetch it, and only
-  once.
+  page fetches it, for 10 minutes at most, then 1 minute more. It keeps 16 files at most, and
+  256 MiB of bytes. Past these limits, the oldest file goes. Only the page of the same session can
+  fetch it.
 - **Qt** shows its save dialog, with `filename` as the name. Qt asks before it replaces a file.
-- **Textual** shows the save picker of `textual-fspicker`, with `filename` as the name.
+- **Textual** shows the save picker of `textual-fspicker`, with `filename` as the name. It
+  replaces a file that exists without asking.
 
 On Qt and Textual, a file that comes while a dialog is open waits for that dialog. The file is
 written beside the target first, then replaces it, so a failed write leaves the target as it was.

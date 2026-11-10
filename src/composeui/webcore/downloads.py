@@ -2,15 +2,16 @@
 
 The app makes a file while it handles a request, or in a job's callback, which no request
 answers. So the session keeps the file under a ticket, a name that can't be guessed, and each
-answer to the page names the tickets kept (`downloads_marker`). The page's script fetches each
-ticket once, from `GET /download/{ticket}`, which only reads: the app's code never runs there.
+answer to the page names the tickets not fetched yet (`downloads_marker`). The page's script
+fetches each once, from `GET /download/{ticket}`, which only reads: the app's code never runs
+there.
 """
 
 from __future__ import annotations
 
 import secrets
 import time
-from typing import TYPE_CHECKING, Callable, NamedTuple, Union
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional, Union
 
 from markupsafe import Markup
 
@@ -24,6 +25,8 @@ MAX_DOWNLOADS = 16
 MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024
 #: seconds a file is kept: a page that never fetches it (closed, or its answer lost) frees it
 DOWNLOAD_TTL = 600.0
+#: seconds a file is kept once fetched: a HEAD, or a browser's download manager, asks again
+FETCHED_TTL = 60.0
 
 
 class Download(NamedTuple):
@@ -34,44 +37,66 @@ class Download(NamedTuple):
     media_type: str
 
 
+class _Kept(NamedTuple):
+    download: Download
+    #: when the app gave it, then when the page first fetched it
+    added: float
+    fetched: Optional[float] = None
+
+
 class Downloads:
-    """The files of one session not fetched yet, by ticket, the oldest first."""
+    """The files of one session, by ticket, the oldest first, until a while after their fetch."""
 
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
-        self._kept: dict[str, tuple[float, Download]] = {}
+        self._kept: dict[str, _Kept] = {}
 
     def add(self, download: Download) -> str:
         """Keep `download` and get its ticket; drop the oldest past the limits."""
         self._drop_expired()
         ticket = secrets.token_urlsafe(16)
-        self._kept[ticket] = (self._clock(), download)
+        self._kept[ticket] = _Kept(download, self._clock())
         while len(self._kept) > MAX_DOWNLOADS or self._size() > MAX_DOWNLOAD_BYTES:
             del self._kept[next(iter(self._kept))]
         return ticket
 
     def take(self, ticket: str) -> Download | None:
-        """Get the file of `ticket` and forget it: a ticket gives its file once."""
+        """Get the file of `ticket`; kept `FETCHED_TTL` from the first fetch, not named again."""
         self._drop_expired()
-        kept = self._kept.pop(ticket, None)
-        return None if kept is None else kept[1]
+        kept = self._kept.get(ticket)
+        if kept is None:
+            return None
+        if kept.fetched is None:
+            self._kept[ticket] = kept._replace(fetched=self._clock())
+        return kept.download
 
     def tickets(self) -> list[tuple[str, str]]:
-        """Get the ticket and the file name of each file kept, the oldest first."""
+        """Get the ticket and the file name of each file not fetched yet, the oldest first."""
         self._drop_expired()
-        return [(ticket, download.filename) for ticket, (_, download) in self._kept.items()]
+        return [
+            (ticket, kept.download.filename)
+            for ticket, kept in self._kept.items()
+            if kept.fetched is None
+        ]
 
     def _size(self) -> int:
         return sum(
-            len(download.content)
-            for _, download in self._kept.values()
-            if isinstance(download.content, bytes)
+            len(kept.download.content)
+            for kept in self._kept.values()
+            if isinstance(kept.download.content, bytes)
         )
 
     def _drop_expired(self) -> None:
         now = self._clock()
-        for ticket in [t for t, (added, _) in self._kept.items() if now - added > DOWNLOAD_TTL]:
+        expired = [ticket for ticket, kept in self._kept.items() if _is_expired(kept, now)]
+        for ticket in expired:
             del self._kept[ticket]
+
+
+def _is_expired(kept: _Kept, now: float) -> bool:
+    if kept.fetched is None:
+        return now - kept.added > DOWNLOAD_TTL
+    return now - kept.fetched > FETCHED_TTL
 
 
 def downloads_marker(tickets: list[tuple[str, str]], *, oob: bool = False) -> Markup:

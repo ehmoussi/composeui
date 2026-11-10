@@ -121,6 +121,7 @@ from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
 from composeui.webcore.downloads import (
     DOWNLOAD_TTL,
+    FETCHED_TTL,
     MAX_DOWNLOADS,
     Download,
     Downloads,
@@ -5884,7 +5885,7 @@ _DISPOSITION = re.compile(
 )
 
 
-def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path) -> None:
+def test_an_app_s_file_is_named_until_the_page_of_its_session_fetches_it(tmp_path: Path) -> None:
     views: list[ReportMainView] = []
 
     class ReportApp(WebApplication[ReportMainView]):
@@ -5911,8 +5912,9 @@ def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path
         assert links(client.get(f"/widget/{export_id}").text) == [(address, name)]
         assert links(client.get("/").text) == [(address, name)]
         stolen = other.get(address)  # the ticket is its session's alone
+        head = client.head(address)
         fetched = client.get(address)
-        again = client.get(address)
+        again = client.get(address)  # e.g. a download manager's: no longer named, still kept
         after = client.get(f"/widget/{export_id}").text
 
         report = tmp_path / "report.csv"
@@ -5932,10 +5934,9 @@ def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path
         nothing = client.post(f"/widget/{export_id}", data={"event": "click"}).text
 
     assert stolen.status_code == 404
-    assert fetched.content == b"a,b\n1,2\n"
-    assert fetched.headers["content-type"] == "text/csv; charset=utf-8"
+    assert head.status_code == 200
+    assert fetched.content == again.content == b"a,b\n1,2\n"
     assert fetched.headers["content-disposition"].endswith("''report%20%C3%A9.csv")
-    assert again.status_code == 404
     assert 'id="cui-downloads"' not in after
     assert from_file.content == b"x\n"
     assert gone.status_code == 404
@@ -6015,9 +6016,14 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
     oldest = kept.add(Download("oldest", b"", "text/plain"))
     tickets = [kept.add(Download(str(i), b"", "text/plain")) for i in range(MAX_DOWNLOADS)]
     assert kept.take(oldest) is None  # one past the count
+    fetched = tickets[-1]
+    assert kept.take(fetched) is not None
+    assert fetched not in dict(kept.tickets())  # no longer named
+    now[0] = FETCHED_TTL + 1
+    assert kept.take(fetched) is None  # gone a while after its fetch
+    assert len(kept.tickets()) == MAX_DOWNLOADS - 1  # the others still kept
     now[0] = DOWNLOAD_TTL + 1
     assert kept.tickets() == []
-    assert kept.take(tickets[-1]) is None
     monkeypatch.setattr(downloads_module, "MAX_DOWNLOAD_BYTES", 4)
     kept.add(Download("a", b"ab", "text/plain"))
     kept.add(Download("b", b"ab", "text/plain"))
