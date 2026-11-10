@@ -79,6 +79,7 @@ from composeui.core.view import (
     line_styles_after,
     lines_after,
     replace_cell,
+    save_download,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composechart import ComposeChart
@@ -3298,6 +3299,9 @@ class _ComposeUIApp(App[None]):
 class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
+        #: the downloads not asked yet: each waits for the save dialog of the one before
+        self._downloads: deque[tuple[str, bytes | Path]] = deque()
+        self._is_asking = False
         self._refresh_dispatcher.update(
             {
                 "title": self._refresh_title,
@@ -3419,6 +3423,31 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         # callback; the return type is verified manually via `_show`'s own annotation.
         result = cast("Path | None", app.call_from_thread(_show))  # type: ignore[arg-type]
         return self._apply_default_extension(result)
+
+    def download(self, filename: str, content: bytes | Path, _media_type: str) -> None:
+        # from a file action's worker too (`_ComposeUIApp.trigger`)
+        self.call_on_main_thread(functools.partial(self._queue_download, filename, content))
+
+    def _queue_download(self, filename: str, content: bytes | Path) -> None:
+        self._downloads.append((filename, content))
+        if not self._is_asking:
+            self._ask_download()
+
+    def _ask_download(self) -> None:
+        """Ask where to save the oldest download waiting, if any."""
+        app = self._rendered_object
+        self._is_asking = len(self._downloads) > 0 and app is not None and app.is_running
+        if self._is_asking:
+            assert app is not None
+            name, content = self._downloads.popleft()
+            app.push_screen(
+                FileSave(default_file=name), functools.partial(self._save_download, content)
+            )
+
+    def _save_download(self, content: bytes | Path, path: Path | None) -> None:
+        if path is not None:
+            save_download(self._view, path, content)
+        self._ask_download()
 
     def _build_filters(self) -> Filters:
         return Filters(

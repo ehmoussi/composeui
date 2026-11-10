@@ -153,6 +153,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.downloading import ReportMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
 from tests.folderform import StudyMainView
@@ -3084,6 +3085,38 @@ async def test_its_key_saves_the_chart_s_image(
         await pilot.pause()
 
     assert _names(tmp_path) == saved
+
+
+@pytest.mark.asyncio
+async def test_an_app_s_files_are_saved_where_the_user_picks_one_dialog_at_a_time(
+    tmp_path: Path,
+) -> None:
+    view = ReportMainView()
+    view.status_bar.timeout = 0  # no timer clearing the message after the test
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def asked() -> list[str]:
+        """Get the name that each save dialog open offers."""
+        assert app is not None
+        return [screen.query_one(Input).value for screen in app.screen_stack[1:]]
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.click(_widget(view.export))
+        view.download("second.txt", b"second")  # while the first dialog is open
+        await pilot.pause()
+        assert asked() == ["report é.csv"]
+        app.screen.dismiss(tmp_path / "a.csv")  # as the dialog's Save button does
+        await pilot.pause()
+        assert asked() == ["second.txt"]
+        app.screen.dismiss(None)  # Cancel
+        await pilot.pause()
+        assert asked() == []
+
+    assert _names(tmp_path) == ["a.csv"]  # the second cancelled
+    assert view.status_bar.message == "Saved a.csv."
 
 
 @pytest.mark.asyncio

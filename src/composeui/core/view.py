@@ -1665,6 +1665,29 @@ class MainView(View):
             self.file_view.filepath = self.renderer.save_file()
         return self.file_view.filepath
 
+    def download(
+        self, filename: str, content: Union[bytes, Path], media_type: Optional[str] = None
+    ) -> None:
+        """Give the user a file that the app made, e.g. a report, to save where they choose.
+
+        `content` is the file's bytes, or the path of a file that the app wrote, read when
+        the user saves it and never deleted. `filename` names the file; `media_type` says
+        what it holds, guessed from `filename` when None. The web downloads it in the
+        browser. Qt and Textual ask where to save it, then write it, and the status bar says
+        how it went. Call it on the main thread, e.g. from a job's `finished` callback.
+        Raises `RuntimeError` while no backend shows the main view: nobody would get the file.
+        """
+        _check_main_thread("MainView.download")
+        renderer = self.renderer
+        if not isinstance(renderer, MainRenderer):
+            msg = f"Can't download {filename!r}: no backend shows the main view"
+            raise RuntimeError(msg)  # noqa: TRY004 (not a wrong argument)
+        # a name, never a folder: the browser or the dialog picks the folder
+        name = re.split(r"[\\/]", filename)[-1] or "download"
+        if media_type is None:
+            media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        renderer.download(name, content, media_type)
+
     def render(self, renderer_type: RendererType) -> None:
         super().render(renderer_type)
         if self.renderer is not None:
@@ -5469,6 +5492,29 @@ def _publish(partial: Path, path: Path) -> None:
     if path.exists():
         shutil.copymode(path, partial)
     partial.replace(path)
+
+
+def save_download(main_view: MainView, path: Path, content: Union[bytes, Path]) -> None:
+    """Write a download's `content` to `path`, which the user chose; the status bar says how.
+
+    For a backend that asks where to save a `MainView.download`. A failure leaves `path` as
+    it was.
+    """
+    target = path.resolve()
+    partial = _partial_path(target)
+    try:
+        if isinstance(content, Path):
+            shutil.copyfile(content, partial)
+        else:
+            partial.write_bytes(content)
+        _publish(partial, target)
+    except OSError as error:
+        failed = main_view.tr("Can't save to {name}: {error}.")
+        main_view.status_bar.show_message(failed.format(name=path.name, error=error))
+        return
+    finally:
+        partial.unlink(missing_ok=True)
+    main_view.status_bar.show_message(main_view.tr("Saved {name}.").format(name=path.name))
 
 
 def _write_csv(job: Optional[Job[bool]], chunks: Iterator[str], path: Path) -> bool:

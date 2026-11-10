@@ -148,6 +148,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.downloading import ReportMainView
 from tests.expander import RecordMainView
 from tests.filters import FiltersMainView
 from tests.folderform import StudyMainView
@@ -592,6 +593,43 @@ def test_a_console_s_save_button_saves_its_text_where_the_user_picks(
         assert (tmp_path / picked).read_text(encoding="utf-8") == "Ready <ok>\n"
     else:  # cancelled
         assert list(tmp_path.iterdir()) == []
+
+
+def test_an_app_s_file_is_saved_where_the_user_picks_one_dialog_at_a_time(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = ReportMainView()
+    view.status_bar.timeout = 0  # no timer clearing the message after the test
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    answers = [tmp_path / "a.csv", None, tmp_path / "missing" / "b.csv", tmp_path / "c.csv"]
+    asked: list[str] = []
+
+    def get_save_file_name(_parent: QWidget, _caption: str, name: str) -> tuple[str, str]:
+        asked.append(name)
+        if len(asked) == 1:  # e.g. a job's callback, in the dialog's own event loop
+            view.download("second.txt", b"second")
+            assert asked == ["report é.csv"]  # asked once this dialog is closed
+        answer = answers[len(asked) - 1]
+        return ("" if answer is None else str(answer)), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    export = _widget(view.export)
+
+    qtbot.mouseClick(export, Qt.MouseButton.LeftButton)
+    assert asked == ["report é.csv", "second.txt"]
+    assert sorted(tmp_path.iterdir()) == [tmp_path / "a.csv"]  # the second cancelled
+    assert (tmp_path / "a.csv").read_bytes() == b"a,b\n1,2\n"
+    assert view.status_bar.message == "Saved a.csv."
+
+    qtbot.mouseClick(export, Qt.MouseButton.LeftButton)  # into a folder that doesn't exist
+    assert view.status_bar.message.startswith("Can't save to b.csv: ")
+    assert sorted(tmp_path.iterdir()) == [tmp_path / "a.csv"]
+
+    view.report = tmp_path / "a.csv"  # a file the app wrote: copied, and kept
+    qtbot.mouseClick(export, Qt.MouseButton.LeftButton)
+    assert (tmp_path / "c.csv").read_bytes() == b"a,b\n1,2\n"
+    assert sorted(tmp_path.iterdir()) == [tmp_path / "a.csv", tmp_path / "c.csv"]
 
 
 def test_the_window_shows_the_app_s_icon_composeui_s_by_default(

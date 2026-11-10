@@ -164,6 +164,10 @@ class MainRenderer(Renderer[TView, TObject]):
     def save_file(self) -> Path | None:
         """Ask the user for a file path to save to, blocking until answered."""
 
+    @abstractmethod
+    def download(self, filename: str, content: bytes | Path, media_type: str) -> None:
+        """Give the user the file `filename`, as `MainView.download` says; don't wait."""
+
 
 class RendererContainer(Generic[TView]):
     """The renderers of a view shown by several widgets, e.g. a form row's label and field."""

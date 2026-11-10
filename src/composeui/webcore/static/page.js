@@ -688,6 +688,17 @@ function openDialogs() {
     },
   );
 }
+/* fetches each file the app gives (`#cui-downloads`), once per ticket: the server names a
+   ticket in each answer until it's fetched, as an answer can be lost. The link's `download`
+   keeps the page if the file is gone: the browser shows a failed download instead. */
+var startedDownloads = new Set();
+function startDownloads() {
+  document.querySelectorAll("#cui-downloads a[data-ticket]").forEach(function (link) {
+    if (startedDownloads.has(link.dataset.ticket)) return;
+    startedDownloads.add(link.dataset.ticket);
+    link.click();
+  });
+}
 
 /* what the markup can't say itself: the page's policy (`headers.py`) runs no inline
    handler, and no code htmx would evaluate (`hx-on`, `js:` values, trigger filters). The
@@ -1421,6 +1432,7 @@ document.addEventListener("beforetoggle", placeHelp, true);
 document.addEventListener("toggle", placeHelp, true);
 document.addEventListener("DOMContentLoaded", function () {
   openDialogs();
+  startDownloads();
   syncCharts();
   syncMaps();
   loadCalendars();
@@ -1430,6 +1442,7 @@ document.addEventListener("DOMContentLoaded", function () {
     syncInvalidFields();
     syncSidebarToggles();
     openDialogs();
+    startDownloads();
     syncPage();
     syncCharts();
     syncMaps();

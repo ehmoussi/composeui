@@ -129,6 +129,7 @@ from composeui.core.view import (
     walk_tree,
     with_extension,
 )
+from composeui.webcore.downloads import Download, Downloads, downloads_marker
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
 from composeui.webcore.serverfiles import (
@@ -6599,6 +6600,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         super().__init__(view)
         #: set by `MainView.close()` (the Exit action); the route then ends the session
         self.is_closed = False
+        #: the files `MainView.download` gave, until the page fetches them
+        self.downloads = Downloads()
         self._target: RenderTarget | None = None
         self._refresh_dispatcher.update(
             dict.fromkeys(
@@ -6717,6 +6720,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             max_upload_size=self._view.max_upload_size,
             session_tag=session_tag,
             icon=self._app_icon_url(),
+            downloads=downloads_marker(self.downloads.tickets()),
         )
 
     def _app_icon_url(self) -> str | None:
@@ -6770,6 +6774,10 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 
     def save_file(self) -> Path | None:
         return None  # see `open_file`; saving is a browser download (M7)
+
+    def download(self, filename: str, content: bytes | Path, media_type: str) -> None:
+        # the session's next answer names it (`downloads_marker`)
+        self.downloads.add(Download(filename, content, media_type))
 
     @staticmethod
     def _noop(_view: MainView, _rendered_object: str, _value: Any) -> None:

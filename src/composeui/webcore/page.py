@@ -46,6 +46,7 @@ $content
 </div>
 $page_marker
 $pollers
+$downloads
 <form id="$save_form" method="post" action="/state/download" hidden>
 <input type="hidden" name="page" autocomplete="off">
 <input type="hidden" name="post" autocomplete="off">
@@ -144,12 +145,14 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
     max_upload_size: int,
     session_tag: str = "",
     icon: str | None = None,
+    downloads: str = "",
 ) -> str:
     """Get the app's page showing `content`, with the browser tab's `icon` at its address.
 
     `pollers` are the elements asking the server for news: `jobs_poller`'s, and
     `reload_poller`'s. The page's script sends no file larger than `max_upload_size`, and
     `session_tag` with its requests (`SESSION_TAG_HEADER`, or Save's `SESSION_TAG_FIELD`).
+    `downloads` names the files the page fetches (`downloads.downloads_marker`).
     """
     return _PAGE.substitute(
         {
@@ -159,6 +162,7 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
             "language": escape(language),
             "page_marker": page_marker(language, title),
             "pollers": pollers,
+            "downloads": downloads,
             "max_upload_size": max_upload_size,
             "session_tag": escape(session_tag),
             "session_field": SESSION_TAG_FIELD,

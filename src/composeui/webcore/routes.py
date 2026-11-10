@@ -292,6 +292,25 @@ def table_csv(request: Request) -> Response:
     return StreamingResponse(chunks, media_type="text/csv; charset=utf-8", headers=headers)
 
 
+def download(request: Request) -> Response:
+    """Give a file that the app made (`MainView.download`), once, to the page of its session.
+
+    A plain link, which the page's script follows: it only reads, and the ticket names the
+    file. Not found without the session, as a link never followed: a redirect would save
+    the page as the file.
+    """
+    session = _session(request)
+    found = None if session is None else session.take_download(request.path_params["ticket"])
+    if found is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    headers = {**_NO_STORE, "Content-Disposition": _attachment(found.filename)}
+    if isinstance(found.content, bytes):
+        return Response(found.content, media_type=found.media_type, headers=headers)
+    if not found.content.is_file():  # the app's file is gone
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    return FileResponse(found.content, media_type=found.media_type, headers=headers)
+
+
 def console_text(request: Request) -> Response:
     """Download a console's text, as a plain link does: it only reads."""
     session = _session(request)

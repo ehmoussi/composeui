@@ -44,6 +44,7 @@ from composeui.core.view import (
 from examples.studyinputs import INPUT_FILE, OUTPUT_FOLDER, PATH, StudyInputsMainView
 from tests.buildings import SITE
 from tests.console import RunMainView
+from tests.downloading import ReportMainView
 from tests.pages import InputsPage
 from tests.splitter import StudySplitter
 from tests.tabs import PipeTabs
@@ -545,3 +546,9 @@ def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_pat
     path = tmp_path / "notes.unknowntype"
     path.write_bytes(b"12345")
     assert UploadedFile.of_path(path) == UploadedFile("notes.unknowntype", 5, "", path)
+
+
+def test_a_download_without_a_backend_showing_the_main_view_is_refused() -> None:
+    # nobody would get the file: an app's test would pass with a download lost
+    with pytest.raises(RuntimeError, match="no backend shows the main view"):
+        ReportMainView().download("report.csv", b"a,b\n")

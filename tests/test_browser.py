@@ -17,7 +17,7 @@ import struct
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 import pytest
@@ -55,6 +55,7 @@ from tests.charts import ChartPagesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
+from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -93,6 +94,7 @@ if TYPE_CHECKING:
     )
     from playwright.sync_api import Request as PageRequest
     from starlette.requests import Request
+    from starlette.types import Receive, Scope, Send
 
 pytestmark = pytest.mark.browser
 
@@ -853,6 +855,37 @@ def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:
     assert download.suggested_filename.endswith(".hello")
     assert "Alice" in Path(download.path()).read_text()
     expect(name).to_have_value("Alice")
+
+
+def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser) -> None:
+    app = WebApplication(build_main_view=ReportMainView).create_starlette_app()
+    fetched: list[str] = []
+
+    async def recording(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"].startswith("/download/"):
+            fetched.append(scope["path"])
+        await app(scope, receive, send)
+
+    with _serve(cast("Starlette", recording)) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        export = page.get_by_role("button", name="Export")
+        downloads = []
+        for _ in range(2):
+            with page.expect_download() as download:
+                export.click()
+            downloads.append(download.value)
+            # the fetched file's link stays in the page, which changes: never followed again
+            with _posted(page):
+                page.get_by_role("button", name="Note").click()
+            expect(page.get_by_text("Noted.")).to_be_visible()
+
+        assert [download.suggested_filename for download in downloads] == ["report é.csv"] * 2
+        assert Path(downloads[0].path()).read_bytes() == b"a,b\n1,2\n"
+        expect(export).to_be_visible()  # the page stays
+        context.close()
+    assert len(fetched) == len(set(fetched)) == 2
 
 
 def test_save_right_after_typing_saves_the_value_typed(page: Page) -> None:

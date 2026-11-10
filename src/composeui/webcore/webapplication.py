@@ -42,6 +42,7 @@ from composeui.webcore.origin import SameOriginMiddleware
 from composeui.webcore.routes import (
     chart_image,
     console_text,
+    download,
     duplicate_post,
     homepage,
     icon,
@@ -147,6 +148,7 @@ def create_starlette_app(
             Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
             Route("/widget/{widget_id}/csv", table_csv, methods=["GET"]),
             Route("/widget/{widget_id}/text", console_text, methods=["GET"]),
+            Route("/download/{ticket}", download, methods=["GET"]),
             Route("/state", state_download, methods=["GET"]),
             Route("/state", state_upload, methods=["POST"]),
             Route("/state/download", state_save, methods=["POST"]),
