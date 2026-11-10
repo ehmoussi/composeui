@@ -415,8 +415,11 @@ What the "…" button opens:
 ## Download
 
 A `DownloadView` is a button that gives the user a file that the app makes, for example a
-report. The click calls `content`, which returns the file's bytes. The web downloads the file in
-the browser. Qt and Textual ask where to save it.
+report. The web downloads the file in the browser. Qt and Textual ask where to save it.
+
+`content` is a function of the app that makes the file. ComposeUI calls it at each click, so the
+file holds what the app shows at that moment: rows that the user added after the app started are
+in it. Set `content` to the function, not to its result:
 
 ```python
 from composeui.core.view import DownloadView, LabelView, VerticalView, child, define_view
@@ -467,6 +470,53 @@ What each backend does with the file:
 On Qt and Textual, a file that comes while a dialog is open waits for that dialog. The file is
 written beside the target first, then replaces it, so a failed write leaves the target as it was.
 The status bar says when the file is saved, or why it can't be.
+
+### Large files
+
+`content` returns the whole file: bytes, or a `Path`. It cannot return a generator that gives
+the file in pieces. For a file too large to hold in memory, write it to a file in a job, and
+return its `Path`:
+
+```python
+import csv
+from pathlib import Path
+
+from composeui.core.view import DownloadView, TableView, VerticalView, child, define_view
+
+#: where the app writes its exports
+EXPORTS = Path("exports")
+
+
+@define_view
+class RunsView(VerticalView):
+    runs: TableView = child(TableView, headers=["Run", "Result"])
+    export: DownloadView = child(
+        DownloadView, text="Export CSV", filename="runs.csv", in_job=True
+    )
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.export.content = self.runs_csv
+
+    def runs_csv(self) -> Path:
+        EXPORTS.mkdir(exist_ok=True)
+        path = EXPORTS / "runs.csv"
+        with path.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            writer.writerow(self.runs.headers)
+            writer.writerows(self.runs.rows)
+        return path
+```
+
+The job writes the file on the disk, in a thread of its own. Then the web sends the file from the
+disk in pieces, and Qt and Textual copy it: it is never whole in memory. The user's download
+starts once the file is written. ComposeUI never deletes the file: the app writes it in a folder
+of its own, and overwrites it at the next export.
+
+A generator would not make the file at the click. In Python, calling a generator runs none of its
+code: its code runs only as its pieces are read. On the web, the browser reads them when it
+fetches the file, after the click, while the user goes on working, and maybe twice. The file would
+then not hold what the app showed at the click. So ComposeUI makes the whole file at the click, or
+in its job. The [technical guide](../technical-guide.md#downloads-on-the-web) explains the design.
 
 ## Slider
 

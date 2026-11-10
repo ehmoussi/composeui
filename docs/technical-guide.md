@@ -22,6 +22,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [Tables on the web](#tables-on-the-web)
   - [Order and sessions](#order-and-sessions)
   - [Uploads and Open](#uploads-and-open)
+  - [Downloads on the web](#downloads-on-the-web)
   - [Pages, tabs, and dialogs](#pages-tabs-and-dialogs)
   - [The header, icons, and images](#the-header-icons-and-images)
   - [Testing the web backend](#testing-the-web-backend)
@@ -329,15 +330,7 @@ section covers what users see.
   `cui-jobs` poller fetches `/jobs` every `JOBS_POLL_MS`, which brings them. The server pushes
   nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
   the poller in, as it does the page's marker.
-- **Downloads.** `MainView.download` can run in a job's callback, which no response answers.
-  So the session keeps the file under a ticket (`webcore/downloads.py`). The answers to events,
-  the fragments, the jobs poll and the full page name the tickets kept in `#cui-downloads`, until
-  the page fetches them: an answer can be lost, and the page reloaded. `page.js` follows each
-  ticket's link once. The file stays a minute after its first fetch: a `HEAD`, or a browser's
-  download manager, asks again. `GET /download/{ticket}` only reads: the app's code made the file
-  in a POST, never in this GET (see the `web-security` skill). Without the session, it answers
-  404, not a redirect, which would save the page as the file. The link's `download` attribute
-  keeps the page when the file is gone.
+- **Downloads** go through a ticket: see [Downloads on the web](#downloads-on-the-web).
 
 ### Tables on the web
 
@@ -397,6 +390,80 @@ section covers what users see.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a bad
   file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.
+
+### Downloads on the web
+
+A browser downloads a file only from a GET: htmx reads the answer to a POST, and puts it in the
+page. The question is where the app's `content` runs. The design keeps it out of every GET.
+
+**The steps.**
+
+1. The click on a `DownloadView` is an htmx POST, like any other click. `content` runs there, and
+   `MainView.download` gives its result to `WebMainRenderer.download`.
+2. The session keeps the file under a ticket: 128 random bits (`webcore/downloads.py`).
+3. The answers to events, the fragments, the jobs poll, and the full page name the tickets not
+   fetched yet, as links in `#cui-downloads` (`downloads_marker`).
+4. `page.js` follows each ticket's link once (`startDownloads`): `GET /download/{ticket}`.
+5. That GET hands over the bytes or the file kept. It runs none of the app's code.
+
+**Why the click is a POST.** A GET that ran the app's code would have two failures:
+
+- **Another site can send it.** The session's cookie (`SameSite=Lax`) goes with a top-level GET
+  from any site, and widget ids come from `id()`, so they can be guessed. The other site cannot
+  read the file, but the app's code runs without the user's click. That code can write, for
+  example mark a study as exported. `SameOriginMiddleware` refuses such requests for unsafe
+  methods only (see the `web-security` skill).
+- **It overtakes the posts sent before it.** The page numbers its posts, and the server runs them
+  in that order (`order.py`). A GET has no number. If the user edits a cell, then clicks at once,
+  `content` can run before the edit, and the file misses it. Save had this bug: its form carries
+  its number for this reason.
+
+A POST has neither failure, with no code of its own: `SameOriginMiddleware` and `PostOrder` handle
+it.
+
+**Why a ticket.** A job (`in_job`) and `MainView.download` called from the app's code give a file
+that no request answers: a job's callback runs on the job's thread. So the file waits in the
+session until the page asks for it. The click uses the same path: one mechanism for the three
+cases.
+
+**The ticket's states.**
+
+| State | First fetch | 10 minutes pass (`DOWNLOAD_TTL`) | A file past the limits | The session ends |
+| --- | --- | --- | --- | --- |
+| Not fetched | Send it, and stop naming it | Drop it | Drop the oldest | Freed with the session |
+| Fetched | Send it again | Dropped 1 minute after the fetch (`FETCHED_TTL`) | Drop the oldest | Freed with the session |
+
+- **Named until fetched.** An answer can be lost: a duplicate post answered with 204, or a page
+  reloaded. So every answer names the tickets not fetched yet, and `page.js` remembers the ones
+  that it followed.
+- **Kept a minute after the fetch.** A `HEAD` (which Starlette answers from the GET's route), or a
+  browser's download manager, asks again.
+- **The limits.** A session keeps at most `MAX_DOWNLOADS` files, and `MAX_DOWNLOAD_BYTES` of bytes
+  in memory. A `Path` stays on the disk, and does not count.
+- **The answers.** Without the session, the GET answers 404, not a redirect: a redirect would save
+  the page as the file. The link's `download` attribute keeps the page when the file is gone, so
+  the browser shows a failed download.
+
+**Why no streaming.** Calling a generator runs none of its code: its code runs as the answer reads
+its pieces, in the GET. With a ticket, that GET comes after the click, on another thread, while
+the user's posts change the views. A generator can be read only once, and it holds what it opened
+until its ticket expires. A `Path` covers the need for a large file: `FileResponse` sends it from
+the disk in pieces.
+
+**The GET that was rejected.** A click without `in_job` could be a GET that streams, safely, with
+six rules:
+
+1. The same origin check as the posts (`is_same_origin`).
+2. Its number in the page's posts, which the server waits for.
+3. No `HEAD` and no prefetch (`Sec-Purpose`); a `<button>`, so that the browser has no link to
+   prefetch.
+4. The check of `takes_events`.
+5. Each piece read under the session's lock, as `table_csv` does.
+6. The connection broken on an error in the middle.
+
+It would still need the ticket for `in_job` and `MainView.download`: two mechanisms to save one
+round trip. Streaming would also work only without `in_job`, and a generator could read the views
+before and after an edit in one file. So `content` returns bytes or a `Path`.
 
 ### Pages, tabs, and dialogs
 

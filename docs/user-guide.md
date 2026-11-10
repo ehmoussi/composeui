@@ -60,6 +60,7 @@ not in the package: run them from a clone of the repository (see
   - [Folder path input](user-guide/widgets.md#folder-path-input)
   - [Save path input](user-guide/widgets.md#save-path-input)
   - [Download](user-guide/widgets.md#download)
+    - [Large files](user-guide/widgets.md#large-files)
   - [Slider](user-guide/widgets.md#slider)
     - [Decimal slider](user-guide/widgets.md#decimal-slider)
   - [Progress bar](user-guide/widgets.md#progress-bar)
