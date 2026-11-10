@@ -123,6 +123,7 @@ __all__ = [
     "DialogView",
     "DimensionShape",
     "DownloadView",
+    "DownloadedFile",
     "DrawingView",
     "EditRefusedError",
     "ExpanderView",
@@ -1418,6 +1419,10 @@ class MainView(View):
     # study_toolbar: StudyToolbar = StudyToolbar(title="study")
     # a file dialog's last answer, not study data: never saved, loaded or reset
     file_view: FileView = attrs.field(factory=FileView, metadata={OMIT: True})
+    #: what `download` gave without a backend, for a test to read
+    _downloads: list[DownloadedFile] = attrs.field(
+        factory=list, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
     #: the question before `write_file` replaces a file that exists
@@ -1676,18 +1681,23 @@ class MainView(View):
         what it holds, guessed from `filename` when None. The web downloads it in the
         browser. Qt and Textual ask where to save it, then write it, and the status bar says
         how it went. Call it on the main thread, e.g. from a job's `finished` callback.
-        Raises `RuntimeError` while no backend shows the main view: nobody would get the file.
+        While no backend shows the main view, e.g. in a test, `downloads` keeps the file.
         """
         _check_main_thread("MainView.download")
-        renderer = self.renderer
-        if not isinstance(renderer, MainRenderer):
-            msg = f"Can't download {filename!r}: no backend shows the main view"
-            raise RuntimeError(msg)  # noqa: TRY004 (not a wrong argument)
         # a name, never a folder: the browser or the dialog picks the folder
         name = re.split(r"[\\/]", filename)[-1] or "download"
         if media_type is None:
             media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
-        renderer.download(name, content, media_type)
+        file = DownloadedFile(name, content, media_type)
+        if isinstance(self.renderer, MainRenderer):
+            self.renderer.download(file)
+        else:
+            self._downloads.append(file)
+
+    @property
+    def downloads(self) -> Sequence[DownloadedFile]:
+        """Get the files `download` gave while no backend showed the main view, e.g. in a test."""
+        return self._downloads
 
     def render(self, renderer_type: RendererType) -> None:
         super().render(renderer_type)
@@ -2102,6 +2112,18 @@ class FilePathInputMixin(PathInputMixin):
         metadata={UI_TEXT: True},
     )
     reload_clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+
+@attrs.frozen
+class DownloadedFile:
+    """A file that the app gives its user (`MainView.download`): its name, content and type."""
+
+    #: the name offered for the file, without a folder
+    filename: str
+    #: the file's bytes, or the path of a file that the app wrote
+    content: Union[bytes, Path]
+    #: what it holds, such as ``text/csv``
+    media_type: str
 
 
 @attrs.frozen

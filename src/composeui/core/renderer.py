@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Mapping
     from pathlib import Path
 
+    from composeui.core.view import DownloadedFile
+
 __all__ = [
     "MainRenderer",
     "MissingRefreshAttributeFunctionError",
@@ -165,8 +167,8 @@ class MainRenderer(Renderer[TView, TObject]):
         """Ask the user for a file path to save to, blocking until answered."""
 
     @abstractmethod
-    def download(self, filename: str, content: bytes | Path, media_type: str) -> None:
-        """Give the user the file `filename`, as `MainView.download` says; don't wait."""
+    def download(self, file: DownloadedFile) -> None:
+        """Give the user `file`, as `MainView.download` says; don't wait."""
 
 
 class RendererContainer(Generic[TView]):

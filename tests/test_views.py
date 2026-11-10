@@ -548,7 +548,14 @@ def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_pat
     assert UploadedFile.of_path(path) == UploadedFile("notes.unknowntype", 5, "", path)
 
 
-def test_a_download_without_a_backend_showing_the_main_view_is_refused() -> None:
-    # nobody would get the file: an app's test would pass with a download lost
-    with pytest.raises(RuntimeError, match="no backend shows the main view"):
-        ReportMainView().download("report.csv", b"a,b\n")
+def test_an_app_s_test_reads_the_files_it_gives_without_a_backend() -> None:
+    app = Application(build_main_view=ReportMainView)
+
+    app.main_view.export.clicked.emit()
+    app.main_view.later.clicked.emit()
+    app.main_view.jobs.wait()  # the job's file then given, on the test's thread
+
+    assert [(file.filename, file.content) for file in app.main_view.downloads] == [
+        ("report é.csv", b"a,b\n1,2\n"),  # without the folder
+        ("later.csv", b"a,b\n1,2\n"),
+    ]

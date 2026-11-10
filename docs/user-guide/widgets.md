@@ -450,8 +450,9 @@ It is a [button](#buttons) too: its `variant` is `SECONDARY` by default, and `cl
 before the file is made. The state saves none of its fields: the app's code sets them.
 
 To give a file without a button, call the main view's `download(filename, content, media_type)`,
-for example from a job's `finished` callback. Call it on the main thread. A main view that no
-backend shows refuses it with a `RuntimeError`, so a test does not lose the file without knowing.
+for example from a job's `finished` callback. Call it on the main thread. While no backend shows
+the main view, as in a test, `main_view.downloads` keeps the files (see
+[Test a download](testing.md#test-a-download)).
 
 What each backend does with the file:
 

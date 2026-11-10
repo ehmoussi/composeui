@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import secrets
 import time
-from typing import TYPE_CHECKING, Callable, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional
 
 from markupsafe import Markup
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from composeui.core.view import DownloadedFile
 
 #: the most files kept for one session: the oldest goes past it
 MAX_DOWNLOADS = 16
@@ -29,16 +29,8 @@ DOWNLOAD_TTL = 600.0
 FETCHED_TTL = 60.0
 
 
-class Download(NamedTuple):
-    """A file that the app gives its user: its name, its content and its media type."""
-
-    filename: str
-    content: Union[bytes, Path]
-    media_type: str
-
-
 class _Kept(NamedTuple):
-    download: Download
+    download: DownloadedFile
     #: when the app gave it, then when the page first fetched it
     added: float
     fetched: Optional[float] = None
@@ -51,7 +43,7 @@ class Downloads:
         self._clock = clock
         self._kept: dict[str, _Kept] = {}
 
-    def add(self, download: Download) -> str:
+    def add(self, download: DownloadedFile) -> str:
         """Keep `download` and get its ticket; drop the oldest past the limits."""
         self._drop_expired()
         ticket = secrets.token_urlsafe(16)
@@ -60,7 +52,7 @@ class Downloads:
             del self._kept[next(iter(self._kept))]
         return ticket
 
-    def take(self, ticket: str) -> Download | None:
+    def take(self, ticket: str) -> DownloadedFile | None:
         """Get the file of `ticket`; kept `FETCHED_TTL` from the first fetch, not named again."""
         self._drop_expired()
         kept = self._kept.get(ticket)
