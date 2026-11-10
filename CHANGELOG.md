@@ -11,7 +11,8 @@ The notable changes of each release of ComposeUI. The format follows
 - `DownloadView` gives the user a file that the app makes on a click, on Qt, Textual and the web.
   `MainView.download` gives one from the app's code, for example after a job. The web downloads
   the file in the browser. Qt and Textual ask where to save it. With `in_job`, the file is made in
-  a job, and the button is disabled meanwhile.
+  a job, and the button is disabled meanwhile. Without a backend, as in a test,
+  `MainView.downloads` keeps the files given.
 - `View.build_task(work)` builds a task in any view, such as a panel or a list's row, without the
   main view. The main view's jobs run it. When a `ListView` removes a row, the run of the row's
   task is canceled, and its outcome reaches no view.

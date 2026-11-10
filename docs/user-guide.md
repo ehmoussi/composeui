@@ -143,6 +143,7 @@ not in the package: run them from a clone of the repository (see
   - [Test a component](user-guide/testing.md#test-a-component)
   - [Test a form](user-guide/testing.md#test-a-form)
   - [Test the jobs](user-guide/testing.md#test-the-jobs)
+  - [Test a download](user-guide/testing.md#test-a-download)
   - [Test with a model](user-guide/testing.md#test-with-a-model)
   - [Test on a backend](user-guide/testing.md#test-on-a-backend)
 - [Using a coding agent](user-guide/coding-agents.md)

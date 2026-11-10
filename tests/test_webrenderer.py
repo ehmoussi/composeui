@@ -76,6 +76,7 @@ from composeui.core.view import (
     CheckBoxView,
     ComboBoxView,
     DialogView,
+    DownloadedFile,
     EditRefusedError,
     FilePathInputMixin,
     FilePathInputView,
@@ -119,13 +120,7 @@ from composeui.core.view import (
 from composeui.webcore import downloads as downloads_module
 from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
-from composeui.webcore.downloads import (
-    DOWNLOAD_TTL,
-    FETCHED_TTL,
-    MAX_DOWNLOADS,
-    Download,
-    Downloads,
-)
+from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
 from composeui.webcore.limits import MAX_BODY_SIZE, max_upload_body_size
@@ -6013,8 +6008,8 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
 ) -> None:
     now = [0.0]
     kept = Downloads(clock=lambda: now[0])
-    oldest = kept.add(Download("oldest", b"", "text/plain"))
-    tickets = [kept.add(Download(str(i), b"", "text/plain")) for i in range(MAX_DOWNLOADS)]
+    oldest = kept.add(DownloadedFile("oldest", b"", "text/plain"))
+    tickets = [kept.add(DownloadedFile(str(i), b"", "text/plain")) for i in range(MAX_DOWNLOADS)]
     assert kept.take(oldest) is None  # one past the count
     fetched = tickets[-1]
     assert kept.take(fetched) is not None
@@ -6025,9 +6020,9 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
     now[0] = DOWNLOAD_TTL + 1
     assert kept.tickets() == []
     monkeypatch.setattr(downloads_module, "MAX_DOWNLOAD_BYTES", 4)
-    kept.add(Download("a", b"ab", "text/plain"))
-    kept.add(Download("b", b"ab", "text/plain"))
-    kept.add(Download("c", b"a", "text/plain"))  # 5 bytes: the oldest goes
+    kept.add(DownloadedFile("a", b"ab", "text/plain"))
+    kept.add(DownloadedFile("b", b"ab", "text/plain"))
+    kept.add(DownloadedFile("c", b"a", "text/plain"))  # 5 bytes: the oldest goes
     assert [name for _, name in kept.tickets()] == ["b", "c"]
 
 

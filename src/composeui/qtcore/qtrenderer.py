@@ -155,6 +155,7 @@ if TYPE_CHECKING:
     from composeui.core.view import (
         CellStyle,
         CellWidget,
+        DownloadedFile,
         HeaderGroup,
         ReferenceLine,
         Series,
@@ -3313,7 +3314,7 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         #: the previous code's on a reload: the window keeps its place and size
         self._window = window
         #: the downloads not asked yet: one asked while the save dialog is open waits for it
-        self._downloads: deque[tuple[str, bytes | Path]] = deque()
+        self._downloads: deque[DownloadedFile] = deque()
         self._is_asking = False
         self._refresh_dispatcher.update(
             {
@@ -3354,18 +3355,20 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
         )
         return self._build_filepath(filepath_str, selected_filter)
 
-    def download(self, filename: str, content: bytes | Path, _media_type: str) -> None:
-        self._downloads.append((filename, content))
+    def download(self, file: DownloadedFile) -> None:
+        self._downloads.append(file)
         # the dialog runs an event loop of its own, where a job's callback may download too
         if self._is_asking:
             return
         self._is_asking = True
         try:
             while self._downloads:
-                name, data = self._downloads.popleft()
-                path, _chosen = QFileDialog.getSaveFileName(self._rendered_object, "", name)
+                file = self._downloads.popleft()
+                path, _chosen = QFileDialog.getSaveFileName(
+                    self._rendered_object, "", file.filename
+                )
                 if path != "":
-                    save_download(self._view, Path(path), data)
+                    save_download(self._view, Path(path), file.content)
         finally:
             self._is_asking = False
 

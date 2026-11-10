@@ -201,6 +201,41 @@ def test_count_shows_the_rows_once_its_job_is_over() -> None:
 - **A task too.** `jobs.wait()` also gives a [loading task](threads.md#reusable-loading-tasks)
   its outcome, so its `finished` or `failed` callbacks run.
 
+## Test a download
+
+Without a backend, the files that the app gives with a [`DownloadView`](widgets.md#download) or
+`main_view.download` stay in `main_view.downloads`, in order. Each is a `DownloadedFile`, with its
+`filename`, its `content`, and its `media_type`:
+
+```python
+from composeui.core.application import Application
+from composeui.core.view import DownloadView, MainView, child, define_view
+
+
+@define_view
+class ExportMainView(MainView):
+    export: DownloadView = child(DownloadView, text="Export", filename="pipes.csv")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.export.content = self._pipes_csv
+
+    def _pipes_csv(self) -> bytes:
+        return b"name,length\nFeed,12.5\n"
+
+
+def test_export_gives_the_pipes_as_csv() -> None:
+    app = Application(build_main_view=ExportMainView)
+
+    app.main_view.export.clicked.emit()
+
+    (file,) = app.main_view.downloads
+    assert (file.filename, file.content) == ("pipes.csv", b"name,length\nFeed,12.5\n")
+```
+
+With `in_job=True`, call `app.main_view.jobs.wait()` after the click: the file is given once its
+job is over.
+
 ## Test with a model
 
 Build the app with `ModelApplication`, with the same arguments as `run`. A fixture builds

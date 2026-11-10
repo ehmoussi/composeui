@@ -129,7 +129,7 @@ from composeui.core.view import (
     walk_tree,
     with_extension,
 )
-from composeui.webcore.downloads import Download, Downloads, downloads_marker
+from composeui.webcore.downloads import Downloads, downloads_marker
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import SAVE_FORM_ID, get_page, jobs_poller, reload_poller
 from composeui.webcore.serverfiles import (
@@ -148,6 +148,7 @@ if TYPE_CHECKING:
     from composeui.core.view import (
         CellStyle,
         CellWidget,
+        DownloadedFile,
         HeaderGroup,
         ReferenceLine,
         Series,
@@ -6792,9 +6793,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def save_file(self) -> Path | None:
         return None  # see `open_file`; saving is a browser download (M7)
 
-    def download(self, filename: str, content: bytes | Path, media_type: str) -> None:
+    def download(self, file: DownloadedFile) -> None:
         # the session's next answer names it (`downloads_marker`)
-        self.downloads.add(Download(filename, content, media_type))
+        self.downloads.add(file)
 
     @staticmethod
     def _noop(_view: MainView, _rendered_object: str, _value: Any) -> None:

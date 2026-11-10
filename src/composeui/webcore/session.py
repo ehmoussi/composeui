@@ -52,8 +52,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
     from composeui.core.model import Model
-    from composeui.core.view import MainView, Router
-    from composeui.webcore.downloads import Download, Downloads
+    from composeui.core.view import DownloadedFile, MainView, Router
+    from composeui.webcore.downloads import Downloads
 
 
 #: largest state file accepted from an upload, in bytes
@@ -531,7 +531,7 @@ class WebSession(RenderTarget):
         tickets = self._downloads.tickets()
         return downloads_marker(tickets, oob=True) if tickets else ""
 
-    def take_download(self, ticket: str) -> Download | None:
+    def take_download(self, ticket: str) -> DownloadedFile | None:
         """Get the file of one of this session's tickets, once; None if it has none."""
         with self.lock:
             return self._downloads.take(ticket)

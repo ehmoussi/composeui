@@ -130,6 +130,7 @@ if TYPE_CHECKING:
     from composeui.core.view import (
         CellStyle,
         CellWidget,
+        DownloadedFile,
         HeaderGroup,
         NodeMark,
         ReferenceLine,
@@ -3314,7 +3315,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
         #: the downloads not asked yet: each waits for the save dialog of the one before
-        self._downloads: deque[tuple[str, bytes | Path]] = deque()
+        self._downloads: deque[DownloadedFile] = deque()
         self._is_asking = False
         self._refresh_dispatcher.update(
             {
@@ -3438,12 +3439,12 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         result = cast("Path | None", app.call_from_thread(_show))  # type: ignore[arg-type]
         return self._apply_default_extension(result)
 
-    def download(self, filename: str, content: bytes | Path, _media_type: str) -> None:
+    def download(self, file: DownloadedFile) -> None:
         # from a file action's worker too (`_ComposeUIApp.trigger`)
-        self.call_on_main_thread(functools.partial(self._queue_download, filename, content))
+        self.call_on_main_thread(functools.partial(self._queue_download, file))
 
-    def _queue_download(self, filename: str, content: bytes | Path) -> None:
-        self._downloads.append((filename, content))
+    def _queue_download(self, file: DownloadedFile) -> None:
+        self._downloads.append(file)
         if not self._is_asking:
             self._ask_download()
 
@@ -3453,9 +3454,10 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         self._is_asking = len(self._downloads) > 0 and app is not None and app.is_running
         if self._is_asking:
             assert app is not None
-            name, content = self._downloads.popleft()
+            file = self._downloads.popleft()
             app.push_screen(
-                FileSave(default_file=name), functools.partial(self._save_download, content)
+                FileSave(default_file=file.filename),
+                functools.partial(self._save_download, file.content),
             )
 
     def _save_download(self, content: bytes | Path, path: Path | None) -> None:

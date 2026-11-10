@@ -178,7 +178,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   the session's end at the latest; `MainView.max_upload_size` sets the largest file.
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
   not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
-  user's computer. Its `content` returns the bytes, and runs in a job with `in_job=True`.
+  user's computer. Its `content` returns the bytes, and runs in a job with `in_job=True`. A
+  test without a backend reads the files given in `main_view.downloads`.
   See https://ehmoussi.github.io/composeui/user-guide/widgets.html#download
 - **Pick a file on the server with `server_roots`** when the app needs the file where it is,
   not a copy: on the web, a file path input otherwise uploads a copy. The web lists only
