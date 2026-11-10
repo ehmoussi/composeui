@@ -1775,6 +1775,23 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         self._view.clicked.emit()
 
 
+class WebDownloadRenderer(WebButtonRenderer):
+    """A button giving a file: its click posts, and the answer names the file to fetch."""
+
+    _role = "download"
+
+    def __init__(self, view: ButtonViewLike) -> None:
+        super().__init__(view)
+        # nothing shown: each click reads them
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("filename", "media_type", "content", "in_job"), self._noop)
+        )
+
+    @staticmethod
+    def _noop(_view: ButtonViewLike, _rendered_object: str, _value: object) -> None:
+        pass
+
+
 class WebDialogButtonRenderer(WebButtonRenderer):
     """A dialog's own button, e.g. Apply: its click goes through its dialog, which checks first.
 
@@ -6788,6 +6805,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
 RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "action": WebActionRenderer,
     "button": WebButtonRenderer,
+    "download": WebDownloadRenderer,
     "dialog_button": WebDialogButtonRenderer,
     "chart": WebChartRenderer,
     "drawing": WebDrawingRenderer,

@@ -122,6 +122,7 @@ __all__ = [
     "DialogKind",
     "DialogView",
     "DimensionShape",
+    "DownloadView",
     "DrawingView",
     "EditRefusedError",
     "ExpanderView",
@@ -2983,6 +2984,67 @@ class ButtonView(View):
     variant: ButtonVariant = attrs.field(default=ButtonVariant.PRIMARY)
     #: the user clicked the button
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
+
+
+@define_view
+class DownloadView(ButtonView):
+    """A button that gives the user a file that the app makes on the click, e.g. a report.
+
+    The click calls `content`, which returns the file's bytes, or the path of a file that
+    the app wrote. Then the main view gives the file (`MainView.download`): the web downloads
+    it, and Qt and Textual ask where to save it. With `in_job`, `content` runs in a job, and
+    the button is disabled until the file is made; the status bar says why it failed.
+    """
+
+    _renderer_key = "download"
+
+    variant: ButtonVariant = attrs.field(default=ButtonVariant.SECONDARY)
+    #: the name offered for the file
+    filename: str = attrs.field(default="download", metadata={OMIT: True})
+    #: what the file holds, e.g. "text/csv"; guessed from `filename` when None
+    media_type: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
+    #: makes the file: its bytes, or the path of a file the app wrote; None gives nothing
+    content: Optional[Callable[[], Union[bytes, Path]]] = attrs.field(
+        default=None, eq=False, repr=False, metadata={OMIT: True}
+    )
+    #: whether `content` runs in a job, for a file that takes a while to make
+    in_job: bool = attrs.field(default=False, metadata={OMIT: True})
+    #: makes the file in a job, built at the first click with `in_job`
+    _task: Optional[Task[Any, Any, Any]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.clicked.connect(self._give)
+
+    def _give(self, main_view: MainView) -> None:
+        content = self.content
+        if content is None:
+            return
+        if not self.in_job:
+            main_view.download(self.filename, content(), self.media_type)
+            return
+        if self._task is None:
+            self._task = self.build_task(_make)
+            self._task.disables(self)
+            self._task.finished.connect(self._made)
+            self._task.failed.connect(self._failed)
+        self._task.start(content)
+
+    def _made(self, content: Union[bytes, Path], main_view: MainView) -> None:
+        main_view.download(self.filename, content, self.media_type)
+
+    def _failed(self, error: Exception, main_view: MainView) -> None:
+        failed = self.tr("Can't make {name}: {error}.")
+        main_view.status_bar.show_message(failed.format(name=self.filename, error=error))
+
+
+def _make(
+    _job: Job[Union[bytes, Path], Any], content: Callable[[], Union[bytes, Path]]
+) -> Union[bytes, Path]:
+    """Make a `DownloadView`'s file, in its job."""
+    return content()
 
 
 @define_view

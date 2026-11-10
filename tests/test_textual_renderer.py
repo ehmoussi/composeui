@@ -3093,6 +3093,7 @@ async def test_an_app_s_files_are_saved_where_the_user_picks_one_dialog_at_a_tim
 ) -> None:
     view = ReportMainView()
     view.status_bar.timeout = 0  # no timer clearing the message after the test
+    _add_reference_to_signals(view, None)  # as the app does
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
     app = view.renderer.app

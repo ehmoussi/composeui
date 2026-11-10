@@ -94,5 +94,6 @@
   "No match": "Aucun résultat",
   "Saved the output to {name}.": "Sortie enregistrée dans {name}.",
   "Can't save to {name}: {error}.": "Impossible d'enregistrer dans {name} : {error}.",
-  "Saved {name}.": "{name} enregistré."
+  "Saved {name}.": "{name} enregistré.",
+  "Can't make {name}: {error}.": "Impossible de créer {name} : {error}."
 }

@@ -176,6 +176,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   text field, so the user cannot type a path of the server. Connect `uploaded`, which gives an
   `UploadedFile`, and read its `path`. On the web, that copy stays for a job that reads it, until
   the session's end at the latest; `MainView.max_upload_size` sets the largest file.
+- **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
+  not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
+  user's computer. Its `content` returns the bytes, and runs in a job with `in_job=True`.
+  See https://ehmoussi.github.io/composeui/user-guide/widgets.html#download
 - **Pick a file on the server with `server_roots`** when the app needs the file where it is,
   not a copy: on the web, a file path input otherwise uploads a copy. The web lists only
   the files in those folders, and `path` is `None` for a path typed outside them: read

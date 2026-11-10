@@ -115,8 +115,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   `DrawingView`.
 - **Saving a drawing as an image** (When needed). A report's image of a `DrawingView`, with a
   title that names the file and shows in the image, as a chart's does.
-- **Download** (Now). A file or bytes that the app makes: a download on the web, a save path on
-  Qt and Textual.
 - **Choices of several values** (Now). A multi-select combobox and a check list with a check-all
   box, on one model, both with an optional search. A table's category column filtered as a choice
   of its values.

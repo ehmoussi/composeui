@@ -16,6 +16,7 @@ import datetime
 import enum
 import errno
 import hashlib
+import html
 import json
 import logging
 import math
@@ -842,6 +843,7 @@ class _PicturesMainView(MainView):
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
+    ReportMainView,
     DataFileMainView,
     PipeMainView,
     BatmanMainView,
@@ -5926,6 +5928,8 @@ def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path
         view.download("notes", b"# Notes", "text/markdown")  # outside any request
         ((address, _),) = links(client.get(f"/widget/{export_id}").text)
         notes = client.get(address)
+        view.export.content = None  # gives nothing
+        nothing = client.post(f"/widget/{export_id}", data={"event": "click"}).text
 
     assert stolen.status_code == 404
     assert fetched.content == b"a,b\n1,2\n"
@@ -5936,6 +5940,71 @@ def test_an_app_s_file_is_fetched_once_by_the_page_of_its_session(tmp_path: Path
     assert from_file.content == b"x\n"
     assert gone.status_code == 404
     assert notes.headers["content-type"] == "text/markdown; charset=utf-8"
+    assert 'id="cui-downloads"' not in nothing
+
+
+def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_meanwhile() -> None:
+    views: list[ReportMainView] = []
+
+    class ReportApp(WebApplication[ReportMainView]):
+        def setup_session(self, main_view: ReportMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    release = threading.Event()
+    outcomes: list[bytes | OSError] = [b"dropped", b"late", OSError("disk full")]
+
+    def make() -> bytes:
+        release.wait(10)
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, OSError):
+            raise outcome
+        return outcome
+
+    def poll_until_over(client: TestClient, view: ReportMainView) -> str:
+        """Get the jobs poll's answer once the job is over."""
+        deadline = time.monotonic() + 10
+        while view.jobs.is_running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return client.get("/jobs").text
+
+    with _Browser(ReportApp(build_main_view=ReportMainView).create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        view.later.content = make
+        later_id = _widget_id(view.later.renderer)
+
+        started = client.post(f"/widget/{later_id}", data={"event": "click"}).text
+        refused = client.post(f"/widget/{later_id}", data={"event": "click"})  # while it runs
+        view.jobs.drop()  # as New and Open do: the file is the study's replaced
+        dropped = client.get(f"/widget/{later_id}").text
+        release.set()
+        deadline = time.monotonic() + 10
+        while view.jobs.has_workers and time.monotonic() < deadline:
+            time.sleep(0.01)
+        after_drop = client.get("/jobs").text
+
+        client.post(f"/widget/{later_id}", data={"event": "click"})
+        polled = poll_until_over(client, view)
+        ((address, name),) = [
+            (a["href"], a["download"])
+            for tag, a in _swapped(polled, "cui-downloads").descendants
+            if tag == "a"
+        ]
+        fetched = client.get(address or "")
+
+        client.post(f"/widget/{later_id}", data={"event": "click"})
+        failed = poll_until_over(client, view)
+
+    assert "disabled" in _swapped(started, later_id).attributes
+    assert refused.status_code == 400
+    assert "disabled" not in _element(dropped, later_id).attributes
+    assert 'id="cui-downloads"' not in after_drop
+    assert "disabled" not in _swapped(polled, later_id).attributes
+    assert (name, fetched.content) == ("later.csv", b"late")
+    assert "Can't make later.csv: disk full." in html.unescape(failed)
+    assert "disabled" not in _swapped(failed, later_id).attributes
+    assert 'id="cui-downloads"' not in failed
 
 
 def test_a_session_keeps_its_newest_files_within_its_limits(
