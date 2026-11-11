@@ -644,7 +644,7 @@ class WebSession(RenderTarget):
             return self._downloads.take(ticket)
 
 
-#: a session id, as `SessionStore.create` makes them: also the name of its saved directory
+#: a session id, as `SessionStore.get_or_create` makes them: also its saved directory's name
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
@@ -756,17 +756,35 @@ class SessionStore:
         One on disk is woken. One being saved or woken is waited for: the caller is never
         a route's coroutine, which would hold up the event loop.
         """
-        if not isinstance(session_id, str):
-            return None
+        found = self._find(session_id, may_create=False)
+        return None if found is None else found[1]
+
+    def get_or_create(self, session_id: Any) -> tuple[str, WebSession] | None:
+        """Return the session with this id as `get` does, else a new one with its own id.
+
+        None while `max_sessions` are in memory. A full store refuses new sessions rather
+        than dropping old ones: requests without a cookie, which anyone can send, would
+        otherwise push out the users' own sessions and their unsaved work. A session on disk
+        without room to wake is refused too, never replaced by a new one, which would take
+        its cookie: the decision is one, under the lock, as a slot can free at any time.
+        """
+        return self._find(session_id, may_create=True)
+
+    def _find(self, session_id: Any, *, may_create: bool) -> tuple[str, WebSession] | None:
+        """Find, wake or build the session, each step decided with the lock held."""
         while True:
             with self._lock:
                 self._drop_expired()
-                entry = self._entries.get(session_id)
+                entry = self._entries.get(session_id) if isinstance(session_id, str) else None
                 if entry is None:
-                    return None
+                    if not may_create or self._in_memory() >= self._max_sessions:
+                        return None
+                    self._building += 1
+                    break
                 if entry.place is _Place.LIVE:
+                    assert entry.session is not None  # in memory
                     entry.last_seen = time.monotonic()
-                    return entry.session
+                    return session_id, entry.session
                 if entry.place is _Place.ON_DISK:
                     if self._in_memory() >= self._max_sessions:
                         return None
@@ -777,7 +795,9 @@ class SessionStore:
                 settled = entry.settled
             assert settled is not None  # saving or waking
             settled.wait()
-        return self._wake(session_id, entry)
+        if entry is None:
+            return self._create()
+        return session_id, self._wake(session_id, entry)
 
     def is_at_hand(self, session_id: Any) -> bool:
         """Tell whether `get` answers at once: the session is in memory, or there is none."""
@@ -834,18 +854,8 @@ class SessionStore:
         entry.settled = None
         return settled
 
-    def create(self) -> tuple[str, WebSession] | None:
-        """Build a new session; None while `max_sessions` are in memory.
-
-        A full store refuses new sessions rather than dropping old ones. Requests without
-        a cookie, which anyone can send, would otherwise push out the users' own sessions
-        and their unsaved work.
-        """
-        with self._lock:
-            self._drop_expired()
-            if self._in_memory() >= self._max_sessions:
-                return None
-            self._building += 1
+    def _create(self) -> tuple[str, WebSession]:
+        """Build a new session, which `_find` made room for (`_building`)."""
         try:
             # built outside the store's lock: building runs app code, which may be slow
             session = self._built_session()
