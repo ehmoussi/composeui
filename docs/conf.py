@@ -7,7 +7,7 @@ import re
 import sys
 from importlib.metadata import version as package_version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sphinx.application import Sphinx
@@ -79,5 +79,19 @@ def _link_repository_files(_app: Sphinx, docname: str, source: list[str]) -> Non
     source[0] = _RELATIVE_LINK.sub(replace, source[0])
 
 
+# proves to Google Search Console that the site is ours: it reads the home page
+_GOOGLE_SITE_VERIFICATION = (
+    '<meta name="google-site-verification" content="0MoGkjpMyCBgk-B3bGTadusOhKy6XVJNqYBvi3MVI9k" />'
+)
+
+
+def _add_site_verification(
+    _app: Sphinx, pagename: str, _template: str, context: dict[str, Any], _doctree: object
+) -> None:
+    if pagename == "index":
+        context["metatags"] = context.get("metatags", "") + _GOOGLE_SITE_VERIFICATION + "\n"
+
+
 def setup(app: Sphinx) -> None:
     app.connect("source-read", _link_repository_files)
+    app.connect("html-page-context", _add_site_verification)
