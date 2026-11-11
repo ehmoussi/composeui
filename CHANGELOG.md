@@ -81,6 +81,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
+  an app with many pages or tabs takes less memory, and its first page comes sooner: with 20 pages
+  of 60 widgets, 518 KiB instead of 924 KiB, and 43 ms instead of 61 ms on the server.
 - `CheckBoxMixin.shows` and `Task.show_state` follow their inputs as reactive methods of the
   view that they change. In a signal's callbacks, the views that they show or hide change
   once the callbacks are done, with the reactive methods, not at once. `reactive_inputs`

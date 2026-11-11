@@ -471,6 +471,13 @@ before and after an edit in one file. So `content` returns bytes or a `Path`.
   sent: the page brings it once shown, as navigating swaps the router. Tabs send only the shown
   tab's views, and the other panels stay empty. The browser shows the tab picked at once. Then
   the answer to its post fills the tab picked and empties the tab left.
+- **Pages and tabs built once shown.** As Qt does, the router and the tabs build the views of a
+  page or a tab the first time it shows: by an address, a link, a tab picked, or the app's code.
+  Each session of an app with many pages then takes less memory, and its first page comes
+  sooner. A page or a tab not built has a renderer of its own, without its views. Until it's
+  built, it adopts the dialogs inside it, which the app opens whatever is shown, so they follow
+  its enabled state. A post to a view not built finds no widget in the session, and is refused
+  as any unknown widget is.
 - **Dialogs** render at the end of the page, outside the shown page's slot: a page not shown
   is not sent, and would take them with it. The browser opens a modal `<dialog>` only from a
   script: `page.js` opens each one swapped in shown, once. A button closes its dialog in the
