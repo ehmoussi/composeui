@@ -508,30 +508,36 @@ commits of ComposeUI, which `git archive` extracts. Their dependencies are the c
 
 ### Frameworks results
 
-The results come from `c29c765`, with each server on Python 3.12, Chromium 148, on the same
-machine as above, in [`results/frameworks-c29c765.json`](results/frameworks-c29c765.json). The
-times are medians of 3 runs, whose memory per session differs by 1% at most.
+The results come from `b5a68c9`, with each server on Python 3.12, Chromium 148, on the same
+machine as above, in [`results/frameworks-b5a68c9.json`](results/frameworks-b5a68c9.json). The
+file names the commit of the benchmark's branch, `d93c2c3`: `b5a68c9` and the benchmarks. The
+times are medians of 3 runs, whose memory per session differs by 1% at most for ComposeUI and
+Panel.
 
-| Measure | ComposeUI `c29c765` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
+| Measure | ComposeUI `b5a68c9` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Start | 0.4 s | 0.5 s | 0.5 s | 1.6 s | 0.3 s |
-| Idle server | 51 MiB | 58 MiB | 63 MiB | 166 MiB | 83 MiB |
-| First page | 143 ms | 148 ms | 1,090 ms | 1,049 ms | 179 ms |
-| Bytes, first page | 64 KiB | 64 KiB | 2,479 KiB | 3,010 KiB | 314 KiB |
-| Click | 67 ms | 68 ms | 140 ms | 68 ms | 67 ms |
-| Page switch | 67 ms | 69 ms | 168 ms | 322 ms | 76 ms |
-| Memory per session | 491 KiB | 1,819 KiB | 112 KiB | 14,913 KiB | 16 KiB |
-| CPU time per session | 69 ms | 80 ms | 270 ms | 871 ms | 22 ms |
-| Memory per session, every page opened | 743 KiB | 1,730 KiB | 432 KiB | 7,168 KiB | 2 KiB |
+| Idle server | 50 MiB | 58 MiB | 63 MiB | 166 MiB | 83 MiB |
+| First page | 133 ms | 144 ms | 1,035 ms | 1,029 ms | 175 ms |
+| Bytes, first page | 63 KiB | 63 KiB | 2,287 KiB | 2,634 KiB | 313 KiB |
+| Click | 71 ms | 67 ms | 139 ms | 67 ms | 67 ms |
+| Page switch | 67 ms | 67 ms | 163 ms | 356 ms | 67 ms |
+| Memory per session | 401 KiB | 1,818 KiB | 109 KiB | 14,952 KiB | 15 KiB |
+| CPU time per session | 61 ms | 79 ms | 267 ms | 841 ms | 23 ms |
+| Memory per session, every page opened | 647 KiB | 1,739 KiB | 435 KiB | 5,700 KiB | 3 KiB |
+
+An earlier run on `c29c765`, before the signals made on their first read (#239), is in
+[`results/frameworks-c29c765.json`](results/frameworks-c29c765.json): a session took 491 KiB,
+743 KiB once every page was opened, and 69 ms of CPU time, and its first page 143 ms.
 
 ### Frameworks findings
 
-- **ComposeUI's first page is the fastest and the lightest.** It sends 64 KiB, against 314 KiB
-  for Dash and 2.5 to 3 MiB for Streamlit and Panel.
+- **ComposeUI's first page is the fastest and the lightest.** It sends 63 KiB, against 313 KiB
+  for Dash and 2.3 to 2.6 MiB for Streamlit and Panel.
 - **A click and a page switch take the floor's time,** on ComposeUI, Panel and Dash. Streamlit
   takes twice as long, as it runs its script again.
-- **A session of ComposeUI takes 4 times Streamlit's memory,** and 1.7 times once every page
-  was opened. It takes a quarter of Streamlit's CPU time, and 30 times less memory than
+- **A session of ComposeUI takes 3.7 times Streamlit's memory,** and 1.5 times once every page
+  was opened. It takes a quarter of Streamlit's CPU time, and 37 times less memory than
   Panel's.
 - **Dash keeps almost nothing per session.** Its server holds no state for a session, so it
   cannot keep a session's jobs or data either.

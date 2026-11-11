@@ -1,0 +1,258 @@
+{
+  "environment": {
+    "commit": "d93c2c36452efe41412145060ebd7bc82fae7141",
+    "python": "3.12",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16,
+    "chromium": "148.0.7778.96"
+  },
+  "versions": {
+    "ComposeUI": {},
+    "ComposeUI 399c2d5": {},
+    "Streamlit": {
+      "streamlit": "1.67.0"
+    },
+    "Panel": {
+      "panel": "1.10.0"
+    },
+    "Dash": {
+      "dash": "4.5.0",
+      "gunicorn": "27.0.0"
+    }
+  },
+  "summary": {
+    "ComposeUI": {
+      "start_s": 0.4261056329996791,
+      "idle_mib": 50.3046875,
+      "first_page_ms": 132.5977710002917,
+      "first_page_kib": 63.4482421875,
+      "click_ms": 71.16106299872627,
+      "switch_ms": 66.90050200086262,
+      "session_kib": 400.96,
+      "session_cpu_ms": 61.19999999999999,
+      "explored_kib": 646.8
+    },
+    "ComposeUI 399c2d5": {
+      "start_s": 0.45090749399969354,
+      "idle_mib": 57.48828125,
+      "first_page_ms": 143.9691835003032,
+      "first_page_kib": 62.6884765625,
+      "click_ms": 66.52796400157968,
+      "switch_ms": 66.76210449768405,
+      "session_kib": 1818.4,
+      "session_cpu_ms": 79.19999999999999,
+      "explored_kib": 1738.8
+    },
+    "Streamlit": {
+      "start_s": 0.5218619619990932,
+      "idle_mib": 62.61328125,
+      "first_page_ms": 1035.370960498767,
+      "first_page_kib": 2287.373046875,
+      "click_ms": 138.45834049971018,
+      "switch_ms": 163.02488799919956,
+      "session_kib": 109.28,
+      "session_cpu_ms": 266.79999999999995,
+      "explored_kib": 435.2
+    },
+    "Panel": {
+      "start_s": 1.5966918769991025,
+      "idle_mib": 165.55859375,
+      "first_page_ms": 1028.7105624993274,
+      "first_page_kib": 2633.890625,
+      "click_ms": 66.93596849981986,
+      "switch_ms": 356.2609059990791,
+      "session_kib": 14952.08,
+      "session_cpu_ms": 841.3999999999999,
+      "explored_kib": 5700.4
+    },
+    "Dash": {
+      "start_s": 0.34345752999797696,
+      "idle_mib": 82.55859375,
+      "first_page_ms": 174.77836350008147,
+      "first_page_kib": 312.6767578125,
+      "click_ms": 66.57925349827565,
+      "switch_ms": 66.97587149938045,
+      "session_kib": 14.72,
+      "session_cpu_ms": 22.599999999999998,
+      "explored_kib": 3.2
+    }
+  },
+  "runs": {
+    "ComposeUI": [
+      {
+        "start_s": 0.4261056329996791,
+        "idle_mib": 50.3046875,
+        "first_page_ms": 130.9816815009981,
+        "first_page_kib": 63.4482421875,
+        "click_ms": 82.77693450145307,
+        "switch_ms": 66.67395650038088,
+        "session_kib": 401.76,
+        "session_cpu_ms": 61.19999999999999,
+        "explored_kib": 646.4
+      },
+      {
+        "start_s": 0.4539592569999513,
+        "idle_mib": 50.390625,
+        "first_page_ms": 132.5977710002917,
+        "first_page_kib": 63.4580078125,
+        "click_ms": 71.16106299872627,
+        "switch_ms": 66.91472949933086,
+        "session_kib": 400.96,
+        "session_cpu_ms": 61.8,
+        "explored_kib": 648.8
+      },
+      {
+        "start_s": 0.3759731379977893,
+        "idle_mib": 50.078125,
+        "first_page_ms": 134.09893899915915,
+        "first_page_kib": 63.4453125,
+        "click_ms": 66.60338999972737,
+        "switch_ms": 66.90050200086262,
+        "session_kib": 400.8,
+        "session_cpu_ms": 61.00000000000001,
+        "explored_kib": 646.8
+      }
+    ],
+    "ComposeUI 399c2d5": [
+      {
+        "start_s": 0.46408521400007885,
+        "idle_mib": 57.5234375,
+        "first_page_ms": 143.6354429988569,
+        "first_page_kib": 62.6884765625,
+        "click_ms": 66.52796400157968,
+        "switch_ms": 69.08503099839436,
+        "session_kib": 1818.24,
+        "session_cpu_ms": 78.60000000000002,
+        "explored_kib": 1738.8
+      },
+      {
+        "start_s": 0.4506605610004044,
+        "idle_mib": 57.48828125,
+        "first_page_ms": 143.9691835003032,
+        "first_page_kib": 63.4794921875,
+        "click_ms": 66.9025294992025,
+        "switch_ms": 65.83446399963577,
+        "session_kib": 1818.4,
+        "session_cpu_ms": 80.19999999999999,
+        "explored_kib": 1741.2
+      },
+      {
+        "start_s": 0.45090749399969354,
+        "idle_mib": 57.4375,
+        "first_page_ms": 147.61506800095958,
+        "first_page_kib": 43.8212890625,
+        "click_ms": 66.49325649959792,
+        "switch_ms": 66.76210449768405,
+        "session_kib": 1818.64,
+        "session_cpu_ms": 79.19999999999999,
+        "explored_kib": 1730.0
+      }
+    ],
+    "Streamlit": [
+      {
+        "start_s": 0.7784462760027964,
+        "idle_mib": 62.65234375,
+        "first_page_ms": 1000.6821355018474,
+        "first_page_kib": 2287.373046875,
+        "click_ms": 144.87921149884642,
+        "switch_ms": 159.29248349857517,
+        "session_kib": 109.28,
+        "session_cpu_ms": 266.79999999999995,
+        "explored_kib": 435.2
+      },
+      {
+        "start_s": 0.5013761679983872,
+        "idle_mib": 62.61328125,
+        "first_page_ms": 1037.4637999993865,
+        "first_page_kib": 1748.21875,
+        "click_ms": 133.8956715007953,
+        "switch_ms": 171.3580465002451,
+        "session_kib": 104.0,
+        "session_cpu_ms": 262.99999999999994,
+        "explored_kib": 470.8
+      },
+      {
+        "start_s": 0.5218619619990932,
+        "idle_mib": 62.51171875,
+        "first_page_ms": 1035.370960498767,
+        "first_page_kib": 2370.619140625,
+        "click_ms": 138.45834049971018,
+        "switch_ms": 163.02488799919956,
+        "session_kib": 117.68,
+        "session_cpu_ms": 272.40000000000003,
+        "explored_kib": 419.6
+      }
+    ],
+    "Panel": [
+      {
+        "start_s": 1.9373813169986533,
+        "idle_mib": 165.60546875,
+        "first_page_ms": 1028.7105624993274,
+        "first_page_kib": 2633.74609375,
+        "click_ms": 66.68313949921867,
+        "switch_ms": 357.00114899918844,
+        "session_kib": 14959.76,
+        "session_cpu_ms": 838.0,
+        "explored_kib": 5072.4
+      },
+      {
+        "start_s": 1.5966918769991025,
+        "idle_mib": 165.40234375,
+        "first_page_ms": 1021.6855764992943,
+        "first_page_kib": 2633.890625,
+        "click_ms": 66.93596849981986,
+        "switch_ms": 356.2609059990791,
+        "session_kib": 14952.08,
+        "session_cpu_ms": 844.0000000000001,
+        "explored_kib": 6073.2
+      },
+      {
+        "start_s": 1.574651762999565,
+        "idle_mib": 165.55859375,
+        "first_page_ms": 1040.8516160005092,
+        "first_page_kib": 3284.34765625,
+        "click_ms": 67.53940900125599,
+        "switch_ms": 355.1411549997283,
+        "session_kib": 14947.52,
+        "session_cpu_ms": 841.3999999999999,
+        "explored_kib": 5700.4
+      }
+    ],
+    "Dash": [
+      {
+        "start_s": 0.5591464350000024,
+        "idle_mib": 82.55859375,
+        "first_page_ms": 174.77836350008147,
+        "first_page_kib": 311.623046875,
+        "click_ms": 65.92649599951983,
+        "switch_ms": 67.71591200049443,
+        "session_kib": 15.76,
+        "session_cpu_ms": 21.799999999999997,
+        "explored_kib": 1.2
+      },
+      {
+        "start_s": 0.34345752999797696,
+        "idle_mib": 82.859375,
+        "first_page_ms": 173.429122500238,
+        "first_page_kib": 464.470703125,
+        "click_ms": 68.01872749929316,
+        "switch_ms": 66.30157000108738,
+        "session_kib": 14.72,
+        "session_cpu_ms": 22.599999999999998,
+        "explored_kib": 3.6
+      },
+      {
+        "start_s": 0.3327918659997522,
+        "idle_mib": 82.3828125,
+        "first_page_ms": 179.18562950217165,
+        "first_page_kib": 312.6767578125,
+        "click_ms": 66.57925349827565,
+        "switch_ms": 66.97587149938045,
+        "session_kib": 14.48,
+        "session_cpu_ms": 22.599999999999998,
+        "explored_kib": 3.2
+      }
+    ]
+  }
+}
