@@ -12,6 +12,8 @@ For each framework and repeat, on a new server:
 - **bytes:** what a new browser context receives for its first page, HTTP and WebSocket;
 - **click:** an Apply, until its label says so;
 - **page switch:** a link (a tab on Panel), until the page's buttons show;
+- **bytes per interaction:** what the page sends and receives for a click, a page switch, and
+  a text typed into a row's input, HTTP and WebSocket bodies;
 - **per session:** the memory and CPU time of 50 sessions kept open, per session;
 - **explored:** the memory of 10 sessions that opened every page, per session.
 
@@ -54,6 +56,10 @@ PAGES = 20
 ROWS = 10
 #: the pages a session switches to, back and forth, to time a switch
 SWITCHES = (5, 0, 7, 0, 12, 0, 3, 0, 19, 0)
+#: interactions of each kind weighed, the median taken
+INTERACTIONS = 6
+#: milliseconds for the page to be quiet, before and after an interaction weighed
+SETTLE = 1000
 PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
 TICKS = os.sysconf("SC_CLK_TCK")
 MIB = 1024 * 1024
@@ -222,22 +228,30 @@ def _cpu_seconds(pid: int) -> float:
     return sum(int(user) + int(system) for user, system in times) / TICKS
 
 
-class _Received:
-    """The bytes that a page received, by HTTP and WebSocket."""
+class _Traffic:
+    """The bytes that a page sent and received, by HTTP and WebSocket: the bodies, not headers."""
 
     def __init__(self, page: Page) -> None:
         self.size = 0
+        self.sent = 0
         page.on("requestfinished", self._request)
         page.on("websocket", self._websocket)
 
     def _request(self, request: Request) -> None:
-        self.size += max(request.sizes()["responseBodySize"], 0)
+        sizes = request.sizes()
+        # as on the wire: compressed, when the server compresses
+        self.size += max(sizes["responseBodySize"], 0)
+        self.sent += max(sizes["requestBodySize"], 0)
 
     def _websocket(self, websocket: WebSocket) -> None:
         websocket.on("framereceived", self._frame)
+        websocket.on("framesent", self._sent)
 
     def _frame(self, payload: str | bytes) -> None:
         self.size += len(payload)
+
+    def _sent(self, payload: str | bytes) -> None:
+        self.sent += len(payload)
 
 
 def _wait_for_page(page: Page, number: int) -> None:
@@ -297,10 +311,11 @@ def _timings(browser: Browser, server: Server, url: str) -> dict[str, float]:
         context.close()
     context = browser.new_context()
     page = context.new_page()
-    received = _Received(page)
+    received = _Traffic(page)
     page.goto(url)
     _wait_for_page(page, 0)
-    time.sleep(1)  # the frames after the page shows
+    # the frames after the page shows; not `time.sleep`, which holds back the page's events
+    page.wait_for_timeout(1000)
     context.close()
     context, page, _seconds = _open(browser, url)
     clicks = []
@@ -320,6 +335,51 @@ def _timings(browser: Browser, server: Server, url: str) -> dict[str, float]:
         "first_page_kib": received.size / 1024,
         "click_ms": statistics.median(clicks) * 1000,
         "switch_ms": statistics.median(switches) * 1000,
+    }
+
+
+def _interaction(page: Page, traffic: _Traffic, action: Callable[[], object]) -> tuple[int, int]:
+    """Give the bytes sent and received for `action`, once the page is quiet again."""
+    # not `time.sleep`: Playwright gives the page's events only while it waits itself
+    page.wait_for_timeout(SETTLE)
+    sent, received = traffic.sent, traffic.size
+    action()
+    # the requests that end after the page shows the change, e.g. a second post
+    page.wait_for_timeout(SETTLE)
+    return traffic.sent - sent, traffic.size - received
+
+
+def _traffic(browser: Browser, server: Server, url: str) -> dict[str, float]:
+    """Weigh a click, a page switch and a text typed, in both directions: the medians."""
+    context = browser.new_context()
+    page = context.new_page()
+    traffic = _Traffic(page)
+    page.goto(url)
+    _wait_for_page(page, 0)
+
+    def click(row: int) -> None:
+        page.get_by_role("button", name="Apply", exact=True).nth(row).click()
+        page.get_by_text(f"Applied {row}", exact=True).wait_for()
+
+    def type_text(row: int) -> None:
+        field = page.get_by_role("textbox").nth(row)
+        field.fill(f"Some text in row {row}")
+        # the change: the frameworks that wait for it send then
+        field.press("Tab")
+
+    measured: dict[str, list[tuple[int, int]]] = {"click": [], "switch": [], "type": []}
+    for row in range(INTERACTIONS):
+        measured["type"].append(_interaction(page, traffic, lambda row=row: type_text(row)))
+        measured["click"].append(_interaction(page, traffic, lambda row=row: click(row)))
+    for number in SWITCHES[:INTERACTIONS]:
+        measured["switch"].append(
+            _interaction(page, traffic, lambda number=number: _switch(page, server, number))
+        )
+    context.close()
+    return {
+        f"{name}_{direction}_b": statistics.median(pair[index] for pair in pairs)
+        for name, pairs in measured.items()
+        for index, direction in enumerate(("sent", "received"))
     }
 
 
@@ -366,6 +426,8 @@ def _measure(browser: Browser, server: Server, counts: tuple[int, int]) -> dict[
         idle = _rss_mib(process.pid)
         timings = _timings(browser, server, url)
         sessions = _sessions(browser, server, url, process.pid, counts)
+        # after the memory: Panel frees a closed session later, during the next measure
+        traffic = _traffic(browser, server, url)
     finally:
         process.terminate()
         try:
@@ -373,7 +435,7 @@ def _measure(browser: Browser, server: Server, counts: tuple[int, int]) -> dict[
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
-    return {"start_s": started, "idle_mib": idle, **timings, **sessions}
+    return {"start_s": started, "idle_mib": idle, **timings, **traffic, **sessions}
 
 
 def _environment(browser: Browser, python: str) -> dict[str, Any]:
