@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import contextlib
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
+from types import MappingProxyType, MethodType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from typing_extensions import Protocol
@@ -13,8 +14,13 @@ from composeui.core.reactivity import batch
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Mapping
     from pathlib import Path
+    from typing import Optional
 
     from composeui.core.view import DownloadedFile
+
+    #: for each field in order, the function of the renderer's method showing it, or None
+    #: for a handler of the renderer's own
+    _HandlerTable = tuple[tuple[str, Optional[Callable[..., None]]], ...]
 
 __all__ = [
     "MainRenderer",
@@ -57,14 +63,37 @@ class MissingRefreshAttributeFunctionError(Exception):
         )
 
 
-class Renderer(ABC, Generic[TView, TObject]):
+#: the handler tables the renderers share, by their content
+_NO_HANDLERS: Mapping[str, Any] = MappingProxyType({})
+_HANDLER_TABLES: dict[_HandlerTable, dict[str, Callable[..., None] | None]] = {}
+
+
+class _RendererMeta(ABCMeta):
+    """Shares a renderer's handlers once its `__init__`, and its subclasses', registered them."""
+
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
+        renderer = super().__call__(*args, **kwargs)
+        renderer._share_handlers()  # noqa: SLF001
+        return renderer
+
+
+class Renderer(Generic[TView, TObject], metaclass=_RendererMeta):
     """The base of a backend's renderers: one shows a view with a widget of its toolkit.
 
     `render` builds the widget. `refresh_attribute` shows a new value of a field of the view,
     with the handler of `_refresh_dispatcher` for that field. The renderer sets the view's
     fields from the widget's signals, inside `stop_refresh`, so the view doesn't show them
     back.
+
+    Its handlers are mostly its own methods, the same for each renderer of its class: a page
+    has a renderer per widget, and a web session a page. Once built, a renderer keeps them in
+    a table it shares with the renderers registering the same methods for the same fields
+    (`_shared_handlers`), and only the others, e.g. a lambda, in `_own_handlers`.
     """
+
+    #: none until the renderer is built: no handler runs during `__init__`
+    _shared_handlers: Mapping[str, Callable[..., None] | None] = _NO_HANDLERS
+    _own_handlers: Mapping[str, Callable[..., None]] = _NO_HANDLERS
 
     def __init__(self, view: TView) -> None:
         self._view = view
@@ -72,9 +101,33 @@ class Renderer(ABC, Generic[TView, TObject]):
         self._refresh_dispatcher: dict[str, Callable[[TView, TObject, Any], None]] = {}
         self._is_updating_state = False
 
+    def _share_handlers(self) -> None:
+        """Move the handlers of `_refresh_dispatcher` to the shared table and `_own_handlers`."""
+        own: dict[str, Callable[..., None]] = {}
+        key: list[tuple[str, Callable[..., None] | None]] = []
+        for name, handler in self._refresh_dispatcher.items():
+            if isinstance(handler, MethodType) and handler.__self__ is self:
+                key.append((name, handler.__func__))
+            else:
+                key.append((name, None))
+                own[name] = handler
+        table = tuple(key)
+        self._shared_handlers = _HANDLER_TABLES.setdefault(table, dict(table))
+        if own:
+            self._own_handlers = own
+        # read-only: a handler registered after `__init__` would be lost. Not `del`, which
+        # would cost each renderer the dict of attribute names it shares with its class's
+        self._refresh_dispatcher = _NO_HANDLERS  # type: ignore[assignment]
+
+    def _handler(self, attr_name: str) -> Callable[[TView, TObject, Any], None]:
+        function = self._shared_handlers[attr_name]
+        if function is None:
+            return self._own_handlers[attr_name]
+        return MethodType(function, self)
+
     def has_attr(self, attr_name: str) -> bool:
         """Check if the attribute has an associated refresh function."""
-        return attr_name in self._refresh_dispatcher
+        return attr_name in self._shared_handlers
 
     def is_updating_state(self) -> bool:
         return self._is_updating_state
@@ -105,11 +158,11 @@ class Renderer(ABC, Generic[TView, TObject]):
         """Show every field of the view that has a handler in `_refresh_dispatcher`."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
-        for attr_name in self._refresh_dispatcher:
+        for attr_name in self._shared_handlers:
             if not hasattr(self._view, attr_name):
                 msg = f"{attr_name} is not an attribute of the view {type(self._view).__name__}"
                 raise AttributeError(msg)
-            refresh = self._refresh_dispatcher[attr_name]
+            refresh = self._handler(attr_name)
             value = getattr(self._view, attr_name)
             refresh(self._view, self._rendered_object, value)
 
@@ -121,8 +174,8 @@ class Renderer(ABC, Generic[TView, TObject]):
         if self._rendered_object is None:
             raise NoRenderedObjectError
         if hasattr(self._view, attr_name):
-            if attr_name in self._refresh_dispatcher:
-                refresh = self._refresh_dispatcher[attr_name]
+            if attr_name in self._shared_handlers:
+                refresh = self._handler(attr_name)
                 refresh(self._view, self._rendered_object, value)
             else:
                 raise MissingRefreshAttributeFunctionError(self, attr_name)
