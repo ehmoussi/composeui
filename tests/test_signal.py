@@ -4,7 +4,9 @@ import functools
 import gc
 import inspect
 import logging
-from typing import TYPE_CHECKING
+import sys
+import threading
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -168,6 +170,42 @@ def test_a_view_s_method_is_no_longer_called_once_the_view_is_gone() -> None:
     changed.emit(2)  # e.g. once the record is deleted
 
     assert shown == [1]
+
+
+def test_two_threads_connecting_a_signal_at_once_keep_both_callbacks() -> None:
+    """E.g. the tables of two sessions, each in its request's thread, following one source."""
+    signal: Signal[int] = Signal()  # connected by none yet
+    checked, resume, second_done = threading.Event(), threading.Event(), threading.Event()
+    received: list[str] = []
+
+    def pause_once_checked(frame: Any, event: str, arg: object) -> None:
+        # the first thread stops as `connect` has looked at the callbacks, before it adds one
+        if event == "c_return" and arg is isinstance and frame.f_code.co_name == "connect":
+            sys.setprofile(None)
+            checked.set()
+            resume.wait(timeout=5)
+
+    def connect_first() -> None:
+        sys.setprofile(pause_once_checked)
+        signal.connect(lambda _value: received.append("first"))
+
+    def connect_second() -> None:
+        signal.connect(lambda _value: received.append("second"))
+        second_done.set()
+
+    first = threading.Thread(target=connect_first)
+    first.start()
+    assert checked.wait(timeout=5)
+    second = threading.Thread(target=connect_second)
+    second.start()
+    second_done.wait(timeout=0.5)  # done at once, unless it waits for the first thread
+    resume.set()
+    first.join()
+    second.join()
+
+    signal.emit(1)
+
+    assert sorted(received) == ["first", "second"]
 
 
 def test_a_signal_disconnected_calls_none_of_its_callbacks() -> None:

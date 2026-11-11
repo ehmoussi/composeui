@@ -6,6 +6,7 @@ import functools
 import inspect
 import logging
 import sys
+import threading
 import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, overload
@@ -24,6 +25,9 @@ __all__ = ["Signal"]
 
 
 LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
+#: held as a signal's first callback replaces its empty tuple with a list: two threads
+#: connecting at once, e.g. two sessions' tables to one source, would each make their own
+_CONNECTING = threading.Lock()
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
 _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
 LOGGER.addHandler(_STREAM_HANDLER)
@@ -155,9 +159,10 @@ class Signal(Generic[Unpack[Ts]]):
         many of the signal's arguments as it takes, the first ones, and none when called `now`.
         """
         injected_callback = self._inject_callback(callback)
-        if isinstance(self._callbacks, tuple):
-            self._callbacks = []
-        self._callbacks.append(injected_callback)
+        with _CONNECTING:
+            if isinstance(self._callbacks, tuple):
+                self._callbacks = []
+            self._callbacks.append(injected_callback)
         if now:
             cast("Callable[[], None]", injected_callback)()
 

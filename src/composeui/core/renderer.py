@@ -84,11 +84,6 @@ class Renderer(Generic[TView, TObject], metaclass=_RendererMeta):
     with the handler of `_refresh_dispatcher` for that field. The renderer sets the view's
     fields from the widget's signals, inside `stop_refresh`, so the view doesn't show them
     back.
-
-    Its handlers are mostly its own methods, the same for each renderer of its class: a page
-    has a renderer per widget, and a web session a page. Once built, a renderer keeps them in
-    a table it shares with the renderers registering the same methods for the same fields
-    (`_shared_handlers`), and only the others, e.g. a lambda, in `_own_handlers`.
     """
 
     #: none until the renderer is built: no handler runs during `__init__`
@@ -103,6 +98,10 @@ class Renderer(Generic[TView, TObject], metaclass=_RendererMeta):
 
     def _share_handlers(self) -> None:
         """Move the handlers of `_refresh_dispatcher` to the shared table and `_own_handlers`."""
+        # its handlers are mostly its own methods, the same for each renderer of its class: a
+        # page has a renderer per widget, and a web session a page. It shares a table with
+        # the renderers registering the same methods for the same fields; only the others,
+        # e.g. a lambda, stay its own
         own: dict[str, Callable[..., None]] = {}
         key: list[tuple[str, Callable[..., None] | None]] = []
         for name, handler in self._refresh_dispatcher.items():
