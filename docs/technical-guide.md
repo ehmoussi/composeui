@@ -384,27 +384,29 @@ section covers what users see.
   and Save's form in its `session` field. `_session` in `routes.py` answers a request with
   another tag as if its session were gone. A plain link, such as a download, sends no tag and
   is not checked: it only reads.
-- **Idle sessions on disk** (`session_idle`). Each session of the `SessionStore` is in one place:
-  in memory, being saved, on disk, or being woken. The lifespan's sweep (`hibernate_idle`, in a
-  thread) saves one idle session at a time with `save_to`, into `<id>.partial`, then renames it
-  to `<id>`: a crash leaves only the partial folder, which a `--reload` server's next process
-  removes. A request for a session being saved or woken waits for it. A request during a save
-  keeps the session in memory, and the saved folder is dropped. One that finds the session on
-  disk builds it again, outside the store's lock, and `open_saved` opens it. So the async routes
-  look the session up in the threadpool when it's not in memory (`_session_off_loop`). The
-  woken session has a new `page_tag`, so the page reloads on its address, which brings back its
-  page. Keeping the tag would need the same widget ids, which `id()` doesn't give. The sweep
-  asks `WebSession.can_hibernate` under the session's lock, and takes the store's lock after it:
-  `_drop_expired` takes them the other way around. `held()` keeps a session in memory during
-  the requests that take a while outside its lock, such as an upload's body and a CSV's stream,
-  and the session is idle from the end of the last one. A large
-  table's source blocks the save if the app gave it since the last `loaded`: the session notes
-  the sources once a request that emitted `loaded` is done, its reactive methods included, and
-  after `open_saved` and Open. The save skips the "initial" state of a `--reload`
-  (`code_edits`), unless the store's folder is a `--reload` server's: the same code opens it,
-  and a field that starts with another value at each build, such as a date, would be taken for
-  an edit of the code. A plain link (a CSV, a chart's image) sends no tag: after a wake, its
-  widget id is unknown, and it answers 404 until the page reloads.
+- **Idle sessions on disk** (`session_idle`). Each session of the `SessionStore` is in one place: in
+  memory, being saved, on disk, or being woken. The lifespan's sweep (`hibernate_idle`, in a thread)
+  saves one idle session at a time with `save_to`, into `<id>.partial`, then renames it to `<id>`: a
+  crash leaves only the partial folder, which a `--reload` server's next process removes. A request
+  for a session being saved or woken waits for it. A request during a save keeps the session in
+  memory, and the saved folder is dropped. One that finds the session on disk builds it again,
+  outside the store's lock, and `open_saved` opens it. A page's request finds, wakes or makes its
+  session in one decision under the lock (`get_or_create`): one on disk without room to wake is
+  refused, as a slot can free just after, and a new session would then take its cookie and lose it.
+  The async routes look the session up in the threadpool when it's not in memory
+  (`_session_off_loop`). The woken session has a new `page_tag`, so the page reloads on its address,
+  which brings back its page. Keeping the tag would need the same widget ids, which `id()` doesn't
+  give. The sweep asks `WebSession.can_hibernate` under the session's lock, and takes the store's
+  lock after it: `_drop_expired` takes them the other way around. `held()` keeps a session in memory
+  during the requests that take a while outside its lock, such as an upload's body and a CSV's
+  stream, and the session is idle from the end of the last one. A large table's source blocks the
+  save if the app gave it since the last `loaded`: the session notes the sources once a request that
+  emitted `loaded` is done, its reactive methods included, and after `open_saved` and Open. The save
+  skips the "initial" state of a `--reload` (`code_edits`), unless the store's folder is a
+  `--reload` server's: the same code opens it, and a field that starts with another value at each
+  build, such as a date, would be taken for an edit of the code. A plain link (a CSV, a chart's
+  image) sends no tag: after a wake, its widget id is unknown, and it answers 404 until the page
+  reloads.
 
 ### Uploads and Open
 

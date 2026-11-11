@@ -84,13 +84,11 @@ def _session_or_new(request: Request) -> WebSession | None:
 
     For a whole page, which the session then serves: whichever page asks.
     """
-    session = _store(request).get(request.session.get(SESSION_KEY))
-    if session is None:
-        created = _store(request).create()
-        if created is None:
-            return None
-        session_id, session = created
-        request.session[SESSION_KEY] = session_id
+    found = _store(request).get_or_create(request.session.get(SESSION_KEY))
+    if found is None:
+        return None
+    session_id, session = found
+    request.session[SESSION_KEY] = session_id  # the same, but for a new session
     return session
 
 

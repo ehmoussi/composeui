@@ -1862,7 +1862,7 @@ def _store_of_data_files(saved: Path) -> SessionStore:
 
 def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None:
     store = _store_of_data_files(tmp_path)
-    created = store.create()
+    created = store.get_or_create(None)
     assert created is not None
     session_id, session = created
     assert isinstance(session.main_view, DataFileMainView)
@@ -1885,7 +1885,7 @@ def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None
 
 def test_a_saved_session_naming_other_uploads_never_deletes_them(tmp_path: Path) -> None:
     store = _store_of_data_files(tmp_path)
-    created = store.create()
+    created = store.get_or_create(None)
     assert created is not None
     session_id, session = created
     assert isinstance(session.main_view, DataFileMainView)
@@ -4132,7 +4132,7 @@ class _SessionStoreMachine(RuleBasedStateMachine):
     @rule(target=ids, name=st.sampled_from(["Alice", "Bob"]))
     def create(self, name: str) -> Any:
         self._expire()
-        created = self.store.create()
+        created = self.store.get_or_create(None)
         if len(self.live) >= self.MOST:  # full: refused, the live ones kept
             assert created is None
             return multiple()
@@ -4161,6 +4161,38 @@ class _SessionStoreMachine(RuleBasedStateMachine):
             self.live[session_id] = (got, self.clock.now)
         else:  # ended, never made, or no room to wake it
             assert got is None
+
+    # a page's request: its cookie's session, else a new one
+    @rule(target=ids, session_id=st.one_of(ids, st.just("forged")))
+    def get_or_create(self, session_id: str) -> Any:
+        self._expire()
+        found = self.store.get_or_create(session_id)
+        if session_id in self.live:  # the same session, its idle time from now
+            session = self.live[session_id][0]
+            assert found == (session_id, session)
+            self.live[session_id] = (session, self.clock.now)
+            return multiple()
+        if session_id in self.on_disk:
+            # woken, if there's room; else refused, never replaced by a new session
+            if len(self.live) >= self.MOST:
+                assert found is None
+                return multiple()
+            assert found is not None
+            assert found[0] == session_id
+            assert isinstance(found[1].main_view, HelloMainView)
+            assert found[1].main_view.form.name.text == self.on_disk.pop(session_id)[0]
+            self.live[session_id] = (found[1], self.clock.now)
+            return multiple()
+        # ended, or never made: a new one, if there's room
+        if len(self.live) >= self.MOST:
+            assert found is None
+            return multiple()
+        assert found is not None
+        new_id, session = found
+        assert new_id not in self.made
+        self.live[new_id] = (session, self.clock.now)
+        self.made.add(new_id)
+        return new_id
 
     @rule(session_id=ids)
     def drop(self, session_id: str) -> None:
@@ -4336,7 +4368,7 @@ def test_an_idle_session_stays_in_memory_while_it_holds_what_a_study_doesn_t(
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         with contextlib.ExitStack() as stack:
@@ -4358,7 +4390,7 @@ def test_a_session_is_idle_from_the_end_of_its_last_long_request() -> None:
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         with session.held():  # e.g. a large upload
@@ -4425,7 +4457,7 @@ def test_a_request_during_the_save_of_an_idle_session_keeps_it_in_memory() -> No
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         clock.now += 6.0
@@ -4465,7 +4497,7 @@ def test_two_requests_for_a_session_on_disk_build_it_once() -> None:
         mock.patch.object(session_module, "threading", watched),
     ):
         store = SessionStore(build, ttl=60.0, max_sessions=1, hibernation=Hibernation(5.0, 10))
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, _session = created
         clock.now += 6.0
@@ -4503,7 +4535,7 @@ def test_an_idle_session_that_fails_to_save_stays_in_memory_and_isn_t_tried_agai
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         clock.now += 6.0
@@ -4545,7 +4577,7 @@ def test_a_session_that_fails_to_wake_is_gone_and_its_next_request_starts_anew(
 
     with mock.patch.object(session_module, "time", clock):
         store = SessionStore(build, ttl=60.0, max_sessions=1, hibernation=Hibernation(5.0, 10))
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, _session = created
         clock.now += 6.0
@@ -4567,7 +4599,7 @@ def test_a_session_on_disk_keeps_its_uploads_until_the_server_stops() -> None:
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         assert isinstance(session.main_view, DataFileMainView)
@@ -4695,10 +4727,24 @@ class _OneIdleGuestbookApp(_IdleGuestbookApp):
 
 
 def test_a_full_server_keeps_a_session_on_disk_for_its_browser() -> None:
-    """A browser whose session waits on disk gets no new session that would take its cookie."""
+    """A browser whose session waits on disk gets no new session that would take its cookie.
+
+    Even when a slot frees just after the server found none: e.g. the sweep saves another
+    session then. Its lookup and a new session are one decision.
+    """
     app = _OneIdleGuestbookApp()
     web = app.create_starlette_app()
+    store: SessionStore = web.state.sessions
     clock = _Clock()
+    lookup = store.get
+
+    def get_then_free_a_slot(session_id: Any) -> WebSession | None:
+        found = lookup(session_id)
+        if found is None:  # the sweep saves Bob's session meanwhile
+            clock.now += 1.0
+            store.hibernate_idle()
+        return found
+
     bob = _Browser(web)
     with mock.patch.object(session_module, "time", clock), _Browser(web) as alice:
         alice.get("/")
@@ -4706,11 +4752,10 @@ def test_a_full_server_keeps_a_session_on_disk_for_its_browser() -> None:
         clock.now += 1.0
         _wait_until_saved(app)
         bob.get("/")  # takes the only room in memory
-        refused = alice.get("/")
-        bob.post(
-            f"/widget/{_action_id(app.session_views[1].file_menu.exit_app)}",
-            data={"event": "triggered"},
-        )
+        with mock.patch.object(store, "get", get_then_free_a_slot):
+            refused = alice.get("/")
+        clock.now += 1.0
+        store.hibernate_idle()  # Bob's session to disk: room for Alice's
         reopened = alice.get("/").text
 
     assert refused.status_code == 503
@@ -4728,8 +4773,8 @@ def test_a_session_used_while_another_is_saved_stays_in_memory() -> None:
 
     with mock.patch.object(session_module, "time", clock):
         store = SessionStore(build, ttl=60.0, max_sessions=2, hibernation=Hibernation(5.0, 10))
-        first = store.create()
-        second = store.create()
+        first = store.get_or_create(None)
+        second = store.get_or_create(None)
         assert first is not None
         assert second is not None
         clock.now += 6.0
@@ -4828,7 +4873,7 @@ def test_a_reload_server_s_idle_session_takes_the_values_edited_in_the_code(
         store = SessionStore(
             build, ttl=60.0, max_sessions=1, saved=tmp_path, hibernation=Hibernation(5.0, 10)
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, _session = created
         clock.now += 6.0
@@ -4862,7 +4907,7 @@ def test_a_session_saved_while_idle_keeps_a_value_that_its_field_starts_with() -
             max_sessions=1,
             hibernation=Hibernation(5.0, 10),
         )
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
         assert isinstance(session.main_view, _NumberedMainView)
@@ -5058,7 +5103,7 @@ def test_a_session_failing_to_render_closes_its_model_if_it_has_one(*, has_model
     model = _CountedModel() if has_model else None
     store = SessionStore(lambda: (_UnrenderableMainView(), model), ttl=10.0, max_sessions=1)
     with pytest.raises(RuntimeError, match="no renderer"):
-        store.create()
+        store.get_or_create(None)
     assert model is None or model.closes == 1
 
 
@@ -5080,7 +5125,7 @@ def test_a_session_used_expires_its_timeout_after_its_last_use() -> None:
     clock = _Clock()
     with mock.patch.object(session_module, "time", clock):
         store = SessionStore(lambda: (HelloMainView(), None), ttl=10, max_sessions=1)
-        created = store.create()
+        created = store.get_or_create(None)
         assert created is not None
         session_id, session = created
 
