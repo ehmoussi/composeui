@@ -1,0 +1,64 @@
+{
+  "environment": {
+    "composeui": "0.3.1.dev117+g7c08a3e47.d20261109",
+    "commit": "e13a7a4d35df4c647ed629cf0e5b6e6c93f33cef",
+    "imported_from": "/home/moussi/.cache/composeui-bench/frameworks/commits/399c2d5/src/composeui",
+    "pythonpath": "/home/moussi/.cache/composeui-bench/frameworks/commits/399c2d5/src",
+    "python": "3.9.23",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16
+  },
+  "sections": {
+    "2": {
+      "views": 133,
+      "session_kib": 267.745947265625,
+      "first_page_ms": 15.164586000537383,
+      "page_kib": 41.45703125
+    },
+    "10": {
+      "views": 621,
+      "session_kib": 1185.31865234375,
+      "first_page_ms": 53.339634998337715,
+      "page_kib": 182.8896484375
+    },
+    "40": {
+      "views": 2451,
+      "session_kib": 4632.348974609375,
+      "first_page_ms": 196.5125144997728,
+      "page_kib": 713.2509765625
+    },
+    "65": {
+      "views": 3976,
+      "session_kib": 7531.825439453125,
+      "first_page_ms": 316.04259249979805,
+      "page_kib": 1155.21875
+    }
+  },
+  "pages": {
+    "1": {
+      "views": 74,
+      "session_kib": 161.205322265625,
+      "first_page_ms": 13.002115500057698,
+      "page_kib": 24.185546875
+    },
+    "5": {
+      "views": 322,
+      "session_kib": 626.767041015625,
+      "first_page_ms": 24.11751150066266,
+      "page_kib": 24.814453125
+    },
+    "10": {
+      "views": 632,
+      "session_kib": 1209.46162109375,
+      "first_page_ms": 36.60080399822618,
+      "page_kib": 25.603515625
+    },
+    "20": {
+      "views": 1252,
+      "session_kib": 2372.049267578125,
+      "first_page_ms": 65.38257200008957,
+      "page_kib": 27.1953125
+    }
+  }
+}

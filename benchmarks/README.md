@@ -432,7 +432,37 @@ uv run python benchmarks/sizes.py --output benchmarks/results/sizes-<commit>.jso
 ```
 
 `--sections` and `--pages` choose the sizes. It takes about a minute. To measure another
-version, set `PYTHONPATH` to that version's `src` folder.
+version, set `PYTHONPATH` to that version's `src` folder: the results then name the folder that
+ComposeUI was imported from (`imported_from`), and the checkout's commit.
+
+### Size results
+
+The results come from Python 3.9.23 on the same machine as above, for two versions:
+
+- **`399c2d5`:** before the work on the sessions' memory, in
+  [`results/sizes-399c2d5.json`](results/sizes-399c2d5.json).
+- **`c29c765`:** with the shared signals and handler tables (#236) and the pages and tabs built
+  once shown (#237), in [`results/sizes-c29c765.json`](results/sizes-c29c765.json).
+
+| App | Views | Memory, `399c2d5` | Memory, `c29c765` | First page, `399c2d5` | First page, `c29c765` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2 sections | 133 | 268 KiB | 123 KiB | 15 ms | 15 ms |
+| 10 sections | 621 | 1,185 KiB | 497 KiB | 53 ms | 54 ms |
+| 40 sections | 2,451 | 4,632 KiB | 1,903 KiB | 197 ms | 204 ms |
+| 65 sections | 3,976 | 7,532 KiB | 3,102 KiB | 316 ms | 329 ms |
+| 1 page | 74 | 161 KiB | 83 KiB | 13 ms | 14 ms |
+| 5 pages | 322 | 627 KiB | 187 KiB | 24 ms | 21 ms |
+| 10 pages | 632 | 1,209 KiB | 320 KiB | 37 ms | 30 ms |
+| 20 pages | 1,252 | 2,372 KiB | 579 KiB | 65 ms | 49 ms |
+
+### Size findings
+
+- **A session's memory grows with its views.** A view costs about 1.9 KiB in `399c2d5`, and
+  0.8 KiB in `c29c765`.
+- **Pages not shown cost less.** With 20 pages, a session takes 76% less memory, and its first
+  page 25% less time, as only the shown page is built.
+- **A page that shows every view takes as long as before.** Its time goes to building the views
+  and their HTML: 1.1 MiB of HTML for 65 sections.
 
 ## The frameworks benchmark
 
@@ -475,6 +505,36 @@ uv run --group browser python benchmarks/frameworks.py \
 The defaults run each framework 3 times, on Python 3.12, in about 40 minutes. `--frameworks`
 chooses the other frameworks, `--python` the servers' Python, and `--commits` adds older
 commits of ComposeUI, which `git archive` extracts. Their dependencies are the checkout's.
+
+### Frameworks results
+
+The results come from `c29c765`, with each server on Python 3.12, Chromium 148, on the same
+machine as above, in [`results/frameworks-c29c765.json`](results/frameworks-c29c765.json). The
+times are medians of 3 runs, whose memory per session differs by 1% at most.
+
+| Measure | ComposeUI `c29c765` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Start | 0.4 s | 0.5 s | 0.5 s | 1.6 s | 0.3 s |
+| Idle server | 51 MiB | 58 MiB | 63 MiB | 166 MiB | 83 MiB |
+| First page | 143 ms | 148 ms | 1,090 ms | 1,049 ms | 179 ms |
+| Bytes, first page | 64 KiB | 64 KiB | 2,479 KiB | 3,010 KiB | 314 KiB |
+| Click | 67 ms | 68 ms | 140 ms | 68 ms | 67 ms |
+| Page switch | 67 ms | 69 ms | 168 ms | 322 ms | 76 ms |
+| Memory per session | 491 KiB | 1,819 KiB | 112 KiB | 14,913 KiB | 16 KiB |
+| CPU time per session | 69 ms | 80 ms | 270 ms | 871 ms | 22 ms |
+| Memory per session, every page opened | 743 KiB | 1,730 KiB | 432 KiB | 7,168 KiB | 2 KiB |
+
+### Frameworks findings
+
+- **ComposeUI's first page is the fastest and the lightest.** It sends 64 KiB, against 314 KiB
+  for Dash and 2.5 to 3 MiB for Streamlit and Panel.
+- **A click and a page switch take the floor's time,** on ComposeUI, Panel and Dash. Streamlit
+  takes twice as long, as it runs its script again.
+- **A session of ComposeUI takes 4 times Streamlit's memory,** and 1.7 times once every page
+  was opened. It takes a quarter of Streamlit's CPU time, and 30 times less memory than
+  Panel's.
+- **Dash keeps almost nothing per session.** Its server holds no state for a session, so it
+  cannot keep a session's jobs or data either.
 
 ### Frameworks limits
 
