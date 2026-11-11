@@ -305,11 +305,11 @@ Read this section before other people use the app, on a network or behind a reve
   image, fails until the page reloads. The session keeps what a study keeps. It also keeps its
   study file, its language, the uploads of its path fields, and the `SESSION` fields (see
   [Saving and loading state](building-views.md#saving-and-loading-state)). What a callback set
-  and a study doesn't hold, such as an image or a table's `cell_styles`, comes back only if the
-  app gives it again on `loaded`. Sessions on disk don't count in `max_sessions`. At most
-  10 000 are on disk (`max_saved_sessions`): past it, idle sessions stay in memory. A session
-  on disk ends after `session_ttl` too, and the server removes the sessions on disk when it
-  stops.
+  and a study doesn't hold, such as a label's text, an image or a table's `cell_styles`, comes
+  back only if the app gives it again on `loaded`. Sessions on disk don't count in
+  `max_sessions`. At most 10 000 are on disk (`max_saved_sessions`): past it, idle sessions stay
+  in memory. A session on disk ends after `session_ttl` too, and the server removes the sessions
+  on disk when it stops.
 - **A session stays in memory while it holds what it can't save.** It stays while:
   - a job runs, or a request is in progress;
   - the page has a file of `MainView.download` to fetch;
@@ -322,6 +322,14 @@ Read this section before other people use the app, on a network or behind a reve
     views' state and its model's data don't, for example an object that a callback built. A
     study saves neither the attributes of a view that are not fields nor the variables of a
     callback: a session that wakes doesn't have them.
+- **Set `session_idle` when many sessions stay idle.** In memory, a session takes what its views
+  and its model hold: about 0.4 to 1 MiB for an app of 20 pages without data. On disk, it takes
+  about 83 KiB. With `session_idle`, the server's memory follows the users active in the last
+  `session_idle` seconds, not all the open sessions. The first save costs a few MiB once, and
+  the saves make some requests slower. So `session_idle` pays off from a few dozen idle
+  sessions, for example in a public app, or when users leave their tab open. With a few users,
+  keep it at `None`. The [benchmarks](../../benchmarks/README.md#the-long-running-benchmark) give
+  the measures.
 - **Requests have a size limit.** The server refuses a request body larger than 6 MiB (413) before
   it reads it. A file upload's request can be `max_upload_size` plus 1 MiB.
 - **A crafted regular expression can stop the server for a long time.** A table's filter accepts

@@ -1,8 +1,9 @@
 # Benchmarks
 
 These benchmarks measure the example apps against the [budgets](../ROADMAP.md#budgets) of the
-roadmap, what a web session costs as an app grows, and the web backend against other Python
-frameworks. They are not part of the test suite.
+roadmap, what a web session costs as an app grows, the web backend against other Python
+frameworks, and what saving idle web sessions to disk gives. They are not part of the test
+suite.
 
 Run a benchmark before and after work on speed, or when someone reports a slow case. No schedule
 refreshes the results: each result names its commit.
@@ -489,6 +490,10 @@ Playwright, as a user does. The benchmark reads the server's memory and CPU time
 - **Bytes:** what a new browser context receives for its first page, HTTP and WebSocket.
 - **Click:** an Apply, until its label says so. The median of 10.
 - **Page switch:** a link, or a tab on Panel, until the page's buttons show. The median of 10.
+- **Bytes per interaction:** what the page sends and receives for a click, a page switch, and a
+  text typed into a row's input, then Tab. The bodies of the HTTP requests and responses, as on
+  the wire, and the WebSocket frames, without headers. The median of 6, each measured from 1 s
+  of quiet before it to 1 s after.
 - **Per session:** the memory and the CPU time of 50 sessions kept open, per session.
 - **Explored:** the memory of 10 sessions that opened each page, per session.
 
@@ -508,37 +513,65 @@ commits of ComposeUI, which `git archive` extracts. Their dependencies are the c
 
 ### Frameworks results
 
-The results come from `b5a68c9`, with each server on Python 3.12, Chromium 148, on the same
-machine as above, in [`results/frameworks-b5a68c9.json`](results/frameworks-b5a68c9.json). The
-file names the commit of the benchmark's branch, `d93c2c3`: `b5a68c9` and the benchmarks. The
+The results come from `4bbf7d7`, with each server on Python 3.12, Chromium 148, on the same
+machine as above, in [`results/frameworks-4bbf7d7.json`](results/frameworks-4bbf7d7.json). The
 times are medians of 3 runs, whose memory per session differs by 1% at most for ComposeUI and
-Panel.
+Panel. The bytes are the same in the 3 runs, except for a page switch: what ComposeUI receives
+differs by 2% at most, and what Panel sends by 16%. The `399c2d5` column comes from an earlier run, on `b5a68c9`.
 
-| Measure | ComposeUI `b5a68c9` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
+| Measure | ComposeUI `4bbf7d7` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Start | 0.4 s | 0.5 s | 0.5 s | 1.6 s | 0.3 s |
+| Start | 0.4 s | 0.5 s | 0.5 s | 1.6 s | 0.4 s |
 | Idle server | 50 MiB | 58 MiB | 63 MiB | 166 MiB | 83 MiB |
-| First page | 133 ms | 144 ms | 1,035 ms | 1,029 ms | 175 ms |
-| Bytes, first page | 63 KiB | 63 KiB | 2,287 KiB | 2,634 KiB | 313 KiB |
-| Click | 71 ms | 67 ms | 139 ms | 67 ms | 67 ms |
-| Page switch | 67 ms | 67 ms | 163 ms | 356 ms | 67 ms |
-| Memory per session | 401 KiB | 1,818 KiB | 109 KiB | 14,952 KiB | 15 KiB |
-| CPU time per session | 61 ms | 79 ms | 267 ms | 841 ms | 23 ms |
-| Memory per session, every page opened | 647 KiB | 1,739 KiB | 435 KiB | 5,700 KiB | 3 KiB |
+| First page | 139 ms | 144 ms | 984 ms | 1,023 ms | 186 ms |
+| Bytes, first page | 64 KiB | 63 KiB | 2,682 KiB | 3,375 KiB | 1,119 KiB |
+| Click | 67 ms | 67 ms | 128 ms | 66 ms | 66 ms |
+| Page switch | 67 ms | 67 ms | 153 ms | 310 ms | 66 ms |
+| Memory per session | 401 KiB | 1,818 KiB | 110 KiB | 14,938 KiB | 14 KiB |
+| CPU time per session | 63 ms | 79 ms | 228 ms | 868 ms | 23 ms |
+| Memory per session, every page opened | 652 KiB | 1,739 KiB | 419 KiB | 8,172 KiB | 4 KiB |
 
-An earlier run on `c29c765`, before the signals made on their first read (#239), is in
-[`results/frameworks-c29c765.json`](results/frameworks-c29c765.json): a session took 491 KiB,
-743 KiB once every page was opened, and 69 ms of CPU time, and its first page 143 ms.
+The bytes of each interaction, sent and received:
+
+| Interaction | ComposeUI | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
+| --- | ---: | ---: | ---: | ---: |
+| Click, sent | 11 B | 1,794 B | 240 B | 332 B |
+| Click, received | 81 B | 15,816 B | 261 B | 88 B |
+| Page switch, sent | 15 B | 107 B | 1,521 B | 213 B |
+| Page switch, received | 1,271 B | 15,812 B | 34,074 B | 6,024 B |
+| Text typed, sent | 45 B | 1,741 B | 254 B | 0 B |
+| Text typed, received | 172 B | 15,812 B | 128 B | 0 B |
+
+The earlier runs are in [`results/frameworks-b5a68c9.json`](results/frameworks-b5a68c9.json),
+which names the commit of the benchmark's branch, `d93c2c3`, and in
+[`results/frameworks-c29c765.json`](results/frameworks-c29c765.json). On `b5a68c9`, ComposeUI
+measured as on `4bbf7d7`: 401 KiB per session, 647 KiB once every page was opened. On
+`c29c765`, before the signals made on their first read (#239), a session took 491 KiB, 743 KiB
+once every page was opened, and 69 ms of CPU time, and its first page 143 ms.
+
+The earlier runs counted fewer bytes for a first page. Their counter waited with `time.sleep`,
+during which Playwright doesn't give the page's events, and missed the requests that ended then.
+For Dash, they measured 310 to 520 KiB.
 
 ### Frameworks findings
 
-- **ComposeUI's first page is the fastest and the lightest.** It sends 63 KiB, against 313 KiB
-  for Dash and 2.3 to 2.6 MiB for Streamlit and Panel.
-- **A click and a page switch take the floor's time,** on ComposeUI, Panel and Dash. Streamlit
-  takes twice as long, as it runs its script again.
-- **A session of ComposeUI takes 3.7 times Streamlit's memory,** and 1.5 times once every page
-  was opened. It takes a quarter of Streamlit's CPU time, and 37 times less memory than
-  Panel's.
+- **ComposeUI's first page is the fastest and the lightest.** It sends 64 KiB, against 1.1 MiB
+  for Dash and 2.6 to 3.3 MiB for Streamlit and Panel.
+- **A click takes the floor's time,** on ComposeUI, Panel and Dash, and a page switch on
+  ComposeUI and Dash. Streamlit takes about twice as long, as it runs its script again. A page
+  switch on Panel takes 5 times as long.
+- **ComposeUI's interactions are the lightest.** A click sends 11 B and receives 81 B, against
+  332 B and 88 B for Dash, and 1.8 KiB and 15.4 KiB for Streamlit. A page switch receives
+  1.2 KiB, against 5.9 KiB for Dash, 15.4 KiB for Streamlit and 33 KiB for Panel.
+- **ComposeUI sends each change of an input,** 45 B, because its server keeps the field's value.
+  Dash sends a value only to a callback that reads it, and this app has none for the input.
+  Streamlit runs its script again, and receives 15.4 KiB.
+- **A session of ComposeUI takes 3.6 times Streamlit's memory,** and 1.6 times once every page
+  was opened. It takes a little more than a quarter of Streamlit's CPU time, and 37 times less
+  memory than Panel's.
+- **With `session_idle`, an idle session of ComposeUI leaves the memory.** It takes about 83 KiB
+  on disk instead (see [the long-running benchmark](#the-long-running-benchmark)). The gap with
+  Streamlit stays for the active sessions.
 - **Dash keeps almost nothing per session.** Its server holds no state for a session, so it
   cannot keep a session's jobs or data either.
 
@@ -555,4 +588,154 @@ An earlier run on `c29c765`, before the signals made on their first read (#239),
   framework's scripts. A returning user's browser has them.
 - **A floor.** A click and a page switch take at least about 66 ms in this setup, whatever the
   framework: Playwright and the browser take most of it.
+- **Bytes without headers.** An interaction of ComposeUI or Dash is an HTTP request, whose
+  headers the table leaves out: about 1.5 KiB for a ComposeUI click, with the session cookie.
+  Streamlit and Panel send theirs over a WebSocket, whose frames have almost no headers.
 - **One machine.** The results come from one machine, in WSL2.
+
+## The idle sessions benchmark
+
+[`idle_sessions.py`](idle_sessions.py) measures what `session_idle` gives: the memory that saving
+idle sessions to disk frees, and the time to save and wake them. It serves the frameworks
+benchmark's app with Uvicorn, in a process of its own, and drives it with headless Chromium.
+Each case opens two batches of sessions, one after the other, on a new server:
+
+- **Kept:** the first batch stays in memory while the second opens.
+- **Hibernated:** one sweep saves the first batch to disk before the second opens. The case
+  checks that each session and its main view are freed.
+
+Python rarely gives the memory that it frees back to the system. Its small objects live in
+arenas, and an arena goes back only once all of its objects are freed. So the server's RSS
+doesn't drop after a sweep, and the drop can't measure the freed memory. The second batch shows
+it instead: it reuses it. The benchmark compares the RSS of the two cases once both batches are
+open, and also reads Python's allocated blocks.
+
+Each user types in an input. After the second batch, the hibernated case reloads the page of
+each session of the first batch, which wakes it. It checks the input's value, the address, and
+the session cookie.
+
+### Run the idle sessions benchmark
+
+It needs Linux, `uv`, and Playwright's Chromium:
+
+```bash
+uv run --group browser python benchmarks/idle_sessions.py \
+    --output benchmarks/results/idle-sessions-<commit>.json
+```
+
+The defaults run batches of 50 sessions on the first page, and batches of 10 sessions that open
+every page, 3 times each, in about 6 minutes. `--sessions`, `--explorers` and `--repeat` change
+this.
+
+### Idle sessions results
+
+The results come from `4bbf7d7`, with the server on Python 3.12, Chromium 148, on the same
+machine as above, in [`results/idle-sessions-4bbf7d7.json`](results/idle-sessions-4bbf7d7.json).
+The memory is the median of 3 runs, which differ by 0.1 MiB at most.
+
+| Measure | 50 sessions, first page | 10 sessions, every page |
+| --- | ---: | ---: |
+| First batch | 22.9 MiB | 10.5 MiB |
+| Second batch, first one kept | 18.3 MiB | 7.3 MiB |
+| Second batch, first one saved | 0.1 MiB | 0.2 MiB |
+| Both batches, first one kept | 41.2 MiB | 17.9 MiB |
+| Both batches, first one saved | 29.6 MiB | 15.8 MiB |
+| Memory saved | 11.5 MiB | 2.0 MiB |
+| On disk per session | 83 KiB | 83 KiB |
+| Save per session | 18 ms | 34 ms |
+| Wake, page reload (median) | 140 ms | 138 ms |
+
+### Idle sessions findings
+
+- **The second batch reuses the memory of the first.** It takes almost nothing once the first
+  batch is on disk.
+- **The first sweep costs about 5 to 7 MiB, once per process.** Saving makes `cattrs` generate
+  its functions for each view class, and they stay. This cost takes most of the saving with 10
+  sessions. Later sweeps don't pay it.
+- **A session on disk takes 83 KiB,** whether it opened one page or all of them: its study holds
+  the views of every page.
+- **A woken page loads as fast as a first page,** 140 ms against 141 ms in the frameworks
+  benchmark.
+
+### Idle sessions limits
+
+- **A sweep on demand.** The benchmark sets `session_idle` to 0 for one sweep, once the requests
+  have ended. The server's own timer, and sessions that come and go during a sweep, are in the
+  long-running benchmark below.
+- **The reload only.** A session also wakes on an action from a page that was not reloaded. The
+  server then answers with `HX-Refresh`, which the benchmark doesn't measure.
+- **An app without data.** A model's data adds to what a session saves and frees.
+
+## The long-running benchmark
+
+[`hibernation_soak.py`](hibernation_soak.py) runs a server as in a deployment, with and without
+`session_idle`, and reads its memory over time. Uvicorn serves the frameworks benchmark's app in a
+process of its own. Users arrive at a steady rate. Each user:
+
+1. opens the app and types in an input;
+2. opens 3 pages by their tabs and clicks Apply;
+3. leaves the tab idle.
+
+One user in 4 comes back 120 s after arriving. It reloads its page, checks the page and its
+input's value, and types again. In the hibernated mode, this reload wakes the session from disk.
+Apply's label isn't checked: a label is UI text, which a study doesn't keep.
+
+The clients send HTTP requests as htmx does, without a browser. The server's own timer saves the
+idle sessions. `session_ttl` is 24 hours, so no session ends. Every second, the benchmark reads the
+server's RSS and the size of its saved sessions, until 90 s after the last request.
+
+### Run the long-running benchmark
+
+It reads `/proc`, so it runs on Linux only. It needs `uv`:
+
+```bash
+uv run python benchmarks/hibernation_soak.py \
+    --output benchmarks/results/hibernation-soak-<commit>.json
+```
+
+The defaults run 600 users, 2 per second, with `session_idle` at 30 s in the hibernated mode.
+Each mode runs once, in about 17 minutes for both. `--users`, `--rate`, `--pages`, `--idle`,
+`--come-back`, `--back-after` and `--settle` change this.
+
+### Long-running results
+
+The results come from `4bbf7d7`, with the server on Python 3.12, on the same machine as above,
+in [`results/hibernation-soak-4bbf7d7.json`](results/hibernation-soak-4bbf7d7.json). Each mode
+ran once.
+
+| Measure | Kept in memory | `session_idle = 30` |
+| --- | ---: | ---: |
+| Server RSS at the start | 46 MiB | 46 MiB |
+| Server RSS after 600 users | 301 MiB | 112 MiB |
+| On disk after 600 users | 0 MiB | 49 MiB |
+| First page, median and p95 | 39 ms, 70 ms | 38 ms, 137 ms |
+| Action, median and p95 | 4.8 ms, 5.7 ms | 4.9 ms, 13.2 ms |
+| Action, slowest | 17 ms | 84 ms |
+| Returning user's reload, median and p95 | 34 ms, 39 ms | 126 ms, 209 ms |
+
+Without `session_idle`, the server's RSS grows by 0.42 MiB for each user, until the last one
+arrives. With it, the RSS grows quickly for the first minute, then slowly, and stops at 112 MiB.
+At 2 users per second, the sessions of the last 30 to 45 s are in memory, about 60 to 90 of them.
+The server keeps the memory that this many live sessions took at their peak, and reuses it.
+
+### Long-running findings
+
+- **The memory follows the active users, not all the users.** With `session_idle`, 600 users
+  took 66 MiB above the idle server, against 255 MiB without it. More users who leave their tabs
+  idle add disk, not memory.
+- **A session on disk takes about 83 KiB,** as in the idle sessions benchmark.
+- **The sweeps slow some requests down.** A sweep saves sessions in a thread, which shares
+  Python's interpreter with the requests. The median doesn't change, but the p95 of an action
+  goes from 5.7 to 13 ms, and the slowest action takes 84 ms.
+- **A returning user waits for the wake.** Its reload takes 126 ms instead of 34 ms, without the
+  browser's time.
+
+### Long-running limits
+
+- **One run of each mode.** The RSS curves are smooth, but the p95 and the slowest times can
+  change from run to run.
+- **Without a browser.** The times leave out the browser's work, and the page's scripts. A
+  returning user's browser also takes its time to draw the page.
+- **An app without data.** A model's data adds to what a session saves, frees and wakes.
+- **One rate.** The memory with `session_idle` depends on the users active at once. Their number
+  is the arrival rate times the sum of `session_idle` and the sweep's interval.

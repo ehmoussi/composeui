@@ -1,0 +1,839 @@
+{
+  "environment": {
+    "commit": "4bbf7d72394411ec2145a04bea70950910380dd1",
+    "python": "3.12",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16,
+    "chromium": "148.0.7778.96"
+  },
+  "method": {
+    "app": "benchmarks/twins/composeui_app.py (20 pages, 10 rows per page)",
+    "command": "uv run --group browser python benchmarks/idle_sessions.py --output benchmarks/results/idle-sessions-4bbf7d7.json",
+    "batches": "Each case opens a first batch of sessions, then a second batch of the same size. 'kept' keeps the first batch in memory; 'hibernated' saves it to disk between the batches. CPython rarely returns freed memory to the system, so RSS doesn't drop after a sweep: the second batch reuses it instead. rss_saved_mib is the kept case's total_mib minus the hibernated case's.",
+    "session_idle_s": 3600,
+    "hibernation": "After browser requests settle, set idle to 0 for one explicit hibernate_idle sweep, then restore 3600. The natural timer delay is not measured.",
+    "memory": "Server process RSS after gc.collect at every snapshot, and Python's allocated blocks (sys.getallocatedblocks); no malloc_trim. Browser memory excluded. Fresh server for each case and repeat, no warm-up.",
+    "save": "Wall time of the explicit sweep, excludes the snapshot's gc.collect.",
+    "wake": "Sequential browser page.reload until content and persisted input are checked; includes HTTP, restore, rendering and browser work. Not the stale-action HX-Refresh path.",
+    "checks": "All sessions/views freed after save; exact LIVE/ON_DISK counts; input value, URL and signed cookie payload preserved for every wake."
+  },
+  "summary": {
+    "first_page_kept": {
+      "first_batch_mib": 22.81640625,
+      "second_batch_mib": 18.3359375,
+      "total_mib": 41.15625,
+      "py_blocks_total": 560519
+    },
+    "first_page_hibernated": {
+      "first_batch_mib": 22.88671875,
+      "second_batch_mib": 0.14453125,
+      "total_mib": 29.61328125,
+      "py_blocks_total": 335568,
+      "save_ms_per_session": 18.16678187999969,
+      "wake_page_median_ms": 139.99307849985598,
+      "wake_page_p95_ms": 185.96066600002814,
+      "rss_saved_mib": 11.54296875
+    },
+    "all_pages_kept": {
+      "first_batch_mib": 10.55859375,
+      "second_batch_mib": 7.28515625,
+      "total_mib": 17.8515625,
+      "py_blocks_total": 221612
+    },
+    "all_pages_hibernated": {
+      "first_batch_mib": 10.5234375,
+      "second_batch_mib": 0.2421875,
+      "total_mib": 15.8125,
+      "py_blocks_total": 159309,
+      "save_ms_per_session": 33.58382110000093,
+      "wake_page_median_ms": 137.87154750025366,
+      "wake_page_p95_ms": 145.94280899973455,
+      "rss_saved_mib": 2.0390625
+    }
+  },
+  "runs": {
+    "first_page_kept": [
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.3203125,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225363
+        },
+        "live": {
+          "rss_mib": 69.1015625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520227
+        },
+        "between": {
+          "rss_mib": 69.1015625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520227
+        },
+        "second": {
+          "rss_mib": 87.421875,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 785882
+        },
+        "first_batch_mib": 22.78125,
+        "second_batch_mib": 18.3203125,
+        "total_mib": 41.1015625,
+        "py_blocks_total": 560519
+      },
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.35546875,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225373
+        },
+        "live": {
+          "rss_mib": 69.171875,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520490
+        },
+        "between": {
+          "rss_mib": 69.171875,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520490
+        },
+        "second": {
+          "rss_mib": 87.51171875,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 786066
+        },
+        "first_batch_mib": 22.81640625,
+        "second_batch_mib": 18.33984375,
+        "total_mib": 41.15625,
+        "py_blocks_total": 560693
+      },
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.3984375,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225360
+        },
+        "live": {
+          "rss_mib": 69.22265625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520454
+        },
+        "between": {
+          "rss_mib": 69.22265625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520454
+        },
+        "second": {
+          "rss_mib": 87.55859375,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 785872
+        },
+        "first_batch_mib": 22.82421875,
+        "second_batch_mib": 18.3359375,
+        "total_mib": 41.16015625,
+        "py_blocks_total": 560512
+      }
+    ],
+    "first_page_hibernated": [
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.40625,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225377
+        },
+        "live": {
+          "rss_mib": 69.2421875,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520497
+        },
+        "save_ms_per_session": 18.067344419996516,
+        "between": {
+          "rss_mib": 75.86328125,
+          "live": 0,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 293349,
+          "save_s": 0.9033672209998258,
+          "sessions_freed": 50,
+          "views_freed": 50
+        },
+        "second": {
+          "rss_mib": 76.01953125,
+          "live": 50,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 560845
+        },
+        "first_batch_mib": 22.8359375,
+        "second_batch_mib": 0.15625,
+        "total_mib": 29.61328125,
+        "py_blocks_total": 335468,
+        "woken": {
+          "rss_mib": 94.34765625,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 816308
+        },
+        "wake_page_ms": [
+          140.174148999904,
+          141.43075900028634,
+          137.1411669997542,
+          143.03231900021274,
+          138.7345009998171,
+          141.1166289999528,
+          140.33214499977475,
+          139.90831899991463,
+          140.67836799995348,
+          140.63122800007477,
+          139.97684600008142,
+          140.40142700014258,
+          152.51988800036997,
+          148.2178850001219,
+          144.22114699982558,
+          137.36987999982375,
+          187.45833399998446,
+          140.2729480000744,
+          137.95739299985144,
+          139.57440599961046,
+          139.128126000287,
+          137.7356409998356,
+          139.94086699995023,
+          150.10221700003967,
+          141.1200809998263,
+          142.95889400000306,
+          138.96252499989714,
+          139.08190300026035,
+          136.33222599992223,
+          142.12097600011475,
+          141.8421700000181,
+          143.4641300002113,
+          196.9283829998858,
+          148.69367400024203,
+          139.30949099994905,
+          139.3823559997145,
+          134.7524389998398,
+          138.14148399978876,
+          139.43660499990074,
+          139.59896100004698,
+          140.57852599989928,
+          149.68049299977793,
+          135.58877000014036,
+          141.43011499982094,
+          138.1789040001422,
+          136.46368299987444,
+          135.7114380002713,
+          141.56134299992118,
+          137.02734499975122,
+          140.96109799993428
+        ],
+        "state_checks_passed": 50,
+        "wake_page_median_ms": 140.2235484999892,
+        "wake_page_p95_ms": 152.51988800036997
+      },
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.33203125,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225356
+        },
+        "live": {
+          "rss_mib": 69.25390625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 520601
+        },
+        "save_ms_per_session": 18.649799320000966,
+        "between": {
+          "rss_mib": 75.7890625,
+          "live": 0,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 293293,
+          "save_s": 0.9324899660000483,
+          "sessions_freed": 50,
+          "views_freed": 50
+        },
+        "second": {
+          "rss_mib": 75.90234375,
+          "live": 50,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 560997
+        },
+        "first_batch_mib": 22.921875,
+        "second_batch_mib": 0.11328125,
+        "total_mib": 29.5703125,
+        "py_blocks_total": 335641,
+        "woken": {
+          "rss_mib": 92.90625,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 816311
+        },
+        "wake_page_ms": [
+          136.6967610001666,
+          138.50970199973744,
+          135.44941500003915,
+          138.0923769997935,
+          140.38758100014093,
+          137.02293300002566,
+          137.4447200000759,
+          138.62350599993079,
+          134.82471299994359,
+          138.05877599997984,
+          147.1313070001088,
+          135.828918000243,
+          140.98895200004335,
+          136.47503900028823,
+          135.33755099979317,
+          141.87778100040305,
+          187.0345269999234,
+          140.78710599960687,
+          137.38141399971937,
+          135.50844300016252,
+          135.54509000005055,
+          140.157826000177,
+          138.9244269998926,
+          141.05224300010377,
+          139.78380999969886,
+          141.43603699994856,
+          135.87601800008997,
+          141.97042799969495,
+          135.8564860001934,
+          140.1041780000014,
+          143.25604299983752,
+          142.6035189997492,
+          140.48597600003632,
+          135.33483100036392,
+          139.65087699989454,
+          193.7594750002063,
+          138.44381500030067,
+          135.01639299965973,
+          133.6540629999945,
+          134.40570900002058,
+          141.49851000001945,
+          135.8763039997939,
+          134.23136499977772,
+          136.92523700001402,
+          135.54515599980732,
+          142.1772020003118,
+          133.57066999969902,
+          136.87096300009216,
+          157.66430099984063,
+          185.96066600002814
+        ],
+        "state_checks_passed": 50,
+        "wake_page_median_ms": 138.26809600004708,
+        "wake_page_p95_ms": 185.96066600002814
+      },
+      {
+        "sessions": 50,
+        "explored": false,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.33984375,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225357
+        },
+        "live": {
+          "rss_mib": 69.2265625,
+          "live": 50,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 521016
+        },
+        "save_ms_per_session": 18.16678187999969,
+        "between": {
+          "rss_mib": 75.8125,
+          "live": 0,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 293769,
+          "save_s": 0.9083390939999845,
+          "sessions_freed": 50,
+          "views_freed": 50
+        },
+        "second": {
+          "rss_mib": 75.95703125,
+          "live": 50,
+          "on_disk": 50,
+          "transitional": 0,
+          "disk_bytes": 4249340,
+          "py_blocks": 560925
+        },
+        "first_batch_mib": 22.88671875,
+        "second_batch_mib": 0.14453125,
+        "total_mib": 29.6171875,
+        "py_blocks_total": 335568,
+        "woken": {
+          "rss_mib": 93.73828125,
+          "live": 100,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 816149
+        },
+        "wake_page_ms": [
+          142.39056699989305,
+          135.8793899999,
+          136.67244599992046,
+          139.12540299998,
+          144.07633500013617,
+          192.33100900009958,
+          212.18754499977877,
+          218.59790700000303,
+          155.76408000015363,
+          146.1736109999947,
+          141.4574340001309,
+          143.7604350003312,
+          137.8777039999477,
+          139.07210200022746,
+          199.8832450003647,
+          136.79146599997694,
+          140.40811800032316,
+          140.96330300026239,
+          135.0327280001693,
+          137.2005299999728,
+          139.60020400008943,
+          137.29342999977234,
+          142.8687570000875,
+          138.11689800013482,
+          138.8080629999422,
+          136.88548899972375,
+          142.6908859998548,
+          137.82409900022685,
+          137.26934599981178,
+          140.379701999791,
+          139.60645499992097,
+          141.32701800008363,
+          191.85916000014913,
+          157.68488300000172,
+          143.85072999994009,
+          233.70874200008984,
+          177.76683500005674,
+          200.8933590000197,
+          147.04943900005674,
+          138.74106299999767,
+          141.57580099981715,
+          134.4515819996559,
+          138.3683059998475,
+          139.13483699980134,
+          158.43363900012264,
+          137.79734599984295,
+          137.56118600031186,
+          138.60965900039446,
+          137.91716499963513,
+          135.32667599974957
+        ],
+        "state_checks_passed": 50,
+        "wake_page_median_ms": 139.99307849985598,
+        "wake_page_p95_ms": 212.18754499977877
+      }
+    ],
+    "all_pages_kept": [
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.40234375,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225358
+        },
+        "live": {
+          "rss_mib": 56.9609375,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345031
+        },
+        "between": {
+          "rss_mib": 56.9609375,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345031
+        },
+        "second": {
+          "rss_mib": 64.26953125,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 447000
+        },
+        "first_batch_mib": 10.55859375,
+        "second_batch_mib": 7.30859375,
+        "total_mib": 17.8671875,
+        "py_blocks_total": 221642
+      },
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.32421875,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225357
+        },
+        "live": {
+          "rss_mib": 56.875,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345006
+        },
+        "between": {
+          "rss_mib": 56.875,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345006
+        },
+        "second": {
+          "rss_mib": 64.15234375,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 446956
+        },
+        "first_batch_mib": 10.55078125,
+        "second_batch_mib": 7.27734375,
+        "total_mib": 17.828125,
+        "py_blocks_total": 221599
+      },
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": false,
+        "before": {
+          "rss_mib": 46.33203125,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225326
+        },
+        "live": {
+          "rss_mib": 56.8984375,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345006
+        },
+        "between": {
+          "rss_mib": 56.8984375,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345006
+        },
+        "second": {
+          "rss_mib": 64.18359375,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 446938
+        },
+        "first_batch_mib": 10.56640625,
+        "second_batch_mib": 7.28515625,
+        "total_mib": 17.8515625,
+        "py_blocks_total": 221612
+      }
+    ],
+    "all_pages_hibernated": [
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.34375,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225422
+        },
+        "live": {
+          "rss_mib": 56.8671875,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345013
+        },
+        "save_ms_per_session": 33.102672699988034,
+        "between": {
+          "rss_mib": 61.95703125,
+          "live": 0,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 283172,
+          "save_s": 0.33102672699988034,
+          "sessions_freed": 10,
+          "views_freed": 10
+        },
+        "second": {
+          "rss_mib": 62.12109375,
+          "live": 10,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 384728
+        },
+        "first_batch_mib": 10.5234375,
+        "second_batch_mib": 0.1640625,
+        "total_mib": 15.77734375,
+        "py_blocks_total": 159306,
+        "woken": {
+          "rss_mib": 66.328125,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 440795
+        },
+        "wake_page_ms": [
+          150.02974300023197,
+          142.5698910002211,
+          141.79449199991723,
+          140.44429499972466,
+          138.56155800021952,
+          148.77269699991302,
+          143.14488999980313,
+          148.28582200016172,
+          135.31963600007657,
+          141.71712300003492
+        ],
+        "state_checks_passed": 10,
+        "wake_page_median_ms": 142.18219150006917,
+        "wake_page_p95_ms": 150.02974300023197
+      },
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.328125,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225371
+        },
+        "live": {
+          "rss_mib": 56.8828125,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 345008
+        },
+        "save_ms_per_session": 33.58382110000093,
+        "between": {
+          "rss_mib": 61.94140625,
+          "live": 0,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 283211,
+          "save_s": 0.3358382110000093,
+          "sessions_freed": 10,
+          "views_freed": 10
+        },
+        "second": {
+          "rss_mib": 62.18359375,
+          "live": 10,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 384680
+        },
+        "first_batch_mib": 10.5546875,
+        "second_batch_mib": 0.2421875,
+        "total_mib": 15.85546875,
+        "py_blocks_total": 159309,
+        "woken": {
+          "rss_mib": 66.3828125,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 440731
+        },
+        "wake_page_ms": [
+          135.56566299985207,
+          141.14994900000966,
+          135.45843300016713,
+          137.95456400021067,
+          138.05455800002164,
+          135.99449499997718,
+          137.55478600023707,
+          140.28936299973793,
+          135.00939599998674,
+          139.4617420000941
+        ],
+        "state_checks_passed": 10,
+        "wake_page_median_ms": 137.75467500022387,
+        "wake_page_p95_ms": 141.14994900000966
+      },
+      {
+        "sessions": 10,
+        "explored": true,
+        "hibernate": true,
+        "before": {
+          "rss_mib": 46.3046875,
+          "live": 0,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 225375
+        },
+        "live": {
+          "rss_mib": 56.78515625,
+          "live": 10,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 344990
+        },
+        "save_ms_per_session": 34.33557589996781,
+        "between": {
+          "rss_mib": 61.8515625,
+          "live": 0,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 283027,
+          "save_s": 0.3433557589996781,
+          "sessions_freed": 10,
+          "views_freed": 10
+        },
+        "second": {
+          "rss_mib": 62.1171875,
+          "live": 10,
+          "on_disk": 10,
+          "transitional": 0,
+          "disk_bytes": 849860,
+          "py_blocks": 384800
+        },
+        "first_batch_mib": 10.48046875,
+        "second_batch_mib": 0.265625,
+        "total_mib": 15.8125,
+        "py_blocks_total": 159425,
+        "woken": {
+          "rss_mib": 66.32421875,
+          "live": 20,
+          "on_disk": 0,
+          "transitional": 0,
+          "disk_bytes": 0,
+          "py_blocks": 440786
+        },
+        "wake_page_ms": [
+          145.94280899973455,
+          133.2323099995847,
+          137.20522300036464,
+          139.278240999829,
+          135.89295099973242,
+          138.53787200014267,
+          140.6950800001141,
+          143.75913100002435,
+          135.53181600036623,
+          134.9910550002278
+        ],
+        "state_checks_passed": 10,
+        "wake_page_median_ms": 137.87154750025366,
+        "wake_page_p95_ms": 145.94280899973455
+      }
+    ]
+  }
+}
