@@ -119,6 +119,7 @@ from composeui.core.view import (
     View,
     as_pattern,
     date_hint,
+    dialogs_in,
     image_content,
     is_within_roots,
     line_styles_after,
@@ -349,6 +350,8 @@ class WebRenderer(Renderer[TView, str]):
         """Make this renderer the parent of `views`' renderers (see `is_enabled`)."""
         for view in views:
             renderer: Any = view.renderer
+            if renderer is None:  # e.g. on a page not built yet (see `_BuiltWhenShown`)
+                continue
             children = renderer.renderers if isinstance(renderer, RendererContainer) else [renderer]
             for child in children:
                 if isinstance(child, WebRenderer) and child not in self.children:
@@ -357,6 +360,10 @@ class WebRenderer(Renderer[TView, str]):
 
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
+
+    def _in_session(self) -> contextlib.AbstractContextManager[None]:
+        """Register the renderers built in the block into this one's session, if it has one."""
+        return contextlib.nullcontext() if self._target is None else rendering_into(self._target)
 
     @abstractmethod
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -5657,14 +5664,67 @@ class WebFormDialogRenderer(WebDialogRenderer):
         super()._mark_dirty(view, rendered_object, value)
 
 
-class WebPageRenderer(WebRenderer[PageView]):
+TBuilt = TypeVar("TBuilt", bound=View)
+
+
+class _BuiltWhenShown(WebRenderer[TBuilt]):
+    """A page or a tab whose views are built the first time it's shown, as Qt's are.
+
+    So an app's many pages and tabs don't weigh on each session, in memory and in the time
+    of its first page. Its views exist from the start: the app reads and sets any of them,
+    and a view built later shows its state then. Until built, the dialogs inside its views,
+    which the app opens whatever is shown, follow its enabled state: it adopts them.
+    """
+
+    def __init__(self, view: TBuilt) -> None:
+        super().__init__(view)
+        #: whether its views are built; `defer` leaves them until `build`
+        self.is_built = True
+        #: the dialogs it adopted until the views around them are built
+        self._waiting: list[WebRenderer[Any]] = []
+
+    @abstractmethod
+    def _content_views(self) -> list[View]:
+        """Get the views it shows, in order."""
+
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._content_views())
+
+    def defer(self) -> None:
+        """Leave its views unbuilt until `build`, adopting the dialogs inside them meanwhile."""
+        self.is_built = False
+        for dialog in dialogs_in(self._view):
+            renderer = dialog.renderer
+            if isinstance(renderer, WebRenderer) and renderer.parent is None:
+                renderer.parent = self
+                self.children.append(renderer)
+                self._waiting.append(renderer)
+
+    def build(self) -> None:
+        """Build its views into its session, once: the router or the tabs show it."""
+        if self.is_built:
+            return
+        self.is_built = True
+        # the views around them adopt them now, or a tab not built yet, as `defer` does
+        for renderer in self._waiting:
+            self.children.remove(renderer)
+            if renderer.parent is self:  # not adopted since, by a render again of its views
+                renderer.parent = None
+        self._waiting = []
+        with self._in_session():
+            for view in self._content_views():
+                view.render(RendererType.WEB)
+        self._adopt(self._content_views())
+
+
+class WebPageRenderer(_BuiltWhenShown[PageView]):
     """A page's views in a column, like the main view's own."""
 
     _role = "page"
 
-    def render(self) -> None:
-        super().render()
-        self._adopt(self._view.content_views)
+    def _content_views(self) -> list[View]:
+        return self._view.content_views
 
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
@@ -6216,10 +6276,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
     def _render_items(self, views: list[View]) -> None:
         """Render the views built since the list was, into the session, and adopt them all."""
         built_since = [view for view in views if view.renderer is None]
-        in_session = (
-            contextlib.nullcontext() if self._target is None else rendering_into(self._target)
-        )
-        with in_session:
+        with self._in_session():
             for view in built_since:
                 view.render(RendererType.WEB)
         self._adopt(views)
@@ -6303,7 +6360,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
         super()._mark_dirty(view, rendered_object, value)
 
 
-class WebTabPageRenderer(WebRenderer[TabPage]):
+class WebTabPageRenderer(_BuiltWhenShown[TabPage]):
     """A tab's views in a column, which its tabs put in a panel under its tab.
 
     Its title, visibility and enabled state are its tab's too: a change swaps its tabs.
@@ -6322,9 +6379,8 @@ class WebTabPageRenderer(WebRenderer[TabPage]):
             }
         )
 
-    def render(self) -> None:
-        super().render()
-        self._adopt(self._view.children_views)
+    def _content_views(self) -> list[View]:
+        return self._view.children_views
 
     @property
     def is_current(self) -> bool:
@@ -6359,14 +6415,30 @@ class WebTabsRenderer(WebRenderer[TabView]):
     """
 
     _role = "tabs"
+    #: read by `TabView`: it renders only the tabs, and this renderer their views, once shown
+    renders_on_demand = True
 
     def __init__(self, view: TabView) -> None:
         super().__init__(view)
-        self._refresh_dispatcher["current_index"] = self._mark_dirty
+        self._refresh_dispatcher["current_index"] = self._refresh_current_index
 
     def render(self) -> None:
         super().render()
+        for tab in self._view.tabs:
+            assert isinstance(tab.renderer, WebTabPageRenderer)  # a tab page's, which the web has
+            tab.renderer.defer()
+        self._build(self._view.current_index)
         self._adopt(self._view.tabs)
+
+    def _build(self, index: int) -> None:
+        """Build the views of the tab at `index`, as it shows: none in a tab view without tabs."""
+        for tab in self._view.tabs[index : index + 1]:
+            assert isinstance(tab.renderer, WebTabPageRenderer)
+            tab.renderer.build()
+
+    def _refresh_current_index(self, view: TabView, rendered_object: str, value: int) -> None:
+        self._build(value)  # the view holds it once this returns
+        self._mark_dirty(view, rendered_object, value)
 
     def to_html(self, *, oob: bool = False) -> Markup:
         current = self._view.current_index
@@ -6435,6 +6507,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         left = self._view.tabs[self._view.current_index]
         with self.stop_refresh():
             self._view.current_index = index
+        self._build(index)
         dirty = _DIRTY.get()
         assert dirty is not None  # a browser event's, collected by `handle_event`
         for tab in (left, self._view.tabs[index]):
@@ -6513,13 +6586,21 @@ class WebRouterRenderer(WebRenderer[Router]):
     """
 
     _role = "router"
+    #: read by `Router`: it renders only the page shown, and this renderer the others once shown
+    renders_on_demand = True
 
     def __init__(self, view: Router) -> None:
         super().__init__(view)
-        self._refresh_dispatcher.update({"current_route": self._mark_dirty})
+        self._refresh_dispatcher["current_route"] = self._refresh_current_route
 
     def render(self) -> None:
         super().render()
+        for page in self._view.pages:
+            if page.renderer is None:  # not shown, so not built by the router's view
+                renderer = WebPageRenderer(page)
+                page.renderer = renderer
+                renderer.render()
+                renderer.defer()
         # not the toolbar: apart from the pages, like Qt's, it still switches them
         self._adopt(self._view.pages)
         # the children are rendered first: make each page's action a link to it
@@ -6527,6 +6608,13 @@ class WebRouterRenderer(WebRenderer[Router]):
             assert isinstance(page.action.renderer, WebActionRenderer)
             page.action.renderer.placement = Placement.PAGE
             page.action.renderer.href = page_path(page.route)
+
+    def _refresh_current_route(self, view: Router, rendered_object: str, value: str) -> None:
+        page = self._view.page(value)
+        if page is not None:
+            assert isinstance(page.renderer, WebPageRenderer)  # rendered with the router
+            page.renderer.build()
+        self._mark_dirty(view, rendered_object, value)
 
     def is_current(self, page: WebRenderer[Any]) -> bool:
         """Whether `page` is the renderer of the page shown."""

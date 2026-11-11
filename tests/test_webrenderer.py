@@ -112,6 +112,7 @@ from composeui.core.view import (
     TreeNode,
     TreeView,
     UploadedFile,
+    VerticalView,
     View,
     child,
     define_view,
@@ -198,6 +199,7 @@ from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
 from tests.horizontal import HorizontalMainView
 from tests.hours import HoursMainView
+from tests.latepages import LatePagesMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.lonerows import LoneRowsMainView
 from tests.maps import MapMainView
@@ -2913,9 +2915,10 @@ def test_a_tab_view_is_a_tab_list_posting_the_tab_picked_never_swapped_back() ->
     assert [b["tabindex"] for b in buttons] == ["0", "-1", "-1"]
     assert ["hidden" in panel for panel in panels] == [False, True, True]
     assert [b["aria-controls"] for b in buttons] == [p["id"] for p in panels]
-    # only the current tab's views are sent
+    # only the current tab's views are sent, and built
     assert "Length: 12 m" in root.text
     assert "Created on Monday" not in root.text
+    assert tabs.history.created.renderer is None
 
     fragments = handle_event(renderer, "select", {"index": "1"})
     assert (tabs.current_index, picks) == (1, [1])
@@ -2941,6 +2944,12 @@ def test_a_tab_view_is_a_tab_list_posting_the_tab_picked_never_swapped_back() ->
     buttons = [a for _, a in swapped.descendants if a.get("role") == "tab"]
     assert "<Changes>" in swapped.text  # escaped, shown as text
     assert ["hidden" in b for b in buttons] == [False, False, True]
+
+    tabs.notes.is_visible = True
+    with collect_dirty() as dirty:  # the code shows a tab not built yet
+        tabs.current_index = 2
+        fragments = render_dirty(dirty)
+    assert "Insulated in 2024" in _swapped(fragments, renderer.widget_id).text
 
 
 def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_widths_posted() -> None:
@@ -3600,7 +3609,9 @@ def test_finishing_a_dimension_edit_updates_the_summary_table(
     pipe_main_view: PipeMainView, pipe_client: TestClient
 ) -> None:
     radius_id = _field_id(pipe_main_view.pages.inputs.pipe_form.main_pipe.radius)
+    pipe_client.get("/results")  # built once shown, then left
     summary_id = _widget_id(pipe_main_view.pages.results.summary.renderer)
+    pipe_client.get("/inputs")
 
     pipe_client.post(f"/widget/{radius_id}", data={"value": "35", "event": "change"})
 
@@ -6472,6 +6483,110 @@ def test_what_a_thread_changes_comes_with_the_session_s_next_response(
     assert _find(pages_client.get(f"/widget/{bar_id}").text, total_id) is None  # shown already
 
 
+def test_a_page_not_shown_is_built_once_shown_with_what_changed_before() -> None:
+    view = LatePagesMainView()
+    session = WebSession(view)
+    page = view.router.rooms
+    assert page.rooms.renderer is None  # built once shown: a session doesn't pay for it before
+    page.rooms.records = [Room("Hall", 18), Room("Kitchen", 20.5), Room("Attic", 9)]
+    page.rooms.sort_column = 1  # temperature
+    page.rooms.sort_descending = True
+
+    assert session.open_route("rooms")  # as its address does
+
+    text = _element(session.page_html(), _widget_id(page.rooms.renderer)).text
+    assert text.index("Kitchen") < text.index("Hall") < text.index("Attic")
+    session.close()
+
+
+@define_view
+class _ToolBox(VerticalView):
+    tool: DialogView = child(DialogView, title="Tool", text="Run the tool?")
+
+
+@define_view
+class _BoxTab(TabPage):
+    box: _ToolBox = child(_ToolBox)
+
+
+@define_view
+class _ToolTabs(TabView):
+    first: TabPage = child(TabPage, title="First")
+    tools: _BoxTab = child(_BoxTab, title="Tools")
+
+
+@define_view
+class _HomePage(PageView):
+    route = "home"
+    page_title = "Home"
+
+
+@define_view
+class _ToolsPage(PageView):
+    route = "tools"
+    page_title = "Tools"
+
+    box: _ToolBox = child(_ToolBox)
+    tabs: _ToolTabs = child(_ToolTabs)
+
+
+@define_view
+class _ToolsRouter(Router):
+    home: _HomePage = child(_HomePage)
+    tools: _ToolsPage = child(_ToolsPage)
+
+
+@define_view
+class _ToolsMainView(MainView):
+    app_title = "Tools"
+    extension = ".tools"
+
+    router: _ToolsRouter = child(_ToolsRouter)
+
+
+def test_the_dialogs_of_a_page_not_built_follow_its_enabled_state_then_their_tab_s() -> None:
+    view = _ToolsMainView()
+    session = WebSession(view)
+    page = view.router.tools
+    tool = page.tabs.tools.box.tool  # in a tab not shown, of a page not built
+    answers: list[str] = []
+    tool.accepted.connect(lambda: answers.append("tool"))
+    page.is_enabled = False
+    tool.open()  # the app opens it whatever the page shown
+    tool_id = _widget_id(tool.renderer)
+
+    session.handle_event(tool_id, "accept", {})  # a disabled dialog ignores its answer
+    assert (answers, tool.is_visible) == ([], True)
+    page.is_enabled = True
+    session.handle_event(tool_id, "accept", {})
+    assert answers == ["tool"]
+
+    session.open_route("tools")  # its tab not built yet: the tab follows the page meanwhile
+    page.tabs.tools.is_enabled = False
+    tool.open()
+    session.handle_event(tool_id, "accept", {})
+    assert (answers, tool.is_visible) == (["tool"], True)
+    session.close()
+
+
+def test_a_dialog_keeps_its_container_once_its_page_rendered_again_is_shown() -> None:
+    view = _ToolsMainView()
+    view.render(RendererType.WEB)
+    view.render(RendererType.WEB)  # as a test or a script may: its column adopts the dialog
+    page = view.router.tools
+    tool = page.box.tool
+    answers: list[str] = []
+    tool.accepted.connect(lambda: answers.append("tool"))
+
+    view.router.navigate("tools")
+    page.box.is_enabled = False
+    tool.open()
+
+    assert isinstance(tool.renderer, WebRenderer)
+    handle_event(tool.renderer, "accept", {})  # a disabled dialog ignores its answer
+    assert (answers, tool.is_visible) == ([], True)
+
+
 def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     pages_views: list[PagesMainView], pages_client: TestClient
 ) -> None:
@@ -6479,11 +6594,9 @@ def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     (main_view,) = pages_views
     inputs = main_view.router.inputs
     button_id = _widget_id(inputs.submit.renderer)
-    total_id = _widget_id(main_view.router.results.total.renderer)
     button = _element(page, button_id)
     assert (button.tag, button.attributes["type"], button.text) == ("button", "button", "Submit")
     assert "btn-primary" in (button.attributes["class"] or "").split()
-    assert _find(page, total_id) is None  # on the results page, not sent
     inputs.name.text = "<Ada>"
 
     response = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
@@ -6494,7 +6607,7 @@ def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     shown = pages_client.post(f"/widget/{results_link}", data={"event": "triggered"}).text
     _swapped(shown, _widget_id(main_view.router.renderer))
     assert _find(shown, button_id) is None  # the page left goes
-    total = _element(shown, total_id)
+    total = _element(shown, _widget_id(main_view.router.results.total.renderer))
     assert total.text == "Submitted: <Ada>"  # escaped in the markup, the text once parsed
 
     pages_client.get("/inputs")
@@ -7611,6 +7724,7 @@ def test_the_server_compresses_what_it_sends(client: TestClient) -> None:
 def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
     energy = main_view.router.chart.energy
     assert isinstance(energy.renderer, WebChartRenderer)
 
@@ -7653,6 +7767,7 @@ def test_a_log_axis_sends_only_what_it_can_show() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)
     page = main_view.router.chart
+    main_view.router.navigate(page.route)  # its charts are built once it shows
     chart, energy = page.chart, page.energy
     assert isinstance(chart.renderer, WebChartRenderer)
     assert isinstance(energy.renderer, WebChartRenderer)
@@ -8472,7 +8587,10 @@ def test_a_main_view_rendered_again_keeps_every_widget_id(main_view_type: type[M
 
     view.render(RendererType.WEB)
 
-    assert [renderer.widget_id for renderer in _web_renderers(view)] == before
+    # it also builds the pages and tabs not shown, which wait to be shown otherwise
+    after = [renderer.widget_id for renderer in _web_renderers(view)]
+    assert set(before) <= set(after)
+    assert len(after) == len(set(after))  # each view's renderers once
 
 
 def test_a_renderer_outside_any_session_calls_back_at_once() -> None:
