@@ -6,16 +6,23 @@ import inspect
 import logging
 import sys
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
 
-from composeui.core.application import Application
-from composeui.core.signal import Signal
-from composeui.core.view import MainView, StatusBar, View, define_view
-
-if TYPE_CHECKING:
-    from composeui.core.model import Model
+from composeui.core.application import Application, ModelApplication
+from composeui.core.model import Model
+from composeui.core.reactivity import reactive, start_reactions
+from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.view import (
+    ButtonView,
+    LabelView,
+    MainView,
+    StatusBar,
+    View,
+    child,
+    define_view,
+)
 
 
 @define_view
@@ -239,3 +246,109 @@ def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
     optional: Signal[int] = Signal()
     optional.connect(maybe_sign)
     optional.emit(1)  # its default instead
+
+
+@define_view
+class _WiredMainView(MainView):
+    app_title = "Wired"
+    extension = ".wired"
+
+    early: ButtonView = child(ButtonView, text="Early")
+    late: ButtonView = child(ButtonView, text="Late")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.early.clicked.connect(lambda: None)  # made as the view is built
+
+
+def test_a_signal_made_before_or_after_the_app_wires_its_view_gives_main_view_and_model() -> None:
+    app = ModelApplication(build_main_view=_WiredMainView, build_model=Model)
+    given: list[tuple[MainView, Model]] = []
+
+    def record(*, main_view: MainView, model: Model) -> None:
+        given.append((main_view, model))
+
+    for button in (app.main_view.early, app.main_view.late):  # `late`'s made only now
+        button.clicked.connect(record)
+        button.clicked.emit()
+
+    assert given == [(app.main_view, app.model)] * 2
+
+
+def test_a_signal_given_to_a_view_or_set_since_is_the_one_it_emits() -> None:
+    clicked = SignalNoArgs()
+    calls: list[str] = []
+    clicked.connect(lambda: calls.append("clicked"))
+
+    button = ButtonView(clicked=clicked)
+    button.clicked.emit()
+    assert button.clicked is clicked
+    assert calls == ["clicked"]
+
+    replaced = SignalNoArgs()
+    button.clicked = replaced  # in place of the one made
+    button.clicked.emit()
+
+    assert button.clicked is replaced
+    assert calls == ["clicked"]  # the first one's callback, not the new one's
+
+
+def test_two_threads_reading_a_view_s_new_signal_at_once_share_it() -> None:
+    """A view's signal is made on its first read: two first reads must make one."""
+    button = ButtonView()
+    looked, resume = threading.Event(), threading.Event()
+    read: list[Signal[()]] = []
+
+    def pause_once_looked(frame: Any, event: str, _arg: object) -> None:
+        # the first thread stops as it found no signal made, before it makes one
+        if event == "return" and frame.f_code.co_name == "made_signal":
+            sys.setprofile(None)
+            looked.set()
+            resume.wait(timeout=5)
+
+    def read_first() -> None:
+        sys.setprofile(pause_once_looked)
+        read.append(button.clicked)
+
+    first = threading.Thread(target=read_first)
+    first.start()
+    assert looked.wait(timeout=5)
+    second = button.clicked  # made meanwhile
+    resume.set()
+    first.join()
+
+    assert read == [second]
+    assert read[0] is second
+
+
+@define_view
+class _ReactiveMainView(MainView):
+    app_title = "Reactive"
+    extension = ".reactive"
+
+    name: LabelView = child(LabelView, text="Ada")
+    greeting: LabelView = child(LabelView)
+
+    @reactive
+    def greet(self) -> None:
+        self.greeting.text = f"Hello {self.name.text}"
+
+
+def test_a_view_built_once_a_reactive_method_runs_still_gives_its_signals() -> None:
+    start_reactions(_ReactiveMainView())  # reads of view fields are tracked from now on
+    button = ButtonView()
+    calls: list[str] = []
+
+    button.clicked.connect(lambda: calls.append("clicked"))
+    button.clicked.emit()
+
+    assert isinstance(button.clicked, Signal)
+    assert calls == ["clicked"]
+
+
+def test_a_view_replacing_a_signal_with_another_kind_of_field_is_refused() -> None:
+    # what type checkers refuse already: as an app without one writes it
+    namespace = {"__annotations__": {"clicked": "int"}, "clicked": 0}
+    counted = type("_CountedButton", (ButtonView,), namespace)
+    with pytest.raises(TypeError, match="replaces a signal"):
+        define_view(counted)

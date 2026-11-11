@@ -84,6 +84,10 @@ The notable changes of each release of ComposeUI. The format follows
 - The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
   an app with many pages or tabs takes less memory, and its first page comes sooner: with 20 pages
   of 60 widgets, 518 KiB instead of 924 KiB, and 43 ms instead of 61 ms on the server.
+- A view makes each of its signals the first time the app's code or a backend reads it, so the
+  signals that nothing connects cost no memory. On the web, a session of an app with 20 pages of
+  60 widgets takes 390 KiB instead of 518 KiB on Python 3.9, and 284 KiB instead of 411 KiB on
+  Python 3.12. `repr(view)` no longer lists the signals.
 - `CheckBoxMixin.shows` and `Task.show_state` follow their inputs as reactive methods of the
   view that they change. In a signal's callbacks, the views that they show or hide change
   once the callbacks are done, with the reactive methods, not at once. `reactive_inputs`

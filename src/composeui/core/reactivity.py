@@ -398,9 +398,10 @@ def _enable() -> None:
 
 
 def _track_fields(cls: type[Any]) -> None:
-    import attrs  # noqa: PLC0415 (only once a reactive method exists)
+    from composeui.core.view import view_fields  # noqa: PLC0415 (it imports this module)
 
-    for field in attrs.fields(cls):
+    # not its signals: made on their first read, they're no input (see `define_view`)
+    for field in view_fields(cls):
         if not field.name.startswith("_") and field.name != "renderer":
             type.__setattr__(cls, field.name, _FieldReader(field.name))
     # attrs's, which runs the fields' hooks: `define_view` always gives it one

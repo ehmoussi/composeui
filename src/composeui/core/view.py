@@ -545,6 +545,8 @@ def set_references(root: View, main_view: MainView, model: Optional[Model]) -> N
     """
     views: deque[View] = deque([root])
     main_view_reference = weakref.ref(main_view)
+    if model is not None:
+        main_view._model_reference = weakref.ref(model)  # noqa: SLF001
     while len(views) > 0:
         current_view = views.popleft()
         current_view._main_view = main_view_reference  # noqa: SLF001
@@ -552,12 +554,11 @@ def set_references(root: View, main_view: MainView, model: Optional[Model]) -> N
             current_view._model = None if model is None else weakref.ref(model)  # noqa: SLF001
         # its children, not only its view fields: e.g. a language menu's actions
         views.extend(current_view.children_views)
-        for f in attrs.fields(cast("type[AttrsInstance]", type(current_view))):
-            signal = getattr(current_view, f.name)
-            if isinstance(signal, Signal):
-                signal.set_main_view(main_view)
-                if model is not None:
-                    signal.set_model(model)
+        # the signals made so far: the others get them as they're made (see `_LazySignal`)
+        for _name, signal in made_signals(current_view):
+            signal.set_main_view(main_view)
+            if model is not None:
+                signal.set_model(model)
 
 
 def _retranslate(view: View, translate: Translate) -> None:
@@ -569,7 +570,7 @@ def _retranslate(view: View, translate: Translate) -> None:
     for child in view.children_views:
         _retranslate(child, translate)
     view._tr = translate  # noqa: SLF001
-    for f in attrs.fields(cast("type[AttrsInstance]", type(view))):
+    for f in view_fields(type(view)):
         value = getattr(view, f.name)
         translated = translate_again(value, translate)
         if translated is value:
@@ -684,8 +685,136 @@ def _fix_lists(instance: View, attribute: Any, value: Any) -> Any:
     return _fixed(value, f"{type(instance).__name__}.{attribute.name}")
 
 
+#: field metadata key of a signal field made on its first read (see `_LazySignal`): its factory
+_LAZY_SIGNAL = "lazy_signal"
+#: held while a view's signal is made, so two threads reading it first share one
+_MAKING_SIGNAL = threading.Lock()
+
+
+def _signal_factory(field: attrs.Attribute[Any]) -> Optional[Callable[[], Signal[Any]]]:
+    """Get the factory of `field`'s signal, if its default makes one, else None."""
+    made = field.metadata.get(_LAZY_SIGNAL)
+    if made is not None:
+        return cast("Callable[[], Signal[Any]]", made)
+    default: Any = field.default  # an `attrs.Factory`, whose type attrs doesn't export
+    factory = getattr(default, "factory", None)
+    if factory is None or getattr(default, "takes_self", False):
+        return None
+    made_class = getattr(factory, "__origin__", factory)
+    if isinstance(made_class, type) and issubclass(made_class, Signal):
+        return cast("Callable[[], Signal[Any]]", factory)
+    return None
+
+
+class _LazySignal:
+    """A view's signal field, made on its first read, as most signals are never connected.
+
+    A page has views by the hundred, each with signals, and a web session a page: a signal
+    that nothing reads costs nothing. It keeps the signals made in the view's
+    `_signals`, so the view's attributes stay the ones every view of its class has: a list
+    of names and signals, smaller than a dict, as a view has few signals.
+    """
+
+    __slots__ = ("_factory", "_name")
+
+    def __init__(self, name: str, factory: Callable[[], Signal[Any]]) -> None:
+        self._name = name
+        self._factory = factory
+
+    def __get__(self, view: Optional[View], owner: Optional[type] = None) -> Any:
+        if view is None:
+            return self
+        signal = made_signal(view, self._name)
+        if signal is None:
+            with _MAKING_SIGNAL:
+                signal = made_signal(view, self._name)
+                if signal is None:
+                    signal = self._factory()
+                    self._store(view, signal)
+        return signal
+
+    def __set__(self, view: View, value: Optional[Signal[Any]]) -> None:
+        if value is not None:  # None: `__init__`'s, for a signal not made yet
+            with _MAKING_SIGNAL:
+                self._store(view, value)
+
+    def _store(self, view: View, signal: Signal[Any]) -> None:
+        # interned: each instance of the view, e.g. each session's, shares the name
+        signal.set_name(sys.intern(f"{type(view).__name__}.{self._name}"))
+        main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001
+        if main_view is not None:
+            signal.set_main_view(main_view)
+            reference = main_view._model_reference  # noqa: SLF001
+            model = None if reference is None else reference()
+            if model is not None:
+                signal.set_model(model)
+        signals = view._signals  # noqa: SLF001
+        if signals is None:
+            object.__setattr__(view, "_signals", [self._name, signal])
+            return
+        for index in range(0, len(signals), 2):
+            if signals[index] == self._name:  # a signal set in its place
+                signals[index + 1] = signal
+                return
+        signals.extend((self._name, signal))
+
+
+def made_signal(view: View, name: str) -> Optional[Signal[Any]]:
+    """Get the signal of `view`'s field `name` if it's made, without making it."""
+    signals = view._signals  # noqa: SLF001
+    if signals is not None:
+        for index in range(0, len(signals), 2):
+            if signals[index] == name:
+                return cast("Signal[Any]", signals[index + 1])
+    return None
+
+
+def emit_if_made(view: View, name: str, *args: object) -> None:
+    """Emit `view`'s signal `name` if it's made: one never read has no callback to call."""
+    signal = made_signal(view, name)
+    if signal is not None:
+        signal.emit(*args)
+
+
+def made_signals(view: View) -> list[tuple[str, Signal[Any]]]:
+    """Get the signals of `view` made so far, with their field names, without making others."""
+    signals = view._signals or []  # noqa: SLF001
+    return list(zip(signals[::2], signals[1::2]))
+
+
+def _lazy_signals_on_set(_cls: type, fields: list[Any]) -> list[Any]:
+    """Make each signal field one made on its first read (see `_LazySignal`)."""
+    lazy = []
+    for field in fields:
+        factory = _signal_factory(field)
+        if factory is not None:
+            # not in `repr`, which reads every field: it would make them all
+            field = field.evolve(  # noqa: PLW2901
+                default=None, repr=False, metadata={**field.metadata, _LAZY_SIGNAL: factory}
+            )
+        lazy.append(field)
+    return lazy
+
+
+_VIEW_FIELDS: dict[type, tuple[attrs.Attribute[Any], ...]] = {}
+
+
+def view_fields(cls: type) -> tuple[attrs.Attribute[Any], ...]:
+    """Get the fields of the view class `cls` but its signals, which a read would make."""
+    fields = _VIEW_FIELDS.get(cls)
+    if fields is None:
+        fields = tuple(
+            f
+            for f in attrs.fields(cast("type[AttrsInstance]", cls))
+            if _LAZY_SIGNAL not in f.metadata
+        )
+        _VIEW_FIELDS[cls] = fields
+    return fields
+
+
 def _fix_lists_on_set(_cls: type, fields: list[Any]) -> list[Any]:
     """Run `_fix_lists` first among the hooks of each field that has hooks of its own."""
+    fields = _lazy_signals_on_set(_cls, fields)
     fixed = []
     for field in fields:
         hooks = field.on_setattr
@@ -714,7 +843,8 @@ def define_view(
 
     Use it as ``@define_view``, or as ``@define_view(...)`` with keyword arguments for
     `attrs.define`. The fields are keyword-only. Hooks of its own (``on_setattr``) run
-    after the validators, before the renderer hears the change.
+    after the validators, before the renderer hears the change. A field whose default makes
+    a `Signal` makes it on its first read, and its `repr` leaves it out.
     """
 
     def wrap(cls: _ClassT) -> _ClassT:
@@ -727,6 +857,15 @@ def define_view(
             field_transformer=_fix_lists_on_set,
             **options,
         )
+        for f in attrs.fields(defined):
+            factory = f.metadata.get(_LAZY_SIGNAL)
+            inherited = getattr(defined, f.name, None)
+            if factory is None and isinstance(inherited, _LazySignal):
+                # the signal's descriptor, inherited, would take the field's values
+                msg = f"{defined.__name__}.{f.name} replaces a signal with another kind of field"
+                raise TypeError(msg)
+            if factory is not None and not isinstance(defined.__dict__.get(f.name), _LazySignal):
+                type.__setattr__(defined, f.name, _LazySignal(f.name, factory))
         register_view_class(defined)
         return defined
 
@@ -766,6 +905,10 @@ class View:
     #: its share of a `HorizontalView`'s width when its field sets no `STRETCH`
     default_stretch: ClassVar[int] = 1
 
+    #: its signals made so far, each after its field name; None until its first (`_LazySignal`)
+    _signals: Optional[list[Any]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
     # properties
     is_visible: bool = attrs.field(default=True)
     is_enabled: bool = attrs.field(default=True)
@@ -791,12 +934,9 @@ class View:
     )
 
     def __attrs_post_init__(self) -> None:
-        for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
+        for f in view_fields(type(self)):
             value = getattr(self, f.name, None)
-            if isinstance(value, Signal):
-                # interned: each instance of the view, e.g. each session's, shares the name
-                value.set_name(sys.intern(f"{type(self).__name__}.{f.name}"))
-            elif isinstance(value, list) and not f.name.startswith("_"):
+            if isinstance(value, list) and not f.name.startswith("_"):
                 # as `_fix_lists` sets it: the hooks don't run in `__init__`
                 object.__setattr__(self, f.name, _fixed(value, f"{type(self).__name__}.{f.name}"))
         self.retranslate()
@@ -865,7 +1005,7 @@ class View:
     def children_views(self) -> list[View]:
         """Get the views in the fields of this view, in order."""
         children_views: list[View] = []
-        for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self))):
+        for field_row_attr in view_fields(type(self)):
             view = getattr(self, field_row_attr.name)
             if isinstance(view, View):
                 children_views.append(view)
@@ -1423,6 +1563,10 @@ class MainView(View):
     #: what `download` gave without a backend, for a test to read
     _downloads: list[DownloadedFile] = attrs.field(
         factory=list, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: the app's model, for the signals made later (see `set_references`); weak
+    _model_reference: Optional[Callable[[], Optional[Model]]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
@@ -2497,7 +2641,8 @@ class LogMixin:
         message = self.validator()
         self.log_message = message or ""
         self.log_type = LogType.ERROR if message else LogType.INFO
-        self.checked.emit()
+        # most rows' isn't connected: don't make it. A mixin of views only
+        emit_if_made(cast("View", self), "checked")
 
 
 @define_view
@@ -6288,7 +6433,7 @@ class SourceTableView(View):
             self._total, self._recount = total, False
         self._order, self._order_source = ids, source
         self._refresh_order()
-        self.ordered.emit()
+        emit_if_made(self, "ordered")  # most tables' isn't connected: don't make it
         if len(self.selected_ids) > 0:
             selected = self._selected
             shown = {row_id for row_id in self._order if row_id in selected}
@@ -6895,7 +7040,7 @@ class FormView(View):
         """Get the rows of the form and its nested forms, in order."""
         return [
             getattr(self, field_row_attr.name)
-            for field_row_attr in attrs.fields(cast("type[AttrsInstance]", type(self)))
+            for field_row_attr in view_fields(type(self))
             if isinstance(getattr(self, field_row_attr.name), (FormRowView, FormView))
         ]
 
@@ -6947,7 +7092,7 @@ class FormView(View):
             self.log_view.is_visible = False
             self.log_view.log_message = ""
             self.log_view.log_type = LogType.INFO
-        self.checked.emit()
+        emit_if_made(self, "checked")  # a form's own isn't always connected: don't make it
 
     def check(self) -> None:
         """Run every check now: each row's, then each form's, nested forms first."""
@@ -7302,7 +7447,7 @@ class HorizontalView(View):
         """Get the views in the row, in order, each with its share of the row's width."""
         return [
             (view, f.metadata.get(STRETCH, view.default_stretch))
-            for f in attrs.fields(cast("type[AttrsInstance]", type(self)))
+            for f in view_fields(type(self))
             if isinstance(view := getattr(self, f.name), View)
         ]
 
@@ -7369,7 +7514,7 @@ class SplitterView(View):
         if len(self.sizes) == 0:
             self.sizes = [
                 max(f.metadata.get(STRETCH, view.default_stretch), 1)
-                for f in attrs.fields(cast("type[AttrsInstance]", type(self)))
+                for f in view_fields(type(self))
                 if isinstance(view := getattr(self, f.name), View)
             ]
         super().__attrs_post_init__()
@@ -7565,7 +7710,7 @@ class GridView(View):
     def _named_positions(self) -> dict[str, tuple[View, GridPosition]]:
         """Get each view field's view and cell, by field name."""
         positions: dict[str, tuple[View, GridPosition]] = {}
-        for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
+        for f in view_fields(type(self)):
             if isinstance(view := getattr(self, f.name), View):
                 position = f.metadata.get(GRID_POSITION)
                 if position is None:

@@ -98,6 +98,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   keyword arguments based on the callback's parameter names; keep those names exact.
 - View state is (de)serialized with `cattrs` (`MainView.save_state` / `load_state`); new view
   fields must remain serializable, or be excluded like `Signal`/`Renderer`/`Validator` fields.
+- A view makes each signal on the first read of its field. Code that walks a view's fields uses
+  `view_fields`, which leaves the signals out: a `getattr` on every field makes them all. Emit a
+  signal that often has no callback, such as `checked`, with `emit_if_made`.
 
 ## Code style
 

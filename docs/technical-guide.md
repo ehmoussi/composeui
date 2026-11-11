@@ -137,6 +137,14 @@ under the session's lock. See [A button click](#a-button-click).
 
 These names are part of the API: keep them exact.
 
+A view makes each of its signals on the first read of its field, as most are never connected.
+`define_view` gives each field whose default makes a signal a `_LazySignal`. A web session's page
+has views by the hundred, so the signals that nothing reads cost nothing. A view keeps the
+signals made in its `_signals`. A signal made after `set_references` gets the main view and the
+model as it is made. Code that walks a view's fields uses `view_fields`, which leaves the signals
+out. The core emits a signal that often has no callback, such as `checked`, with `emit_if_made`.
+`test_a_session_makes_only_the_signals_something_connects` fails if a walk reads them all.
+
 ### Reactive methods
 
 `composeui.core.reactivity` runs the [reactive methods](user-guide/reactive-methods.md) of the
