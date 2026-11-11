@@ -127,7 +127,10 @@ def _environment() -> dict[str, Any]:
     ).stdout.strip()
     return {
         "composeui": getattr(composeui, "__version__", None),
+        # the checkout's: with `PYTHONPATH`, the version measured is the folder imported
         "commit": commit,
+        "imported_from": str(Path(composeui.__file__).parent),
+        "pythonpath": os.environ.get("PYTHONPATH", ""),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "processor": platform.processor() or platform.machine(),
