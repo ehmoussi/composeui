@@ -116,6 +116,7 @@ from composeui.core.view import (
     View,
     child,
     define_view,
+    made_signals,
     replace_cell,
 )
 from composeui.webcore import downloads as downloads_module
@@ -8577,6 +8578,35 @@ def test_a_view_the_web_doesn_t_render_is_left_out_of_its_container() -> None:
         assert _holds(page, _widget_id(bar.renderer), _widget_id(bar.shown.renderer))
     view.items.item_views = []  # gone outside any session too
     assert _find(view.renderer.page_html(), _widget_id(item.renderer)) is None
+
+
+def _views_under(view: View) -> Iterator[View]:
+    yield view
+    for child_view in view.children_views:
+        yield from _views_under(child_view)
+
+
+@pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)
+def test_a_session_makes_only_the_signals_something_connects(
+    main_view_type: type[MainView], tmp_path: Path
+) -> None:
+    """A view's signal is made on its first read: walking the views must not read them all."""
+    view = main_view_type()
+    session = WebSession(view)  # built, wired and rendered
+    session.page_html()
+    view.set_language("fr")
+    view.save_state(tmp_path / f"study{view.extension}")
+    view.reset_state()
+
+    unconnected = [
+        f"{type(each).__name__}.{name}"
+        for each in _views_under(view)
+        for name, signal in made_signals(each)
+        # what the test checks is internal: no public API tells a signal's callbacks
+        if len(signal._callbacks) == 0  # noqa: SLF001
+    ]
+    assert unconnected == []
+    session.close()
 
 
 @pytest.mark.parametrize("main_view_type", _MAIN_VIEW_TYPES)

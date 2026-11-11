@@ -18,7 +18,6 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
 
-import attrs
 import uvicorn
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -32,9 +31,8 @@ from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
-from composeui.core.signal import Signal
 from composeui.core.study import open_study
-from composeui.core.view import FILTER_PATTERNS_VARIABLE, View
+from composeui.core.view import FILTER_PATTERNS_VARIABLE, View, made_signals, view_fields
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
 from composeui.webcore.order import DuplicatePostError
@@ -68,6 +66,7 @@ if TYPE_CHECKING:
 
     from composeui.core.application import _ConnectDecorator, _ConnectModelDecorator
     from composeui.core.model import Model
+    from composeui.core.signal import Signal
     from composeui.core.view import MainView
 
     Ts = TypeVarTuple("Ts")
@@ -110,12 +109,14 @@ def _attribute_paths(main_view: MainView) -> dict[int, _AttributePath]:
     views: deque[tuple[View, _AttributePath]] = deque([(main_view, ())])
     while len(views) > 0:
         view, path = views.popleft()
-        for field in attrs.fields(cast("type[attrs.AttrsInstance]", type(view))):
+        for field in view_fields(type(view)):
             child = getattr(view, field.name)
-            if isinstance(child, (View, Signal)):
-                paths[id(child)] = (*path, field.name)
             if isinstance(child, View):
+                paths[id(child)] = (*path, field.name)
                 views.append((child, (*path, field.name)))
+        # a signal `connect` names is made already, by the read naming it
+        for name, signal in made_signals(view):
+            paths[id(signal)] = (*path, name)
     return paths
 
 
