@@ -94,7 +94,12 @@ dev = [
     "textual-dev>=1.8.0",
     "watchfiles>=1.1.1",
 ]
-docs = ["furo>=2024.8.6", "myst-parser>=3.0.1", "sphinx>=7.4.7"]
+docs = [
+    "furo>=2024.8.6",
+    "myst-parser>=3.0.1",
+    "sphinx>=7.4.7",
+    "sphinx-sitemap>=2.9.0",
+]
 typecheck = [
     "mypy>=1.19.1",
     "pyrefly>=1.4.0",

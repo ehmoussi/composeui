@@ -927,6 +927,7 @@ job. That job also lints the Python files of `docs/`.
 
 On a push to `main`, the `pages` job publishes the site that `make docs` built to GitHub
 Pages, at https://ehmoussi.github.io/composeui/. A pull request only builds the site.
+The docs build generates `sitemap.xml` with the published URLs for search engines.
 
 ### Release
 

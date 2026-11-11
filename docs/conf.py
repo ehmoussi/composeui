@@ -26,6 +26,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx_sitemap",
     "widgetcatalog",
 ]
 
@@ -49,6 +50,8 @@ autodoc_class_signature = "separated"
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 html_theme = "furo"
+html_baseurl = "https://ehmoussi.github.io/composeui/"
+sitemap_url_scheme = "{link}"
 html_title = f"ComposeUI {release}"
 html_static_path = ["_static"]
 # _site/ is copied as is to the root of the site: llms.txt for language models
