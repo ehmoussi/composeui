@@ -297,6 +297,31 @@ Read this section before other people use the app, on a network or behind a reve
   (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
   full, a new browser gets an error (503) until a session ends, and the open sessions keep
   working.
+- **Idle sessions can wait on disk.** Set `session_idle`, in seconds, in a subclass of
+  `WebApplication`, for example `session_idle = 300.0`. The server then saves each session that
+  is idle for that long to the system's temporary folder, and frees its memory. Its next request
+  opens it again, and its page reloads on the same address: the action of that request is
+  lost, and the user does it again. A link that downloads, such as a table's CSV or a chart's
+  image, fails until the page reloads. The session keeps what a study keeps. It also keeps its
+  study file, its language, the uploads of its path fields, and the `SESSION` fields (see
+  [Saving and loading state](building-views.md#saving-and-loading-state)). What a callback set
+  and a study doesn't hold, such as an image or a table's `cell_styles`, comes back only if the
+  app gives it again on `loaded`. Sessions on disk don't count in `max_sessions`. At most
+  10 000 are on disk (`max_saved_sessions`): past it, idle sessions stay in memory. A session
+  on disk ends after `session_ttl` too, and the server removes the sessions on disk when it
+  stops.
+- **A session stays in memory while it holds what it can't save.** It stays while:
+  - a job runs, or a request is in progress;
+  - the page has a file of `MainView.download` to fetch;
+  - a dialog is open;
+  - an upload view holds a file;
+  - a large table shows a source that the app gave other than on `loaded`, for example from a
+    file that the user chose (a source given on `loaded` comes back as the session wakes);
+  - a console holds text;
+  - `MainView.can_hibernate` returns False. Override it when a session holds something that its
+    views' state and its model's data don't, for example an object that a callback built. A
+    study saves neither the attributes of a view that are not fields nor the variables of a
+    callback: a session that wakes doesn't have them.
 - **Requests have a size limit.** The server refuses a request body larger than 6 MiB (413) before
   it reads it. A file upload's request can be `max_upload_size` plus 1 MiB.
 - **A crafted regular expression can stop the server for a long time.** A table's filter accepts

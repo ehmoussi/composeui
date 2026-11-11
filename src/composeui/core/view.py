@@ -96,6 +96,7 @@ __all__ = [
     "GRID_POSITION",
     "OMIT",
     "SEARCH_DELAY_MS",
+    "SESSION",
     "SOURCE_TABLE_JOB_ROWS",
     "STRETCH",
     "UI_TEXT",
@@ -288,6 +289,10 @@ GRID_POSITION = "grid_position"
 #: Field metadata key for text the user reads rather than enters (labels, titles...): it
 #: belongs to the app's code and language, not to a study, so it's never saved or loaded
 UI_TEXT = "ui_text"
+#: Field metadata key for a field left out of a study (`OMIT`) that a session keeps when it
+#: is saved and opened again, idle on the web (`WebApplication.session_idle`) or across a
+#: ``--reload``: where the user is, such as the tab shown, not study data
+SESSION = "session"
 #: the version of how a study file holds the views' state, written in it as
 #: ``{"composeui": {"format": ...}, "app": {"version": ...}, "views": ...}``. A file
 #: without them is from before, and holds the views' state alone.
@@ -452,6 +457,44 @@ def _show_checked(view: View) -> None:
             for shown in current.shown_views:
                 shown.is_visible = current.is_checked
         views.extend(current.children_views)
+
+
+def _session_fields(view: View) -> Iterator[tuple[str, View, attrs.Attribute[Any]]]:
+    """Get the `SESSION` fields of `view` and of the views under it, each with its path."""
+    views: deque[tuple[str, View]] = deque([("", view)])
+    while len(views) > 0:
+        prefix, current = views.popleft()
+        attrs.resolve_types(cast("type[AttrsInstance]", type(current)))
+        for f in view_fields(type(current)):
+            if f.metadata.get(SESSION, False):
+                yield f"{prefix}{f.name}", current, f
+            else:
+                value = getattr(current, f.name)
+                if isinstance(value, View):
+                    views.append((f"{prefix}{f.name}.", value))
+
+
+def session_data(view: View) -> dict[str, Any]:
+    """Get the `SESSION` fields of `view` and of the views under it, by their path."""
+    return {
+        path: CONVERTER.unstructure(getattr(current, f.name))
+        for path, current, f in _session_fields(view)
+    }
+
+
+@batch()
+def load_session_data(view: View, data: Mapping[str, Any]) -> None:
+    """Set the `SESSION` fields that `session_data` got, wherever they still fit.
+
+    A field that the code added keeps its value, and so does one given a value that it no
+    longer takes (e.g. a tab removed): it's only where the user was, not their data.
+    """
+    for path, current, f in _session_fields(view):
+        if path in data:
+            # resolved by `_session_fields`
+            field_type = cast("type[Any]", f.type)
+            with contextlib.suppress(*_BAD_STATE_ERRORS):
+                setattr(current, f.name, CONVERTER.structure(data[path], field_type))
 
 
 @batch()
@@ -1779,6 +1822,15 @@ class MainView(View):
         finally:
             partial.unlink(missing_ok=True)
         self.state_filepath = filepath
+
+    def can_hibernate(self) -> bool:
+        """Tell whether the web may save this session to disk while it's idle, and free it.
+
+        See `WebApplication.session_idle`. An app returns False while the session holds what
+        its views' state and its model's data don't, e.g. an object that a callback built
+        from the user's input: the session then stays in memory.
+        """
+        return True
 
     def ask_open_filepath(self, extensions: dict[str, tuple[str, ...]]) -> Optional[Path]:
         self.file_view.extensions = extensions
@@ -7502,8 +7554,10 @@ class SplitterView(View):
 
     #: each pane's share of the width (the height, vertical), in order; once the user drags
     #: a border, the panes shown in percent of theirs. Layout, not study data: never saved,
-    #: loaded or reset
-    sizes: list[int] = attrs.field(factory=list, validator=[_check_sizes], metadata={OMIT: True})
+    #: loaded or reset, but kept with the session (`SESSION`)
+    sizes: list[int] = attrs.field(
+        factory=list, validator=[_check_sizes], metadata={OMIT: True, SESSION: True}
+    )
     #: names a border between two panes for a screen reader, on the web
     border_text: str = attrs.field(default=T("Resize the panes"), metadata={UI_TEXT: True})
     #: the user dragged a border (once dropped) or moved one with a key, giving the new
@@ -7585,9 +7639,10 @@ class TabView(View):
             msg = f"Cannot show tab {index} of {type(self).__name__}: it has {count} tabs."
             raise ValueError(msg)
 
-    #: the tab shown, counted from 0. Navigation, not study data: never saved, loaded or reset
+    #: the tab shown, counted from 0. Navigation, not study data: never saved, loaded or
+    #: reset, but kept with the session (`SESSION`)
     current_index: int = attrs.field(
-        default=0, validator=[_check_current_index], metadata={OMIT: True}
+        default=0, validator=[_check_current_index], metadata={OMIT: True, SESSION: True}
     )
     #: the user picked another tab, by its index; not emitted when `current_index` is set in code
     current_changed: Signal[int] = attrs.Factory(Signal[int])
@@ -7891,8 +7946,9 @@ class SidebarView(View):
     #: for screen readers and as its tooltip
     toggle_text: str = attrs.field(default=T("Sidebar"), metadata={UI_TEXT: True})
     #: whether the content shows, else a narrow strip with the button bringing it back.
-    #: Layout, not study data: never saved, loaded or reset
-    is_expanded: bool = attrs.field(default=True, metadata={OMIT: True})
+    #: Layout, not study data: never saved, loaded or reset, but kept with the session
+    #: (`SESSION`)
+    is_expanded: bool = attrs.field(default=True, metadata={OMIT: True, SESSION: True})
     #: the user retracted or expanded the sidebar; not emitted when `is_expanded` is set in code
     toggled: Signal[bool] = attrs.Factory(Signal[bool])
 

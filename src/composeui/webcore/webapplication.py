@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import functools
 import importlib.abc
@@ -16,10 +17,21 @@ from collections import deque
 from contextvars import ContextVar
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, NamedTuple, TypeVar, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Generic,
+    NamedTuple,
+    Optional,
+    TypeVar,
+    cast,
+)
 
 import uvicorn
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -56,7 +68,7 @@ from composeui.webcore.routes import (
     widget_file,
     widget_fragment,
 )
-from composeui.webcore.session import SessionStore
+from composeui.webcore.session import Hibernation, SessionStore
 from composeui.webcore.webrenderer import check_routes
 
 if TYPE_CHECKING:
@@ -184,7 +196,7 @@ def create_starlette_app(
             Middleware(GZipMiddleware, minimum_size=1024),
         ],
         exception_handlers={DuplicatePostError: duplicate_post},
-        lifespan=_saving(sessions) if reloading else _closing(sessions),
+        lifespan=_lifespan(sessions, reloading=reloading),
     )
     app.state.sessions = sessions
     #: this process of a `--reload` server, which its pages name: None for another server
@@ -219,30 +231,59 @@ def _hide_reload_polls() -> None:
         access.addFilter(_is_logged)
 
 
-def _closing(
-    sessions: SessionStore,
+LOGGER = logging.getLogger("COMPOSEUI")
+
+#: the longest and the shortest wait between two looks for idle sessions to save, in seconds
+_MAX_SWEEP_INTERVAL = 30.0
+_MIN_SWEEP_INTERVAL = 0.01
+
+
+def _lifespan(
+    sessions: SessionStore, *, reloading: bool
 ) -> Callable[[Starlette], contextlib.AbstractAsyncContextManager[None]]:
-    """Get a lifespan closing the sessions once the server stops: their uploads go too."""
+    """Get the server's lifespan: idle sessions saved to disk while it runs (`session_idle`).
+
+    Once it stops, the sessions are closed, their uploads removed, or a ``--reload``
+    server's saved for its next process.
+    """
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        yield
-        sessions.close_all()
+        stopping = asyncio.Event()
+        sweeper = None
+        if sessions.hibernation is not None:
+            # not 0, even for a `session_idle` of 0: the sweep would never wait
+            interval = max(
+                min(sessions.hibernation.idle / 2, _MAX_SWEEP_INTERVAL), _MIN_SWEEP_INTERVAL
+            )
+            sweeper = asyncio.ensure_future(_sweep(sessions, interval, stopping))
+        try:
+            yield
+        finally:
+            stopping.set()
+            if sweeper is not None:
+                # not canceled: the session it's saving would be left half saved
+                await sweeper
+            if reloading:
+                sessions.save_all()
+            else:
+                sessions.close_all()
 
     return lifespan
 
 
-def _saving(
-    sessions: SessionStore,
-) -> Callable[[Starlette], contextlib.AbstractAsyncContextManager[None]]:
-    """Get a lifespan saving the sessions once the server stops, e.g. for a change."""
-
-    @contextlib.asynccontextmanager
-    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-        yield
-        sessions.save_all()
-
-    return lifespan
+async def _sweep(sessions: SessionStore, interval: float, stopping: asyncio.Event) -> None:
+    """Save the idle sessions every `interval` seconds, until `stopping` is set."""
+    while not stopping.is_set():
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(stopping.wait(), interval)
+        if not stopping.is_set():
+            try:
+                # saving reads the views and writes files: off the event loop
+                await run_in_threadpool(sessions.hibernate_idle)
+            except Exception:
+                # e.g. an app's model failing to close: the next sessions are still saved
+                LOGGER.exception("Can't save the idle sessions to disk.")
 
 
 def _has_watchfiles() -> bool:
@@ -324,8 +365,15 @@ class WebApplication(Application[MainViewT]):
     #: seconds a session may stay idle before it is dropped
     session_ttl: ClassVar[float] = 3600.0
     #: most sessions live at once: past it, a new browser gets 503 until one is dropped
-    #: (each holds a main view, and maybe a model, in memory)
+    #: (each holds a main view, and maybe a model, in memory); those on disk don't count
     max_sessions: ClassVar[int] = 1000
+    #: seconds a session may stay idle before it's saved to disk and its memory freed; its
+    #: next request opens it again, and its page reloads. None keeps every session in
+    #: memory. A session stays in memory while it holds what a study doesn't (see
+    #: `MainView.can_hibernate`)
+    session_idle: ClassVar[Optional[float]] = None
+    #: most sessions on disk at once: past it, idle sessions stay in memory
+    max_saved_sessions: ClassVar[int] = 10_000
     #: whether table filters take regular expressions; a public app sets it to False, because a
     #: crafted one can make every session wait for a long time
     filter_patterns: ClassVar[bool] = True
@@ -395,6 +443,9 @@ class WebApplication(Application[MainViewT]):
             ttl=self.session_ttl,
             max_sessions=self.max_sessions,
             saved=saved_sessions,
+            hibernation=None
+            if self.session_idle is None
+            else Hibernation(self.session_idle, self.max_saved_sessions),
         )
         return create_starlette_app(
             sessions,

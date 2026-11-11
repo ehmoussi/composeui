@@ -458,6 +458,13 @@ chart. Saving, opening, and New leave the rest alone:
   [list of views](organizing-the-window.md#a-list-of-views), which belong to the model.
 - **The language** shown, which the main view or `--language` sets.
 
+A session keeps some of this as it's saved and opened again: on a
+[reload](running-the-app.md#reloading-the-app-on-a-change), and on the web while it's idle
+(`session_idle`, see [Serve the app to other users](running-the-app.md#serve-the-app-to-other-users)).
+It keeps the tab shown, the sizes of the panes, and whether the sidebar is retracted. These fields
+are tagged `SESSION`, with `OMIT`. Tag a field of your own views the same way, for where the user
+is rather than their data: `attrs.field(default=0, metadata={OMIT: True, SESSION: True})`.
+
 The main view emits `loaded` once the views and the model's data are in place: once as the
 app starts, after its setup, with the study that `-f FILE` opens or with a new one, then
 after each New and Open. On the web, each session emits it as it starts. Connect `loaded` to

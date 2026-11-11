@@ -17,6 +17,7 @@ import enum
 import errno
 import hashlib
 import html
+import itertools
 import json
 import logging
 import math
@@ -75,11 +76,13 @@ from composeui.core.view import (
     ChartView,
     CheckBoxView,
     ComboBoxView,
+    ConsoleView,
     DialogView,
     DownloadedFile,
     EditRefusedError,
     FilePathInputMixin,
     FilePathInputView,
+    FileUploadView,
     FolderPathInputMixin,
     ImageView,
     InputView,
@@ -136,7 +139,7 @@ from composeui.webcore.order import (
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS, SESSION_TAG_FIELD, SESSION_TAG_HEADER
-from composeui.webcore.session import SessionStore, WebSession
+from composeui.webcore.session import Hibernation, SessionStore, WebSession
 from composeui.webcore.uploads import (
     MAX_FIELD_SIZE,
     MAX_FIELDS,
@@ -4089,12 +4092,14 @@ class _CountedModel(Model):
 
 
 class _SessionStoreMachine(RuleBasedStateMachine):
-    """A store of 3 sessions, idle 10 seconds at most, used in any order.
+    """A store of 3 sessions in memory and 1 on disk, used in any order.
 
-    The live sessions as it should keep them: each with when it was last used.
+    Idle 5 seconds, a session goes to disk; 10 seconds, it ends. The sessions as it
+    should keep them: each live one with when it was last used, and each one on disk with
+    the name it held and when it was last used.
     """
 
-    TTL, MOST = 10.0, 3
+    TTL, MOST, IDLE, MOST_SAVED = 10.0, 3, 5.0, 1
     ids = Bundle("ids")
 
     def __init__(self) -> None:
@@ -4103,19 +4108,29 @@ class _SessionStoreMachine(RuleBasedStateMachine):
         self.patched = mock.patch.object(session_module, "time", self.clock)
         self.patched.start()
         self.store = SessionStore(
-            lambda: (HelloMainView(), _ReleasedModel()), ttl=self.TTL, max_sessions=self.MOST
+            lambda: (HelloMainView(), _ReleasedModel()),
+            ttl=self.TTL,
+            max_sessions=self.MOST,
+            hibernation=Hibernation(self.IDLE, self.MOST_SAVED),
         )
         self.live: dict[str, tuple[WebSession, float]] = {}
-        self.ended: list[WebSession] = []
+        self.on_disk: dict[str, tuple[str, float]] = {}
+        #: the sessions freed: ended, or saved to disk
+        self.freed: list[WebSession] = []
+        self.made: set[str] = set()
 
     def _expire(self) -> None:
         for session_id, (session, used) in list(self.live.items()):
             if self.clock.now - used >= self.TTL:
                 del self.live[session_id]
-                self.ended.append(session)
+                self.freed.append(session)
+        for session_id, (_name, used) in list(self.on_disk.items()):
+            if self.clock.now - used >= self.TTL:
+                del self.on_disk[session_id]
 
-    @rule(target=ids)
-    def create(self) -> Any:
+    # the user's name: one a new session doesn't have, which only its saved state brings back
+    @rule(target=ids, name=st.sampled_from(["Alice", "Bob"]))
+    def create(self, name: str) -> Any:
         self._expire()
         created = self.store.create()
         if len(self.live) >= self.MOST:  # full: refused, the live ones kept
@@ -4124,7 +4139,10 @@ class _SessionStoreMachine(RuleBasedStateMachine):
         assert created is not None
         session_id, session = created
         assert session_id not in self.live
+        assert isinstance(session.main_view, HelloMainView)
+        session.main_view.form.name.text = name
         self.live[session_id] = (session, self.clock.now)
+        self.made.add(session_id)
         return session_id
 
     @rule(session_id=st.one_of(ids, st.just("forged")))
@@ -4135,14 +4153,39 @@ class _SessionStoreMachine(RuleBasedStateMachine):
             session = self.live[session_id][0]
             assert got is session
             self.live[session_id] = (session, self.clock.now)
-        else:  # ended, or never made
+        elif session_id in self.on_disk and len(self.live) < self.MOST:
+            # built again, with the user's name, and in memory
+            assert got is not None
+            assert isinstance(got.main_view, HelloMainView)
+            assert got.main_view.form.name.text == self.on_disk.pop(session_id)[0]
+            self.live[session_id] = (got, self.clock.now)
+        else:  # ended, never made, or no room to wake it
             assert got is None
 
     @rule(session_id=ids)
     def drop(self, session_id: str) -> None:
         self.store.drop(session_id)
         if session_id in self.live:
-            self.ended.append(self.live.pop(session_id)[0])
+            self.freed.append(self.live.pop(session_id)[0])
+
+    @rule()
+    def hibernate(self) -> None:
+        self._expire()
+        idle = [
+            session_id
+            for session_id, (_session, used) in self.live.items()
+            if self.clock.now - used >= self.IDLE
+        ]
+        self.store.hibernate_idle()
+        saved = [session_id for session_id in idle if not self.store.is_at_hand(session_id)]
+        # those idle, while there's room on disk; the others still in memory
+        assert len(saved) == min(len(idle), self.MOST_SAVED - len(self.on_disk))
+        assert all(self.store.is_at_hand(session_id) for session_id in self.live.keys() - idle)
+        for session_id in saved:
+            session, used = self.live.pop(session_id)
+            assert isinstance(session.main_view, HelloMainView)
+            self.on_disk[session_id] = (session.main_view.form.name.text, used)
+            self.freed.append(session)
 
     # mostly less than the timeout: sessions used, then idle, then used again
     @rule(seconds=st.sampled_from([1.0, 4.0, 6.0, 9.0, 10.0]))
@@ -4150,8 +4193,8 @@ class _SessionStoreMachine(RuleBasedStateMachine):
         self.clock.now += seconds
 
     @invariant()
-    def ended_sessions_alone_are_released(self) -> None:
-        # dropped at once; expired once the store is used again
+    def freed_sessions_alone_are_released(self) -> None:
+        # dropped or saved at once; expired once the store is used again
         self._expire()
         self.store.get("forged")  # used: it drops the expired ones
 
@@ -4159,15 +4202,680 @@ class _SessionStoreMachine(RuleBasedStateMachine):
             assert isinstance(session.model, _ReleasedModel)
             return session.model.is_released
 
-        assert all(released(session) for session in self.ended)
+        assert all(released(session) for session in self.freed)
         assert not any(released(session) for session, _used in self.live.values())
+        # on disk until they expire, then gone
+        for session_id in self.made:
+            assert self.store.is_at_hand(session_id) is (session_id not in self.on_disk)
 
     def teardown(self) -> None:
+        self.store.close_all()
         self.patched.stop()
 
 
 TestASessionStoreUsedInAnyOrder = _SessionStoreMachine.TestCase
 TestASessionStoreUsedInAnyOrder.settings = settings(max_examples=100, stateful_step_count=20)
+
+
+def test_a_store_saves_its_idle_sessions_while_it_has_room_and_wakes_them_as_they_were() -> None:
+    """A run of `_SessionStoreMachine` pinned: Hypothesis's CI profile may not draw it."""
+    machine = _SessionStoreMachine()
+    try:
+        alice = machine.create("Alice")
+        bob = machine.create("Bob")
+        machine.wait(6.0)
+        machine.hibernate()  # one of them: the disk has room for one
+        machine.freed_sessions_alone_are_released()
+        carol = machine.create("Carol")
+        machine.create("Dave")
+        machine.get(alice)  # not woken: the memory is full
+        machine.get(bob)
+        machine.drop(carol)
+        machine.get(alice)  # woken as it was
+        machine.get(bob)
+        machine.wait(6.0)
+        machine.hibernate()
+        machine.wait(4.0)
+        machine.freed_sessions_alone_are_released()  # expired on disk too
+    finally:
+        machine.teardown()
+
+
+@define_view
+class _HoldingMainView(MainView):
+    """A session holding, on demand, each thing that a study doesn't save."""
+
+    console: ConsoleView = Factory(ConsoleView)
+    upload: FileUploadView = Factory(FileUploadView)
+    notes: SourceTableView = Factory(SourceTableView)
+    question: DialogView = Factory(DialogView)
+
+
+@define_view
+class _KeptByTheAppMainView(_HoldingMainView):
+    """A session that the app keeps in memory, e.g. holding an object a callback built."""
+
+    def can_hibernate(self) -> bool:
+        return False
+
+
+def _hold_nothing(_session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    pass
+
+
+def _hold_a_job(session: WebSession, stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    may_end = threading.Event()
+    jobs = session.main_view.jobs
+
+    def end() -> None:
+        may_end.set()
+        for _ in range(200):  # until its thread is over
+            if not jobs.has_workers:
+                return
+            time.sleep(0.05)
+
+    stack.callback(end)
+    jobs.start(lambda _job: may_end.wait(10))
+
+
+def _hold_a_download(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    session.main_view.download("report.txt", b"made by the app")
+
+
+def _hold_a_question(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    assert isinstance(session.main_view, _HoldingMainView)
+    session.main_view.question.open()
+
+
+def _hold_an_upload(session: WebSession, _stack: contextlib.ExitStack, tmp_path: Path) -> None:
+    assert isinstance(session.main_view, _HoldingMainView)
+    path = tmp_path / "data.csv"
+    path.write_text("a\n1\n")
+    session.main_view.upload.take_file(UploadedFile("data.csv", 4, "text/csv", path))
+
+
+def _hold_a_new_source(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    assert isinstance(session.main_view, _HoldingMainView)
+    session.main_view.notes.source = ListSource(_Note, {"text": "Note"}, [_Note("from a file")])
+
+
+def _hold_output(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    assert isinstance(session.main_view, _HoldingMainView)
+    session.main_view.console.append("solver started\n")
+
+
+def _hold_a_request(session: WebSession, stack: contextlib.ExitStack, _tmp_path: Path) -> None:
+    stack.enter_context(session.held())  # e.g. an upload still arriving
+
+
+@pytest.mark.parametrize(
+    ("main_view_type", "hold", "is_kept"),
+    [
+        (_HoldingMainView, _hold_nothing, False),
+        (_HoldingMainView, _hold_a_job, True),
+        (_HoldingMainView, _hold_a_download, True),
+        (_HoldingMainView, _hold_a_question, True),
+        (_HoldingMainView, _hold_an_upload, True),
+        (_HoldingMainView, _hold_a_new_source, True),
+        (_HoldingMainView, _hold_output, True),
+        (_HoldingMainView, _hold_a_request, True),
+        (_KeptByTheAppMainView, _hold_nothing, True),
+    ],
+)
+def test_an_idle_session_stays_in_memory_while_it_holds_what_a_study_doesn_t(
+    main_view_type: type[_HoldingMainView],
+    hold: Callable[[WebSession, contextlib.ExitStack, Path], None],
+    is_kept: bool,
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            lambda: (main_view_type(), None),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        with contextlib.ExitStack() as stack:
+            hold(session, stack, tmp_path)
+            clock.now += 6.0
+            store.hibernate_idle()
+            kept = store.is_at_hand(session_id)
+        store.close_all()
+
+    assert kept is is_kept
+
+
+def test_a_session_is_idle_from_the_end_of_its_last_long_request() -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            lambda: (HelloMainView(), None),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        with session.held():  # e.g. a large upload
+            clock.now += 6.0
+        store.hibernate_idle()
+        kept = store.is_at_hand(session_id)
+        clock.now += 5.0
+        store.hibernate_idle()
+        saved = not store.is_at_hand(session_id)
+    store.close_all()
+
+    assert kept
+    assert saved
+
+
+def _watched_threading() -> tuple[types.SimpleNamespace, threading.Event]:
+    """Get a `threading` for the store whose events say when a request waits on one."""
+    waiting = threading.Event()
+
+    class WatchedEvent(threading.Event):
+        def wait(self, timeout: float | None = None) -> bool:
+            waiting.set()
+            return super().wait(timeout)
+
+    return types.SimpleNamespace(Lock=threading.Lock, Event=WatchedEvent), waiting
+
+
+class _SlowSavedModel(Model):
+    """A model with data, whose save waits for the test."""
+
+    data_name = "data.txt"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.saving = threading.Event()
+        self.may_save = threading.Event()
+        self.saves = 0
+        self.is_closed = False
+
+    def save_data(self, path: Path) -> None:
+        self.saves += 1
+        self.saving.set()
+        assert self.may_save.wait(10)
+        path.write_text("data")
+
+    def open_data(self, path: Path) -> None:
+        assert path.read_text() == "data"
+
+    def close(self) -> None:
+        self.is_closed = True
+
+
+def test_a_request_during_the_save_of_an_idle_session_keeps_it_in_memory() -> None:
+    watched, waiting = _watched_threading()
+    clock = _Clock()
+    model = _SlowSavedModel()
+    with (
+        mock.patch.object(session_module, "time", clock),
+        mock.patch.object(session_module, "threading", watched),
+    ):
+        store = SessionStore(
+            lambda: (HelloMainView(), model),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        clock.now += 6.0
+        sweep = threading.Thread(target=store.hibernate_idle)
+        sweep.start()
+        assert model.saving.wait(10)
+        got: list[WebSession | None] = []
+        request = threading.Thread(target=lambda: got.append(store.get(session_id)))
+        request.start()
+        assert waiting.wait(10)  # the request waits for the save
+        model.may_save.set()
+        sweep.join(10)
+        request.join(10)
+        store.hibernate_idle()  # used just now: not idle any more
+
+    assert got == [session]
+    assert store.is_at_hand(session_id)
+    assert not model.is_closed
+    store.close_all()
+    assert model.is_closed
+
+
+def test_two_requests_for_a_session_on_disk_build_it_once() -> None:
+    watched, waiting = _watched_threading()
+    clock = _Clock()
+    builds: list[HelloMainView] = []
+    may_build = threading.Event()
+
+    def build() -> tuple[MainView, Model | None]:
+        if len(builds) > 0:  # the wake's
+            assert may_build.wait(10)
+        builds.append(HelloMainView())
+        return builds[-1], None
+
+    with (
+        mock.patch.object(session_module, "time", clock),
+        mock.patch.object(session_module, "threading", watched),
+    ):
+        store = SessionStore(build, ttl=60.0, max_sessions=1, hibernation=Hibernation(5.0, 10))
+        created = store.create()
+        assert created is not None
+        session_id, _session = created
+        clock.now += 6.0
+        store.hibernate_idle()
+        got: list[WebSession | None] = []
+        first = threading.Thread(target=lambda: got.append(store.get(session_id)))
+        first.start()
+        second = threading.Thread(target=lambda: got.append(store.get(session_id)))
+        second.start()
+        assert waiting.wait(10)  # one waits for the other's wake
+        may_build.set()
+        first.join(10)
+        second.join(10)
+        store.close_all()
+
+    assert len(builds) == 2
+    assert len(got) == 2
+    assert got[0] is got[1] is not None
+
+
+def test_an_idle_session_that_fails_to_save_stays_in_memory_and_isn_t_tried_again(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingModel(_SlowSavedModel):
+        def save_data(self, path: Path) -> None:
+            self.saves += 1
+            raise OSError(errno.ENOSPC, "No space left on device", str(path))
+
+    clock = _Clock()
+    model = FailingModel()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            lambda: (HelloMainView(), model),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        clock.now += 6.0
+        with caplog.at_level(logging.ERROR, logger="COMPOSEUI"):
+            store.hibernate_idle()
+        clock.now += 6.0
+        store.hibernate_idle()
+
+        assert store.get(session_id) is session
+    store.close_all()
+    assert model.saves == 1
+    assert "Can't save an idle session" in caplog.text
+
+
+class _UnopenableModel(_SlowSavedModel):
+    """A model whose data saves, then fails to open, e.g. a file the disk lost."""
+
+    def save_data(self, path: Path) -> None:
+        path.write_text("data")
+
+    def open_data(self, path: Path) -> None:
+        msg = f"can't open {path.name}"
+        raise RuntimeError(msg)
+
+
+@pytest.mark.parametrize("fails_to", ["build", "open"])
+def test_a_session_that_fails_to_wake_is_gone_and_its_next_request_starts_anew(
+    fails_to: str,
+) -> None:
+    clock = _Clock()
+    models: list[_SlowSavedModel] = []
+
+    def build() -> tuple[MainView, Model | None]:
+        if len(models) == 1 and fails_to == "build":  # e.g. a database the app can't reach
+            msg = "can't open data.txt"
+            raise RuntimeError(msg)
+        models.append(_UnopenableModel())
+        return HelloMainView(), models[-1]
+
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(build, ttl=60.0, max_sessions=1, hibernation=Hibernation(5.0, 10))
+        created = store.create()
+        assert created is not None
+        session_id, _session = created
+        clock.now += 6.0
+        store.hibernate_idle()
+
+        with pytest.raises(RuntimeError, match=r"can't open data\.txt"):
+            store.get(session_id)
+        assert store.get(session_id) is None
+    store.close_all()
+    assert all(model.is_closed for model in models)  # the woken one's too
+
+
+def test_a_session_on_disk_keeps_its_uploads_until_the_server_stops() -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            lambda: (DataFileMainView(), None),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        assert isinstance(session.main_view, DataFileMainView)
+        measurements = session.main_view.form.measurements
+        _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
+        path = measurements.path
+        assert path is not None
+        clock.now += 6.0
+        store.hibernate_idle()
+        on_disk = not store.is_at_hand(session_id)
+        woken = store.get(session_id)
+        clock.now += 6.0
+        store.hibernate_idle()  # to disk again, as the server stops
+        store.close_all()
+
+    assert on_disk
+    assert woken is not None
+    assert isinstance(woken.main_view, DataFileMainView)
+    assert woken.main_view.form.measurements.path == path
+    assert not path.exists()
+
+
+def test_a_reload_server_s_next_process_removes_a_session_cut_short_by_a_crash(
+    tmp_path: Path,
+) -> None:
+    cut = tmp_path / f"{'a' * 43}.partial"
+    cut.mkdir()
+    (cut / "session.json").write_text("{")
+
+    SessionStore(lambda: (HelloMainView(), None), ttl=60.0, max_sessions=1, saved=tmp_path)
+
+    assert not cut.exists()
+
+
+class _IdleGuestbookApp(WebModelApplication[HelloMainView, _ReleasedModel]):
+    """The hello app with a model, its sessions saved to disk once idle on the test's clock."""
+
+    session_idle = 0.05  # the sweep's interval too, on the real clock
+
+    def __init__(self, build_model: Callable[[], _ReleasedModel] = _ReleasedModel) -> None:
+        super().__init__(build_main_view=HelloMainView, build_model=build_model)
+        self.session_views: list[HelloMainView] = []
+        self.models: list[_ReleasedModel] = []
+
+    def setup_model(self, main_view: HelloMainView, model: _ReleasedModel) -> None:
+        main_view.status_bar.timeout = 0
+        self.session_views.append(main_view)
+        self.models.append(model)
+
+
+def _wait_until_released(model: _ReleasedModel) -> None:
+    """Wait until the server's sweep saves the model's session to disk, which frees it."""
+    for _ in range(200):
+        if model.is_released:
+            return
+        time.sleep(0.05)
+
+
+def _wait_until_saved(app: _IdleGuestbookApp) -> None:
+    _wait_until_released(app.models[0])
+
+
+def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was() -> None:
+    app = _IdleGuestbookApp()
+    clock = _Clock()
+    with (
+        mock.patch.object(session_module, "time", clock),
+        _Browser(app.create_starlette_app()) as browser,
+    ):
+        page = browser.get("/").text
+        tag = re.search(rf'name="{SESSION_TAG_FIELD}" value="([0-9a-f]+)"', page)
+        assert tag is not None
+        _type_name(browser, app.session_views[0], "Bob")
+        clock.now += 1.0
+        _wait_until_saved(app)
+        # the page that the saved session served, as it posts its next event
+        response = browser.post(
+            f"/widget/{_field_id(app.session_views[0].form.name)}",
+            data={"value": "Bobby", "event": "input"},
+            headers={SESSION_TAG_HEADER: tag[1]},
+        )
+        reloaded = browser.get("/").text
+
+    assert response.headers["hx-refresh"] == "true"
+    assert 'value="Bob"' in reloaded
+    assert len(app.session_views) == 2  # built again, and opened
+
+
+class _UnclosableModel(_ReleasedModel):
+    """A model that fails to close, e.g. a database that another program locked."""
+
+    def close(self) -> None:
+        super().close()
+        msg = "the database is locked"
+        raise RuntimeError(msg)
+
+
+def test_a_model_that_fails_to_close_leaves_its_session_on_disk_and_the_server_saving(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = _IdleGuestbookApp(_UnclosableModel)
+    web = app.create_starlette_app()
+    clock = _Clock()
+    # one server's lifespan, so one sweep: Bob's browser starts none of its own
+    bob = _Browser(web)
+    with mock.patch.object(session_module, "time", clock), _Browser(web) as alice:
+        alice.get("/")
+        _type_name(alice, app.session_views[0], "Alice")
+        clock.now += 1.0
+        with caplog.at_level(logging.ERROR, logger="COMPOSEUI"):
+            _wait_until_saved(app)
+            reopened = alice.get("/").text
+            bob.get("/")
+            clock.now += 1.0
+            _wait_until_released(app.models[-1])  # the sweep saves Bob's too
+            saved = app.models[-1].is_released  # before the server stops, which releases them
+
+    assert 'value="Alice"' in reopened
+    assert saved
+    assert "Can't save the idle sessions to disk." in caplog.text
+
+
+class _OneIdleGuestbookApp(_IdleGuestbookApp):
+    max_sessions = 1
+
+
+def test_a_full_server_keeps_a_session_on_disk_for_its_browser() -> None:
+    """A browser whose session waits on disk gets no new session that would take its cookie."""
+    app = _OneIdleGuestbookApp()
+    web = app.create_starlette_app()
+    clock = _Clock()
+    bob = _Browser(web)
+    with mock.patch.object(session_module, "time", clock), _Browser(web) as alice:
+        alice.get("/")
+        _type_name(alice, app.session_views[0], "Alice")
+        clock.now += 1.0
+        _wait_until_saved(app)
+        bob.get("/")  # takes the only room in memory
+        refused = alice.get("/")
+        bob.post(
+            f"/widget/{_action_id(app.session_views[1].file_menu.exit_app)}",
+            data={"event": "triggered"},
+        )
+        reopened = alice.get("/").text
+
+    assert refused.status_code == 503
+    assert len(app.session_views) == 3  # Alice's, Bob's, then Alice's woken
+    assert 'value="Alice"' in reopened
+
+
+def test_a_session_used_while_another_is_saved_stays_in_memory() -> None:
+    clock = _Clock()
+    models: list[_SlowSavedModel] = []
+
+    def build() -> tuple[MainView, Model | None]:
+        models.append(_SlowSavedModel())
+        return HelloMainView(), models[-1]
+
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(build, ttl=60.0, max_sessions=2, hibernation=Hibernation(5.0, 10))
+        first = store.create()
+        second = store.create()
+        assert first is not None
+        assert second is not None
+        clock.now += 6.0
+        sweep = threading.Thread(target=store.hibernate_idle)
+        sweep.start()
+        assert models[0].saving.wait(10)  # the first one's save
+        used = store.get(second[0])  # a click on the second one's page
+        models[0].may_save.set()
+        models[1].may_save.set()
+        sweep.join(10)
+
+        assert used is second[1]
+        assert not store.is_at_hand(first[0])
+        assert store.is_at_hand(second[0])
+    store.close_all()
+
+
+@define_view
+class _LoadedNotesMainView(MainView):
+    """A large table whose source the app gives again on each `loaded`, as a study opens."""
+
+    notes: SourceTableView = Factory(SourceTableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loaded.connect(self._show_notes)
+
+    def _show_notes(self) -> None:
+        self.notes.source = ListSource(_Note, {"text": "Note"}, [_Note("from the study")])
+
+
+class _IdleNotesApp(WebModelApplication[_LoadedNotesMainView, _ReleasedModel]):
+    """`_LoadedNotesMainView` served, its sessions saved to disk once idle on the test's clock."""
+
+    session_idle = 0.05
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=_LoadedNotesMainView, build_model=_ReleasedModel)
+        self.session_views: list[_LoadedNotesMainView] = []
+        self.models: list[_ReleasedModel] = []
+
+    def setup_model(self, main_view: _LoadedNotesMainView, model: _ReleasedModel) -> None:
+        self.session_views.append(main_view)
+        self.models.append(model)
+
+
+@pytest.mark.parametrize("loads_by", ["wake", "new"])
+def test_a_session_whose_table_source_a_study_gives_again_goes_to_disk_again(
+    loads_by: str,
+) -> None:
+    app = _IdleNotesApp()
+    clock = _Clock()
+    with (
+        mock.patch.object(session_module, "time", clock),
+        _Browser(app.create_starlette_app()) as browser,
+    ):
+        browser.get("/")
+        if loads_by == "wake":
+            clock.now += 1.0
+            _wait_until_released(app.models[0])
+            browser.get("/")  # opens the study: a new source
+        else:
+            new = app.session_views[0].file_menu.new
+            browser.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+        clock.now += 1.0
+        _wait_until_released(app.models[-1])
+        saved = app.models[-1].is_released  # before the server stops, which releases them all
+
+    assert saved
+
+
+@define_view
+class _CountMainView(MainView):
+    count: LabelRowIntInputView = Factory(lambda: LabelRowIntInputView(value=1))
+
+
+@define_view
+class _CountEditedMainView(MainView):
+    """`_CountMainView` after an edit of the initial count in its code."""
+
+    count: LabelRowIntInputView = Factory(lambda: LabelRowIntInputView(value=2))
+
+
+def test_a_reload_server_s_idle_session_takes_the_values_edited_in_the_code(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    built: list[MainView] = []
+
+    def build() -> tuple[MainView, Model | None]:
+        # the code of the server's next process, edited
+        built.append(_CountEditedMainView() if len(built) > 0 else _CountMainView())
+        return built[-1], None
+
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            build, ttl=60.0, max_sessions=1, saved=tmp_path, hibernation=Hibernation(5.0, 10)
+        )
+        created = store.create()
+        assert created is not None
+        session_id, _session = created
+        clock.now += 6.0
+        store.hibernate_idle()
+        next_process = SessionStore(
+            build, ttl=60.0, max_sessions=1, saved=tmp_path, hibernation=Hibernation(5.0, 10)
+        )
+        woken = next_process.get(session_id)
+
+    assert woken is not None
+    assert isinstance(woken.main_view, _CountEditedMainView)
+    assert woken.main_view.count.value == 2
+
+
+_STARTS = itertools.count()
+
+
+@define_view
+class _NumberedMainView(MainView):
+    """A main view whose field starts with another value at each build, as a date would."""
+
+    number: LabelRowIntInputView = attrs.Factory(lambda: LabelRowIntInputView(value=next(_STARTS)))
+
+
+def test_a_session_saved_while_idle_keeps_a_value_that_its_field_starts_with() -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(
+            lambda: (_NumberedMainView(), None),
+            ttl=60.0,
+            max_sessions=1,
+            hibernation=Hibernation(5.0, 10),
+        )
+        created = store.create()
+        assert created is not None
+        session_id, session = created
+        assert isinstance(session.main_view, _NumberedMainView)
+        started = session.main_view.number.value
+        clock.now += 6.0
+        store.hibernate_idle()
+        woken = store.get(session_id)
+    store.close_all()
+
+    assert woken is not session
+    assert woken is not None
+    assert isinstance(woken.main_view, _NumberedMainView)
+    assert woken.main_view.number.value == started
 
 
 class _WorkerRun:

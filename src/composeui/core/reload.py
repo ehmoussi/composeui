@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from composeui.core.model import InvalidStateError
 from composeui.core.study import open_study, save_study
-from composeui.core.view import _RELOADED_STATE
+from composeui.core.view import _RELOADED_STATE, load_session_data, session_data
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator, Sequence
@@ -59,8 +59,8 @@ LOGGER = logging.getLogger("COMPOSEUI")
 #: supervisor: the directory where the runs leave their state to the next
 RELOADED_VARIABLE = "COMPOSEUI_RELOADED"
 #: the files of that directory: the last study saved; what the study doesn't hold, its
-#: file's path and the language shown (JSON); the files changed, one per line, which the
-#: app renames once it takes them, and removes once it runs their code
+#: file's path, the language shown and the `SESSION` fields (JSON); the files changed, one
+#: per line, which the app renames once it takes them, and removes once it runs their code
 _STUDY_NAME = "study"
 _SESSION_NAME = "session.json"
 _CHANGES_NAME = "changes"
@@ -214,23 +214,32 @@ def _run_as_main(previous_main: types.ModuleType) -> None:
 
 
 def save_reloaded_state(
-    main_view: MainView, model: Model | None, directory: Path | None = None
+    main_view: MainView,
+    model: Model | None,
+    directory: Path | None = None,
+    *,
+    code_edits: bool = True,
 ) -> None:
     """Save the views' state and the model's data, for the next run to open.
 
-    Into `directory`, an existing one, else the one the supervisor shares with the app.
+    Into `directory`, an existing one, else the one the supervisor shares with the app. With
+    `code_edits`, the next run's code may have changed: what the fields start as is saved
+    too, for `load_reloaded_state` to give the fields whose initial value changed the new one.
     """
     directory = _state_directory() if directory is None else directory
     state_filepath = main_view.state_filepath
     save_study(main_view, model, directory / _STUDY_NAME)
     # the user's study is still the file they opened, not this scratch one
     main_view.state_filepath = state_filepath
-    session = {
+    session: dict[str, Any] = {
         "state_filepath": None if state_filepath is None else str(state_filepath),
         "language": main_view.language,
-        # built now, while it's still the previous code: what its fields start as
-        "initial": type(main_view)().state_data(),
+        # where the user is, e.g. the tab shown, which a study doesn't hold
+        "views": session_data(main_view),
     }
+    if code_edits:
+        # built now, while it's still the previous code: what its fields start as
+        session["initial"] = type(main_view)().state_data()
     (directory / _SESSION_NAME).write_text(json.dumps(session))
 
 
@@ -246,10 +255,14 @@ def load_reloaded_state(
     if not (directory / _STUDY_NAME).exists():
         return
     session = _read_session(directory / _SESSION_NAME)
+    previous_code_state = session.get("initial")
     # built as `save_reloaded_state` builds it, not `main_view`, which a function may have
     # filled: the two would differ with no edit, and the user's values be lost
-    code_state = json.loads(json.dumps(type(main_view)().state_data()))
-    previous_code_state = session.get("initial")
+    code_state = (
+        json.loads(json.dumps(type(main_view)().state_data()))
+        if isinstance(previous_code_state, dict)
+        else {}
+    )
     language = main_view.language
     # first: the study's text was saved in it
     saved_language = session.get("language")
@@ -269,6 +282,9 @@ def load_reloaded_state(
         _RELOADED_STATE.reset(token)
     state_filepath = session.get("state_filepath")
     main_view.state_filepath = Path(state_filepath) if isinstance(state_filepath, str) else None
+    views = session.get("views")
+    if isinstance(views, dict):
+        load_session_data(main_view, views)
 
 
 def _with_code_edits(saved: dict[str, Any], previous: Any, code: dict[str, Any]) -> dict[str, Any]:
