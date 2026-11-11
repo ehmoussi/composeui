@@ -1,7 +1,8 @@
 # Benchmarks
 
-These benchmarks measure the example apps, against the [budgets](../ROADMAP.md#budgets) of the
-roadmap. They are not part of the test suite.
+These benchmarks measure the example apps against the [budgets](../ROADMAP.md#budgets) of the
+roadmap, what a web session costs as an app grows, and the web backend against other Python
+frameworks. They are not part of the test suite.
 
 Run a benchmark before and after work on speed, or when someone reports a slow case. No schedule
 refreshes the results: each result names its commit.
@@ -410,3 +411,82 @@ threads it would limit.
 - **One machine, one Python.** The results come from Python 3.9 in WSL2, with few runs.
 - **One server process.** The benchmark does not measure several processes.
 - **No browser.** The clients send requests only. They do not parse or draw the pages.
+
+## The session size benchmark
+
+[`sizes.py`](sizes.py) measures what a web session costs as an app grows. Its apps are built
+from one row: a label, a text input, an int input, a checkbox and a button. They grow in two
+ways:
+
+- **Sections.** One page of 2 to 65 sections of 10 rows, all shown.
+- **Pages.** A router of 1 to 20 pages of 10 rows, one shown.
+
+For each app, Starlette's test client opens 20 sessions in the benchmark's own process. The
+memory of a session is what Python allocates for it, measured by `tracemalloc`. The benchmark
+also times 30 first pages, and weighs one.
+
+### Run the size benchmark
+
+```bash
+uv run python benchmarks/sizes.py --output benchmarks/results/sizes-<commit>.json
+```
+
+`--sections` and `--pages` choose the sizes. It takes about a minute. To measure another
+version, set `PYTHONPATH` to that version's `src` folder.
+
+## The frameworks benchmark
+
+[`frameworks.py`](frameworks.py) compares the web backend with Streamlit, Panel and Dash on one
+app of 20 pages of 10 rows. Each row has a label, a text input, an int input, a checkbox and an
+Apply button, which writes "Applied" and the row's number in the label. Each framework has its
+twin of the app in [`twins/`](twins), written as that framework's users write apps:
+
+- **ComposeUI:** a `Router` of `PageView`s.
+- **Streamlit:** `st.navigation`, its pages built by the script.
+- **Panel:** `pn.Tabs` with `dynamic=True`, which draws only the shown tab.
+- **Dash:** links, and a callback that builds the page. Gunicorn serves it, with one worker and
+  8 threads.
+
+Each framework runs its own server, in a virtual environment of its own, on the same Python. The
+benchmark makes the environments with `uv`, at the versions that `PINS` names, and keeps them
+in `~/.cache/composeui-bench/frameworks/`. Headless Chromium drives each app through
+Playwright, as a user does. The benchmark reads the server's memory and CPU time from Linux's
+`/proc`, for the whole process tree. For each framework, a new server for each run:
+
+- **Start:** from the server's launch to its first answer.
+- **First page:** a new browser context, until the page's ten Apply buttons show. The median of
+  10.
+- **Bytes:** what a new browser context receives for its first page, HTTP and WebSocket.
+- **Click:** an Apply, until its label says so. The median of 10.
+- **Page switch:** a link, or a tab on Panel, until the page's buttons show. The median of 10.
+- **Per session:** the memory and the CPU time of 50 sessions kept open, per session.
+- **Explored:** the memory of 10 sessions that opened each page, per session.
+
+### Run the frameworks benchmark
+
+It needs Linux, `uv`, and Playwright's Chromium:
+
+```bash
+uv run --group browser playwright install chromium
+uv run --group browser python benchmarks/frameworks.py \
+    --output benchmarks/results/frameworks-<commit>.json
+```
+
+The defaults run each framework 3 times, on Python 3.12, in about 40 minutes. `--frameworks`
+chooses the other frameworks, `--python` the servers' Python, and `--commits` adds older
+commits of ComposeUI, which `git archive` extracts. Their dependencies are the checkout's.
+
+### Frameworks limits
+
+- **An app without data.** The app holds widgets only. With data, how each framework loads and
+  keeps it decides most of the memory. Measure a data app the same way before you compare the
+  frameworks in general.
+- **The frameworks as written, not tuned.** No caching, and each framework's default server.
+- **Different models.** Dash keeps no state on the server: a browser sends what each callback
+  needs. Streamlit keeps the values of the widgets that a session showed, and runs the script
+  again on each event. ComposeUI and Panel keep each session's views.
+- **An empty cache.** Each first page comes to a new browser context, which loads the
+  framework's scripts. A returning user's browser has them.
+- **A floor.** A click and a page switch take at least about 66 ms in this setup, whatever the
+  framework: Playwright and the browser take most of it.
+- **One machine.** The results come from one machine, in WSL2.
