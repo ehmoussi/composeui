@@ -794,7 +794,8 @@ class View:
         for f in attrs.fields(cast("type[AttrsInstance]", type(self))):
             value = getattr(self, f.name, None)
             if isinstance(value, Signal):
-                value.set_name(f"{type(self).__name__}.{f.name}")
+                # interned: each instance of the view, e.g. each session's, shares the name
+                value.set_name(sys.intern(f"{type(self).__name__}.{f.name}"))
             elif isinstance(value, list) and not f.name.startswith("_"):
                 # as `_fix_lists` sets it: the hooks don't run in `__init__`
                 object.__setattr__(self, f.name, _fixed(value, f"{type(self).__name__}.{f.name}"))

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import functools
 import gc
+import inspect
+import logging
 from typing import TYPE_CHECKING
 
 import pytest
@@ -27,18 +30,60 @@ class _Recorder:
         self.received.append(value)
 
 
-def test_emit_calls_callbacks_without_a_code_object() -> None:
-    """Signal logging must not require `__code__`: built-ins and callable objects have none."""
+def _first(value: int) -> None:
+    pass
+
+
+def _tag(label: str, *_values: object, into: list[str]) -> None:
+    into.append(label)
+
+
+@pytest.mark.parametrize("call", ["emit", "call_callbacks"])
+def test_a_logged_signal_names_each_callback_with_the_arguments_and_where_it_is(
+    call: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """As `--log-signals` shows them: a callback without a code object, by its `repr`."""
     signal: Signal[int] = Signal()
+    signal.set_name("Pipe.changed")
+    main_view = _MainView()
+    signal.set_main_view(main_view)
     appended: list[int] = []
     recorder = _Recorder()
+    tags: list[str] = []
+    record = _RecordView()
+    signal.connect(_first)
     signal.connect(appended.append)
     signal.connect(recorder)
+    signal.connect(functools.partial(_tag, "pipe", into=tags))
+    signal.connect(record.show)
+    del record
+    gc.collect()  # its method is no longer called, but still listed
 
-    signal.emit(3)
+    unconnected: Signal[int] = Signal()
 
-    assert appended == [3]
-    assert recorder.received == [3]
+    with caplog.at_level(logging.DEBUG, logger="COMPOSEUI_SIGNAL"):
+        getattr(unconnected, call)(3)  # calls nothing: logs nothing
+        getattr(signal, call)(3)
+
+    here = f'File "{__file__}", line'
+    assert [record.getMessage() for record in caplog.records] == [
+        "\n".join(
+            [
+                "EMIT SIGNAL Pipe.changed",
+                "  -> CALL _first(3)",
+                f"          {here} {inspect.getsourcelines(_first)[1]}",
+                "  -> CALL list.append(3)",
+                f"          {appended.append!r}",
+                "  -> CALL _Recorder(3)",
+                f"          {recorder!r}",
+                "  -> CALL _tag('pipe', into=list)(3)",
+                f"          {here} {inspect.getsourcelines(_tag)[1]}",
+                "  -> CALL <collected>(3)",
+                "          ",
+            ]
+        )
+    ]
+    assert (appended, recorder.received, tags) == ([3], [3], ["pipe"])
 
 
 def test_app_connect_injects_the_view_and_main_view() -> None:

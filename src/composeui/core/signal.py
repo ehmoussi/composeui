@@ -92,10 +92,14 @@ class Signal(Generic[Unpack[Ts]]):
     callback with a ``main_view`` or ``model`` parameter gets it by name (see `connect`).
     """
 
+    # a page makes several signals per widget, and a web session a page: slots keep each
+    # small, and keep `Signal[int]()` from giving it a dict for `__orig_class__`
+    __slots__ = ("__weakref__", "_callbacks", "_main_view", "_model", "_name")
+
     def __init__(self) -> None:
         self._name = ""
-        self._callbacks: list[Callable[[Unpack[Ts]], None]] = [self._log_signal]
-        self._logger = LOGGER
+        # most signals stay unconnected: they share the empty tuple until `connect`
+        self._callbacks: list[Callable[[Unpack[Ts]], None]] | tuple[()] = ()
         self._main_view: ReferenceType[MainView] | None = None
         self._model: ReferenceType[Model] | None = None
 
@@ -151,12 +155,14 @@ class Signal(Generic[Unpack[Ts]]):
         many of the signal's arguments as it takes, the first ones, and none when called `now`.
         """
         injected_callback = self._inject_callback(callback)
+        if isinstance(self._callbacks, tuple):
+            self._callbacks = []
         self._callbacks.append(injected_callback)
         if now:
             cast("Callable[[], None]", injected_callback)()
 
     def disconnect(self) -> None:
-        self._callbacks = [self._log_signal]
+        self._callbacks = ()
 
     def call_callbacks(self, *args: Unpack[Ts]) -> None:
         """Call the callbacks, for a backend that connects a toolkit's signal to this method.
@@ -164,39 +170,39 @@ class Signal(Generic[Unpack[Ts]]):
         Each callback runs, even after another one raised: its error goes to
         `sys.excepthook`, as a Qt slot's does. An app emits a signal with `emit`.
         """
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            _call_reporting(self._log_signal, args)
         # the callbacks connected now, as Qt calls the slots connected when it emits
         for callback in tuple(self._callbacks):
             _call_reporting(callback, args)
 
     def emit(self, *args: Unpack[Ts]) -> None:
         if not reactivity.is_enabled():
-            for callback in self._callbacks:
-                callback(*args)
+            self._call_logged(args)
             return
-        # the reactive methods run once all callbacks are done, without their reads
+        # the reactive methods run once all callbacks are done, without their reads, nor the
+        # log's `repr` of the arguments
         with reactivity.batch(), reactivity.untracked():
-            for callback in self._callbacks:
-                callback(*args)
+            self._call_logged(args)
+
+    def _call_logged(self, args: tuple[Unpack[Ts]]) -> None:
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            self._log_signal(*args)
+        for callback in self._callbacks:
+            callback(*args)
 
     def _log_signal(self, *args: Unpack[Ts]) -> None:
+        if not self._callbacks:
+            return
         log_msgs = ["EMIT SIGNAL %s"]
         log_args = [self._name]
-        nb_callbacks = 0
+        arguments = ",".join(repr(arg) for arg in args)
         for callback in self._callbacks:
-            if callback != self._log_signal:
-                callback_name = self.get_function_name(callback)
-                callback_file = self.get_function_file(callback)
-                if len(args) > 0:
-                    log_msgs.append("  -> CALL %s(%s)\n          %s")
-                else:
-                    log_msgs.append("  -> CALL %s()\n          %s")
-                log_args.append(callback_name)
-                if len(args) > 0:
-                    log_args.append(",".join(repr(arg) for arg in args))
-                log_args.append(callback_file)
-                nb_callbacks += 1
-        if nb_callbacks > 0:
-            self._logger.debug("\n".join(log_msgs), *log_args)
+            log_msgs.append("  -> CALL %s(%s)\n          %s")
+            log_args.extend(
+                (self.get_function_name(callback), arguments, self.get_function_file(callback))
+            )
+        LOGGER.debug("\n".join(log_msgs), *log_args)
 
     def _inject_callback(
         self, callback: Callable[..., None]

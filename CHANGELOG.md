@@ -90,6 +90,11 @@ The notable changes of each release of ComposeUI. The format follows
   place: `append`, `pop`, `x[i] = ...` and the like raise a `TypeError` that names the
   attribute. Such a change reached no renderer, so the screen kept the old list. Set a new
   list instead: `view.points = [*view.points, point]`, or `view.points += [point]`.
+- A view and its renderers take less memory, on each backend. On the web, a session of the
+  example apps takes about 40% less, and a session of an app with 4,000 widgets takes 3.5 MiB
+  instead of 8 MiB. Signals share what they hold until
+  a callback connects, and renderers of the same kind share their handlers. A signal builds its
+  log message only when signal logging is on (`--log-signals`).
 
 ### Fixed
 
