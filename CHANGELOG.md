@@ -8,6 +8,12 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `WebApplication.session_idle` saves a web session idle for that many seconds to disk and frees
+  its memory. Its next request opens it again, and its page reloads. A session stays in memory
+  while it holds what it can't save, for example while a job runs, and while
+  `MainView.can_hibernate` returns False. At most `max_saved_sessions` are on disk.
+- A reload, and an idle web session, keep the tab shown, the sizes of the panes, and whether the
+  sidebar is retracted. A field of an app's views tagged `SESSION` is kept too.
 - `DownloadView` gives the user a file that the app makes on a click, on Qt, Textual and the web.
   `MainView.download` gives one from the app's code, for example after a job. The web downloads
   the file in the browser. Qt and Textual ask where to save it. With `in_job`, the file is made in

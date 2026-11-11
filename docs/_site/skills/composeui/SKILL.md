@@ -211,8 +211,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Keep the state saveable.** `MainView.save_state` writes the views' fields with
   `cattrs`, which handles `datetime.date` and `datetime.datetime` as ISO 8601 text. A new
   field must be serializable, or carry the `OMIT` metadata. Text that the code sets, not
-  the user, carries `UI_TEXT`. A new or removed field needs no new version. To rename or
-  move a field, raise the main view's `state_version`, and upgrade an older study in
+  the user, carries `UI_TEXT`. Where the user is, such as a tab shown, carries `SESSION` with
+  `OMIT`: a reload and an idle web session keep it, a study doesn't. A new or removed field
+  needs no new version. To rename or move a field, raise the main view's `state_version`, and
+  upgrade an older study in
   `migrate_state`. Older versions of the app then refuse the new studies. A load sets the
   fields without emitting their signals: connect `MainView.loaded`, emitted as the app
   starts and after New and Open, to give again what a study does not hold, such as a large

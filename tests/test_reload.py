@@ -32,7 +32,15 @@ from composeui.core.reload import (
     watch_changes,
 )
 from composeui.core.study import open_study
-from composeui.core.view import CircleShape, DrawingView, MainView, child, define_view
+from composeui.core.view import (
+    CircleShape,
+    DrawingView,
+    MainView,
+    TabView,
+    child,
+    define_view,
+)
+from tests.tabs import DetailsTab, HistoryTab, PipeTabs
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -257,6 +265,45 @@ def test_a_damaged_session_only_loses_what_the_study_doesn_t_hold(
     assert reloaded.count == 7
     assert reloaded.state_filepath is None
     assert reloaded.language == "en"
+
+
+@define_view
+class _TwoTabsMainView(MainView):
+    tabs: PipeTabs = child(PipeTabs)
+    more: PipeTabs = child(PipeTabs)
+
+
+@define_view
+class _FewerTabs(TabView):
+    """`PipeTabs` after the code removed its last tab."""
+
+    details: DetailsTab = child(DetailsTab, title="Details")
+    history: HistoryTab = child(HistoryTab, title="History")
+
+
+@define_view
+class _FewerTabsMainView(MainView):
+    """`_TwoTabsMainView` after the code removed the last tab of `tabs`, and added `added`."""
+
+    tabs: _FewerTabs = child(_FewerTabs)
+    more: PipeTabs = child(PipeTabs)
+    added: PipeTabs = child(PipeTabs, current_index=1)
+
+
+def test_a_reload_shows_the_tabs_shown_but_one_that_the_code_removed(tmp_path: Path) -> None:
+    previous = _TwoTabsMainView()
+    previous.tabs.current_index = 2
+    previous.more.current_index = 1
+    save_reloaded_state(previous, None, tmp_path)
+    reloaded = _TwoTabsMainView()
+    edited = _FewerTabsMainView()
+
+    load_reloaded_state(reloaded, None, tmp_path)
+    load_reloaded_state(edited, None, tmp_path)
+
+    assert (reloaded.tabs.current_index, reloaded.more.current_index) == (2, 1)
+    assert (edited.tabs.current_index, edited.more.current_index) == (0, 1)
+    assert edited.added.current_index == 1  # as the code starts it
 
 
 def test_only_composeui_s_own_code_needs_a_new_process(tmp_path: Path) -> None:

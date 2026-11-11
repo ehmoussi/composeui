@@ -1,4 +1,4 @@
-"""One `MainView` per browser session, kept in memory.
+"""One `MainView` per browser session, kept in memory, or on disk while it's idle.
 
 A session is identified by a random id stored in Starlette's signed session cookie.
 Every tab of a browser shares that cookie. So they share one session (and one app
@@ -9,7 +9,10 @@ except with ``--reload``, whose server keeps them across its restarts (`SessionS
 
 from __future__ import annotations
 
+import contextlib
+import enum
 import functools
+import logging
 import re
 import secrets
 import shutil
@@ -17,14 +20,21 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
-from composeui.core.view import UploadedFile
+from composeui.core.view import (
+    ConsoleView,
+    FileUploadMixin,
+    SourceTableView,
+    UploadedFile,
+    View,
+    dialogs_in,
+)
 from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
@@ -66,11 +76,24 @@ _MAX_FILE_NAME_LENGTH = 200
 _NO_ROOM = "the server has no room for it right now"
 #: the file of a saved session that names the directory of its uploads
 _UPLOADS_NAME = "uploads"
+#: the suffix of a session's directory being saved, renamed without it once complete
+_PARTIAL_SUFFIX = ".partial"
+
+LOGGER = logging.getLogger("COMPOSEUI")
 
 
 def safe_filename(name: str) -> str:
     """Reduce `name` to letters, digits, `.`, `_` and `-`, safe in a response header."""
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.") or "state"
+
+
+def _views(main_view: MainView) -> Iterator[View]:
+    """Get the views of `main_view`'s tree, it included, its dialogs' too."""
+    views: list[View] = [main_view]
+    while len(views) > 0:
+        view = views.pop()
+        yield view
+        views.extend(view.children_views)
 
 
 def _saved_uploads(file: Path) -> Path | None:
@@ -102,11 +125,80 @@ class WebSession(RenderTarget):
         self._replaced_uploads: list[Path] = []
         #: the order of each page's posts, which the routes handle in it
         self.post_order = PostOrder()
+        #: the requests that take a while outside the session's lock (an upload's body, a
+        #: CSV's stream): the session isn't saved to disk under them (`can_hibernate`)
+        self._held = 0
+        self._held_lock = threading.Lock()
+        #: when the last request that held it ended (`time.monotonic`): it's idle from then
+        self.held_until = 0.0
+        #: the source of each large table as a study left it (`loaded`), which a study
+        #: opened again gives again: one that the app gave since (e.g. from the user's file)
+        #: can't be saved (`can_hibernate`)
+        self._loaded_sources: list[tuple[SourceTableView, object]] = []
+        self._note_loaded_sources()
+        #: `loaded` was emitted: the sources are noted again once its reactions are done
+        self._is_loaded_again = False
+        main_view.loaded.connect(self._mark_loaded_again)
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
 
-    def close(self) -> None:
-        """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
+    def _mark_loaded_again(self) -> None:
+        self._is_loaded_again = True
+
+    def _note_loaded_sources(self) -> None:
+        """Note the large tables' sources, as a study left them: a wake gives them again."""
+        self._is_loaded_again = False
+        self._loaded_sources = [
+            (view, view.source)
+            for view in _views(self.main_view)
+            if isinstance(view, SourceTableView)
+        ]
+
+    @contextlib.contextmanager
+    def held(self) -> Iterator[None]:
+        """Keep the session in memory while the block runs, e.g. while an upload arrives."""
+        # not the session's lock: an async route takes it, and a callback may hold that one
+        with self._held_lock:
+            self._held += 1
+        try:
+            yield
+        finally:
+            with self._held_lock:
+                self._held -= 1
+                self.held_until = time.monotonic()
+
+    def can_hibernate(self) -> bool:
+        """Tell whether `save_to` and `open_saved` give the session back as it is now.
+
+        Not while it's at work: a job, a file the page hasn't fetched, a long request. Nor
+        while it shows what its views' state and its model's data don't hold: a dialog's
+        question, an uploaded file, a large table's source given since `loaded`, a console's
+        text. Nor when the app says so (`MainView.can_hibernate`).
+        """
+        with self.lock:
+            main_view = self.main_view
+            jobs = main_view.jobs
+            with self._held_lock:
+                held = self._held > 0
+            return not (
+                held
+                or self.has_ended
+                or self.closed
+                or jobs.is_running
+                or jobs.has_workers
+                or len(self._downloads.tickets()) > 0
+                or any(dialog.is_visible for dialog in dialogs_in(main_view))
+                or any(view.source is not source for view, source in self._loaded_sources)
+                or any(
+                    (isinstance(view, FileUploadMixin) and view.file is not None)
+                    or (isinstance(view, ConsoleView) and view.text != "")
+                    for view in _views(main_view)
+                )
+                or not main_view.can_hibernate()
+            )
+
+    def suspend(self) -> None:
+        """Release the session's model, keeping its uploads: `save_to` saved it, to wake."""
         with self.lock:
             self.has_ended = True
             # weak references would free them too, but only once collected
@@ -115,6 +207,11 @@ class WebSession(RenderTarget):
             self.main_view.jobs.cancel()
             if self.model is not None:
                 self.model.close()
+
+    def close(self) -> None:
+        """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
+        with self.lock:
+            self.suspend()
             if self._uploads is not None:
                 # a job may still read them, even dropped: its thread goes on
                 self.main_view.jobs.after_workers(
@@ -166,10 +263,13 @@ class WebSession(RenderTarget):
             self.take_pending()  # the whole page shows them
             return self.main_view.renderer.page_html(reload_instance, session_tag=self.page_tag)
 
-    def save_to(self, directory: Path) -> None:
-        """Save the session's study, its file and language, for `open_saved` to open."""
+    def save_to(self, directory: Path, *, code_edits: bool = True) -> None:
+        """Save the session's study, its file and language, for `open_saved` to open.
+
+        With `code_edits`, for a server whose code may have changed (`save_reloaded_state`).
+        """
         with self.lock:
-            save_reloaded_state(self.main_view, self.model, directory)
+            save_reloaded_state(self.main_view, self.model, directory, code_edits=code_edits)
             if self._uploads is not None:
                 (directory / _UPLOADS_NAME).write_text(str(self._uploads), encoding="utf-8")
 
@@ -178,6 +278,7 @@ class WebSession(RenderTarget):
         with self.lock, collect_dirty():  # the whole page is sent next: drop the fragments
             load_reloaded_state(self.main_view, self.model, directory)
             self._uploads = _saved_uploads(directory / _UPLOADS_NAME)
+            self._note_loaded_sources()
 
     def handle_event(
         self, widget_id: str, event: str, form: Mapping[str, str]
@@ -387,6 +488,9 @@ class WebSession(RenderTarget):
                 # the reactive methods run once for all of the event's changes
                 with batch():
                     apply()
+                # e.g. New: once the reactive methods have run too
+                if self._is_loaded_again:
+                    self._note_loaded_sources()
                 self._remove_replaced_uploads()
                 # after: the event may hand changes over with `call_on_main_thread` too
                 body = render_dirty({**self.take_pending(), **dirty})
@@ -425,6 +529,7 @@ class WebSession(RenderTarget):
                 self.main_view.status_bar.show_message(f"Can't open {filename!r}: {error}.")
                 return render_dirty(dirty)
             self.main_view.state_filepath = Path(Path(filename).name)
+            self._note_loaded_sources()
             return None
 
     def _load_state(self, filename: str, content: bytes) -> str | None:
@@ -500,12 +605,14 @@ class WebSession(RenderTarget):
             filename, chunks = renderer.csv_file()
 
         def locked() -> Iterator[str]:
-            while True:
-                with self.lock:
-                    chunk = next(chunks, None)
-                if chunk is None:
-                    return
-                yield chunk
+            # the source must stay open until the last row
+            with self.held():
+                while True:
+                    with self.lock:
+                        chunk = next(chunks, None)
+                    if chunk is None:
+                        return
+                    yield chunk
 
         return filename, locked()
 
@@ -541,12 +648,67 @@ class WebSession(RenderTarget):
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
+def _remove_saved(directory: Path) -> None:
+    """Remove a session saved in `directory`, with the uploads it names, if they're ours."""
+    uploads = _saved_uploads(directory / _UPLOADS_NAME)
+    if uploads is not None:
+        shutil.rmtree(uploads, ignore_errors=True)
+    shutil.rmtree(directory, ignore_errors=True)
+
+
+class Hibernation(NamedTuple):
+    """When idle sessions go to disk (`WebApplication.session_idle`)."""
+
+    #: seconds a session is idle before it's saved and freed
+    idle: float
+    #: most sessions on disk at once: past it, the idle ones stay in memory
+    max_saved: int
+
+
+class _Place(enum.Enum):
+    """Where a session is: in memory, or on disk, or between the two."""
+
+    LIVE = enum.auto()
+    SAVING = enum.auto()
+    ON_DISK = enum.auto()
+    WAKING = enum.auto()
+
+
+class _Entry:
+    """A session of the store, wherever it is."""
+
+    __slots__ = ("last_seen", "place", "session", "settled", "touched", "unsaveable")
+
+    def __init__(self, session: WebSession | None, place: _Place) -> None:
+        self.place = place
+        #: None while on disk
+        self.session = session
+        self.last_seen = time.monotonic()
+        #: set once the session is saved or woken: the requests that came meanwhile wait
+        self.settled: threading.Event | None = None
+        #: a request came while it was being saved: it stays in memory
+        self.touched = False
+        #: saving it failed: it stays in memory, never tried again
+        self.unsaveable = False
+
+    def idle_since(self) -> float:
+        """Get when its last request came, or ended if it held the session (`held`)."""
+        assert self.session is not None  # in memory: only those are idle
+        return max(self.last_seen, self.session.held_until)
+
+
 class SessionStore:
-    """The live sessions by id, each dropped once idle for longer than `ttl` seconds.
+    """The sessions by id, each dropped once idle for longer than `ttl` seconds.
 
     Expiry is checked whenever the store is used, so an idle server keeps its sessions
     until the next request. A dropped session's `StatusBar` timer may still fire; it
     then clears a message on a tree nothing displays any more, which is harmless.
+
+    With `hibernation`, `hibernate_idle` saves each session idle for its `idle` seconds to
+    a directory of its own, if it `can_hibernate`, and frees it. Its next request builds
+    the session again and opens what was saved: its page then reloads, as the session that
+    served it is gone. At most its `max_saved` sessions are on disk; past it, they stay in
+    memory.
 
     With `saved`, a ``--reload`` server's directory, `save_all` saves the live sessions
     there as the server stops. The server started next opens one there when its browser
@@ -560,29 +722,120 @@ class SessionStore:
         ttl: float,
         max_sessions: int,
         saved: Path | None = None,
+        hibernation: Hibernation | None = None,
     ) -> None:
         self._build_session = build_session
         self._ttl = ttl
         self._max_sessions = max_sessions
-        self._saved = saved
-        self._sessions: dict[str, tuple[WebSession, float]] = {}
+        self.hibernation = hibernation
+        self._entries: dict[str, _Entry] = {}
         #: sessions being built, outside the lock: they count against `max_sessions` too
         self._building = 0
         self._lock = threading.Lock()
+        #: where the sessions on disk are, each in the directory of its id
+        self._directory: Path | None = saved
+        #: whether the store made `_directory`, and so removes it with the server
+        self._owns_directory = False
+        if saved is not None:
+            self._find_saved(saved)
+        elif hibernation is not None:
+            self._directory = Path(tempfile.mkdtemp(prefix="composeui-sessions-"))
+            self._owns_directory = True
+
+    def _find_saved(self, directory: Path) -> None:
+        """Take the sessions that the previous process saved; remove what it left unfinished."""
+        for path in directory.iterdir():
+            if path.name.endswith(_PARTIAL_SUFFIX):
+                shutil.rmtree(path, ignore_errors=True)
+            elif _SESSION_ID.fullmatch(path.name) is not None and path.is_dir():
+                self._entries[path.name] = _Entry(None, _Place.ON_DISK)
 
     def get(self, session_id: Any) -> WebSession | None:
-        """Return the live session with this id (from a cookie, so of any type), or None."""
+        """Return the session with this id (from a cookie, so of any type), or None.
+
+        One on disk is woken. One being saved or woken is waited for: the caller is never
+        a route's coroutine, which would hold up the event loop.
+        """
+        if not isinstance(session_id, str):
+            return None
+        while True:
+            with self._lock:
+                self._drop_expired()
+                entry = self._entries.get(session_id)
+                if entry is None:
+                    return None
+                if entry.place is _Place.LIVE:
+                    entry.last_seen = time.monotonic()
+                    return entry.session
+                if entry.place is _Place.ON_DISK:
+                    if self._in_memory() >= self._max_sessions:
+                        return None
+                    entry.place = _Place.WAKING
+                    entry.settled = threading.Event()
+                    break
+                entry.touched = True
+                settled = entry.settled
+            assert settled is not None  # saving or waking
+            settled.wait()
+        return self._wake(session_id, entry)
+
+    def is_at_hand(self, session_id: Any) -> bool:
+        """Tell whether `get` answers at once: the session is in memory, or there is none."""
         with self._lock:
-            self._drop_expired()
-            entry = self._sessions.get(session_id) if isinstance(session_id, str) else None
-            if entry is None:
-                return self._restore(session_id)
-            session = entry[0]
-            self._sessions[session_id] = (session, time.monotonic())
-            return session
+            entry = self._entries.get(session_id) if isinstance(session_id, str) else None
+            return entry is None or entry.place is _Place.LIVE
+
+    def _in_memory(self) -> int:
+        """Count the sessions in memory, or about to be. Called with the lock held."""
+        on_disk = sum(entry.place is _Place.ON_DISK for entry in self._entries.values())
+        return len(self._entries) - on_disk + self._building
+
+    def _wake(self, session_id: str, entry: _Entry) -> WebSession:
+        """Build the session again and open what `_hibernate` saved, outside the lock.
+
+        Building runs the app's code, which may be slow: the other sessions go on.
+        """
+        assert self._directory is not None  # only a store with one has sessions on disk
+        directory = self._directory / session_id
+        try:
+            session = self._built_session()
+            try:
+                session.open_saved(directory)
+            except BaseException:
+                session.close()
+                raise
+        except BaseException:
+            # its next request starts a new session, rather than fail the same way
+            with self._lock:
+                self._entries.pop(session_id, None)
+                settled = self._settled(entry)
+            _remove_saved(directory)
+            settled.set()
+            raise
+        # not its uploads, which the session now holds
+        shutil.rmtree(directory, ignore_errors=True)
+        with self._lock:
+            entry.session = session
+            entry.place = _Place.LIVE
+            entry.last_seen = time.monotonic()
+            settled = self._settled(entry)
+        settled.set()
+        return session
+
+    @staticmethod
+    def _settled(entry: _Entry) -> threading.Event:
+        """Take the event that the requests waiting for `entry` wait on, for the caller to set.
+
+        Called with the lock held, in the change of place that ends the wait: a request may
+        give the entry a new event as soon as the lock is released.
+        """
+        settled = entry.settled
+        assert settled is not None  # saving or waking
+        entry.settled = None
+        return settled
 
     def create(self) -> tuple[str, WebSession] | None:
-        """Build a new session; None while `max_sessions` are live.
+        """Build a new session; None while `max_sessions` are in memory.
 
         A full store refuses new sessions rather than dropping old ones. Requests without
         a cookie, which anyone can send, would otherwise push out the users' own sessions
@@ -590,7 +843,7 @@ class SessionStore:
         """
         with self._lock:
             self._drop_expired()
-            if len(self._sessions) + self._building >= self._max_sessions:
+            if self._in_memory() >= self._max_sessions:
                 return None
             self._building += 1
         try:
@@ -598,7 +851,7 @@ class SessionStore:
             session = self._built_session()
             session_id = secrets.token_urlsafe(32)
             with self._lock:
-                self._sessions[session_id] = (session, time.monotonic())
+                self._entries[session_id] = _Entry(session, _Place.LIVE)
         finally:
             with self._lock:
                 self._building -= 1
@@ -614,63 +867,139 @@ class SessionStore:
                 model.close()
             raise
 
+    def hibernate_idle(self) -> None:
+        """Save to disk each session idle for `idle` seconds that can be, and free it.
+
+        One at a time: a request for a session waits only for its own.
+        """
+        hibernation = self.hibernation
+        assert hibernation is not None  # only a store with one is swept
+        with self._lock:
+            self._drop_expired()
+            now = time.monotonic()
+            idle = [
+                session_id
+                for session_id, entry in self._entries.items()
+                if entry.place is _Place.LIVE
+                and not entry.unsaveable
+                and now - entry.idle_since() >= hibernation.idle
+            ]
+            # counted once: a session kept in memory still counts, until the next sweep
+            saved = sum(entry.place is not _Place.LIVE for entry in self._entries.values())
+        for session_id in idle:
+            if saved >= hibernation.max_saved:
+                return
+            with self._lock:
+                entry = self._entries.get(session_id)
+                # used meanwhile, while another one was saved: not idle any more
+                if (
+                    entry is None
+                    or entry.place is not _Place.LIVE
+                    or time.monotonic() - entry.idle_since() < hibernation.idle
+                ):
+                    continue
+                saved += 1
+                entry.place = _Place.SAVING
+                entry.settled = threading.Event()
+                entry.touched = False
+            self._hibernate(session_id, entry)
+
+    def _hibernate(self, session_id: str, entry: _Entry) -> None:
+        """Save `entry`'s session into its directory, then free it, unless a request came."""
+        assert self._directory is not None  # made with `hibernation`
+        session = entry.session
+        assert session is not None  # in memory until now
+        directory = self._directory / session_id
+        partial = directory.with_name(f"{session_id}{_PARTIAL_SUFFIX}")
+        failed = False
+        try:
+            # its requests wait on the store, but a timer takes the session's lock too
+            with session.lock:
+                can_hibernate = session.can_hibernate()
+                if can_hibernate:
+                    shutil.rmtree(partial, ignore_errors=True)
+                    partial.mkdir()
+                    # the same code opens it, but a `--reload` server's next process: a field
+                    # that starts with another value at each build, e.g. a date, would else
+                    # be taken for an edit of the code
+                    session.save_to(partial, code_edits=not self._owns_directory)
+                    # complete, under its id: a crash before leaves only the partial one
+                    partial.replace(directory)
+        except Exception:
+            LOGGER.exception("Can't save an idle session to disk: it stays in memory.")
+            failed = True
+            can_hibernate = False
+        # the store's lock only once the session's is released: `_drop_expired` takes them
+        # the other way around
+        with self._lock:
+            entry.unsaveable = failed
+            kept = not can_hibernate or entry.touched
+            if kept:
+                entry.place = _Place.LIVE
+            else:
+                entry.place = _Place.ON_DISK
+                entry.session = None
+            settled = self._settled(entry)
+        # only the requests that came during the save wait, and they keep it in memory
+        settled.set()
+        if kept:
+            shutil.rmtree(partial, ignore_errors=True)
+            shutil.rmtree(directory, ignore_errors=True)
+        else:
+            session.suspend()
+
     def save_all(self) -> None:
         """Save every live session into `saved`, as a ``--reload`` server's process stops."""
-        assert self._saved is not None  # only such a server's lifespan calls it
+        assert self._directory is not None  # only such a server's lifespan calls it
         with self._lock:
             sessions = [
-                (session_id, session) for session_id, (session, _) in self._sessions.items()
+                (session_id, entry.session)
+                for session_id, entry in self._entries.items()
+                if entry.place is _Place.LIVE and entry.session is not None
             ]
         for session_id, session in sessions:
-            directory = self._saved / session_id
+            directory = self._directory / session_id
             directory.mkdir(exist_ok=True)
             session.save_to(directory)
 
-    def _restore(self, session_id: Any) -> WebSession | None:
-        """Open the session the previous server saved under `session_id`; None if none.
-
-        Called with the lock held. The session is built under it too, unlike `create`'s,
-        so two requests of its browser can't both open it: only a ``--reload`` server,
-        for its developer, saves sessions.
-        """
-        if (
-            self._saved is None
-            or not isinstance(session_id, str)
-            # its directory's name: never a path elsewhere
-            or _SESSION_ID.fullmatch(session_id) is None
-            or len(self._sessions) + self._building >= self._max_sessions
-        ):
-            return None
-        directory = self._saved / session_id
-        if not directory.is_dir():
-            return None
-        session = self._built_session()
-        session.open_saved(directory)
-        shutil.rmtree(directory, ignore_errors=True)
-        self._sessions[session_id] = (session, time.monotonic())
-        return session
-
     def drop(self, session_id: Any) -> None:
+        """Close the live session with this id, as its app asked (e.g. Exit)."""
         with self._lock:
-            entry = self._sessions.pop(session_id, None)
-        if entry is not None:
-            entry[0].close()
+            entry = self._entries.get(session_id)
+            if entry is None or entry.place is not _Place.LIVE:
+                return
+            del self._entries[session_id]
+        assert entry.session is not None  # live
+        entry.session.close()
 
     def close_all(self) -> None:
-        """Close every live session, as the server stops: nothing else removes their uploads."""
+        """Close every session as the server stops: nothing else removes their uploads.
+
+        Once no request runs, nor `hibernate_idle`: no session is being saved or woken.
+        """
         with self._lock:
-            sessions = [session for session, _ in self._sessions.values()]
-            self._sessions.clear()
-        for session in sessions:
-            session.close()
+            entries = list(self._entries.items())
+            self._entries.clear()
+        for session_id, entry in entries:
+            self._end(session_id, entry)
+        if self._owns_directory and self._directory is not None:
+            shutil.rmtree(self._directory, ignore_errors=True)
 
     def _drop_expired(self) -> None:
+        """Drop the sessions idle for `ttl`, in memory or on disk. Called with the lock held."""
         now = time.monotonic()
         expired = [
             session_id
-            for session_id, (_, last_seen) in self._sessions.items()
-            if now - last_seen >= self._ttl
+            for session_id, entry in self._entries.items()
+            if entry.place in (_Place.LIVE, _Place.ON_DISK) and now - entry.last_seen >= self._ttl
         ]
         for session_id in expired:
-            session, _ = self._sessions.pop(session_id)
-            session.close()
+            self._end(session_id, self._entries.pop(session_id))
+
+    def _end(self, session_id: str, entry: _Entry) -> None:
+        """Close a session dropped from the store, in memory or on disk."""
+        if entry.session is not None:
+            entry.session.close()
+        else:
+            assert self._directory is not None  # where it is
+            _remove_saved(self._directory / session_id)

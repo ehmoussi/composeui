@@ -68,6 +68,17 @@ def _session(request: Request, tag: object = None) -> WebSession | None:
     return session
 
 
+async def _session_off_loop(request: Request, tag: object = None) -> WebSession | None:
+    """Get the request's session as `_session` does, for a route's coroutine.
+
+    Off the event loop when it's on disk, or being saved: it's built again, or waited for. A
+    save that starts between the two looks is waited for on the loop: it takes milliseconds.
+    """
+    if _store(request).is_at_hand(request.session.get(SESSION_KEY)):
+        return _session(request, tag)
+    return await run_in_threadpool(_session, request, tag)
+
+
 def _session_or_new(request: Request) -> WebSession | None:
     """Get the request's session, or a new one; None while the server has too many.
 
@@ -141,23 +152,25 @@ async def duplicate_post(_request: Request, _error: Exception) -> Response:
 
 async def widget_event(request: Request) -> Response:
     """Dispatch a browser event to a widget; respond with every fragment it changed."""
-    session = _session(request)
+    session = await _session_off_loop(request)
     if session is None:
         return Response(headers=_RELOAD)
-    form = await request.form()
-    fields = {name: value for name, value in form.items() if isinstance(value, str)}
-    event = fields.pop("event", "")
-    widget_id = request.path_params["widget_id"]
-    try:
-        # in the order the page sent its posts, waiting for its turn off any thread
-        async with session.post_order.turn(request.headers):
-            # view callbacks are plain sync code: keep them off the event loop
-            result = await run_in_threadpool(session.handle_event, widget_id, event, fields)
-    except UnsupportedEventError as e:
-        return PlainTextResponse(str(e), status_code=400)
-    if result is None:
-        return PlainTextResponse("Unknown widget", status_code=404)
-    return _widget_response(request, session, *result)
+    with session.held():
+        form = await request.form()
+        fields = {name: value for name, value in form.items() if isinstance(value, str)}
+        event = fields.pop("event", "")
+        widget_id = request.path_params["widget_id"]
+        try:
+            # in the order the page sent its posts, waiting for its turn off any thread
+            async with session.post_order.turn(request.headers):
+                # view callbacks are plain sync code: keep them off the event loop
+                result = await run_in_threadpool(session.handle_event, widget_id, event, fields)
+        except UnsupportedEventError as e:
+            return PlainTextResponse(str(e), status_code=400)
+        if result is None:
+            return PlainTextResponse("Unknown widget", status_code=404)
+        # held still: Exit drops it, which a session being saved would ignore
+        return _widget_response(request, session, *result)
 
 
 def _widget_response(
@@ -175,9 +188,14 @@ def _widget_response(
 
 async def widget_file(request: Request) -> Response:
     """Hand an uploaded file to its action, path field or cell; respond as `widget_event` does."""
-    session = _session(request)
+    session = await _session_off_loop(request)
     if session is None:
         return Response(headers=_RELOAD)
+    with session.held():
+        return await _receive_file(request, session)
+
+
+async def _receive_file(request: Request, session: WebSession) -> Response:
     widget_id = request.path_params["widget_id"]
     main_view = session.main_view
     async with receive_upload(request, main_view.max_upload_size, main_view.min_free_disk) as (
@@ -232,7 +250,7 @@ async def chart_image(request: Request) -> Response:
     A plain link, like the state's download. Without matplotlib (the `report` extra), not
     found: the page draws its PNG itself.
     """
-    session = _session(request)
+    session = await _session_off_loop(request)
     if session is None:
         return RedirectResponse("/", status_code=303)
     if not chartimage.is_available():
@@ -254,7 +272,7 @@ async def chart_image(request: Request) -> Response:
 
 async def picture(request: Request) -> Response:
     """Serve the image of one of the session's `ImageView`s, at the version its page names."""
-    session = _session(request)
+    session = await _session_off_loop(request)
     if session is None:
         return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
     result = await run_in_threadpool(
@@ -351,15 +369,16 @@ async def state_save(request: Request) -> Response:
     the browser is sent to the page, as for `state_download`.
     """
     form = await request.form()
-    session = _session(request, form.get(SESSION_TAG_FIELD))
+    session = await _session_off_loop(request, form.get(SESSION_TAG_FIELD))
     if session is None:
         return RedirectResponse("/", status_code=303)
     trigger = form.get("trigger")
     # after the page's posts sent before it, e.g. a field's value as Save took the focus
-    async with session.post_order.turn(form_order(form)):
-        if isinstance(trigger, str):
-            await run_in_threadpool(session.trigger_action, trigger)
-        return _state_file(session)
+    with session.held():
+        async with session.post_order.turn(form_order(form)):
+            if isinstance(trigger, str):
+                await run_in_threadpool(session.trigger_action, trigger)
+            return _state_file(session)
 
 
 def _state_file(session: WebSession) -> Response:
@@ -374,21 +393,22 @@ async def state_upload(request: Request) -> Response:
     A load can change any part of the tree. So instead of collecting fragments the page
     reloads. A rejected file leaves the state alone and says why in the status bar.
     """
-    session = _session(request)
+    session = await _session_off_loop(request)
     if session is None:
         return Response(headers=_RELOAD)
-    form = await request.form(max_files=1)
-    upload = form.get("file")
-    if not isinstance(upload, UploadFile):
-        return PlainTextResponse("No file uploaded", status_code=400)
-    trigger = form.get("trigger")
-    # one byte over the limit is enough to know the file is too large
-    content = await upload.read(MAX_STATE_SIZE + 1)
-    async with session.post_order.turn(request.headers):
-        if isinstance(trigger, str):
-            # e.g. Open's own `triggered`, before the file is loaded
-            await run_in_threadpool(session.trigger_action, trigger)
-        status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
+    with session.held():
+        form = await request.form(max_files=1)
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile):
+            return PlainTextResponse("No file uploaded", status_code=400)
+        trigger = form.get("trigger")
+        # one byte over the limit is enough to know the file is too large
+        content = await upload.read(MAX_STATE_SIZE + 1)
+        async with session.post_order.turn(request.headers):
+            if isinstance(trigger, str):
+                # e.g. Open's own `triggered`, before the file is loaded
+                await run_in_threadpool(session.trigger_action, trigger)
+            status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
     if status_bar is None:
         return Response(headers=_RELOAD)
     return HTMLResponse(status_bar, headers=_NO_STORE)

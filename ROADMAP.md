@@ -220,8 +220,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   any platform must give the app.
 - **Sessions that survive a restart** (Now). A data folder on a volume: the sessions saved at
   intervals and on shutdown, and the cookies' signing key.
-- **Idle sessions on disk** (Now). An option to save a session idle for a few minutes
-  and free its memory, then rebuild it at its next request, with its page.
 - **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
   removes what a crash left.
 - **Users** (Later). The user read from a login proxy's headers, for OIDC, SAML2 or Basic Auth,
