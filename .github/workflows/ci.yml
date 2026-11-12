@@ -209,6 +209,37 @@ jobs:
           cp docs/_static/versions.{css,js} "$release/docs/_static/"
           uv run --project "$release" --group docs --all-extras --with sphinx-sitemap \
             sphinx-build -W --keep-going -b html "$release/docs" docs/_build/html/stable
+      - name: Include the release pages in the root sitemap
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+
+          namespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
+          ET.register_namespace("", namespace)
+          ET.register_namespace("xhtml", "http://www.w3.org/1999/xhtml")
+          urlset = f"{{{namespace}}}urlset"
+          url = f"{{{namespace}}}url"
+          loc = f"{{{namespace}}}loc"
+          root_path = Path("docs/_build/html/sitemap.xml")
+          main = ET.parse(root_path)
+          stable = ET.parse(root_path.parent / "stable/sitemap.xml")
+          if main.getroot().tag != urlset or stable.getroot().tag != urlset:
+              raise ValueError("Expected a URL sitemap for each documentation version")
+          main_urls = main.getroot().findall(url)
+          stable_urls = stable.getroot().findall(url)
+          if not main_urls or not stable_urls:
+              raise ValueError("Each documentation version must have sitemap URLs")
+          locations = {entry.findtext(loc) for entry in main_urls}
+          for entry in stable_urls:
+              location = entry.findtext(loc)
+              if not location:
+                  raise ValueError("A stable sitemap URL has no location")
+              if location not in locations:
+                  main.getroot().append(entry)
+                  locations.add(location)
+          main.write(root_path, encoding="utf-8", xml_declaration=True)
+          PY
       # A pull request builds both versions but does not publish them.
       - if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v5
