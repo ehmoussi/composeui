@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections import deque
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from qtpy.QtCore import QObject, QSignalBlocker, Qt
 from qtpy.QtCore import Signal as QtSignal
@@ -122,6 +122,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore.qtslot import connect_slot
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qdrawing import QDrawing
@@ -147,7 +148,7 @@ from composeui.qtcore.widgets.qwindowrelease import release_when_hidden
 
 if TYPE_CHECKING:
     import datetime
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
 
     from qtpy.QtCore import QModelIndex, SignalInstance
 
@@ -155,6 +156,7 @@ if TYPE_CHECKING:
     from composeui.core.view import (
         CellStyle,
         CellWidget,
+        ChoicesShown,
         DownloadedFile,
         HeaderGroup,
         ReferenceLine,
@@ -2330,6 +2332,146 @@ class QtComboBoxRenderer(
             self._view.value = value
 
 
+class MultiValuesViewLike(ViewLike, Protocol):
+    selected: list[Any]
+    has_search: bool
+    search: str
+    has_check_all: bool
+    check_all_text: str
+    search_text: str
+    selected_changed: Signal[list[Any]]
+
+    @property
+    def shown(self) -> ChoicesShown: ...
+
+    def shown_once(self, name: str, value: Any) -> ChoicesShown: ...
+
+    def select_keys(self, keys: Mapping[str, bool]) -> bool: ...
+
+    def check_all(self, *, is_checked: bool) -> bool: ...
+
+
+TChoicesWidget = TypeVar("TChoicesWidget", bound=QWidget)
+
+
+class _QtChoicesRenderer(
+    QtWidgetRenderer[MultiValuesViewLike, TChoicesWidget], Generic[TChoicesWidget]
+):
+    """A choice of several values: a `QCheckList`, alone or in a drop-down list."""
+
+    #: the attributes that change what `_show` shows
+    _shown_attributes: ClassVar[tuple[str, ...]] = (
+        "values",
+        "selected",
+        "search",
+        "check_all_text",
+    )
+
+    def __init__(self, view: MultiValuesViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                **{name: self._shown_refresher(name) for name in self._shown_attributes},
+                "has_search": self._refresh_has_search,
+                "has_check_all": self._refresh_has_check_all,
+                "search_text": self._refresh_search_text,
+            }
+        )
+
+    @staticmethod
+    def _check_list(widget: TChoicesWidget) -> QCheckList:
+        return cast("QCheckList", widget)
+
+    def _make_widget(self) -> TChoicesWidget:
+        return cast("TChoicesWidget", QCheckList())
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = self._make_widget()
+            check_list = self._check_list(self._rendered_object)
+            self._connect(check_list.toggled, self._toggle)
+            self._connect(check_list.all_clicked, self._check_all)
+            self._connect(check_list.searched, self._search)
+            self.refresh()
+
+    def _show(self, widget: TChoicesWidget, shown: ChoicesShown) -> None:
+        self._check_list(widget).show_choices(shown)
+
+    def _shown_refresher(
+        self, name: str
+    ) -> Callable[[MultiValuesViewLike, TChoicesWidget, Any], None]:
+        def refresh(view: MultiValuesViewLike, widget: TChoicesWidget, value: Any) -> None:
+            if name == "search":
+                self._check_list(widget).set_search(value)
+            elif name == "check_all_text":
+                self._check_list(widget).check_all.setText(value)
+            self._show(widget, view.shown_once(name, value))
+
+        return refresh
+
+    def _refresh_has_search(
+        self, _view: MultiValuesViewLike, widget: TChoicesWidget, value: bool
+    ) -> None:
+        self._check_list(widget).search_field.setVisible(value)
+
+    def _refresh_has_check_all(
+        self, _view: MultiValuesViewLike, widget: TChoicesWidget, value: bool
+    ) -> None:
+        self._check_list(widget).check_all.setVisible(value)
+
+    def _refresh_search_text(
+        self, _view: MultiValuesViewLike, widget: TChoicesWidget, value: str
+    ) -> None:
+        self._check_list(widget).search_field.setPlaceholderText(value)
+
+    def _after_user_change(self, *, is_changed: bool) -> None:
+        """Show the view as the user left it, and tell if the choice changed."""
+        # only the widget's own signals call it
+        self._show(cast("TChoicesWidget", self._rendered_object), self._view.shown)
+        if is_changed:
+            self._view.selected_changed.emit(self._view.selected)
+
+    def _toggle(self, key: str, is_checked: bool) -> None:
+        with self.stop_refresh():
+            is_changed = self._view.select_keys({key: is_checked})
+        self._after_user_change(is_changed=is_changed)
+
+    def _check_all(self, is_checked: bool) -> None:
+        # the box's state as the user saw it change, partly checked to checked
+        with self.stop_refresh():
+            is_changed = self._view.check_all(is_checked=is_checked)
+        self._after_user_change(is_changed=is_changed)
+
+    def _search(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.search = text
+        self._after_user_change(is_changed=False)
+
+
+class QtCheckListRenderer(_QtChoicesRenderer[QCheckList]):
+    """A list of check boxes, with a search field and a check-all box."""
+
+    _invalid_style = "QListWidget { border: 1px solid red; }"
+
+
+class QtMultiComboBoxRenderer(_QtChoicesRenderer[QMultiComboBox]):
+    """A drop-down list of check boxes: a button showing the choice, its menu the list."""
+
+    _invalid_style = "QPushButton { border: 1px solid red; }"
+    _shown_attributes = (*_QtChoicesRenderer._shown_attributes, "empty_text", "count_text")  # noqa: SLF001
+
+    @staticmethod
+    def _check_list(widget: QMultiComboBox) -> QCheckList:
+        return widget.check_list
+
+    def _make_widget(self) -> QMultiComboBox:
+        return QMultiComboBox()
+
+    def _show(self, widget: QMultiComboBox, shown: ChoicesShown) -> None:
+        widget.check_list.show_choices(shown)
+        widget.setText(shown.summary)
+
+
 class LogViewLike(ViewLike, Protocol):
     log_message: str
     log_type: LogType
@@ -3650,6 +3792,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "drawing": QtDrawingRenderer,
     "map": _map_renderer,
     "checkbox": QtCheckBoxRenderer,
+    "check_list": QtCheckListRenderer,
     "combobox": QtComboBoxRenderer,
     "source_table": QtSourceTableRenderer,
     "date_input": QtDateInputRenderer,
@@ -3678,6 +3821,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "console": QtConsoleRenderer,
     "menu": QtMenuRenderer,
     "metric": QtMetricRenderer,
+    "multi_combobox": QtMultiComboBoxRenderer,
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
     "slider": QtSliderRenderer,

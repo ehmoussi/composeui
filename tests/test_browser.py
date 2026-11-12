@@ -54,6 +54,7 @@ from examples.webhello import HelloApp, HelloMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView
 from tests.charts import ChartPagesMainView
+from tests.choices import OneBaseMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
@@ -398,6 +399,13 @@ def site_plan_base_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
+def choices_base_url() -> Iterator[str]:
+    """Serve an app with a check list and a multi-combobox, for the whole module."""
+    with _serve(WebApplication(build_main_view=OneBaseMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
 def records_base_url() -> Iterator[str]:
     """Serve an app with a record's details in an expander, for the whole module."""
     with _serve(WebApplication(build_main_view=RecordMainView).create_starlette_app()) as url:
@@ -645,6 +653,15 @@ def test_map_renders_osm_tiles_with_attribution_and_an_origin_referrer(browser: 
 def page(browser: Browser, base_url: str) -> Iterator[Page]:
     """Open a page in a fresh context: its own cookies, so its own session."""
     context = browser.new_context(base_url=base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def choices_page(browser: Browser, choices_base_url: str) -> Iterator[Page]:
+    """Open the choices app like `page`, in a session of its own."""
+    context = browser.new_context(base_url=choices_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -3338,3 +3355,39 @@ def test_a_slider_moves_a_drawing_that_keeps_its_proportions_and_text_size(
     assert wide["width"] / wide["height"] == pytest.approx(2, abs=0.02)
     assert narrow["width"] / narrow["height"] == pytest.approx(2, abs=0.02)
     assert narrow_text["height"] == pytest.approx(wide_text["height"], abs=1)
+
+
+def test_a_multi_combobox_stays_open_as_its_boxes_are_checked(choices_page: Page) -> None:
+    page = choices_page
+    page.goto("/")
+    button = page.get_by_role("button", name="Bases")
+    button.click()
+    dropdown = page.locator(".dropdown").filter(has=button)
+    weiter = dropdown.get_by_role("checkbox", name="Weiter")
+    check_all = dropdown.get_by_role("checkbox", name="All")
+
+    with _posted(page):
+        weiter.check()
+
+    expect(button).to_have_text("Weiter")
+    expect(weiter).to_be_visible()  # the summary swapped, the dropdown still open
+    expect(check_all).to_have_js_property("indeterminate", value=True)
+    with _posted(page):
+        check_all.click()  # partly checked: checks them all
+    expect(button).to_have_text("All")
+    unter = dropdown.get_by_role("checkbox", name="Unter")
+    expect(unter).to_be_checked()
+    expect(check_all).to_be_visible()
+
+    with _posted(page):
+        check_all.click()  # none left: the app checks "Unter" again, in code
+    expect(button).to_have_text("Unter")
+    expect(unter).to_be_checked()
+    expect(unter).to_be_visible()  # swapped whole, the focus given back: still open
+    expect(check_all).to_be_focused()
+    with _posted(page):
+        unter.click()  # the last one: checked again, the focus given back to its box
+    expect(unter).to_be_checked()
+    expect(unter).to_be_focused()
+    page.get_by_role("heading", name="Choices").click()
+    expect(unter).to_be_hidden()  # closed as the focus leaves, as before the swap

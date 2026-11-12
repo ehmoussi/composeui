@@ -123,6 +123,7 @@ from composeui.core.view import (
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
 from composeui.qtcore.widgets.qchart import QChart
+from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qdatefield import QDateField
 from composeui.qtcore.widgets.qexpander import QExpander
@@ -146,6 +147,7 @@ from examples.studyinputs import OUTPUT_FOLDER, PATH, StudyInputsMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.choices import Base, ChoicesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
@@ -4513,6 +4515,7 @@ def _widgets_of(view: View) -> list[object]:
         EditedPipeMainView,
         HoursMainView,
         WorkersMainView,
+        ChoicesMainView,
     ],
 )
 def test_a_main_view_rendered_again_keeps_every_widget(
@@ -4581,6 +4584,78 @@ def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
     size.value = None  # set in code: no item, and not reported
 
     assert (seen, combobox.currentIndex()) == ([Size.SMALL], -1)
+
+
+def _click_box_text(qtbot: QtBot, box: QCheckBox) -> None:
+    """Click a check box on its text, not on its square."""
+    qtbot.mouseClick(
+        box,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(box.sizeHint().width() - 4, box.height() // 2),
+    )
+
+
+def test_a_check_list_checks_the_view_s_values_its_check_all_box_those_the_search_shows(
+    qtbot: QtBot,
+) -> None:
+    view = ChoicesMainView()
+    view.render(RendererType.QT)
+    check_list = _widget(view.hours)
+    assert isinstance(check_list, QCheckList)
+    qtbot.addWidget(check_list)
+    check_list.show()
+    seen: list[list[int]] = []
+    view.hours.selected_changed.connect(seen.append)
+
+    qtbot.keyClicks(check_list.search_field, "MORN")
+    rows = [box.text() for box in check_list.boxes]
+    assert (view.hours.search, rows) == ("MORN", ["Early morning", "Morning"])
+    _click_box_text(qtbot, check_list.boxes[1])
+    assert (view.hours.selected, seen) == ([9], [[9]])
+    assert check_list.check_all.checkState() == Qt.CheckState.PartiallyChecked
+
+    check_list.check_all.click()  # partly checked: checks all those shown
+    assert (view.hours.selected, seen[-1]) == ([5, 9], [5, 9])
+    assert check_list.check_all.checkState() == Qt.CheckState.Checked
+
+    view.hours.search = ""  # set in code: the list follows, and nothing is reported
+    view.hours.selected = [12]
+    assert [box.isChecked() for box in check_list.boxes] == [False, False, True, False]
+    assert check_list.check_all.checkState() == Qt.CheckState.PartiallyChecked
+    assert len(seen) == 2
+
+    view.hours.values = {"Dawn": 5, "Day": 9, "Dusk": 12, "Night": 19}  # the same keys
+    assert [box.text() for box in check_list.boxes] == ["Dawn", "Day", "Dusk", "Night"]
+
+
+def test_a_multi_combobox_shows_the_choice_on_its_button_and_the_boxes_in_its_menu(
+    qtbot: QtBot,
+) -> None:
+    view = ChoicesMainView()
+    view.render(RendererType.QT)
+    combobox = _field_widget(view.bases)
+    assert isinstance(combobox, QMultiComboBox)
+    qtbot.addWidget(combobox)
+    assert combobox.text() == "None"
+    assert not combobox.check_list.search_field.isVisibleTo(combobox.check_list)
+
+    menu = combobox.menu()
+    assert menu is not None
+    combobox.resize(300, combobox.height())
+    menu.popup(combobox.mapToGlobal(combobox.rect().bottomLeft()))  # as a click does
+    assert menu.width() >= combobox.width()  # as wide as the button, as a combobox's list
+    weiter = combobox.check_list.boxes[2]
+    # anywhere on its row, past its text: a click reaching the menu would close it
+    qtbot.mouseClick(
+        weiter, Qt.MouseButton.LeftButton, pos=QPoint(weiter.width() - 4, weiter.height() // 2)
+    )
+    qtbot.mouseClick(combobox.check_list, Qt.MouseButton.LeftButton, pos=QPoint(1, 1))
+    assert menu.isVisible()
+    menu.close()
+
+    assert (view.bases.selected, combobox.text()) == ([Base.WEITER], "Weiter")
+    view.bases.selected = [Base.UNTER, Base.HINTER]
+    assert combobox.text() == "2 selected"
 
 
 @pytest.mark.parametrize(

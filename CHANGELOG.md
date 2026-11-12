@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `CheckListView` and `MultiComboBoxView` pick several of their `values`, on Qt, Textual and the
+  web, with their form rows. A check-all box checks the choices shown, and an optional search
+  shows only the choices whose label holds its text. A study saves the choice.
 - The documentation site offers two versions: current `main` and the latest release tag.
 - `WebApplication.session_idle` saves a web session idle for that many seconds to disk and frees
   its memory. Its next request opens it again, and its page reloads. A session stays in memory
@@ -123,6 +126,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, a click on a table's check-all box does what the page shows. Before, when the app
+  had checked every row and the page still showed the box unchecked, the click unchecked them
+  all.
 - A web session no longer expires during a request that outlasts `session_ttl`, such as a large
   upload or download. It is idle from the request's end.
 - On the web, a tab left open on a page of an ended session reloads when the user acts on it, also
