@@ -24,6 +24,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    MAX_SLIDER_STEPS,
     STATE_FORMAT,
     ActionView,
     ChartKind,
@@ -31,7 +32,9 @@ from composeui.core.view import (
     CheckBoxView,
     CheckListView,
     ComboBoxView,
+    DateRangeInputView,
     FloatInputMixin,
+    FloatRangeSliderView,
     FloatSliderView,
     ImageView,
     InputView,
@@ -43,6 +46,7 @@ from composeui.core.view import (
     MultiComboBoxView,
     ProgressBarView,
     RadioGroupView,
+    RangeSliderView,
     ReferenceLine,
     SelectionMode,
     Series,
@@ -66,6 +70,7 @@ from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
 from tests.horizontal import HorizontalMainView
+from tests.ranges import FIRST_DAY, RangesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
 
@@ -639,6 +644,144 @@ def test_a_decimal_slider_refuses_a_number_that_is_not_finite(field: str, number
 def test_a_decimal_slider_refuses_a_step_that_is_not_positive(step: float) -> None:
     with pytest.raises(ValueError, match="positive"):
         FloatSliderView(step=step)
+
+
+# small positions, so that the handles often meet or cross
+@given(
+    st.integers(0, 4), st.integers(0, 3), st.integers(0, 2), st.integers(-1, 9), st.integers(-1, 9)
+)
+@example(2, 2, 2, 5, 4)  # the low handle moved past the high one: stops on it
+@example(2, 2, 2, 2, 1)  # the high handle moved below the low one: stops on it
+@example(2, 2, 2, 5, 1)  # both moved, crossed, as a stale page posts them: in order
+def test_a_range_slider_s_handles_stop_on_each_other_and_on_steps_in_range(
+    was_low: int, gap: int, beyond: int, low: int, high: int
+) -> None:
+    was_high, last = was_low + gap, was_low + gap + beyond
+    # positions as the widgets give them: in range
+    low, high = (min(max(0, position), last) for position in (low, high))
+    current = 10 + 5 * was_low, 10 + 5 * was_high
+
+    moved = RangeSliderView.moved(current, (low, high), 10, 10 + 5 * last, 5)
+
+    positions = RangeSliderView.positions(moved, 10, 10 + 5 * last, 5)
+    assert [10 + 5 * position for position in positions] == list(moved)  # on steps
+    if low <= high:
+        assert positions == (low, high)
+    elif high == was_high:
+        assert positions == (high, high)
+    elif low == was_low:
+        assert positions == (low, low)
+    else:
+        assert positions == (high, low)
+
+
+@pytest.mark.parametrize(
+    ("view_type", "field", "value", "message"),
+    [
+        (RangeSliderView, "value", (5, 1), "low end is above its high end"),
+        (RangeSliderView, "value", (1, 2, 3), "not two ends"),
+        (RangeSliderView, "step", 0, "positive"),
+        (FloatRangeSliderView, "value", (0.0, math.nan), "not finite"),
+        (FloatRangeSliderView, "value", (math.inf, math.inf), "not finite"),
+        (FloatRangeSliderView, "step", -0.5, "positive"),
+    ],
+)
+def test_a_range_slider_refuses_a_range_crossed_misshapen_or_not_finite_or_a_bad_step(
+    view_type: type[RangeSliderView], field: str, value: object, message: str
+) -> None:
+    view = view_type()
+    before = getattr(view, field)
+    with pytest.raises(ValueError, match=message):
+        setattr(view, field, value)
+    assert getattr(view, field) == before
+
+
+def test_a_range_slider_takes_its_ends_as_a_pair_and_a_decimal_one_as_floats() -> None:
+    view = RangeSliderView(value=[2, 4])  # type: ignore[arg-type]
+    decimal = FloatRangeSliderView(minimum=0, maximum=3, step=0.5, value=[1, 2])  # type: ignore[arg-type]
+
+    assert view.value == (2, 4)
+    assert decimal.value == (1.0, 2.0)
+    assert all(isinstance(end, float) for end in decimal.value)
+    assert FloatRangeSliderView.positions((0.75, 2.6), 0.0, 3.0, 0.5) == (2, 5)
+
+
+@pytest.mark.parametrize(
+    ("index", "day", "expected"),
+    [
+        (1, 10, (5, 10)),  # after the start: kept
+        (1, 3, (3, 3)),  # an end before the start: the start follows it
+        (0, 20, (20, 20)),  # a start after the end: the end follows it
+        (0, None, (None, 15)),  # emptied: open on that side
+    ],
+)
+def test_a_date_range_end_set_past_the_other_moves_the_other_to_it(
+    index: int, day: int | None, expected: tuple[int | None, int | None]
+) -> None:
+    def date(of_month: int | None) -> datetime.date | None:
+        return None if of_month is None else datetime.date(2014, 9, of_month)
+
+    value = DateRangeInputView.with_end((date(5), date(15)), index, date(day))
+
+    assert value == (date(expected[0]), date(expected[1]))
+
+
+def test_a_date_range_is_open_on_either_side_but_can_t_end_before_it_starts() -> None:
+    view = DateRangeInputView(value=[None, FIRST_DAY])  # type: ignore[arg-type]
+    assert view.value == (None, FIRST_DAY)
+    with pytest.raises(ValueError, match="starts after it ends"):
+        view.value = (FIRST_DAY + datetime.timedelta(days=1), FIRST_DAY)
+    with pytest.raises(ValueError, match="not two ends"):
+        view.value = (FIRST_DAY,)  # type: ignore[assignment]
+
+
+def test_ranges_are_saved_and_a_study_with_a_damaged_one_is_refused(tmp_path: Path) -> None:
+    saved = RangesMainView()
+    saved.hours.value = (3, 9)
+    saved.distance.value = (1.0, 2.5)
+    saved.days.value = (FIRST_DAY, FIRST_DAY + datetime.timedelta(days=6))
+    path = tmp_path / "ranges.ranges"
+    saved.save_state(path)
+    loaded = RangesMainView()
+    loaded.load_state(path)
+    assert (loaded.hours.value, loaded.distance.value, loaded.days.value) == (
+        saved.hours.value,
+        saved.distance.value,
+        saved.days.value,
+    )
+
+    for field, damaged in (
+        ("hours", [9, 3]),
+        ("hours", [3]),
+        ("distance", [1.0, "x"]),
+        ("days", ["2014-09-07", "2014-09-01"]),
+        ("days", ["2014-09-01"]),
+    ):
+        data = saved.file_data()
+        data["views"][field]["value"] = damaged
+        path.write_text(json.dumps(data))
+        view = RangesMainView()
+        before = (view.hours.value, view.distance.value, view.days.value)
+        with pytest.raises(InvalidStateError, match="doesn't match this application"):
+            view.load_state(path)
+        assert (view.hours.value, view.distance.value, view.days.value) == before, damaged
+
+
+@pytest.mark.parametrize(
+    "view_type", [SliderView, FloatSliderView, RangeSliderView, FloatRangeSliderView]
+)
+def test_a_slider_refuses_more_steps_than_a_backend_counts_unless_its_step_comes_first(
+    view_type: type[SliderView],
+) -> None:
+    with pytest.raises(ValueError, match="more than 2147483647"):
+        view_type(maximum=2**40)
+    view = view_type(maximum=2**40, step=2**10)
+    with pytest.raises(ValueError, match="Set a larger step first"):
+        view.step = 1
+    view.maximum = 10  # a smaller range first: then the step
+    view.step = 1
+    assert view.step == 1
+    assert view_type(maximum=MAX_SLIDER_STEPS, step=1).maximum == MAX_SLIDER_STEPS
 
 
 def test_a_metric_badge_points_the_way_its_figure_changed() -> None:

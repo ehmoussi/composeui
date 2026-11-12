@@ -82,6 +82,7 @@ from composeui.core.chartcolors import SERIES_COLORS
 from composeui.core.registry import create_renderer
 from composeui.core.renderer import MainRenderer, NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
+    MAX_SLIDER_STEPS,
     SEARCH_DELAY_MS,
     SOURCE_TABLE_JOB_ROWS,
     SOURCE_TABLE_WINDOW,
@@ -125,7 +126,7 @@ from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidg
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
-from composeui.qtcore.widgets.qdatefield import QDateField
+from composeui.qtcore.widgets.qdatefield import QDateField, QDateRangeField
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
 from composeui.qtcore.widgets.qfileupload import QFileUpload
@@ -135,6 +136,7 @@ from composeui.qtcore.widgets.qformlabel import QFormLabel
 from composeui.qtcore.widgets.qimagelabel import QImageLabel
 from composeui.qtcore.widgets.qmap import QMap
 from composeui.qtcore.widgets.qmetric import QMetric
+from composeui.qtcore.widgets.qrangeslider import QRangeSlider
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qtexttable import QCheckHeader, QTextTableView
@@ -168,6 +170,7 @@ from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
+from tests.ranges import FIRST_DAY, RangesMainView
 from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
@@ -972,6 +975,25 @@ def test_an_int_input_keeps_its_value_while_a_minus_sign_is_typed(qtbot: QtBot) 
     assert (kept, view.value) == (3, -2)
 
 
+def test_a_date_input_s_calendar_offers_its_new_limits_at_once(qtbot: QtBot) -> None:
+    view = BookingMainView()
+    view.render(RendererType.QT)
+    arrival = view.form.arrival
+    field = _field_widget(arrival)
+    assert isinstance(field, QDateField)
+    qtbot.addWidget(field)
+
+    # set in code: the calendar's own, not the previous limits, which the view held as its
+    # renderer heard of the change
+    arrival.maximum = datetime.date(2026, 11, 20)
+    arrival.minimum = datetime.date(2026, 11, 2)
+
+    assert (field.calendar.minimumDate(), field.calendar.maximumDate()) == (
+        QDate(2026, 11, 2),
+        QDate(2026, 11, 20),
+    )
+
+
 def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) -> None:
     view = BookingMainView()
     view.render(RendererType.QT)
@@ -1307,6 +1329,120 @@ def test_a_decimal_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> None:
 
     opacity.value = 0.14  # set in code: shown at its nearest step, and not reported
     assert (slider.shown_value(), moves) == (0.1, [0.3])
+
+
+def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other(
+    qtbot: QtBot,
+) -> None:
+    view = RangesMainView()
+    view.render(RendererType.QT)
+    hours = view.hours
+    slider = _field_widget(hours)
+    assert isinstance(slider, QRangeSlider)
+    qtbot.addWidget(slider)
+    moves: list[tuple[int, int]] = []
+    hours.value_changed.connect(moves.append)
+    assert (slider.low, slider.high, slider.ends_text()) == (8, 18, "8 \u2013 18")
+    plain = QSlider(Qt.Orientation.Horizontal).sizeHint()
+    assert slider.sizeHint().height() == plain.height()  # as tall as a plain slider
+
+    slider.resize(400, slider.sizeHint().height())
+    slider.show()
+    slider.setFocus()
+    qtbot.keyClick(slider, Qt.Key.Key_Right)  # the low handle at first
+    qtbot.keyClick(slider, Qt.Key.Key_End)  # the high one to the end
+    qtbot.keyClick(slider, Qt.Key.Key_Left)  # the high one, pressed last
+    qtbot.keyClick(slider, Qt.Key.Key_PageDown)  # by a tenth of the way, at least a step
+    qtbot.keyClick(slider, Qt.Key.Key_Home)  # the low one to the start
+    qtbot.keyClick(slider, Qt.Key.Key_A)  # not a slider's key
+    assert moves == [(9, 18), (9, 23), (9, 22), (9, 20), (0, 20)]
+
+    def click(position: int) -> None:
+        x = slider._handle_rect(position).center().x()  # noqa: SLF001
+        qtbot.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, slider.height() // 2))
+        qtbot.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, slider.height() // 2))
+
+    click(12)  # nearer the high handle
+    assert hours.value == (0, 12)
+    x = slider._handle_rect(12).center().x()  # noqa: SLF001
+    y = slider.height() // 2
+    qtbot.mousePress(slider, Qt.MouseButton.RightButton, pos=QPoint(x, y))  # not a move
+    # the high handle dragged, released, then the mouse moved: no move
+    qtbot.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, y))
+    qtbot.mouseMove(slider, QPoint(slider._handle_rect(16).center().x(), y))  # noqa: SLF001
+    qtbot.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, y))
+    qtbot.mouseMove(slider, QPoint(slider._handle_rect(18).center().x(), y))  # noqa: SLF001
+    assert hours.value == (0, 16)
+    reported = len(moves)
+    hours.value = (20, 20)  # set in code: shown, and not reported
+    assert (slider.low, slider.high, len(moves)) == (20, 20, reported)
+    # on one another near the end: the low handle, which can still move down
+    click(20)
+    qtbot.keyClick(slider, Qt.Key.Key_Left)
+    assert hours.value == (19, 20)
+    hours.value = (2, 2)  # near the start: the high one, which can still move up
+    click(2)
+    qtbot.keyClick(slider, Qt.Key.Key_Right)
+    assert hours.value == (2, 3)
+    hours.value = (5, 5)
+    click(9)  # beside both, past them: the high one, on the side of the click
+    assert hours.value == (5, 9)
+
+
+def test_a_slider_of_the_most_steps_a_view_takes_renders_on_qt(qtbot: QtBot) -> None:
+    view = RangesMainView()
+    view.hours.maximum = MAX_SLIDER_STEPS  # Qt counts its steps in a 32-bit integer
+    view.render(RendererType.QT)
+    slider = _field_widget(view.hours)
+    assert isinstance(slider, QRangeSlider)
+    qtbot.addWidget(slider)
+
+    assert slider.maximum() == MAX_SLIDER_STEPS
+
+
+def test_a_decimal_range_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> None:
+    view = RangesMainView()
+    view.render(RendererType.QT)
+    distance = view.distance
+    slider = _field_widget(distance)
+    assert isinstance(slider, QRangeSlider)
+    qtbot.addWidget(slider)
+    assert (slider.maximum(), slider.low, slider.high) == (6, 1, 4)
+    assert slider.ends_text() == "0.5 \u2013 2.0"
+
+    slider.show()
+    slider.setFocus()
+    qtbot.keyClick(slider, Qt.Key.Key_End)
+    assert distance.value == (0.5, 3.0)
+    distance.step = 0.25  # set in code: the steps follow
+    assert (slider.maximum(), slider.low, slider.high) == (12, 2, 12)
+
+
+def test_a_date_range_s_end_typed_before_its_start_moves_the_start_to_it(qtbot: QtBot) -> None:
+    view = RangesMainView()
+    view.render(RendererType.QT)
+    days = view.days
+    field = _field_widget(days)
+    assert isinstance(field, QDateRangeField)
+    qtbot.addWidget(field)
+    changes: list[tuple[datetime.date | None, datetime.date | None]] = []
+    days.value_changed.connect(changes.append)
+    assert [part.line_edit.text() for part in field.fields] == ["09/01/2014", ""]
+    assert field.end.line_edit.placeholderText() == "End"
+
+    qtbot.keyClicks(field.end.line_edit, "08/31/2014")
+
+    august = datetime.date(2014, 8, 31)
+    assert (days.value, changes) == ((august, august), [(august, august)])
+    assert field.start.line_edit.text() == "08/31/2014"  # the start followed
+    days.value = (None, FIRST_DAY)  # set in code: shown, and not reported
+    assert [part.line_edit.text() for part in field.fields] == ["", "09/01/2014"]
+    days.maximum = datetime.date(2014, 9, 15)
+    assert field.end.calendar.maximumDate() == QDate(2014, 9, 15)
+    assert len(changes) == 1
+    qtbot.keyClicks(field.start.line_edit, "09/05/2014")  # after the end: the end follows
+    fifth = datetime.date(2014, 9, 5)
+    assert (days.value, field.end.line_edit.text()) == ((fifth, fifth), "09/05/2014")
 
 
 def test_a_slider_without_fill_paints_its_track_alike_on_both_sides_of_its_handle(
@@ -4516,6 +4652,7 @@ def _widgets_of(view: View) -> list[object]:
         HoursMainView,
         WorkersMainView,
         ChoicesMainView,
+        RangesMainView,
     ],
 )
 def test_a_main_view_rendered_again_keeps_every_widget(

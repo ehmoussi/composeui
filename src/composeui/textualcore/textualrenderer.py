@@ -34,10 +34,12 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     ConsoleView,
+    DateRangeInputMixin,
     DialogButtonView,
     DialogKind,
     DialogView,
     ExpanderView,
+    FloatRangeSliderMixin,
     FloatSliderMixin,
     FormLabelRowView,
     FormRowView,
@@ -57,6 +59,7 @@ from composeui.core.view import (
     PageView,
     PickFileAction,
     ProgressBarView,
+    RangeSliderMixin,
     Router,
     SaveAction,
     SaveAsAction,
@@ -105,6 +108,7 @@ from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composerange import ComposeDateRangeInput, ComposeRangeSlider
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composesourcetable import ComposeDataFilterTable
@@ -998,6 +1002,136 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
         self._view.text_edited.emit(text)
 
 
+class DateRangeInputViewLike(ViewLike, Protocol):
+    value: tuple[datetime.date | None, datetime.date | None]
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    month_names: list[str]
+    day_names: list[str]
+    start_text: str
+    end_text: str
+    pick_text: str
+    value_changed: Signal[tuple[datetime.date | None, datetime.date | None]]
+
+
+class TextualDateRangeInputRenderer(
+    TextualWidgetRenderer[DateRangeInputViewLike, ComposeDateRangeInput]
+):
+    """Two date fields, the start and the end, each beside its calendar button."""
+
+    _marks_invalid = True
+
+    def __init__(self, view: DateRangeInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "date_format": self._refresh_date_format,
+                "month_names": self._refresh_month_names,
+                "day_names": self._refresh_day_names,
+                "start_text": self._refresh_start_text,
+                "end_text": self._refresh_end_text,
+                "pick_text": self._refresh_pick_text,
+            }
+        )
+        # its calendar's keys move by month, its title naming the month shown
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("previous_month_text", "next_month_text"),
+                lambda _view, _rendered_object, _value: None,
+            )
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeDateRangeInput()
+            self._rendered_object.end_edited.connect(self._update_end)
+
+    @staticmethod
+    def _refresh_value(
+        _view: DateRangeInputViewLike,
+        rendered_object: ComposeDateRangeInput,
+        value: tuple[datetime.date | None, datetime.date | None],
+    ) -> None:
+        for field, date in zip(rendered_object.fields, value):
+            field.set_date(date)
+
+    @staticmethod
+    def _refresh_minimum(
+        _view: DateRangeInputViewLike,
+        rendered_object: ComposeDateRangeInput,
+        value: datetime.date | None,
+    ) -> None:
+        for field in rendered_object.fields:
+            field.minimum = value
+            field.input.validate(field.input.value)
+
+    @staticmethod
+    def _refresh_maximum(
+        _view: DateRangeInputViewLike,
+        rendered_object: ComposeDateRangeInput,
+        value: datetime.date | None,
+    ) -> None:
+        for field in rendered_object.fields:
+            field.maximum = value
+            field.input.validate(field.input.value)
+
+    @staticmethod
+    def _refresh_date_format(
+        view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: str
+    ) -> None:
+        for field, text in zip(rendered_object.fields, (view.start_text, view.end_text)):
+            field.set_date_format(value)
+            field.input.placeholder = date_hint(text, value)
+
+    @staticmethod
+    def _refresh_month_names(
+        _view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: list[str]
+    ) -> None:
+        for field in rendered_object.fields:
+            field.month_names = list(value)
+
+    @staticmethod
+    def _refresh_day_names(
+        _view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: list[str]
+    ) -> None:
+        for field in rendered_object.fields:
+            field.day_names = list(value)
+
+    @staticmethod
+    def _refresh_start_text(
+        view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: str
+    ) -> None:
+        rendered_object.start.input.placeholder = date_hint(value, view.date_format)
+
+    @staticmethod
+    def _refresh_end_text(
+        view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: str
+    ) -> None:
+        rendered_object.end.input.placeholder = date_hint(value, view.date_format)
+
+    @staticmethod
+    def _refresh_pick_text(
+        _view: DateRangeInputViewLike, rendered_object: ComposeDateRangeInput, value: str
+    ) -> None:
+        for field in rendered_object.fields:
+            field.button.tooltip = Content(value)
+
+    def _update_end(self, index: int, date: datetime.date | None) -> None:
+        view = self._view
+        # the field reports only a new date, so the range changes
+        value = DateRangeInputMixin.with_end(view.value, index, date)
+        with self.stop_refresh():
+            view.value = value
+        # the other field, if it followed; not the one typed in, whose text the user writes
+        other = 1 - index
+        cast("ComposeDateRangeInput", self._rendered_object).fields[other].set_date(value[other])
+        view.value_changed.emit(value)
+
+
 #: the texts of the web's list of the server's files, which Textual doesn't show
 _SERVER_LIST_TEXTS = (
     "parent_folder_text",
@@ -1362,6 +1496,78 @@ class TextualFloatSliderRenderer(TextualSliderRenderer):
     """A slider stopping on each decimal step."""
 
     _steps = FloatSliderMixin
+
+
+class RangeSliderViewLike(ViewLike, Protocol):
+    value: tuple[float, float]
+    minimum: float
+    maximum: float
+    step: float
+    value_changed: Signal[tuple[float, float]]
+
+
+class TextualRangeSliderRenderer(TextualWidgetRenderer[RangeSliderViewLike, ComposeRangeSlider]):
+    """A slider with two handles stopping on each step, its ends beside the track."""
+
+    _marks_invalid = True
+    #: the rules of its two ends
+    _range: ClassVar[Any] = RangeSliderMixin
+
+    def __init__(self, view: RangeSliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {name: self._refresher(name) for name in ("value", "minimum", "maximum", "step")}
+        )
+        # the web's handles, each an input of its own; this one widget is named by its row
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("low_text", "high_text"), lambda _view, _rendered_object, _value: None)
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeRangeSlider()
+            self._rendered_object.steps = self._range.step_rules
+            self._rendered_object.moved.connect(self._update_value)
+
+    def _refresher(
+        self, name: str
+    ) -> Callable[[RangeSliderViewLike, ComposeRangeSlider, Any], None]:
+        """Show the handles once the attribute `name` is set to the value given."""
+
+        def refresh(
+            view: RangeSliderViewLike, rendered_object: ComposeRangeSlider, value: Any
+        ) -> None:
+            state = {
+                "value": view.value,
+                "minimum": view.minimum,
+                "maximum": view.maximum,
+                "step": view.step,
+                name: value,
+            }
+            minimum, maximum, step = state["minimum"], state["maximum"], state["step"]
+            steps = self._range.step_rules
+            rendered_object.set_steps(
+                minimum,
+                step,
+                steps.last_position(minimum, maximum, step),
+                *self._range.positions(state["value"], minimum, maximum, step),
+            )
+
+        return refresh
+
+    def _update_value(self, low: int, high: int) -> None:
+        view = self._view
+        # the slider reports only a move, so the range changes
+        value = self._range.moved(view.value, (low, high), view.minimum, view.maximum, view.step)
+        with self.stop_refresh():
+            view.value = value
+        view.value_changed.emit(view.value)
+
+
+class TextualFloatRangeSliderRenderer(TextualRangeSliderRenderer):
+    """A slider with two handles stopping on each decimal step."""
+
+    _range = FloatRangeSliderMixin
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -3650,6 +3856,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "combobox": TextualComboBoxRenderer,
     "source_table": TextualSourceTableRenderer,
     "date_input": TextualDateInputRenderer,
+    "date_range_input": TextualDateRangeInputRenderer,
     "file_path_input": TextualFilePathInputRenderer,
     "file_upload": TextualFileUploadRenderer,
     "folder_path_input": TextualFolderPathInputRenderer,
@@ -3679,8 +3886,10 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "page": TextualPageRenderer,
     "progress_bar": TextualProgressBarRenderer,
     "slider": TextualSliderRenderer,
+    "float_range_slider": TextualFloatRangeSliderRenderer,
     "float_slider": TextualFloatSliderRenderer,
     "radio_group": TextualRadioGroupRenderer,
+    "range_slider": TextualRangeSliderRenderer,
     "router": TextualRouterRenderer,
     "separator": TextualSeparatorRenderer,
     "sidebar": TextualSidebarRenderer,

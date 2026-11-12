@@ -72,10 +72,12 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     ConsoleView,
+    DateRangeInputMixin,
     DialogButtonView,
     DialogKind,
     DialogView,
     ExpanderView,
+    FloatRangeSliderMixin,
     FloatSliderMixin,
     FormLabelRowView,
     FormRowView,
@@ -94,6 +96,7 @@ from composeui.core.view import (
     PageView,
     PickFileAction,
     ProgressBarView,
+    RangeSliderMixin,
     Router,
     SelectionMode,
     SeparatorAction,
@@ -124,7 +127,7 @@ from composeui.qtcore.qtslot import connect_slot
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
-from composeui.qtcore.widgets.qdatefield import QDateField
+from composeui.qtcore.widgets.qdatefield import QDateField, QDateRangeField
 from composeui.qtcore.widgets.qdrawing import QDrawing
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qfilepathfield import QFilePathField
@@ -137,6 +140,7 @@ from composeui.qtcore.widgets.qmarkicon import mark_icon
 from composeui.qtcore.widgets.qmetric import QMetric
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qradiogroup import QRadioGroup
+from composeui.qtcore.widgets.qrangeslider import QRangeSlider
 from composeui.qtcore.widgets.qsidebar import QSidebar
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
@@ -600,8 +604,8 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
             {
                 "value": self._refresh_value,
                 "placeholder": self._refresh_placeholder,
-                "minimum": self._refresh_range,
-                "maximum": self._refresh_range,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
                 "date_format": self._refresh_date_format,
                 "pick_text": self._refresh_pick_text,
                 # Qt's calendar names them, in the system's language
@@ -635,9 +639,18 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
     ) -> None:
         rendered_object.line_edit.setPlaceholderText(date_hint(value, view.date_format))
 
+    # the new limit: the view still holds the old one as its renderer hears of the change
     @staticmethod
-    def _refresh_range(view: DateInputViewLike, rendered_object: QDateField, _value: Any) -> None:
-        rendered_object.set_range(view.minimum, view.maximum)
+    def _refresh_minimum(
+        view: DateInputViewLike, rendered_object: QDateField, value: datetime.date | None
+    ) -> None:
+        rendered_object.set_range(value, view.maximum)
+
+    @staticmethod
+    def _refresh_maximum(
+        view: DateInputViewLike, rendered_object: QDateField, value: datetime.date | None
+    ) -> None:
+        rendered_object.set_range(view.minimum, value)
 
     @staticmethod
     def _refresh_date_format(
@@ -657,6 +670,115 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+
+
+class DateRangeInputViewLike(ViewLike, Protocol):
+    value: tuple[datetime.date | None, datetime.date | None]
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    start_text: str
+    end_text: str
+    pick_text: str
+    value_changed: Signal[tuple[datetime.date | None, datetime.date | None]]
+
+
+class QtDateRangeInputRenderer(QtWidgetRenderer[DateRangeInputViewLike, QDateRangeField]):
+    """Two date fields, the start and the end, each beside its calendar button."""
+
+    _invalid_style = "QLineEdit { border: 1px solid red; }"
+
+    def __init__(self, view: DateRangeInputViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "value": self._refresh_value,
+                "minimum": self._refresh_minimum,
+                "maximum": self._refresh_maximum,
+                "date_format": self._refresh_date_format,
+                "start_text": self._refresh_start_text,
+                "end_text": self._refresh_end_text,
+                "pick_text": self._refresh_pick_text,
+            }
+        )
+        # Qt's calendar names them, in the system's language
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("month_names", "day_names", "previous_month_text", "next_month_text"),
+                lambda _view, _rendered_object, _value: None,
+            )
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QDateRangeField()
+            self._connect(self._rendered_object.end_edited, self._update_end)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_value(
+        _view: DateRangeInputViewLike,
+        rendered_object: QDateRangeField,
+        value: tuple[datetime.date | None, datetime.date | None],
+    ) -> None:
+        for field, date in zip(rendered_object.fields, value):
+            field.set_date(date)
+
+    @staticmethod
+    def _refresh_minimum(
+        view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: datetime.date | None
+    ) -> None:
+        for field in rendered_object.fields:
+            field.set_range(value, view.maximum)
+
+    @staticmethod
+    def _refresh_maximum(
+        view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: datetime.date | None
+    ) -> None:
+        for field in rendered_object.fields:
+            field.set_range(view.minimum, value)
+
+    @staticmethod
+    def _refresh_date_format(
+        view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: str
+    ) -> None:
+        texts = (view.start_text, view.end_text)
+        for field, text in zip(rendered_object.fields, texts):
+            field.set_date_format(value)
+            field.line_edit.setPlaceholderText(date_hint(text, value))
+
+    @staticmethod
+    def _refresh_start_text(
+        view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: str
+    ) -> None:
+        rendered_object.start.line_edit.setPlaceholderText(date_hint(value, view.date_format))
+        rendered_object.start.line_edit.setAccessibleName(value)
+
+    @staticmethod
+    def _refresh_end_text(
+        view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: str
+    ) -> None:
+        rendered_object.end.line_edit.setPlaceholderText(date_hint(value, view.date_format))
+        rendered_object.end.line_edit.setAccessibleName(value)
+
+    @staticmethod
+    def _refresh_pick_text(
+        _view: DateRangeInputViewLike, rendered_object: QDateRangeField, value: str
+    ) -> None:
+        for field in rendered_object.fields:
+            field.button.setToolTip(plain_tool_tip(value))
+            field.button.setAccessibleName(value)
+
+    def _update_end(self, index: int, date: datetime.date | None) -> None:
+        view = self._view
+        # the field reports only a new date, so the range changes
+        value = DateRangeInputMixin.with_end(view.value, index, date)
+        with self.stop_refresh():
+            view.value = value
+        # the other field, if it followed; not the one typed in, whose text the user writes
+        other = 1 - index
+        cast("QDateRangeField", self._rendered_object).fields[other].set_date(value[other])
+        view.value_changed.emit(value)
 
 
 def _file_filters(extensions: dict[str, tuple[str, ...]]) -> str:
@@ -1087,6 +1209,83 @@ class QtFloatSliderRenderer(QtSliderRenderer):
     """A slider stopping on each decimal step."""
 
     _steps = FloatSliderMixin
+
+
+class RangeSliderViewLike(ViewLike, Protocol):
+    value: tuple[float, float]
+    minimum: float
+    maximum: float
+    step: float
+    value_changed: Signal[tuple[float, float]]
+
+
+class QtRangeSliderRenderer(QtWidgetRenderer[RangeSliderViewLike, QRangeSlider]):
+    """A horizontal slider with two handles stopping on each step, its ends beside the track."""
+
+    _invalid_style = "QSlider { border: 1px solid red; }"
+    #: the rules of its two ends
+    _range: ClassVar[Any] = RangeSliderMixin
+
+    def __init__(self, view: RangeSliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {name: self._refresher(name) for name in ("value", "minimum", "maximum", "step")}
+        )
+        # the web's handles, each an input of its own; this one widget is named by its row
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("low_text", "high_text"), lambda _view, _rendered_object, _value: None)
+        )
+
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QRangeSlider()
+            self._rendered_object.steps = self._range.step_rules
+            self._connect(self._rendered_object.moved, self._update_value)
+            self.refresh()
+
+    def _refresher(self, name: str) -> Callable[[RangeSliderViewLike, QRangeSlider, Any], None]:
+        """Show the handles once the attribute `name` is set to the value given."""
+
+        def refresh(view: RangeSliderViewLike, rendered_object: QRangeSlider, value: Any) -> None:
+            state = {
+                "value": view.value,
+                "minimum": view.minimum,
+                "maximum": view.maximum,
+                "step": view.step,
+                name: value,
+            }
+            self._show(rendered_object, **state)
+
+        return refresh
+
+    def _show(
+        self,
+        rendered_object: QRangeSlider,
+        *,
+        value: tuple[float, float],
+        minimum: float,
+        maximum: float,
+        step: float,
+    ) -> None:
+        last = self._range.step_rules.last_position(minimum, maximum, step)
+        rendered_object.first, rendered_object.step = minimum, step
+        rendered_object.setRange(0, last)
+        rendered_object.set_positions(*self._range.positions(value, minimum, maximum, step))
+        rendered_object.updateGeometry()  # the ends' slot follows the widest ends
+
+    def _update_value(self, low: int, high: int) -> None:
+        view = self._view
+        # the slider reports only a move, so the range changes
+        value = self._range.moved(view.value, (low, high), view.minimum, view.maximum, view.step)
+        with self.stop_refresh():
+            view.value = value
+        view.value_changed.emit(view.value)
+
+
+class QtFloatRangeSliderRenderer(QtRangeSliderRenderer):
+    """A slider with two handles stopping on each decimal step."""
+
+    _range = FloatRangeSliderMixin
 
 
 class LabelViewLike(ViewLike, Protocol):
@@ -3796,6 +3995,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "combobox": QtComboBoxRenderer,
     "source_table": QtSourceTableRenderer,
     "date_input": QtDateInputRenderer,
+    "date_range_input": QtDateRangeInputRenderer,
     "file_path_input": QtFilePathInputRenderer,
     "file_upload": QtFileUploadRenderer,
     "folder_path_input": QtFolderPathInputRenderer,
@@ -3825,8 +4025,10 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
     "slider": QtSliderRenderer,
+    "float_range_slider": QtFloatRangeSliderRenderer,
     "float_slider": QtFloatSliderRenderer,
     "radio_group": QtRadioGroupRenderer,
+    "range_slider": QtRangeSliderRenderer,
     "router": QtRouterRenderer,
     "separator": QtSeparatorRenderer,
     "sidebar": QtSidebarRenderer,

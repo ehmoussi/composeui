@@ -68,6 +68,7 @@ from tests.listview import PIPES, PipesMainView
 from tests.maps import AutoMapMainView, MapMainView
 from tests.markdown import HelpMainView
 from tests.pages import PagesMainView, WidePageMainView
+from tests.ranges import RangesMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
@@ -3391,3 +3392,39 @@ def test_a_multi_combobox_stays_open_as_its_boxes_are_checked(choices_page: Page
     expect(unter).to_be_focused()
     page.get_by_role("heading", name="Choices").click()
     expect(unter).to_be_hidden()  # closed as the focus leaves, as before the swap
+
+
+def test_a_range_slider_s_handles_stop_on_each_other_and_part_from_the_end(
+    browser: Browser,
+) -> None:
+    with _serve(WebApplication(build_main_view=RangesMainView).create_starlette_app()) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        hours = page.get_by_role("group", name="Hours")
+        low = hours.get_by_role("slider", name="From")
+        high = hours.get_by_role("slider", name="To")
+        ends = hours.locator("output")
+        expect(ends).to_have_text("8 \u2013 18")
+
+        with _posted(page):
+            low.press("End")  # past the high handle: stops on it
+        expect(ends).to_have_text("18 \u2013 18")
+        expect(low).to_have_attribute("aria-valuetext", "18")
+        # on one another near the end: a drag moves the low one, on top, down
+        box = low.bounding_box()
+        assert box is not None
+        x = box["x"] + box["height"] / 2 + (box["width"] - box["height"]) * 18 / 23
+        y = box["y"] + box["height"] / 2
+        page.mouse.move(x, y)
+        page.mouse.down()
+        with _posted(page):
+            page.mouse.move(x - box["width"] / 4, y, steps=5)
+            page.mouse.up()
+        expect(high).to_have_attribute("aria-valuetext", "18")
+        expect(low).not_to_have_attribute("aria-valuetext", "18")
+
+        page.reload()  # the server's range, as the page last posted it
+        expect(ends).not_to_have_text("18 \u2013 18")
+        expect(ends).to_have_text(re.compile(r"^\d+ \u2013 18$"))
+        context.close()

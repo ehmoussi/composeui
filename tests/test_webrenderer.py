@@ -85,6 +85,7 @@ from composeui.core.view import (
     CheckListView,
     ComboBoxView,
     ConsoleView,
+    DateRangeInputView,
     DialogView,
     DownloadCanceledError,
     DownloadedFile,
@@ -108,6 +109,7 @@ from composeui.core.view import (
     Menu,
     PageView,
     PageWidth,
+    RangeSliderView,
     Router,
     SaveAsAction,
     SavePathInputMixin,
@@ -225,6 +227,7 @@ from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
+from tests.ranges import FIRST_DAY, RangesMainView
 from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
@@ -860,6 +863,7 @@ class _PicturesMainView(MainView):
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
     ChoicesMainView,
+    RangesMainView,
     ReportMainView,
     DataFileMainView,
     PipeMainView,
@@ -1728,6 +1732,8 @@ class _DisabledControlsMainView(MainView):
     choices: CheckListView[str] = attrs.Factory(
         lambda: CheckListView[str](values={"A": "a", "B": "b"})
     )
+    hours: RangeSliderView = child(RangeSliderView)
+    days: DateRangeInputView = child(DateRangeInputView)
 
 
 _DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], object]] = {
@@ -1737,6 +1743,13 @@ _DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], 
     "combo": ("change", {}, lambda view: view.combo.value, "a"),  # see `_posted`
     "tabs": ("select", {"index": "1"}, lambda view: view.tabs.current_index, 0),
     "choices": ("toggle", {"key": "a", "checked": "on"}, lambda view: view.choices.selected, []),
+    "hours": ("input", {"low": "5", "high": "50"}, lambda view: view.hours.value, (0, 100)),
+    "days": (
+        "input",
+        {"end": "0", "value": "09/01/2014"},
+        lambda view: view.days.value,
+        (None, None),
+    ),
 }
 
 
@@ -1755,6 +1768,8 @@ def _disabled_session() -> tuple[_DisabledControlsMainView, WebSession, list[obj
     view.combo.value_changed.connect(signals.append)
     view.tabs.current_changed.connect(signals.append)
     view.choices.selected_changed.connect(signals.append)
+    view.hours.value_changed.connect(signals.append)
+    view.days.value_changed.connect(signals.append)
     return view, session, signals
 
 
@@ -3323,6 +3338,85 @@ def test_a_decimal_slider_posts_exact_steps_and_ignores_what_is_not_a_finite_num
     for posted in ("nan", "inf", "-inf", "1e999", "abc"):
         handle_event(field, "input", {"value": posted})
     assert (opacity.value, moves) == (0.3, [0.3])
+
+
+def test_a_range_slider_posts_both_handles_which_stop_on_each_other() -> None:
+    view = RangesMainView()
+    view.render(RendererType.WEB)
+    hours = view.hours
+    field = _part(hours, "field")
+    moves: list[tuple[int, int]] = []
+    hours.value_changed.connect(moves.append)
+    slider = _element(field.to_html(), field.widget_id)
+    low, high = [a for tag, a in slider.descendants if tag == "input"]
+    names = ("name", "max", "value", "aria-label", "aria-valuetext")
+    assert [low[name] for name in names] == ["low", "23", "8", "From", "8"]
+    assert [high[name] for name in names] == ["high", "23", "18", "To", "18"]
+    assert slider.text == "8 \u2013 18"
+
+    handle_event(field, "input", {"low": "9", "high": "18"})
+    handle_event(field, "change", {"low": "9", "high": "18"})  # the same: reported once
+    handle_event(field, "input", {"low": "20", "high": "18"})  # the low one past the high
+    assert (hours.value, moves) == ((18, 18), [(9, 18), (18, 18)])
+    # on one another near the end: the low handle on top, which can still move down
+    track = _element(field.to_html(), field.widget_id).descendants[0]
+    assert "data-low-on-top" in track[1]
+    handle_event(field, "input", {"low": "30", "high": "2"})  # both moved: in order, in range
+    assert hours.value == (2, 23)
+    for posted in ({"low": "x", "high": "3"}, {"low": "1"}):
+        handle_event(field, "input", posted)
+    assert len(moves) == 3
+
+
+def test_a_decimal_range_slider_posts_positions_which_give_exact_steps() -> None:
+    view = RangesMainView()
+    view.render(RendererType.WEB)
+    distance = view.distance
+    field = _part(distance, "field")
+    track = _element(field.to_html(), field.widget_id).descendants[0][1]
+    assert [track[name] for name in ("data-first", "data-step", "data-decimals")] == [
+        "0.0",
+        "0.5",
+        "1",
+    ]
+
+    handle_event(field, "input", {"low": "3", "high": "5"})
+
+    assert distance.value == (1.5, 2.5)
+
+
+def test_a_date_range_swaps_the_end_that_followed_never_the_one_typed_in() -> None:
+    view = RangesMainView()
+    view.render(RendererType.WEB)
+    days = view.days
+    field = _part(days, "field")
+    changes: list[tuple[datetime.date | None, datetime.date | None]] = []
+    days.value_changed.connect(changes.append)
+    start_id, end_id = f"{field.widget_id}-start", f"{field.widget_id}-end"
+    page = field.to_html()
+    assert _element(page, f"{start_id}-field").attributes["value"] == "09/01/2014"
+    assert _element(page, f"{end_id}-field").attributes["aria-label"] == "End"
+
+    answer = handle_event(field, "input", {"end": "1", "value": "08/31/2014"})
+
+    august = datetime.date(2014, 8, 31)
+    assert (days.value, changes) == ((august, august), [(august, august)])
+    _swapped(answer, start_id)
+    assert _element(answer, f"{start_id}-field").attributes["value"] == "08/31/2014"
+    assert _find(answer, end_id) is None  # the field typed in stays
+    answer = handle_event(field, "change", {"end": "1", "value": "8/31/2014"})  # left
+    _swapped(answer, end_id)
+    assert _element(answer, f"{end_id}-field").attributes["value"] == "08/31/2014"
+    handle_event(field, "pick", {"end": "1", "picked": "2014-09-09"})
+    handle_event(field, "input", {"end": "0", "value": "09/0"})  # not a date yet
+    assert days.value == (august, datetime.date(2014, 9, 9))
+    handle_event(field, "input", {"end": "0", "value": ""})  # emptied: open on that side
+    handle_event(field, "change", {"end": "0", "value": ""})  # the same text: no change
+    assert (days.value, len(changes)) == ((None, datetime.date(2014, 9, 9)), 3)
+    days.value = (None, FIRST_DAY)  # set in code: the whole swapped, not reported
+    assert len(changes) == 3
+    with pytest.raises(UnsupportedEventError):
+        handle_event(field, "input", {"end": "2", "value": "09/01/2014"})
 
 
 def test_a_slider_without_fill_turns_off_the_range_input_s_fill() -> None:
