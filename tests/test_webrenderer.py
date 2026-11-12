@@ -47,6 +47,7 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("httpx")
 
+import anyio
 import attrs
 import httpx
 from attrs import Factory
@@ -6943,6 +6944,30 @@ async def test_a_stream_s_writer_waits_while_no_one_reads_and_stops_once_cancele
     with pytest.raises(StreamFailedError):  # what was written isn't sent: the file is cut
         async for _ in stream.pieces():
             pass
+
+
+@pytest.mark.asyncio
+async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
+    finished = threading.Event()
+
+    def write(sink: BinaryIO) -> None:
+        try:
+            while True:
+                sink.write(bytes(DOWNLOAD_CHUNK_SIZE))
+        except DownloadCanceledError:
+            time.sleep(0.2)  # the writer's cleanup, e.g. closing its source
+            finished.set()
+            raise
+
+    stream = Stream(StreamContent(write))
+    with anyio.CancelScope() as scope:  # as uvicorn cancels an answer when the server stops
+        async with stream.running():
+            assert await stream.first() is None
+            scope.cancel()
+            await anyio.sleep(10)  # canceled here
+
+    # the answer's place and session are freed once nothing writes any more
+    assert finished.is_set()
 
 
 def test_the_server_writes_at_most_its_streams_at_once_the_next_waiting() -> None:
