@@ -487,10 +487,10 @@ then shows them this way.
 
 ### Rows in a dataframe
 
-A `DataFrameSource` gives a large table the rows of a dataframe. The frame's library sorts
-and filters the rows with its own expressions, never row by row in Python. It needs the
-`dataframe` extra, which installs [narwhals](https://narwhals-dev.github.io/narwhals/).
-Narwhals reads the frames of pandas, Polars, PyArrow, and other libraries through one API.
+A `DataFrameSource` gives a large table the rows of a dataframe. The frame's library sorts and
+filters the rows with its own expressions, never row by row in Python. It reads them through
+[narwhals](https://narwhals-dev.github.io/narwhals/), which ComposeUI installs. Narwhals reads the
+frames of pandas, Polars, PyArrow, and other libraries through one API.
 
 ```python
 import polars as pl

@@ -1,7 +1,7 @@
 """A dataframe's rows in a large table, a chart or a map: pandas, Polars, PyArrow, lazy...
 
-`narwhals` (the ``dataframe`` extra) reads each library's frame through one API, so the
-library sorts and filters the rows with its own expressions, never row by row in Python.
+`narwhals` reads each library's frame through one API, so the library sorts and filters the
+rows with its own expressions, never row by row in Python.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import datetime
 import decimal
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-import narwhals as nw
+import narwhals.stable.v2 as nw
 
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
@@ -26,7 +26,7 @@ from composeui.core.view import (
 if TYPE_CHECKING:
     from collections.abc import Generator, Hashable, Iterator, Mapping, Sequence
 
-    from narwhals.typing import IntoFrame
+    from narwhals.stable.v2.typing import IntoFrame
 
     from composeui.core.sqlitemodel import CSVSqliteTable
     from composeui.core.view import Filter, Sort
@@ -323,7 +323,8 @@ def _text(name: str) -> nw.Expr:
 
 def _as_text(cell: nw.Expr) -> nw.Expr:
     """Get a cell's text, an empty cell's being "": pandas casts it to "None" or "nan"."""
-    return nw.when(~cell.is_null()).then(cell.cast(nw.String)).otherwise(nw.lit(""))
+    # not `otherwise`: in `narwhals.stable.v2` it returns an `Expr` of the unstable API
+    return nw.when(~cell.is_null()).then(cell.cast(nw.String)).fill_null("")
 
 
 def _text_condition(text: nw.Expr, operator: FilterOperator, value: str) -> nw.Expr:

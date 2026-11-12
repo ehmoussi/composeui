@@ -13,7 +13,6 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-pytest.importorskip("narwhals")
 pytest.importorskip("polars")
 pytest.importorskip("pandas")
 pytest.importorskip("pyarrow")
@@ -50,7 +49,7 @@ if TYPE_CHECKING:
     from collections.abc import Hashable, Iterator
     from pathlib import Path
 
-    from narwhals.typing import IntoFrame
+    from narwhals.stable.v2.typing import IntoFrame
 
     from composeui.core.view import TableSource
 

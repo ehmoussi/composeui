@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 import pytest
 
-pytest.importorskip("narwhals")
 pytest.importorskip("polars")
 import polars as pl
 

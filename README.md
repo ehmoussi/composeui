@@ -65,7 +65,6 @@ Each extra adds a backend or a feature:
 | `tui` | Textual | The Textual backend, a terminal |
 | `report` | Matplotlib | The report images of charts |
 | `terminal-images` | textual-image | [Images](https://ehmoussi.github.io/composeui/user-guide/widgets.html#image) in pixels on Textual, on Python 3.12 or later |
-| `dataframe` | narwhals | A large table of a pandas, Polars, or PyArrow frame |
 | `reload` | watchfiles | Faster reloads in development |
 
 To try ComposeUI and its example apps, clone the repository and install every extra:

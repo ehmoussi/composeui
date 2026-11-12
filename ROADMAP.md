@@ -83,8 +83,6 @@ The order of the work for **Now**:
   CSV and Parquet files, and a download of a frame. Done when a CSV dashboard takes a few dozen
   clear lines, one panel moves into its own view class without other changes, and a tutorial
   shows it.
-- **Narwhals as a required dependency** (Now). Use `narwhals.stable.v2`, import it only where
-  frames are used, and keep the `dataframe` extra as an empty alias for one release.
 - **Shared data** (Now). Data loaded once per process and shared by the sessions, read-only, and
   freed on shutdown and reload. Private data never goes in. Done when 4 web sessions of the Uber
   example load its CSV once.

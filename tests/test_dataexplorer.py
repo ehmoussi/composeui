@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-pytest.importorskip("narwhals")
 pytest.importorskip("polars")
 pytest.importorskip("starlette")
 import polars as pl

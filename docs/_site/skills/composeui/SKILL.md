@@ -241,13 +241,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   end. Pass only trusted URLs.
   See https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html and
   https://ehmoussi.github.io/composeui/user-guide/csv-import.html
-- **Show many rows in a `SourceTableView`,** on a `ListSource`, a `SqliteSource`
-  (`table.source()` for a CSV table), or a `DataFrameSource` (the `dataframe` extra). Set
-  a source's new `frame` on the main thread.
+- **Show many rows in a `SourceTableView`,** on a `ListSource`, a `SqliteSource` (`table.source()`
+  for a CSV table), or a `DataFrameSource`. Set a source's new `frame` on the main thread.
   See https://ehmoussi.github.io/composeui/user-guide/tables.html#a-large-table
-- **Build a bar chart's series with `Series.bars(name, values)`.** With the `dataframe`
-  extra, `series_of` and `points_of` from `composeui.core.dataframesource` read a chart's
-  series or a map's points from a frame.
+- **Build a bar chart's series with `Series.bars(name, values)`.** `series_of` and `points_of` from
+  `composeui.core.dataframesource` read a chart's series or a map's points from a frame.
   See https://ehmoussi.github.io/composeui/user-guide/charts.html
 - **Use `DrawingView` for a diagram of shapes,** not an image or a `ChartView`. Set a new
   `shapes` list of `LineShape`, `PolylineShape`, `PolygonShape`, `CircleShape`, `ArrowShape`,

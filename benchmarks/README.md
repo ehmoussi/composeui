@@ -64,7 +64,7 @@ memory run are separate, because `tracemalloc` slows Python down several times.
 
 ### Run it
 
-Install the `web` and `dataframe` extras, then run:
+Install the `web` extra, then run:
 
 ```bash
 uv sync --group dev --all-extras
