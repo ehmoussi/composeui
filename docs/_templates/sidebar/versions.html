@@ -1,0 +1,12 @@
+<div class="docs-versions">
+  <label for="docs-version">Documentation version</label>
+  {% set root = pathto('', 1) %}
+  <div class="docs-version-control">
+    <select id="docs-version" name="docs-version" aria-label="Documentation version">
+      <option value="{{ root }}{% if docs_ref != 'main' %}../{% endif %}index.html"{% if docs_ref == 'main' %} selected{% endif %}>main (development)</option>
+      {% if docs_latest_tag %}
+      <option value="{{ root }}{% if docs_ref == 'main' %}stable/{% endif %}index.html"{% if docs_ref != 'main' %} selected{% endif %}>{{ docs_latest_tag }} (latest release)</option>
+      {% endif %}
+    </select>
+  </div>
+</div>

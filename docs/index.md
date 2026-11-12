@@ -1,4 +1,4 @@
-# ComposeUI
+# ComposeUI: One Python UI for desktop, terminal, and web
 
 ComposeUI is a small MVVM layer for building UIs in Python. You write the views once, as
 typed `attrs` classes. In MVVM terms, these views are the view-models. A renderer binds each

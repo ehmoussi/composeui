@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import posixpath
 import re
+import shutil
+import subprocess
 import sys
 from importlib.metadata import version as package_version
+from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -50,10 +53,43 @@ autodoc_class_signature = "separated"
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 html_theme = "furo"
-html_baseurl = "https://ehmoussi.github.io/composeui/"
+_DOCS_REF = environ.get("COMPOSEUI_DOCS_REF", "main")
+_LATEST_TAG = environ.get("COMPOSEUI_DOCS_LATEST_TAG", "")
+if not _LATEST_TAG and (git := shutil.which("git")):
+    # Fixed arguments only; use local tags so a normal `make docs` shows both choices.
+    tags = subprocess.run(  # noqa: S603 - the executable is resolved and arguments are fixed
+        [git, "tag", "--list", "v[0-9]*", "--sort=-version:refname"],
+        cwd=Path(__file__).parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.splitlines()
+    _LATEST_TAG = tags[0] if tags else ""
+_SITE_ROOT = "https://ehmoussi.github.io/composeui/"
+html_baseurl = _SITE_ROOT + ("stable/" if _DOCS_REF != "main" else "")
 sitemap_url_scheme = "{link}"
-html_title = f"ComposeUI {release}"
+html_title = f"ComposeUI: Python UIs for desktop, terminal, and web ({_DOCS_REF})"
 html_static_path = ["_static"]
+templates_path = ["_templates"]
+html_css_files = ["versions.css"]
+html_js_files = ["versions.js"]
+html_sidebars = {
+    "**": [
+        "sidebar/brand.html",
+        "sidebar/versions.html",
+        "sidebar/search.html",
+        "sidebar/scroll-start.html",
+        "sidebar/navigation.html",
+        "sidebar/ethical-ads.html",
+        "sidebar/scroll-end.html",
+        "sidebar/variant-selector.html",
+    ],
+}
+html_context = {
+    "docs_ref": _DOCS_REF,
+    "docs_latest_tag": _LATEST_TAG,
+    "docs_site_root": _SITE_ROOT,
+}
 # _site/ is copied as is to the root of the site: llms.txt for language models
 # (https://llmstxt.org), and the skill for coding agents (skills/composeui/SKILL.md)
 html_extra_path = ["_site"]
@@ -68,7 +104,7 @@ html_theme_options = {
 
 # the guides link to the repository's files (`../src/examples/pipeform.py`), which the site
 # does not hold: those links go to the files on GitHub
-REPOSITORY_URL = "https://github.com/ehmoussi/composeui/blob/main/"
+REPOSITORY_URL = f"https://github.com/ehmoussi/composeui/blob/{_DOCS_REF}/"
 _RELATIVE_LINK = re.compile(r"\]\((\.\./[^)\s]*)\)")
 
 
