@@ -47,7 +47,6 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("httpx")
 
-import anyio
 import attrs
 import httpx
 from attrs import Factory
@@ -6960,11 +6959,20 @@ async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
             raise
 
     stream = Stream(StreamContent(write))
-    with anyio.CancelScope() as scope:  # as uvicorn cancels an answer when the server stops
+
+    async def answer() -> None:
         async with stream.running():
             assert await stream.first() is None
-            scope.cancel()
-            await anyio.sleep(10)  # canceled here
+            await asyncio.sleep(10)
+
+    task = asyncio.ensure_future(answer())
+    await asyncio.sleep(0.05)
+    # as uvicorn cancels the answers when the server stops, then `asyncio.run` as it ends
+    task.cancel()
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
     # the answer's place and session are freed once nothing writes any more
     assert finished.is_set()

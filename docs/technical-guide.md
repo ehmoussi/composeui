@@ -524,8 +524,10 @@ Only the GET changes: it runs `write` (`webcore/streaming.py`).
   to drain, so a slow browser slows the writer.
 - **Cancel.** A browser that leaves, or the session's end (`WebSession.close`, through
   `streaming`), cancels the stream: the writer's next write raises `DownloadCanceledError`, and
-  every one after. The answer then waits for the thread, shielded from the cancel, before it
-  frees the session and its place. A writer that doesn't write for a while holds them that long.
+  every one after. The answer then waits for the thread before it frees the session and its
+  place, whatever cancels it meanwhile (`Stream.ended`): an anyio shield stops anyio's cancels,
+  not asyncio's `task.cancel`, which uvicorn and then `asyncio.run` send as the server stops. A
+  writer that doesn't write for a while holds them that long.
 - **A server that stops.** uvicorn's graceful shutdown waits for the open answers before the
   lifespan closes the sessions, and tells the app nothing. So `run` gives uvicorn
   `WebApplication.shutdown_timeout` as `timeout_graceful_shutdown`, which the processes of a
