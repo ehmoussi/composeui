@@ -34,6 +34,7 @@ classifiers = [
 dependencies = [
     "attrs>=26.1.0",
     "cattrs>=25.3.0",
+    "narwhals>=2.21.0",
     "typing-extensions>=4.15.0",
 ]
 dynamic = ["version"]
@@ -63,7 +64,8 @@ report = ["matplotlib>=3.9"]
 # images in pixels on Textual: it needs Python 3.12 or later
 terminal-images = ["textual-image>=0.14.2; python_version >= '3.12'"]
 reload = ["watchfiles>=1.1.1"]
-dataframe = ["narwhals>=2.21.0"]
+# empty: Narwhals is now required; kept for one release so that `composeui[dataframe]` installs
+dataframe = []
 
 [tool.setuptools.packages.find]
 where = ["src"]

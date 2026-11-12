@@ -247,8 +247,8 @@ delimiter, with `csv.Sniffer`.
 ## A frame or a Parquet file
 
 `fill_from_frame`, from `composeui.core.dataframesource`, imports the rows of a dataframe into a
-`CSVSqliteTable`. It needs the `dataframe` extra. The app reads a Parquet file with its own
-library, such as Polars or pandas, so ComposeUI needs no Parquet reader:
+`CSVSqliteTable`. The app reads a Parquet file with its own library, such as Polars or pandas, so
+ComposeUI needs no Parquet reader:
 
 ```python
 import contextlib

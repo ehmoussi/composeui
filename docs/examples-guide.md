@@ -475,7 +475,7 @@ It shows:
 uv run python -m examples.uberpickupsframe   # web; or --backend qt, or textual
 ```
 
-It needs the `dataframe` extra and Polars. It reads the CSV file in a job each time that it
+It needs Polars. It reads the CSV file in a job each time that it
 starts. It has no File menu, because a study would keep no rows. The table shows the CSV's
 own columns. Polars counts the pickups by hour, selects the pickups of the slider's hour for
 the table, and samples them for the map.
@@ -519,7 +519,7 @@ gives.
 uv run python -m examples.dataexplorer   # web; or --backend qt, or textual
 ```
 
-It needs the `dataframe` extra and Polars, which reads both formats. It finds a CSV file's
+It needs Polars, which reads both formats. It finds a CSV file's
 separator (a comma, a semicolon, a tab, or a bar) from the file's first line, and refuses a
 compressed CSV file. These screenshots use made-up rows.
 

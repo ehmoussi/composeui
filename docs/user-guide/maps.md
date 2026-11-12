@@ -31,10 +31,9 @@ class PickupsMainView(MainView):
   arguments. The longitude goes from -180 to 180. The latitude goes from -85.05112878 to
   85.05112878, the range of a Web Mercator map. A point out of range, or with a coordinate
   that is not finite, raises an error.
-- **Points of a dataframe.** With the `dataframe` extra, `points_of(frame, latitude,
-  longitude)` from `composeui.core.dataframesource` gives the points of two columns of a
-  pandas, Polars, or PyArrow frame. It leaves out the rows that miss a coordinate, or that
-  are out of the map's range.
+- **Points of a dataframe.** `points_of(frame, latitude, longitude)` from
+  `composeui.core.dataframesource` gives the points of two columns of a pandas, Polars, or PyArrow
+  frame. It leaves out the rows that miss a coordinate, or that are out of the map's range.
 - **Points.** Set a new `points` list to draw the blue dots again. The view does not
   limit the number of points: the app keeps a large dataset to a size that the map can show.
 - **Automatic fit.** `center` and `zoom` are `None` by default. The map then fits the

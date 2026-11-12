@@ -97,6 +97,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- ComposeUI installs narwhals, so `DataFrameSource`, `series_of`, `points_of` and
+  `fill_from_frame` need no extra. The `dataframe` extra installs nothing more, and goes in a
+  later release.
 - The web sends the files of `MainView.download` as they are, not compressed. Compressing a large
   file took the server's event loop, which every session shares, for its whole transfer.
 - The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
