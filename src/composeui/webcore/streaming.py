@@ -161,20 +161,37 @@ class Stream:
     async def running(self) -> AsyncIterator[None]:
         """Start the writer for the block; then cancel it, and wait for its thread to end.
 
-        The wait is shielded: a canceled answer still waits, so that nothing writes once it
-        ends.
+        A canceled answer still waits, so that nothing writes once it ends (`ended`).
         """
         self.start()
         try:
             yield
         finally:
             self.cancel()
-            with anyio.CancelScope(shield=True):
-                await self.ended()
+            await self.ended()
 
     async def ended(self) -> None:
-        """Wait for the writer's thread to end."""
-        await self._ended.wait()
+        """Wait for the writer's thread to end, whatever cancels the wait meanwhile.
+
+        Then raise the last cancel, if any. A server that stops cancels the answers, then
+        `asyncio.run` cancels them again as it ends: an anyio shield stops neither, a
+        `task.cancel` of asyncio's own.
+        """
+        canceled: asyncio.CancelledError | None = None
+        # anyio's own cancels, as a task group's, don't reach the wait
+        with anyio.CancelScope(shield=True):
+            while not self._ended.is_set():
+                canceled = await self._wait_ended() or canceled
+        if canceled is not None:
+            raise canceled
+
+    async def _wait_ended(self) -> asyncio.CancelledError | None:
+        """Wait for the writer's thread to end; get the cancel that ended the wait first."""
+        try:
+            await self._ended.wait()
+        except asyncio.CancelledError as error:
+            return error
+        return None
 
     def _write(self) -> None:
         sink = DownloadSink(self._put)
