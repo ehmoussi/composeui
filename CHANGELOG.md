@@ -8,6 +8,7 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- The documentation site offers two versions: current `main` and the latest release tag.
 - `WebApplication.session_idle` saves a web session idle for that many seconds to disk and frees
   its memory. Its next request opens it again, and its page reloads. A session stays in memory
   while it holds what it can't save, for example while a job runs, and while

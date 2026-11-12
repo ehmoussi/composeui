@@ -925,9 +925,18 @@ run all four type checkers.
 A change of the documentation only, in `docs/` and the Markdown files, runs only the `docs`
 job. That job also lints the Python files of `docs/`.
 
-On a push to `main`, the `pages` job publishes the site that `make docs` built to GitHub
-Pages, at https://ehmoussi.github.io/composeui/. A pull request only builds the site.
-The docs build generates `sitemap.xml` with the published URLs for search engines.
+On a push to `main` or a `v*` tag, the `pages` job publishes two versions to GitHub Pages.
+Current `main` is at https://ehmoussi.github.io/composeui/. The latest release is at
+https://ehmoussi.github.io/composeui/stable/. The sidebar dropdown selects either version.
+A pull request builds both versions without publishing them.
+
+The docs job selects the highest version tag that matches `v[0-9]*`. It builds that tag's
+guides, widget catalog, and API reference in a separate environment. Only `docs/conf.py`,
+the sidebar templates, and the version selector's CSS and JavaScript come from the current site.
+`COMPOSEUI_DOCS_REF` sets the version label, repository links, and canonical URL.
+`COMPOSEUI_DOCS_LATEST_TAG` sets the release option. Without it, the build uses the highest
+local version tag. A local `make docs` build defaults to `main`. Each version generates its
+own `sitemap.xml` with its published URLs. Switching versions opens that version's home page.
 
 ### Release
 

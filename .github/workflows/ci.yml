@@ -4,6 +4,7 @@ on:
   # pull requests cover every other branch; this avoids running twice per PR push
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -23,7 +24,9 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          if ! git diff --name-only "$BASE...$HEAD" > changed.txt; then
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            code=false  # the release workflow checks the tagged code
+          elif ! git diff --name-only "$BASE...$HEAD" > changed.txt; then
             code=true  # nothing to compare with: check everything
           elif grep -qvE '^docs/|\.md$' changed.txt; then
             code=true
@@ -159,6 +162,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # A release rebuilds both versions with main's current site configuration.
+          ref: ${{ github.ref_type == 'tag' && 'main' || github.sha }}
           fetch-depth: 0  # the tags: setuptools-scm makes the version from them
       # the API reference imports the Qt application module, which loads Qt's libraries
       - name: Install the system libraries Qt needs
@@ -177,8 +182,34 @@ jobs:
       # documentation only: its Python files (conf.py, _ext/, screenshots.py) are linted here
       - run: uv run ruff format --check docs
       - run: uv run ruff check docs
+      - name: Find the latest release tag
+        id: latest
+        run: |
+          tag=$(git tag --list 'v[0-9]*' --sort=-version:refname | head -n 1)
+          test -n "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - run: make docs
-      # only main's site is published: a pull request just builds it
+        env:
+          COMPOSEUI_DOCS_REF: main
+          COMPOSEUI_DOCS_LATEST_TAG: ${{ steps.latest.outputs.tag }}
+      - name: Check out the latest release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.latest.outputs.tag }}
+          fetch-depth: 0
+          path: docs/_build/release
+      - name: Build the release documentation with the current site presentation
+        env:
+          COMPOSEUI_DOCS_REF: ${{ steps.latest.outputs.tag }}
+          COMPOSEUI_DOCS_LATEST_TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          release="$GITHUB_WORKSPACE/docs/_build/release"
+          cp docs/conf.py "$release/docs/conf.py"
+          cp -R docs/_templates "$release/docs/_templates"
+          cp docs/_static/versions.{css,js} "$release/docs/_static/"
+          uv run --project "$release" --group docs --all-extras --with sphinx-sitemap \
+            sphinx-build -W --keep-going -b html "$release/docs" docs/_build/html/stable
+      # A pull request builds both versions but does not publish them.
       - if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v5
         with:
