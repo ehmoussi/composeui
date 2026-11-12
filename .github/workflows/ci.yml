@@ -246,6 +246,38 @@ jobs:
         with:
           path: docs/_build/html
 
+  required:
+    name: Required checks
+    if: always()
+    needs: [changes, check, typecheck, windows, macos, browser, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the required jobs passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["RESULTS"])
+          code = results["changes"].get("outputs", {}).get("code")
+          expected = "success" if code == "true" else "skipped"
+          passed = (
+              results["changes"]["result"] == "success"
+              and results["docs"]["result"] == "success"
+              and code in ("true", "false")
+              and all(
+                  results[job]["result"] == expected
+                  for job in ("check", "typecheck", "windows", "macos", "browser")
+              )
+          )
+          if not passed:
+              print(json.dumps(results, indent=2))
+              sys.exit("Required checks did not pass")
+          PY
+
   # the site the docs job built, on GitHub Pages
   pages:
     if: github.event_name == 'push'
