@@ -52,6 +52,7 @@ not in the package: run them from a clone of the repository (see
   - [Text area](user-guide/widgets.md#text-area)
   - [Integer input](user-guide/widgets.md#integer-input)
   - [Date input](user-guide/widgets.md#date-input)
+  - [Choices of several values](user-guide/widgets.md#choices-of-several-values)
   - [File path input](user-guide/widgets.md#file-path-input)
     - [Files on the server](user-guide/widgets.md#files-on-the-server)
     - [Relative paths](user-guide/widgets.md#relative-paths)

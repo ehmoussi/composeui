@@ -921,6 +921,30 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
 });
+/* a drop-down list swapped while the focus is in it, e.g. a multi-combobox whose choice the
+   app changed: it's open only while the focus is in it, and htmx gives the focus back to
+   the element of the same id, which a closed list hides. So the list stays open through the
+   swap: on the element swapped out too, as htmx first gives the new one the old one's
+   classes, and its own only once settled. */
+document.addEventListener("htmx:oobBeforeSwap", function (event) {
+  var field = document.activeElement;
+  if (field === null || field.id === "") return;
+  var shown = field.closest(".dropdown");
+  var swapped = event.detail.fragment.getElementById(field.id);
+  var dropdown = swapped === null ? null : swapped.closest(".dropdown");
+  if (shown === null || dropdown === null) return;
+  shown.classList.add("dropdown-open");
+  dropdown.classList.add("dropdown-open");
+  dropdown.dataset.keptOpen = "";
+});
+/* once that list settled, not another answer's element: before it, htmx would give it the
+   class again */
+document.addEventListener("htmx:afterSettle", function (event) {
+  var dropdown = event.target;
+  if (!(dropdown instanceof HTMLElement) || !("keptOpen" in dropdown.dataset)) return;
+  dropdown.classList.remove("dropdown-open");
+  delete dropdown.dataset.keptOpen;
+});
 /* a table's check-all box while some of its rows are checked: only a script shows a
    box partly checked */
 document.addEventListener("htmx:load", function (event) {

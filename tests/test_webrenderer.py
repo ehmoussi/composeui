@@ -82,6 +82,7 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     CheckBoxView,
+    CheckListView,
     ComboBoxView,
     ConsoleView,
     DialogView,
@@ -203,6 +204,7 @@ from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, Na
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.choices import Base, ChoicesMainView
 from tests.console import MAX_LINES, STEP_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
@@ -857,6 +859,7 @@ class _PicturesMainView(MainView):
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
+    ChoicesMainView,
     ReportMainView,
     DataFileMainView,
     PipeMainView,
@@ -1722,6 +1725,9 @@ class _DisabledControlsMainView(MainView):
         lambda: _DisabledCombo(values={"A": "a", "B": "b"}, value="a")
     )
     tabs: _DisabledTabs = child(_DisabledTabs)
+    choices: CheckListView[str] = attrs.Factory(
+        lambda: CheckListView[str](values={"A": "a", "B": "b"})
+    )
 
 
 _DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], object]] = {
@@ -1730,6 +1736,7 @@ _DISABLED_EVENTS: dict[str, tuple[str, dict[str, str], Callable[[Any], object], 
     "slider": ("change", {"value": "5"}, lambda view: view.slider.value, 0),
     "combo": ("change", {}, lambda view: view.combo.value, "a"),  # see `_posted`
     "tabs": ("select", {"index": "1"}, lambda view: view.tabs.current_index, 0),
+    "choices": ("toggle", {"key": "a", "checked": "on"}, lambda view: view.choices.selected, []),
 }
 
 
@@ -1747,6 +1754,7 @@ def _disabled_session() -> tuple[_DisabledControlsMainView, WebSession, list[obj
     view.slider.value_changed.connect(signals.append)
     view.combo.value_changed.connect(signals.append)
     view.tabs.current_changed.connect(signals.append)
+    view.choices.selected_changed.connect(signals.append)
     return view, session, signals
 
 
@@ -1780,6 +1788,91 @@ def test_a_control_accepts_its_events_while_enabled() -> None:
         assert value_of(view) != before, name
     assert len(signals) == len(_DISABLED_EVENTS)
     session.close()
+
+
+def _checked_keys(element: _Element) -> list[str]:
+    """Get the keys of the boxes checked in a check list's `element`."""
+    return [
+        json.loads(attributes["hx-vals"] or "{}")["key"]
+        for tag, attributes in element.descendants
+        if tag == "input" and "checked" in attributes and "key" in (attributes["hx-vals"] or "")
+    ]
+
+
+def test_a_check_list_posts_each_box_s_state_and_swaps_only_what_it_changes() -> None:
+    view = ChoicesMainView()
+    session = WebSession(view)
+    seen: list[list[int]] = []
+    view.hours.selected_changed.connect(seen.append)
+    widget_id = _widget_id(view.hours.renderer)
+
+    def post(event: str, form: dict[str, str]) -> str:
+        answer = session.handle_event(widget_id, event, form)
+        assert answer is not None
+        return answer[0]
+
+    # a box posts its key and its state: the same post twice leaves the same choice
+    post("toggle", {"key": "1", "checked": "on"})
+    swapped = post("toggle", {"key": "1", "checked": "on"})
+    assert (view.hours.selected, seen) == ([9], [[9]])
+    assert "data-indeterminate" in _swapped(swapped, f"{widget_id}-all").descendants[0][1]
+
+    swapped = post("search", {"search": "MORN"})
+    assert view.hours.search == "MORN"
+    assert _find(swapped, f"{widget_id}-search") is None  # the field typed in stays
+    shown = _swapped(swapped, f"{widget_id}-list")
+    assert (shown.text, _checked_keys(shown)) == ("Early morningMorning", ["1"])
+
+    # partly checked, checked by the click: checks all those shown
+    swapped = post("all", {"checked": "on"})
+    assert (view.hours.selected, seen[-1]) == ([5, 9], [5, 9])
+    assert _find(swapped, f"{widget_id}-all") is None  # the box clicked stays
+    assert _checked_keys(_swapped(swapped, f"{widget_id}-list")) == ["0", "1"]
+    # a page that still shows the box unchecked, the app having checked them since
+    view.hours.selected = [5, 9]
+    post("all", {"checked": "on"})  # checks them, as the page showed: not unchecks
+    assert (view.hours.selected, len(seen)) == ([5, 9], 2)
+
+    view.hours.values = {"Noon": 12}  # the app's change: the whole list swaps
+    _swapped(post("search", {"search": ""}), widget_id)
+    swapped = post("toggle", {"key": "3", "checked": "on"})  # a choice gone, from a stale page
+    assert (view.hours.selected, len(seen)) == ([], 2)
+    assert _swapped(swapped, f"{widget_id}-list").text == "Noon"  # shown as the view is
+
+    view.hours.has_check_all = False
+    renderer = view.hours.renderer
+    assert isinstance(renderer, WebRenderer)
+    html = renderer.to_html()
+    assert _element(html, f"{widget_id}-all").tag == "span"  # no box, kept as a target
+    session.close()
+
+
+def test_a_multi_combobox_shows_the_choice_on_its_button_and_escapes_the_labels() -> None:
+    view = ChoicesMainView()
+    session = WebSession(view)
+    field = _part(view.bases, "field")
+    assert _element(field.to_html(), f"{field.widget_id}-summary").text == "None"
+
+    answer = session.handle_event(field.widget_id, "toggle", {"key": "WEITER", "checked": "on"})
+
+    assert answer is not None
+    assert view.bases.selected == [Base.WEITER]
+    assert _swapped(answer[0], f"{field.widget_id}-summary").text == "Weiter"
+    view.bases.values = {_HOSTILE: Base.UNTER, "Hinter": Base.HINTER}
+    view.bases.selected = [Base.UNTER]
+    finder = _HostileFinder()
+    finder.feed(field.to_html())
+    assert (finder.found, finder.shown) == ([], 2)  # on the button and beside its box
+    session.close()
+
+    # a value's text is its key, which its box posts
+    texts = CheckListView[str](values={"Hostile": _HOSTILE})
+    texts.render(RendererType.WEB)
+    renderer = texts.renderer
+    assert isinstance(renderer, WebRenderer)
+    finder = _HostileFinder()
+    finder.feed(renderer.to_html())
+    assert (finder.found, finder.shown) == ([], 1)
 
 
 def test_float_input_renders_a_decimal_text_field(rows: _RowsMainView) -> None:
@@ -8360,6 +8453,10 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
         assert "checked" not in _element(body, f"{table_id}-cell-0-0").attributes
         assert _find(body, f"{table_id}-check-all-0") is None
         assert table.selected_rows == [1]
+        # a page still showing the box unchecked, the app having checked every row since
+        table.rows = [["True", *row[1:]] for row in table.rows]
+        post("check_all", column="0", checked="on")  # checks them, as the page showed
+        assert [row[0] for row in table.rows] == ["True", "True"]
         post("pick", row="0", column="2", text="Output")
         assert table.rows[0][2] == "Output"
 

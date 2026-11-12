@@ -113,6 +113,7 @@ __all__ = [
     "ChartView",
     "CheckBoxMixin",
     "CheckBoxView",
+    "CheckListView",
     "CircleShape",
     "Column",
     "ComboBoxView",
@@ -162,6 +163,7 @@ __all__ = [
     "IntInputView",
     "LabelMixin",
     "LabelRowCheckBoxView",
+    "LabelRowCheckListView",
     "LabelRowComboBoxView",
     "LabelRowDateInputView",
     "LabelRowFilePathInputView",
@@ -171,6 +173,7 @@ __all__ = [
     "LabelRowFolderPathInputView",
     "LabelRowInputView",
     "LabelRowIntInputView",
+    "LabelRowMultiComboBoxView",
     "LabelRowRadioGroupView",
     "LabelRowSavePathInputView",
     "LabelRowSliderView",
@@ -192,6 +195,9 @@ __all__ = [
     "MarkdownView",
     "Menu",
     "MetricView",
+    "MultiComboBoxMixin",
+    "MultiComboBoxView",
+    "MultiValuesMixin",
     "NodeMark",
     "OkCancelDialogView",
     "Orientation",
@@ -206,6 +212,7 @@ __all__ = [
     "ReferenceLine",
     "Router",
     "RowCheckBoxView",
+    "RowCheckListView",
     "RowComboBoxView",
     "RowDateInputView",
     "RowFilePathInputView",
@@ -215,6 +222,7 @@ __all__ = [
     "RowFolderPathInputView",
     "RowInputView",
     "RowIntInputView",
+    "RowMultiComboBoxView",
     "RowRadioGroupView",
     "RowSavePathInputView",
     "RowSliderView",
@@ -371,15 +379,15 @@ def _omit_renderer_and_signals(
             return data
 
         return unstructure_record_table
-    if not issubclass(view_cls, ValuesGroupMixin):
+    if not issubclass(view_cls, ChoicesMixin):
         return unstructure
 
-    def unstructure_radio_group(obj: ValuesGroupMixin[Any]) -> dict[str, Any]:
+    def unstructure_choices(obj: ChoicesMixin[Any]) -> dict[str, Any]:
         data = unstructure(cast("AttrsInstance", obj))
-        data["value"] = obj.serialize_value()
+        data[obj.choice_field] = obj.saved_choice()
         return data
 
-    return unstructure_radio_group
+    return unstructure_choices
 
 
 #: what a `RecordTableView`'s records and columns set, which loading leaves to them
@@ -398,6 +406,11 @@ _RELOADED_STATE: contextvars.ContextVar[Callable[[Any], Any] | None] = contextva
 )
 
 
+def _choice_field(view: View) -> Optional[str]:
+    """Get the field of a `ChoicesMixin`'s choice, which loads by its keys: else None."""
+    return view.choice_field if isinstance(view, ChoicesMixin) else None
+
+
 @batch()
 def _apply_state(view: View, data: dict[str, Any]) -> None:
     """Update a live view tree in place from previously saved state.
@@ -407,13 +420,13 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
     the existing attributes instead lets the normal ``notify_renderer``
     on_setattr hook refresh the UI as each value is applied.
 
-    ``ValuesGroupMixin.value`` is handled separately: its declared type is an
+    The choice of a `ChoicesMixin` (``ValuesGroupMixin.value``,
+    ``MultiValuesMixin.selected``) is handled separately: its declared type is an
     unresolved generic ``TypeVar`` that cattrs can't structure statically. So it is
-    restored through `ValuesGroupMixin.deserialize_value` instead, which resolves it
-    via the mixin's own `values` label lookup. ``ValuesGroupMixin.values`` is included
-    in saved state (for inspection/debugging) but never restored from it on load. It's
-    app-defined config, not persisted user data, and has the same unresolved-`TValue`
-    structuring problem `value` has, without an equivalent label-based workaround.
+    saved by its keys and restored through the mixin's own `values`. ``values`` is
+    included in saved state (for inspection/debugging) but never restored from it on load.
+    It's app-defined config, not persisted user data, and has the same unresolved-`TValue`
+    structuring problem, without an equivalent key-based workaround.
     ``RecordTableView.records`` is restored first, by `RecordTableView.record_type`: its
     rows, before the selection checked against them.
     """
@@ -422,8 +435,9 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
         current_view, new_data = states.popleft()
         current_cls = cast("type[AttrsInstance]", type(current_view))
         attrs.resolve_types(current_cls)
-        if isinstance(current_view, ValuesGroupMixin) and "value" in new_data:
-            current_view.value = current_view.deserialize_value(new_data["value"])
+        choice = _choice_field(current_view)
+        if isinstance(current_view, ChoicesMixin) and choice in new_data:
+            current_view.load_choice(new_data[choice])
         if isinstance(current_view, RecordTableView) and "records" in new_data:
             current_view.records = current_view.structure_records(new_data["records"])
         for f in attrs.fields(current_cls):
@@ -431,7 +445,7 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
                 f.name not in new_data
                 or not _is_state_field(f)
                 or f.on_setattr is attrs.setters.frozen
-                or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
+                or (choice is not None and f.name in ("values", choice))
                 or (f.name in _RECORD_TABLE_SETUP and isinstance(current_view, RecordTableView))
             ):
                 continue
@@ -508,21 +522,22 @@ def _reset_state(view: View, initial: View) -> None:
     `values`, an initial validator message...). Like `_apply_state`, it sets the existing
     attributes, so renderers and connected signals stay bound and only what actually
     changed is pushed to the UI. Fields `_apply_state` never restores are skipped the
-    same way (omitted, frozen); `ValuesGroupMixin.values` is reset before `value`, which
-    must be one of them, and `RecordTableView.records` before the selection.
+    same way (omitted, frozen); a `ChoicesMixin`'s `values` is reset before its choice,
+    which must be among them, and `RecordTableView.records` before the selection.
     """
     states: deque[tuple[View, View]] = deque([(view, initial)])
     while len(states) > 0:
         current_view, initial_view = states.popleft()
         current_cls = cast("type[AttrsInstance]", type(current_view))
         attrs.resolve_types(current_cls)
+        choice = _choice_field(current_view)
         if isinstance(current_view, RecordTableView) and isinstance(initial_view, RecordTableView):
             current_view.records = initial_view.records
         for f in attrs.fields(current_cls):
             if (
                 _is_omitted_field(f)
                 or f.on_setattr is attrs.setters.frozen
-                or (f.name in ("value", "values") and isinstance(current_view, ValuesGroupMixin))
+                or (isinstance(current_view, ChoicesMixin) and f.name in ("values", choice))
                 or (f.name in ("rows", "records") and isinstance(current_view, RecordTableView))
             ):
                 continue
@@ -532,11 +547,13 @@ def _reset_state(view: View, initial: View) -> None:
                 states.append((current_field, initial_field))
             else:
                 setattr(current_view, f.name, initial_field)
-        if isinstance(current_view, ValuesGroupMixin) and isinstance(
-            initial_view, ValuesGroupMixin
-        ):
+        if isinstance(current_view, ChoicesMixin) and isinstance(initial_view, ChoicesMixin):
             current_view.values = initial_view.values
-            current_view.value = initial_view.value
+            setattr(
+                current_view,
+                current_view.choice_field,
+                getattr(initial_view, current_view.choice_field),
+            )
 
 
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
@@ -6799,8 +6816,74 @@ class SourceTableByPosition:
 TValue = TypeVar("TValue")
 
 
+class ChoicesMixin(Generic[TValue]):
+    """What a choice among `values` has, whether of one value or several: each value's key.
+
+    A value is saved and sent by its key, not by its label, which changes with the app's
+    language. Its subclasses hold `values`, and the choice in their `choice_field`.
+    """
+
+    #: the field of the choice made, which a study saves by its keys
+    choice_field: ClassVar[str]
+
+    if TYPE_CHECKING:
+        values: dict[str, TValue]
+
+    @staticmethod
+    def _value_key(index: int, value: TValue) -> str:
+        """Get the key `value`, at `index` in `values`, is saved and sent by.
+
+        Not its label, which changes with the app's language: an enum member's name, a
+        string itself, else its position.
+        """
+        if isinstance(value, enum.Enum):
+            return value.name
+        if isinstance(value, str):
+            return value
+        return str(index)
+
+    @property
+    def options(self) -> list[tuple[str, str]]:
+        """Get each of `values` as its key (see `_value_key`) and its label, in order."""
+        return [
+            (self._value_key(index, value), label)
+            for index, (label, value) in enumerate(self.values.items())
+        ]
+
+    def _key_of(self, value: TValue) -> Optional[str]:
+        """Get the key of `value`, None if it isn't one of `values`."""
+        return next(
+            (
+                self._value_key(index, candidate)
+                for index, candidate in enumerate(self.values.values())
+                if candidate == value
+            ),
+            None,
+        )
+
+    def _value_of(self, key: str) -> tuple[bool, Optional[TValue]]:
+        """Get whether `key` is the key of one of `values`, and that value.
+
+        A label is accepted too, as older state files saved it.
+        """
+        for index, candidate in enumerate(self.values.values()):
+            if self._value_key(index, candidate) == key:
+                return True, candidate
+        if key in self.values:
+            return True, self.values[key]
+        return False, None
+
+    def saved_choice(self) -> Any:
+        """Get the choice made as a study saves it: by its keys."""
+        raise NotImplementedError
+
+    def load_choice(self, saved: Any) -> None:
+        """Make the choice that `saved_choice` saved, among the current `values`."""
+        raise NotImplementedError
+
+
 @define_view
-class ValuesGroupMixin(Generic[TValue]):
+class ValuesGroupMixin(ChoicesMixin[TValue]):
     """The fields of one choice among `values`: the choices by label, and the `value` selected.
 
     `value` is None, or one of `values`; new `values` without it clear it. None selects
@@ -6843,26 +6926,7 @@ class ValuesGroupMixin(Generic[TValue]):
     )
     value_changed: Signal[Optional[TValue]] = attrs.Factory(Signal[Optional[TValue]])
 
-    @staticmethod
-    def _value_key(index: int, value: TValue) -> str:
-        """Get the key `value`, at `index` in `values`, is saved and sent by.
-
-        Not its label, which changes with the app's language: an enum member's name, a
-        string itself, else its position.
-        """
-        if isinstance(value, enum.Enum):
-            return value.name
-        if isinstance(value, str):
-            return value
-        return str(index)
-
-    @property
-    def options(self) -> list[tuple[str, str]]:
-        """Get each of `values` as its key (see `serialize_value`) and its label, in order."""
-        return [
-            (self._value_key(index, value), label)
-            for index, (label, value) in enumerate(self.values.items())
-        ]
+    choice_field: ClassVar[str] = "value"
 
     def serialize_value(self) -> Optional[str]:
         """Serialize `value` as its key: its label could be in another language on load.
@@ -6870,14 +6934,7 @@ class ValuesGroupMixin(Generic[TValue]):
         None for nothing selected: a None `value` that isn't one of `values`.
         """
         # one of `values`, as its validator keeps it, unless it's None
-        return next(
-            (
-                self._value_key(index, candidate)
-                for index, candidate in enumerate(self.values.values())
-                if candidate == self.value
-            ),
-            None,
-        )
+        return self._key_of(cast("TValue", self.value))
 
     def deserialize_value(self, key: Optional[str]) -> Optional[TValue]:
         """Look up a key previously produced by `serialize_value` back into a TValue.
@@ -6886,18 +6943,21 @@ class ValuesGroupMixin(Generic[TValue]):
         """
         if key is None:
             return None
-        for index, candidate in enumerate(self.values.values()):
-            if self._value_key(index, candidate) == key:
-                return candidate
-        if key in self.values:
-            return self.values[key]
-        LOGGER.warning(
-            "Cannot restore %s.value from saved state: %r is not among the current options %r.",
-            type(self).__name__,
-            key,
-            list(self.values),
-        )
-        return None
+        is_found, value = self._value_of(key)
+        if not is_found:
+            LOGGER.warning(
+                "Cannot restore %s.value from saved state: %r is not among the current options %r.",
+                type(self).__name__,
+                key,
+                list(self.values),
+            )
+        return value
+
+    def saved_choice(self) -> Optional[str]:
+        return self.serialize_value()
+
+    def load_choice(self, saved: Optional[str]) -> None:
+        self.value = self.deserialize_value(saved)
 
 
 @define_view
@@ -6912,6 +6972,243 @@ class ComboBoxView(ValuesGroupMixin[TValue], View):
     """A drop-down list, for one choice among `values`."""
 
     _renderer_key = "combobox"
+
+
+@attrs.frozen
+class ChoicesShown:
+    """What a choice of several values shows (`MultiValuesMixin.shown`)."""
+
+    #: the key, the label and whether it's checked, of each choice that the search shows
+    options: list[tuple[str, str, bool]]
+    #: whether the choices shown are all checked: None while only some of them are, False
+    #: without a choice shown
+    all_checked: Optional[bool]
+    #: what a closed drop-down list shows of the choice; "" for a check list
+    summary: str
+
+
+def _in_values_order(selected: Iterable[TValue], view: ChoicesMixin[TValue]) -> list[TValue]:
+    """Get `selected` in the order of the view's `values`, each once: the same choice is no change.
+
+    A value that isn't one of `values` comes last, for the view's validator to reject.
+    """
+    chosen = list(selected)
+    known = list(view.values.values())
+    return [
+        *(value for value in known if value in chosen),
+        *(value for value in chosen if value not in known),
+    ]
+
+
+def _selected_in_order(selected: Iterable[Any], view: AttrsInstance) -> list[Any]:
+    """Convert a `MultiValuesMixin`'s `selected` at init: its `values` are set before it."""
+    return _in_values_order(selected, cast("ChoicesMixin[Any]", view))
+
+
+@define_view
+class MultiValuesMixin(ChoicesMixin[TValue]):
+    """The fields of a choice of several among `values`: the choices by label, and `selected`.
+
+    `selected` holds some of `values`, in their order, each once; new `values` drop those
+    no longer among them. With `has_search`, a search field shows only the choices whose
+    label holds its text, in any case. The check-all box, with `has_check_all`, checks or
+    unchecks the choices shown, and shows partly checked while only some of them are.
+    """
+
+    def _check_selected(self, _attribute: attrs.Attribute[Any], selected: list[TValue]) -> None:
+        """Reject a `selected` with a value that isn't one of `values`."""
+        for value in selected:
+            if value not in self.values.values():
+                msg = (
+                    f"Cannot select {value!r} in {type(self).__name__}: not one of the "
+                    f"available values {list(self.values)}."
+                )
+                raise ValueError(msg)
+
+    def _order_selected(
+        self, attribute: attrs.Attribute[Any], selected: list[TValue]
+    ) -> list[TValue]:
+        """Set `selected` in the order of `values`, as it is at init."""
+        ordered = _fixed(
+            _in_values_order(selected, self), f"{type(self).__name__}.{attribute.name}"
+        )
+        return cast("list[TValue]", notify_renderer(cast("View", self), attribute, ordered))
+
+    def _reconcile_values(
+        self, attribute: attrs.Attribute[Any], values: dict[str, TValue]
+    ) -> dict[str, TValue]:
+        """Drop the selected values that the new `values` don't hold, then notify the renderer."""
+        kept = [value for value in self.selected if value in values.values()]
+        if kept != self.selected:
+            self.selected = kept
+        return cast("dict[str, TValue]", notify_renderer(cast("View", self), attribute, values))
+
+    values: dict[str, TValue] = attrs.field(factory=dict[str, TValue], on_setattr=_reconcile_values)
+    #: the values the user chose, in the order of `values`
+    selected: list[TValue] = attrs.field(
+        factory=list,
+        converter=attrs.Converter(_selected_in_order, takes_self=True),
+        validator=[_check_selected],
+        on_setattr=[attrs.setters.validate, _order_selected],
+    )
+    #: whether a search field filters the choices shown
+    has_search: bool = attrs.field(default=False, metadata={OMIT: True})
+    #: the text of the search field; never saved
+    search: str = attrs.field(default="", metadata={OMIT: True})
+    #: whether a box checks or unchecks all the choices shown at once
+    has_check_all: bool = attrs.field(default=True, metadata={OMIT: True})
+    #: the check-all box's text
+    check_all_text: str = attrs.field(default=T("All"), metadata={UI_TEXT: True})
+    #: the search field's placeholder, as a screen reader names it too
+    search_text: str = attrs.field(default=T("Search"), metadata={UI_TEXT: True})
+    #: the user changed `selected`, which it holds
+    selected_changed: Signal[list[TValue]] = attrs.Factory(Signal[list[TValue]])
+
+    choice_field: ClassVar[str] = "selected"
+
+    @property
+    def shown_options(self) -> list[tuple[str, str]]:
+        """Get the key and the label of each choice that the search shows, in order."""
+        return [(key, label) for key, label, _is_checked in self.shown.options]
+
+    @property
+    def selected_keys(self) -> list[str]:
+        """Get the keys of `selected`, in order."""
+        return [cast("str", self._key_of(value)) for value in self.selected]
+
+    @property
+    def shown(self) -> ChoicesShown:
+        """Get what the view shows: the choices that the search shows, and what's checked."""
+        return self.shown_once("selected", self.selected)
+
+    def shown_once(self, name: str, value: Any) -> ChoicesShown:
+        """Get `shown` once the attribute `name` is set to `value`.
+
+        For renderers: they are notified of a change before it lands in the view (see
+        `notify_renderer`), so `shown` itself still answers for the old value.
+        """
+        state = {
+            "values": self.values,
+            "selected": self.selected,
+            "search": self.search,
+            name: value,
+        }
+        values = cast("dict[str, TValue]", state["values"])
+        selected = cast("list[TValue]", state["selected"])
+        search = cast("str", state["search"]).strip().casefold()
+        options = [
+            (self._value_key(index, value), label, value in selected)
+            for index, (label, value) in enumerate(values.items())
+            if search in label.casefold()
+        ]
+        checked = [is_checked for _key, _label, is_checked in options]
+        all_checked = True if len(checked) > 0 and all(checked) else None if any(checked) else False
+        return ChoicesShown(options, all_checked, self._summary_once(name, value, selected))
+
+    def _summary_once(self, _name: str, _value: Any, _selected: list[TValue]) -> str:
+        """Get what a closed drop-down list shows, once `name` is `value`: none here."""
+        return ""
+
+    def select_keys(self, keys: Mapping[str, bool]) -> bool:
+        """Check or uncheck each choice by its key, as the user did; get whether it changed.
+
+        A key that isn't one of a choice is left out: a page can send one gone since.
+        Doesn't emit `selected_changed`: the renderer that the user changed does.
+        """
+        chosen = set(self.selected_keys)
+        for key, is_checked in keys.items():
+            if is_checked:
+                chosen.add(key)
+            else:
+                chosen.discard(key)
+        selected = [
+            value
+            for index, value in enumerate(self.values.values())
+            if self._value_key(index, value) in chosen
+        ]
+        if selected == self.selected:
+            return False
+        self.selected = selected
+        return True
+
+    def check_all(self, *, is_checked: bool) -> bool:
+        """Check or uncheck every choice shown, as the check-all box does; get whether it changed.
+
+        The choices that the search hides keep their state.
+        """
+        return self.select_keys({key: is_checked for key, _label in self.shown_options})
+
+    def saved_choice(self) -> list[str]:
+        return self.selected_keys
+
+    def load_choice(self, saved: list[str]) -> None:
+        if not isinstance(saved, list) or not all(isinstance(key, str) for key in saved):
+            msg = f"{type(self).__name__}.selected must be a list of keys, not {saved!r}"
+            raise TypeError(msg)  # a damaged study: refused before anything changes
+        found = []
+        for key in saved:
+            is_found, value = self._value_of(key)
+            if is_found:
+                found.append(cast("TValue", value))
+            else:
+                LOGGER.warning(
+                    "Cannot restore %r in %s.selected from saved state: not among the current "
+                    "options %r.",
+                    key,
+                    type(self).__name__,
+                    list(self.values),
+                )
+        self.selected = found
+
+
+@define_view
+class CheckListView(MultiValuesMixin[TValue], View):
+    """A list of check boxes, for a choice of several among `values`, e.g. a filter's."""
+
+    _renderer_key = "check_list"
+
+
+@define_view
+class MultiComboBoxMixin(MultiValuesMixin[TValue]):
+    """The fields of a drop-down list of check boxes: what it shows closed (`summary`)."""
+
+    #: shown closed while nothing is chosen
+    empty_text: str = attrs.field(default=T("None"), metadata={UI_TEXT: True})
+    #: shown closed while several values are chosen, of their `{count}`
+    count_text: str = attrs.field(default=T("{count} selected"), metadata={UI_TEXT: True})
+
+    @property
+    def summary(self) -> str:
+        """Get what the closed list shows of `selected`: their label, or how many they are."""
+        return self.shown.summary
+
+    def _summary_once(self, name: str, value: Any, selected: list[TValue]) -> str:
+        texts = {
+            "empty_text": self.empty_text,
+            "count_text": self.count_text,
+            "check_all_text": self.check_all_text,
+            "values": self.values,
+            name: value,
+        }
+        values = cast("dict[str, TValue]", texts["values"])
+        if len(selected) == 0:
+            return cast("str", texts["empty_text"])
+        if len(selected) == len(values):
+            return cast("str", texts["check_all_text"])
+        if len(selected) == 1:
+            return next(label for label, value in values.items() if value == selected[0])
+        return cast("str", texts["count_text"]).format(count=len(selected))
+
+
+@define_view
+class MultiComboBoxView(MultiComboBoxMixin[TValue], View):
+    """A drop-down list of check boxes, for a choice of several among many `values`.
+
+    Closed, it shows its `summary`: the choice's label, `check_all_text` while all are
+    chosen, else how many are.
+    """
+
+    _renderer_key = "multi_combobox"
 
 
 @define_view
@@ -7185,6 +7482,34 @@ class LabelRowComboBoxView(FormLabelRowView, ValuesGroupMixin[TValue]):
     """A row of a form with a label and a drop-down list."""
 
     _field_renderer_key = "combobox"
+
+
+@define_view
+class RowCheckListView(FormRowView, MultiValuesMixin[TValue]):
+    """A row of a form with a list of check boxes, without a label."""
+
+    _field_renderer_key = "check_list"
+
+
+@define_view
+class LabelRowCheckListView(FormLabelRowView, MultiValuesMixin[TValue]):
+    """A row of a form with a label and a list of check boxes."""
+
+    _field_renderer_key = "check_list"
+
+
+@define_view
+class RowMultiComboBoxView(FormRowView, MultiComboBoxMixin[TValue]):
+    """A row of a form with a drop-down list of check boxes, without a label."""
+
+    _field_renderer_key = "multi_combobox"
+
+
+@define_view
+class LabelRowMultiComboBoxView(FormLabelRowView, MultiComboBoxMixin[TValue]):
+    """A row of a form with a label and a drop-down list of check boxes."""
+
+    _field_renderer_key = "multi_combobox"
 
 
 @define_view

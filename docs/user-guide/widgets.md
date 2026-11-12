@@ -103,6 +103,69 @@ The calendar offers only the dates from `minimum` to `maximum`. But not every ba
 refuses a typed date out of range, so validate the date. `value_changed` reports the dates
 that the user enters.
 
+## Choices of several values
+
+A `CheckListView` and a `MultiComboBoxView` pick several of their `values`, for example the bases
+that a dashboard shows. A check list shows a check box per choice. A multi-combobox shows the
+same list in a drop-down list, for a long list or a narrow sidebar.
+
+```python
+from composeui.core.view import (
+    CheckListView,
+    FormView,
+    LabelRowMultiComboBoxView,
+    child,
+    define_view,
+)
+
+
+@define_view
+class Filters(FormView):
+    bases: LabelRowMultiComboBoxView[str] = child(
+        LabelRowMultiComboBoxView,
+        label="Bases",
+        values={"Unter": "B02512", "Hinter": "B02598", "Weiter": "B02617"},
+        selected=["B02512"],
+    )
+    hours: CheckListView[int] = child(
+        CheckListView, values={"Morning": 9, "Noon": 12, "Evening": 19}, has_search=True
+    )
+
+
+filters = Filters()
+assert filters.bases.summary == "Unter"
+filters.hours.search = "n"  # "Morning", "Noon" and "Evening" hold it
+assert filters.hours.check_all(is_checked=True)
+assert filters.hours.selected == [9, 12, 19]
+```
+
+- **The choice.** `values` maps each label to its value, as for a
+  [choice of one](building-views.md#forms-and-their-fields). `selected` holds the values chosen,
+  in the order of `values`, each once. A value that is not one of `values` raises `ValueError`.
+  New `values` drop the selected values that they no longer hold. `selected_changed` reports the
+  user's changes.
+- **The check-all box.** It checks or unchecks all the choices shown. It shows partly checked
+  while only some of them are checked, and a click then checks them all. Set `has_check_all` to
+  `False` to hide it. `check_all(is_checked=...)` does the same from code.
+- **The search.** With `has_search`, a search field shows only the choices whose label holds its
+  text, in any case. The check-all box then acts on the choices shown only. The search is not
+  saved.
+- **What the closed list shows.** A multi-combobox shows its `summary`: the label of the choice,
+  `check_all_text` ("All") while all are chosen, `count_text` ("{count} selected") for several,
+  and `empty_text` ("None") for none.
+- **In a study.** A study saves `selected` by the keys of the values, as it saves a choice of one.
+  A value that is gone when the study opens is left out, with a warning in the log.
+
+Each has its row views: `RowCheckListView`, `LabelRowCheckListView`, `RowMultiComboBoxView`, and
+`LabelRowMultiComboBoxView`.
+
+- **Qt** shows a check list as `QCheckBox`es, under a search field and a check-all box. Past ten
+  choices, the list scrolls. A multi-combobox is a button with the list in its menu.
+- **Textual** shows a `SelectionList`. The check-all box shows a dash while partly checked. A
+  multi-combobox is a collapsible, titled with its summary.
+- **The web** shows daisyUI check boxes. A multi-combobox is a daisyUI dropdown, which stays open
+  while the focus is in it, also when the app changes the choice as the user checks a box.
+
 ## File path input
 
 A `FilePathInputView` takes the path of a file, for example a data file or a template file

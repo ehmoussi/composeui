@@ -100,6 +100,7 @@ from composeui.textualcore.textualrenderer import (
 )
 from composeui.textualcore.widgets import composeimage
 from composeui.textualcore.widgets.composechart import ComposeChart
+from composeui.textualcore.widgets.composechecklist import ComposeCheckList, ComposeMultiComboBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
 from composeui.textualcore.widgets.composeconsole import ComposeConsoleBox
@@ -151,6 +152,7 @@ from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.charts import ChartPagesMainView
+from tests.choices import Base, ChoicesMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
 from tests.dialogs import DialogsMainView
@@ -631,6 +633,78 @@ async def test_a_slider_without_fill_draws_its_track_alike_on_both_sides_of_its_
         opacity.is_filled = True
         await pilot.pause()
         assert _track_and_value(slider)[0] == filled
+
+
+@pytest.mark.asyncio
+async def test_a_check_list_checks_the_view_s_values_its_check_all_box_those_the_search_shows() -> (
+    None
+):
+    view = ChoicesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    renderer = view.hours.renderer
+    assert isinstance(renderer, TextualWidgetRenderer)
+    check_list = renderer.widget
+    assert isinstance(check_list, ComposeCheckList)
+    seen: list[list[int]] = []
+    view.hours.selected_changed.connect(seen.append)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        check_list.search_input.focus()
+        await pilot.press(*"MORN")
+        await pilot.pause()
+        prompts = [str(option.prompt) for option in check_list.choices.options]
+        assert (view.hours.search, prompts) == ("MORN", ["Early morning", "Morning"])
+        check_list.choices.focus()
+        await pilot.press("home", "down", "space")
+        await pilot.pause()
+        assert (view.hours.selected, seen) == ([9], [[9]])
+        assert check_list.check_all.BUTTON_INNER == "-"  # partly checked
+
+        check_list.check_all.focus()
+        await pilot.press("space")  # partly checked: checks all those shown
+        await pilot.pause()
+        assert (view.hours.selected, seen[-1]) == ([5, 9], [5, 9])
+        assert (check_list.check_all.value, check_list.check_all.BUTTON_INNER) == (True, "X")
+
+        view.hours.search = ""  # set in code: the list follows, and nothing is reported
+        view.hours.selected = [12]
+        await pilot.pause()
+        assert check_list.choices.selected == ["2"]  # the key of 12: its position
+        assert check_list.check_all.BUTTON_INNER == "-"
+        assert len(seen) == 2
+
+        view.hours.values = {"Dawn": 5, "Day": 9, "Dusk": 12, "Night": 19}  # the same keys
+        await pilot.pause()
+        prompts = [str(option.prompt) for option in check_list.choices.options]
+        assert prompts == ["Dawn", "Day", "Dusk", "Night"]
+
+
+@pytest.mark.asyncio
+async def test_a_multi_combobox_is_a_collapsible_titled_with_the_choice() -> None:
+    view = ChoicesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    combobox = _field_widget(view.bases.renderer)
+    assert isinstance(combobox, ComposeMultiComboBox)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert (combobox.title, combobox.collapsed) == ("None", True)
+        await pilot.click(combobox.query_one(CollapsibleTitle))
+        await pilot.pause()
+        combobox.check_list.choices.focus()
+        await pilot.press("home", "down", "down", "space")
+        await pilot.pause()
+        assert (view.bases.selected, combobox.title) == ([Base.WEITER], "Weiter")
+        view.bases.selected = [Base.UNTER, Base.HINTER]
+        await pilot.pause()
+        assert combobox.title == "2 selected"
 
 
 @pytest.mark.asyncio
@@ -4336,6 +4410,7 @@ def _textual_widgets_of(view: View) -> list[object]:
         EditedPipeMainView,
         HoursMainView,
         WorkersMainView,
+        ChoicesMainView,
     ],
 )
 def test_a_main_view_rendered_again_keeps_every_widget(main_view_type: type[MainView]) -> None:

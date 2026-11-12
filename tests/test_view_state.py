@@ -29,6 +29,7 @@ from composeui.core.view import (
     ChartKind,
     ChartView,
     CheckBoxView,
+    CheckListView,
     ComboBoxView,
     FloatInputMixin,
     FloatSliderView,
@@ -39,6 +40,7 @@ from composeui.core.view import (
     ListSource,
     MainView,
     MetricView,
+    MultiComboBoxView,
     ProgressBarView,
     RadioGroupView,
     ReferenceLine,
@@ -749,6 +751,137 @@ def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
 
     assert fresh.radio.value is None
     assert any("_StrRadioGroupView.value" in record.message for record in caplog.records)
+
+
+class _Base(enum.Enum):
+    B02512 = 1
+    B02598 = 2
+    B02617 = 3
+    B02682 = 4
+
+
+_BASES = {
+    "Unter": _Base.B02512,
+    "Hinter": _Base.B02598,
+    "Weiter": _Base.B02617,
+    "Schmecken": _Base.B02682,
+}
+
+
+@define_view
+class _BasesView(MultiComboBoxView[_Base]):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.values = dict(_BASES)
+
+
+@define_view
+class _BasesMainView(MainView):
+    app_title = "Bases"
+    extension = ".bases"
+
+    bases: _BasesView = Factory(_BasesView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.bases.selected = [_Base.B02598]
+
+
+def test_a_choice_of_several_keeps_the_order_of_its_values_each_once() -> None:
+    view = CheckListView[str](values={"a": "a", "b": "b", "c": "c"}, selected=["c", "a", "c"])
+    assert view.selected == ["a", "c"]
+
+    view.selected = ["b", "a"]
+    assert view.selected == ["a", "b"]
+    with pytest.raises(ValueError, match="not one of the available values"):
+        view.selected = ["a", "z"]
+    assert view.selected == ["a", "b"]
+    with pytest.raises(ValueError, match="not one of the available values"):
+        CheckListView[str](values={"a": "a"}, selected=["z"])
+
+
+def test_new_values_drop_the_selected_values_they_no_longer_hold() -> None:
+    view = CheckListView[str](values={"a": "a", "b": "b", "c": "c"}, selected=["a", "c"])
+
+    view.values = {"c": "c", "d": "d"}
+
+    assert view.selected == ["c"]
+
+
+def test_the_search_shows_the_choices_whose_label_holds_it_and_check_all_checks_only_those() -> (
+    None
+):
+    view = _BasesView(search=" ER ")  # in any case, without the spaces around
+    view.selected = [_Base.B02598]
+    assert view.shown_options == [("B02512", "Unter"), ("B02598", "Hinter"), ("B02617", "Weiter")]
+    assert view.shown.all_checked is None  # "Hinter" alone checked: partly
+
+    assert view.check_all(is_checked=True)
+    assert view.selected == [_Base.B02512, _Base.B02598, _Base.B02617]
+    assert view.shown.all_checked is True
+
+    view.search = "schm"
+    assert view.shown.all_checked is False
+    assert view.check_all(is_checked=True)
+    view.search = ""
+    assert view.check_all(is_checked=False)  # a search hiding none: all of them
+    assert view.selected == []
+    assert not view.check_all(is_checked=False)
+
+    view.search = "nothing"
+    assert (view.shown.options, view.shown.all_checked) == ([], False)
+
+
+@pytest.mark.parametrize(
+    ("selected", "summary"),
+    [
+        ([], "None"),
+        ([_Base.B02617], "Weiter"),
+        ([_Base.B02512, _Base.B02617], "2 selected"),
+        (list(_BASES.values()), "All"),
+    ],
+)
+def test_a_closed_multi_combobox_shows_the_choice_s_label_all_or_how_many(
+    selected: list[_Base], summary: str
+) -> None:
+    view = _BasesView()
+    view.selected = selected
+
+    assert view.summary == summary
+
+
+def test_a_choice_of_several_is_saved_by_its_keys_and_reset_to_the_app_s(tmp_path: Path) -> None:
+    saved = _BasesMainView()
+    saved.bases.selected = [_Base.B02512, _Base.B02682]
+    filepath = tmp_path / "bases.json"
+    saved.save_state(filepath)
+    assert json.loads(filepath.read_text())["views"]["bases"]["selected"] == ["B02512", "B02682"]
+
+    fresh = _BasesMainView()
+    fresh.bases.values = {"Unter (in another language)": _Base.B02512, "Hinter": _Base.B02598}
+    fresh.load_state(filepath)  # B02682 no longer a choice
+    assert fresh.bases.selected == [_Base.B02512]
+
+    fresh.reset_state()
+    assert fresh.bases.values == _BASES
+    assert fresh.bases.selected == [_Base.B02598]
+
+
+@pytest.mark.parametrize("damaged", [5, None, {"B02512": 1}, ["B02512", 5], [["B02512"]]])
+def test_a_study_whose_choice_of_several_isn_t_a_list_of_keys_is_refused(
+    tmp_path: Path, damaged: object
+) -> None:
+    saved = _BasesMainView()
+    data = saved.file_data()
+    data["views"]["bases"]["selected"] = damaged
+    filepath = tmp_path / "damaged.bases"
+    filepath.write_text(json.dumps(data))
+    view = _BasesMainView()
+
+    with pytest.raises(InvalidStateError, match="doesn't match this application"):
+        view.load_state(filepath)
+
+    assert view.bases.selected == [_Base.B02598]
 
 
 @define_view

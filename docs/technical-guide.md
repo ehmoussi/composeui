@@ -341,6 +341,18 @@ section covers what users see.
   `cui-jobs` poller fetches `/jobs` every `JOBS_POLL_MS`, which brings them. The server pushes
   nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
   the poller in, as it does the page's marker.
+- **Choices of several values.** Each box of a check list posts its key and its state, not a
+  flip, and the check-all box posts its state too. A post that arrives twice leaves the same
+  choice, and a click on a stale page does what the page showed. The user's change swaps only
+  the parts that it changes: the check-all box, the list, and a multi-combobox's summary. It
+  never swaps the box clicked or the search field, which keep the focus. A post that changes
+  nothing, such as one of a stale page, swaps all three back as the view is. The check-all box
+  shows partly checked through `page.js`, which reads `data-indeterminate`.
+- **A drop-down list swapped while open.** A change of the app's swaps a multi-combobox whole.
+  Each box has an id made from its key, so htmx gives it the focus back. But the dropdown is
+  open only while the focus is in it, and a closed one's boxes take no focus. So `page.js` keeps
+  it open through the swap with `dropdown-open`, on the element swapped out too: htmx gives the
+  new element the old one's classes until it settles.
 - **Downloads** go through a ticket: see [Downloads on the web](#downloads-on-the-web).
 
 ### Tables on the web
@@ -361,6 +373,8 @@ section covers what users see.
   go each in a `<template>` of its own: bare, they switch htmx's parsing of the whole answer to
   a table's rules, which mangles the fragments after them. An invalid filter value swaps only
   its message, which `syncInvalidFields` marks the field by.
+- **A check-all box posts its state.** A click does what the page showed, partly checked to
+  checked, not what the server would decide from its own rows, which a stale page may not show.
 
 ### Order and sessions
 

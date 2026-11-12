@@ -157,6 +157,8 @@ The fields:
 | `CheckBoxView` | `is_checked`, with its `text` beside the box | Checks or unchecks the box (`toggled`) |
 | `RadioGroupView` | `value`, one of `values` | Picks one of a few choices |
 | `ComboBoxView` | `value`, one of `values` | Picks one choice in a drop-down list |
+| `CheckListView` | `selected`, some of `values` (see [Choices of several values](widgets.md#choices-of-several-values)) | Checks several choices in a list |
+| `MultiComboBoxView` | `selected`, some of `values` | Checks several choices in a drop-down list |
 | `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](widgets.md#slider)) | Drags a handle |
 | `FloatSliderView` | `value`, a decimal number from `minimum` to `maximum` by `step` (see [Decimal slider](widgets.md#decimal-slider)) | Drags a handle |
 
@@ -213,7 +215,7 @@ You can compose a view by mixing traits. For example, `LabelRowFloatInputView` c
 `FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
 available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
 `DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `CheckBoxMixin`,
-`ValuesGroupMixin`, `TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+`ValuesGroupMixin`, `MultiValuesMixin`, `TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
 
 Larger views have sections of their own:
 
