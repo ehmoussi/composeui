@@ -296,7 +296,10 @@ Read this section before other people use the app, on a network or behind a reve
 - **Sessions have limits.** The server drops a session after an hour without use
   (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
   full, a new browser gets an error (503) until a session ends, and the open sessions keep
-  working.
+  working. A session doesn't end while a request, such as a large download, is in progress. At
+  most 8 files that a [`StreamContent`](widgets.md#large-files) writes are sent at once
+  (`max_download_streams`), and 2 for one session (`max_session_download_streams`). A server
+  that stops waits 5 seconds for the requests in progress (`shutdown_timeout`), then ends them.
 - **Idle sessions can wait on disk.** Set `session_idle`, in seconds, in a subclass of
   `WebApplication`, for example `session_idle = 300.0`. The server then saves each session that
   is idle for that long to the system's temporary folder, and frees its memory. Its next request

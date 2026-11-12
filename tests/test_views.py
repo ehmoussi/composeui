@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import datetime
+import io
 import pickle
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +18,7 @@ from hypothesis import strategies as st
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
+    DOWNLOAD_CHUNK_SIZE,
     CellKind,
     CellWidget,
     ConsoleView,
@@ -30,6 +33,7 @@ from composeui.core.view import (
     MapView,
     NodeMark,
     RowInputView,
+    StreamContent,
     TableView,
     TextStyle,
     TreeView,
@@ -40,6 +44,7 @@ from composeui.core.view import (
     follow_match,
     line_styles_after,
     parse_date,
+    save_download,
 )
 from examples.studyinputs import INPUT_FILE, OUTPUT_FOLDER, PATH, StudyInputsMainView
 from tests.buildings import SITE
@@ -51,6 +56,7 @@ from tests.tabs import PipeTabs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from typing import BinaryIO
 
 
 def _note(_instance: object, _attribute: object, value: str) -> str:
@@ -546,6 +552,67 @@ def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_pat
     path = tmp_path / "notes.unknowntype"
     path.write_bytes(b"12345")
     assert UploadedFile.of_path(path) == UploadedFile("notes.unknowntype", 5, "", path)
+
+
+def test_a_stream_is_saved_in_a_job_and_a_failure_or_a_cancel_leaves_the_file_as_it_was(
+    tmp_path: Path,
+) -> None:
+    main_view = Application(build_main_view=ReportMainView).main_view
+    main_view.status_bar.timeout = 0  # no timer clearing the message after the test
+    target = tmp_path / "out.csv"
+    rows = [f"{row},row\n" for row in range(100_000)]
+    started, go = threading.Event(), threading.Event()
+
+    def fails(sink: BinaryIO) -> None:
+        sink.write(b"partial")
+        msg = "source gone"
+        raise ValueError(msg)
+
+    def waits(sink: BinaryIO) -> None:
+        started.set()
+        assert go.wait(10)
+        sink.write(bytes(DOWNLOAD_CHUNK_SIZE))
+
+    def write(sink: BinaryIO) -> None:
+        # closes the file it writes to: ComposeUI's close after it does nothing
+        with io.TextIOWrapper(sink, encoding="utf-8", newline="") as text:
+            text.writelines(rows)
+
+    save_download(main_view, target, StreamContent(write))
+    main_view.jobs.wait()
+    saved = main_view.status_bar.message
+    save_download(main_view, target, StreamContent(fails))
+    main_view.jobs.wait()
+    failed = main_view.status_bar.message
+    save_download(main_view, target, StreamContent(waits))
+    assert started.wait(10)
+    main_view.jobs.cancel()  # as New, Open and closing the app do
+    go.set()
+    main_view.jobs.wait()
+
+    assert saved == "Saved out.csv."
+    assert failed == "Can't save to out.csv: source gone."
+    assert main_view.status_bar.message == failed  # a cancel says nothing
+    assert target.read_text(encoding="utf-8") == "".join(rows)
+    assert list(tmp_path.iterdir()) == [target]  # no partial file left
+
+
+def test_arrow_writes_a_parquet_file_to_a_stream(tmp_path: Path) -> None:
+    pa: Any = pytest.importorskip("pyarrow")
+    pq: Any = pytest.importorskip("pyarrow.parquet")
+    table = pa.table({"id": list(range(100_000)), "name": ["row"] * 100_000})
+    main_view = Application(build_main_view=ReportMainView).main_view
+
+    def write(sink: BinaryIO) -> None:
+        # in a file that can't seek: Parquet's footer comes last
+        with pq.ParquetWriter(sink, table.schema) as writer:
+            for batch in table.to_batches(10_000):
+                writer.write_batch(batch)
+
+    save_download(main_view, tmp_path / "out.parquet", StreamContent(write))
+    main_view.jobs.wait()
+
+    assert pq.read_table(tmp_path / "out.parquet").equals(table)
 
 
 def test_an_app_s_test_reads_the_files_it_gives_without_a_backend() -> None:

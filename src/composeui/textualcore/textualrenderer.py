@@ -136,6 +136,7 @@ if TYPE_CHECKING:
         ReferenceLine,
         Series,
         Shape,
+        StreamContent,
         TextRole,
         TreeNode,
         TreePath,
@@ -3460,7 +3461,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                 functools.partial(self._save_download, file.content),
             )
 
-    def _save_download(self, content: bytes | Path, path: Path | None) -> None:
+    def _save_download(self, content: bytes | Path | StreamContent, path: Path | None) -> None:
         if path is not None:
             save_download(self._view, path, content)
         self._ask_download()

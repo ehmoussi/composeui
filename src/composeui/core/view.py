@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    BinaryIO,
     ClassVar,
     Generic,
     NamedTuple,
@@ -52,7 +53,7 @@ import attrs
 import cattrs
 from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
 from cattrs.strategies import configure_tagged_union
-from typing_extensions import ParamSpec, Unpack, dataclass_transform
+from typing_extensions import Buffer, ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
 from composeui.core.jobs import Jobs, Task, _check_main_thread
@@ -232,6 +233,7 @@ __all__ = [
     "SourceTableView",
     "SplitterView",
     "StatusBar",
+    "StreamContent",
     "T",
     "TabPage",
     "TabView",
@@ -1869,16 +1871,20 @@ class MainView(View):
         return self.file_view.filepath
 
     def download(
-        self, filename: str, content: Union[bytes, Path], media_type: Optional[str] = None
+        self,
+        filename: str,
+        content: Union[bytes, Path, StreamContent],
+        media_type: Optional[str] = None,
     ) -> None:
         """Give the user a file that the app made, e.g. a report, to save where they choose.
 
-        `content` is the file's bytes, or the path of a file that the app wrote, read when
-        the user saves it and never deleted. `filename` names the file; `media_type` says
-        what it holds, guessed from `filename` when None. The web downloads it in the
-        browser. Qt and Textual ask where to save it, then write it, and the status bar says
-        how it went. Call it on the main thread, e.g. from a job's `finished` callback.
-        While no backend shows the main view, e.g. in a test, `downloads` keeps the file.
+        `content` is the file's bytes, the path of a file that the app wrote, read when the
+        user saves it and never deleted, or a `StreamContent`, which writes the file as the
+        user receives it. `filename` names the file; `media_type` says what it holds,
+        guessed from `filename` when None. The web downloads it in the browser. Qt and
+        Textual ask where to save it, then write it, and the status bar says how it went.
+        Call it on the main thread, e.g. from a job's `finished` callback. While no backend
+        shows the main view, e.g. in a test, `downloads` keeps the file.
         """
         _check_main_thread("MainView.download")
         # a name, never a folder: the browser or the dialog picks the folder
@@ -2317,10 +2323,75 @@ class DownloadedFile:
 
     #: the name offered for the file, without a folder
     filename: str
-    #: the file's bytes, or the path of a file that the app wrote
-    content: Union[bytes, Path]
+    #: the file's bytes, the path of a file that the app wrote, or what writes it
+    content: Union[bytes, Path, StreamContent]
     #: what it holds, such as ``text/csv``
     media_type: str
+
+
+@attrs.frozen
+class StreamContent:
+    """A file that the app writes as the user receives it: one too large to make first.
+
+    `write` writes the file to the binary file it gets, in order: it can't seek. It runs
+    later, on a thread of its own, once the user saves the file, and at most once: a
+    second fetch of the file on the web fails. So it must not read or change a view or the
+    model. Read what it needs where `StreamContent` is made, e.g. in a `DownloadView`'s
+    `content`, and give it only those values. A write raises once the user no longer
+    wants the file, e.g. the browser's download canceled: let the error through.
+    """
+
+    #: writes the file, e.g. with ``pyarrow.csv.CSVWriter(sink, schema)``
+    write: Callable[[BinaryIO], object]
+
+
+#: bytes a `DownloadSink` hands over at once: small writes are gathered, large ones cut
+DOWNLOAD_CHUNK_SIZE = 256 * 1024
+
+
+class DownloadCanceledError(Exception):
+    """The file that a `StreamContent` writes is no longer wanted."""
+
+
+class DownloadSink(io.RawIOBase):
+    """The file that a `StreamContent` writes to, which hands its bytes over in pieces.
+
+    `put` gets each piece, of `DOWNLOAD_CHUNK_SIZE` bytes but the last, as a copy: the
+    writer may reuse its buffer. It raises `DownloadCanceledError` once the file is no
+    longer wanted, so the writer stops at its next write. `close`, once the writer is
+    done, hands over the last piece; `discard`, after it failed, drops it.
+    """
+
+    def __init__(self, put: Callable[[bytes], None]) -> None:
+        super().__init__()
+        self._put = put
+        self._pending = bytearray()
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, data: Buffer, /) -> int:
+        view = memoryview(data).cast("B")
+        self._pending += view
+        while len(self._pending) >= DOWNLOAD_CHUNK_SIZE:
+            piece = bytes(self._pending[:DOWNLOAD_CHUNK_SIZE])
+            # cheap at the front: a bytearray moves its start
+            del self._pending[:DOWNLOAD_CHUNK_SIZE]
+            self._put(piece)
+        return len(view)
+
+    def close(self) -> None:
+        """Hand over the last piece, then close; the writer may close it itself."""
+        if not self.closed:
+            piece = bytes(self._pending)
+            self._pending.clear()
+            self._put(piece)
+        super().close()
+
+    def discard(self) -> None:
+        """Drop what wasn't handed over, and close: the file is incomplete."""
+        self._pending.clear()
+        super().close()
 
 
 @attrs.frozen
@@ -3210,10 +3281,11 @@ class ButtonView(View):
 class DownloadView(ButtonView):
     """A button that gives the user a file that the app makes on the click, e.g. a report.
 
-    The click calls `content`, which returns the file's bytes, or the path of a file that
-    the app wrote. Then the main view gives the file (`MainView.download`): the web downloads
-    it, and Qt and Textual ask where to save it. With `in_job`, `content` runs in a job, and
-    the button is disabled until the file is made; the status bar says why it failed.
+    The click calls `content`, which returns the file's bytes, the path of a file that the
+    app wrote, or a `StreamContent`, which writes a large file as the user receives it. Then
+    the main view gives the file (`MainView.download`): the web downloads it, and Qt and
+    Textual ask where to save it. With `in_job`, `content` runs in a job, and the button is
+    disabled until the file is made; the status bar says why it failed.
     """
 
     _renderer_key = "download"
@@ -3223,8 +3295,9 @@ class DownloadView(ButtonView):
     filename: str = attrs.field(default="download", metadata={OMIT: True})
     #: what the file holds, e.g. "text/csv"; guessed from `filename` when None
     media_type: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
-    #: makes the file: its bytes, or the path of a file the app wrote; None gives nothing
-    content: Optional[Callable[[], Union[bytes, Path]]] = attrs.field(
+    #: makes the file: its bytes, the path of a file the app wrote, or a `StreamContent`
+    #: that writes it as the user receives it; None gives nothing
+    content: Optional[Callable[[], Union[bytes, Path, StreamContent]]] = attrs.field(
         default=None, eq=False, repr=False, metadata={OMIT: True}
     )
     #: whether `content` runs in a job, for a file that takes a while to make
@@ -3252,7 +3325,7 @@ class DownloadView(ButtonView):
             self._task.failed.connect(self._failed)
         self._task.start(content)
 
-    def _made(self, content: Union[bytes, Path], main_view: MainView) -> None:
+    def _made(self, content: Union[bytes, Path, StreamContent], main_view: MainView) -> None:
         main_view.download(self.filename, content, self.media_type)
 
     def _failed(self, error: Exception, main_view: MainView) -> None:
@@ -3261,8 +3334,9 @@ class DownloadView(ButtonView):
 
 
 def _make(
-    _job: Job[Union[bytes, Path], Any], content: Callable[[], Union[bytes, Path]]
-) -> Union[bytes, Path]:
+    _job: Job[Union[bytes, Path, StreamContent], Any],
+    content: Callable[[], Union[bytes, Path, StreamContent]],
+) -> Union[bytes, Path, StreamContent]:
     """Make a `DownloadView`'s file, in its job."""
     return content()
 
@@ -5776,12 +5850,18 @@ def _publish(partial: Path, path: Path) -> None:
     partial.replace(path)
 
 
-def save_download(main_view: MainView, path: Path, content: Union[bytes, Path]) -> None:
+def save_download(
+    main_view: MainView, path: Path, content: Union[bytes, Path, StreamContent]
+) -> None:
     """Write a download's `content` to `path`, which the user chose; the status bar says how.
 
     For a backend that asks where to save a `MainView.download`. A failure leaves `path` as
-    it was.
+    it was. A `StreamContent` writes in a job, the app staying responsive; New, Open and
+    closing the app cancel it.
     """
+    if isinstance(content, StreamContent):
+        _save_stream(main_view, path, content)
+        return
     target = path.resolve()
     partial = _partial_path(target)
     try:
@@ -5797,6 +5877,54 @@ def save_download(main_view: MainView, path: Path, content: Union[bytes, Path]) 
     finally:
         partial.unlink(missing_ok=True)
     main_view.status_bar.show_message(main_view.tr("Saved {name}.").format(name=path.name))
+
+
+def _save_stream(main_view: MainView, path: Path, content: StreamContent) -> None:
+    """Write a `StreamContent` to `path` in a job; the status bar says how it went."""
+    job = main_view.jobs.start(_write_stream, content, path)
+    # the texts of `save_download`, so that a translation says both
+    saved = main_view.tr("Saved {name}.")
+    failed = main_view.tr("Can't save to {name}: {error}.")
+    show = main_view.status_bar.show_message
+
+    def report(is_written: bool) -> None:
+        if is_written:
+            show(saved.format(name=path.name))
+
+    job.finished.connect(report)
+    job.failed.connect(lambda error: show(failed.format(name=path.name, error=error)))
+
+
+def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:
+    """Write a `StreamContent` to `path`, in a job; tell if it wrote it.
+
+    A job canceled (New, Open, closing the app) stops at the writer's next write. Stopped,
+    or failed, it leaves the file `path` as it was.
+    """
+    path = path.resolve()
+    partial = _partial_path(path)
+    try:
+        with partial.open("wb") as file:
+
+            def put(piece: bytes) -> None:
+                if job.is_canceled:
+                    raise DownloadCanceledError
+                file.write(piece)
+
+            sink = DownloadSink(put)
+            try:
+                content.write(cast("BinaryIO", sink))
+                sink.close()
+            except Exception:
+                sink.discard()
+                # the writer may have raised its own error for ours, e.g. Arrow's
+                if job.is_canceled:
+                    return False
+                raise
+        _publish(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
+    return True
 
 
 def _write_csv(job: Optional[Job[bool]], chunks: Iterator[str], path: Path) -> bool:
