@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import base64
 import contextlib
 import datetime
 import enum
@@ -25,11 +26,15 @@ import os
 import re
 import secrets
 import shutil
+import signal
+import socket
+import subprocess
 import sys
 import tempfile
 import threading
 import time
 import types
+from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from importlib.util import find_spec
 from pathlib import Path
@@ -43,6 +48,7 @@ pytest.importorskip("starlette")
 pytest.importorskip("httpx")
 
 import attrs
+import httpx
 from attrs import Factory
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -67,6 +73,7 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.study import save_study
 from composeui.core.view import (
+    DOWNLOAD_CHUNK_SIZE,
     SOURCE_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
@@ -78,6 +85,7 @@ from composeui.core.view import (
     ComboBoxView,
     ConsoleView,
     DialogView,
+    DownloadCanceledError,
     DownloadedFile,
     EditRefusedError,
     FilePathInputMixin,
@@ -108,6 +116,7 @@ from composeui.core.view import (
     SliderView,
     SourceTableView,
     StatusBar,
+    StreamContent,
     TableView,
     TabPage,
     TabView,
@@ -125,6 +134,7 @@ from composeui.core.view import (
 from composeui.webcore import downloads as downloads_module
 from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
+from composeui.webcore import streaming as streaming_module
 from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
@@ -139,7 +149,9 @@ from composeui.webcore.order import (
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS, SESSION_TAG_FIELD, SESSION_TAG_HEADER
+from composeui.webcore.routes import SESSION_KEY
 from composeui.webcore.session import Hibernation, SessionStore, WebSession
+from composeui.webcore.streaming import MAX_QUEUED_BYTES, Stream, StreamFailedError
 from composeui.webcore.uploads import (
     MAX_FIELD_SIZE,
     MAX_FIELDS,
@@ -3942,6 +3954,23 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
             browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
 
+        def fails(_sink: BinaryIO) -> None:
+            msg = "source gone"
+            raise ValueError(msg)
+
+        # streamed as written, or failed before its first bytes
+        main_view.download("rows.csv", StreamContent(lambda sink: sink.write(b"a,b\n")))
+        main_view.download("failed.csv", StreamContent(fails))
+        written, failed = [
+            a["href"] or ""
+            for tag, a in _element(browser.get("/").text, "cui-downloads").descendants
+            if tag == "a"
+        ]
+        streamed = [browser.head(written), browser.get(written), browser.get(failed)]
+        responses += streamed
+
+    assert [response.status_code for response in streamed] == [200, 200, 500]
+
     for response in responses:
         assert response.headers["x-frame-options"] == "DENY"
         assert POLICY in response.headers.get_list("content-security-policy")
@@ -4404,6 +4433,23 @@ def test_a_session_is_idle_from_the_end_of_its_last_long_request() -> None:
 
     assert kept
     assert saved
+
+
+def test_a_session_doesn_t_expire_while_a_long_request_holds_it() -> None:
+    clock = _Clock()
+    with mock.patch.object(session_module, "time", clock):
+        store = SessionStore(lambda: (HelloMainView(), None), ttl=60.0, max_sessions=2)
+        created = store.get_or_create(None)
+        assert created is not None
+        session_id, session = created
+        with session.held():  # e.g. a large download
+            clock.now += 61.0
+            store.get_or_create(None)  # another session's request: the store drops the idle
+        clock.now += 59.0  # idle from the download's end
+        kept = store.get(session_id)
+    store.close_all()
+
+    assert kept is session
 
 
 def _watched_threading() -> tuple[types.SimpleNamespace, threading.Event]:
@@ -6789,6 +6835,334 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
     kept.add(DownloadedFile("b", b"ab", "text/plain"))
     kept.add(DownloadedFile("c", b"a", "text/plain"))  # 5 bytes: the oldest goes
     assert [name for _, name in kept.tickets()] == ["b", "c"]
+
+
+class _ReportApp(WebApplication[ReportMainView]):
+    """The report app, keeping each session's main view."""
+
+    def __init__(self) -> None:
+        super().__init__(build_main_view=ReportMainView)
+        self.views: list[ReportMainView] = []
+
+    def setup_session(self, main_view: ReportMainView) -> None:
+        self.views.append(main_view)
+
+
+def _stream_ticket(
+    client: TestClient, view: ReportMainView, write: Callable[[BinaryIO], object]
+) -> str:
+    """Give `write` as the report, click Export, and get the address that the page fetches."""
+    view.report = StreamContent(write)
+    body = client.post(f"/widget/{_widget_id(view.export.renderer)}", data={"event": "click"}).text
+    # the newest: the answer names each file not fetched yet
+    *_, address = [
+        a["href"] or "" for tag, a in _swapped(body, "cui-downloads").descendants if tag == "a"
+    ]
+    return address
+
+
+def test_a_stream_is_written_once_by_the_first_fetch_of_its_ticket(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = _ReportApp()
+    rows = range(50_000)
+    writes: list[str] = []
+
+    def write(sink: BinaryIO) -> None:
+        writes.append("write")
+        sink.writelines(b"%d,row\n" % row for row in rows)
+
+    def fails_first(_sink: BinaryIO) -> None:
+        msg = "source gone"
+        raise ValueError(msg)
+
+    def fails_later(sink: BinaryIO) -> None:
+        sink.write(bytes(DOWNLOAD_CHUNK_SIZE))
+        msg = "source gone"
+        raise ValueError(msg)
+
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = app.views
+        address = _stream_ticket(client, view, write)
+        written_by_click = len(writes)
+        head = client.head(address)
+        written_by_head = len(writes)
+        fetched = client.get(address, headers={"Accept-Encoding": "gzip"})
+        again = client.get(address)  # e.g. a download manager's: written once only
+        failed_first = client.get(_stream_ticket(client, view, fails_first))
+        later = _stream_ticket(client, view, fails_later)
+        # its first bytes sent, the connection breaks: the browser shows a failed download
+        with pytest.raises(StreamFailedError):
+            client.get(later)
+
+    assert (written_by_click, written_by_head) == (0, 0)
+    assert head.status_code == 200
+    assert "content-length" not in head.headers  # unknown until written
+    assert fetched.content == b"".join(b"%d,row\n" % row for row in rows)
+    assert fetched.headers["content-disposition"].endswith("''report%20%C3%A9.csv")
+    assert "content-encoding" not in fetched.headers  # sent as written, not compressed
+    assert writes == ["write"]
+    assert again.status_code == 404
+    assert failed_first.status_code == 500
+    assert "Can't write a download." in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_stream_s_writer_waits_while_no_one_reads_and_stops_once_canceled() -> None:
+    returned = 0
+    stopped: list[DownloadCanceledError] = []
+    waiting = threading.Event()
+
+    class WatchedCondition(threading.Condition):
+        def wait(self, timeout: float | None = None) -> bool:
+            waiting.set()  # the writer still holds the lock: a cancel comes once it waits
+            return super().wait(timeout)
+
+    def write(sink: BinaryIO) -> None:
+        nonlocal returned
+        try:
+            while True:
+                sink.write(bytes(DOWNLOAD_CHUNK_SIZE))  # a piece each
+                returned += 1
+        except DownloadCanceledError as error:
+            stopped.append(error)
+            raise
+
+    watched = types.SimpleNamespace(Condition=WatchedCondition, Thread=threading.Thread)
+    with mock.patch.object(streaming_module, "threading", watched):
+        stream = Stream(StreamContent(write))
+    stream.start()
+    loop = asyncio.get_running_loop()
+    assert await loop.run_in_executor(None, waiting.wait, 10)
+    stream.cancel()
+    await asyncio.wait_for(stream.ended(), 10)
+
+    assert returned == MAX_QUEUED_BYTES // DOWNLOAD_CHUNK_SIZE  # the pieces that fill the room
+    assert len(stopped) == 1
+    with pytest.raises(StreamFailedError):  # what was written isn't sent: the file is cut
+        async for _ in stream.pieces():
+            pass
+
+
+def test_the_server_writes_at_most_its_streams_at_once_the_next_waiting() -> None:
+    class OneStreamApp(_ReportApp):
+        max_download_streams = 1
+
+    app = OneStreamApp()
+    starlette_app = app.create_starlette_app()
+    limiter = starlette_app.state.stream_places.server
+    first_writing, release, second_started = threading.Event(), threading.Event(), threading.Event()
+
+    def first(sink: BinaryIO) -> None:
+        sink.write(b"first")
+        first_writing.set()
+        assert release.wait(10)
+
+    def second(sink: BinaryIO) -> None:
+        second_started.set()
+        sink.write(b"second")
+
+    with _Browser(starlette_app) as client, ThreadPoolExecutor(2) as pool:
+        client.get("/")
+        (view,) = app.views
+        first_address = _stream_ticket(client, view, first)
+        second_address = _stream_ticket(client, view, second)
+        first_fetch = pool.submit(client.get, first_address)
+        assert first_writing.wait(10)
+        second_fetch = pool.submit(client.get, second_address)
+        for _ in range(1000):  # until the second asks for a place
+            if limiter.statistics().tasks_waiting == 1:
+                break
+            time.sleep(0.01)
+        waiting = limiter.statistics().tasks_waiting
+        started_meanwhile = second_started.is_set()
+        release.set()
+        contents = (first_fetch.result(10).content, second_fetch.result(10).content)
+
+    assert waiting == 1
+    assert not started_meanwhile
+    assert contents == (b"first", b"second")
+
+
+def _session_of(starlette_app: Starlette, client: TestClient) -> WebSession:
+    """Get the session that `client`'s cookie names, as the app's middleware signed it."""
+    signed = client.cookies["session"]
+    session_id = json.loads(base64.b64decode(signed.split(".")[0]))[SESSION_KEY]
+    session = starlette_app.state.sessions.get(session_id)
+    assert isinstance(session, WebSession)
+    return session
+
+
+def test_a_session_writes_at_most_its_streams_at_once_leaving_the_others_to_other_browsers() -> (
+    None
+):
+    class OneStreamPerSessionApp(_ReportApp):
+        max_download_streams = 2
+        max_session_download_streams = 1
+
+    app = OneStreamPerSessionApp()
+    starlette_app = app.create_starlette_app()
+    first_writing, release, second_started = threading.Event(), threading.Event(), threading.Event()
+
+    def first(sink: BinaryIO) -> None:
+        sink.write(b"first")
+        first_writing.set()
+        assert release.wait(10)
+
+    def second(sink: BinaryIO) -> None:
+        second_started.set()
+        sink.write(b"second")
+
+    with _Browser(starlette_app) as alice, ThreadPoolExecutor(3) as pool:
+        # on Alice's event loop: a server has one, where a place freed wakes the next
+        bob = _Browser(starlette_app)
+        bob.portal = alice.portal
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = app.views
+        try:
+            first_fetch = pool.submit(alice.get, _stream_ticket(alice, alice_view, first))
+            assert first_writing.wait(10)
+            second_fetch = pool.submit(alice.get, _stream_ticket(alice, alice_view, second))
+            alice_places = starlette_app.state.stream_places.of(_session_of(starlette_app, alice))
+            for _ in range(1000):  # until Alice's second waits for a place of her own
+                if alice_places.statistics().tasks_waiting == 1:
+                    break
+                time.sleep(0.01)
+            waiting = alice_places.statistics().tasks_waiting
+            # the server's second place: Alice's second waits without it
+            other = pool.submit(
+                bob.get, _stream_ticket(bob, bob_view, lambda sink: sink.write(b"b"))
+            )
+            bob_content = other.result(10).content
+            started_meanwhile = second_started.is_set()
+        finally:
+            release.set()
+        contents = (first_fetch.result(10).content, second_fetch.result(10).content)
+
+    assert waiting == 1
+    assert bob_content == b"b"
+    assert not started_meanwhile
+    assert contents == (b"first", b"second")
+
+
+def test_a_session_that_ends_stops_its_streams_and_starts_none() -> None:
+    class OneStreamApp(_ReportApp):
+        max_download_streams = 1
+
+    app = OneStreamApp()
+    starlette_app = app.create_starlette_app()
+    limiter = starlette_app.state.stream_places.server
+    started, go = threading.Event(), threading.Event()
+    stopped: list[DownloadCanceledError] = []
+    writers: list[str] = []
+
+    def write(sink: BinaryIO) -> None:
+        writers.append("write")
+        started.set()
+        assert go.wait(10)
+        try:
+            sink.write(bytes(DOWNLOAD_CHUNK_SIZE))
+        except DownloadCanceledError as error:
+            stopped.append(error)
+            raise
+
+    with _Browser(starlette_app) as client, ThreadPoolExecutor(2) as pool:
+        client.get("/")
+        (view,) = app.views
+        running = pool.submit(client.get, _stream_ticket(client, view, write))
+        assert started.wait(10)
+        waiting = pool.submit(client.get, _stream_ticket(client, view, write))
+        for _ in range(1000):  # until the second waits for a place
+            if limiter.statistics().tasks_waiting == 1:
+                break
+            time.sleep(0.01)
+        # the sessions end, as one does at Exit (`SessionStore.drop`) or past `session_ttl`
+        starlette_app.state.sessions.close_all()
+        go.set()
+        responses = (running.result(10).status_code, waiting.result(10).status_code)
+
+    assert responses == (404, 404)  # as files gone
+    assert len(stopped) == 1
+    assert writers == ["write"]  # the second never started
+
+
+#: an app whose Export writes for ever, until stopped; it notes the error that stopped it
+_ENDLESS_EXPORT_APP = """
+import os, pathlib, sys, time
+from composeui.core.view import DownloadView, MainView, StreamContent, child, define_view
+from composeui.webcore.webapplication import WebApplication
+
+def write(sink):
+    try:
+        while True:
+            sink.write(bytes(65536))
+            time.sleep(0.01)
+    except Exception as error:
+        pathlib.Path(os.environ["STOPPED"]).write_text(type(error).__name__)
+        raise
+
+@define_view
+class ExportMainView(MainView):
+    export: DownloadView = child(DownloadView, text="Export", filename="endless.bin")
+
+    def __attrs_post_init__(self):
+        super().__attrs_post_init__()
+        self.export.content = lambda: StreamContent(write)
+
+class ExportApp(WebApplication[ExportMainView]):
+    shutdown_timeout = 1
+
+ExportApp(build_main_view=ExportMainView).run()
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Ctrl+C is a console event on Windows")
+def test_a_server_that_stops_ends_the_downloads_being_written(tmp_path: Path) -> None:
+    script = tmp_path / "app.py"
+    script.write_text(_ENDLESS_EXPORT_APP)
+    stopped = tmp_path / "stopped"
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    program = subprocess.Popen(  # noqa: S603
+        [sys.executable, str(script), "--port", str(port)],
+        cwd=tmp_path,
+        env={**os.environ, "STOPPED": str(stopped)},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        with httpx.Client(
+            base_url=f"http://127.0.0.1:{port}", headers={"Sec-Fetch-Site": "same-origin"}
+        ) as client:
+            page = None
+            for _ in range(300):  # until the server serves
+                with contextlib.suppress(httpx.TransportError):
+                    page = client.get("/").text
+                    break
+                time.sleep(0.1)
+            assert page is not None
+            match = re.search(r'hx-post="(/widget/[^"]+)"[^>]*>Export<', page)
+            assert match is not None
+            body = client.post(match[1], data={"event": "click"}).text
+            ticket = re.search(r'href="(/download/[^"]+)"', body)
+            assert ticket is not None
+            with client.stream("GET", ticket[1]) as download:
+                # kept: an iterator closed would close the download
+                pieces = download.iter_raw()
+                next(pieces)  # being written
+                program.send_signal(signal.SIGINT)  # Ctrl+C
+                # past `shutdown_timeout`, not once the endless file is sent
+                code = program.wait(timeout=30)
+    finally:
+        if program.poll() is None:
+            program.kill()
+            program.wait()
+
+    assert code == 0
+    assert stopped.read_text() == "DownloadCanceledError"
 
 
 def test_a_download_of_whatever_name_has_a_header_naming_it() -> None:

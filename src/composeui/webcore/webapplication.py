@@ -69,11 +69,13 @@ from composeui.webcore.routes import (
     widget_fragment,
 )
 from composeui.webcore.session import Hibernation, SessionStore
+from composeui.webcore.streaming import MAX_SESSION_STREAMS, MAX_STREAMS, StreamPlaces
 from composeui.webcore.webrenderer import check_routes
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
+    from starlette.types import Receive, Scope, Send
     from typing_extensions import TypeVarTuple, Unpack
 
     from composeui.core.application import _ConnectDecorator, _ConnectModelDecorator
@@ -142,10 +144,12 @@ def create_starlette_app(
     max_upload_size: int,
     secret_key: str | None = None,
     reloading: bool = False,
+    stream_places: StreamPlaces | None = None,
 ) -> Starlette:
     """Create the Starlette app serving one main view per browser session.
 
-    `max_upload_size` sets the largest body of the route of file uploads. `secret_key`
+    `max_upload_size` sets the largest body of the route of file uploads, and
+    `stream_places` the downloads written at once (`StreamContent`). `secret_key`
     signs the session cookie, a new one by default. A ``--reload`` server's process
     (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and its pages
     reload once another process serves (`reload_poll`).
@@ -193,17 +197,33 @@ def create_starlette_app(
                 same_site="lax",
             ),
             # the stylesheet, the scripts and a chart's points shrink several times
-            Middleware(GZipMiddleware, minimum_size=1024),
+            Middleware(_GZipMiddleware, minimum_size=1024),
         ],
         exception_handlers={DuplicatePostError: duplicate_post},
         lifespan=_lifespan(sessions, reloading=reloading),
     )
     app.state.sessions = sessions
+    #: the places of the downloads written at once (`StreamResponse`)
+    app.state.stream_places = StreamPlaces() if stream_places is None else stream_places
     #: this process of a `--reload` server, which its pages name: None for another server
     app.state.reload_instance = secrets.token_urlsafe(8) if reloading else None
     if reloading:
         _hide_reload_polls()
     return app
+
+
+class _GZipMiddleware(GZipMiddleware):
+    """Compress the answers but the app's downloads (`/download/{ticket}`), sent as they are.
+
+    A download can be large, or written as it's sent (`StreamContent`): compressing it would
+    take the event loop's time, which every session shares, piece after piece.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"].startswith("/download/"):
+            await self.app(scope, receive, send)
+        else:
+            await super().__call__(scope, receive, send)
 
 
 #: the arguments of uvicorn's access log record, in order: the path has its query
@@ -374,6 +394,15 @@ class WebApplication(Application[MainViewT]):
     session_idle: ClassVar[Optional[float]] = None
     #: most sessions on disk at once: past it, idle sessions stay in memory
     max_saved_sessions: ClassVar[int] = 10_000
+    #: downloads written as they're sent (`StreamContent`) at once, among all sessions: the
+    #: next wait for one to end. Each takes a thread, and the time its writer takes
+    max_download_streams: ClassVar[int] = MAX_STREAMS
+    #: downloads written as they're sent at once for one session: the next wait for one of its
+    #: own to end, holding no place of the server's. So one browser can't take them all
+    max_session_download_streams: ClassVar[int] = MAX_SESSION_STREAMS
+    #: seconds the server waits, as it stops or restarts (``--reload``), for the requests in
+    #: progress, such as a large download; past it, it ends them. None waits for them all
+    shutdown_timeout: ClassVar[Optional[int]] = 5
     #: whether table filters take regular expressions; a public app sets it to False, because a
     #: crafted one can make every session wait for a long time
     filter_patterns: ClassVar[bool] = True
@@ -450,6 +479,9 @@ class WebApplication(Application[MainViewT]):
         return create_starlette_app(
             sessions,
             max_upload_size=self.main_view.max_upload_size,
+            stream_places=StreamPlaces(
+                self.max_download_streams, self.max_session_download_streams
+            ),
             secret_key=secret_key,
             reloading=saved_sessions is not None,
         )
@@ -462,8 +494,16 @@ class WebApplication(Application[MainViewT]):
         if reloaded_apps is not None:  # the program is run again by the reloader's process
             reloaded_apps.append(self)
             return
+        # the same for each process of a `--reload` server, which uvicorn configures
+        server = {
+            "host": self._args.host,
+            "port": self._args.port,
+            # a download being written would hold the server up until it's sent: past it, it's
+            # canceled, and its writer stops at its next write
+            "timeout_graceful_shutdown": self.shutdown_timeout,
+        }
         if not self._args.reload:
-            uvicorn.run(self.create_starlette_app(), host=self._args.host, port=self._args.port)
+            uvicorn.run(self.create_starlette_app(), **server)
             return
         # uvicorn reloads only an app it can import by name, in a process of its own
         os.environ[_RELOAD_ENTRY_VARIABLE] = _entry_point()
@@ -483,8 +523,7 @@ class WebApplication(Application[MainViewT]):
                 f"{__name__}:{create_reloaded_starlette_app.__name__}",
                 factory=True,
                 reload=True,
-                host=self._args.host,
-                port=self._args.port,
+                **server,
             )
 
     def _new_session(self) -> tuple[MainViewT, Model | None]:

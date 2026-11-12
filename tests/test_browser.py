@@ -33,6 +33,7 @@ from starlette.routing import Route as StarletteRoute
 
 from composeui.core import chartimage
 from composeui.core.view import (
+    DOWNLOAD_CHUNK_SIZE,
     ButtonView,
     ChartView,
     DateInputView,
@@ -40,6 +41,7 @@ from composeui.core.view import (
     MainView,
     MapView,
     Series,
+    StreamContent,
     child,
     define_view,
 )
@@ -81,6 +83,7 @@ from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
+    from typing import BinaryIO
 
     from playwright.sync_api import (
         APIResponse,
@@ -895,6 +898,39 @@ def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser
         expect(export).to_be_visible()  # the page stays
         context.close()
     assert len(fetched) == len(set(fetched)) == 3
+
+
+def test_a_stream_downloads_as_it_s_written_and_one_cut_midway_fails(browser: Browser) -> None:
+    cuts = [False, True]
+
+    def write(sink: BinaryIO) -> None:
+        is_cut = cuts.pop(0)
+        sink.write(bytes(DOWNLOAD_CHUNK_SIZE))  # sent before the end
+        if is_cut:
+            msg = "source gone"
+            raise ValueError(msg)
+        sink.write(b"end")
+
+    class StreamApp(WebApplication[ReportMainView]):
+        def setup_session(self, main_view: ReportMainView) -> None:
+            main_view.report = StreamContent(write)
+
+    with _serve(StreamApp(build_main_view=ReportMainView).create_starlette_app()) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        export = page.get_by_role("button", name="Export", exact=True)
+        with page.expect_download() as whole:
+            export.click()
+        whole_file = Path(whole.value.path()).read_bytes()
+        with page.expect_download() as cut:
+            export.click()
+        # the browser's download, not a short file that looks whole
+        cut_failure = cut.value.failure()
+        context.close()
+
+    assert whole_file == bytes(DOWNLOAD_CHUNK_SIZE) + b"end"
+    assert cut_failure is not None
 
 
 def test_save_right_after_typing_saves_the_value_typed(page: Page) -> None:

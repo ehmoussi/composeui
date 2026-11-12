@@ -82,6 +82,7 @@ from composeui.core.view import (
     SelectionMode,
     Series,
     SourceTableView,
+    StreamContent,
     T,
     TabPage,
     TabView,
@@ -3115,9 +3116,22 @@ async def test_an_app_s_files_are_saved_where_the_user_picks_one_dialog_at_a_tim
         app.screen.dismiss(None)  # Cancel
         await pilot.pause()
         assert asked() == []
+        saved = view.status_bar.message
+        files = _names(tmp_path)  # the second cancelled
 
-    assert _names(tmp_path) == ["a.csv"]  # the second cancelled
-    assert view.status_bar.message == "Saved a.csv."
+        view.report = StreamContent(lambda sink: sink.write(b"streamed"))  # written in a job
+        await pilot.click(_widget(view.export))
+        await pilot.pause()
+        app.screen.dismiss(tmp_path / "b.csv")
+        for _ in range(100):  # until the job's outcome reaches the status bar
+            if view.status_bar.message == "Saved b.csv.":
+                break
+            await pilot.pause(0.05)
+
+    assert files == ["a.csv"]
+    assert saved == "Saved a.csv."
+    assert view.status_bar.message == "Saved b.csv."
+    assert (tmp_path / "b.csv").read_bytes() == b"streamed"
 
 
 @pytest.mark.asyncio

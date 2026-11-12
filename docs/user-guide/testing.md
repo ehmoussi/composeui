@@ -236,6 +236,9 @@ def test_export_gives_the_pipes_as_csv() -> None:
 With `in_job=True`, call `app.main_view.jobs.wait()` after the click: the file is given once its
 job is over.
 
+A [`StreamContent`](widgets.md#large-files) holds no bytes. Give its `write` an `io.BytesIO`,
+then read what it wrote: `file.content.write(buffer)`, then `buffer.getvalue()`.
+
 ## Test with a model
 
 Build the app with `ModelApplication`, with the same arguments as `run`. A fixture builds

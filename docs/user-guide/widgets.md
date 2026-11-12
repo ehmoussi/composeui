@@ -439,8 +439,9 @@ class ResultsView(VerticalView):
 ```
 
 - **`content`** makes the file. It returns the bytes, or the `Path` of a file that the app wrote.
-  ComposeUI reads that file when the user saves it, and never deletes it. While `content` is
-  `None`, a click gives nothing.
+  ComposeUI reads that file when the user saves it, and never deletes it. For a large file, it can
+  return a `StreamContent` (see [Large files](#large-files)). While `content` is `None`, a click
+  gives nothing.
 - **`filename`** is the name offered for the file. Only its last part counts: a folder before it
   is dropped.
 - **`media_type`** says what the file holds, such as `"text/csv"`. When it is `None`, the type
@@ -473,9 +474,10 @@ The status bar says when the file is saved, or why it can't be.
 
 ### Large files
 
-`content` returns the whole file: bytes, or a `Path`. It cannot return a generator that gives
-the file in pieces. For a file too large to hold in memory, write it to a file in a job, and
-return its `Path`:
+`content` can return a file of any size in two ways: a `Path` of a file that the app writes in a
+job, or a `StreamContent` that writes the file as the user receives it.
+
+**A file written first.** Write the file in a job, and return its `Path`:
 
 ```python
 import csv
@@ -512,11 +514,90 @@ disk in pieces, and Qt and Textual copy it: it is never whole in memory. The use
 starts once the file is written. ComposeUI never deletes the file: the app writes it in a folder
 of its own, and overwrites it at the next export.
 
-A generator would not make the file at the click. In Python, calling a generator runs none of its
-code: its code runs only as its pieces are read. On the web, the browser reads them when it
-fetches the file, after the click, while the user goes on working, and maybe twice. The file would
-then not hold what the app showed at the click. So ComposeUI makes the whole file at the click, or
-in its job. The [technical guide](../technical-guide.md#downloads-on-the-web) explains the design.
+**A file written as it is sent.** For an export of many gigabytes, such as the rows of a large
+Parquet dataset, writing the file first takes as much disk, and the user waits for the whole file.
+Return a `StreamContent` instead. Its `write` function writes the file to the binary file that it
+gets, in order:
+
+```python
+import csv
+import io
+from pathlib import Path
+from typing import BinaryIO
+
+from composeui.core.view import (
+    DownloadView,
+    InputView,
+    StreamContent,
+    VerticalView,
+    child,
+    define_view,
+)
+
+#: a large file of measures: sensor, time, value
+MEASURES = Path("measures.csv")
+
+
+@define_view
+class MeasuresView(VerticalView):
+    sensor: InputView = child(InputView, placeholder="Sensor")
+    export: DownloadView = child(DownloadView, text="Export CSV", filename="sensor.csv")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.export.content = self.sensor_csv
+
+    def sensor_csv(self) -> StreamContent:
+        sensor = self.sensor.text  # read at the click: `write` runs later
+
+        def write(sink: BinaryIO) -> None:
+            text = io.TextIOWrapper(sink, encoding="utf-8", newline="", write_through=True)
+            writer = csv.writer(text)
+            with MEASURES.open(newline="", encoding="utf-8") as measures:
+                writer.writerows(row for row in csv.reader(measures) if row[0] == sensor)
+            text.detach()  # the file stays open: ComposeUI closes it
+
+        return StreamContent(write)
+```
+
+`write` gets a file that accepts `write` and nothing that seeks. PyArrow's
+`pyarrow.csv.CSVWriter` and `pyarrow.parquet.ParquetWriter` write to it, for example. Follow
+these rules:
+
+- **Read the views in `content`, not in `write`.** `content` runs at the click, in order with the
+  user's other changes. `write` runs later, on a thread of its own, once the user saves the file,
+  while the user goes on working. Give `write` only the values that it needs. It must not read or
+  change a view or the model.
+- **Keep the source as it is.** `write` reads the source while the file is sent: a source that
+  changes meanwhile gives a file that holds parts of both.
+- **Let the errors through.** When the user no longer wants the file, for example after a cancel
+  of the browser's download, the next `write` to the file raises. `write` then stops. An error of
+  `write` ends the file too.
+
+What each backend does:
+
+- **The web** runs `write` when the browser fetches the file, once: a second fetch of the same
+  file fails. The browser receives the file as `write` writes it. When the browser reads slowly,
+  `write` waits, so the server holds about 1 MiB of the file at most. An error before the first
+  bytes gives a failed download. An error after them breaks the connection, and the browser shows
+  a failed download, not a short file. The browser can't resume the download, and doesn't know the
+  file's size. At most `WebApplication.max_download_streams` files (8 by default) are written at
+  once on the server, and `max_session_download_streams` (2 by default) for one browser; the next
+  wait for one to end. A session's end stops its files. A server
+  that stops, or restarts with `--reload`, waits for the files being sent for
+  `WebApplication.shutdown_timeout` seconds (5 by default), then stops them: the browser shows a
+  failed download.
+
+  The web sends the file in pieces of 256 KiB. A `write` that takes long to write one, for
+  example one that filters most rows out, sends nothing meanwhile. A proxy in front of the app
+  can then end the download at its read timeout, 60 seconds in nginx (`proxy_read_timeout`).
+- **Qt and Textual** run `write` in a job, after the save dialog. The file is written beside the
+  target, then replaces it. New, Open and closing the app cancel the job, and leave the target as
+  it was.
+
+A plain generator can't give a file in pieces. In Python, calling a generator runs none of its
+code: its code runs only as its pieces are read, and it can read the views long after the click.
+The [technical guide](../technical-guide.md#downloads-on-the-web) explains the design.
 
 ## Slider
 

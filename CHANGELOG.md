@@ -20,6 +20,15 @@ The notable changes of each release of ComposeUI. The format follows
   the file in the browser. Qt and Textual ask where to save it. With `in_job`, the file is made in
   a job, and the button is disabled meanwhile. Without a backend, as in a test,
   `MainView.downloads` keeps the files given.
+- A `DownloadView`'s `content`, and `MainView.download`, can give a `StreamContent`: its `write`
+  function writes a large file as the user receives it, without a copy in memory or on the disk.
+  The web runs it once, when the browser fetches the file, and slows it down to the browser's
+  pace. Qt and Textual run it in a job, after the save dialog. At most
+  `WebApplication.max_download_streams` files are written at once on the web, and
+  `max_session_download_streams` for one session.
+- `WebApplication.shutdown_timeout`, 5 seconds by default, is how long a web server that stops,
+  or restarts with `--reload`, waits for the requests in progress, such as a large download.
+  Past it, it ends them. Before, it waited for them all.
 - `View.build_task(work)` builds a task in any view, such as a panel or a list's row, without the
   main view. The main view's jobs run it. When a `ListView` removes a row, the run of the row's
   task is canceled, and its outcome reaches no view.
@@ -88,6 +97,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- The web sends the files of `MainView.download` as they are, not compressed. Compressing a large
+  file took the server's event loop, which every session shares, for its whole transfer.
 - The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
   an app with many pages or tabs takes less memory, and its first page comes sooner: with 20 pages
   of 60 widgets, 518 KiB instead of 924 KiB, and 43 ms instead of 61 ms on the server.
@@ -112,6 +123,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- A web session no longer expires during a request that outlasts `session_ttl`, such as a large
+  upload or download. It is idle from the request's end.
 - On the web, a tab left open on a page of an ended session reloads when the user acts on it, also
   after another tab opened the app. The session ended when the server restarted, or when it
   expired. The tab's posts failed with `404 Unknown widget` before, and Save downloaded the other

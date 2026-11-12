@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.view import DownloadedFile, MainView, Router
     from composeui.webcore.downloads import Downloads
+    from composeui.webcore.streaming import Stream
 
 
 #: largest state file accepted from an upload, in bytes
@@ -131,6 +132,9 @@ class WebSession(RenderTarget):
         self._held_lock = threading.Lock()
         #: when the last request that held it ended (`time.monotonic`): it's idle from then
         self.held_until = 0.0
+        #: the downloads being written (`StreamContent`), stopped when the session ends;
+        #: under `_held_lock`
+        self._streams: set[Stream] = set()
         #: the source of each large table as a study left it (`loaded`), which a study
         #: opened again gives again: one that the app gave since (e.g. from the user's file)
         #: can't be saved (`can_hibernate`)
@@ -166,6 +170,27 @@ class WebSession(RenderTarget):
             with self._held_lock:
                 self._held -= 1
                 self.held_until = time.monotonic()
+
+    @property
+    def is_held(self) -> bool:
+        """Whether a request holds the session (`held`): it isn't idle, however long it takes."""
+        with self._held_lock:
+            return self._held > 0
+
+    @contextlib.contextmanager
+    def streaming(self, stream: Stream) -> Iterator[None]:
+        """Stop `stream` if the session ends while the block runs, or has ended."""
+        # the order of `close`: it sets `has_ended`, then stops those it finds here
+        with self._held_lock:
+            self._streams.add(stream)
+            has_ended = self.has_ended
+        if has_ended:
+            stream.cancel()
+        try:
+            yield
+        finally:
+            with self._held_lock:
+                self._streams.discard(stream)
 
     def can_hibernate(self) -> bool:
         """Tell whether `save_to` and `open_saved` give the session back as it is now.
@@ -209,9 +234,16 @@ class WebSession(RenderTarget):
                 self.model.close()
 
     def close(self) -> None:
-        """Release the session's model (e.g. its database file) and its uploads; it's dropped."""
+        """Release the session's model (e.g. its database file) and its uploads; it's dropped.
+
+        Its downloads being written stop.
+        """
         with self.lock:
             self.suspend()
+            with self._held_lock:
+                streams = list(self._streams)
+            for stream in streams:
+                stream.cancel()
             if self._uploads is not None:
                 # a job may still read them, even dropped: its thread goes on
                 self.main_view.jobs.after_workers(
@@ -638,10 +670,13 @@ class WebSession(RenderTarget):
         tickets = self._downloads.tickets()
         return downloads_marker(tickets, oob=True) if tickets else ""
 
-    def take_download(self, ticket: str) -> DownloadedFile | None:
-        """Get the file of one of this session's tickets, once; None if it has none."""
+    def take_download(self, ticket: str, *, claim: bool = True) -> DownloadedFile | None:
+        """Get the file of one of this session's tickets; None if it has none.
+
+        A `StreamContent` once, by the fetch that `claim`s it (see `Downloads.take`).
+        """
         with self.lock:
-            return self._downloads.take(ticket)
+            return self._downloads.take(ticket, claim=claim)
 
 
 #: a session id, as `SessionStore.get_or_create` makes them: also its saved directory's name
@@ -695,6 +730,15 @@ class _Entry:
         """Get when its last request came, or ended if it held the session (`held`)."""
         assert self.session is not None  # in memory: only those are idle
         return max(self.last_seen, self.session.held_until)
+
+    def is_expired(self, now: float, ttl: float) -> bool:
+        """Tell whether it was idle for `ttl` seconds at `now`; never while saved or woken."""
+        if self.place is _Place.ON_DISK:
+            return now - self.last_seen >= ttl
+        if self.place is not _Place.LIVE:
+            return False
+        assert self.session is not None  # in memory
+        return not self.session.is_held and now - self.idle_since() >= ttl
 
 
 class SessionStore:
@@ -996,12 +1040,16 @@ class SessionStore:
             shutil.rmtree(self._directory, ignore_errors=True)
 
     def _drop_expired(self) -> None:
-        """Drop the sessions idle for `ttl`, in memory or on disk. Called with the lock held."""
+        """Drop the sessions idle for `ttl`, in memory or on disk. Called with the lock held.
+
+        A session in memory is idle from its last request's end (`idle_since`): a long one,
+        such as a large download, keeps it.
+        """
         now = time.monotonic()
         expired = [
             session_id
             for session_id, entry in self._entries.items()
-            if entry.place in (_Place.LIVE, _Place.ON_DISK) and now - entry.last_seen >= self._ttl
+            if entry.is_expired(now, self._ttl)
         ]
         for session_id in expired:
             self._end(session_id, self._entries.pop(session_id))

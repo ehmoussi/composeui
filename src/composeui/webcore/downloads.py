@@ -4,7 +4,8 @@ The app makes a file while it handles a request, or in a job's callback, which n
 answers. So the session keeps the file under a ticket, a name that can't be guessed, and each
 answer to the page names the tickets not fetched yet (`downloads_marker`). The page's script
 fetches each once, from `GET /download/{ticket}`, which only reads: the app's code never runs
-there.
+there, but a `StreamContent`'s writer, made in the request or job that gave the file, from
+what it read there. That writer runs once: its first fetch takes it (`take`).
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import time
 from typing import TYPE_CHECKING, Callable, NamedTuple, Optional
 
 from markupsafe import Markup
+
+from composeui.core.view import StreamContent
 
 if TYPE_CHECKING:
     from composeui.core.view import DownloadedFile
@@ -52,12 +55,20 @@ class Downloads:
             del self._kept[next(iter(self._kept))]
         return ticket
 
-    def take(self, ticket: str) -> DownloadedFile | None:
-        """Get the file of `ticket`; kept `FETCHED_TTL` from the first fetch, not named again."""
+    def take(self, ticket: str, *, claim: bool = True) -> DownloadedFile | None:
+        """Get the file of `ticket`; kept `FETCHED_TTL` from the first fetch, not named again.
+
+        A `StreamContent` can be written once: the fetch that `claim`s it takes it, and the
+        ticket is gone. A fetch that doesn't, e.g. a ``HEAD``, leaves it as it was.
+        """
         self._drop_expired()
         kept = self._kept.get(ticket)
         if kept is None:
             return None
+        if isinstance(kept.download.content, StreamContent):
+            if claim:
+                del self._kept[ticket]
+            return kept.download
         if kept.fetched is None:
             self._kept[ticket] = kept._replace(fetched=self._clock())
         return kept.download

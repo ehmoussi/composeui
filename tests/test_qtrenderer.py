@@ -110,6 +110,7 @@ from composeui.core.view import (
     SelectionMode,
     Series,
     SourceTableView,
+    StreamContent,
     T,
     TableView,
     TabView,
@@ -603,7 +604,13 @@ def test_an_app_s_file_is_saved_where_the_user_picks_one_dialog_at_a_time(
     _add_reference_to_signals(view, None)  # as the app does
     view.render(RendererType.QT)
     qtbot.addWidget(_widget(view))
-    answers = [tmp_path / "a.csv", None, tmp_path / "missing" / "b.csv", tmp_path / "c.csv"]
+    answers = [
+        tmp_path / "a.csv",
+        None,
+        tmp_path / "missing" / "b.csv",
+        tmp_path / "c.csv",
+        tmp_path / "d.csv",
+    ]
     asked: list[str] = []
 
     def get_save_file_name(_parent: QWidget, _caption: str, name: str) -> tuple[str, str]:
@@ -631,6 +638,11 @@ def test_an_app_s_file_is_saved_where_the_user_picks_one_dialog_at_a_time(
     qtbot.mouseClick(export, Qt.MouseButton.LeftButton)
     assert (tmp_path / "c.csv").read_bytes() == b"a,b\n1,2\n"
     assert sorted(tmp_path.iterdir()) == [tmp_path / "a.csv", tmp_path / "c.csv"]
+
+    view.report = StreamContent(lambda sink: sink.write(b"streamed"))  # written in a job
+    qtbot.mouseClick(export, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: view.status_bar.message == "Saved d.csv.")
+    assert (tmp_path / "d.csv").read_bytes() == b"streamed"
 
 
 def test_the_window_shows_the_app_s_icon_composeui_s_by_default(

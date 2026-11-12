@@ -7,7 +7,14 @@ from typing import Union
 
 import attrs
 
-from composeui.core.view import OMIT, ButtonView, DownloadView, MainView, define_view
+from composeui.core.view import (
+    OMIT,
+    ButtonView,
+    DownloadView,
+    MainView,
+    StreamContent,
+    define_view,
+)
 
 
 @define_view
@@ -25,7 +32,7 @@ class ReportMainView(MainView):
     #: changes the page without giving a file
     note: ButtonView = attrs.field(factory=lambda: ButtonView(text="Note"))
     # private: no widget shows it
-    _report: Union[bytes, Path] = attrs.field(
+    _report: Union[bytes, Path, StreamContent] = attrs.field(
         default=b"a,b\n1,2\n", init=False, metadata={OMIT: True}
     )
 
@@ -35,13 +42,13 @@ class ReportMainView(MainView):
         self.note.clicked.connect(lambda: self.status_bar.show_message("Noted."))
 
     @property
-    def report(self) -> Union[bytes, Path]:
-        """Get what the buttons give: bytes, or the path of a file the app wrote."""
+    def report(self) -> Union[bytes, Path, StreamContent]:
+        """Get what the buttons give: bytes, the path of a file the app wrote, or its writer."""
         return self._report
 
     @report.setter
-    def report(self, report: Union[bytes, Path]) -> None:
+    def report(self, report: Union[bytes, Path, StreamContent]) -> None:
         self._report = report
 
-    def _make_report(self) -> Union[bytes, Path]:
+    def _make_report(self) -> Union[bytes, Path, StreamContent]:
         return self._report
