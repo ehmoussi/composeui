@@ -71,11 +71,12 @@ sitemap_url_scheme = "{link}"
 html_title = f"ComposeUI: Python UIs for desktop, terminal, and web ({_DOCS_REF})"
 html_static_path = ["_static"]
 templates_path = ["_templates"]
-html_css_files = ["versions.css"]
+html_css_files = ["versions.css", "github.css"]
 html_js_files = ["versions.js"]
 html_sidebars = {
     "**": [
         "sidebar/brand.html",
+        "sidebar/github.html",
         "sidebar/versions.html",
         "sidebar/search.html",
         "sidebar/scroll-start.html",
