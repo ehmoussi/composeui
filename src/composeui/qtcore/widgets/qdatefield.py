@@ -5,9 +5,16 @@ from typing import Any, Optional
 
 from qtpy.QtCore import QDate, QPoint, Qt
 from qtpy.QtCore import Signal as QtSignal
-from qtpy.QtWidgets import QCalendarWidget, QHBoxLayout, QLineEdit, QToolButton, QWidget
+from qtpy.QtWidgets import (
+    QCalendarWidget,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QToolButton,
+    QWidget,
+)
 
-from composeui.core.view import ISO_DATE_FORMAT, format_date, parse_date
+from composeui.core.view import ISO_DATE_FORMAT, RANGE_DASH, format_date, parse_date
 
 #: a calendar's own range, Qt's default, for a limit the view leaves out
 _CALENDAR_FIRST, _CALENDAR_LAST = QDate(-4714, 11, 25), QDate(9999, 12, 31)
@@ -99,3 +106,36 @@ class QDateField(QWidget):
         text = "" if self._date is None else format_date(self._date, self._date_format)
         if self.line_edit.text() != text:
             self.line_edit.setText(text)
+
+
+class QDateRangeField(QWidget):
+    """Two date fields, the start and the end of a range, with a dash between them.
+
+    `end_edited` reports the user's dates for an end: its index (0 the start, 1 the end)
+    and the date, None once the field is emptied.
+    """
+
+    #: the user typed or picked a date for an end: its index and the date, or None
+    end_edited = QtSignal(int, object)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.start = QDateField()
+        self.end = QDateField()
+        layout.addWidget(self.start)
+        layout.addWidget(QLabel(RANGE_DASH.strip()))
+        layout.addWidget(self.end)
+        self.start.date_edited.connect(self._start_edited)
+        self.end.date_edited.connect(self._end_edited)
+
+    @property
+    def fields(self) -> tuple[QDateField, QDateField]:
+        return self.start, self.end
+
+    def _start_edited(self, value: Optional[datetime.date]) -> None:
+        self.end_edited.emit(0, value)
+
+    def _end_edited(self, value: Optional[datetime.date]) -> None:
+        self.end_edited.emit(1, value)

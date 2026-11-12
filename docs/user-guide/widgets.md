@@ -103,6 +103,37 @@ The calendar offers only the dates from `minimum` to `maximum`. But not every ba
 refuses a typed date out of range, so validate the date. `value_changed` reports the dates
 that the user enters.
 
+### Date range
+
+A `DateRangeInputView` takes a range of dates, for example the days of the trips to show. Its
+`value` is a pair: the first and the last day. Either can be `None`, for a range open on that
+side. It shows two date fields, each typed or picked as a [date input](#date-input)'s, named by
+`start_text` ("Start") and `end_text` ("End").
+
+```python
+import datetime
+
+from composeui.core.view import DateRangeInputView
+
+days = DateRangeInputView(
+    minimum=datetime.date(2014, 9, 1),
+    maximum=datetime.date(2014, 9, 30),
+    value=(datetime.date(2014, 9, 1), None),
+)
+# an end set before the start: the start moves to it
+first = datetime.date(2014, 8, 31)
+assert DateRangeInputView.with_end(days.value, 1, first) == (first, first)
+```
+
+- **An end set past the other.** When the user types or picks a date past the other end, the
+  other end moves to it, as the user means the date set (`with_end`).
+- **In code.** A `value` that ends before it starts raises `ValueError`. `value_changed`
+  reports the user's changes only, with both ends.
+- **The limits.** As for a date input, the calendars offer only the dates from `minimum` to
+  `maximum`, but not every backend refuses a date typed out of them: validate the range.
+
+Qt shows two of its date fields, with a dash between them, as Textual does with its own. The
+web shows two daisyUI fields, each with its Cally calendar.
 ## Choices of several values
 
 A `CheckListView` and a `MultiComboBoxView` pick several of their `values`, for example the bases
@@ -672,6 +703,10 @@ step. The value shows beside the track, so the row is no taller than the other r
 Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
 move, and the web a range input.
 
+A slider takes at most 2,147,483,647 steps from `minimum` to `maximum`, as many as Qt's sliders
+count. A range of more steps raises `ValueError`. To widen a range that way, set a larger `step`
+first, then the new `maximum`. This applies to every slider, the range sliders too.
+
 The track shows in the accent color up to the handle. Set `is_filled` to `False` when the value is
 a position and not an amount, for example a balance from -1 to 1. The track then shows the same
 on both sides of the handle. On Qt, a style that never fills the track, such as `Windows`, looks
@@ -692,6 +727,36 @@ assert FloatSliderView.value_at(3, opacity.minimum, opacity.step) == 0.3
 The steps are exact: three steps of `0.1` give `0.3`, not `0.30000000000000004`. Every value shows
 with the same number of decimals: the larger of those of `step` and `minimum`. A `value` that is not
 on a step shows at its nearest step. A `nan` or infinite number raises `ValueError`.
+
+### Range slider
+
+A `RangeSliderView` picks a range of whole numbers with two handles, for example the hours
+to show. Its `value` is a pair, the low and the high end, from `minimum` to `maximum` by
+`step`. A `FloatRangeSliderView` does the same with decimal numbers, with the exact steps of a
+[decimal slider](#decimal-slider).
+
+```python
+from composeui.core.view import FloatRangeSliderView, RangeSliderView
+
+hours = RangeSliderView(minimum=0, maximum=23, value=(8, 18))
+distance = FloatRangeSliderView(minimum=0.0, maximum=30.0, step=0.5, value=(2.5, 12.0))
+assert distance.value == (2.5, 12.0)
+```
+
+- **The handles.** A handle stops on the other: the two never cross. On one another, a press on
+  them takes the one that can move away from the end that they are near: the low one in the
+  upper half of the track. The ends show beside the track, as a slider's value does.
+  `value_changed` reports the user's moves, with both ends.
+- **In code.** A `value` whose low end is above its high end raises `ValueError`, as does a
+  decimal end that is not finite. Each end shows at its nearest step.
+- **The keys.** On Qt and Textual, a click moves the nearest handle, and the arrow keys move
+  the last one pressed, the low one at first. Home moves the low one to the start, and End the
+  high one to the end. On the web, each handle is a range input of its own, which the Tab key
+  reaches: its keys move it, End as far as the other handle.
+
+Qt paints the two handles on the style's groove, and Textual draws them on ComposeUI's own
+slider. The web stacks two range inputs on one track, named by `low_text` ("From") and
+`high_text` ("To").
 
 ## Progress bar
 

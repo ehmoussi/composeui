@@ -121,6 +121,9 @@ __all__ = [
     "ContentDialogView",
     "DateInputMixin",
     "DateInputView",
+    "DateRange",
+    "DateRangeInputMixin",
+    "DateRangeInputView",
     "DialogButtonView",
     "DialogKind",
     "DialogView",
@@ -142,6 +145,8 @@ __all__ = [
     "FilterProblem",
     "FloatInputMixin",
     "FloatInputView",
+    "FloatRangeSliderMixin",
+    "FloatRangeSliderView",
     "FloatSliderMixin",
     "FloatSliderView",
     "FolderPathInputMixin",
@@ -166,15 +171,18 @@ __all__ = [
     "LabelRowCheckListView",
     "LabelRowComboBoxView",
     "LabelRowDateInputView",
+    "LabelRowDateRangeInputView",
     "LabelRowFilePathInputView",
     "LabelRowFileUploadView",
     "LabelRowFloatInputView",
+    "LabelRowFloatRangeSliderView",
     "LabelRowFloatSliderView",
     "LabelRowFolderPathInputView",
     "LabelRowInputView",
     "LabelRowIntInputView",
     "LabelRowMultiComboBoxView",
     "LabelRowRadioGroupView",
+    "LabelRowRangeSliderView",
     "LabelRowSavePathInputView",
     "LabelRowSliderView",
     "LabelRowTextAreaView",
@@ -208,6 +216,8 @@ __all__ = [
     "PolylineShape",
     "ProgressBarView",
     "RadioGroupView",
+    "RangeSliderMixin",
+    "RangeSliderView",
     "RecordTableView",
     "ReferenceLine",
     "Router",
@@ -215,15 +225,18 @@ __all__ = [
     "RowCheckListView",
     "RowComboBoxView",
     "RowDateInputView",
+    "RowDateRangeInputView",
     "RowFilePathInputView",
     "RowFileUploadView",
     "RowFloatInputView",
+    "RowFloatRangeSliderView",
     "RowFloatSliderView",
     "RowFolderPathInputView",
     "RowInputView",
     "RowIntInputView",
     "RowMultiComboBoxView",
     "RowRadioGroupView",
+    "RowRangeSliderView",
     "RowSavePathInputView",
     "RowSliderView",
     "RowTextAreaView",
@@ -2142,16 +2155,9 @@ def parse_date(text: str, date_format: str) -> datetime.date:
 
 
 @define_view
-class DateInputMixin(_InputView):
-    """A date, typed as `date_format` says or picked from a calendar.
+class _DateTextsMixin:
+    """The text of a date field: its format, and the names its calendar shows."""
 
-    Not every backend refuses a date typed out of `minimum`/`maximum`: Textual and the web
-    mark it or keep it. So validate the date. The calendar offers only the dates in range.
-    """
-
-    value: Optional[datetime.date] = attrs.field(default=None)
-    minimum: Optional[datetime.date] = attrs.field(default=None)
-    maximum: Optional[datetime.date] = attrs.field(default=None)
     #: how the date is typed and shown: its day ``dd``, month ``MM`` and year ``yyyy`` between
     #: separators; a text the catalogs translate, so the main view's language's
     date_format: str = attrs.field(default=T("MM/dd/yyyy"), metadata={UI_TEXT: True})
@@ -2182,9 +2188,6 @@ class DateInputMixin(_InputView):
     pick_text: str = attrs.field(default=T("Pick a date"), metadata={UI_TEXT: True})
     previous_month_text: str = attrs.field(default=T("Previous month"), metadata={UI_TEXT: True})
     next_month_text: str = attrs.field(default=T("Next month"), metadata={UI_TEXT: True})
-    #: the user typed or picked a new date (None once the field is emptied); not
-    #: emitted when `value` is set in code
-    value_changed: Signal[Optional[datetime.date]] = attrs.Factory(Signal[Optional[datetime.date]])
 
     def shown_text(self, value: Optional[datetime.date]) -> str:
         """Show `value` as `date_format` says, "" for no date."""
@@ -2192,10 +2195,98 @@ class DateInputMixin(_InputView):
 
 
 @define_view
+class DateInputMixin(_InputView, _DateTextsMixin):
+    """A date, typed as `date_format` says or picked from a calendar.
+
+    Not every backend refuses a date typed out of `minimum`/`maximum`: Textual and the web
+    mark it or keep it. So validate the date. The calendar offers only the dates in range.
+    """
+
+    value: Optional[datetime.date] = attrs.field(default=None)
+    minimum: Optional[datetime.date] = attrs.field(default=None)
+    maximum: Optional[datetime.date] = attrs.field(default=None)
+    #: the user typed or picked a new date (None once the field is emptied); not
+    #: emitted when `value` is set in code
+    value_changed: Signal[Optional[datetime.date]] = attrs.Factory(Signal[Optional[datetime.date]])
+
+
+@define_view
 class DateInputView(DateInputMixin, View):
     """A date, e.g. a booking's first day: typed in the main view's language's format."""
 
     _renderer_key = "date_input"
+
+
+#: a range's ends: its low and its high one, or its first and its last day
+_RANGE_ENDS = 2
+
+
+#: a range of dates: its first and its last day, each None for no limit on that side
+DateRange = tuple[Optional[datetime.date], Optional[datetime.date]]
+
+
+def _date_pair(pair: Iterable[Optional[datetime.date]]) -> DateRange:
+    """Get a date range's ends as a tuple, e.g. from a list; its validator checks them."""
+    return cast("DateRange", tuple(pair))
+
+
+def _check_date_range(instance: Any, attribute: attrs.Attribute[Any], pair: DateRange) -> None:
+    """Reject a date range that isn't two ends, or that starts after it ends."""
+    if len(pair) != _RANGE_ENDS:
+        msg = f"Cannot set {type(instance).__name__}.{attribute.name} to {pair}: not two ends."
+        raise ValueError(msg)
+    start, end = pair
+    if start is not None and end is not None and start > end:
+        msg = (
+            f"Cannot set {type(instance).__name__}.{attribute.name} to {pair}: it starts after "
+            "it ends."
+        )
+        raise ValueError(msg)
+
+
+@define_view
+class DateRangeInputMixin(_DateTextsMixin):
+    """A range of dates, each end typed as `date_format` says or picked from a calendar.
+
+    Either end can be empty (None), for a range open on that side. An end that the user
+    sets past the other moves the other to it. As for a date field, not every backend
+    refuses a date out of `minimum`/`maximum`: validate the range.
+    """
+
+    #: the first and the last day, each None for no limit; the first not after the last
+    value: DateRange = attrs.field(
+        default=(None, None),
+        converter=_date_pair,
+        validator=[_check_date_range],
+        on_setattr=[attrs.setters.convert, attrs.setters.validate, notify_renderer],
+    )
+    minimum: Optional[datetime.date] = attrs.field(default=None)
+    maximum: Optional[datetime.date] = attrs.field(default=None)
+    #: the names of the two fields, shown in them while empty
+    start_text: str = attrs.field(default=T("Start"), metadata={UI_TEXT: True})
+    end_text: str = attrs.field(default=T("End"), metadata={UI_TEXT: True})
+    #: the user typed or picked a new date for an end; not emitted when `value` is set in code
+    value_changed: Signal[DateRange] = attrs.Factory(Signal[DateRange])
+
+    @staticmethod
+    def with_end(value: DateRange, index: int, date: Optional[datetime.date]) -> DateRange:
+        """Get `value` with its end `index` (0 the start, 1 the end) set to `date`.
+
+        Set past the other end, the other moves to it, as the user means the date set.
+        """
+        ends = [*value]
+        ends[index] = date
+        start, end = ends
+        if start is not None and end is not None and start > end:
+            ends[1 - index] = date
+        return ends[0], ends[1]
+
+
+@define_view
+class DateRangeInputView(DateRangeInputMixin, View):
+    """A range of dates, e.g. the days of the trips to show, typed or picked in a calendar."""
+
+    _renderer_key = "date_range_input"
 
 
 def is_within_roots(path: Path, roots: Iterable[Path]) -> bool:
@@ -2593,6 +2684,31 @@ class FileUploadView(FileUploadMixin, View):
     _renderer_key = "file_upload"
 
 
+#: the most steps a slider takes: Qt's sliders count them in a 32-bit integer
+MAX_SLIDER_STEPS = 2**31 - 1
+
+
+def _check_steps(instance: Any, attribute: attrs.Attribute[Any], value: float) -> None:
+    """Reject a range of more than `MAX_SLIDER_STEPS` steps, once `attribute` is `value`."""
+    limits = {
+        "minimum": instance.minimum,
+        "maximum": instance.maximum,
+        "step": instance.step,
+        attribute.name: value,
+    }
+    if limits["step"] <= 0:
+        return  # no steps to count: the step's own check refuses it
+    # the arithmetic of the steps: a range slider's, else the slider's own
+    steps = getattr(instance, "step_rules", instance)
+    last = steps.last_position(limits["minimum"], limits["maximum"], limits["step"])
+    if last > MAX_SLIDER_STEPS:
+        msg = (
+            f"Cannot set {type(instance).__name__}.{attribute.name} to {value}: the range would "
+            f"take {last} steps, more than {MAX_SLIDER_STEPS}. Set a larger step first."
+        )
+        raise ValueError(msg)
+
+
 @define_view
 class SliderMixin:
     """The fields of a slider: its `value`, its range and its `step`."""
@@ -2604,10 +2720,10 @@ class SliderMixin:
 
     #: from `minimum` to `maximum` by `step`; shown at its nearest step (see `position`)
     value: int = attrs.field(default=0)
-    minimum: int = attrs.field(default=0)
+    minimum: int = attrs.field(default=0, validator=[_check_steps])
     #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
-    maximum: int = attrs.field(default=100)
-    step: int = attrs.field(default=1, validator=[_check_step])
+    maximum: int = attrs.field(default=100, validator=[_check_steps])
+    step: int = attrs.field(default=1, validator=[_check_step, _check_steps])
     #: the track is drawn in the accent color up to the handle
     is_filled: bool = attrs.field(default=True)
     #: the user moved the handle; not emitted when `value` is set in code
@@ -2679,10 +2795,10 @@ class FloatSliderMixin:
 
     #: from `minimum` to `maximum` by `step`; shown at its nearest step
     value: float = attrs.field(default=0.0, validator=[_check_finite])
-    minimum: float = attrs.field(default=0.0, validator=[_check_finite])
+    minimum: float = attrs.field(default=0.0, validator=[_check_finite, _check_steps])
     #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
-    maximum: float = attrs.field(default=1.0, validator=[_check_finite])
-    step: float = attrs.field(default=0.1, validator=[_check_finite, _check_step])
+    maximum: float = attrs.field(default=1.0, validator=[_check_finite, _check_steps])
+    step: float = attrs.field(default=0.1, validator=[_check_finite, _check_step, _check_steps])
     #: the track is drawn in the accent color up to the handle
     is_filled: bool = attrs.field(default=True)
     #: the user moved the handle; not emitted when `value` is set in code
@@ -2730,6 +2846,168 @@ class FloatSliderView(FloatSliderMixin, View):
     """
 
     _renderer_key = "float_slider"
+
+
+def _int_pair(pair: Iterable[int]) -> tuple[int, int]:
+    """Get a range's ends as a tuple, e.g. from a list; its validator checks them."""
+    return cast("tuple[int, int]", tuple(pair))
+
+
+def _float_pair(pair: Iterable[float]) -> tuple[float, float]:
+    """Get a range's ends as a tuple of floats, e.g. from a list of ints."""
+    return cast("tuple[float, float]", tuple(float(end) for end in pair))
+
+
+#: between the two ends of a range, as the backends show them: an en dash
+RANGE_DASH = " \u2013 "
+
+
+def _check_range(instance: Any, attribute: attrs.Attribute[Any], pair: tuple[Any, ...]) -> None:
+    """Reject a range that isn't two ends, or whose low end is above its high end."""
+    if len(pair) != _RANGE_ENDS:
+        msg = f"Cannot set {type(instance).__name__}.{attribute.name} to {pair}: not two ends."
+        raise ValueError(msg)
+    low, high = pair
+    if low > high:
+        msg = (
+            f"Cannot set {type(instance).__name__}.{attribute.name} to {pair}: its low end is "
+            "above its high end."
+        )
+        raise ValueError(msg)
+
+
+class _RangeSliderBase:
+    """What both range sliders do with their two ends, by the arithmetic of their steps."""
+
+    #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
+    step_rules: ClassVar[Any] = SliderMixin
+
+    @classmethod
+    def positions(
+        cls, value: tuple[float, float], minimum: float, maximum: float, step: float
+    ) -> tuple[int, int]:
+        """Get the handles' positions, in steps from `minimum`: each end's nearest, in range.
+
+        Takes them all, as a renderer refreshes one before the view holds the new value.
+        """
+        low, high = (cls.step_rules.position(end, minimum, maximum, step) for end in value)
+        return low, high
+
+    @classmethod
+    def moved(
+        cls,
+        current: tuple[float, float],
+        positions: tuple[int, int],
+        minimum: float,
+        maximum: float,
+        step: float,
+    ) -> tuple[Any, Any]:
+        """Get the range that the user moved the handles to, at these `positions`.
+
+        A handle moved past the other stops on it: the two never cross. Both moved at once,
+        as a stale page can post them, they are put in order.
+        """
+        low, high = positions
+        if low > high:
+            was_low, was_high = cls.positions(current, minimum, maximum, step)
+            if high == was_high:
+                low = high  # the low handle moved past the high one
+            elif low == was_low:
+                high = low
+            else:
+                low, high = high, low
+        return cls.step_rules.value_at(low, minimum, step), cls.step_rules.value_at(
+            high, minimum, step
+        )
+
+
+@define_view
+class RangeSliderMixin(_RangeSliderBase):
+    """The fields of a range slider: its `value`, a pair of ends, its range and its `step`."""
+
+    def _check_step(self, _attribute: attrs.Attribute[Any], step: int) -> None:
+        if step <= 0:
+            msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
+            raise ValueError(msg)
+
+    #: the low and the high end, from `minimum` to `maximum` by `step`; each shown at its
+    #: nearest step; the low end can't be above the high one
+    value: tuple[int, int] = attrs.field(
+        default=(0, 100),
+        converter=_int_pair,
+        validator=[_check_range],
+        on_setattr=[attrs.setters.convert, attrs.setters.validate, notify_renderer],
+    )
+    minimum: int = attrs.field(default=0, validator=[_check_steps])
+    #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
+    maximum: int = attrs.field(default=100, validator=[_check_steps])
+    step: int = attrs.field(default=1, validator=[_check_step, _check_steps])
+    #: the names of the low and the high handle, as a screen reader reads them out
+    low_text: str = attrs.field(default=T("From"), metadata={UI_TEXT: True})
+    high_text: str = attrs.field(default=T("To"), metadata={UI_TEXT: True})
+    #: the user moved a handle; not emitted when `value` is set in code
+    value_changed: Signal[tuple[int, int]] = attrs.Factory(Signal[tuple[int, int]])
+
+
+@define_view
+class RangeSliderView(RangeSliderMixin, View):
+    """A range of whole numbers picked by dragging two handles, e.g. the hours to show.
+
+    Its two ends are shown beside the track, so that its row is no taller than a field's.
+    """
+
+    _renderer_key = "range_slider"
+
+
+@define_view
+class FloatRangeSliderMixin(_RangeSliderBase):
+    """The fields of a decimal range slider: its `value`, a pair of ends, its range and step."""
+
+    step_rules = FloatSliderMixin
+
+    def _check_finite(self, attribute: attrs.Attribute[Any], number: float) -> None:
+        if not math.isfinite(number):
+            msg = f"Cannot set {type(self).__name__}.{attribute.name} to {number}: not finite."
+            raise ValueError(msg)
+
+    def _check_finite_pair(
+        self, attribute: attrs.Attribute[Any], pair: tuple[float, float]
+    ) -> None:
+        for end in pair:
+            self._check_finite(attribute, end)
+
+    def _check_step(self, _attribute: attrs.Attribute[Any], step: float) -> None:
+        if step <= 0:
+            msg = f"Cannot set {type(self).__name__}.step to {step}: it must be positive."
+            raise ValueError(msg)
+
+    #: the low and the high end, from `minimum` to `maximum` by `step`; each shown at its
+    #: nearest step; the low end can't be above the high one
+    value: tuple[float, float] = attrs.field(
+        default=(0.0, 1.0),
+        converter=_float_pair,
+        validator=[_check_range, _check_finite_pair],
+        on_setattr=[attrs.setters.convert, attrs.setters.validate, notify_renderer],
+    )
+    minimum: float = attrs.field(default=0.0, validator=[_check_finite, _check_steps])
+    #: the last step, if ``maximum - minimum`` is not a whole number of steps, falls short of it
+    maximum: float = attrs.field(default=1.0, validator=[_check_finite, _check_steps])
+    step: float = attrs.field(default=0.1, validator=[_check_finite, _check_step, _check_steps])
+    #: the names of the low and the high handle, as a screen reader reads them out
+    low_text: str = attrs.field(default=T("From"), metadata={UI_TEXT: True})
+    high_text: str = attrs.field(default=T("To"), metadata={UI_TEXT: True})
+    #: the user moved a handle; not emitted when `value` is set in code
+    value_changed: Signal[tuple[float, float]] = attrs.Factory(Signal[tuple[float, float]])
+
+
+@define_view
+class FloatRangeSliderView(FloatRangeSliderMixin, View):
+    """A range of decimal numbers picked by dragging two handles, e.g. the trips' distances.
+
+    Its two ends are shown beside the track, with the decimals of its `step`.
+    """
+
+    _renderer_key = "float_range_slider"
 
 
 class LogType(enum.Enum):
@@ -7440,6 +7718,48 @@ class LabelRowFloatSliderView(FormLabelRowView, FloatSliderMixin):
     """A row of a form with a label and a decimal slider."""
 
     _field_renderer_key = "float_slider"
+
+
+@define_view
+class RowRangeSliderView(FormRowView, RangeSliderMixin):
+    """A row of a form with a range slider, without a label."""
+
+    _field_renderer_key = "range_slider"
+
+
+@define_view
+class LabelRowRangeSliderView(FormLabelRowView, RangeSliderMixin):
+    """A row of a form with a label and a range slider."""
+
+    _field_renderer_key = "range_slider"
+
+
+@define_view
+class RowFloatRangeSliderView(FormRowView, FloatRangeSliderMixin):
+    """A row of a form with a decimal range slider, without a label."""
+
+    _field_renderer_key = "float_range_slider"
+
+
+@define_view
+class LabelRowFloatRangeSliderView(FormLabelRowView, FloatRangeSliderMixin):
+    """A row of a form with a label and a decimal range slider."""
+
+    _field_renderer_key = "float_range_slider"
+
+
+@define_view
+class RowDateRangeInputView(FormRowView, DateRangeInputMixin):
+    """A row of a form with a date range, without a label."""
+
+    _field_renderer_key = "date_range_input"
+
+
+@define_view
+class LabelRowDateRangeInputView(FormLabelRowView, DateRangeInputMixin):
+    """A row of a form with a label and a date range."""
+
+    _field_renderer_key = "date_range_input"
 
 
 @define_view

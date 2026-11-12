@@ -266,6 +266,68 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   font-variant-numeric: tabular-nums;
 }
 
+/* a range slider (`WebRangeSliderRenderer`): two range inputs on one track, only their
+   handles taking the pointer. The lower one draws the track and, below both handles, the
+   fill between them, from the handles' positions (`--range-low` and `--range-high`, in
+   steps out of `--range-last`, which `page.js` keeps in step); the upper one's track is
+   transparent. daisyUI's own fill, up to one handle, is off. */
+.cui-range-track {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.cui-range-track > .range {
+  grid-area: 1 / 1;
+  width: 100%;
+  pointer-events: none;
+  --range-fill: 0;
+  --range-low-x: calc(
+    var(--range-thumb-size) / 2 + (100% - var(--range-thumb-size)) * var(--range-low) /
+      var(--range-last)
+  );
+  --range-high-x: calc(
+    var(--range-thumb-size) / 2 + (100% - var(--range-thumb-size)) * var(--range-high) /
+      var(--range-last)
+  );
+}
+/* the handles on one another, in the upper half of the track: the low one on top, which
+   can still move down, as the high one can't move below it (`page.js`) */
+.cui-range-track[data-low-on-top] > .range:first-child {
+  z-index: 1;
+}
+.cui-range-track > .range::-webkit-slider-thumb {
+  pointer-events: auto;
+}
+.cui-range-track > .range::-moz-range-thumb {
+  pointer-events: auto;
+}
+.cui-range-track > .range:first-child::-webkit-slider-runnable-track {
+  background-image: linear-gradient(
+    to right,
+    #0000 var(--range-low-x),
+    currentColor var(--range-low-x),
+    currentColor var(--range-high-x),
+    #0000 var(--range-high-x)
+  );
+}
+.cui-range-track > .range:first-child::-moz-range-track {
+  background-image: linear-gradient(
+    to right,
+    #0000 var(--range-low-x),
+    currentColor var(--range-low-x),
+    currentColor var(--range-high-x),
+    #0000 var(--range-high-x)
+  );
+}
+.cui-range-track > .range:last-child::-webkit-slider-runnable-track {
+  background-color: #0000;
+  border-color: #0000;
+}
+.cui-range-track > .range:last-child::-moz-range-track {
+  background-color: #0000;
+  border-color: #0000;
+}
+
 /* a splitter's borders (`WebSplitterRenderer`): a line the width of a row's gap, which
    thickens under the pointer, while dragged or focused; only between panes shown: not
    before the first pane shown, nor before a hidden one, nor once a splitter of panes

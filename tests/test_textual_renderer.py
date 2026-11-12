@@ -125,6 +125,7 @@ from composeui.textualcore.widgets.composeimage import ComposeImage
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
+from composeui.textualcore.widgets.composerange import ComposeDateRangeInput, ComposeRangeSlider
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composeslider import ComposeSlider
 from composeui.textualcore.widgets.composesourcetable import (
@@ -171,6 +172,7 @@ from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
 from tests.pages import PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
+from tests.ranges import FIRST_DAY, RangesMainView
 from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
@@ -574,6 +576,93 @@ async def test_a_slider_stops_on_its_steps_its_value_drawn_beside_the_track() ->
         workers.value = 6  # set in code: shown at its nearest step, and not reported
         await pilot.pause()
         assert (_track_and_value(slider)[1], moves) == ("5", [8, 14, 2, 14])
+
+
+@pytest.mark.asyncio
+async def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other() -> None:
+    view = RangesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    hours = view.hours
+    moves: list[tuple[int, int]] = []
+    hours.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(hours.renderer)
+        assert isinstance(slider, ComposeRangeSlider)
+        await pilot.pause()
+        assert slider.region.height == 3  # a row as tall as an input's
+        assert slider.ends_text() == "8 \u2013 18"
+        rendered = slider.render()
+        assert isinstance(rendered, Text)
+        assert rendered.plain.count("●") == 2  # a handle each
+
+        slider.focus()
+        await pilot.press("right", "end", "left")  # the low one at first, then the high one
+        assert moves == [(9, 18), (9, 23), (9, 22)]
+        # the track's first column, past the padding: the nearer handle, the low one
+        await pilot.click(slider, offset=(1, 1))
+        assert hours.value == (0, 22)
+
+        hours.value = (20, 20)  # set in code: shown, and not reported
+        await pilot.pause()
+        assert (slider.low, slider.high, len(moves)) == (20, 20, 4)
+        # on one another near the end: the low handle, which can still move down
+        column = 1 + round(20 * (slider._track_width() - 1) / 23)  # noqa: SLF001
+        await pilot.click(slider, offset=(column, 1))
+        await pilot.press("left")
+        assert hours.value == (19, 20)
+        hours.value = (5, 5)
+        await pilot.pause()
+        width = slider._track_width()  # noqa: SLF001
+        # beside both, past them: the high one, on the side of the click; then a page and a drag
+        await pilot.click(slider, offset=(1 + round(9 * (width - 1) / 23), 1))
+        await pilot.press("pagedown")
+        await pilot.mouse_down(slider, offset=(1 + round(8 * (width - 1) / 23), 1))
+        await pilot.hover(slider, offset=(1 + round(15 * (width - 1) / 23), 1))
+        await pilot.mouse_up(slider, offset=(1 + round(15 * (width - 1) / 23), 1))
+        await pilot.hover(slider, offset=(1, 1))  # released: no move
+        await pilot.pause()
+        # pressed at 8, nearer the high handle at 7, then dragged
+        assert moves[-4:] == [(5, 9), (5, 7), (5, 8), (5, 15)]
+
+
+@pytest.mark.asyncio
+async def test_a_date_range_s_end_typed_before_its_start_moves_the_start_to_it() -> None:
+    view = RangesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    days = view.days
+    changes: list[tuple[datetime.date | None, datetime.date | None]] = []
+    days.value_changed.connect(changes.append)
+
+    async with app.run_test(size=(100, 24)) as pilot:
+        field = _field_widget(days.renderer)
+        assert isinstance(field, ComposeDateRangeInput)
+        await pilot.pause()
+        assert [part.input.value for part in field.fields] == ["09/01/2014", ""]
+        assert field.end.input.placeholder == "End"
+
+        field.end.input.focus()
+        await pilot.press(*"08/31/2014")
+        await pilot.pause()
+
+        august = datetime.date(2014, 8, 31)
+        assert (days.value, changes) == ((august, august), [(august, august)])
+        assert field.start.input.value == "08/31/2014"  # the start followed
+        days.value = (None, FIRST_DAY)  # set in code: shown, and not reported
+        await pilot.pause()
+        assert [part.input.value for part in field.fields] == ["", "09/01/2014"]
+        assert len(changes) == 1
+        field.start.input.focus()
+        await pilot.press(*"09/05/2014")  # after the end: the end follows
+        await pilot.pause()
+        fifth = datetime.date(2014, 9, 5)
+        assert (days.value, field.end.input.value) == ((fifth, fifth), "09/05/2014")
 
 
 @pytest.mark.asyncio
@@ -4411,6 +4500,7 @@ def _textual_widgets_of(view: View) -> list[object]:
         HoursMainView,
         WorkersMainView,
         ChoicesMainView,
+        RangesMainView,
     ],
 )
 def test_a_main_view_rendered_again_keeps_every_widget(main_view_type: type[MainView]) -> None:
@@ -5188,17 +5278,22 @@ async def test_the_chart_leaves_out_what_it_has_no_data_for() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_slider_too_narrow_for_its_track_draws_none_and_takes_no_drag() -> None:
-    view = WorkersMainView()
+@pytest.mark.parametrize("is_range", [False, True])
+async def test_a_slider_too_narrow_for_its_track_draws_none_and_takes_no_drag(
+    *, is_range: bool
+) -> None:
+    view = RangesMainView() if is_range else WorkersMainView()
     app = _app_of(view)
-    moves: list[int] = []
-    view.form.workers.value_changed.connect(moves.append)
+    moves: list[object] = []
+    row = view.hours if isinstance(view, RangesMainView) else view.form.workers
+    row.value_changed.connect(moves.append)
 
     async with app.run_test(size=(80, 24)) as pilot:
-        slider = _field_widget(view.form.workers.renderer)
-        assert isinstance(slider, ComposeSlider)
+        slider = _field_widget(row.renderer)
+        assert isinstance(slider, (ComposeSlider, ComposeRangeSlider))
         await pilot.pause()
-        slider.styles.width = 4  # its value's slot and a space, no track
+        # the padding, its value's slot and a space, no track: the range's, "23 - 23", 7 wide
+        slider.styles.width = 10 if is_range else 4
         await pilot.pause()
         drawn = str(slider.render())
         await pilot.mouse_down(slider, offset=(1, 0))

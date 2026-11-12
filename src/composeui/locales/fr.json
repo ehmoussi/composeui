@@ -98,5 +98,9 @@
   "Can't make {name}: {error}.": "Impossible de créer {name} : {error}.",
   "All": "Tout",
   "None": "Aucun",
-  "{count} selected": "{count} sélectionnés"
+  "{count} selected": "{count} sélectionnés",
+  "Start": "Début",
+  "End": "Fin",
+  "From": "De",
+  "To": "À"
 }

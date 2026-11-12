@@ -11,6 +11,9 @@ The notable changes of each release of ComposeUI. The format follows
 - `CheckListView` and `MultiComboBoxView` pick several of their `values`, on Qt, Textual and the
   web, with their form rows. A check-all box checks the choices shown, and an optional search
   shows only the choices whose label holds its text. A study saves the choice.
+- `RangeSliderView` and `FloatRangeSliderView` pick a range with two handles, which stop on each
+  other, and `DateRangeInputView` a range of dates, in two date fields, on Qt, Textual and the
+  web, with their form rows. An end set past the other moves the other to it.
 - The documentation site offers two versions: current `main` and the latest release tag.
 - `WebApplication.session_idle` saves a web session idle for that many seconds to disk and frees
   its memory. Its next request opens it again, and its page reloads. A session stays in memory
@@ -103,6 +106,8 @@ The notable changes of each release of ComposeUI. The format follows
 - ComposeUI installs narwhals, so `DataFrameSource`, `series_of`, `points_of` and
   `fill_from_frame` need no extra. The `dataframe` extra installs nothing more, and goes in a
   later release.
+- A slider refuses a range of more than 2,147,483,647 steps with `ValueError`. Qt raised
+  `OverflowError` as it showed one.
 - The web sends the files of `MainView.download` as they are, not compressed. Compressing a large
   file took the server's event loop, which every session shares, for its whole transfer.
 - The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
@@ -132,6 +137,8 @@ The notable changes of each release of ComposeUI. The format follows
 - On the web, a click on a table's check-all box does what the page shows. Before, when the app
   had checked every row and the page still showed the box unchecked, the click unchecked them
   all.
+- On Qt, a date input's calendar offers its new `minimum` or `maximum` at once. It offered the
+  previous one, until the next change.
 - A web session no longer expires during a request that outlasts `session_ttl`, such as a large
   upload or download. It is idle from the request's end.
 - On the web, a tab left open on a page of an ended session reloads when the user acts on it, also

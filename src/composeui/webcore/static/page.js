@@ -976,6 +976,30 @@ document.addEventListener("input", function (event) {
     Number(slider.dataset.decimals),
   );
 });
+/* a range slider's handles, two range inputs on one track: the one dragged stops on the
+   other, and the fill and the ends follow, as for a slider; the server hears of them
+   debounced (see `WebRangeSliderRenderer`) */
+document.addEventListener("input", function (event) {
+  var input = event.target;
+  if (!("rangeEnd" in input.dataset)) return;
+  var track = input.parentElement;
+  var low = track.querySelector('[data-range-end="low"]');
+  var high = track.querySelector('[data-range-end="high"]');
+  if (Number(low.value) > Number(high.value)) {
+    input.value = input === low ? high.value : low.value;
+  }
+  track.style.setProperty("--range-low", low.value);
+  track.style.setProperty("--range-high", high.value);
+  var isLowOnTop = low.value === high.value && Number(low.value) > Number(low.max) / 2;
+  track.toggleAttribute("data-low-on-top", isLowOnTop);
+  var texts = [low, high].map(function (end) {
+    var value = Number(track.dataset.first) + Number(end.value) * Number(track.dataset.step);
+    var text = value.toFixed(Number(track.dataset.decimals));
+    end.setAttribute("aria-valuetext", text);
+    return text;
+  });
+  track.parentElement.querySelector("output").value = texts.join(" \u2013 ");
+});
 /* the date fields' calendar, Cally's `<calendar-date>`: the page loads it only once it
    shows its first date field, from a swap too, as it does uPlot */
 var callyLoader = newLoader();

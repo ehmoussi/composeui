@@ -151,6 +151,7 @@ The fields:
 | `FloatInputView` | `value`, a `float` or `None`, from `minimum` to `maximum`, with `decimals` | Types a decimal number |
 | `IntInputView` | `value`, an `int` or `None` (see [Integer input](widgets.md#integer-input)) | Types a whole number |
 | `DateInputView` | `value`, a `datetime.date` or `None` (see [Date input](widgets.md#date-input)) | Types or picks a date |
+| `DateRangeInputView` | `value`, a pair of dates, either `None` (see [Date range](widgets.md#date-range)) | Types or picks the first and the last day |
 | `FilePathInputView` | `text`, and `path` (see [File path input](widgets.md#file-path-input)) | Types or picks a file |
 | `FolderPathInputView` | `text`, and `path` (see [Folder path input](widgets.md#folder-path-input)) | Types or picks a folder |
 | `SavePathInputView` | `text`, and `path` (see [Save path input](widgets.md#save-path-input)) | Types or picks a file to save |
@@ -161,6 +162,8 @@ The fields:
 | `MultiComboBoxView` | `selected`, some of `values` | Checks several choices in a drop-down list |
 | `SliderView` | `value`, from `minimum` to `maximum` by `step` (see [Slider](widgets.md#slider)) | Drags a handle |
 | `FloatSliderView` | `value`, a decimal number from `minimum` to `maximum` by `step` (see [Decimal slider](widgets.md#decimal-slider)) | Drags a handle |
+| `RangeSliderView` | `value`, a pair of ends from `minimum` to `maximum` by `step` (see [Range slider](widgets.md#range-slider)) | Drags two handles |
+| `FloatRangeSliderView` | `value`, a pair of decimal ends | Drags two handles |
 
 Each field has its row views too, for example `RowFloatInputView` and
 `LabelRowFloatInputView`, or `LabelRowDateInputView` for a date. The
@@ -212,10 +215,11 @@ checks of several rows.
 ## Compose views from mixins
 
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
-`FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the
-available building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`,
-`DateInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `CheckBoxMixin`,
-`ValuesGroupMixin`, `MultiValuesMixin`, `TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+`FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the available
+building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`, `DateInputMixin`,
+`DateRangeInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `RangeSliderMixin`,
+`FloatRangeSliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `MultiValuesMixin`, `TableMixin`,
+`LogMixin`, `LabelMixin`, and `MarkdownMixin`.
 
 Larger views have sections of their own:
 

@@ -117,7 +117,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   column's values in the filter bar, on `MultiValuesMixin`.
 - **A searchable picker** (Now). A combobox that filters its values as the user types, searched
   on the server for long lists.
-- **A range slider and a date range** (Now).
 - **Switches, busy indicators and notifications** (Now). A switch look for `CheckBoxView`, a
   progress bar without a maximum, and `notify` for a short message.
 - **Highlighted code in Markdown** (Now). Code blocks of a `MarkdownView` highlighted by

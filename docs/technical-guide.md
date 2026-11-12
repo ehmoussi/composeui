@@ -353,6 +353,16 @@ section covers what users see.
   open only while the focus is in it, and a closed one's boxes take no focus. So `page.js` keeps
   it open through the swap with `dropdown-open`, on the element swapped out too: htmx gives the
   new element the old one's classes until it settles.
+- **Ranges.** A range slider stacks two range inputs on one track, only their handles taking
+  the pointer. The lower input draws the track and the fill between the handles, from the
+  handles' positions (`--range-low`, `--range-high`), as daisyUI's fill only reaches one
+  handle. The inputs count steps, so a decimal step needs no decimal arithmetic in the page.
+  Each posts both positions, as the page shows them, and the server takes them by
+  `RangeSliderMixin.moved`. While dragged, `page.js` stops a handle on the other. When the two
+  meet in the upper half of the track, the low one goes on top (`data-low-on-top`): the high one
+  can't move below it, so a press there moves the low one down. A date range is two date
+  fields, each posting its end. The end that followed the one set swaps alone, never the field
+  typed in.
 - **Downloads** go through a ticket: see [Downloads on the web](#downloads-on-the-web).
 
 ### Tables on the web

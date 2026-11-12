@@ -54,6 +54,7 @@ from composeui.core.renderer import (
 from composeui.core.view import (
     CHECKED_TEXTS,
     PLAIN_CELL,
+    RANGE_DASH,
     SEARCH_DELAY_MS,
     ActionView,
     Align,
@@ -64,6 +65,7 @@ from composeui.core.view import (
     ChartView,
     CircleShape,
     ConsoleView,
+    DateRangeInputMixin,
     DialogButtonView,
     DialogKind,
     DialogView,
@@ -71,6 +73,7 @@ from composeui.core.view import (
     DrawingView,
     ExitAppAction,
     ExpanderView,
+    FloatRangeSliderMixin,
     FloatSliderMixin,
     FormLabelRowView,
     FormRowView,
@@ -98,6 +101,7 @@ from composeui.core.view import (
     PickFileAction,
     PolygonShape,
     ProgressBarView,
+    RangeSliderMixin,
     Router,
     SaveAction,
     SaveAsAction,
@@ -711,6 +715,102 @@ class DateInputViewLike(TextFieldViewLike, Protocol):
     def shown_text(self, value: datetime.date | None) -> str: ...
 
 
+class _DateTextsLike(Protocol):
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    pick_text: str
+    previous_month_text: str
+    next_month_text: str
+
+    def shown_text(self, value: datetime.date | None) -> str: ...
+
+
+class _DateField(NamedTuple):
+    """A date field of a renderer: its date and the text of its posts."""
+
+    #: what its elements' ids start with
+    field_id: str
+    value: datetime.date | None
+    placeholder: str
+    #: added to its posts, e.g. which end of a range it is
+    vals: Mapping[str, str]
+
+
+def _date_field_html(
+    view: _DateTextsLike,
+    field: _DateField,
+    owner: WebRenderer[Any],
+    root_attributes: Markup,
+    row_attributes: Markup,
+) -> Markup:
+    """Render a date field: its text, then its calendar button and popover.
+
+    It posts to `owner`, the renderer holding it (see `WebDateInputRenderer`).
+    """
+    field_id, value, placeholder, vals = field
+    widget_id = owner.widget_id
+    disabled = "" if owner.is_enabled else " disabled"
+    pick = view.pick_text
+    limits = Markup("").join(
+        Markup(' {}="{}"').format(name, limit.isoformat())
+        for name, limit in (("min", view.minimum), ("max", view.maximum))
+        if limit is not None
+    )
+    picked = "" if value is None else value.isoformat()
+    calendar_id = f"{field_id}-calendar"
+    field_vals = Markup(" hx-vals='{}'").format(json.dumps(dict(vals))) if vals else Markup()
+    return (
+        # daisyUI's field around both, its colors, focus ring and invalid border theirs
+        Markup(
+            '<div {root_attributes} class="input relative w-full pe-1">'
+            '<input id="{field_id}-field"{row_attributes}'
+            ' class="min-w-0 grow" type="text" name="value"'
+            ' value="{shown_text}"'
+            ' placeholder="{date_hint}"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
+            '{field_vals} data-post-event hx-swap="none" hx-sync="this:queue all"'
+            ' autocomplete="off"{disabled}>'
+            '<button id="{field_id}-pick" type="button"'
+            ' class="btn btn-ghost btn-sm btn-square"'
+            ' aria-label="{pick}" title="{pick}" popovertarget="{calendar_id}"'
+            ' style="anchor-name: --{field_id}"{disabled}>'
+            "{calendar_icon}</button>"
+            # in the top layer, under the button: Escape or a click beside it closes it
+            '<div id="{calendar_id}" popover data-date-button="{field_id}-pick"'
+            ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
+            ' style="position-anchor: --{field_id}">'
+            '<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
+            ' hx-post="/widget/{widget_id}" hx-trigger="change"'
+            " hx-vals='{pick_vals}' data-post-picked hx-swap=\"none\">"
+            '<span slot="previous" aria-label="{previous_month_text}">'
+            "{chevron_icon}</span>"
+            '<span slot="next" aria-label="{next_month_text}">'
+            "{chevron_icon2}</span>"
+            "<calendar-month></calendar-month></calendar-date></div></div>"
+        ).format(
+            root_attributes=root_attributes,
+            field_id=field_id,
+            widget_id=widget_id,
+            row_attributes=row_attributes,
+            shown_text=view.shown_text(value),
+            date_hint=date_hint(placeholder, view.date_format),
+            field_vals=field_vals,
+            disabled=disabled,
+            pick=pick,
+            calendar_id=calendar_id,
+            calendar_icon=_icon("calendar"),
+            picked=picked,
+            limits=limits,
+            pick_vals=json.dumps({"event": "pick", **vals}),
+            previous_month_text=view.previous_month_text,
+            chevron_icon=_icon("chevron", "size-4 rotate-90"),
+            next_month_text=view.next_month_text,
+            chevron_icon2=_icon("chevron", "size-4 -rotate-90"),
+        )
+    )
+
+
 class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
     """A text field typing the date as the view's `date_format` says, then a calendar button.
 
@@ -753,60 +853,12 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
-        disabled = "" if self.is_enabled else " disabled"
-        pick = view.pick_text
-        limits = Markup("").join(
-            Markup(' {}="{}"').format(name, limit.isoformat())
-            for name, limit in (("min", view.minimum), ("max", view.maximum))
-            if limit is not None
-        )
-        picked = "" if view.value is None else view.value.isoformat()
-        calendar_id = f"{self.widget_id}-calendar"
-        return (
-            # daisyUI's field around both, its colors, focus ring and invalid border theirs
-            Markup(
-                '<div {root_attributes} class="input relative w-full pe-1">'
-                '<input id="{widget_id}-field"{row_attributes}'
-                ' class="min-w-0 grow" type="text" name="value"'
-                ' value="{shown_text}"'
-                ' placeholder="{date_hint}"'
-                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
-                ' data-post-event hx-swap="none" hx-sync="this:queue all"'
-                ' autocomplete="off"{disabled}>'
-                '<button id="{widget_id}-pick" type="button"'
-                ' class="btn btn-ghost btn-sm btn-square"'
-                ' aria-label="{pick}" title="{pick}" popovertarget="{calendar_id}"'
-                ' style="anchor-name: --{widget_id}"{disabled}>'
-                "{calendar_icon}</button>"
-                # in the top layer, under the button: Escape or a click beside it closes it
-                '<div id="{calendar_id}" popover data-date-button="{widget_id}-pick"'
-                ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
-                ' style="position-anchor: --{widget_id}">'
-                '<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
-                ' hx-post="/widget/{widget_id}" hx-trigger="change"'
-                """ hx-vals='{{"event": "pick"}}' data-post-picked hx-swap="none">"""
-                '<span slot="previous" aria-label="{previous_month_text}">'
-                "{chevron_icon}</span>"
-                '<span slot="next" aria-label="{next_month_text}">'
-                "{chevron_icon2}</span>"
-                "<calendar-month></calendar-month></calendar-date></div></div>"
-            ).format(
-                root_attributes=self._root_attributes(oob=oob),
-                widget_id=self.widget_id,
-                row_attributes=self._row_attributes(),
-                shown_text=view.shown_text(view.value),
-                date_hint=date_hint(view.placeholder, view.date_format),
-                disabled=disabled,
-                pick=pick,
-                calendar_id=calendar_id,
-                calendar_icon=_icon("calendar"),
-                picked=picked,
-                limits=limits,
-                previous_month_text=view.previous_month_text,
-                chevron_icon=_icon("chevron", "size-4 rotate-90"),
-                next_month_text=view.next_month_text,
-                chevron_icon2=_icon("chevron", "size-4 -rotate-90"),
-            )
+        return _date_field_html(
+            view,
+            _DateField(self.widget_id, view.value, view.placeholder, {}),
+            self,
+            self._root_attributes(oob=oob),
+            self._row_attributes(),
         )
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -850,6 +902,148 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
     def _refresh_value(self, view: DateInputViewLike, rendered_object: str, value: Any) -> None:
         self._last_posted_text = None  # the server's date wins over what was typed
         self._mark_dirty(view, rendered_object, value)
+
+
+class DateRangeInputViewLike(ViewLike, Protocol):
+    value: tuple[datetime.date | None, datetime.date | None]
+    minimum: datetime.date | None
+    maximum: datetime.date | None
+    date_format: str
+    start_text: str
+    end_text: str
+    pick_text: str
+    previous_month_text: str
+    next_month_text: str
+    value_changed: Signal[tuple[datetime.date | None, datetime.date | None]]
+
+    def shown_text(self, value: datetime.date | None) -> str: ...
+
+
+#: the parts of a date range, by the index of their end
+_DATE_RANGE_PARTS = ("start", "end")
+#: the attributes of a date range that swap it whole
+_DATE_RANGE_ATTRIBUTES = (
+    "value",
+    "minimum",
+    "maximum",
+    "date_format",
+    "start_text",
+    "end_text",
+    "pick_text",
+    "previous_month_text",
+    "next_month_text",
+)
+
+
+class WebDateRangeInputRenderer(WebRenderer[DateRangeInputViewLike]):
+    """Two date fields, the start and the end, each as `WebDateInputRenderer`'s, in a group.
+
+    Each posts with its end (``"end"``: 0 or 1). The date typed or picked for an end that
+    passes the other moves the other to it (`DateRangeInputMixin.with_end`), which then
+    swaps alone: never the field typed in, unless left or picked in. A change of the app's
+    swaps the whole. The row's label names the group; each field, its end's text.
+    """
+
+    _role = "date_range_input"
+    is_labelable = False
+
+    def __init__(self, view: DateRangeInputViewLike) -> None:
+        super().__init__(view)
+        #: the text each end last posted, while it stays what its field shows
+        self._last_posted_texts: list[str | None] = [None, None]
+        #: the ends to swap, unless the whole is
+        self._dirty_parts: set[int] = set()
+        self._is_whole_dirty = False
+        self._refresh_dispatcher.update(dict.fromkeys(_DATE_RANGE_ATTRIBUTES, self._mark_dirty))
+        # the calendar names them, in the page's language (`Intl`'s names)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("month_names", "day_names"), lambda _view, _rendered_object, _value: None
+            )
+        )
+
+    def _mark_dirty(self, view: DateRangeInputViewLike, rendered_object: str, value: Any) -> None:
+        self._is_whole_dirty = True
+        self._last_posted_texts = [None, None]  # the server's dates win over what was typed
+        super()._mark_dirty(view, rendered_object, value)
+
+    def _mark_end(self, index: int) -> None:
+        """Swap the field of the end `index`, as the view's date: only an event marks one."""
+        self._last_posted_texts[index] = None
+        self._dirty_parts.add(index)
+        cast("dict[str, WebRenderer[Any]]", _DIRTY.get())[self.widget_id] = self
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        parts, self._dirty_parts = self._dirty_parts, set()
+        is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
+        if not is_whole:
+            return Markup("").join(self._end_html(index, oob=True) for index in sorted(parts))
+        return Markup(
+            '<div {root_attributes}{row_attributes} role="group"'
+            ' class="flex items-center gap-2">{start}<span aria-hidden="true">{dash}</span>'
+            "{end}</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            start=self._end_html(0, oob=False),
+            dash=RANGE_DASH.strip(),
+            end=self._end_html(1, oob=False),
+        )
+
+    def _end_html(self, index: int, *, oob: bool) -> Markup:
+        view = self._view
+        field_id = f"{self.widget_id}-{_DATE_RANGE_PARTS[index]}"
+        text = (view.start_text, view.end_text)[index]
+        return _date_field_html(
+            view,
+            _DateField(field_id, view.value[index], text, {"end": str(index)}),
+            self,
+            Markup('id="{}"{}').format(
+                field_id, Markup(' hx-swap-oob="true"') if oob else Markup()
+            ),
+            Markup(' aria-label="{}"').format(text),
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        posted_end = form.get("end", "")
+        if event not in ("input", "change", "pick") or posted_end not in ("0", "1"):
+            super().dispatch(event, form)
+        index = int(posted_end)
+        if event == "pick":
+            with contextlib.suppress(ValueError):  # a date input posts a date, or nothing
+                self._edit(index, datetime.date.fromisoformat(form.get("picked", "")))
+            # the field shows it: swapped back, as the button had the focus, not the field
+            self._mark_end(index)
+            return
+        # `change` carries the text too: it can overtake a still-debounced `input`
+        text = form.get("value", "")
+        if text != self._posted_text(index):
+            self._last_posted_texts[index] = text
+            if text.strip() == "":
+                self._edit(index, None)
+            else:
+                with contextlib.suppress(ValueError):  # not a date yet, e.g. halfway
+                    self._edit(index, parse_date(text, self._view.date_format))
+        if event == "change":
+            # left: the date as the format writes it, or back for text that isn't one
+            self._mark_end(index)
+
+    def _edit(self, index: int, date: datetime.date | None) -> None:
+        view = self._view
+        value = DateRangeInputMixin.with_end(view.value, index, date)
+        if value == view.value:
+            return
+        other = 1 - index
+        followed = value[other] != view.value[other]
+        with self.stop_refresh():
+            view.value = value
+        if followed:
+            self._mark_end(other)
+        view.value_changed.emit(value)
+
+    def _posted_text(self, index: int) -> str:
+        posted = self._last_posted_texts[index]
+        return self._view.shown_text(self._view.value[index]) if posted is None else posted
 
 
 def _file_types(extensions: dict[str, tuple[str, ...]]) -> list[str]:
@@ -1970,6 +2164,127 @@ class WebFloatSliderRenderer(WebSliderRenderer):
         except ValueError:
             return None
         return number if math.isfinite(number) else None  # `float` reads "nan" and "inf"
+
+
+class RangeSliderViewLike(ViewLike, Protocol):
+    value: tuple[float, float]
+    minimum: float
+    maximum: float
+    step: float
+    low_text: str
+    high_text: str
+    value_changed: Signal[tuple[float, float]]
+
+
+class WebRangeSliderRenderer(WebRenderer[RangeSliderViewLike]):
+    """Two range inputs on one track, the low and the high handle, their ends on the right.
+
+    The inputs count steps (0 to the last), so the browser stops each handle on a step,
+    and a decimal step needs no decimal arithmetic in the page. Each posts both positions
+    (`hx-include`), debounced and on release, as the page shows them. Meanwhile the page's
+    script stops a handle on the other, and keeps the fill and the ends in step (see
+    `page.js`). The server takes the positions by `RangeSliderMixin.moved`. The root is a
+    `<div>`: a row's label names the group, and each input its end's text.
+    """
+
+    _role = "range_slider"
+    is_labelable = False
+    #: the rules of its two ends
+    _range: ClassVar[Any] = RangeSliderMixin
+
+    def __init__(self, view: RangeSliderViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(
+                ("value", "minimum", "maximum", "step", "low_text", "high_text"),
+                self._mark_dirty,
+            )
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        view, steps = self._view, self._range.step_rules
+        minimum, step = view.minimum, view.step
+        last = steps.last_position(minimum, view.maximum, step)
+        positions = self._range.positions(view.value, minimum, view.maximum, step)
+        texts = [
+            steps.shown_text(steps.value_at(p, minimum, step), minimum, step) for p in positions
+        ]
+        widest = max(
+            len(steps.shown_text(steps.value_at(end, minimum, step), minimum, step))
+            for end in (0, last)
+        )
+        disabled = "" if self.is_enabled else " disabled"
+        inputs = Markup("").join(
+            Markup(
+                '<input id="{widget_id}-{name}" type="range" class="range range-primary"'
+                ' name="{name}" min="0" max="{last}" step="1" value="{position}"'
+                ' aria-label="{label}" aria-valuetext="{text}" data-range-end="{name}"'
+                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
+                ' hx-include="closest .cui-range-track" data-post-event hx-swap="none"'
+                ' hx-sync="closest .cui-range-track:queue all" autocomplete="off"{disabled}>'
+            ).format(
+                widget_id=self.widget_id,
+                name=name,
+                last=last,
+                position=position,
+                label=label,
+                text=text,
+                disabled=disabled,
+            )
+            for name, position, label, text in zip(
+                ("low", "high"), positions, (view.low_text, view.high_text), texts
+            )
+        )
+        return Markup(
+            '<div {root_attributes}{row_attributes} role="group" class="cui-slider"'
+            ' style="--slider-digits: {digits}">'
+            '<div class="cui-range-track" data-first="{minimum}" data-step="{step}"'
+            ' data-decimals="{decimals}"{low_on_top}'
+            ' style="--range-low: {low}; --range-high: {high}; --range-last: {range_last}">'
+            "{inputs}</div>"
+            # read out by the inputs themselves, as their values
+            '<output class="cui-slider-value" aria-hidden="true">{ends}</output></div>'
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            row_attributes=self._row_attributes(),
+            digits=2 * widest + len(RANGE_DASH),
+            minimum=minimum,
+            step=step,
+            decimals=steps.decimals(minimum, step),
+            # on one another in the upper half: the low handle on top, which can move down
+            low_on_top=Markup(" data-low-on-top")
+            if positions[0] == positions[1] and positions[0] > last / 2
+            else Markup(),
+            low=positions[0],
+            high=positions[1],
+            range_last=max(1, last),  # the fill divides by it
+            inputs=inputs,
+            ends=RANGE_DASH.join(texts),
+        )
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        if event not in ("input", "change"):
+            super().dispatch(event, form)
+        try:
+            positions = (int(form.get("low", "")), int(form.get("high", "")))
+        except ValueError:
+            return  # the inputs always post their positions; nothing else is a move
+        view = self._view
+        last = self._range.step_rules.last_position(view.minimum, view.maximum, view.step)
+        low, high = (min(max(0, position), last) for position in positions)
+        value = self._range.moved(view.value, (low, high), view.minimum, view.maximum, view.step)
+        # `change` posts the positions of a still-debounced `input` too: emitted once
+        if value == view.value:
+            return
+        with self.stop_refresh():
+            view.value = value
+        view.value_changed.emit(view.value)
+
+
+class WebFloatRangeSliderRenderer(WebRangeSliderRenderer):
+    """Two range inputs on one track, stopping on each decimal step."""
+
+    _range = FloatRangeSliderMixin
 
 
 class MapViewLike(ViewLike, Protocol):
@@ -7157,6 +7472,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "combobox": WebComboBoxRenderer,
     "source_table": WebSourceTableRenderer,
     "date_input": WebDateInputRenderer,
+    "date_range_input": WebDateRangeInputRenderer,
     "file_path_input": WebFilePathInputRenderer,
     "file_upload": WebFileUploadRenderer,
     "folder_path_input": WebFolderPathInputRenderer,
@@ -7186,8 +7502,10 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "page": WebPageRenderer,
     "progress_bar": WebProgressBarRenderer,
     "slider": WebSliderRenderer,
+    "float_range_slider": WebFloatRangeSliderRenderer,
     "float_slider": WebFloatSliderRenderer,
     "radio_group": WebRadioGroupRenderer,
+    "range_slider": WebRangeSliderRenderer,
     "router": WebRouterRenderer,
     "separator": WebSeparatorRenderer,
     "sidebar": WebSidebarRenderer,
