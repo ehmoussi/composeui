@@ -157,6 +157,21 @@ class Stream:
             else:
                 yield piece
 
+    @contextlib.asynccontextmanager
+    async def running(self) -> AsyncIterator[None]:
+        """Start the writer for the block; then cancel it, and wait for its thread to end.
+
+        The wait is shielded: a canceled answer still waits, so that nothing writes once it
+        ends.
+        """
+        self.start()
+        try:
+            yield
+        finally:
+            self.cancel()
+            with anyio.CancelScope(shield=True):
+                await self.ended()
+
     async def ended(self) -> None:
         """Wait for the writer's thread to end."""
         await self._ended.wait()
@@ -223,18 +238,15 @@ class StreamResponse(Response):
         self._download_headers = headers
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        with self._session.held():
-            async with self._places.of(self._session), self._places.server:
-                stream = Stream(self._content)
-                with self._session.streaming(stream):
-                    try:
-                        stream.start()
-                        await self._send(stream, scope, receive, send)
-                    finally:
-                        stream.cancel()
-                        # the place and the session are freed once nothing writes any more
-                        with anyio.CancelScope(shield=True):
-                            await stream.ended()
+        # left in the reverse order: the place and the session are freed once nothing writes
+        async with contextlib.AsyncExitStack() as stack:
+            stack.enter_context(self._session.held())
+            await stack.enter_async_context(self._places.of(self._session))
+            await stack.enter_async_context(self._places.server)
+            stream = Stream(self._content)
+            stack.enter_context(self._session.streaming(stream))
+            await stack.enter_async_context(stream.running())
+            await self._send(stream, scope, receive, send)
 
     async def _send(self, stream: Stream, scope: Scope, receive: Receive, send: Send) -> None:
         error = await stream.first()
