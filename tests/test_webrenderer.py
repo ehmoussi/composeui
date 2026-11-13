@@ -2127,16 +2127,18 @@ def test_an_upload_stays_until_a_dropped_worker_that_may_read_it_has_ended(endin
     _pick_file(session, field.widget_id, "first.csv", b"first")
     first = measurements.path
     assert first is not None
-    release = threading.Event()
+    started, release = threading.Event(), threading.Event()
     threads: list[threading.Thread] = []
     contents: list[bytes] = []
 
     def work(_job: Job[None, None]) -> None:
         threads.append(threading.current_thread())
+        started.set()
         assert release.wait(30)
         contents.append(first.read_bytes())
 
     main_view.jobs.start(work)
+    assert started.wait(30)  # running, not only started: a busy runner starts the thread late
     if ending == "closed":
         session.close()
     else:
@@ -2189,14 +2191,17 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
     _pick_file(session, field.widget_id, "first.csv", b"first")
     first = main_view.form.dataset.file
     assert first is not None
-    release = threading.Event()
+    started, release = threading.Event(), threading.Event()
     threads: list[threading.Thread] = []
 
     def work(_job: Job[None, None]) -> None:
         threads.append(threading.current_thread())
+        started.set()
         assert release.wait(30)
 
     main_view.jobs.start(work)
+    # running, not only started: a busy runner starts the thread late
+    assert started.wait(30)
     main_view.form.dataset.clear()
     session.poll_jobs()
     assert first.path.exists()
@@ -2212,11 +2217,12 @@ def test_the_end_of_a_session_removes_a_replaced_file_while_a_job_runs() -> None
 def test_a_closed_session_runs_none_of_its_jobs_callbacks() -> None:
     main_view = DataFileMainView()
     session = WebSession(main_view)
-    release, threads = threading.Event(), list[threading.Thread]()
+    started, release, threads = threading.Event(), threading.Event(), list[threading.Thread]()
     called: list[object] = []
 
     def work(job: Job[None, int]) -> None:
         threads.append(threading.current_thread())
+        started.set()
         assert release.wait(30)
         job.report_progress(1)
         job.call_on_main_thread(lambda: called.append("handed over"))
@@ -2225,6 +2231,7 @@ def test_a_closed_session_runs_none_of_its_jobs_callbacks() -> None:
     job.progress.connect(called.append)
     job.finished.connect(lambda _result: called.append("finished"))
     job.failed.connect(called.append)
+    assert started.wait(30)  # running, not only started: a busy runner starts the thread late
     session.close()
     release.set()
     threads[0].join(30)
