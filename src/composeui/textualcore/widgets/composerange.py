@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional
 from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal
-from textual.widget import Widget
 from textual.widgets import Label
 
 from composeui.core.signal import Signal
 from composeui.core.view import RANGE_DASH, SliderMixin
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
+from composeui.textualcore.widgets.composeslider import DragReportMixin
 
 if TYPE_CHECKING:
     import datetime
@@ -21,14 +21,15 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult, RenderResult
 
 
-class ComposeRangeSlider(Widget, can_focus=True):
+class ComposeRangeSlider(DragReportMixin, can_focus=True):
     """A slider with a low and a high handle, from `first` by `step`, its ends on the right.
 
     As `ComposeSlider`, its positions count steps (0 to `last`) and it is three lines tall.
     A click moves the nearest handle, and a drag moves it under the mouse. The arrow keys,
     Page Up/Down, move the last handle pressed (the low one at first); Home moves the low
     one to the start, End the high one to the end. A handle stops on the other. `moved`
-    reports the user's moves only, with both positions.
+    reports the user's moves only, with both positions: a drag's once the handle rests, and
+    on release (see `DragReportMixin`).
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -97,6 +98,7 @@ class ComposeRangeSlider(Widget, can_focus=True):
 
     def set_steps(self, first: float, step: float, last: int, low: int, high: int) -> None:
         """Show `low` and `high` out of `last` steps of `step` from `first`, without `moved`."""
+        self._drop_report()
         self.first, self.step, self.last = first, step, last
         self.low, self.high = low, high
         self.refresh()
@@ -162,24 +164,28 @@ class ComposeRangeSlider(Widget, can_focus=True):
             self.active = 0 if abs(position - self.low) <= abs(position - self.high) else 1
         self._is_dragging = True
         self.capture_mouse()
-        self._move_active(position)
+        self._move_active(position, is_drag=True)
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
         position = self._position_at(event.get_content_offset_capture(self).x)
         if self._is_dragging and position is not None:
-            self._move_active(position)
+            self._move_active(position, is_drag=True)
 
     def on_mouse_up(self, _event: events.MouseUp) -> None:
         self._is_dragging = False
         self.release_mouse()
+        self._report_rested()
 
     def _position_at(self, column: int) -> Optional[int]:
         """Get the position under `column`; None without a track, too narrow to draw one."""
         width = self._track_width()
         return None if width <= 1 else round(column * self.last / (width - 1))
 
-    def _move_active(self, position: int) -> None:
-        """Move the active handle to `position`, stopping on the other one and in range."""
+    def _move_active(self, position: int, *, is_drag: bool = False) -> None:
+        """Move the active handle to `position`, stopping on the other one and in range.
+
+        A drag's move is reported once the handle rests, any other at once.
+        """
         position = min(max(0, position), self.last)
         if self.active == 0:
             low, high = min(position, self.high), self.high
@@ -187,8 +193,15 @@ class ComposeRangeSlider(Widget, can_focus=True):
             low, high = self.low, max(position, self.low)
         if (low, high) != (self.low, self.high):
             self.low, self.high = low, high
-            self.moved.emit(low, high)
+            if is_drag:
+                self._report_later()
+            else:
+                self._report()
         self.refresh()  # the active handle shows its focus
+
+    def _report(self) -> None:
+        self._drop_report()
+        self.moved.emit(self.low, self.high)
 
 
 class ComposeDateRangeInput(Horizontal):

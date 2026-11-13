@@ -698,7 +698,9 @@ The [technical guide](../technical-guide.md#downloads-on-the-web) explains the d
 A `SliderView` picks a whole number when the user drags a handle, for example a number of
 workers. The number goes from `minimum` to `maximum` by `step`. The handle stops only on a
 step. The value shows beside the track, so the row is no taller than the other rows.
-`value_changed` reports the user's moves.
+`value_changed` reports the user's moves. A drag reports its value once the handle rests for
+150 ms (`DRAG_REPORT_DELAY_MS`), and on release: the app's work on each step, such as a dashboard drawn
+again, would make the handle lag. A key or a click reports at once.
 
 Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
 move, and the web a range input.
@@ -746,7 +748,8 @@ assert distance.value == (2.5, 12.0)
 - **The handles.** A handle stops on the other: the two never cross. On one another, a press on
   them takes the one that can move away from the end that they are near: the low one in the
   upper half of the track. The ends show beside the track, as a slider's value does.
-  `value_changed` reports the user's moves, with both ends.
+  `value_changed` reports the user's moves, with both ends: a drag's once the handle rests, as a
+  [slider](#slider) does.
 - **In code.** A `value` whose low end is above its high end raises `ValueError`, as does a
   decimal end that is not finite. Each end shows at its nearest step.
 - **The keys.** On Qt and Textual, a click moves the nearest handle, and the arrow keys move

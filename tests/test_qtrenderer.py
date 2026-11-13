@@ -1413,6 +1413,92 @@ def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other
     assert hours.value == (5, 9)
 
 
+def test_a_range_slider_reports_a_drag_once_its_handle_rests_and_on_release(
+    qtbot: QtBot,
+) -> None:
+    view = RangesMainView()
+    view.render(RendererType.QT)
+    hours = view.hours
+    slider = _field_widget(hours)
+    assert isinstance(slider, QRangeSlider)
+    qtbot.addWidget(slider)
+    slider.resize(400, slider.sizeHint().height())
+    slider.show()
+    moves: list[tuple[int, int]] = []
+    hours.value_changed.connect(moves.append)
+
+    def at(position: int) -> QPoint:
+        return QPoint(slider._handle_rect(position).center().x(), slider.height() // 2)  # noqa: SLF001
+
+    _press(slider, at(18))  # the high handle of (8, 18)
+    for position in (19, 20, 21):
+        _move_pressed(slider, at(position))
+    # the handle follows the mouse; the app hears of it once the handle rests, not at each
+    # step: its work on each would make the handle lag
+    assert (slider.high, hours.value, moves) == (21, (8, 18), [])
+    qtbot.waitUntil(lambda: moves == [(8, 21)])
+    _move_pressed(slider, at(22))
+    _release(slider, at(22))
+    assert (hours.value, moves) == ((8, 22), [(8, 21), (8, 22)])  # on release, at once
+
+    _press(slider, at(22))
+    _move_pressed(slider, at(20))
+    qtbot.keyClick(slider, Qt.Key.Key_Left)  # a key, even during a drag: at once
+    assert moves[2:] == [(8, 19)]
+    _release(slider, at(20))
+    assert len(moves) == 3  # nothing left to report
+
+    _press(slider, at(19))
+    _move_pressed(slider, at(22))
+    _release(slider, at(22))
+    _press(slider, at(22))
+    _move_pressed(slider, at(23))
+    hours.value = (2, 3)  # set in code before the drag's move is reported: the app's wins
+    _release(slider, at(23))
+    assert (slider.low, slider.high, hours.value, len(moves)) == (2, 3, (2, 3), 4)
+
+
+def test_a_slider_reports_a_drag_once_its_handle_rests_and_on_release(qtbot: QtBot) -> None:
+    view = WorkersMainView()
+    view.render(RendererType.QT)
+    workers = view.form.workers
+    slider = _field_widget(workers)
+    assert isinstance(slider, QValueSlider)
+    qtbot.addWidget(slider)
+    slider.resize(400, slider.sizeHint().height())
+    slider.show()
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+
+    def at(position: int) -> QPoint:
+        """Get the handle's center at `position`, as the style lays the track out."""
+        option = QStyleOptionSlider()
+        slider.initStyleOption(option)
+        groove, handle = (
+            slider.style().subControlRect(QStyle.ComplexControl.CC_Slider, option, part, slider)
+            for part in (QStyle.SubControl.SC_SliderGroove, QStyle.SubControl.SC_SliderHandle)
+        )
+        span = groove.width() - handle.width()
+        offset = QStyle.sliderPositionFromValue(slider.minimum(), slider.maximum(), position, span)
+        return QPoint(groove.x() + handle.width() // 2 + offset, slider.height() // 2)
+
+    start = slider.value()
+    _press(slider, at(start))
+    _move_pressed(slider, at(start + 1))
+    _move_pressed(slider, at(start + 2))
+    assert (slider.value(), moves) == (start + 2, [])
+    qtbot.waitUntil(lambda: moves == [slider.shown_value()])
+    _move_pressed(slider, at(start + 3))
+    _release(slider, at(start + 3))
+    assert moves[1:] == [workers.value] == [slider.shown_value()]  # on release, at once
+
+    _press(slider, at(start + 3))
+    _move_pressed(slider, at(start + 1))
+    workers.value = 2  # set in code before the drag's move is reported: the app's wins
+    _release(slider, at(start + 1))
+    assert (workers.value, slider.shown_value(), len(moves)) == (2, 2, 2)
+
+
 def test_a_slider_of_the_most_steps_a_view_takes_renders_on_qt(qtbot: QtBot) -> None:
     view = RangesMainView()
     view.hours.maximum = MAX_SLIDER_STEPS  # Qt counts its steps in a 32-bit integer
@@ -2691,22 +2777,36 @@ def test_an_expander_shows_its_views_while_expanded_by_a_click_on_its_header(
 
 def _drag(widget: QWidget, start: QPoint, end: QPoint) -> None:
     """Drag the mouse from `start` to `end` in `widget`, its left button held throughout."""
+    _press(widget, start)
+    _move_pressed(widget, end)
+    _release(widget, end)
+
+
+def _mouse(widget: QWidget, kind: QEvent.Type, position: QPoint, *, is_held: bool) -> None:
+    """Send `widget` a mouse event of the left button at `position`, held after it or not."""
     left, no_button = Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton
-    for kind, position, button, buttons in (
-        (QMouseEvent.Type.MouseButtonPress, start, left, left),
-        (QMouseEvent.Type.MouseMove, end, no_button, left),
-        (QMouseEvent.Type.MouseButtonRelease, end, left, no_button),
-    ):
-        local = QPointF(position)
-        event = QMouseEvent(
-            kind,
-            local,
-            QPointF(widget.mapToGlobal(position)),
-            button,
-            buttons,
-            Qt.KeyboardModifier.NoModifier,
-        )
-        QApplication.sendEvent(widget, event)
+    event = QMouseEvent(
+        kind,
+        QPointF(position),
+        QPointF(widget.mapToGlobal(position)),
+        no_button if kind == QEvent.Type.MouseMove else left,
+        left if is_held else no_button,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(widget, event)
+
+
+def _press(widget: QWidget, position: QPoint) -> None:
+    _mouse(widget, QEvent.Type.MouseButtonPress, position, is_held=True)
+
+
+def _move_pressed(widget: QWidget, position: QPoint) -> None:
+    """Move the mouse to `position` in `widget`, its left button held: QTest's moves hold none."""
+    _mouse(widget, QEvent.Type.MouseMove, position, is_held=True)
+
+
+def _release(widget: QWidget, position: QPoint) -> None:
+    _mouse(widget, QEvent.Type.MouseButtonRelease, position, is_held=False)
 
 
 def test_a_splitter_shares_its_width_as_its_sizes_and_takes_the_users_drags(

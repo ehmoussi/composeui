@@ -2,15 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from qtpy.QtCore import QRect, QSize, Qt
+from qtpy.QtCore import QRect, QSize, Qt, QTimer
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPaintEvent
 from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
 
-from composeui.core.view import SliderMixin
+from composeui.core.view import DRAG_REPORT_DELAY_MS, SliderMixin
 
 #: pixels between the track and the value
 _GAP = 8
+
+
+def report_timer(parent: QSlider, report: Any) -> QTimer:
+    """Get the timer that calls `report` once a dragged handle rests."""
+    timer = QTimer(parent)
+    timer.setSingleShot(True)
+    timer.setInterval(DRAG_REPORT_DELAY_MS)
+    timer.timeout.connect(report)
+    return timer
 
 
 class QValueSlider(QSlider):
@@ -21,7 +30,9 @@ class QValueSlider(QSlider):
     the widest one. So the track keeps its length as the value changes. The style lays
     the slider out left of it (`initStyleOption`), which painting and the mouse both
     use. Beside the track rather than above the handle, the slider is no taller than a
-    plain one, so its form row is as tall as the others.
+    plain one, so its form row is as tall as the others. A drag reports its value once
+    the handle rests for `DRAG_REPORT_DELAY_MS`, and on release; a key, a click
+    on the track, or the wheel at once.
     """
 
     #: the user moved the handle to the value; never while signals are blocked
@@ -35,6 +46,8 @@ class QValueSlider(QSlider):
         #: the arithmetic of the steps: `SliderMixin`, or `FloatSliderMixin` for decimals
         self.steps: Any = SliderMixin
         self.valueChanged.connect(self._emit_shown_value)
+        self._report_timer = report_timer(self, self._report)
+        self.sliderReleased.connect(self._report_rested)
 
     def shown_value(self) -> float:
         return self._value_at(self.value())  # type: ignore[no-any-return]
@@ -86,5 +99,20 @@ class QValueSlider(QSlider):
         option.sliderPosition = option.sliderValue = position
         self.style().drawComplexControl(QStyle.ComplexControl.CC_Slider, option, painter, self)
 
+    def drop_report(self) -> None:
+        """Forget the drag's value not reported yet: the app has set another one."""
+        self._report_timer.stop()
+
     def _emit_shown_value(self, _position: int) -> None:
+        if self.isSliderDown():
+            self._report_timer.start()  # again: once the handle rests
+        else:
+            self._report()
+
+    def _report_rested(self) -> None:
+        if self._report_timer.isActive():
+            self._report()
+
+    def _report(self) -> None:
+        self._report_timer.stop()
         self.shown_value_changed.emit(self.shown_value())

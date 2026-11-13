@@ -1194,6 +1194,7 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
     ) -> None:
         last = cls._steps.last_position(minimum, maximum, step)
         rendered_object.first, rendered_object.step = minimum, step
+        rendered_object.drop_report()  # the app's value, not the user's drag
         rendered_object.setRange(0, last)
         rendered_object.setPageStep(max(1, last // 10))
         rendered_object.setValue(cls._steps.position(value, minimum, maximum, step))

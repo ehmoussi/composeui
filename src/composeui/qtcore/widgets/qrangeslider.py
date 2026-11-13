@@ -10,6 +10,7 @@ from qtpy.QtGui import QPainter
 from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
 
 from composeui.core.view import RANGE_DASH, SliderMixin
+from composeui.qtcore.widgets.qvalueslider import report_timer
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QKeyEvent, QMouseEvent, QPaintEvent
@@ -27,7 +28,8 @@ class QRangeSlider(QSlider):
     between the handles, then each handle. A click moves the nearest handle; the arrow
     keys, Page Up/Down, move the last handle pressed (the low one at first); Home moves
     the low one to the start, End the high one to the end. A handle stops on the other.
-    `moved` reports the user's moves only, with both positions.
+    `moved` reports the user's moves only, with both positions: a drag's once the handle
+    rests for `DRAG_REPORT_DELAY_MS`, and on release, as `QValueSlider` does.
     """
 
     #: the user moved a handle: the low and the high position
@@ -51,10 +53,15 @@ class QRangeSlider(QSlider):
         #: the handle the keys move: 0 the low one, 1 the high one
         self.active = 0
         self._is_dragging = False
+        self._report_timer = report_timer(self, self._report)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def set_positions(self, low: int, high: int) -> None:
-        """Show the handles at `low` and `high`, without `moved`."""
+        """Show the handles at `low` and `high`, without `moved`.
+
+        A drag's move not reported yet is forgotten: the app has set another range.
+        """
+        self._report_timer.stop()
         self.low, self.high = low, high
         self.update()
 
@@ -150,16 +157,18 @@ class QRangeSlider(QSlider):
         else:
             self.active = 0 if abs(position - self.low) <= abs(position - self.high) else 1
         self._is_dragging = True
-        self._move_active(position)
+        self._move_active(position, is_drag=True)
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if self._is_dragging:
-            self._move_active(self._position_at(event.position().toPoint().x()))
+            self._move_active(self._position_at(event.position().toPoint().x()), is_drag=True)
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         self._is_dragging = False
+        if self._report_timer.isActive():
+            self._report()
         event.accept()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
@@ -182,8 +191,16 @@ class QRangeSlider(QSlider):
             return
         event.accept()
 
-    def _move_active(self, position: int) -> None:
-        """Move the active handle to `position`, stopping on the other one and in range."""
+    def _report(self) -> None:
+        self._report_timer.stop()
+        self.moved.emit(self.low, self.high)
+
+    def _move_active(self, position: int, *, is_drag: bool = False) -> None:
+        """Move the active handle to `position`, stopping on the other one and in range.
+
+        A drag's move is reported once the handle rests, any other at once: a key's too, even
+        while a drag's release never came, e.g. to a slider disabled meanwhile.
+        """
         position = min(max(self.minimum(), position), self.maximum())
         if self.active == 0:
             low, high = min(position, self.high), self.high
@@ -192,6 +209,9 @@ class QRangeSlider(QSlider):
         if (low, high) != (self.low, self.high):
             self.low, self.high = low, high
             self.update()
-            self.moved.emit(low, high)
+            if is_drag:
+                self._report_timer.start()  # again: once the handle rests
+            else:
+                self._report()
         else:
             self.update()  # the active handle shows its focus

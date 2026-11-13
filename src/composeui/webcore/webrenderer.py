@@ -53,6 +53,7 @@ from composeui.core.renderer import (
 )
 from composeui.core.view import (
     CHECKED_TEXTS,
+    DRAG_REPORT_DELAY_MS,
     PLAIN_CELL,
     RANGE_DASH,
     SEARCH_DELAY_MS,
@@ -2105,7 +2106,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             '<input id="{input_id}"{row_attributes} type="range" data-slider'
             ' data-decimals="{decimals}"{fill} class="range range-primary" name="value"'
             ' min="{minimum}" max="{top}" step="{step}" value="{value}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
+            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:{delay}ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
             # read out by the input itself, as its value
@@ -2114,6 +2115,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             digits=digits,
+            delay=DRAG_REPORT_DELAY_MS,
             input_id=input_id,
             row_attributes=self._row_attributes(),
             minimum=minimum,
@@ -2219,11 +2221,12 @@ class WebRangeSliderRenderer(WebRenderer[RangeSliderViewLike]):
                 '<input id="{widget_id}-{name}" type="range" class="range range-primary"'
                 ' name="{name}" min="0" max="{last}" step="1" value="{position}"'
                 ' aria-label="{label}" aria-valuetext="{text}" data-range-end="{name}"'
-                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:150ms, change"'
+                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:{delay}ms, change"'
                 ' hx-include="closest .cui-range-track" data-post-event hx-swap="none"'
                 ' hx-sync="closest .cui-range-track:queue all" autocomplete="off"{disabled}>'
             ).format(
                 widget_id=self.widget_id,
+                delay=DRAG_REPORT_DELAY_MS,
                 name=name,
                 last=last,
                 position=position,
