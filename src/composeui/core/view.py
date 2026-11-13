@@ -816,6 +816,7 @@ class _LazySignal:
     def _store(self, view: View, signal: Signal[Any]) -> None:
         # interned: each instance of the view, e.g. each session's, shares the name
         signal.set_name(sys.intern(f"{type(view).__name__}.{self._name}"))
+        signal.set_view(view)
         main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001
         if main_view is not None:
             signal.set_main_view(main_view)

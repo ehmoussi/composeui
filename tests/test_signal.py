@@ -4,10 +4,12 @@ import functools
 import gc
 import inspect
 import logging
+import subprocess
 import sys
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import attrs
 import pytest
 
 from composeui.core.application import Application, ModelApplication
@@ -19,10 +21,14 @@ from composeui.core.view import (
     LabelView,
     MainView,
     StatusBar,
+    TableView,
     View,
     child,
     define_view,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @define_view
@@ -111,6 +117,275 @@ def test_app_connect_injects_the_view_and_main_view() -> None:
     assert len(calls) == 1
     assert calls[0][0] is status_bar
     assert calls[0][1] is app.main_view
+
+
+def test_a_signal_injects_its_owning_view_without_an_app() -> None:
+    table = TableView()
+    calls: list[tuple[object, ...]] = []
+
+    def record(row: int, column: int, text: str, *, view: TableView) -> None:
+        calls.append((row, column, text, view))
+
+    def first(row: int, *, view: TableView) -> None:
+        calls.append((row, view))
+
+    def first_two(row: int, column: int, *, view: TableView) -> None:
+        calls.append((row, column, view))
+
+    def owner_only(view: TableView) -> None:
+        calls.append((view,))
+
+    def every(*values: object, view: TableView) -> None:
+        calls.append((*values, view))
+
+    table.cell_edited.connect(record)
+    table.cell_edited.connect(first)
+    table.cell_edited.connect(first_two)
+    table.cell_edited.connect(owner_only, now=True)
+    table.cell_edited.connect(every)
+    table.cell_edited.emit(0, 1, "Ada")
+
+    assert calls == [
+        (table,),
+        (0, 1, "Ada", table),
+        (0, table),
+        (0, 1, table),
+        (table,),
+        (0, 1, "Ada", table),
+    ]
+
+
+def test_view_injection_keeps_the_signal_arguments_typed(tmp_path: Path) -> None:
+    script = tmp_path / "view_callback_types.py"
+    source = (
+        "from composeui.core.signal import Signal\n"
+        "from composeui.core.view import ButtonView, MainView\n"
+        "from composeui.core.model import Model\n"
+        "signal: Signal[int, str, float] = Signal()\n"
+        "def first(row: int, *, view: ButtonView) -> None: pass\n"
+        "def first_two(row: int, text: str, *, view: ButtonView) -> None: pass\n"
+        "def full(row: int, text: str, value: float, *, view: ButtonView) -> None: pass\n"
+        "def context(row: int, *, view: ButtonView, main_view: MainView, model: Model)"
+        " -> None: pass\n"
+        "def two_main(row: int, text: str, *, view: ButtonView, main_view: MainView)"
+        " -> None: pass\n"
+        "def two_model(row: int, text: str, *, view: ButtonView, model: Model)"
+        " -> None: pass\n"
+        "def two_context(row: int, text: str, *, view: ButtonView, main_view: MainView,"
+        " model: Model) -> None: pass\n"
+        "def wrong_first(row: str, *, view: ButtonView) -> None: pass\n"
+        "def wrong_second(row: int, text: int, *, view: ButtonView) -> None: pass\n"
+        "def wrong_full(row: str, text: str, value: float, *, view: ButtonView) -> None: pass\n"
+        "def wrong_context(row: str, *, view: ButtonView, main_view: MainView, model: Model)"
+        " -> None: pass\n"
+        "def wrong_two_main(row: int, text: int, *, view: ButtonView, main_view: MainView)"
+        " -> None: pass\n"
+        "def wrong_two_model(row: int, text: int, *, view: ButtonView, model: Model)"
+        " -> None: pass\n"
+        "def wrong_two_context(row: int, text: int, *, view: ButtonView, main_view: MainView,"
+        " model: Model) -> None: pass\n"
+        "signal.connect(first)\n"
+        "signal.connect(first_two)\n"
+        "signal.connect(full)\n"
+        "signal.connect(context)\n"
+        "signal.connect(two_main)\n"
+        "signal.connect(two_model)\n"
+        "signal.connect(two_context)\n"
+        "signal.connect(wrong_first)\n"
+        "signal.connect(wrong_second)\n"
+        "signal.connect(wrong_full)\n"
+        "signal.connect(wrong_context)\n"
+        "signal.connect(wrong_two_main)\n"
+        "signal.connect(wrong_two_model)\n"
+        "signal.connect(wrong_two_context)\n"
+    )
+    for count in (4, 8):
+        names = [f"value{index}" for index in range(count)]
+        prefix = names[:-1]
+        types = ", ".join(["int"] * count)
+        parameters = ", ".join(f"{name}: int" for name in prefix)
+        wrong_parameters = ", ".join(
+            f"{name}: {'str' if index == len(prefix) - 1 else 'int'}"
+            for index, name in enumerate(prefix)
+        )
+        projection = f"lambda {', '.join(names)}: ({', '.join(prefix)})"
+        wrong_inputs = ", ".join(
+            f"{name}: {'str' if index == 0 else 'int'}" for index, name in enumerate(names)
+        )
+        returned_types = ", ".join(["int"] * len(prefix))
+        zeroes = ", ".join(["0"] * len(prefix))
+        source += (
+            f"wide{count}: Signal[{types}] = Signal()\n"
+            f"def prefix{count}({parameters}, *, view: ButtonView) -> None: pass\n"
+            f"def wrong_prefix{count}({wrong_parameters}, *, view: ButtonView) -> None: pass\n"
+            f"def wrong_arguments{count}({wrong_inputs}) -> tuple[{returned_types}]:"
+            f" return ({zeroes})\n"
+            f"wide{count}.connect(prefix{count}, arguments={projection})\n"
+            f"wide{count}.connect(wrong_prefix{count}, arguments={projection})\n"
+            f"wide{count}.connect(prefix{count}, arguments=wrong_arguments{count})\n"
+        )
+    script.write_text(source, encoding="utf-8")
+    result = subprocess.run(  # noqa: S603 (mypy checks only the declarations above)
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--follow-imports=silent",
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            str(script),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    errors = list(
+        dict.fromkeys(
+            line.split(": error:")[0] for line in result.stdout.splitlines() if ": error:" in line
+        )
+    )
+    assert result.returncode == 1
+    assert errors == [
+        f"{script}:{number}"
+        for number, line in enumerate(source.splitlines(), start=1)
+        if ".connect(" in line and "wrong_" in line
+    ]
+
+
+@define_view
+class _ProjectedView(View):
+    changed: Signal[int, str, float, bool] = attrs.Factory(Signal[int, str, float, bool])
+
+    def select(self, row: int, text: str, value: float, _flag: bool) -> tuple[int, str, float]:
+        return row, text, value
+
+
+def _first_three(row: int, text: str, value: float, _flag: bool) -> tuple[int, str, float]:
+    return row, text, value
+
+
+def test_argument_projection_keeps_the_signal_owner_and_all_injected_context() -> None:
+    view = _ProjectedView()
+    main_view = _MainView()
+    model = Model()
+    signal = view.changed
+    signal.set_main_view(main_view)
+    signal.set_model(model)
+    received: list[tuple[object, ...]] = []
+
+    def plain(row: int, text: str, value: float) -> None:
+        received.append((row, text, value))
+
+    def owner(row: int, text: str, value: float, *, view: _ProjectedView) -> None:
+        received.append((row, text, value, view))
+
+    def main(row: int, text: str, value: float, *, main_view: _MainView) -> None:
+        received.append((row, text, value, main_view))
+
+    def data(row: int, text: str, value: float, *, model: Model) -> None:
+        received.append((row, text, value, model))
+
+    def main_data(row: int, text: str, value: float, *, main_view: _MainView, model: Model) -> None:
+        received.append((row, text, value, main_view, model))
+
+    def owner_main(
+        row: int, text: str, value: float, *, view: _ProjectedView, main_view: _MainView
+    ) -> None:
+        received.append((row, text, value, view, main_view))
+
+    def owner_data(
+        row: int, text: str, value: float, *, view: _ProjectedView, model: Model
+    ) -> None:
+        received.append((row, text, value, view, model))
+
+    def every(
+        *values: object,
+        view: _ProjectedView,
+        main_view: _MainView,
+        model: Model,
+    ) -> None:
+        received.append((*values, view, main_view, model))
+
+    signal.connect(plain, arguments=_first_three)
+    signal.connect(owner, arguments=_first_three)
+    signal.connect(main, arguments=_first_three)
+    signal.connect(data, arguments=_first_three)
+    signal.connect(main_data, arguments=_first_three)
+    signal.connect(owner_main, arguments=_first_three)
+    signal.connect(owner_data, arguments=_first_three)
+    signal.connect(every, arguments=_first_three)
+    flag = True
+    signal.emit(1, "Ada", 2.5, flag)
+
+    assert received == [
+        (1, "Ada", 2.5),
+        (1, "Ada", 2.5, view),
+        (1, "Ada", 2.5, main_view),
+        (1, "Ada", 2.5, model),
+        (1, "Ada", 2.5, main_view, model),
+        (1, "Ada", 2.5, view, main_view),
+        (1, "Ada", 2.5, view, model),
+        (1, "Ada", 2.5, view, main_view, model),
+    ]
+
+
+def test_now_uses_callback_defaults_without_running_the_argument_projection() -> None:
+    view = _ProjectedView()
+    received: list[tuple[object, ...]] = []
+    projected: list[bool] = []
+
+    def arguments(row: int, text: str, value: float, flag: bool) -> tuple[int, str, float]:
+        projected.append(flag)
+        return row, text, value
+
+    def record(row: int = -1, text: str = "", value: float = 0.0, *, view: _ProjectedView) -> None:
+        received.append((row, text, value, view))
+
+    view.changed.connect(record, arguments=arguments, now=True)
+    assert projected == []
+    assert received == [(-1, "", 0.0, view)]
+
+    flag = True
+    view.changed.emit(1, "Ada", 2.5, flag)
+    assert projected == [True]
+    assert received == [(-1, "", 0.0, view), (1, "Ada", 2.5, view)]
+
+
+def test_an_argument_projection_does_not_keep_its_view_alive() -> None:
+    view = _ProjectedView()
+    signal = view.changed
+    received: list[tuple[object, ...]] = []
+
+    def record(*values: object) -> None:
+        received.append(values)
+
+    signal.connect(record, arguments=view.select)
+    flag = True
+    signal.emit(1, "Ada", 2.5, flag)
+    del view
+    gc.collect()
+    signal.emit(2, "Bob", 3.5, flag)
+
+    assert received == [(1, "Ada", 2.5)]
+
+
+def test_a_signal_does_not_keep_its_owning_view_alive() -> None:
+    button = ButtonView()
+    signal = button.clicked
+    calls: list[str] = []
+
+    def record(*, view: ButtonView) -> None:
+        calls.append(view.text)
+
+    signal.connect(record)
+    signal.emit()
+    assert calls == [button.text]
+    del button
+    gc.collect()
+
+    with pytest.raises(ValueError, match=r"The view is missing\."):
+        signal.emit()
+    assert len(calls) == 1
 
 
 def test_a_callback_gets_as_many_of_the_signal_s_arguments_as_it_takes() -> None:
@@ -215,6 +490,49 @@ def test_two_threads_connecting_a_signal_at_once_keep_both_callbacks() -> None:
     assert sorted(received) == ["first", "second"]
 
 
+@pytest.mark.parametrize("now", [False, True])
+def test_a_signal_assigned_while_a_callback_connects_gives_it_the_owner(*, now: bool) -> None:
+    signal = SignalNoArgs()
+    prepared, resume = threading.Event(), threading.Event()
+    received: list[ButtonView] = []
+    errors: list[Exception] = []
+
+    def record(*, view: ButtonView) -> None:
+        received.append(view)
+
+    def pause_once_prepared(frame: Any, event: str, _arg: object) -> None:
+        # the callback has captured the old owner, but is not registered yet
+        if event == "return" and frame.f_code.co_name == "_inject_callback":
+            sys.setprofile(None)
+            prepared.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError
+
+    def connect() -> None:
+        try:
+            sys.setprofile(pause_once_prepared)
+            signal.connect(record, now=now)
+        except Exception as error:  # noqa: BLE001 - the main thread asserts the error
+            errors.append(error)
+        finally:
+            sys.setprofile(None)
+
+    worker = threading.Thread(target=connect)
+    worker.start()
+    try:
+        assert prepared.wait(timeout=5)
+        button = ButtonView(clicked=signal)
+    finally:
+        resume.set()
+        worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert errors == []
+    assert received == ([button] if now else [])
+
+    signal.emit()
+    assert received == [button] * (2 if now else 1)
+
+
 def test_a_signal_disconnected_calls_none_of_its_callbacks() -> None:
     signal: Signal[int] = Signal()
     received: list[int] = []
@@ -235,10 +553,17 @@ def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
     def sign(value: int, *, model: Model) -> None:
         pass
 
+    def owner(value: int, *, view: View) -> None:
+        pass
+
     def maybe_sign(value: int, *, model: Model | None = None) -> None:
         pass
 
-    for callback, error in ((show, "The main view is missing."), (sign, "The model is missing.")):
+    for callback, error in (
+        (show, "The main view is missing."),
+        (sign, "The model is missing."),
+        (owner, "The view is missing."),
+    ):
         signal: Signal[int] = Signal()  # e.g. a view's, not given its main view yet
         signal.connect(callback)
         with pytest.raises(ValueError, match=error):
@@ -246,6 +571,23 @@ def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
     optional: Signal[int] = Signal()
     optional.connect(maybe_sign)
     optional.emit(1)  # its default instead
+
+
+def test_an_optional_view_uses_its_default_until_the_signal_has_an_owner() -> None:
+    signal = SignalNoArgs()
+    calls: list[str] = []
+
+    def record(*, view: ButtonView | None = None) -> None:
+        calls.append("no view" if view is None else view.text)
+
+    signal.connect(record, now=True)
+    button = ButtonView(text="Ready", clicked=signal)
+    signal.emit()
+    del button
+    gc.collect()
+    signal.emit()
+
+    assert calls == ["no view", "Ready", "no view"]
 
 
 @define_view
@@ -261,36 +603,56 @@ class _WiredMainView(MainView):
         self.early.clicked.connect(lambda: None)  # made as the view is built
 
 
-def test_a_signal_made_before_or_after_the_app_wires_its_view_gives_main_view_and_model() -> None:
+def test_a_signal_made_before_or_after_the_app_wires_its_view_injects_its_context() -> None:
     app = ModelApplication(build_main_view=_WiredMainView, build_model=Model)
-    given: list[tuple[MainView, Model]] = []
+    given: list[tuple[View, MainView, Model]] = []
 
-    def record(*, main_view: MainView, model: Model) -> None:
-        given.append((main_view, model))
+    def record(*, view: ButtonView, main_view: MainView, model: Model) -> None:
+        given.append((view, main_view, model))
+
+    def with_main(*, view: ButtonView, main_view: MainView) -> None:
+        assert main_view is app.main_view
+        view.text = "Main"
+
+    def with_model(*, view: ButtonView, model: Model) -> None:
+        assert model is app.model
+        view.text += " and model"
 
     for button in (app.main_view.early, app.main_view.late):  # `late`'s made only now
+        button.clicked.connect(with_main)
+        button.clicked.connect(with_model)
         button.clicked.connect(record)
         button.clicked.emit()
+        assert button.text == "Main and model"
 
-    assert given == [(app.main_view, app.model)] * 2
+    assert given == [
+        (app.main_view.early, app.main_view, app.model),
+        (app.main_view.late, app.main_view, app.model),
+    ]
 
 
 def test_a_signal_given_to_a_view_or_set_since_is_the_one_it_emits() -> None:
     clicked = SignalNoArgs()
-    calls: list[str] = []
+    calls: list[object] = []
     clicked.connect(lambda: calls.append("clicked"))
+
+    def record(*, view: ButtonView) -> None:
+        calls.append(view)
+
+    clicked.connect(record)
 
     button = ButtonView(clicked=clicked)
     button.clicked.emit()
     assert button.clicked is clicked
-    assert calls == ["clicked"]
+    assert calls == ["clicked", button]
 
     replaced = SignalNoArgs()
+    replaced.connect(record)
     button.clicked = replaced  # in place of the one made
     button.clicked.emit()
 
     assert button.clicked is replaced
-    assert calls == ["clicked"]  # the first one's callback, not the new one's
+    assert calls == ["clicked", button, button]
 
 
 def test_two_threads_reading_a_view_s_new_signal_at_once_share_it() -> None:

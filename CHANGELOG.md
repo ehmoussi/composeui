@@ -8,6 +8,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `Signal.connect` injects the signal's owning view into a callback's `view` parameter,
+  also before an app is built. `Application.connect(view=...)` keeps its explicit view.
+- `Signal.connect(arguments=...)` selects or converts emitted values before the callback.
+  It keeps arbitrary-length selections typed with mypy, Pyright, Pyrefly and ty, without
+  changing the callback's injected context. The immediate call from `now=True` skips it.
 - `CheckListView` and `MultiComboBoxView` pick several of their `values`, on Qt, Textual and the
   web, with their form rows. A check-all box checks the choices shown, and an optional search
   shows only the choices whose label holds its text. A study saves the choice.

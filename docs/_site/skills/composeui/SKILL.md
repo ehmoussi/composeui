@@ -167,8 +167,16 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   method until `start_reactions(main_view)`. `reactive_inputs(view)` shows what each read.
   See https://ehmoussi.github.io/composeui/user-guide/reactive-methods.html
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
-  `connect` injects them. Spell the names exactly. A callback may take fewer of the
-  signal's arguments than it emits.
+  `connect` injects them. Spell the names exactly. With `signal.connect`, `view` is the
+  signal's owning view, available even before an app is built. With `Application.connect`,
+  it is the explicit `view` argument instead. A standalone signal has no owning view:
+  a callback's `view` default is used, or the call raises `ValueError` without one.
+  A callback may take fewer of the signal's arguments than it emits.
+  For a custom signal's longer prefix, use `connect(callback, arguments=...)`: the function
+  takes every emitted value and returns exactly the tuple the callback takes. This keeps
+  arbitrary-length selections checked by mypy, Pyright, Pyrefly and ty. It can reorder or
+  convert values too. `now=True` calls the callback without emitted values and skips
+  `arguments`; value parameters need defaults for that immediate call.
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
   where `_check` returns an error message or `None`. Then call `form.check()` and read
   `form.is_valid`.

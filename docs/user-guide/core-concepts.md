@@ -63,5 +63,55 @@ def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
     main_view.status_bar.show_message(f"Hello, {text}!" if text else "")
 ```
 
+With `signal.connect`, `view` is the view that owns the signal. It is available before an
+app is built:
+
+```python
+from composeui.core.view import ButtonView
+
+button = ButtonView(text="Click")
+
+def on_click(*, view: ButtonView) -> None:
+    view.text = "Clicked"
+
+button.clicked.connect(on_click)
+button.clicked.emit()
+assert button.text == "Clicked"
+```
+
+`Application.connect(view=..., signals=...)` supplies the explicit `view` instead. It need
+not own those signals. A standalone signal, such as a model's signal, has no owning view.
+If a callback asks for `view` when none is available, it uses its parameter's default.
+Without a default, the call raises `ValueError`. Signals do not keep their owning views alive.
+
 A callback can take fewer of the signal's arguments than the signal emits. It then gets the
-first ones, or none. `connect(callback, now=True)` also calls the callback once, right away.
+first ones, or none. The default type annotations cover common short callbacks, not every
+prefix of a custom signal. To check an arbitrary-length prefix with mypy, Pyright, Pyrefly
+or ty, pass an `arguments` function. It receives every emitted value and returns the tuple
+that the callback takes:
+
+```python
+from composeui.core.signal import Signal
+
+changed: Signal[int, str, float, bool] = Signal()
+seen: list[tuple[int, str, float]] = []
+
+def record(number: int, text: str, value: float) -> None:
+    seen.append((number, text, value))
+
+changed.connect(
+    record,
+    arguments=lambda number, text, value, _flag: (number, text, value),
+)
+changed.emit(1, "Ada", 2.5, True)
+assert seen == [(1, "Ada", 2.5)]
+```
+
+The type checker checks both the input values of `arguments` and the tuple passed to the
+callback. `arguments` can also select, reorder or convert values. It does not change which
+`view`, `main_view` or `model` the callback receives.
+
+`connect(callback, now=True)` also calls the callback once, right away, without emitted
+values. That call does not run `arguments`; the callback needs defaults for its value
+parameters if it has any. A bound method used for `arguments` does not keep its receiver
+alive. Once that receiver is collected, the connection calls neither it nor the callback.

@@ -94,8 +94,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   from the widget's signals, set inside `stop_refresh()`.
 - Views are reactive: setting a view attribute pushes the change to its renderer. Don't add
   manual `update()`/`refresh()` calls.
-- `Signal.connect` injects `main_view` and `model`, and `Application.connect` also `view`, as
-  keyword arguments based on the callback's parameter names; keep those names exact.
+- `Signal.connect` injects its owning `view` and the app's `main_view` and `model` as keyword
+  arguments based on the callback's parameter names; keep those names exact.
+  `Application.connect` supplies its explicit `view` instead, which need not own the signal.
 - View state is (de)serialized with `cattrs` (`MainView.save_state` / `load_state`); new view
   fields must remain serializable, or be excluded like `Signal`/`Renderer`/`Validator` fields.
 - A view makes each signal on the first read of its field. Code that walks a view's fields uses
