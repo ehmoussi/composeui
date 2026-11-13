@@ -131,9 +131,10 @@ under the session's lock. See [A button click](#a-button-click).
 
 `Signal.connect` and `Application.connect` read the parameter names of a callback:
 
-- `Signal.connect` injects the `main_view` and `model` keyword arguments when the callback
-  asks for them. The callback gets only as many of the signal's arguments as it takes.
-- `Application.connect` also injects `view`, the view that it connects.
+- `Signal.connect` injects `view`, the view that owns the signal, and the app's `main_view`
+  and `model` when the callback asks for them. The callback gets only as many of the signal's
+  arguments as it takes.
+- `Application.connect` supplies its explicit `view`, which need not own the signal.
 
 These names are part of the API: keep them exact.
 
@@ -141,9 +142,18 @@ A view makes each of its signals on the first read of its field, as most are nev
 `define_view` gives each field whose default makes a signal a `_LazySignal`. A web session's page
 has views by the hundred, so the signals that nothing reads cost nothing. A view keeps the
 signals made in its `_signals`. A signal made after `set_references` gets the main view and the
-model as it is made. Code that walks a view's fields uses `view_fields`, which leaves the signals
-out. The core emits a signal that often has no callback, such as `checked`, with `emit_if_made`.
+model as it is made. `_LazySignal` gives each signal a weak reference to its owning view,
+also when code supplies the signal. Callbacks connected before the signal is assigned to a
+view get that owner too. A view refuses a signal that another live view owns, so a
+callback's view never changes. Code that walks a view's fields uses `view_fields`,
+which leaves the signals out. The core emits a signal that often has no callback, such as
+`checked`, with `emit_if_made`.
 `test_a_session_makes_only_the_signals_something_connects` fails if a walk reads them all.
+
+Callback registration and owner assignment share a lock. `connect` prepares the callback
+outside the lock, then gives it the current owner and registers it inside the lock.
+This prevents a concurrent owner assignment from leaving the callback with an old owner.
+Callbacks run outside the lock, including the immediate call from `now=True`.
 
 ### Reactive methods
 

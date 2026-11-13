@@ -63,5 +63,28 @@ def _on_name_changed(self, text: str, *, main_view: MainView) -> None:
     main_view.status_bar.show_message(f"Hello, {text}!" if text else "")
 ```
 
+With `signal.connect`, `view` is the view that owns the signal. It is available before an
+app is built:
+
+```python
+from composeui.core.view import ButtonView
+
+button = ButtonView(text="Click")
+
+def on_click(*, view: ButtonView) -> None:
+    view.text = "Clicked"
+
+button.clicked.connect(on_click)
+button.clicked.emit()
+assert button.text == "Clicked"
+```
+
+`Application.connect(view=..., signals=...)` supplies the explicit `view` instead. It need
+not own those signals. A standalone signal, such as a model's signal, has no owning view.
+If a callback asks for `view` when none is available, it uses its parameter's default.
+Without a default, the call raises `ValueError`. Signals do not keep their owning views alive.
+A signal belongs to one view: giving it to another view, as in `b.clicked = a.clicked`,
+raises `ValueError`.
+
 A callback can take fewer of the signal's arguments than the signal emits. It then gets the
 first ones, or none. `connect(callback, now=True)` also calls the callback once, right away.
