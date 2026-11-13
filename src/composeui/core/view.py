@@ -94,6 +94,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CHECKED_TEXTS",
     "CONVERTER",
+    "DRAG_REPORT_DELAY_MS",
     "GRID_POSITION",
     "OMIT",
     "SEARCH_DELAY_MS",
@@ -2686,6 +2687,10 @@ class FileUploadView(FileUploadMixin, View):
 
 #: the most steps a slider takes: Qt's sliders count them in a 32-bit integer
 MAX_SLIDER_STEPS = 2**31 - 1
+#: the milliseconds a dragged slider's handle rests before the slider reports its value (and
+#: on release): a report at each step would make the app's work on it, such as a dashboard
+#: drawn again, lag behind the handle
+DRAG_REPORT_DELAY_MS = 150
 
 
 def _check_steps(instance: Any, attribute: attrs.Attribute[Any], value: float) -> None:

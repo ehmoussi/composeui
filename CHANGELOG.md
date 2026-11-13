@@ -145,6 +145,9 @@ The notable changes of each release of ComposeUI. The format follows
 - On Qt, an empty date input's calendar opens on the month nearest to today's that its `minimum`
   and `maximum` allow. It opened on today's month, whose days the user couldn't pick when today
   was out of the range.
+- On Qt and Textual, a slider and a range slider report a drag once the handle rests for 150 ms,
+  and on release, as the web does. They reported each step, and the app's work on each, such as
+  a dashboard drawn again, made the handle lag behind the mouse.
 - On Qt, a date picked in a date input's calendar shows in the field at once. It showed only
   once the app's work on the new date was over, such as a dashboard filtering its rows.
 - On the web, a click on a table's check-all box does what the page shows. Before, when the app

@@ -1,26 +1,57 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
 from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.widget import Widget
 
 from composeui.core.signal import Signal
-from composeui.core.view import SliderMixin
+from composeui.core.view import DRAG_REPORT_DELAY_MS, SliderMixin
 
 if TYPE_CHECKING:
     from textual import events
     from textual.app import RenderResult
+    from textual.timer import Timer
 
 
-class ComposeSlider(Widget, can_focus=True):
+class DragReportMixin(Widget):
+    """A slider whose drag reports its value once the handle rests, and on release.
+
+    Each `DRAG_REPORT_DELAY_MS` of rest, or the release, calls `_report`, which the
+    slider defines; a key or a click reports at once. Showing the app's value drops a
+    report not made yet: the app has set another value.
+    """
+
+    _report_timer: Optional[Timer] = None
+
+    def _report(self) -> None:
+        raise NotImplementedError
+
+    def _report_later(self) -> None:
+        """Report once the handle rests: again from now on."""
+        self._drop_report()
+        self._report_timer = self.set_timer(DRAG_REPORT_DELAY_MS / 1000, self._report)
+
+    def _drop_report(self) -> None:
+        if self._report_timer is not None:
+            self._report_timer.stop()
+            self._report_timer = None
+
+    def _report_rested(self) -> None:
+        """Report the drag's value not reported yet, as the mouse is released."""
+        if self._report_timer is not None:
+            self._report()
+
+
+class ComposeSlider(DragReportMixin, can_focus=True):
     """A slider from `first` by `step`, its value on the right of the track.
 
     Textual has none. Its positions count steps (0 to `last`), so the handle only stops
     on a step. The arrow keys move it a step, Page Up/Down a tenth of the way, Home/End
     to an end; a click or a drag moves it under the mouse. `moved` reports the user's
-    moves only, as Qt's renderers block their widget's signals while refreshing it.
+    moves only, as Qt's renderers block their widget's signals while refreshing it: a
+    drag's once the handle rests, and on release (see `DragReportMixin`).
 
     Three lines tall, the track on the middle one, as an input's text: a form row is as
     tall as an input's. The value has a slot as wide as the widest one, so the track
@@ -92,6 +123,7 @@ class ComposeSlider(Widget, can_focus=True):
 
     def set_steps(self, first: float, step: float, last: int, position: int) -> None:
         """Show `position` out of `last` steps of `step` from `first`, without `moved`."""
+        self._drop_report()
         self.first, self.step, self.last, self.position = first, step, last, position
         self.refresh()
 
@@ -143,15 +175,25 @@ class ComposeSlider(Widget, can_focus=True):
     def on_mouse_up(self, _event: events.MouseUp) -> None:
         self._is_dragging = False
         self.release_mouse()
+        self._report_rested()
 
     def _move_to_column(self, column: int) -> None:
+        """Move the handle under `column`, as the mouse drags it."""
         width = self._track_width()
         if width > 1:
-            self._move_to(round(column * self.last / (width - 1)))
+            self._move_to(round(column * self.last / (width - 1)), is_drag=True)
 
-    def _move_to(self, position: int) -> None:
+    def _move_to(self, position: int, *, is_drag: bool = False) -> None:
+        """Move the handle to `position`: a drag's move reported once it rests, others at once."""
         position = min(max(0, position), self.last)
         if position != self.position:
             self.position = position
             self.refresh()
-            self.moved.emit(self.shown_value)
+            if is_drag:
+                self._report_later()
+            else:
+                self._report()
+
+    def _report(self) -> None:
+        self._drop_report()
+        self.moved.emit(self.shown_value)

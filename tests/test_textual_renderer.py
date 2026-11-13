@@ -98,7 +98,7 @@ from composeui.textualcore.textualrenderer import (
     TextualMainRenderer,
     TextualWidgetRenderer,
 )
-from composeui.textualcore.widgets import composeimage
+from composeui.textualcore.widgets import composeimage, composeslider
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composechecklist import ComposeCheckList, ComposeMultiComboBox
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
@@ -199,6 +199,8 @@ from tests.vertical import VerticalMainView
 from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from textual.app import App
     from textual.message import Message
     from textual.pilot import Pilot
@@ -625,8 +627,8 @@ async def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each
         await pilot.mouse_up(slider, offset=(1 + round(15 * (width - 1) / 23), 1))
         await pilot.hover(slider, offset=(1, 1))  # released: no move
         await pilot.pause()
-        # pressed at 8, nearer the high handle at 7, then dragged
-        assert moves[-4:] == [(5, 9), (5, 7), (5, 8), (5, 15)]
+        # pressed at 8, nearer the high handle at 7, then dragged: reported once, on release
+        assert moves[-3:] == [(5, 9), (5, 7), (5, 15)]
 
 
 @pytest.mark.asyncio
@@ -4659,9 +4661,111 @@ async def test_a_slider_moves_by_a_page_and_follows_a_drag() -> None:
         await pilot.hover(slider, offset=(1, 1))  # released: no move
         await pilot.pause()
 
-        assert moves[:3] == [8, 5, 2]  # by a page each, then pressed at the start
+        # by a page each, then pressed at the start and dragged: reported once, on release
+        assert moves[:2] == [8, 5]
+        assert len(moves) == 3
         assert 2 < moves[-1] < 14  # dragged to the track's middle
         assert workers.value == moves[-1]
+
+
+async def _until(pilot: Pilot[Any], is_done: Callable[[], bool]) -> None:
+    """Pause until `is_done`, at most a few seconds: a timer's work, not a fixed wait."""
+    for _ in range(100):
+        if is_done():
+            return
+        await pilot.pause(0.05)
+
+
+#: a rest longer than any test: a drag's report then waits for the release
+_LONG_REST_MS = 10_000
+
+
+@pytest.mark.asyncio
+async def test_a_slider_reports_a_drag_once_its_handle_rests_and_on_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    view = WorkersMainView()
+    app = _app_of(view)
+    workers = view.form.workers
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(workers.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        width = slider._track_width()  # noqa: SLF001
+
+        def at(position: int) -> tuple[int, int]:
+            return (1 + round(position * (width - 1) / slider.last), 1)
+
+        await pilot.mouse_down(slider, offset=at(1))  # the handle, at 5
+        await pilot.hover(slider, offset=at(2))
+        await _until(pilot, lambda: moves == [8])  # once the handle rests
+        assert (slider.position, moves) == (2, [8])
+        await pilot.mouse_up(slider, offset=at(2))
+
+        # each step of a drag not reported: the app's work on each would make the handle lag
+        monkeypatch.setattr(composeslider, "DRAG_REPORT_DELAY_MS", _LONG_REST_MS)
+        await pilot.mouse_down(slider, offset=at(2))
+        await pilot.hover(slider, offset=at(3))
+        await pilot.hover(slider, offset=at(4))
+        assert (slider.position, workers.value, moves) == (4, 8, [8])
+        await pilot.mouse_up(slider, offset=at(4))
+        assert (workers.value, moves) == (14, [8, 14])  # on release, at once
+
+        await pilot.mouse_down(slider, offset=at(4))
+        await pilot.hover(slider, offset=at(3))
+        workers.value = 11  # set in code before the drag's move is reported: the app's wins
+        await pilot.mouse_up(slider, offset=at(3))
+        assert (slider.position, moves) == (3, [8, 14])
+
+
+@pytest.mark.asyncio
+async def test_a_range_slider_reports_a_drag_once_its_handle_rests_and_on_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    view = RangesMainView()
+    app = _app_of(view)
+    hours = view.hours
+    moves: list[tuple[int, int]] = []
+    hours.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(hours.renderer)
+        assert isinstance(slider, ComposeRangeSlider)
+        await pilot.pause()
+        width = slider._track_width()  # noqa: SLF001
+
+        def at(position: int) -> tuple[int, int]:
+            return (1 + round(position * (width - 1) / slider.last), 1)
+
+        await pilot.mouse_down(slider, offset=at(18))  # the high handle of (8, 18)
+        await pilot.hover(slider, offset=at(19))
+        await _until(pilot, lambda: moves == [(8, 19)])  # once the handle rests
+        assert moves == [(8, 19)]
+        await pilot.mouse_up(slider, offset=at(19))
+
+        monkeypatch.setattr(composeslider, "DRAG_REPORT_DELAY_MS", _LONG_REST_MS)
+        await pilot.mouse_down(slider, offset=at(19))
+        await pilot.hover(slider, offset=at(20))
+        await pilot.hover(slider, offset=at(21))
+        assert (slider.high, hours.value, moves) == (21, (8, 19), [(8, 19)])
+        await pilot.mouse_up(slider, offset=at(21))
+        assert (hours.value, moves) == ((8, 21), [(8, 19), (8, 21)])  # on release, at once
+
+        await pilot.mouse_down(slider, offset=at(21))
+        await pilot.hover(slider, offset=at(20))
+        await pilot.press("left")  # a key, even during a drag: at once
+        assert moves[2:] == [(8, 19)]
+        await pilot.mouse_up(slider, offset=at(20))  # the mouse moved back to 20 first
+        assert moves[2:] == [(8, 19), (8, 20)]
+
+        await pilot.mouse_down(slider, offset=at(21))
+        await pilot.hover(slider, offset=at(22))
+        hours.value = (8, 22)  # set in code before the drag's move is reported: the app's wins
+        await pilot.mouse_up(slider, offset=at(22))
+        assert (slider.high, len(moves)) == (22, 4)
 
 
 @pytest.mark.asyncio
