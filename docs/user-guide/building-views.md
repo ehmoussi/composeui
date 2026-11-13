@@ -252,27 +252,8 @@ A subclass of `MainView` is the app. Its class variables configure it:
 Its view fields are the content of the window, one above the other. Its `status_bar` shows
 short messages, and its `jobs` [run work in threads](threads.md).
 
-### A dashboard's main view
-
-`DashboardView`, from `composeui.core.dashboard`, is a `MainView` for a dashboard. Its
-`width` is `WIDE`, and it has no File menu:
-
-```python
-from composeui.core.dashboard import DashboardView
-from composeui.core.view import ChartView, LabelView, child, define_view
-
-
-@define_view
-class SalesDashboard(DashboardView):
-    app_title = "Sales"
-
-    status: LabelView = child(LabelView)
-    sales: ChartView = child(ChartView, title="Sales by month")
-```
-
-A dashboard that saves studies sets `has_file_menu = True` and its `extension`. The
-[Uber pickups example](../../src/examples/uberpickups.py) does, so that a study keeps the
-rows that it read.
+A dashboard's main view, `DashboardView`, is wide and has no File menu: see
+[Dashboards from a dataframe](dashboards.md#a-dashboards-main-view).
 
 ### The status bar
 

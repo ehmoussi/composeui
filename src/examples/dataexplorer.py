@@ -5,11 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
-import polars as pl
-
 from composeui.core.application import run
-from composeui.core.dashboard import DashboardView
-from composeui.core.dataframesource import DataFrameSource
+from composeui.core.dashboard import DashboardView, read_frame, show_frame
 from composeui.core.reactivity import reactive
 from composeui.core.view import (
     FileUploadView,
@@ -23,45 +20,9 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from composeui.core.jobs import Job
-
-
-#: the separators that a CSV file can use, the first winning a tie, and the longest first line
-#: read to find it. Not `csv.Sniffer`: on a crafted file, it stops every session for seconds
-SEPARATORS = ",;\t|"
-MAX_HEADER_LENGTH = 64 * 1024
-#: how a compressed file starts, which Polars would unpack: gzip, zstd and zlib. A small file can
-#: unpack to more than the server's memory, whatever `max_upload_size` says
-COMPRESSED_STARTS = (
-    b"\x1f\x8b",
-    b"\x28\xb5\x2f\xfd",
-    b"\x78\x01",
-    b"\x78\x5e",
-    b"\x78\x9c",
-    b"\x78\xda",
-)
-
-
-def csv_separator(path: Path) -> str:
-    """Find the separator of a CSV file: the most frequent on its first line, outside quotes."""
-    with path.open(encoding="utf-8", errors="replace", newline="") as file:
-        header = file.readline(MAX_HEADER_LENGTH)
-    counts = dict.fromkeys(SEPARATORS, 0)
-    is_quoted = False
-    for character in header:
-        if character == '"':
-            is_quoted = not is_quoted
-        elif character in counts and not is_quoted:
-            counts[character] += 1
-    return max(SEPARATORS, key=lambda separator: counts[separator])
-
-
-def check_not_compressed(path: Path) -> None:
-    with path.open("rb") as file:
-        start = file.read(4)
-    if start.startswith(COMPRESSED_STARTS):
-        msg = "a compressed file isn't accepted"
-        raise ValueError(msg)
 
 
 class Table(NamedTuple):
@@ -72,11 +33,7 @@ class Table(NamedTuple):
 
 
 def read_table(_job: Job[Table, int], file: UploadedFile) -> Table:
-    path = file.path
-    if path.suffix.lower() == ".parquet":
-        return Table(pl.read_parquet(path), file)
-    check_not_compressed(path)
-    return Table(pl.read_csv(path, separator=csv_separator(path)), file)
+    return Table(read_frame(file.path, backend="polars").to_native(), file)
 
 
 def size_text(size: int) -> str:
@@ -134,8 +91,7 @@ class DataExplorerMainView(DashboardView):
             self.summary.rows.value = f"{frame.height:,}"
             self.summary.columns.value = str(frame.width)
             self.summary.size.value = size_text(file.size)
-            self.table.source = DataFrameSource(frame)
-            self.table.filterable_columns = frame.columns
+            show_frame(self.table, frame)
             self.table.export_filename = f"{Path(file.name).stem}-filtered.csv"
 
 

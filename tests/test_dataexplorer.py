@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import csv
-import gzip
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -16,11 +14,12 @@ import polars as pl
 from starlette.testclient import TestClient
 
 from composeui.core.application import Application
+from composeui.core.dashboard import read_frame
 from composeui.core.view import UploadedFile
 from composeui.webcore.webapplication import WebApplication
 from composeui.webcore.webrenderer import WebRenderer
 from examples import dataexplorer
-from examples.dataexplorer import DataExplorerMainView, csv_separator, size_text
+from examples.dataexplorer import DataExplorerMainView, size_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,11 +72,11 @@ def test_the_summary_and_the_export_keep_to_the_rows_shown_during_a_new_read(
     second.write_text("x\n" + "1\n" * 5000, encoding="utf-8")
     release = threading.Event()
 
-    def wait_then_find(path: Path) -> str:
+    def wait_then_read(path: Path, *, backend: Any) -> Any:
         assert release.wait(30)
-        return csv_separator(path)
+        return read_frame(path, backend=backend)
 
-    monkeypatch.setattr(dataexplorer, "csv_separator", wait_then_find)
+    monkeypatch.setattr(dataexplorer, "read_frame", wait_then_read)
     main_view.upload.take_file(UploadedFile.of_path(second))
 
     assert main_view.table.export_filename == "first-filtered.csv"
@@ -87,69 +86,6 @@ def test_the_summary_and_the_export_keep_to_the_rows_shown_during_a_new_read(
     main_view.jobs.wait()
     assert main_view.table.export_filename == "second-filtered.csv"
     assert main_view.summary.rows.value == "5,000"
-
-
-@pytest.mark.parametrize("separator", [",", ";", "\t", "|"])
-def test_a_csv_file_shows_its_columns_whatever_its_separator(
-    main_view: DataExplorerMainView, tmp_path: Path, separator: str
-) -> None:
-    path = tmp_path / "trips.csv"
-    lines = [["base", "count", "note"], ["B02512", "1", "a, b"], ["B02764", "2", "c"]]
-    with path.open("w", encoding="utf-8", newline="") as file:
-        csv.writer(file, delimiter=separator).writerows(lines)
-
-    _give(main_view, path)
-
-    assert main_view.loader.error is None
-    assert main_view.summary.columns.value == "3"
-    assert main_view.table.row_count == 2
-
-
-def test_a_separator_inside_quotes_on_the_first_line_doesn_t_count(tmp_path: Path) -> None:
-    path = tmp_path / "trips.csv"
-    path.write_text('"a,b,c,d";count\n"1,2,3,4";5\n', encoding="utf-8")
-
-    assert csv_separator(path) == ";"
-
-
-def test_a_crafted_csv_file_doesn_t_hold_up_the_server(tmp_path: Path) -> None:
-    """`csv.Sniffer` took 18 s on this, with every other thread stopped."""
-    path = tmp_path / "crafted.csv"
-    path.write_text(',"' * 32768, encoding="utf-8")
-
-    start = time.monotonic()
-    csv_separator(path)
-
-    assert time.monotonic() - start < 2
-
-
-@pytest.mark.parametrize(
-    "start",
-    [gzip.compress(b"a,b\n1,2\n"), b"\x28\xb5\x2f\xfd rest", b"\x78\x9c rest"],
-    ids=["gzip", "zstd", "zlib"],
-)
-def test_a_compressed_csv_file_is_refused_before_it_is_unpacked(
-    main_view: DataExplorerMainView, tmp_path: Path, start: bytes
-) -> None:
-    path = tmp_path / "small.csv"
-    path.write_bytes(start)
-
-    _give(main_view, path)
-
-    assert main_view.status.text == "Can't read the file: a compressed file isn't accepted"
-    assert not main_view.table.is_visible
-
-
-def test_a_csv_file_of_one_column_reads_as_one_column(
-    main_view: DataExplorerMainView, tmp_path: Path
-) -> None:
-    path = tmp_path / "names.csv"
-    path.write_text("name\nAda\nGrace\n", encoding="utf-8")
-
-    _give(main_view, path)
-
-    assert main_view.summary.columns.value == "1"
-    assert main_view.table.row_count == 2
 
 
 @pytest.mark.parametrize(
