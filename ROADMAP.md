@@ -212,6 +212,9 @@ The SQLite model is complete otherwise: do not rebuild it.
   intervals and on shutdown, and the cookies' signing key.
 - **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
   removes what a crash left.
+- **Formulas in CSV exports** (Now, before data is shared between users). A table's Export CSV
+  and `frame_content` escape a text cell that a spreadsheet would run as a formula, with a way to
+  keep the exact values.
 - **Users** (Later). The user read from a login proxy's headers, for OIDC, SAML2 or Basic Auth,
   with recipes for the proxies.
 - **Access control** (Later). An authorization hook that the server enforces for pages, actions
