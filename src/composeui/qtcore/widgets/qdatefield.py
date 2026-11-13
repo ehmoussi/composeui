@@ -70,12 +70,19 @@ class QDateField(QWidget):
         self.calendar.setDateRange(first, last)
 
     def open_calendar(self) -> None:
-        """Show the calendar under the field, on the date, else on today's month."""
+        """Show the calendar under the field, on the date, else on today's month.
+
+        Today out of the range, on the month of its nearest limit: the calendar would show a
+        month of days that the user can't pick.
+        """
         if self._date is not None:
             self.calendar.setSelectedDate(_qdate(self._date))
         else:
-            today = QDate.currentDate()
-            self.calendar.setCurrentPage(today.year(), today.month())
+            shown = min(
+                max(QDate.currentDate(), self.calendar.minimumDate()),
+                self.calendar.maximumDate(),
+            )
+            self.calendar.setCurrentPage(shown.year(), shown.month())
         self.calendar.move(self.mapToGlobal(QPoint(0, self.height())))
         self.calendar.show()
         self.calendar.setFocus()
