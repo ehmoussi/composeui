@@ -101,8 +101,16 @@ class QDateField(QWidget):
         # `close`, not `hide`: it also releases the popup's window, which WSLg's
         # compositor could otherwise keep drawing (see `release_when_hidden`)
         self.calendar.close()
-        self._edit(datetime.date(value.year(), value.month(), value.day()))
+        picked = datetime.date(value.year(), value.month(), value.day())
+        if picked == self._date:
+            self._show_date()  # e.g. over a date half typed
+            return
+        self._date = picked
+        # the date shown at once, before the app's work on it: Qt would paint the field only
+        # once that work is over, e.g. a dashboard filtering its rows and drawing them again
         self._show_date()
+        self.line_edit.repaint()
+        self.date_edited.emit(picked)
 
     def _edit(self, value: Optional[datetime.date]) -> None:
         if value != self._date:
