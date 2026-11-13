@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from composeui.core.application import run
-from composeui.core.dashboard import DashboardView, bar_chart
-from composeui.core.dataframesource import DataFrameSource, points_of
+from composeui.core.dashboard import DashboardView, bar_chart, counts_of, show_frame
+from composeui.core.dataframesource import points_of
 from composeui.core.model import Model
 from composeui.core.reactivity import reactive
 from composeui.core.view import (
@@ -35,8 +35,7 @@ def read_pickups(_job: Job[pl.DataFrame, int], url: str) -> pl.DataFrame:
 
 
 def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
-    counts = dict(frame.get_column("Date/Time").dt.hour().drop_nulls().value_counts().iter_rows())
-    return [counts.get(hour, 0) for hour in range(24)]
+    return counts_of(frame.select(Hour=pl.col("Date/Time").dt.hour()), "Hour", range(24))
 
 
 def pickups_at(frame: pl.DataFrame, at_hour: int) -> pl.DataFrame:
@@ -104,7 +103,7 @@ class UberPickupsMainView(DashboardView):
         if frame is not None:
             hour = self.filters.hour.value
             at = pickups_at(frame, hour)
-            self.table.source = DataFrameSource(at)
+            show_frame(self.table, at, filterable=False)
             self.pickups_chart.reference_lines = [ReferenceLine(hour, HOURS[hour], vertical=True)]
             self.pickups_map.points = pickup_points(at)
 

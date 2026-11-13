@@ -53,6 +53,7 @@ from examples import (
     studyinputs,
     taskview,
     textual_demo,
+    uberdashboard,
     uberpickups,
     uberpickupsframe,
     webhello,
@@ -246,6 +247,26 @@ def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
     main_view.connect_model(model)
 
 
+def _uberdashboard_main_view() -> MainView:
+    # made-up pickups over three days and two bases, in a CSV the app reads as it starts
+    lines = ["Date/Time,Lat,Lon,Base"] + [
+        f"9/{day}/2014 {hour}:01:00,{40.70 + index * 0.002:.4f},"
+        f"{-74.02 + index * 0.002 + hour * 0.0005:.4f},{('B02512', 'B02598')[index % 2]}"
+        for day in (1, 2, 3)
+        for hour in range(24)
+        for index in range(3 + hour // 2 + day)
+    ]
+    path = Path(tempfile.mkdtemp()) / "pickups.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    uberdashboard.DATA_URL = str(path)
+    return uberdashboard.UberDashboardMainView()
+
+
+def _uberdashboard(main_view: Any, _model: Optional[Model]) -> None:
+    main_view.jobs.wait()
+    main_view.filters.hours.value = (6, 22)
+
+
 def _uberpickups(main_view: Any, _model: Optional[Model]) -> None:
     main_view.jobs.wait()
 
@@ -310,6 +331,14 @@ def _examples() -> list[Example]:
             fits_height=TALL,
         ),
         Example("taskview", taskview.TaskMainView, _taskview, fits_height=TALL),
+        Example(
+            "uberdashboard",
+            _uberdashboard_main_view,
+            _uberdashboard,
+            window=(1200, 1600),
+            # not Textual: its window would grow with each row of the table
+            fits_height=("web",),
+        ),
         Example(
             "uberpickups",
             uberpickups.UberPickupsMainView,

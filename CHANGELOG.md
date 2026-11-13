@@ -14,6 +14,14 @@ The notable changes of each release of ComposeUI. The format follows
 - `RangeSliderView` and `FloatRangeSliderView` pick a range with two handles, which stop on each
   other, and `DateRangeInputView` a range of dates, in two date fields, on Qt, Textual and the
   web, with their form rows. An end set past the other moves the other to it.
+- Dashboard helpers, in `composeui.core.dashboard`, for any frame that Narwhals reads:
+  `column_filter` binds a choice, a range slider or a date range to a column, `fill_filters` gives
+  the filters their column's values, and `filtered` keeps the rows that they accept.
+  `counts_of` counts the rows per category for a bar chart, and `show_frame` shows a frame in a
+  large table. `read_frame` reads a user's CSV or Parquet file, and refuses a compressed CSV file
+  or one of too many columns. `frame_content` gives a frame's rows to a `DownloadView` as CSV or
+  Parquet. A tutorial, "Dashboards from a dataframe", and a first dashboard example
+  (`uberdashboard.py`) show them.
 - The documentation site offers two versions: current `main` and the latest release tag.
 - `WebApplication.session_idle` saves a web session idle for that many seconds to disk and frees
   its memory. Its next request opens it again, and its page reloads. A session stays in memory

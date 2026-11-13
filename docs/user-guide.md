@@ -29,7 +29,6 @@ not in the package: run them from a clone of the repository (see
   - [Check a form](user-guide/building-views.md#check-a-form)
   - [Compose views from mixins](user-guide/building-views.md#compose-views-from-mixins)
   - [The main view](user-guide/building-views.md#the-main-view)
-    - [A dashboard's main view](user-guide/building-views.md#a-dashboards-main-view)
     - [The status bar](user-guide/building-views.md#the-status-bar)
     - [The app's icon](user-guide/building-views.md#the-apps-icon)
     - [Command-line options of your own](user-guide/building-views.md#command-line-options-of-your-own)
@@ -45,6 +44,18 @@ not in the package: run them from a clone of the repository (see
   - [Errors in a method](user-guide/reactive-methods.md#errors-in-a-method)
   - [Debug a method's inputs](user-guide/reactive-methods.md#debug-a-methods-inputs)
   - [On each backend](user-guide/reactive-methods.md#on-each-backend)
+- [Dashboards from a dataframe](user-guide/dashboards.md)
+  - [A dashboard's main view](user-guide/dashboards.md#a-dashboards-main-view)
+  - [A first dashboard](user-guide/dashboards.md#a-first-dashboard)
+    - [Read the data in a task](user-guide/dashboards.md#read-the-data-in-a-task)
+    - [Declare the filters](user-guide/dashboards.md#declare-the-filters)
+    - [Show the rows that the filters keep](user-guide/dashboards.md#show-the-rows-that-the-filters-keep)
+    - [Move a panel into its own view class](user-guide/dashboards.md#move-a-panel-into-its-own-view-class)
+  - [Filters of a frame's columns](user-guide/dashboards.md#filters-of-a-frames-columns)
+  - [Counts for a bar chart](user-guide/dashboards.md#counts-for-a-bar-chart)
+  - [A frame in a table](user-guide/dashboards.md#a-frame-in-a-table)
+  - [A file from a user](user-guide/dashboards.md#a-file-from-a-user)
+  - [Download a frame](user-guide/dashboards.md#download-a-frame)
 - [Widgets](user-guide/widgets.md)
   - [Label](user-guide/widgets.md#label)
   - [Buttons](user-guide/widgets.md#buttons)
@@ -160,6 +171,7 @@ not in the package: run them from a clone of the repository (see
 user-guide/core-concepts
 user-guide/building-views
 user-guide/reactive-methods
+user-guide/dashboards
 user-guide/widgets
 user-guide/organizing-the-window
 user-guide/tables

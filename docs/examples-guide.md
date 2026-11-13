@@ -19,6 +19,7 @@ run them from a clone of the repository.
 - [Pipe catalogue](#pipe-catalogue)
 - [Pipe sweep](#pipe-sweep)
 - [Large table](#large-table)
+- [First dashboard](#first-dashboard)
 - [Uber pickups](#uber-pickups)
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe)
 - [Data explorer](#data-explorer)
@@ -53,6 +54,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipecatalogue.py`](../src/examples/pipecatalogue.py) | web | A SQLite model, a sidebar, a list of views, a tree, resizable panes, a form dialog, a date input |
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
+| [`uberdashboard.py`](../src/examples/uberdashboard.py) | web | A first dashboard from a CSV: filters of a frame's columns in a sidebar, a multi-combobox, a date range, a range slider, metrics, a bar chart, a map, a large table, and a download of the rows shown |
 | [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`dataexplorer.py`](../src/examples/dataexplorer.py) | web | A user's CSV or Parquet file: an upload, a summary, a large table of any columns, and the rows shown exported |
@@ -82,6 +84,9 @@ The other examples each show one topic:
 - [Study inputs](#study-inputs): a table of a study's files, with a path widget for each row's
   kind.
 - [Large table](#large-table): a million rows of SQLite in a large table.
+- [First dashboard](#first-dashboard): a dashboard from a CSV file, with filters, metrics,
+  a chart, a map, a table, and a download. It follows
+  [Dashboards from a dataframe](user-guide/dashboards.md) of the user guide.
 - [Uber pickups](#uber-pickups): a CSV download in a loading task, a bar chart, and a map.
 - [Data explorer](#data-explorer): a user's own file, uploaded, filtered, and exported.
 - [Uber pickups on a dataframe](#uber-pickups-on-a-dataframe): the same app on a
@@ -405,6 +410,52 @@ It shows:
 - a study that saves the readings with the model, and the table's settings with the views.
   Opened with `-f`, it shows its own readings: none are made up.
 
+## First dashboard
+
+[`uberdashboard.py`](../src/examples/uberdashboard.py) is a first dashboard from a CSV file: the
+Uber pickups of September 2014 in New York City, filtered by base, day, and hour.
+
+```bash
+uv run python -m examples.uberdashboard   # web; or --backend qt, or textual
+```
+
+It needs Polars, which reads the CSV file in a job each time that the app starts. It has no File
+menu. These screenshots use made-up rows. The street map needs a network connection for its
+tiles. Textual shows no map.
+
+On Qt:
+
+![First dashboard on Qt](images/uberdashboard-qt.png)
+
+On Textual:
+
+![First dashboard on Textual](images/uberdashboard-textual.png)
+
+On the web:
+
+![First dashboard on the web](images/uberdashboard-web.png)
+
+It shows:
+
+- a [sidebar](user-guide/organizing-the-window.md#sidebar) of
+  [filters of the frame's columns](user-guide/dashboards.md#filters-of-a-frames-columns): a
+  [multi-combobox](user-guide/widgets.md#choices-of-several-values) of the bases, a
+  [date range](user-guide/widgets.md#date-range) of the days, and a
+  [range slider](user-guide/widgets.md#range-slider) of the hours. `fill_filters` gives them
+  their values from the whole frame, and `filtered` gives the rows that they keep.
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) that reads the CSV file, and
+  two [reactive methods](user-guide/reactive-methods.md) that read its result: one fills the
+  filters, the other shows the rows that they keep.
+- a row of [metrics](user-guide/widgets.md#metric): the pickups, the bases, and the busiest hour.
+- a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups by hour, which
+  [`counts_of`](user-guide/dashboards.md#counts-for-a-bar-chart) counts.
+- a [map](user-guide/maps.md) of at most 10,000 of the pickups, on Qt and the web.
+- a [large table](user-guide/tables.md#a-large-table) of the rows, which
+  [`show_frame`](user-guide/dashboards.md#a-frame-in-a-table) shows. Its filter bar offers every
+  column.
+- a [download](user-guide/widgets.md#download) of the rows as CSV, which
+  [`frame_content`](user-guide/dashboards.md#download-a-frame) writes as the user receives it.
+
 ## Uber pickups
 
 [`uberpickups.py`](../src/examples/uberpickups.py) explores the Uber pickups of September 2014
@@ -477,8 +528,9 @@ uv run python -m examples.uberpickupsframe   # web; or --backend qt, or textual
 
 It needs Polars. It reads the CSV file in a job each time that it
 starts. It has no File menu, because a study would keep no rows. The table shows the CSV's
-own columns. Polars counts the pickups by hour, selects the pickups of the slider's hour for
-the table, and samples them for the map.
+own columns. [`counts_of`](user-guide/dashboards.md#counts-for-a-bar-chart) counts the pickups
+by hour. Polars selects the pickups of the slider's hour for the table, and samples them for the
+map.
 
 These screenshots use made-up rows. The street map needs a network connection for its
 tiles. Textual shows no map.
@@ -499,7 +551,8 @@ It shows:
 
 - a [large table](user-guide/tables.md#a-large-table) on a
   [`DataFrameSource`](user-guide/tables.md#rows-in-a-dataframe) of the pickups of the
-  slider's hour: Polars sorts, searches, and filters them.
+  slider's hour, which [`show_frame`](user-guide/dashboards.md#a-frame-in-a-table) shows:
+  Polars sorts, searches, and filters them.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
   file. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
   the main thread. One gives the chart its series. The other follows the slider: it gives the
@@ -519,9 +572,10 @@ gives.
 uv run python -m examples.dataexplorer   # web; or --backend qt, or textual
 ```
 
-It needs Polars, which reads both formats. It finds a CSV file's
-separator (a comma, a semicolon, a tab, or a bar) from the file's first line, and refuses a
-compressed CSV file. These screenshots use made-up rows.
+It needs Polars, which reads both formats.
+[`read_frame`](user-guide/dashboards.md#a-file-from-a-user) finds a CSV file's separator (a
+comma, a semicolon, a tab, or a bar) from the file's first line. It refuses a compressed CSV file,
+and one of more than 1000 columns. These screenshots use made-up rows.
 
 Each session reads its whole file into memory. A Parquet file is compressed, so it can take much
 more memory than its size. Before you give this app to the public, set `max_upload_size` for your
@@ -547,7 +601,8 @@ It shows:
   replaces the one being read, and a file that cannot be read says why.
 - [metrics](user-guide/widgets.md#metric) that summarize the file.
 - a [large table](user-guide/tables.md#a-large-table) on a `DataFrameSource`, which shows the
-  file's own columns. The user filters its rows, and exports those shown as CSV.
+  file's own columns, with [`show_frame`](user-guide/dashboards.md#a-frame-in-a-table). The user
+  filters its rows, and exports those shown as CSV.
 
 ## Figure viewer
 

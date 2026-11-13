@@ -133,7 +133,10 @@ to serve it to other users, read
    of the user guide: views, signals, the model, and studies.
 2. Build a form with its layout and its checks, in
    [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html).
-3. Run the example apps, in the order of the
+3. To turn an analysis into a dashboard, follow
+   [Dashboards from a dataframe](https://ehmoussi.github.io/composeui/user-guide/dashboards.html):
+   filters of a frame's columns, metrics, a chart, a table, and a download.
+4. Run the example apps, in the order of the
    [examples guide](https://ehmoussi.github.io/composeui/examples-guide.html#where-to-start).
    The first,
    [`src/examples/pipeform.py`](https://github.com/ehmoussi/composeui/blob/main/src/examples/pipeform.py),
@@ -147,8 +150,8 @@ The documentation site, at https://ehmoussi.github.io/composeui/, has the guides
 widget catalog, and the API reference.
 
 - The [user guide](https://ehmoussi.github.io/composeui/user-guide.html) explains how to build
-  an app. It covers the views, their layout, forms and their checks, reactive methods, and the
-  widgets. It also covers pages, tabs, dialogs, tables, charts,
+  an app. It covers the views, their layout, forms and their checks, reactive methods,
+  dashboards from a dataframe, and the widgets. It also covers pages, tabs, dialogs, tables, charts,
   [maps](https://ehmoussi.github.io/composeui/user-guide/maps.html), threads, SQLite models, CSV
   imports, and translations. It ends with the differences between the backends, testing an app,
   and a skill for coding agents.

@@ -247,6 +247,13 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Build a bar chart's series with `Series.bars(name, values)`.** `series_of` and `points_of` from
   `composeui.core.dataframesource` read a chart's series or a map's points from a frame.
   See https://ehmoussi.github.io/composeui/user-guide/charts.html
+- **Build a dashboard's filters with `column_filter(cls, column, ...)`**, from
+  `composeui.core.dashboard`, on a choice, a range slider or a date range. Fill them from the
+  whole frame with `fill_filters(view, frame)` in one reactive method, and read the rows that they
+  keep with `filtered(frame, view)` in another. Show the rows with `show_frame(table, rows)`,
+  count them by category with `counts_of`, read a user's file with `read_frame`, and give them
+  to a `DownloadView` with `frame_content`.
+  See https://ehmoussi.github.io/composeui/user-guide/dashboards.html
 - **Use `DrawingView` for a diagram of shapes,** not an image or a `ChartView`. Set a new
   `shapes` list of `LineShape`, `PolylineShape`, `PolygonShape`, `CircleShape`, `ArrowShape`,
   `DimensionShape`, and `TextShape` to redraw it. Its y axis goes up. Set `bounds` when a shape

@@ -72,17 +72,11 @@ The order of the work for **Now**:
 
 1. Share the data and speed up imports: shared data, the shared SQLite database, and a
    vectorized `fill_from_frame`, measured against the budgets.
-2. The dashboard helpers and the widgets that they need.
-3. The charts: split the page's scripts, type-check them, then layers, then the new charts.
-4. Deployment in a container.
+2. The charts: split the page's scripts, type-check them, then layers, then the new charts.
+3. Deployment in a container.
 
 ## Data and dashboards
 
-- **Dashboard helpers** (Now). Helpers that take data and fill views: filters built from a
-  frame's columns, a table and a chart from a frame, a row of metrics, a safe reader of uploaded
-  CSV and Parquet files, and a download of a frame. Done when a CSV dashboard takes a few dozen
-  clear lines, one panel moves into its own view class without other changes, and a tutorial
-  shows it.
 - **Shared data** (Now). Data loaded once per process and shared by the sessions, read-only, and
   freed on shutdown and reload. Private data never goes in. Done when 4 web sessions of the Uber
   example load its CSV once.
@@ -250,7 +244,7 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Rework the examples** (Now, then Next). Believable apps on one realistic dataset, in the order
   of the goal:
-  1. A first dashboard from a CSV (Now).
+  1. A first dashboard from a CSV (exists).
   2. The data explorer, a user's own file (exists).
   3. The same dashboard, grown into view classes, pages and a saved study (Now).
   4. A scientific workbench: parameters, a background computation, results and a report (Next).
