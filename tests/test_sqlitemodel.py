@@ -146,12 +146,13 @@ def test_a_saved_study_opens_with_its_views_and_its_rows(app: App, tmp_path: Pat
 def test_a_dropped_worker_cannot_write_into_the_study_that_replaced_its_own() -> None:
     model = RunsModel()
     main_view = MainView()
-    release = threading.Event()
+    started, release = threading.Event(), threading.Event()
     threads: list[threading.Thread] = []
     errors: list[Exception] = []
 
     def work(_job: Job[None, None]) -> None:
         threads.append(threading.current_thread())
+        started.set()
         assert release.wait(30)
         try:
             model.runs.add(1.0)
@@ -159,6 +160,7 @@ def test_a_dropped_worker_cannot_write_into_the_study_that_replaced_its_own() ->
             errors.append(error)
 
     job = main_view.jobs.start(work)
+    assert started.wait(30)  # running, not only started: a busy runner starts the thread late
     job.finished.connect(lambda _result: errors.append(RuntimeError("the outcome was emitted")))
     main_view.jobs.drop()
     new_study(main_view, model)
