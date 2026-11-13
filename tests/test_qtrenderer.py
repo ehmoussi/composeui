@@ -1016,8 +1016,7 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
 
     qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
     calendar = field.calendar
-    assert calendar.isVisible()
-    assert calendar.selectedDate() == QDate(2026, 10, 25)
+    assert (calendar.isVisible(), calendar.selectedDate()) == (True, QDate(2026, 10, 25))
     assert (calendar.minimumDate(), calendar.maximumDate()) == (
         QDate(2026, 10, 1),
         QDate(2026, 12, 31),
@@ -1034,6 +1033,8 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     qtbot.keyClicks(field.line_edit, "31/02")
     qtbot.keyClick(field.line_edit, Qt.Key.Key_Return)  # left as no date: the date back
     assert field.line_edit.text() == "03/11/2026"
+    field.line_edit.selectAll()
+    qtbot.keyClicks(field.line_edit, "03/11/2026")  # the same date typed again: nothing new
     qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
     qtbot.keyClick(days, Qt.Key.Key_Return)  # the same day again: nothing to report
     assert len(changes) == 2
@@ -1052,6 +1053,27 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     assert field.line_edit.text() == ""
     assert field.line_edit.placeholderText() == "dd/mm/yyyy"
     assert len(changes) == 3
+
+
+def test_a_date_picked_in_qt_s_calendar_shows_before_the_app_hears_of_it(qtbot: QtBot) -> None:
+    view = BookingMainView()
+    view.render(RendererType.QT)
+    arrival = view.form.arrival
+    field = _field_widget(arrival)
+    assert isinstance(field, QDateField)
+    qtbot.addWidget(field)
+    field.show()
+    # what the field shows as the app hears of the date: its slow work leaves it shown
+    shown: list[str] = []
+    arrival.value_changed.connect(lambda _date: shown.append(field.line_edit.text()))
+
+    qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
+    field.calendar.setSelectedDate(QDate(2026, 11, 3))
+    days = field.calendar.findChild(QTableView)
+    assert days is not None
+    qtbot.keyClick(days, Qt.Key.Key_Return)
+
+    assert shown == ["11/03/2026"]
 
 
 def test_a_file_upload_gives_the_user_s_file_from_qt_s_dialog_without_a_copy(

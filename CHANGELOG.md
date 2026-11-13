@@ -145,6 +145,8 @@ The notable changes of each release of ComposeUI. The format follows
 - On Qt, an empty date input's calendar opens on the month nearest to today's that its `minimum`
   and `maximum` allow. It opened on today's month, whose days the user couldn't pick when today
   was out of the range.
+- On Qt, a date picked in a date input's calendar shows in the field at once. It showed only
+  once the app's work on the new date was over, such as a dashboard filtering its rows.
 - On the web, a click on a table's check-all box does what the page shows. Before, when the app
   had checked every row and the page still showed the box unchecked, the click unchecked them
   all.
