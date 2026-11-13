@@ -19,14 +19,14 @@ if TYPE_CHECKING:
     from weakref import ReferenceType
 
     from composeui.core.model import Model
-    from composeui.core.view import MainView
+    from composeui.core.view import MainView, View
 
 __all__ = ["Signal"]
 
 
 LOGGER = logging.getLogger("COMPOSEUI_SIGNAL")
-#: held as a signal's first callback replaces its empty tuple with a list: two threads
-#: connecting at once, e.g. two sessions' tables to one source, would each make their own
+#: held as callbacks are registered or their owning view changes: registration must keep
+#: the current owner, and two first connects must not each replace the empty tuple
 _CONNECTING = threading.Lock()
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
 _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
@@ -35,9 +35,11 @@ LOGGER.addHandler(_STREAM_HANDLER)
 Ts = TypeVarTuple("Ts")
 _Rest = TypeVarTuple("_Rest")
 _FirstT = TypeVar("_FirstT")
+_SecondT = TypeVar("_SecondT")
 
 _MainViewT_contra = TypeVar("_MainViewT_contra", contravariant=True)
 _ModelT_contra = TypeVar("_ModelT_contra", contravariant=True)
+_ViewT_contra = TypeVar("_ViewT_contra", contravariant=True)
 _MainViewT = TypeVar("_MainViewT", bound="MainView")
 
 
@@ -59,8 +61,34 @@ class _BoundCallback(Protocol[_MainViewT_contra, _ModelT_contra, Unpack[Ts]]):
     ) -> None: ...
 
 
-# `main_view` and `model` are typed `Any`: a signal can't know its app's classes, and a
-# callback asks for those, not `MainView` and `Model` (`connect` still checks a main view)
+class _ViewOnlyCallback(Protocol[_ViewT_contra, Unpack[Ts]]):
+    def __call__(self, *args: Unpack[Ts], view: _ViewT_contra) -> None: ...
+
+
+class _ViewMainCallback(Protocol[_ViewT_contra, _MainViewT_contra, Unpack[Ts]]):
+    def __call__(
+        self, *args: Unpack[Ts], view: _ViewT_contra, main_view: _MainViewT_contra
+    ) -> None: ...
+
+
+class _ViewModelCallback(Protocol[_ViewT_contra, _ModelT_contra, Unpack[Ts]]):
+    def __call__(self, *args: Unpack[Ts], view: _ViewT_contra, model: _ModelT_contra) -> None: ...
+
+
+class _ViewMainModelCallback(
+    Protocol[_ViewT_contra, _MainViewT_contra, _ModelT_contra, Unpack[Ts]]
+):
+    def __call__(
+        self,
+        *args: Unpack[Ts],
+        view: _ViewT_contra,
+        main_view: _MainViewT_contra,
+        model: _ModelT_contra,
+    ) -> None: ...
+
+
+# Injected arguments are typed `Any`: a signal can't know its owner's or app's classes.
+# A callback asks for those, not `View`, `MainView` and `Model`.
 CallbackT = TypeAliasType(
     "CallbackT",
     (
@@ -69,6 +97,10 @@ CallbackT = TypeAliasType(
             _MainViewCallback[Any, Unpack[Ts]],
             _ModelCallback[Any, Unpack[Ts]],
             _BoundCallback[Any, Any, Unpack[Ts]],
+            _ViewOnlyCallback[Any, Unpack[Ts]],
+            _ViewMainCallback[Any, Any, Unpack[Ts]],
+            _ViewModelCallback[Any, Any, Unpack[Ts]],
+            _ViewMainModelCallback[Any, Any, Any, Unpack[Ts]],
         ]
     ),
     type_params=(Ts,),
@@ -85,7 +117,21 @@ def _positional_count(callback: Callable[..., object]) -> int | None:
     if any(param.kind is inspect.Parameter.VAR_POSITIONAL for param in params):
         return None
     return sum(
-        param.kind in positional and param.name not in ("main_view", "model") for param in params
+        param.kind in positional and param.name not in ("view", "main_view", "model")
+        for param in params
+    )
+
+
+def _optional_bounds(callback: Callable[..., None]) -> frozenset[str]:
+    """Get the bounds `callback` has a default for, left out when there is none to give.
+
+    Asked once `_requested_bounds` found some: its signature can be read.
+    """
+    params = inspect.signature(callback).parameters
+    return frozenset(
+        name
+        for name in ("view", "main_view", "model")
+        if name in params and params[name].default is not inspect.Parameter.empty
     )
 
 
@@ -93,12 +139,12 @@ class Signal(Generic[Unpack[Ts]]):
     """An event that a view, a model or the app emits, with the callbacks connected to it.
 
     `connect` adds a callback, and `emit` calls each callback with the signal's arguments. A
-    callback with a ``main_view`` or ``model`` parameter gets it by name (see `connect`).
+    callback with a ``view``, ``main_view`` or ``model`` parameter gets it by name (see `connect`).
     """
 
     # a page makes several signals per widget, and a web session a page: slots keep each
     # small, and keep `Signal[int]()` from giving it a dict for `__orig_class__`
-    __slots__ = ("__weakref__", "_callbacks", "_main_view", "_model", "_name")
+    __slots__ = ("__weakref__", "_callbacks", "_main_view", "_model", "_name", "_view")
 
     def __init__(self) -> None:
         self._name = ""
@@ -106,9 +152,27 @@ class Signal(Generic[Unpack[Ts]]):
         self._callbacks: list[Callable[[Unpack[Ts]], None]] | tuple[()] = ()
         self._main_view: ReferenceType[MainView] | None = None
         self._model: ReferenceType[Model] | None = None
+        self._view: ReferenceType[View] | None = None
 
     def set_name(self, name: str) -> None:
         self._name = name
+
+    def set_view(self, view: View) -> None:
+        """Make `view` the signal's owner, given to the callbacks that ask for ``view``.
+
+        Raise `ValueError` if another view still owns it, so that a callback's view never changes.
+        """
+        with _CONNECTING:
+            owner = None if self._view is None else self._view()
+            if owner is view:
+                return
+            if owner is not None:
+                msg = f"The signal {self._name} belongs to another view"
+                raise ValueError(msg)
+            self._view = weakref.ref(view)
+            for callback in self._callbacks:
+                if isinstance(callback, InjectedCallback):
+                    callback.set_view(self._view)
 
     def set_main_view(self, main_view: MainView) -> None:
         self._main_view = weakref.ref(main_view)
@@ -134,6 +198,25 @@ class Signal(Generic[Unpack[Ts]]):
     def connect(
         self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]], *, now: bool = False
     ) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewOnlyCallback[Any, Unpack[Ts]], *, now: bool = False
+    ) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewMainCallback[Any, _MainViewT, Unpack[Ts]], *, now: bool = False
+    ) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewModelCallback[Any, Any, Unpack[Ts]], *, now: bool = False
+    ) -> None: ...
+    @overload
+    def connect(
+        self,
+        callback: _ViewMainModelCallback[Any, _MainViewT, Any, Unpack[Ts]],
+        *,
+        now: bool = False,
+    ) -> None: ...
     # a callback taking none of the arguments
     @overload
     def connect(self, callback: Callable[[], None], *, now: bool = False) -> None: ...
@@ -146,20 +229,97 @@ class Signal(Generic[Unpack[Ts]]):
     @overload
     def connect(self, callback: _BoundCallback[_MainViewT, Any], *, now: bool = False) -> None: ...
     @overload
+    def connect(self, callback: _ViewOnlyCallback[Any], *, now: bool = False) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewMainCallback[Any, _MainViewT], *, now: bool = False
+    ) -> None: ...
+    @overload
+    def connect(self, callback: _ViewModelCallback[Any, Any], *, now: bool = False) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewMainModelCallback[Any, _MainViewT, Any], *, now: bool = False
+    ) -> None: ...
+    @overload
     def connect(
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: Callable[[_FirstT], None],
         *,
         now: bool = False,
     ) -> None: ...
-    def connect(self, callback: Callable[..., None], *, now: bool = False) -> None:
+    @overload
+    def connect(
+        self: Signal[_FirstT, Unpack[_Rest]],
+        callback: _ViewOnlyCallback[Any, _FirstT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, Unpack[_Rest]],
+        callback: _ViewMainCallback[Any, _MainViewT, _FirstT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, Unpack[_Rest]],
+        callback: _ViewModelCallback[Any, Any, _FirstT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, Unpack[_Rest]],
+        callback: _ViewMainModelCallback[Any, _MainViewT, Any, _FirstT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
+        callback: _ViewOnlyCallback[Any, _FirstT, _SecondT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
+        callback: _ViewMainCallback[Any, _MainViewT, _FirstT, _SecondT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
+        callback: _ViewModelCallback[Any, Any, _FirstT, _SecondT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
+        callback: _ViewMainModelCallback[Any, _MainViewT, Any, _FirstT, _SecondT],
+        *,
+        now: bool = False,
+    ) -> None: ...
+    def connect(
+        self,
+        callback: Callable[..., None],
+        *,
+        now: bool = False,
+    ) -> None:
         """Call `callback` on each emit, and once right away too if `now`.
 
-        The callback gets the `main_view` and the `model` it asks for by name. It gets only as
-        many of the signal's arguments as it takes, the first ones, and none when called `now`.
+        The callback gets the owning `view`, `main_view` and `model` it asks for by name.
+        It gets only as many of the signal's arguments as it takes, the first ones, and none
+        when called `now`. A signal outside a view has no owning view. A missing view uses
+        the callback's default, or raises `ValueError` if the parameter has no default.
         """
         injected_callback = self._inject_callback(callback)
         with _CONNECTING:
+            if isinstance(injected_callback, InjectedCallback):
+                injected_callback.set_view(self._view)
             if isinstance(self._callbacks, tuple):
                 self._callbacks = []
             self._callbacks.append(injected_callback)
@@ -221,7 +381,7 @@ class Signal(Generic[Unpack[Ts]]):
             return InjectedCallback[Unpack[Ts]](
                 callback=callback,
                 requested_bounds=requested_bounds,
-                optional_bounds=self._optional_bounds(callback),
+                view=self._view,
                 main_view=self._main_view,
                 model=self._model,
             )
@@ -232,25 +392,15 @@ class Signal(Generic[Unpack[Ts]]):
 
     @staticmethod
     def _requested_bounds(callback: Callable[..., None]) -> frozenset[str]:
-        names = ("main_view", "model")
+        names: tuple[str, ...] = ("view", "main_view", "model")
+        if isinstance(callback, functools.partial) and "view" in callback.keywords:
+            # `Application.connect(view=...)` explicitly picks a view, not always the owner.
+            names = ("main_view", "model")
         try:
             params = inspect.signature(callback).parameters
         except (TypeError, ValueError):
             return frozenset()
         return frozenset(name for name in names if name in params)
-
-    @staticmethod
-    def _optional_bounds(callback: Callable[..., None]) -> frozenset[str]:
-        """Get the bounds `callback` has a default for, left out when there is none to give.
-
-        Asked once `_requested_bounds` found some: its signature can be read.
-        """
-        params = inspect.signature(callback).parameters
-        return frozenset(
-            name
-            for name in ("main_view", "model")
-            if name in params and params[name].default is not inspect.Parameter.empty
-        )
 
     @staticmethod
     def get_function_name(callback: CallbackT[Any]) -> str:
@@ -311,14 +461,14 @@ class _FirstArgumentsCallback(Generic[Unpack[Ts]]):
 
 
 class InjectedCallback(Generic[Unpack[Ts]]):
-    """A callback that gets the ``main_view`` and ``model`` it asks for by name."""
+    """A callback that gets the ``view``, ``main_view`` and ``model`` it asks for by name."""
 
     def __init__(
         self,
         *,
         callback: Callable[..., None],
         requested_bounds: frozenset[str],
-        optional_bounds: frozenset[str] = frozenset(),
+        view: ReferenceType[View] | None,
         main_view: ReferenceType[MainView] | None,
         model: ReferenceType[Model] | None,
     ) -> None:
@@ -330,14 +480,18 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         else:
             self._callback = lambda: callback
         self._requested_bounds = requested_bounds
-        self._optional_bounds = optional_bounds
+        self._optional_bounds = _optional_bounds(callback)
         self._main_view = main_view
         self._model = model
+        self._view = view
         #: how many of the signal's arguments the callback takes, the first ones; None for all
         self._count = _positional_count(callback)
 
     def set_main_view(self, main_view: ReferenceType[MainView]) -> None:
         self._main_view = main_view
+
+    def set_view(self, view: ReferenceType[View] | None) -> None:
+        self._view = view
 
     def set_model(self, model: ReferenceType[Model]) -> None:
         self._model = model
@@ -350,7 +504,17 @@ class InjectedCallback(Generic[Unpack[Ts]]):
         callback = self._callback()
         if callback is None:
             return None  # its view is gone: as Qt, which drops a deleted receiver's slot
-        kwargs: dict[str, MainView | Model] = {}
+        return callback(*args[: self._count], **self._injected_kwargs())
+
+    def _injected_kwargs(self) -> dict[str, View | Model]:
+        kwargs: dict[str, View | Model] = {}
+        if "view" in self._requested_bounds:
+            view = None if self._view is None else self._view()
+            if view is not None:
+                kwargs["view"] = view
+            elif "view" not in self._optional_bounds:
+                msg = "The view is missing."
+                raise ValueError(msg)
         if "main_view" in self._requested_bounds:
             main_view = None if self._main_view is None else self._main_view()
             if main_view is None:
@@ -364,4 +528,4 @@ class InjectedCallback(Generic[Unpack[Ts]]):
             elif "model" not in self._optional_bounds:
                 msg = "The model is missing."
                 raise ValueError(msg)
-        return callback(*args[: self._count], **kwargs)
+        return kwargs

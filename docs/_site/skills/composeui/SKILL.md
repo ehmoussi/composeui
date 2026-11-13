@@ -167,8 +167,12 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   method until `start_reactions(main_view)`. `reactive_inputs(view)` shows what each read.
   See https://ehmoussi.github.io/composeui/user-guide/reactive-methods.html
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
-  `connect` injects them. Spell the names exactly. A callback may take fewer of the
-  signal's arguments than it emits.
+  `connect` injects them. Spell the names exactly. With `signal.connect`, `view` is the
+  signal's owning view, available even before an app is built. With `Application.connect`,
+  it is the explicit `view` argument instead. A standalone signal has no owning view:
+  a callback's `view` default is used, or the call raises `ValueError` without one.
+  A signal belongs to one view: giving it to another view raises `ValueError`.
+  A callback may take fewer of the signal's arguments than it emits.
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
   where `_check` returns an error message or `None`. Then call `form.check()` and read
   `form.is_valid`.

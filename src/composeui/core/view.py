@@ -815,6 +815,8 @@ class _LazySignal:
                 self._store(view, value)
 
     def _store(self, view: View, signal: Signal[Any]) -> None:
+        # first: a signal another view owns is refused, and keeps its name for the error
+        signal.set_view(view)
         # interned: each instance of the view, e.g. each session's, shares the name
         signal.set_name(sys.intern(f"{type(view).__name__}.{self._name}"))
         main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001

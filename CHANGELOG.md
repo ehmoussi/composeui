@@ -8,6 +8,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `Signal.connect` injects the signal's owning view into a callback's `view` parameter,
+  also before an app is built. `Application.connect(view=...)` keeps its explicit view.
+  A view refuses a signal that another view owns.
 - `CheckListView` and `MultiComboBoxView` pick several of their `values`, on Qt, Textual and the
   web, with their form rows. A check-all box checks the choices shown, and an optional search
   shows only the choices whose label holds its text. A study saves the choice.
@@ -111,6 +114,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- A signal's callback with a parameter named `view` gets the view that owns the signal, as one
+  named `main_view` or `model` gets the app's. Before, it got one of the signal's arguments.
+  Without an owning view, the call raises `ValueError` unless the parameter has a default.
+  Rename the parameter to keep the argument.
 - ComposeUI installs narwhals, so `DataFrameSource`, `series_of`, `points_of` and
   `fill_from_frame` need no extra. The `dataframe` extra installs nothing more, and goes in a
   later release.

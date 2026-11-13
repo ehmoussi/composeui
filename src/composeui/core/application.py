@@ -31,7 +31,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
 
     from composeui.core.model import Model
-    from composeui.core.signal import _BoundCallback, _MainViewCallback, _ModelCallback
+    from composeui.core.signal import (
+        _BoundCallback,
+        _MainViewCallback,
+        _ModelCallback,
+        _ViewMainCallback,
+        _ViewMainModelCallback,
+        _ViewModelCallback,
+        _ViewOnlyCallback,
+    )
     from composeui.core.view import MainView, View
 
 __all__ = ["Application", "ModelApplication", "current_backend", "get_logger", "renders", "run"]
@@ -79,32 +87,6 @@ class AvailableModelBounds(TypedDict, Generic[_ViewT_contra, _MainViewT_contra, 
     view: _ViewT_contra
     main_view: _MainViewT_contra
     model: _ModelT_contra
-
-
-class _ViewOnlyCallback(Protocol[_ViewT_contra, Unpack[Ts]]):
-    def __call__(self, *args: Unpack[Ts], view: _ViewT_contra) -> None: ...
-
-
-class _ViewMainCallback(Protocol[_ViewT_contra, _MainViewT_contra, Unpack[Ts]]):
-    def __call__(
-        self, *args: Unpack[Ts], view: _ViewT_contra, main_view: _MainViewT_contra
-    ) -> None: ...
-
-
-class _ViewModelCallback(Protocol[_ViewT_contra, _ModelT_contra, Unpack[Ts]]):
-    def __call__(self, *args: Unpack[Ts], view: _ViewT_contra, model: _ModelT_contra) -> None: ...
-
-
-class _ViewMainModelCallback(
-    Protocol[_ViewT_contra, _MainViewT_contra, _ModelT_contra, Unpack[Ts]]
-):
-    def __call__(
-        self,
-        *args: Unpack[Ts],
-        view: _ViewT_contra,
-        main_view: _MainViewT_contra,
-        model: _ModelT_contra,
-    ) -> None: ...
 
 
 class _ConnectDecorator(Protocol[_ViewTD, _MainViewTD, Unpack[_TsD]]):
