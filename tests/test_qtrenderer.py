@@ -1040,11 +1040,13 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     field.line_edit.selectAll()
     qtbot.keyClick(field.line_edit, Qt.Key.Key_Backspace)  # cleared: no date
     assert (arrival.value, changes[-1]) == (None, None)
-    # without a date, the calendar opens on today's month, or the nearest it allows
+    # without a date, the calendar opens on the nearest month it allows to today's: the days
+    # of today's month couldn't be picked
+    arrival.minimum, arrival.maximum = datetime.date(2014, 9, 1), datetime.date(2014, 9, 30)
     qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
-    nearest = min(max(QDate.currentDate(), calendar.minimumDate()), calendar.maximumDate())
-    assert (calendar.yearShown(), calendar.monthShown()) == (nearest.year(), nearest.month())
+    assert (calendar.yearShown(), calendar.monthShown()) == (2014, 9)
     calendar.close()
+    arrival.minimum, arrival.maximum = datetime.date(2026, 10, 1), datetime.date(2026, 12, 31)
     arrival.value = datetime.date(2026, 11, 3)
     arrival.value = None  # set in code: shown empty, the format as its hint, not reported
     assert field.line_edit.text() == ""
