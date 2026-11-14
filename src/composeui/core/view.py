@@ -6268,18 +6268,34 @@ class _WeakCallback:
             method()
 
 
+class _Order(NamedTuple):
+    """The rows a `SourceTableView` shows, as its source ordered them."""
+
+    #: the source's rows' count, if counted with the order
+    total: Optional[int]
+    ids: Sequence[Any]
+    #: the ids selected when the order was asked that it shows
+    shown_selected: frozenset[Any]
+
+
 def _ordered_ids(
-    _job: Optional[Job[tuple[Optional[int], Sequence[Any]]]],
+    _job: Optional[Job[_Order]],
     source: TableSource[Any],
-    sort: Optional[Sort],
-    search: str,
-    filters: Mapping[str, Filter],
+    settings: tuple[Optional[Sort], str, Mapping[str, Filter]],
     *,
     is_counting: bool,
-) -> tuple[Optional[int], Sequence[Any]]:
-    """Ask `source` for its rows' count, if `is_counting`, then the ids of those shown."""
+    selected: frozenset[Any],
+) -> _Order:
+    """Ask `source` for its rows' count, if `is_counting`, then the ids of those shown.
+
+    `settings` are the sort, the search and the filters the source orders them by. Then
+    find which ids of `selected` the order shows: in a job, this pass over every id runs
+    on the job's thread too.
+    """
     total = source.count() if is_counting else None
-    return total, _compact_ids(source.ordered_ids(sort, search, filters))
+    ids = _compact_ids(source.ordered_ids(*settings))
+    shown = frozenset(row_id for row_id in ids if row_id in selected) if selected else frozenset()
+    return _Order(total, ids, shown)
 
 
 def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
@@ -6838,19 +6854,26 @@ class SourceTableView(View):
         source = self.source
         jobs = self._ordering_jobs()
         if source is None:
-            self._show_order(None, 0, [])
+            self._show_order(None, _Order(0, [], frozenset()))
         elif jobs is None:
             settings = self._order_settings(source)
-            order = _ordered_ids(None, source, *settings, is_counting=self._recount)
-            self._show_order(source, *order)
+            selected = frozenset(self._selected)
+            order = _ordered_ids(
+                None, source, settings, is_counting=self._recount, selected=selected
+            )
+            self._show_order(source, order, selected)
         elif self._ordering:
             self._order_pending = True
         else:
             request = self._order_request
             self._set_ordering(is_ordering=True)
             settings = self._order_settings(source)
-            job = jobs.start(_ordered_ids, source, *settings, is_counting=self._recount)
-            job.finished.connect(lambda order: self._ordered(request, order))
+            # a copy: the user selects rows of the old order while the job runs
+            selected = frozenset(self._selected)
+            job = jobs.start(
+                _ordered_ids, source, settings, is_counting=self._recount, selected=selected
+            )
+            job.finished.connect(lambda order: self._ordered(request, order, selected))
             job.failed.connect(lambda _error: self._ordered(request, None))
 
     def _ordering_jobs(self) -> Optional[Jobs]:
@@ -6872,7 +6895,9 @@ class SourceTableView(View):
             self._set_ordering(is_ordering=False)
             self._read_order()
 
-    def _ordered(self, request: int, order: Optional[tuple[Optional[int], Sequence[Any]]]) -> None:
+    def _ordered(
+        self, request: int, order: Optional[_Order], selected: frozenset[Any] = frozenset()
+    ) -> None:
         """Show the order a job got for `request`, unless a newer one was asked meanwhile.
 
         A newer request waiting for the job orders now; one answered at once (e.g. the
@@ -6881,7 +6906,7 @@ class SourceTableView(View):
         self._set_ordering(is_ordering=False)
         if request == self._order_request:
             if order is not None:
-                self._show_order(self.source, *order)
+                self._show_order(self.source, order, selected)
             else:  # it failed, logged: the old order stays
                 self._announce_cleared_selection()
         elif self._order_pending:
@@ -6906,21 +6931,24 @@ class SourceTableView(View):
     def _show_order(
         self,
         source: Optional[TableSource[Any]],
-        total: Optional[int],
-        ids: Sequence[Any],
+        order: _Order,
+        asked: frozenset[Any] = frozenset(),
     ) -> None:
-        """Show the rows `ids`, in order, drop the selected ones it hides, emit `ordered`.
+        """Show the rows of `order`, drop the selected ones it hides, emit `ordered`.
 
-        `total` is the source's rows' count, if counted with the order.
+        `asked` holds the ids selected when the order was asked, whose shown ones the order
+        found. Only the rows selected since are looked for in the order, on this thread.
         """
-        if total is not None:
-            self._total, self._recount = total, False
-        self._order, self._order_source = ids, source
+        if order.total is not None:
+            self._total, self._recount = order.total, False
+        self._order, self._order_source = order.ids, source
         self._refresh_order()
         emit_if_made(self, "ordered")  # most tables' isn't connected: don't make it
         if len(self.selected_ids) > 0:
-            selected = self._selected
-            shown = {row_id for row_id in self._order if row_id in selected}
+            selected_since = self._selected - asked
+            shown = order.shown_selected
+            if selected_since:  # e.g. clicked while a job ordered: a pass over every id
+                shown = shown | {row_id for row_id in order.ids if row_id in selected_since}
             kept = [row_id for row_id in self.selected_ids if row_id in shown]
             if kept != self.selected_ids:
                 self.selected_ids = kept
