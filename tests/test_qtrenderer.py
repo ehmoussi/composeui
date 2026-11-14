@@ -4503,6 +4503,38 @@ def test_a_large_source_s_rows_are_ordered_in_a_job_the_old_order_shown_meanwhil
     assert model.rowCount() == other.size
 
 
+def test_a_job_s_order_keeps_the_selected_rows_it_shows_those_selected_meanwhile_too(
+    qtbot: QtBot,
+) -> None:
+    view = GatedMainView()
+    view.render(RendererType.QT)
+    _add_reference_to_signals(view, None)  # as the app does: the table finds the jobs
+    qtbot.addWidget(_widget(view))
+    table = view.table
+    source = table.source
+    assert isinstance(source, GatedSource)
+    table.selection_mode = SelectionMode.MULTIPLE
+    last = source.size - 1
+    table.selected_ids = [3, last]
+
+    # the last two rows gone while a job orders the others, two rows clicked meanwhile, in
+    # the old order shown
+    source.gate.clear()
+    source.size -= 2
+    source.changed.emit()
+    assert table.is_ordering
+    table.select_at(last - 1)
+    table.select_at(5)
+    assert table.selected_ids == [3, last, last - 1, 5]
+    emitted: list[list[Any]] = []
+    table.selection_changed.connect(emitted.append)
+    source.gate.set()
+    qtbot.waitUntil(lambda: not table.is_ordering)
+
+    assert table.selected_ids == [3, 5]
+    assert emitted == [[3, 5]]
+
+
 class _PositionalGatedSource(GatedSource):
     """Rows known by their positions, whose order fails once `fails` is set."""
 
