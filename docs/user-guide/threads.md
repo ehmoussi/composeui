@@ -2,7 +2,7 @@
 
 A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`
 runs `work(job, *args)` in a thread of its own instead. These sections cover progress and
-canceling, reusable loading tasks, and how jobs behave.
+canceling, reusable loading tasks, data shared by the sessions, and how jobs behave.
 
 The function must not touch a view, because the widgets of a toolkit belong to the main
 thread. The function returns its result. The `finished` signal of its job emits the result
@@ -396,6 +396,82 @@ assert main_view.solver.result == "beam.comm: stopped"
 - **The task's views.** The task alone sets their `is_enabled`: do not set it from another
   callback too.
 
+## Data shared by the sessions
+
+`@shared_data`, from `composeui.core.shared`, loads data once per process, for every session
+that asks for it. Use it for data that every user reads, such as a large CSV file of a
+dashboard. On the web, 4 sessions then read the file once and keep one copy of its columns.
+
+Give it a function that takes only its job. Then pass the decorated function to `jobs.task`, as
+any function of a job:
+
+```python
+import polars as pl
+
+from composeui.core.dashboard import DashboardView
+from composeui.core.jobs import Job
+from composeui.core.shared import shared_data
+from composeui.core.view import LabelView, child, define_view
+
+DATA_URL = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+
+
+@shared_data
+def read_pickups(_job: Job[pl.DataFrame]) -> pl.DataFrame:
+    return pl.read_csv(DATA_URL)
+
+
+@define_view
+class PickupsView(DashboardView):
+    status: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.loader = self.jobs.task(read_pickups)
+        self.loader.show_state(self.status)
+        self.loader.start()
+```
+
+- **One load.** The first job starts the load in a thread of its own. The jobs that start
+  meanwhile wait for it, and each gets its progress (`job.report_progress`). The jobs that
+  start later get the value at once.
+- **No arguments.** The function takes only its job, so a session's input can't reach it.
+  Put fixed values, such as the file's address, in the function. Never load the private data
+  of a user with it. A function that takes other arguments raises `TypeError`.
+- **Read-only.** Each session gets a value that its changes can't spread from:
+  - a Polars frame or series: a clone, which shares the columns, so it costs almost nothing.
+  - a pandas frame or series: a copy that shares the columns, only when pandas' copy-on-write
+    is on. It is always on from pandas 3. Before, set `pd.options.mode.copy_on_write = True`.
+  - a NumPy array: a read-only view, without a copy. The arrays that it is a view of become
+    read-only too, also an array that the app keeps: a later write to it raises `ValueError`.
+    A memory-mapped file (`numpy.load(path, mmap_mode="r")`) stays in its file. An array over
+    memory that can be written, such as a `bytearray` or a file opened with `mmap_mode="r+"`,
+    is refused.
+  - a lazy Polars frame, a PyArrow table or a chunked array: the value itself.
+  - an immutable value, such as a number, a string, a date, `None`, an enum member, or a
+    `tuple`, a `frozenset` or a frozen `attrs` class of them: the value itself. Each value
+    that they hold is checked, at any depth. A frame in a tuple is refused.
+
+  Any other value fails the jobs with `SharedDataError`, with the reason: for example a list,
+  a dict, a pandas frame without copy-on-write, or a column of Python objects that a session
+  could change, such as lists.
+- **Canceled.** A job canceled stops waiting and raises `JobCanceledError`. When no job waits
+  for the load any longer, its own job is canceled: the load reads `job.is_canceled` to stop
+  early. Its value isn't kept, and the next job loads again.
+- **Failures.** A load that fails fails every job that waits for it. Each job gets its own copy
+  of the exception, whose traceback goes on into the load. The failure isn't kept: the next job
+  loads again.
+- **No main thread.** The load runs for every session, so `job.call_on_main_thread` raises
+  `CalledInJobError` in it.
+- **Until the process ends.** The value stays for the life of the process. On the web,
+  `--reload` starts a new process. On Qt and Textual, a reload runs the modules of the
+  program's folder again, which makes a new value. A `@shared_data` of a module outside that
+  folder keeps its value. `read_pickups.forget()` drops the value, so that the next job loads
+  again. The sessions keep their copies. A test that changes the data calls it.
+
+The [Uber pickups example](../../src/examples/uberpickupsframe.py) and the
+[first dashboard](../../src/examples/uberdashboard.py) read their CSV file this way.
+
 ## How jobs behave
 
 These rules hold for every job, and for the jobs of a task.
@@ -411,6 +487,8 @@ These rules hold for every job, and for the jobs of a task.
   - A `RefusedError` (`composeui.core.model`) logs a warning with its message, without a
     traceback. Raise it for an expected refusal, for example of bad input or of a rule of
     the app.
+  - A `JobCanceledError` (`composeui.core.jobs`) logs its message as information, without a
+    traceback. Raise it from a function that stops without a result because it was canceled.
   - Another exception logs an error with its traceback, even when a `failed` callback
     shows it. Do not turn an unexpected error into a `RefusedError` to hide its traceback.
   - A `ValueError`, a `KeyError`, or an I/O error follows this path too, because external

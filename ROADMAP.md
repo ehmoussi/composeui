@@ -70,18 +70,15 @@ what exists. This file holds only the work that is left.
 
 The order of the work for **Now**:
 
-1. Share the data and speed up imports: shared data, the shared SQLite database, and a
-   vectorized `fill_from_frame`, measured against the budgets.
+1. Share the data and speed up imports: the shared SQLite database, and a vectorized
+   `fill_from_frame`, measured against the budgets.
 2. The charts: split the page's scripts, type-check them, then layers, then the new charts.
 3. Deployment in a container.
 
 ## Data and dashboards
 
-- **Shared data** (Now). Data loaded once per process and shared by the sessions, read-only, and
-  freed on shutdown and reload. Private data never goes in. Done when 4 web sessions of the Uber
-  example load its CSV once.
-- **A shared SQLite database** (Now). The same for SQLite: one import per process, read by every
-  session, each session keeping its own database for its writes.
+- **A shared SQLite database** (Now). What `shared_data` does for a frame, for SQLite: one import
+  per process, read by every session, each session keeping its own database for its writes.
 - **A vectorized `fill_from_frame`** (Now). Check and insert a frame's rows in the frame library,
   not row by row in Python. Measure it with concurrent sessions first. A bulk insert through
   ADBC can follow, in an optional extra.

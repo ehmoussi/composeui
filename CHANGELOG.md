@@ -8,6 +8,13 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `@shared_data`, in `composeui.core.shared`, loads data once per process for every session, such
+  as a dashboard's CSV file. The jobs that ask meanwhile wait for the one load and get its
+  progress. Each session gets a copy that its changes can't spread from: a clone of a Polars
+  frame, a pandas frame with copy-on-write, or a read-only NumPy array. A value that a session
+  could change is refused. The Uber dashboard examples read their CSV file once.
+- `JobCanceledError` stops a canceled job without a result. Its job fails with it, logged as
+  information, without a traceback.
 - `Signal.connect` injects the signal's owning view into a callback's `view` parameter,
   also before an app is built. `Application.connect(view=...)` keeps its explicit view.
   A view refuses a signal that another view owns.

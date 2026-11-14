@@ -11,6 +11,7 @@ from composeui.core.dashboard import DashboardView, bar_chart, counts_of, show_f
 from composeui.core.dataframesource import points_of
 from composeui.core.model import Model
 from composeui.core.reactivity import reactive
+from composeui.core.shared import shared_data
 from composeui.core.view import (
     ChartView,
     CheckBoxView,
@@ -30,8 +31,14 @@ if TYPE_CHECKING:
     from composeui.core.jobs import Job
 
 
-def read_pickups(_job: Job[pl.DataFrame, int], url: str) -> pl.DataFrame:
-    return pl.read_csv(url).with_columns(pl.col("Date/Time").str.to_datetime("%m/%d/%Y %H:%M:%S"))
+DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+
+
+@shared_data
+def read_pickups(_job: Job[pl.DataFrame]) -> pl.DataFrame:
+    """Read the pickups once, for every session: each gets its own clone of the frame."""
+    pickups = pl.read_csv(DATA_URL)
+    return pickups.with_columns(pl.col("Date/Time").str.to_datetime("%m/%d/%Y %H:%M:%S"))
 
 
 def pickups_by_hour(frame: pl.DataFrame) -> list[int]:
@@ -51,7 +58,6 @@ class UberPickupsModel(Model):
     """No data of its own: the loader's result holds the pickups."""
 
 
-DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
@@ -88,7 +94,7 @@ class UberPickupsMainView(DashboardView):
             failed_text="Failed to read the CSV: {error}",
         )
         self.filters.show_raw_data.shows(self.table)
-        self.loader.start(DATA_URL)
+        self.loader.start()
 
     @reactive
     def show_pickups(self) -> None:

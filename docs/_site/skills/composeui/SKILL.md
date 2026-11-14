@@ -238,6 +238,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   current run, and a replaced run's result never shows. A reactive method can call it, but
   must not read the state of the task that it starts.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html
+- **Load the data every user reads once,** with `@shared_data` (`composeui.core.shared`) on a
+  function that takes only its job, passed to `self.jobs.task`. Never load a user's private
+  data with it, nor take the session's input. Return a Polars frame (each session gets a
+  clone), a pandas frame with copy-on-write on, a NumPy array, or immutable values: a list or
+  a dict is refused (`SharedDataError`). Tests that change the data call `forget()`.
 - **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and
   `setup_model=`. Batch inserts and CSV imports (`insert_batches`, `CSVSqliteTable`,

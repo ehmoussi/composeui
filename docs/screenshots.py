@@ -244,6 +244,7 @@ def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
     path = Path(tempfile.mkdtemp()) / "pickups.csv"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     uberpickupsframe.DATA_URL = str(path)
+    uberpickupsframe.read_pickups.forget()  # read the CSV just written, not one read before
     main_view.connect_model(model)
 
 
@@ -259,6 +260,7 @@ def _uberdashboard_main_view() -> MainView:
     path = Path(tempfile.mkdtemp()) / "pickups.csv"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     uberdashboard.DATA_URL = str(path)
+    uberdashboard.read_pickups.forget()  # read the CSV just written, not one read before
     return uberdashboard.UberDashboardMainView()
 
 

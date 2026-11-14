@@ -38,18 +38,22 @@ the [first dashboard example](../../src/examples/uberdashboard.py).
 ### Read the data in a task
 
 A task reads the file in a thread, so that the window shows while it reads. It returns a frame,
-in your frame library. Here, Polars reads the file and adds the hour of each pickup:
+in your frame library. Here, Polars reads the file and adds the hour of each pickup.
+[`@shared_data`](threads.md#data-shared-by-the-sessions) reads it once for every session, and
+gives each session its own clone of the frame:
 
 ```python
 import polars as pl
 
 from composeui.core.jobs import Job
+from composeui.core.shared import shared_data
 
 DATA_URL = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 
 
-def read_pickups(_job: Job[pl.DataFrame, int], url: str) -> pl.DataFrame:
-    pickups = pl.read_csv(url).with_columns(
+@shared_data
+def read_pickups(_job: Job[pl.DataFrame]) -> pl.DataFrame:
+    pickups = pl.read_csv(DATA_URL).with_columns(
         pl.col("Date/Time").str.to_datetime("%m/%d/%Y %H:%M:%S")
     )
     return pickups.with_columns(Hour=pl.col("Date/Time").dt.hour())
@@ -146,7 +150,7 @@ class PickupsDashboard(DashboardView):
         self.loader.show_state(
             self.status, views=[self.summary, self.by_hour, self.table, self.download_rows]
         )
-        self.loader.start(DATA_URL)
+        self.loader.start()
 
     @reactive
     def fill(self) -> None:

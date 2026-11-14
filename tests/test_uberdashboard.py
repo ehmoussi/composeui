@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import io
 import re
@@ -24,6 +25,7 @@ from examples import uberdashboard
 from examples.uberdashboard import UberDashboardMainView
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from composeui.core.view import View
@@ -39,11 +41,14 @@ _CSV = (
 
 
 @pytest.fixture(autouse=True)
-def data_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def data_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     path = tmp_path / "pickups.csv"
     path.write_text(_CSV, encoding="utf-8")
     monkeypatch.setattr(uberdashboard, "DATA_URL", str(path))
-    return path
+    # each test reads its own CSV: the frame read once per process would be another test's
+    uberdashboard.read_pickups.forget()
+    yield path
+    uberdashboard.read_pickups.forget()
 
 
 def _written(content: StreamContent) -> bytes:
@@ -148,3 +153,47 @@ def test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown() -> Non
     assert downloaded.status_code == 200
     assert "pickups.csv" in downloaded.headers["content-disposition"]
     assert pl.read_csv(io.BytesIO(downloaded.content)).get_column("Base").to_list() == ["B02598"]
+
+
+def test_four_web_sessions_read_the_csv_once_and_each_filters_its_own_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reads: list[object] = []
+    read_csv = pl.read_csv
+
+    def counted(source: str) -> pl.DataFrame:
+        reads.append(source)
+        return read_csv(source)
+
+    monkeypatch.setattr(pl, "read_csv", counted)
+    views: list[UberDashboardMainView] = []
+
+    class DashboardApp(WebApplication[UberDashboardMainView]):
+        def setup_session(self, main_view: UberDashboardMainView) -> None:
+            views.append(main_view)
+
+    app = DashboardApp(build_main_view=UberDashboardMainView).create_starlette_app()
+    headers = {"Sec-Fetch-Site": "same-origin"}
+    # a client per browser: each its own cookie, so its own session
+    with contextlib.ExitStack() as stack:
+        clients = [stack.enter_context(TestClient(app, headers=headers)) for _ in range(4)]
+        for client in clients:
+            client.get("/")
+        for client, page in zip(clients, views):
+            for _ in range(600):  # the page's poller: it brings the job's result to the views
+                client.get("/jobs")
+                if page.loader.has_result:
+                    break
+                time.sleep(0.05)
+            # the job's thread set the result under the session's lock, and its reactive
+            # methods may still be filling the views: a request takes the lock once they're done
+            client.get("/jobs")
+
+        assert len(views) == 4
+        assert len(reads) == 1
+        # a session's filter changes its rows only
+        clients[0].post(
+            f"/widget/{_field_id(views[0].filters.bases)}",
+            data={"event": "toggle", "key": "B02512"},
+        )
+        assert [page.summary.pickups.value for page in views] == ["1", "4", "4", "4"]

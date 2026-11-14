@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from composeui.core.renderer import Renderer, RendererContainer
     from composeui.core.view import ActionView, ButtonView, LabelView, MainView, View
 
-__all__ = ["CalledInJobError", "Job", "Jobs", "Task"]
+__all__ = ["CalledInJobError", "Job", "JobCanceledError", "Jobs", "Task"]
 
 LOGGER = logging.getLogger("COMPOSEUI")
 
@@ -39,6 +39,14 @@ _CURRENT = threading.local()
 
 class CalledInJobError(RuntimeError):
     """A job's function tried to start or change jobs instead of using a main-thread callback."""
+
+
+class JobCanceledError(Exception):
+    """Raised by a job's function that stops because it was canceled, without a result.
+
+    The job fails with it, as with any exception, but it's logged as information only:
+    the user asked for it.
+    """
 
 
 def current_job() -> Job[Any, Any] | None:
@@ -645,6 +653,8 @@ class Jobs:
             name = getattr(work, "__name__", "job")
             if isinstance(error, RefusedError):
                 LOGGER.warning("The job %s was refused: %s", name, error)
+            elif isinstance(error, JobCanceledError):
+                LOGGER.info("The job %s stopped: %s", name, error)
             else:
                 LOGGER.exception("The job %s failed", name)
             self._on_main_thread(functools.partial(self._end, job, job.failed, error))

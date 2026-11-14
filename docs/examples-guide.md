@@ -443,7 +443,8 @@ It shows:
   [date range](user-guide/widgets.md#date-range) of the days, and a
   [range slider](user-guide/widgets.md#range-slider) of the hours. `fill_filters` gives them
   their values from the whole frame, and `filtered` gives the rows that they keep.
-- a [loading task](user-guide/threads.md#reusable-loading-tasks) that reads the CSV file, and
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) that reads the CSV file once
+  for every session ([shared data](user-guide/threads.md#data-shared-by-the-sessions)), and
   two [reactive methods](user-guide/reactive-methods.md) that read its result: one fills the
   filters, the other shows the rows that they keep.
 - a row of [metrics](user-guide/widgets.md#metric): the pickups, the bases, and the busiest hour.
@@ -526,8 +527,9 @@ It shows:
 uv run python -m examples.uberpickupsframe   # web; or --backend qt, or textual
 ```
 
-It needs Polars. It reads the CSV file in a job each time that it
-starts. It has no File menu, because a study would keep no rows. The table shows the CSV's
+It needs Polars. It reads the CSV file in a job, once per process: on the web, every session gets
+a clone of the same frame ([shared data](user-guide/threads.md#data-shared-by-the-sessions)).
+It has no File menu, because a study would keep no rows. The table shows the CSV's
 own columns. [`counts_of`](user-guide/dashboards.md#counts-for-a-bar-chart) counts the pickups
 by hour. Polars selects the pickups of the slider's hour for the table, and samples them for the
 map.
@@ -554,7 +556,7 @@ It shows:
   slider's hour, which [`show_frame`](user-guide/dashboards.md#a-frame-in-a-table) shows:
   Polars sorts, searches, and filters them.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
-  file. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
+  file, once for every session. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
   the main thread. One gives the chart its series. The other follows the slider: it gives the
   table and the map the pickups of the hour, and marks the hour on the chart. The model keeps
   no copy of the frame.

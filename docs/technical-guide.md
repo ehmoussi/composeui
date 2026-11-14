@@ -192,6 +192,36 @@ views. It costs nothing until a class with a `@reactive` method exists:
 
 `tests/test_reactivity.py` tests each of these rules.
 
+### Shared data
+
+`composeui.core.shared` loads a value once per process for the jobs of every session
+(`shared_data`). Its state changes under one `threading.Condition`:
+
+- **A run per load.** The first job makes a `_Run`, which runs the load in a daemon thread of
+  its own, not in that job's thread. So the job that started it can be canceled while the others
+  still wait. The load gets a `_LoadJob`: its progress goes to the run, and it has no main thread
+  to call.
+- **Each job delivers to itself.** The run only records its progress and its outcome, and
+  wakes the waiters. Each waiting job reports the progress and copies the value in its own
+  thread. On the web, reporting takes the session's lock: one busy session doesn't hold back the
+  load or the other sessions.
+- **An exception per job.** A failed load's exception, raised in every waiting thread, would
+  gather all their frames, and each session's task would keep the others'. `_own_copy` gives
+  each job a copy, with the load's traceback. A class that can't be copied, as one whose
+  `__init__` doesn't take its `args`, is raised as it is.
+- **The current run alone is kept.** When its last waiter is canceled, the run is canceled and
+  detached, as `forget` detaches it. A detached run gives its outcome to its own waiters only: a
+  canceled load's part, or a value forgotten, is never kept.
+- **Checked once.** `_sharer` checks the value as the load ends, and returns how each job gets
+  it: a clone, a shallow copy, a view, or the value itself. A NumPy array is never copied:
+  `_shared_array` makes it and each array it is a view of read-only, then refuses it if a view
+  can still be made writeable, as NumPy allows over memory that can be written. Narwhals tells the frame types apart,
+  so the core imports no frame library.
+- **No registry.** The value lives as long as its `SharedData`, a module's global. A reload runs
+  the module again, and the old value goes with the sessions that hold it.
+
+`tests/test_shared.py` drives each order with gated loads.
+
 ### View state
 
 `MainView.save_state` and `MainView.load_state` serialize the view tree with the `cattrs`
