@@ -31,7 +31,15 @@ class DragReportMixin(Widget):
     def _report_later(self) -> None:
         """Report once the handle rests: again from now on."""
         self._drop_report()
-        self._report_timer = self.set_timer(DRAG_REPORT_DELAY_MS / 1000, self._report)
+
+        def rested() -> None:
+            # stopping a timer doesn't take back its call already on its way: the release
+            # or the app's value may have come first, and reported or dropped it
+            if self._report_timer is timer:
+                self._report()
+
+        timer = self.set_timer(DRAG_REPORT_DELAY_MS / 1000, rested)
+        self._report_timer = timer
 
     def _drop_report(self) -> None:
         if self._report_timer is not None:
