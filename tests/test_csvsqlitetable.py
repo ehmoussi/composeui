@@ -430,8 +430,8 @@ def test_schema_source_infers_headers_types_and_reads_imported_rows(model: Readi
         SourceColumn("note", "note", str),
         SourceColumn("computed", "computed", int),
     ]
-    assert source.ordered_ids(Sort("value", descending=True), "", {}) == [2, 1]
-    assert source.ordered_ids(None, "", {"value": parse_filter(">2", float)}) == [2]
+    assert list(source.ordered_ids(Sort("value", descending=True), "", {})) == [2, 1]
+    assert list(source.ordered_ids(None, "", {"value": parse_filter(">2", float)})) == [2]
     assert source.cells([1], ["day", "moment", "computed"]) == {
         1: [
             datetime.date(2026, 10, 25),
@@ -475,7 +475,7 @@ def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[s
         else:
             list(rows.fill([",".join(names) + "\n", ",".join("42" for _ in names) + "\n"]))
             source = rows.source()
-            assert source.ordered_ids(None, "", {}) == [1]
+            assert list(source.ordered_ids(None, "", {})) == [1]
             assert source.cells([1], list(names)) == {1: [42] * len(names)}
     finally:
         model.close()

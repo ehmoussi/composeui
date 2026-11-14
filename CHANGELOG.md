@@ -146,6 +146,9 @@ The notable changes of each release of ComposeUI. The format follows
   instead of 8 MiB. Signals share what they hold until
   a callback connects, and renderers of the same kind share their handlers. A signal builds its
   log message only when signal logging is on (`--log-signals`).
+- `SqliteSource.ordered_ids` reads the ids in batches, into an `array` while they are integers.
+  A large table orders a million rows with a peak of 9.5 MiB of Python memory instead of 42 MiB.
+  The result is no longer a `list`: compare `list(source.ordered_ids(...))` with a list.
 
 ### Fixed
 
