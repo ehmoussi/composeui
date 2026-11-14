@@ -68,6 +68,13 @@ the work itself:
   their results.
 - **Qt:** use `qtbot.waitUntil(...)` or `qtbot.waitSignal(...)` on the state or
   signal that the work ends with.
+- **Web jobs:** read the views only after a request. A job hands its result to
+  the session in its own thread, under the session's lock, and the reactive
+  methods run there. A flag such as `has_result` or `jobs.is_running` changes
+  before they end. Poll `GET /jobs` until the state the test asserts arrives, or
+  send one more request once the flag is set: it takes the lock after the
+  callback is over. `test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown`
+  read a summary still empty on Windows with Python 3.9.
 - **Without such a hook,** pause in a bounded loop until the state the test reads
   arrives, then assert it: `for _ in range(100): await pilot.pause(0.05)`, with a
   `break` once it is there, as the Textual tests of a sorting job do.
@@ -76,6 +83,8 @@ A fixed pause is fine only for work on the app's own thread, such as a screen
 pushed. Even there, a slow runner can need more pauses than a fast one: when a
 test fails on CI only, use a bounded loop. When a test reads a file, a model, or
 a view that an action changes, find out first which thread the action runs on.
+Wait on the state that the test reads, not on a flag set before it: a task's
+`has_result` is set before its reactive methods fill the views.
 
 ## Browser tests (Playwright)
 

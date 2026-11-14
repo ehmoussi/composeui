@@ -845,8 +845,10 @@ Every behavior change needs a test in `tests/`.
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
   number of pauses. After a Textual file action (Open, Save, Save As, `PickFileAction`),
   call `await app.workers.wait_for_complete()`. For a job, call `main_view.jobs.wait()`. On
-  Qt, use `qtbot.waitUntil(...)`. A fixed wait passes on a fast machine and fails on a slow
-  CI runner, such as Windows with Python 3.9.
+  Qt, use `qtbot.waitUntil(...)`. On the web, read the views only after a request that follows
+  the job's result (`GET /jobs`). The job's thread sets a flag such as `has_result` under the
+  session's lock, before its reactive methods fill the views. A fixed wait passes on a fast
+  machine and fails on a slow CI runner, such as Windows with Python 3.9.
 - Qt tests in a headless environment (CI, WSL) need `QT_QPA_PLATFORM=offscreen`.
   `make test` sets it. To run one file or test:
 
