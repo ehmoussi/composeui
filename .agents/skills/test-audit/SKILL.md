@@ -204,6 +204,9 @@ matches one, and audits hunt for existing tests that do.
 - fixed pauses (`pilot.pause()` counts, `qtbot.wait(ms)`, `time.sleep`) before
   reading what a worker thread or a job does: wait on the work instead (see
   [Waiting for work on another thread](#waiting-for-work-on-another-thread));
+- a fake that several threads call at once and that hands out values or records
+  them by the order of the calls (a shared iterator, counter or list): each call
+  decides by its own input (see the `state-machines` skill, "Prove it");
 - fixtures that supply the event ordering the toolkit should produce, such as
   calling the view-side handler directly instead of typing into the widget, or
   state persistence asserted against a file `save_state` never writes;
