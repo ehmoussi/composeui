@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from composeui.core.application import ModelApplication
-from composeui.core.jobs import CalledInJobError
+from composeui.core.jobs import CalledInJobError, JobCanceledError
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.view import (
@@ -130,12 +130,15 @@ def test_a_job_s_result_is_emitted_with_what_its_callbacks_ask_for(
     assert not jobs.is_running
 
 
-@pytest.mark.parametrize("error_type", [ValueError, RefusedError, KeyError, OSError, RuntimeError])
+@pytest.mark.parametrize(
+    "error_type", [ValueError, RefusedError, JobCanceledError, KeyError, OSError, RuntimeError]
+)
 def test_what_a_job_raises_is_logged_emitted_and_ends_it(
     app: ModelApplication[MainView, _Model],
     caplog: pytest.LogCaptureFixture,
     error_type: type[Exception],
 ) -> None:
+    caplog.set_level(logging.INFO, "COMPOSEUI")
     jobs = app.main_view.jobs
     errors: list[Exception] = []
     finished: list[int] = []
@@ -156,6 +159,11 @@ def test_what_a_job_raises_is_logged_emitted_and_ends_it(
     (record,) = [record for record in caplog.records if record.name == "COMPOSEUI"]
     if error_type is RefusedError:
         assert record.levelno == logging.WARNING
+        assert record.exc_info is None
+        assert "no luck" in record.getMessage()
+    elif error_type is JobCanceledError:
+        # the user asked for it: no traceback in the log
+        assert record.levelno == logging.INFO
         assert record.exc_info is None
         assert "no luck" in record.getMessage()
     else:

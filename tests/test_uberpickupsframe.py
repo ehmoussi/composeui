@@ -51,6 +51,14 @@ def _app() -> App:
     )
 
 
+@pytest.fixture(autouse=True)
+def _fresh_pickups() -> Iterator[None]:
+    # each test reads its own CSV: the frame read once per process would be another test's
+    uberpickupsframe.read_pickups.forget()
+    yield
+    uberpickupsframe.read_pickups.forget()
+
+
 @pytest.fixture
 def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[App]:
     monkeypatch.setattr(uberpickupsframe, "DATA_URL", _csv(tmp_path))

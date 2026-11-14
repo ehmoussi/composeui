@@ -19,6 +19,7 @@ from composeui.core.dashboard import (
 )
 from composeui.core.dataframesource import points_of
 from composeui.core.reactivity import reactive
+from composeui.core.shared import shared_data
 from composeui.core.view import (
     ChartView,
     DownloadView,
@@ -43,8 +44,10 @@ DATA_URL = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data
 HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
-def read_pickups(_job: Job[pl.DataFrame, int], url: str) -> pl.DataFrame:
-    pickups = pl.read_csv(url).with_columns(
+@shared_data
+def read_pickups(_job: Job[pl.DataFrame]) -> pl.DataFrame:
+    """Read the pickups once, for every session: each gets its own clone of the frame."""
+    pickups = pl.read_csv(DATA_URL).with_columns(
         pl.col("Date/Time").str.to_datetime("%m/%d/%Y %H:%M:%S")
     )
     return pickups.with_columns(Hour=pl.col("Date/Time").dt.hour())
@@ -89,7 +92,7 @@ class UberDashboardMainView(DashboardView):
             self.status,
             views=[self.summary, self.by_hour, self.pickups_map, self.table, self.download_rows],
         )
-        self.loader.start(DATA_URL)
+        self.loader.start()
 
     @reactive
     def fill(self) -> None:

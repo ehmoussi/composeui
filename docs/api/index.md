@@ -17,6 +17,7 @@ dataframesource
 dashboard
 study
 jobs
+shared
 reactivity
 reload
 translation
