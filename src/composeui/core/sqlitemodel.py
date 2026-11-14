@@ -857,6 +857,35 @@ def _folded(cell: str, *, is_ascii: bool) -> str:
 
 #: the ids read from SQLite at a time, as Python objects
 ID_BATCH = 10_000
+#: SQLite's instructions that the check of empty cells may take before the sort gives up on
+#: it: the check of an indexed column takes a few, one computing an app's GROUP BY millions
+EMPTY_CHECK_BUDGET = 100_000
+
+
+def _has_no_empty_cell(db: sqlite3.Connection, check: str) -> bool:
+    """Tell whether the query `check` finds no empty cell, within `EMPTY_CHECK_BUDGET`.
+
+    Over the budget (e.g. a query SQLite computes again for the check), say False: the
+    sort then reads the empty cells apart, as without the check.
+    """
+    stopped = False
+
+    def stop() -> bool:
+        nonlocal stopped
+        stopped = True
+        return True  # stops the statement; the read transaction goes on
+
+    db.set_progress_handler(stop, EMPTY_CHECK_BUDGET)
+    try:
+        return db.execute(check).fetchall() == [(0,)]
+    except sqlite3.OperationalError:
+        # an error not the budget's (e.g. the app's query fails) comes again in the sort's
+        # queries, which read the same query: no test tells which one raised it
+        if not stopped:  # pragma: no cover
+            raise
+        return False
+    finally:
+        db.set_progress_handler(None, 0)
 
 
 def _read_ids(cursors: Iterable[sqlite3.Cursor]) -> Sequence[Any]:
@@ -993,7 +1022,7 @@ class SqliteSource:
             try:
                 # no empty cell: no test of each cell, nor a scan of the table for the empty
                 # ones (a third of the time to sort 10 million rows by an indexed number)
-                if empty_check is not None and db.execute(empty_check).fetchall() == [(0,)]:
+                if empty_check is not None and _has_no_empty_cell(db, empty_check):
                     queries = plain
                 return _read_ids(
                     db.execute(self._select_ids(where, order_by), parameters)

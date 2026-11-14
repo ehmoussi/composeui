@@ -155,7 +155,9 @@ The notable changes of each release of ComposeUI. The format follows
   The result is no longer a `list`: compare `list(source.ordered_ids(...))` with a list.
 - A `SqliteSource` sorted without a search or a filter first asks SQLite whether the column has an
   empty cell. Without one, a single query orders the rows: 10 million rows sorted by an indexed
-  number take 3.4 s instead of 5.2 s. A column with empty cells takes the same time as before.
+  number take 3.4 s instead of 5.2 s. A column with empty cells takes the same time as before. So
+  does a source whose query SQLite would compute again to answer, such as a `GROUP BY`: past a
+  small amount of work, SQLite stops the question, and the sort reads the empty cells apart.
 
 ### Fixed
 

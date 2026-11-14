@@ -493,6 +493,31 @@ def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
     assert "place_depth" not in plans[0]
 
 
+def test_a_check_of_empty_cells_over_its_budget_sorts_the_rows_as_without_it(
+    model: PlacesModel,
+) -> None:
+    # a GROUP BY that the check computes again: no empty count, but finding it out costs
+    query = "SELECT MIN(id) AS id, name, COUNT(*) AS places FROM place GROUP BY name"
+    columns = [SourceColumn("name", "Name"), SourceColumn("places", "Places", int)]
+    grouped = SqliteSource(model.places, query, id_column="id", columns=columns)
+
+    def sort_plans() -> list[str]:
+        return _plans(model, lambda: grouped.ordered_ids(Sort("places"), "", {}))
+
+    # few rows: the check is cheap, then one query
+    assert len(sort_plans()) == 2
+    # many rows: the check stops at its budget, then the counts and the empty ones apart
+    with model.places.connection() as db:
+        db.executemany(
+            "INSERT INTO place(name, kind) VALUES (?, 'lake')", [(f"p{i}",) for i in range(5000)]
+        )
+    assert len(sort_plans()) == 3
+    # each name once: one place each, in the order of their ids
+    with model.places.connection() as db:
+        ids = [row_id for (row_id,) in db.execute("SELECT id FROM place")]
+    assert list(grouped.ordered_ids(Sort("places"), "", {})) == sorted(ids)
+
+
 def test_a_filter_by_a_decimal_keeps_the_rows_a_list_source_keeps(
     sql: SqliteSource, listed: ListSource[Place]
 ) -> None:
