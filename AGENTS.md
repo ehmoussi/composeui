@@ -160,9 +160,11 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   after each test: PySide can crash when a job's thread collects a main view that a test dropped.
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
   number of pauses: `await app.workers.wait_for_complete()` after a Textual file action,
-  `main_view.jobs.wait()` for a job, `qtbot.waitUntil(...)` on Qt. A slow CI runner (Windows,
-  Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on another
-  thread").
+  `main_view.jobs.wait()` for a job, `qtbot.waitUntil(...)` on Qt. On the web, a test reads
+  the views only after a request that follows the job's result (`GET /jobs`): the job's thread
+  sets a flag such as `has_result` before its reactive methods fill the views. A slow CI runner
+  (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on
+  another thread").
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.

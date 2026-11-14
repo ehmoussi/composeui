@@ -125,6 +125,9 @@ def test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown() -> Non
             if page.loader.has_result:
                 break
             time.sleep(0.05)
+        # the job's thread set the result under the session's lock, and its reactive methods
+        # may still be filling the views: a request takes the lock once they're done
+        client.get("/jobs")
         assert page.summary.pickups.value == "4"
 
         # a base's key is its text: a page posts it as it shows it
