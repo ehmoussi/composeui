@@ -71,7 +71,9 @@ what exists. This file holds only the work that is left.
 The order of the work for **Now**:
 
 1. Share the data and speed up imports: the shared SQLite database, and a vectorized
-   `fill_from_frame`, measured against the budgets.
+   `fill_from_frame`, measured against the budgets. First, a case of 4 concurrent sessions
+   in `benchmarks/uber.py`, for both examples, measured on `main`: it sets the budget of
+   concurrent sessions, and records what `shared_data` saves.
 2. The charts: split the page's scripts, type-check them, then layers, then the new charts.
 3. Deployment in a container.
 
