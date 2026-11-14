@@ -469,8 +469,21 @@ def _plans(model: PlacesModel, order: Callable[[], object]) -> list[str]:
 def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
     model: PlacesModel, sql: SqliteSource
 ) -> None:
-    # the rows with a depth in its index's order, then the empty ones
-    plans = _plans(model, lambda: sql.ordered_ids(Sort("depth", descending=True), "", {}))
+    def sort_plans() -> list[str]:
+        return _plans(model, lambda: sql.ordered_ids(Sort("depth", descending=True), "", {}))
+
+    # whether a depth is empty, in the index; then the rows with a depth in its order, then
+    # the empty ones
+    check, *plans = sort_plans()
+    assert "place_depth" in check
+    assert len(plans) == 2
+    assert "place_depth" in plans[0]
+    assert "TEMP B-TREE FOR ORDER BY" not in plans[0]
+    # no empty depth: one query in the index's order, without a scan for the empty ones
+    with model.places.connection() as db:
+        db.execute("UPDATE place SET depth = 0 WHERE depth IS NULL")
+    _check, *plans = sort_plans()
+    assert len(plans) == 1
     assert "place_depth" in plans[0]
     assert "TEMP B-TREE FOR ORDER BY" not in plans[0]
     # filtered: reading the table in the index's order would cost more than sorting

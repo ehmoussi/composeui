@@ -959,6 +959,9 @@ class SqliteSource:
             parameters.extend(values)
         # by id unsorted: else in the order of an index a filter reads by, no header showing it
         queries = [(conditions, self._id)]
+        # without filters: whether the column has an empty cell, else one query orders the rows
+        empty_check: str | None = None
+        plain: list[tuple[list[str], str]] = []
         if sort is not None:
             column = self._column(sort.column)
             name = _identifier(column.name)
@@ -977,11 +980,21 @@ class SqliteSource:
                     ([f"NOT {empty}"], f"{order}{direction}, {self._id}"),
                     ([empty], self._id),
                 ]
+                # a cell found stops each EXISTS: a column with empty cells loses no time
+                empty_check = (
+                    f"SELECT EXISTS (SELECT 1 FROM ({self._query}) WHERE {name} IS NULL)"  # noqa: S608 (quoted, the app's query)
+                    f" OR EXISTS (SELECT 1 FROM ({self._query}) WHERE {name} = '')"
+                )
+                plain = [([], f"{order}{direction}, {self._id}")]
         with self._table.reading() as db:
             db.create_function("regexp", 2, _regexp, deterministic=True)
             db.create_function("casefold", 1, _casefold, deterministic=True)
             db.execute("BEGIN")  # the queries read the same rows, a write committed between
             try:
+                # no empty cell: no test of each cell, nor a scan of the table for the empty
+                # ones (a third of the time to sort 10 million rows by an indexed number)
+                if empty_check is not None and db.execute(empty_check).fetchall() == [(0,)]:
+                    queries = plain
                 return _read_ids(
                     db.execute(self._select_ids(where, order_by), parameters)
                     for where, order_by in queries

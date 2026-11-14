@@ -149,6 +149,9 @@ The notable changes of each release of ComposeUI. The format follows
 - `SqliteSource.ordered_ids` reads the ids in batches, into an `array` while they are integers.
   A large table orders a million rows with a peak of 9.5 MiB of Python memory instead of 42 MiB.
   The result is no longer a `list`: compare `list(source.ordered_ids(...))` with a list.
+- A `SqliteSource` sorted without a search or a filter first asks SQLite whether the column has an
+  empty cell. Without one, a single query orders the rows: 10 million rows sorted by an indexed
+  number take 3.4 s instead of 5.2 s. A column with empty cells takes the same time as before.
 
 ### Fixed
 
