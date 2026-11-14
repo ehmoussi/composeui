@@ -135,6 +135,12 @@ skill: each test must fail without the fix, for the intended reason.
 - **Hold a race with events.** Pause the worker with a `threading.Event` at the exact moment, make
   the other event happen, then release it. Join the thread, or wait for the job, before you read
   the result. A fixed sleep does not prove the order.
+- **A fake that several threads call decides by its own input,** not by the order of the calls.
+  A shared iterator, counter or list hands its values to whichever thread asks first: once a
+  gate opens, any thread can. Give each call what its own state says, such as its job's
+  `is_canceled`. Lock what the fake records, and compare what the threads record without its
+  order (`sorted(...)`), unless the test holds that order with events. A load that took
+  `next(parts)` failed 16 times in 300, when the run that replaced a canceled one asked first.
 - **Test a deadlock in a subprocess,** with a timeout and `faulthandler.dump_traceback_later`, so
   that a failure shows the stacks and does not hang the test run, as
   `test_a_job_reporting_inside_a_transaction_and_a_callback_reading_the_model_both_end` does.
