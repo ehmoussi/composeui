@@ -6284,6 +6284,8 @@ def _ordered_ids(
 
 def _compact_ids(ids: Sequence[Any]) -> Sequence[Any]:
     """Keep integer ids in an `array` (8 bytes each), any other ids in a list."""
+    if isinstance(ids, array.array) and ids.typecode == "q":
+        return ids  # e.g. `SqliteSource`'s, read into one: no copy
     if all(isinstance(row_id, int) and not isinstance(row_id, bool) for row_id in ids):
         with contextlib.suppress(OverflowError):
             return array.array("q", ids)

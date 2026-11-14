@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import array
 import contextlib
 import datetime
 import enum
@@ -118,7 +119,7 @@ def _both(
     filters: Optional[dict[str, Filter]] = None,
 ) -> tuple[Sequence[Hashable], Sequence[Hashable]]:
     return (
-        sql.ordered_ids(sort, search, filters or {}),
+        list(sql.ordered_ids(sort, search, filters or {})),
         listed.ordered_ids(sort, search, filters or {}),
     )
 
@@ -180,12 +181,29 @@ def test_a_search_finds_its_text_as_typed_in_the_text_columns(
     for needle in ("o'b", "100%", "_", " HARBOUR ", "ÉCOLE", "straße"):
         found, expected = _both(sql, listed, search=needle)
         assert found == expected, needle
-    assert sql.ordered_ids(None, "12.5", {}) == []  # no text column holds it
+    assert list(sql.ordered_ids(None, "12.5", {})) == []  # no text column holds it
     # a source without text columns: no row holds any text
     columns = [SourceColumn("depth", "Depth", Optional[float])]
     numbers = SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns)
     numbered = ListSource(Place, {"depth": "Depth"}, PLACES, id_field="id")
-    assert numbers.ordered_ids(None, "5", {}) == numbered.ordered_ids(None, "5", {}) == []
+    assert list(numbers.ordered_ids(None, "5", {})) == numbered.ordered_ids(None, "5", {}) == []
+
+
+def test_the_ids_are_read_in_batches_into_an_array_until_one_is_not_an_integer(
+    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sqlitemodel, "ID_BATCH", 3)  # the 8 places in 3 batches
+    # integers: 8 bytes each, however many batches
+    assert sql.ordered_ids(None, "", {}) == array.array("q", [1, 2, 3, 4, 5, 6, 8, 9])
+    # keys of mixed types, as SQLite stores a column without one: integers first, then
+    # text, which starts within the second batch, after one integer of it
+    keyed = SqliteSource(
+        model.places,
+        "SELECT CASE WHEN id > 4 THEN 'k' || id ELSE id END AS key, * FROM place",
+        id_column="key",
+        columns=sql.columns,
+    )
+    assert keyed.ordered_ids(None, "", {}) == [1, 2, 3, 4, "k5", "k6", "k8", "k9"]
 
 
 # Generated places, from few values so that cells are often equal, or equal but for
@@ -365,7 +383,9 @@ def test_a_table_s_cells_are_read_while_another_thread_orders_its_rows(
     ordered: list[Sequence[Hashable]] = []
     read: list[dict[Any, list[Any]]] = []
     filters = {"name": parse_filter("/^lake$/", str)}
-    ordering = threading.Thread(target=lambda: ordered.append(sql.ordered_ids(None, "", filters)))
+    ordering = threading.Thread(
+        target=lambda: ordered.append(list(sql.ordered_ids(None, "", filters)))
+    )
     ordering.start()
     assert started.wait(5)
 
@@ -390,7 +410,7 @@ def test_a_table_s_rows_are_read_while_a_write_is_uncommitted(
     read: list[tuple[int, dict[Any, list[Any]], Sequence[Hashable]]] = []
 
     def read_rows() -> None:
-        deepest = sql.ordered_ids(Sort("depth", descending=True), "", {})[:2]
+        deepest = list(sql.ordered_ids(Sort("depth", descending=True), "", {})[:2])
         read.append((sql.count(), sql.cells([4], ["name"]), deepest))
 
     # as a job writing many rows in one transaction: it holds the model's connection

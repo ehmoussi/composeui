@@ -35,7 +35,7 @@ from composeui.core.view import (
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterator, Mapping, Sequence
 
     from composeui.core.jobs import Job
     from composeui.core.view import Filter, Sort
@@ -146,7 +146,7 @@ class TimedSource(SqliteSource):
 
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
-    ) -> list[Any]:
+    ) -> Sequence[Any]:
         start = time.perf_counter()
         ids = super().ordered_ids(sort, search, filters)
         self.seconds = time.perf_counter() - start

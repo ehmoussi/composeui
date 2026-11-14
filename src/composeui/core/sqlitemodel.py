@@ -8,6 +8,7 @@ study only changes when it's saved.
 
 from __future__ import annotations
 
+import array
 import contextlib
 import csv
 import datetime
@@ -854,6 +855,27 @@ def _folded(cell: str, *, is_ascii: bool) -> str:
     return cell if is_ascii else f"casefold({cell})"
 
 
+#: the ids read from SQLite at a time, as Python objects
+ID_BATCH = 10_000
+
+
+def _read_ids(cursors: Iterable[sqlite3.Cursor]) -> Sequence[Any]:
+    """Read the ids of `cursors`, in turn: in an `array` while integers, else in a list."""
+    ids: array.array[int] | list[Any] = array.array("q")
+    for cursor in cursors:
+        while rows := cursor.fetchmany(ID_BATCH):
+            batch = [row[0] for row in rows]
+            if isinstance(ids, array.array):
+                size = len(ids)
+                try:
+                    ids.extend(batch)
+                    continue
+                except TypeError:  # e.g. a text id (SQLite's integers fit in 64 bits)
+                    ids = ids[:size].tolist()  # the batch's ids extended before it failed
+            ids.extend(batch)
+    return ids
+
+
 def _regexp(pattern: str, value: Any) -> bool:
     """SQLite's ``REGEXP``: whether `pattern` is found in `value`'s text, ignoring case."""
     return _compiled(pattern).search("" if value is None else str(value)) is not None
@@ -907,7 +929,11 @@ class SqliteSource:
 
     def ordered_ids(
         self, sort: Sort | None, search: str, filters: Mapping[str, Filter]
-    ) -> list[Any]:
+    ) -> Sequence[Any]:
+        """Get the ids as `TableSource.ordered_ids` says: integer ids in an `array`.
+
+        Read a batch at a time, never all as Python objects: 8 bytes an id, not 40.
+        """
         conditions: list[str] = []
         parameters: list[Any] = []
         needle = search.strip()
@@ -956,11 +982,10 @@ class SqliteSource:
             db.create_function("casefold", 1, _casefold, deterministic=True)
             db.execute("BEGIN")  # the queries read the same rows, a write committed between
             try:
-                return [
-                    row[0]
+                return _read_ids(
+                    db.execute(self._select_ids(where, order_by), parameters)
                     for where, order_by in queries
-                    for row in db.execute(self._select_ids(where, order_by), parameters)
-                ]
+                )
             finally:
                 db.rollback()
 

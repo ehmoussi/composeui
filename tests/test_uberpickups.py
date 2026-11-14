@@ -388,7 +388,7 @@ def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hou
             reader.set_progress_handler(count, steps_per_call)
         source = model.uber_data.source_at(11)
         assert source.count() == 1
-        assert source.ordered_ids(None, "", {}) == [other_hour + 1]
+        assert list(source.ordered_ids(None, "", {})) == [other_hour + 1]
         assert model.uber_data.pickup_points(11) == [MapPoint(latitude=40.8, longitude=-73.8)]
         assert calls * steps_per_call < other_hour
     finally:
