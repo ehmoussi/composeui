@@ -78,7 +78,9 @@ The order of the work for **Now**:
 ## Data and dashboards
 
 - **A shared SQLite database** (Now). What `shared_data` does for a frame, for SQLite: one import
-  per process, read by every session, each session keeping its own database for its writes.
+  per process, read by every session, each session keeping its own database for its writes. Done
+  when 4 SQLite sessions at once each load within twice the time of one session, and move the hour
+  within 500 ms, in the concurrency case of [`benchmarks/sessions.py`](benchmarks/sessions.py).
 - **A vectorized `fill_from_frame`** (Now). Check and insert a frame's rows in the frame library,
   not row by row in Python. Measure it with concurrent sessions first. A bulk insert through
   ADBC can follow, in an optional extra.
@@ -261,7 +263,6 @@ Measured by [`benchmarks/`](benchmarks/README.md), on native Linux:
 
 - An hour move in the SQLite Uber example: less than 500 ms on the web.
 - The Uber CSV loads in less than 10 s.
-- Concurrent sessions: a budget to set, which 4 SQLite sessions must meet.
 
 Add regression thresholds to CI only once there are real users, and only where results are
 reproducible.
@@ -269,7 +270,7 @@ reproducible.
 ## Known problems
 
 - **SQLite sessions slow down when they overlap.** In the SQLite Uber example on the web, a load
-  takes 9.5 s with one session and 206 s with 4 at once. Each row's checks in Python hand the
+  takes 9.6 s with one session and 200 s with 4 at once. Each row's checks in Python hand the
   GIL over between threads ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)).
   The shared SQLite database and the vectorized `fill_from_frame` address it.
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the

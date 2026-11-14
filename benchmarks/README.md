@@ -296,45 +296,52 @@ load alone. The JSON file holds a summary, not each sample.
 
 ### Sessions results
 
-The results come from `3c647a3`, on the same machine and Python as above, in
-[`results/sessions-3c647a3.json`](results/sessions-3c647a3.json). They ran with
-`--levels 1 2 4 8 --repeat 2 --rounds 3 --left-repeat 3`, on a longer version of the script that
-also measured Python's memory. Other work ran on the machine during part of these runs. A second
-run of 4 SQLite sessions, with nothing else running, gives a load of 213 s and a move of 4.2 s.
+The results come from `b9995b8`, on the same machine and Python as above, in
+[`results/sessions-b9995b8.json`](results/sessions-b9995b8.json). They ran with
+`--levels 1 2 4 --repeat 2 --rounds 3 --left-repeat 1`, with nothing else running. Since
+`b9995b8`, the Polars example reads its CSV file once per process, with `shared_data`, and its
+sessions share the frame. The SQLite example didn't change. The results of `3c647a3`, before
+`shared_data`, are in [`results/sessions-3c647a3.json`](results/sessions-3c647a3.json): they also
+have 8 sessions at once.
 
 What each session costs, after the first session:
 
-| Measure | SQLite | Polars |
-| --- | ---: | ---: |
-| Load | 10 s | 0.22 s |
-| Process memory (RSS) | 9.8 MiB | 54 MiB |
-| Temporary files | 125 MiB | none |
-| Open file descriptors | 5 | 0 |
-| Time to close | 11 ms | 0.5 ms |
+| Measure | SQLite | Polars | Polars at `3c647a3` |
+| --- | ---: | ---: | ---: |
+| Load | 9.8 s | 0.15 s | 0.22 s |
+| Process memory (RSS) | 10.8 MiB | 5.1 MiB | 54 MiB |
+| Temporary files | 125 MiB | none | none |
+| Open file descriptors | 5 | 0 | 0 |
+| Time to close | 11 ms | 0.5 ms | 0.5 ms |
 
-The first session also takes 34 MiB (SQLite) or 223 MiB (Polars) of process memory. Each session
-loads its own copy of the rows.
+The first session also takes 35 MiB (SQLite) or 233 MiB (Polars) of process memory. Each SQLite
+session imports its own copy of the rows. The Polars sessions share one frame, which stays until
+the process ends.
 
 A session's end frees its main view and its model:
 
-- **Nothing stays.** All 4 main views are freed, and no temporary file stays. The file
-  descriptors return to 8.
-- **The process memory falls little.** With 4 SQLite sessions, it falls from 113 to 96 MiB. With
-  4 Polars sessions, it falls from 458 to 455 MiB. This benchmark does not show why.
+- **Nothing stays.** All 4 main views are freed, and no temporary file stays. The SQLite example
+  returns to 8 file descriptors. The Polars example keeps the 11 that its first session opens,
+  before `shared_data` too: Polars keeps the CSV file open.
+- **The process memory falls little.** With 4 SQLite sessions, it falls from 126 to 107 MiB. With
+  4 Polars sessions, it falls from 324 to 321 MiB: the shared frame stays.
 
 Sessions at once, with medians:
 
 | Sessions | SQLite load | SQLite move | SQLite moves/s | SQLite peak | Polars load | Polars move | Polars moves/s | Polars peak |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 9.5 s | 0.37 s | 2.7 | 113 MiB | 0.46 s | 0.21 s | 4.9 | 292 MiB |
-| 2 | 17.7 s | 0.43 s | 4.0 | 147 MiB | 0.57 s | 0.28 s | 7.4 | 523 MiB |
-| 4 | 206 s | 3.9 s | 0.8 | 223 MiB | 0.62 s | 0.47 s | 8.9 | 1,012 MiB |
-| 8 | 1,083 s | 38 s | 0.2 | 385 MiB | 1.0 s | 0.96 s | 8.9 | 1,922 MiB |
+| 1 | 9.6 s | 0.38 s | 2.6 | 121 MiB | 0.51 s | 0.23 s | 4.5 | 306 MiB |
+| 2 | 17.5 s | 0.45 s | 3.5 | 145 MiB | 0.55 s | 0.27 s | 7.3 | 317 MiB |
+| 4 | 200 s | 3.5 s | 1.0 | 238 MiB | 0.66 s | 0.49 s | 8.5 | 335 MiB |
+
+At `3c647a3`, before `shared_data`, the Polars peak was 292, 523 and 1,012 MiB for 1, 2 and 4
+sessions, and 1,922 MiB for 8. The SQLite example then took 1,083 s to load with 8 sessions.
 
 A move lasts until a poll of `/jobs` shows that no job runs. The benchmark polls every 50 ms
 during a move, and every 300 ms during a load.
 
-A session left during a SQLite load, in 3 runs at each moment:
+A session left during a SQLite load, in 3 runs at each moment. At `b9995b8`, one run at each
+moment is clean too.
 
 | Seconds after it opens | `3c647a3` | With the fix |
 | ---: | --- | --- |
@@ -352,15 +359,17 @@ A session left during a SQLite load, in 3 runs at each moment:
 ### Sessions findings
 
 - **The SQLite example does not scale past 2 sessions at once.** From 2 to 4 sessions, a load
-  takes about 12 times as long, and a move about 9 times as long. Moves also become slower after
+  takes about 11 times as long, and a move about 8 times as long. Moves also become slower after
   the loads are over. ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the
   cause.
-- **The budget holds for one SQLite session.** A move takes 0.37 s, within the 500 ms budget of
-  [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.43 s, but the 95th
-  percentile is 0.80 s. Polars stays within the budget up to 4 sessions at the median, and its
-  95th percentile at 4 sessions is 0.54 s.
-- **Polars pays with memory.** Its sessions move the hour faster, but 8 sessions take about
-  1.9 GiB. Throughput stops growing at about 9 moves per second, from 4 sessions.
+- **The budget holds for one SQLite session.** A move takes 0.38 s, within the 500 ms budget of
+  [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.45 s, but the 95th
+  percentile is 0.94 s. Polars stays within the budget up to 4 sessions at the median, and its
+  95th percentile at 4 sessions is 0.55 s.
+- **Shared data takes Polars' memory down to the size of the frame.** 4 sessions peak at 335 MiB,
+  against 1,012 MiB before `shared_data`: each session after the first adds 5 MiB, not 54 MiB.
+  Loads and moves take the same time. Throughput stops growing at about 9 moves per second, from
+  4 sessions.
 - **Disk limits the SQLite example.** At 125 MiB per session, the 1,000 sessions of
   `max_sessions` would take about 125 GB.
 
