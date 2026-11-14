@@ -1040,8 +1040,9 @@ The existing mypy matrix checks source, examples, and tests together. Separate j
 configuration. Failures in these jobs fail the workflow. Run `make typecheck` locally to
 run all four type checkers.
 
-A change of the documentation only, in `docs/` and the Markdown files, runs only the `docs`
-job. That job also lints the Python files of `docs/`.
+A change of the documentation and the benchmarks' results only, in `docs/`, the Markdown files
+and `benchmarks/results/`, runs only the `docs` job. That job also lints the Python files of
+`docs/`.
 
 On a push to `main` or a `v*` tag, the `pages` job publishes two versions to GitHub Pages.
 Current `main` is at https://ehmoussi.github.io/composeui/. The latest release is at

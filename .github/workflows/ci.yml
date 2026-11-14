@@ -10,7 +10,8 @@ on:
 
 jobs:
   # whether the push or pull request changes more than the documentation (docs/ and the
-  # Markdown files): a change of the documentation only needs the docs job
+  # Markdown files) and the benchmarks' results (benchmarks/results/, data that no check
+  # reads): a change of these only needs the docs job
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -28,7 +29,7 @@ jobs:
             code=false  # the release workflow checks the tagged code
           elif ! git diff --name-only "$BASE...$HEAD" > changed.txt; then
             code=true  # nothing to compare with: check everything
-          elif grep -qvE '^docs/|\.md$' changed.txt; then
+          elif grep -qvE '^docs/|\.md$|^benchmarks/results/' changed.txt; then
             code=true
           else
             code=false

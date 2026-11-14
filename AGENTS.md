@@ -184,7 +184,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`, and the tests
   on Windows (`.\make.ps1 translations test`) and macOS (`make translations test`), on
   Python 3.9 and 3.14. A change of
-  the documentation only (`docs/`, Markdown files) runs only the docs build and its lint.
+  only the documentation (`docs/`, Markdown files) and benchmark results
+  (`benchmarks/results/`) runs only the docs build and its lint.
   The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
   on tests on Python 3.9.
 
