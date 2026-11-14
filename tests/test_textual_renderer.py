@@ -204,6 +204,7 @@ if TYPE_CHECKING:
     from textual.app import App
     from textual.message import Message
     from textual.pilot import Pilot
+    from textual.timer import Timer
     from textual.widget import Widget
 
     from composeui.core.view import TableView, View
@@ -581,7 +582,11 @@ async def test_a_slider_stops_on_its_steps_its_value_drawn_beside_the_track() ->
 
 
 @pytest.mark.asyncio
-async def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other() -> None:
+async def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # a slow machine's rest would report a drag's steps: the drag here reports on release
+    monkeypatch.setattr(composeslider, "DRAG_REPORT_DELAY_MS", _LONG_REST_MS)
     view = RangesMainView()
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
@@ -4641,7 +4646,11 @@ async def test_a_tree_reports_a_node_selected_once_and_its_collapse() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_slider_moves_by_a_page_and_follows_a_drag() -> None:
+async def test_a_slider_moves_by_a_page_and_follows_a_drag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # a slow machine's rest would report a drag's steps: the drag here reports on release
+    monkeypatch.setattr(composeslider, "DRAG_REPORT_DELAY_MS", _LONG_REST_MS)
     view = WorkersMainView()
     app = _app_of(view)
     workers = view.form.workers
@@ -4719,6 +4728,40 @@ async def test_a_slider_reports_a_drag_once_its_handle_rests_and_on_release(
         workers.value = 11  # set in code before the drag's move is reported: the app's wins
         await pilot.mouse_up(slider, offset=at(3))
         assert (slider.position, moves) == (3, [8, 14])
+
+
+@pytest.mark.asyncio
+async def test_a_rest_s_call_on_its_way_after_the_release_reports_nothing_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # no rest before the release: the test makes its call come late itself
+    monkeypatch.setattr(composeslider, "DRAG_REPORT_DELAY_MS", _LONG_REST_MS)
+    view = WorkersMainView()
+    app = _app_of(view)
+    workers = view.form.workers
+    moves: list[int] = []
+    workers.value_changed.connect(moves.append)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        slider = _field_widget(workers.renderer)
+        assert isinstance(slider, ComposeSlider)
+        await pilot.pause()
+        width = slider._track_width()  # noqa: SLF001
+        rests: list[Callable[[], None]] = []
+        set_timer = slider.set_timer
+
+        def keeping_its_call(delay: float, callback: Callable[[], None]) -> Timer:
+            rests.append(callback)
+            return set_timer(delay, callback)
+
+        monkeypatch.setattr(slider, "set_timer", keeping_its_call)
+        await pilot.mouse_down(slider, offset=(1, 1))
+        await pilot.hover(slider, offset=(width // 2, 1))
+        await pilot.mouse_up(slider, offset=(width // 2, 1))
+        assert len(moves) == 1  # on release
+        # a slow machine: the rest's timer fired as the release came, its call already queued
+        rests[-1]()
+        assert len(moves) == 1
 
 
 @pytest.mark.asyncio

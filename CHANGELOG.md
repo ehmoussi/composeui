@@ -168,6 +168,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On Textual, a slider and a range slider no longer report a drag's value twice on a slow
+  machine. The handle's rest and the release could both report it, when the release came as the
+  rest's report was on its way.
 - On Qt, an empty date input's calendar opens on the month nearest to today's that its `minimum`
   and `maximum` allow. It opened on today's month, whose days the user couldn't pick when today
   was out of the range.
