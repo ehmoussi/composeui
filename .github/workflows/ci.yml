@@ -155,6 +155,8 @@ jobs:
       # the web extra, and matplotlib for its charts' images: these tests drive the web
       # backend, nothing else
       - run: uv sync --locked --group dev --group browser --extra web --extra report
+      # the page's scripts against their types: once, as they don't depend on Python
+      - run: make js-check
       - run: uv run playwright install --with-deps chromium
       - run: make browser-test
 

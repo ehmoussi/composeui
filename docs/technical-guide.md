@@ -19,6 +19,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
   - [A button click on the web](#a-button-click-on-the-web)
 - [Design of the web backend](#design-of-the-web-backend)
   - [Requests and updates](#requests-and-updates)
+  - [The page's scripts](#the-pages-scripts)
   - [Tables on the web](#tables-on-the-web)
   - [Order and sessions](#order-and-sessions)
   - [Uploads and Open](#uploads-and-open)
@@ -53,6 +54,7 @@ src/composeui/
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
+js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
 docs/            # the user guide (user-guide/), the examples guide, this guide, the Sphinx site
@@ -366,8 +368,8 @@ section covers what users see.
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
   files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
-  triggers on a custom event (`enter-key`, `escape-key`, `activate`), and `static/page.js` does
-  the rest.
+  triggers on a custom event (`enter-key`, `escape-key`, `activate`), and the page's scripts do
+  the rest (see [The page's scripts](#the-pages-scripts)).
 - **Hidden fragments keep their id.** A hidden fragment's root keeps its id (`hidden`
   attribute), so a later swap has a target.
 - **Updates.** Setting a view attribute marks its renderer dirty in a request-scoped set
@@ -387,7 +389,7 @@ section covers what users see.
   the parts that it changes: the check-all box, the list, and a multi-combobox's summary. It
   never swaps the box clicked or the search field, which keep the focus. A post that changes
   nothing, such as one of a stale page, swaps all three back as the view is. The check-all box
-  shows partly checked through `page.js`, which reads `data-indeterminate`.
+  shows partly checked through `tables.js`, which reads `data-indeterminate`.
 - **A drop-down list swapped while open.** A change of the app's swaps a multi-combobox whole.
   Each box has an id made from its key, so htmx gives it the focus back. But the dropdown is
   open only while the focus is in it, and a closed one's boxes take no focus. So `page.js` keeps
@@ -405,11 +407,45 @@ section covers what users see.
   typed in.
 - **Downloads** go through a ticket: see [Downloads on the web](#downloads-on-the-web).
 
+### The page's scripts
+
+- **One script per domain.** The scripts are files of `webcore/static/`, in the hashed
+  addresses of `page.py`:
+  - `page.js` runs in the `<head>`. It applies the theme before the body paints, and holds the
+    common controls, the request and session headers, the post numbers, the protection against
+    stale fragments, the loading of the libraries, and the `MutationObserver` that runs each
+    script's work after a change of the page.
+  - `tables.js` runs once after `page.js`, before the body: row activation, cell editing, the
+    check-all box, a large table's scroll windows, and its clipboard.
+  - `charts.js` loads with uPlot, and `maps.js` with deck.gl, once the page shows the first
+    chart or map.
+- **Classic scripts, no bundler.** Each script keeps its code in a closure, and shares only
+  what the others use, under `window.ComposeUI`: `dispatch` from `page.js`, and the `sync`
+  functions of `charts.js` and `maps.js`, which they add once loaded. `page.js` calls them
+  from its observer.
+- **The library, then the script.** `page.js` loads uPlot, then `charts.js` (deck.gl, then
+  `maps.js`), one after the other. A failed load is forgotten, and asked again on a later change
+  of the page, up to five times: never as the other file arrives. Once both are there, each
+  change of the page goes to the script before any check that a chart is shown, so a chart
+  swapped out is destroyed, and a map finalized.
+- **The order of the listeners.** Listeners of one event and phase run in the order they were
+  added, and `tables.js` adds its after all of `page.js`'s. `page.js`'s captured Enter
+  dispatches `activate`, which selects a row, before `tables.js` activates it. A cell's Escape is
+  captured: else the sidebar's Escape in `page.js` would first move the focus, and the cell
+  would post the text typed.
+- **Types without Node.** The scripts carry JSDoc types. `make js-check` checks them with
+  TypeScript's compiler, a binary, in strict mode, with `noUncheckedIndexedAccess`: an element
+  read from an array or a map may be missing (`js/tsconfig.json`). `js/composeui.d.ts` declares
+  the globals, the JSON of a chart and of a map, and the events of htmx; `make web-deps`
+  downloads the declarations of htmx and uPlot beside it. deck.gl's bundle has none: its
+  classes are unchecked. A JSDoc cast, such as of `event.target`, is not checked: it says what
+  the page holds.
+
 ### Tables on the web
 
 - **A large table's frame.** `WebSourceTableRenderer` draws a window of rows between two filler
   rows (`style` heights, which the policy allows) that give the scroll bar every row's height.
-  `page.js` posts the first row shown once the scroll stops outside the window. Only the
+  `tables.js` posts the first row shown once the scroll stops outside the window. Only the
   `<tbody>` comes back (in a `<template>`, as a table's parts), so the scroll position stays.
   Browsers cap an element's height: past `SOURCE_TABLE_SCROLLED_ROWS`, a filler's row height
   stands for more than one row. The page maps the scroll position through the fillers as drawn,
@@ -839,7 +875,8 @@ make pyright pyrefly ty  # individual test checkers
 make test          # pytest in parallel, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
-make check         # lint + mypy + translations
+make js-check      # the page's scripts against their JSDoc types (TypeScript's compiler)
+make check         # lint + mypy + translations + js-check
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
 make web-deps      # download htmx, uPlot, Cally and deck.gl at pinned versions (commit them)
@@ -849,7 +886,7 @@ make screenshots   # the screenshots of the examples guide, on every backend
 
 On Windows without `make`, run the same targets in PowerShell with `make.ps1`, such as
 `.\make.ps1 check test`. Pass `EXAMPLES` as `-Examples pipeform, batman` and
-`TAILWIND_PLATFORM` as `-TailwindPlatform`. When you change a target in the `Makefile`,
+`TAILWIND_PLATFORM` as `-TailwindPlatform`, and `TSC_PLATFORM` as `-TscPlatform`. When you change a target in the `Makefile`,
 change it in `make.ps1` too.
 
 `make mypy` checks source, examples, and tests together. It installs the `browser` group and
@@ -944,7 +981,13 @@ download, and the page works offline. `make web-deps` downloads these files from
 versions in the `Makefile`, and checks their SHA-256. It adds Cally's license to `cally.js`
 as a comment. It keeps the licenses of deck.gl and uPlot beside their scripts, in
 `deckgl.LICENSE` and `uPlot.LICENSE`, and daisyUI's beside `app.css`, in `daisyui.LICENSE`.
-To update one of them:
+`make js-check` downloads TypeScript's compiler once into `js/vendor/`, which is not
+committed, as `make css` does Tailwind. It checks the archive's SHA-256 against the one in the
+`Makefile` and `make.ps1`. When you change `TSC_VERSION`, change the SHA-256 values in both
+files, and delete `js/vendor/`.
+
+`make web-deps` also downloads the declarations of htmx and uPlot into `js/`, for
+`make js-check`. They don't go in the package. To update one of them:
 
 1. Change its version and its SHA-256 in the `Makefile` and in `make.ps1`.
 2. Change its version in the comments of `webcore/page.py`.
@@ -980,6 +1023,11 @@ To update one of them:
   A widget's own slots are methods of a `QObject`, and need no `QtSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that is not `Markup` itself.
+- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a
+  closure, sharing only what another script calls under `window.ComposeUI`. Put a feature's
+  code in the script of its domain (`page.js`, `tables.js`, `charts.js`, `maps.js`).
+  `make js-check` must pass: type what you add, with a JSDoc cast rather than a runtime check
+  that changes what the code does.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
 - Before you change code that holds state over time, write down its states and events, and what
   each event does in each state. The `state-machines` skill gives the method. It applies to jobs,
@@ -1039,7 +1087,7 @@ uv sync --group dev --group docs --all-extras
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`. It runs
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
-`make browser-test` and `make docs` on Python 3.13. On Windows, it runs
+`make js-check`, `make browser-test` and `make docs` on Python 3.13. On Windows, it runs
 `.\make.ps1 translations test`, and on macOS `make translations test`, on Python 3.9 and
 3.14. Run `make check test` before you commit.
 

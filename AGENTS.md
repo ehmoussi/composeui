@@ -27,7 +27,8 @@ make pyright pyrefly ty  # individual test checkers
 make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
-make check   # lint + mypy + translations
+make js-check  # the page's scripts against their JSDoc types (TypeScript's compiler, no Node)
+make check   # lint + mypy + translations + js-check
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
 make web-deps  # htmx, uPlot, Cally and deck.gl from npm at pinned versions and SHA-256 (commit them)
@@ -37,7 +38,7 @@ make screenshots   # docs/images/<example>-<backend>.png for the docs and README
 
 On Windows without `make`, run the same targets in PowerShell with `make.ps1`
 (`.\make.ps1 check test`; `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform`
-for `TAILWIND_PLATFORM`). Keep it in step with the `Makefile`, including its
+for `TAILWIND_PLATFORM`, `-TscPlatform` for `TSC_PLATFORM`). Keep it in step with the `Makefile`, including its
 `$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
 
 `make mypy` checks source, examples and tests together. It installs the `browser` group and
@@ -64,6 +65,7 @@ src/composeui/
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
+js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
 docs/            # user guide, examples guide, technical guide; Sphinx site (conf.py, api/, _ext/)
@@ -132,6 +134,11 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   A widget's own slots, methods of a `QObject`, need no `QtSlot`.
 - In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
   escapes every value (see the `web-security` skill).
+- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a
+  closure, sharing only what another script calls under `window.ComposeUI`. Put a feature's
+  code in the script of its domain (`page.js`, `tables.js`, `charts.js`, `maps.js`).
+  `make js-check` must pass: type what you add, with a JSDoc cast rather than a runtime check
+  that changes what the code does.
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
 - Load the `state-machines` skill before you change code that holds state over time: jobs,
   threads and timers, `SqliteModel` locking, web sessions and post order, `page.js` loaders and

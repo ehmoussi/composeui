@@ -117,7 +117,7 @@ Chromium. Browser tests are slow and opt-in, so the gate is stricter for them:
   `tests/test_webrenderer.py` with the `TestClient`, even when the user only
   notices it in a browser: an `accept` attribute, an `aria-describedby` link, an
   OOB fragment. A browser test owns what happens after the response arrives: the
-  scripts in `webcore/static/page.js` (Alt+Shift shortcuts, keeping `aria-invalid` in step
+  scripts in `webcore/static/` (Alt+Shift shortcuts, keeping `aria-invalid` in step
   with a swapped log), htmx swaps leaving the focused field and its caret alone, a
   fragment fetching itself again (the status bar's auto-clear), the page loading
   nothing from another host.
@@ -281,7 +281,7 @@ split discovery into lanes (parallel agents only when the user asks for them):
   `tests/test_pipeview.py`, `tests/test_statusbar_thread_safety.py`);
 - Textual (`src/composeui/textualcore/`, `tests/test_textual_renderer.py`);
 - web (`src/composeui/webcore/`, `tests/test_webrenderer.py`, and
-  `tests/test_browser.py` for `webcore/static/page.js` and htmx behavior);
+  `tests/test_browser.py` for the scripts in `webcore/static/` and htmx behavior);
 - a cross-cutting pattern sweep (same contract asserted in several backends,
   examples used as fixtures, coverage-only tests).
 
@@ -379,8 +379,8 @@ rewrites), each passing validation on its own.
 6. Run `make lint`, then `git diff --check`.
 7. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
    Compare coverage against the baseline run and explain any drop.
-   When browser tests, `webcore/static/page.js` or the markup they rely on changed, also
-   run `make browser-test` (once: `uv run --group browser playwright install
+   When browser tests, the scripts in `webcore/static/` or the markup they rely on changed,
+   also run `make browser-test` (once: `uv run --group browser playwright install
    chromium`) and check they passed rather than skipped; `make test` excludes them.
 8. Inspect `git diff --numstat`; report production/examples separately from
    tests and test support.

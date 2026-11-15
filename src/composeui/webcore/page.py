@@ -36,7 +36,8 @@ $icon_link
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="$css_url" rel="stylesheet" type="text/css" />
 <script src="$page_url" data-uplot="$uplot_url" data-cally="$cally_url"
-  data-deckgl="$deckgl_url"></script>
+  data-deckgl="$deckgl_url" data-charts="$charts_url" data-maps="$maps_url"></script>
+<script src="$tables_url"></script>
 </head>
 
 <body class="bg-base-200 min-h-screen" data-max-upload="$max_upload_size"
@@ -65,6 +66,11 @@ _STATIC_URLS = {
     "css_url": _static_url("app.css"),
     # a file, not inline: a policy can then allow the page's own scripts by address
     "page_url": _static_url("page.js"),
+    # the tables' script, after the page's; those of the charts and the maps, which the
+    # page's loads with their libraries
+    "tables_url": _static_url("tables.js"),
+    "charts_url": _static_url("charts.js"),
+    "maps_url": _static_url("maps.js"),
     # uPlot 1.6.32 (https://github.com/leeoniya/uPlot), its stylesheet in css/uPlot.min.css,
     # its license in uPlot.LICENSE
     "uplot_url": _static_url("uPlot.iife.min.js"),

@@ -41,7 +41,9 @@ from composeui.core.view import (
     MainView,
     MapView,
     Series,
+    SidebarView,
     StreamContent,
+    TableView,
     child,
     define_view,
 )
@@ -2445,6 +2447,50 @@ def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(
     expect(lake).to_contain_text("Windy")
 
 
+@define_view
+class _PlacesSidebar(SidebarView):
+    places: TableView = child(
+        TableView, headers=["Place", "Note"], rows=[["Lake", "Calm"]], editable_columns=[1]
+    )
+
+
+@define_view
+class _SidebarPlacesMainView(MainView):
+    sidebar: _PlacesSidebar = child(_PlacesSidebar)
+
+
+def test_escape_in_a_cell_of_a_phone_s_sidebar_leaves_the_cell_as_it_was(
+    browser: Browser,
+) -> None:
+    """The cell's Escape comes before the drawer's, whose focus would post the text typed."""
+    views: list[_SidebarPlacesMainView] = []
+
+    def build_view() -> _SidebarPlacesMainView:
+        views.append(_SidebarPlacesMainView())
+        return views[-1]
+
+    app = WebApplication(build_main_view=build_view).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        page.set_viewport_size({"width": 400, "height": 700})
+        page.goto("/")
+        page.get_by_role("button", name="Sidebar").click()
+        lake = page.get_by_role("row").filter(has_text="Lake")
+        note = lake.get_by_label("Note")
+        with _posted(page):
+            lake.get_by_text("Calm").dblclick()
+        expect(note).to_be_focused()
+        expect(page.locator(".htmx-added")).to_have_count(0)
+        note.press_sequentially("Foggy")
+
+        with _posted(page):
+            note.press("Escape")
+
+        expect(note).to_have_count(0)
+        expect(page.get_by_role("button", name="Sidebar")).to_be_focused()
+        assert views[-1].sidebar.places.rows == [["Lake", "Calm"]]
+
+
 def test_a_double_click_or_enter_opens_a_table_row_once_selected_unless_it_edits(
     places_page: Page,
 ) -> None:
@@ -2534,7 +2580,7 @@ def test_the_page_follows_tasks_running_in_threads_until_they_end(tasks_page: Pa
 def _x_range(page: Page) -> list[float]:
     """Get the x range of the page's one chart."""
     x_range: list[float] = page.evaluate(
-        "(() => { const [chart] = charts.values();"
+        "(() => { const [chart] = ComposeUI.charts.drawn.values();"
         " return [chart.scales.x.min, chart.scales.x.max]; })()"
     )
     return x_range
@@ -2571,7 +2617,9 @@ class _SwappingDateMainView(_SwappingMainView):
     ("main_view", "library", "ready"),
     [
         (_SwappingChartMainView, "uPlot.iife.min.js", "typeof uPlot !== 'undefined'"),
+        (_SwappingChartMainView, "charts.js", "ComposeUI.charts !== undefined"),
         (_SwappingMapMainView, "deckgl.min.js", "typeof deck !== 'undefined'"),
+        (_SwappingMapMainView, "maps.js", "ComposeUI.maps !== undefined"),
         (_SwappingDateMainView, "cally.js", "customElements.get('calendar-date') !== undefined"),
     ],
 )
@@ -2713,7 +2761,9 @@ def test_a_swapped_chart_is_destroyed_and_keeps_the_zoom(chart_page: Page) -> No
     add = chart_page.get_by_role("button", name="Add Curve")
     add.click()
     expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
-    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+    chart_page.evaluate(
+        "ComposeUI.charts.drawn.values().next().value.setScale('x', {min: 0.5, max: 1})"
+    )
 
     # the server has the new diameter before the click: the two would else race
     with _posted(chart_page):
@@ -2725,7 +2775,7 @@ def test_a_swapped_chart_is_destroyed_and_keeps_the_zoom(chart_page: Page) -> No
     # one chart, the old one gone with its legend
     expect(chart_page.locator(".uplot")).to_have_count(1)
     expect(chart_page.locator(".u-legend")).to_have_count(1)
-    assert chart_page.evaluate("charts.size") == 1
+    assert chart_page.evaluate("ComposeUI.charts.drawn.size") == 1
     assert _x_range(chart_page) == [0.5, 1]
 
 
@@ -2734,7 +2784,9 @@ def test_the_chart_follows_the_theme(chart_page: Page) -> None:
     chart_page.goto("/")
     chart_page.get_by_role("button", name="Add Curve").click()
     expect(chart_page.locator(".u-legend")).to_contain_text("D = 50 mm")
-    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+    chart_page.evaluate(
+        "ComposeUI.charts.drawn.values().next().value.setScale('x', {min: 0.5, max: 1})"
+    )
     canvas = chart_page.locator("figure canvas")
     light = canvas.evaluate("canvas => canvas.toDataURL()")
 
@@ -2777,7 +2829,7 @@ def test_measurements_are_drawn_as_dots_over_the_curve(chart_page: Page) -> None
     expect(chart_page.locator(".u-legend")).to_contain_text("Measured, D = 50 mm")
     # whether uPlot draws each series' points, and its line
     drawn = chart_page.evaluate(
-        "(() => { const chart = charts.values().next().value;"
+        "(() => { const chart = ComposeUI.charts.drawn.values().next().value;"
         " return chart.series.slice(1).map((series, index) =>"
         " [series.points.show(chart, index + 1), series.paths(chart, index + 1, 0, 1) !== null]);"
         " })()"
@@ -2807,7 +2859,7 @@ def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:
     expect(decay.locator("canvas")).to_have_count(1)
 
     scales = decay.locator("[data-chart]").evaluate(
-        "element => { const chart = charts.get(element);"
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
         " return [chart.scales.x.distr, chart.scales.y.distr, chart.scales.x.min > 0]; }"
     )
 
@@ -2828,7 +2880,7 @@ def test_reference_lines_are_drawn_in_their_styles_in_range(chart_pages_page: Pa
 
     # the y range, past the data to the lines' 4.6 and 0.6; then the pixels along their rows
     y_range, solid, dotted = pressure.locator("[data-chart]").evaluate(
-        "element => { const chart = charts.get(element); const box = chart.bbox;"
+        "element => { const chart = ComposeUI.charts.drawn.get(element); const box = chart.bbox;"
         " const row = value => {"
         "   const y = Math.round(chart.valToPos(value, 'y', true));"
         "   const pixels = chart.ctx.getImageData(box.left, y, box.width, 1).data;"
@@ -2854,7 +2906,7 @@ def test_a_step_series_holds_each_value_until_the_next_point(chart_pages_page: P
     plot = jobs.locator("[data-chart]")
     # the fill at 3.5 h: under 3 running, held from 2 h to 5 h; a line would be at 2.5
     held, under = plot.evaluate(
-        "element => { const chart = charts.get(element);"
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
         " const pixel = (x, y) => chart.ctx.getImageData("
         "   Math.round(chart.valToPos(x, 'x', true)), Math.round(chart.valToPos(y, 'y', true)),"
         "   1, 1).data.join();"
@@ -2862,7 +2914,7 @@ def test_a_step_series_holds_each_value_until_the_next_point(chart_pages_page: P
     )
     assert held == under
 
-    x = plot.evaluate("element => charts.get(element).valToPos(4.8, 'x')")
+    x = plot.evaluate("element => ComposeUI.charts.drawn.get(element).valToPos(4.8, 'x')")
     jobs.locator(".u-over").hover(position={"x": x, "y": 10})
 
     # the values held at 4.8 h, rather than those of the points nearest it, at 5 h
@@ -2884,7 +2936,9 @@ def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> Non
     link = chart_page.get_by_role("link", name="Save Image")
     expect(link).to_have_attribute("href", re.compile(r"/image\?format=pdf$"))
 
-    chart_page.evaluate("charts.values().next().value.setScale('x', {min: 0.5, max: 1})")
+    chart_page.evaluate(
+        "ComposeUI.charts.drawn.values().next().value.setScale('x', {min: 0.5, max: 1})"
+    )
     chart_page.get_by_label("Image format").select_option("svg")
 
     expect(link).to_have_attribute("href", re.compile(r"\?format=svg&x_min=0\.5&x_max=1&y_min="))
@@ -2903,7 +2957,7 @@ def test_a_series_fill_color_paints_its_area_and_the_png_legend_keeps_its_line_c
     jobs = chart_pages_page.locator("figure").filter(has_text="Jobs")
     expect(jobs.locator("canvas")).to_have_count(1)
     area = jobs.locator("[data-chart]").evaluate(
-        "element => { const chart = charts.get(element);"
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
         " return chart.ctx.getImageData(Math.round(chart.valToPos(3.5, 'x', true)),"
         "   Math.round(chart.valToPos(1.8, 'y', true)), 1, 1).data.slice(0, 3).join(); }"
     )
@@ -2979,7 +3033,7 @@ def test_a_click_on_the_chart_reaches_the_app(browser: Browser, batman_base_url:
     page.goto("/")
     over = page.locator(".u-over")
     expect(over).to_have_count(1)
-    chart = "charts.values().next().value"
+    chart = "ComposeUI.charts.drawn.values().next().value"
     point = page.evaluate(
         f"(() => {{ const chart = {chart};"
         " return [chart.valToPos(0, 'x'), chart.valToPos(0, 'y')]; })()"

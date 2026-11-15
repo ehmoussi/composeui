@@ -6,18 +6,21 @@
     .\make.ps1 check test
     .\make.ps1 screenshots -Examples pipeform, batman
     .\make.ps1 css -TailwindPlatform windows-x64
+    .\make.ps1 js-check -TscPlatform win32-x64
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
         'pyright', 'pyrefly', 'ty', 'translations', 'test',
-        'browser-test', 'docs', 'screenshots', 'css', 'web-deps', 'clean', 'all')]
+        'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'web-deps', 'clean', 'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
     [string[]] $Examples = @(),
     # Tailwind's release name for this machine, detected when empty
-    [string] $TailwindPlatform = ''
+    [string] $TailwindPlatform = '',
+    # TypeScript's release name for this machine, detected when empty
+    [string] $TscPlatform = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +54,21 @@ $Sha256 = @{
     'daisyui-theme.mjs'            = 'd92d2f488933dab757f046e81ebd4986e51e9423307798dc3545d09a15542c89'
 }
 
+# TypeScript's compiler, a binary without Node: it checks the page's scripts against their
+# JSDoc types (js/tsconfig.json). Downloaded once into js/vendor/.
+$TscVersion = '7.0.2'
+$JsVendor = 'js/vendor'
+# the SHA-256 of each release archive (github.com/microsoft/TypeScript, the same files as
+# npm's @typescript/typescript-<platform>): change them with the version
+$TscSha256 = @{
+    'linux-x64'    = '7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3'
+    'linux-arm64'  = 'c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea'
+    'darwin-x64'   = 'eba158cb54050f723d5ff781438f33de5640054440bb4f2bd170cfe9bc2eb551'
+    'darwin-arm64' = '902e2fe1cf0799198ef902c6b8c310a450fef629a6baba41d45641ef75c04ebd'
+    'win32-x64'    = '61fc4e141d2bc687db580e71bbfa63b9c209f0310645d82ca1b457eb3a24fd19'
+    'win32-arm64'  = '0a73534e6ee50cdbb2a29ac48657ca0ad13cf0f424cf63808e4df7baeb87b8be'
+}
+
 # the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
 # imports: committed, so the package needs no download. Change a version and its SHA-256,
 # run `.\make.ps1 web-deps css`, and commit the files.
@@ -60,6 +78,17 @@ $UplotVersion = '1.6.32'
 $CallyVersion = '0.9.2'
 $DeckglVersion = '9.2.6'
 $WebDeps = @(
+    # the declarations of htmx and uPlot, for js-check, not in the package
+    @{
+        Url    = "https://unpkg.com/htmx.org@$HtmxVersion/dist/htmx.esm.d.ts"
+        Path   = 'js/htmx.d.ts'
+        Sha256 = 'bdd6a73baa16cc0e10e892e3d7a7ebe9119d1d6761c6c6b8b42a4f98b53a338a'
+    }
+    @{
+        Url    = "https://unpkg.com/uplot@$UplotVersion/dist/uPlot.d.ts"
+        Path   = 'js/uPlot.d.ts'
+        Sha256 = 'af44374f6e808be4f7f3fa5888b9c7574dca9f8a15a66d54b6763535802c8080'
+    }
     @{
         Url    = "https://unpkg.com/deck.gl@$DeckglVersion/dist.min.js"
         Path   = "$Static/deckgl.min.js"
@@ -148,19 +177,20 @@ function Save-Verified {
 # Downloads a file once. A file already there is checked too: it can be from an older
 # version, or have changed since.
 function Invoke-Download {
-    param([string] $Url, [string] $Path, [string] $Expected)
+    param([string] $Url, [string] $Path, [string] $Expected, [string] $Vendor = $CssVendor)
     if (-not (Test-Path $Path)) {
         Save-Verified $Url $Path $Expected
     }
     elseif (-not (Test-Sha256 $Path $Expected)) {
-        throw "The SHA-256 of $Path is not ${Expected}: delete $CssVendor/ to download it again"
+        throw "The SHA-256 of $Path is not ${Expected}: delete $Vendor/ to download it again"
     }
 }
 
-function Get-TailwindPlatform {
-    if ($TailwindPlatform) { return $TailwindPlatform }
+# this machine's name in a release, e.g. linux-x64: each tool names macOS and Windows its way
+function Get-Platform {
+    param([string] $MacOS, [string] $Windows)
     # $IsLinux and $IsMacOS exist only in PowerShell 6+, which also runs off Windows
-    if ($IsLinux) { $os = 'linux' } elseif ($IsMacOS) { $os = 'macos' } else { $os = 'windows' }
+    if ($IsLinux) { $os = 'linux' } elseif ($IsMacOS) { $os = $MacOS } else { $os = $Windows }
     $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
     switch ($arch) {
         'X64' { $cpu = 'x64' }
@@ -168,6 +198,11 @@ function Get-TailwindPlatform {
         default { $cpu = $arch.ToLower() }
     }
     return "$os-$cpu"
+}
+
+function Get-TailwindPlatform {
+    if ($TailwindPlatform) { return $TailwindPlatform }
+    return Get-Platform -MacOS 'macos' -Windows 'windows'
 }
 
 function Invoke-Format { Invoke-Native uv @('run', 'ruff', 'format') }
@@ -222,6 +257,7 @@ function Invoke-Check {
     Invoke-Lint
     Invoke-Mypy
     Invoke-Translations
+    Invoke-JsCheck
 }
 
 function Invoke-Test {
@@ -284,6 +320,28 @@ function Invoke-Css {
         '-o', 'src/composeui/webcore/static/app.css', '--minify')
 }
 
+# the archive kept beside it: checked again on each run, as Tailwind's binary is
+function Invoke-JsCheck {
+    $platform = $TscPlatform
+    if (-not $platform) { $platform = Get-Platform -MacOS 'darwin' -Windows 'win32' }
+    if (-not $TscSha256.ContainsKey($platform)) {
+        throw ("No TypeScript binary for '$platform': pass one of " +
+            "$($TscSha256.Keys -join ' ') as -TscPlatform")
+    }
+    $suffix = if ($platform -like 'win32-*') { '.exe' } else { '' }
+    $directory = "$JsVendor/typescript-$TscVersion-$platform"
+    $url = 'https://github.com/microsoft/TypeScript/releases/download/' +
+        "v$TscVersion/typescript-$platform.tgz"
+    $tsc = "$directory/lib/tsc$suffix"
+    $isNew = -not (Test-Path "$directory.tgz")
+    Invoke-Download $url "$directory.tgz" $TscSha256[$platform] -Vendor $JsVendor
+    if ($isNew -or -not (Test-Path $tsc)) {
+        New-Item -ItemType Directory -Force $directory | Out-Null
+        Invoke-Native tar @('-xzf', "$directory.tgz", '-C', $directory, '--strip-components=1')
+    }
+    Invoke-Native (Resolve-Path $tsc).Path @('-p', 'js/tsconfig.json')
+}
+
 # Cally's file has no license comment: it gets Cally's LICENSE as one; uPlot's has only its
 # address, and its LICENSE goes beside it
 function Invoke-WebDeps {
@@ -337,6 +395,7 @@ $actions = @{
     'docs'         = { Invoke-Docs }
     'screenshots'  = { Invoke-Screenshots }
     'css'          = { Invoke-Css }
+    'js-check'     = { Invoke-JsCheck }
     'web-deps'     = { Invoke-WebDeps }
     'clean'        = { Invoke-Clean }
     'all'          = { Invoke-All }

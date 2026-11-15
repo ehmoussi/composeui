@@ -15,6 +15,8 @@ wheels/
 *.pipe
 # downloaded by `make css`, not committed
 css/vendor/
+# downloaded by `make js-check`, not committed
+js/vendor/
 
 # built by `make docs`
 docs/_build/
