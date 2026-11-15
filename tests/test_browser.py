@@ -480,12 +480,13 @@ def browser() -> Iterator[Browser]:
 
 
 @pytest.fixture(autouse=True)
-def _no_policy_violation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Fail a test whose page did something its policy refused (`headers.py`).
+def _no_browser_error(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Fail on a page's script error or content policy violation (`headers.py`).
 
     The browser only reports it, so a script or a style the policy blocks would otherwise
     just quietly not work. A frame refused to another site is the policy at work.
     """
+    errors: list[Error] = []
     violations: list[str] = []
     new_context = Browser.new_context
 
@@ -495,11 +496,13 @@ def _no_policy_violation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
     def checked_context(browser: Browser, **kwargs: Any) -> BrowserContext:
         context = new_context(browser, **kwargs)
+        context.on("weberror", lambda error: errors.append(error.error))
         context.on("console", record)
         return context
 
     monkeypatch.setattr(Browser, "new_context", checked_context)
     yield
+    assert errors == []
     assert violations == []
 
 

@@ -172,6 +172,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.
+- Preserve the browser tests' `_no_browser_error` guard. It checks every page in each context
+  for unhandled JavaScript errors and unexpected Content Security Policy (CSP) violations,
+  even when visible assertions pass. An expected exception needs a narrow, explained
+  allowance in its test, not a disabled guard.
 - Use a Hypothesis property test when two implementations must agree (`SqliteSource` or
   `DataFrameSource` and `ListSource`) or for a rule of a pure function; not for rendered
   widgets or the browser, too slow for many inputs. Draw from small pools of values, so that

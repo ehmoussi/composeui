@@ -894,6 +894,10 @@ Every behavior change needs a test in `tests/`.
   `tests/test_browser.py`, marked `browser`. These tests need the `browser` group and
   Chromium. Install Chromium once with `uv run --group browser playwright install chromium`,
   then run `make browser-test`.
+- Preserve the browser tests' `_no_browser_error` guard. It checks every page in each context
+  for unhandled JavaScript errors and unexpected Content Security Policy (CSP) violations,
+  even when visible assertions pass. An expected exception needs a narrow, explained
+  allowance in its test, not a disabled guard.
 - A property-based test, with [Hypothesis](https://hypothesis.readthedocs.io/), checks a
   rule for many inputs that Hypothesis makes. Use one when two implementations must agree,
   such as `SqliteSource` or `DataFrameSource` and `ListSource`. Use one also for a rule of
