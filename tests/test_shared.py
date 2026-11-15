@@ -76,19 +76,26 @@ class _Gated:
         self.gate = threading.Event()
         self.calls = 0
         self.canceled: list[bool] = []
-        self._lock = threading.Lock()  # two runs can go on at once
+        # two runs can go on at once; a canceled one ends after its session stopped waiting
+        self._ended = threading.Condition()
 
     def __call__(self, job: Job[Any, Any]) -> object:
-        with self._lock:
+        with self._ended:
             self.calls += 1
             call = self.calls
         job.report_progress(call)
         # until the gate opens, or every session stops waiting
         while not self.gate.wait(0.01) and not job.is_canceled:
             pass
-        with self._lock:
+        with self._ended:
             self.canceled.append(job.is_canceled)
+            self._ended.notify_all()
         return ("part",) if job.is_canceled else self.value()
+
+    def wait_until_ended(self, runs: int) -> None:
+        """Wait until that many runs have ended."""
+        with self._ended:
+            assert self._ended.wait_for(lambda: len(self.canceled) == runs, _TIMEOUT)
 
 
 def _joined(*sessions: _Session) -> None:
@@ -143,7 +150,8 @@ def test_the_load_stops_when_its_last_session_cancels_and_the_next_one_loads_aga
     load.gate.set()
     assert _Session(shared).result() == ("all",)
     assert load.calls == 2
-    assert sorted(load.canceled) == [False, True]  # the canceled one ends when it notices
+    load.wait_until_ended(2)  # the canceled one ends when it notices, maybe after the other
+    assert sorted(load.canceled) == [False, True]
 
 
 def test_a_failed_load_is_not_kept_and_the_next_session_loads_again() -> None:
@@ -242,7 +250,8 @@ def test_a_forgotten_load_canceled_leaves_the_load_that_replaced_it() -> None:
     assert waiting.result() == ("value",)
     assert _Session(shared).result() == ("value",)
     assert load.calls == 2
-    assert sorted(load.canceled) == [False, True]  # the canceled one ends when it notices
+    load.wait_until_ended(2)  # the canceled one ends when it notices, maybe after the other
+    assert sorted(load.canceled) == [False, True]
 
 
 def test_a_shared_load_can_t_call_a_session_s_main_thread() -> None:
