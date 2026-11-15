@@ -27,7 +27,12 @@ def collect_garbage_on_the_main_thread() -> Iterator[None]:
     PySide can crash when another thread collects a main view that a test dropped: a
     `QMainWindow` and its `QToolBar` are enough. It deletes them later, on the main thread, and
     a worker dies with a segmentation fault wherever that thread is. This was 1 run in 25.
+
+    The objects left are frozen: the next collection skips them. A full collection of a worker's
+    whole heap took about 450 ms, 70% of the suite's time; one of only the last test's objects
+    takes a few milliseconds.
     """
     gc.disable()
     yield
     gc.collect()
+    gc.freeze()
