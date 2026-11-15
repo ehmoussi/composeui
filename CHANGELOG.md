@@ -168,6 +168,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, updates to console text and lists no longer raise a JavaScript error while a
+  control has focus.
 - On Textual, a slider and a range slider no longer report a drag's value twice on a slow
   machine. The handle's rest and the release could both report it, when the release came as the
   rest's report was on its way.

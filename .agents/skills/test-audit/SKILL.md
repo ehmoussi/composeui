@@ -127,6 +127,12 @@ Chromium. Browser tests are slow and opt-in, so the gate is stricter for them:
   `time.sleep` or `page.wait_for_timeout`. A test of a timeout derives its wait
   from the app's own setting (`_MESSAGE_TIMEOUT`), with a margin, rather than a
   bare number.
+- **Fail on unhandled script errors.** Keep the context-wide `weberror` guard
+  alongside the CSP guard in `_no_browser_error`. A test can pass its visible
+  assertions while a swap handler throws. Check every page, including new tabs.
+  An expected exception needs a narrow, explained allowance in its test, not a
+  disabled guard. Do not reject every `console.error`: tests can deliberately
+  fail a network request.
 - **The real app, one session per test.** The `page` fixture opens a fresh browser
   context, so each test gets its own cookie and session; the server and browser
   are module-scoped and must stay stateless between tests. Configure the app
@@ -238,6 +244,7 @@ matches one, and audits hunt for existing tests that do.
   the text);
 - `reject()` or `assume` for any error, rather than the one refusal the test
   expects;
+- browser tests that pass despite unhandled JavaScript errors;
 - browser tests that re-check markup a `TestClient` test can see, wait with
   fixed sleeps, locate by `cui-<id>` ids, or set values through `page.evaluate`
   instead of typing (see [Browser tests](#browser-tests-playwright)).

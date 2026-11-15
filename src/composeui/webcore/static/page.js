@@ -916,7 +916,7 @@ document.addEventListener("input", function (event) {
 document.addEventListener("htmx:oobBeforeSwap", function (event) {
   var field = document.activeElement;
   if (field === null || !("typed" in field.dataset)) return;
-  var swapped = event.detail.fragment.getElementById(field.id);
+  var swapped = event.detail.fragment.querySelector("#" + CSS.escape(field.id));
   if (swapped === null) return;
   swapped.setAttribute("value", field.value);
   swapped.dataset.typed = "";
@@ -930,7 +930,7 @@ document.addEventListener("htmx:oobBeforeSwap", function (event) {
   var field = document.activeElement;
   if (field === null || field.id === "") return;
   var shown = field.closest(".dropdown");
-  var swapped = event.detail.fragment.getElementById(field.id);
+  var swapped = event.detail.fragment.querySelector("#" + CSS.escape(field.id));
   var dropdown = swapped === null ? null : swapped.closest(".dropdown");
   if (shown === null || dropdown === null) return;
   shown.classList.add("dropdown-open");
