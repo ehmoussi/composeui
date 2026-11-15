@@ -129,6 +129,21 @@ def test_invalid_csv_rows_refuse_the_whole_import(
     assert changes == []
 
 
+def test_a_batch_of_more_rows_than_one_statement_takes_keeps_them_all_in_order(
+    model: ReadingsModel,
+) -> None:
+    """An import writes many rows per statement, a batch in several: each row once."""
+    names = [f"reading {number}" for number in range(2_500)]
+    rows = "".join(f"{name};1;25/10/2026;25/10/2026 17:00+0200\n" for name in names)
+
+    counts = list(model.readings.fill(io.StringIO(_HEADER + rows), delimiter=";", batch_size=1_100))
+
+    assert counts == [1_100, 2_200, 2_500]
+    with model.readings.reading() as db:
+        stored = db.execute('SELECT name FROM "reading ""values""" ORDER BY rowid')
+        assert [name for (name,) in stored] == names
+
+
 def test_closing_csv_progress_rolls_back_and_leaves_the_input_open(model: ReadingsModel) -> None:
     text = io.StringIO(_HEADER + _FIRST + _SECOND)
     with contextlib.closing(model.readings.fill(text, delimiter=";", batch_size=1)) as batches:

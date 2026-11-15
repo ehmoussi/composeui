@@ -260,6 +260,15 @@ The notable changes of each release of ComposeUI. The format follows
   connection during the job's statement, which could end the process and every session in it.
   `close` still returns at once: the connection now closes when the write's transaction ends. The
   end of a session also cancels its jobs.
+- Imports into a `CSVSqliteTable` slow down much less when several run at once, such as the loads
+  of several web sessions. An import wrote one statement per row, and Python's `sqlite3` gave the
+  GIL to another thread at each one. It now writes many rows per statement. In the SQLite Uber
+  pickups example on the web, 4 sessions at once load in 35.5 s, down from 200 s. One session
+  takes 9.0 s.
+- `fill_from_frame` checks the columns in the frame's library, not each row in Python. A Polars
+  frame of 300,000 rows, with the Uber pickups example's row class, imports about 3 times as
+  fast. A row class with its own code, such as a converter, still has each row checked in Python.
+  Both ways refuse the same rows, with the same messages.
 - `CSVSqliteTable` imports a CSV file about twice as fast when dates repeat in it. The 1,028,136
   rows of the Uber pickups example take about 10 s, down from about 20 s, with the same checks on
   each row. An import holds more memory for its dates, about 5 MiB for this file, and frees it

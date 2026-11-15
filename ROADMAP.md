@@ -70,8 +70,7 @@ what exists. This file holds only the work that is left.
 
 The order of the work for **Now**:
 
-1. Share the data and speed up imports: the shared SQLite database, and a vectorized
-   `fill_from_frame`, measured against the budgets.
+1. Share the data: the shared SQLite database, measured against the budgets.
 2. The charts: check the HTML, then layers, then the new charts.
 3. Deployment in a container.
 
@@ -81,9 +80,6 @@ The order of the work for **Now**:
   per process, read by every session, each session keeping its own database for its writes. Done
   when 4 SQLite sessions at once each load within twice the time of one session, and move the hour
   within 500 ms, in the concurrency case of [`benchmarks/sessions.py`](benchmarks/sessions.py).
-- **A vectorized `fill_from_frame`** (Now). Check and insert a frame's rows in the frame library,
-  not row by row in Python. Measure it with concurrent sessions first. A bulk insert through
-  ADBC can follow, in an optional extra.
 - **Cached query results** (Now). Results kept by their parameters, with an expiry, a size limit
   and a refresh. A recipe in the user guide reads a SQL query into a table and a chart, and keeps
   the user's work when the query fails.
@@ -267,9 +263,10 @@ reproducible.
 ## Known problems
 
 - **SQLite sessions slow down when they overlap.** In the SQLite Uber example on the web, a load
-  takes 9.6 s with one session and 200 s with 4 at once. Each row's checks in Python hand the
-  GIL over between threads ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)).
-  The shared SQLite database and the vectorized `fill_from_frame` address it.
+  takes 9.0 s with one session and 35.5 s with 4 at once. With 4, a move takes 3.6 s. The CSV's
+  checks run in Python, one session at a time. A query hands the GIL over between threads for
+  each row that it reads ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). The
+  shared SQLite database addresses it.
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the
   connection and deletes its files while a job's thread can still be writing. A process that is
   killed leaves its files behind. "A clean exit during a write" fixes both.

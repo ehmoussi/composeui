@@ -197,6 +197,24 @@ class SqliteTable:
         If ``db`` is supplied, use it without committing, rolling back or closing it.
         Pass a connection from ``connection()`` to keep the table's change notifications.
         """
+        yield from self._insert_batches(
+            lambda connection, batch: connection.executemany(sql, batch),
+            rows,
+            db=db,
+            batch_size=batch_size,
+            limit=limit,
+        )
+
+    def _insert_batches(
+        self,
+        insert: Callable[[sqlite3.Connection, list[Parameters]], object],
+        rows: Iterable[Parameters],
+        *,
+        db: sqlite3.Connection | None = None,
+        batch_size: int,
+        limit: int | None,
+    ) -> Generator[int]:
+        """Insert rows as `insert_batches` does, each batch with `insert`."""
         if batch_size <= 0:
             msg = "batch_size must be positive"
             raise ValueError(msg)
@@ -211,7 +229,7 @@ class SqliteTable:
                 batch = list(itertools.islice(iterator, size))
                 if not batch:
                     break
-                connection.executemany(sql, batch)
+                insert(connection, batch)
                 count += len(batch)
                 yield count
 
@@ -271,6 +289,9 @@ def define_csv_row(cls: _RowClassT) -> _RowClassT:
     return cast("_RowClassT", attrs.define(cls))
 
 
+#: the parameters of one statement of `CSVSqliteTable`'s import, at most: SQLite's default
+#: limit before its version 3.32, which a system's Python may still use
+_PARAMETERS_PER_INSERT = 999
 #: the exact types whose values `_sql_value` gives back as they are
 _STORED_AS_IS = frozenset({str, int, float, bool, bytes, type(None)})
 
@@ -513,6 +534,7 @@ class CSVSqliteTable(SqliteTable):
     _column_names: ClassVar[tuple[str, ...]]
     _read_cells: ClassVar[operator.attrgetter[tuple[Any, ...]]]
     _csv_fields: ClassVar[tuple[_CSVField, ...]]
+    _rows_per_insert: ClassVar[int]
 
     def __init_subclass__(
         cls, *, row_type: type[AttrsInstance] | None = None, name: str | None = None, **kwargs: Any
@@ -575,6 +597,7 @@ class CSVSqliteTable(SqliteTable):
         names = ", ".join(_identifier(field.name) for field in fields)
         placeholders = ", ".join("?" for _ in fields)
         cls.insert = f"INSERT INTO {_identifier(name)} ({names}) VALUES ({placeholders})"  # noqa: S608 (quoted identifiers)
+        cls._rows_per_insert = max(1, _PARAMETERS_PER_INSERT // len(fields))
 
     def source(self, *, headers: Mapping[str, str] | None = None) -> SqliteSource:
         """Build a source with schema-derived types and SQLite row ids.
@@ -668,12 +691,30 @@ class CSVSqliteTable(SqliteTable):
         self, parameters: Iterable[Parameters], *, batch_size: int, limit: int | None
     ) -> Generator[int]:
         try:
-            yield from self.insert_batches(
-                self.insert, parameters, batch_size=batch_size, limit=limit
+            yield from self._insert_batches(
+                self._insert_many, parameters, batch_size=batch_size, limit=limit
             )
         finally:
             _parsed_date.cache_clear()
             _naive_date_text.cache_clear()
+
+    def _insert_many(self, connection: sqlite3.Connection, batch: list[Parameters]) -> None:
+        """Insert `batch` with statements of many rows each.
+
+        Not `executemany`: SQLite runs a step for each row of it, and Python's `sqlite3`
+        gives the GIL away at each step. Imports in several threads at once then took 20
+        times longer, the threads waiting for each other on every row.
+        """
+        size = self._rows_per_insert
+        for start in range(0, len(batch), size):
+            rows = batch[start : start + size]
+            connection.execute(self._insert_of(len(rows)), list(itertools.chain(*rows)))
+
+    def _insert_of(self, nb_rows: int) -> str:
+        """Get the statement inserting `nb_rows` rows into the table."""
+        row = "(" + ", ".join("?" for _ in self._column_names) + ")"
+        head = self.insert[: self.insert.index(" VALUES ")]
+        return f"{head} VALUES {', '.join([row] * nb_rows)}"
 
     def fill_from_file(  # noqa: PLR0913 (keep decoding, detection and import options explicit)
         self,

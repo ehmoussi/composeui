@@ -16,11 +16,13 @@ from hypothesis import strategies as st
 pytest.importorskip("polars")
 pytest.importorskip("pandas")
 pytest.importorskip("pyarrow")
+import narwhals.stable.v2 as nw
 import pandas as pd
 import polars as pl
 
 from composeui.core.dataframesource import (
     DataFrameSource,
+    _frame_rows,
     fill_from_frame,
     points_of,
     series_of,
@@ -49,7 +51,7 @@ if TYPE_CHECKING:
     from collections.abc import Hashable, Iterator
     from pathlib import Path
 
-    from narwhals.stable.v2.typing import IntoFrame
+    from narwhals.stable.v2.typing import IntoDataFrame, IntoFrame
 
     from composeui.core.view import TableSource
 
@@ -985,3 +987,324 @@ def test_a_date_of_a_frame_fits_a_date_field_with_a_format(
     list(fill_from_frame(measures_model.measures, frame))
 
     assert _stored(measures_model)[0][4] == "2026-01-02T00:00:00"
+
+
+def _even(_instance: object, attribute: attrs.Attribute[Any], value: Any) -> None:
+    if value % 2:
+        msg = f"{attribute.name} must be even"
+        raise ValueError(msg)
+
+
+@define_csv_row
+class _Even:
+    count: int = csv_field("count", validator=_even)
+
+
+@define_csv_row
+class _EvenAndPositive:
+    count: int = csv_field("count", validator=attrs.validators.and_(attrs.validators.ge(0), _even))
+
+
+@define_csv_row
+class _EvenIfGiven:
+    count: Optional[int] = csv_field(
+        "count", default=None, validator=attrs.validators.optional(_even)
+    )
+
+
+@define_csv_row
+class _EvenOnceBuilt:
+    count: int
+
+    def __attrs_post_init__(self) -> None:
+        _even(self, attrs.fields(type(self)).count, self.count)
+
+
+@define_csv_row
+class _EvenOnInit:
+    count: int
+
+    def __init__(self, count: int) -> None:
+        _even(self, attrs.fields(type(self)).count, count)
+        self.count = count
+
+
+@define_csv_row
+class _Absolute:
+    count: int = csv_field("count", converter=abs)
+
+
+@define_csv_row
+class _Count:
+    count: int
+
+
+class _EvenTable(CSVSqliteTable, row_type=_Even, name="even"):
+    pass
+
+
+class _EvenAndPositiveTable(CSVSqliteTable, row_type=_EvenAndPositive, name="even_and_positive"):
+    pass
+
+
+class _EvenIfGivenTable(CSVSqliteTable, row_type=_EvenIfGiven, name="even_if_given"):
+    pass
+
+
+class _EvenOnceBuiltTable(CSVSqliteTable, row_type=_EvenOnceBuilt, name="even_once_built"):
+    pass
+
+
+class _EvenOnInitTable(CSVSqliteTable, row_type=_EvenOnInit, name="even_on_init"):
+    pass
+
+
+class _AbsoluteTable(CSVSqliteTable, row_type=_Absolute, name="absolute"):
+    pass
+
+
+class _TenfoldTable(CSVSqliteTable, row_type=_Count, name="tenfold"):
+    def row_parameters(self, row: dict[str, Any]) -> tuple[Any, ...]:
+        (count,) = super().row_parameters(row)
+        return (count * 10,)
+
+
+class _OwnCodeModel(SqliteModel):
+    even = table(_EvenTable)
+    even_and_positive = table(_EvenAndPositiveTable)
+    even_if_given = table(_EvenIfGivenTable)
+    even_once_built = table(_EvenOnceBuiltTable)
+    even_on_init = table(_EvenOnInitTable)
+    absolute = table(_AbsoluteTable)
+    tenfold = table(_TenfoldTable)
+
+
+@pytest.fixture
+def own_code_model() -> Iterator[_OwnCodeModel]:
+    model = _OwnCodeModel()
+    yield model
+    model.close()
+
+
+@pytest.mark.parametrize(
+    "name", ["even", "even_and_positive", "even_if_given", "even_once_built", "even_on_init"]
+)
+def test_the_row_class_s_own_checks_refuse_a_frame_s_row(
+    own_code_model: _OwnCodeModel, name: str
+) -> None:
+    """The frame's library can't run them: each row goes through the row class."""
+    csv_table: CSVSqliteTable = getattr(own_code_model, name)
+
+    with pytest.raises(RefusedError, match="count must be even"):
+        list(fill_from_frame(csv_table, pl.DataFrame({"count": [2, 3]})))
+
+    with csv_table.connection() as db:
+        assert db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] == 0  # noqa: S608
+
+
+@pytest.mark.parametrize(("name", "stored"), [("absolute", [2, 3]), ("tenfold", [-20, 30])])
+def test_the_app_s_own_conversions_change_a_frame_s_values(
+    own_code_model: _OwnCodeModel, name: str, stored: list[int]
+) -> None:
+    """A field's converter, or a table's own `row_parameters`, runs on each row."""
+    csv_table: CSVSqliteTable = getattr(own_code_model, name)
+
+    list(fill_from_frame(csv_table, pl.DataFrame({"count": [-2, 3]})))
+
+    with csv_table.connection() as db:
+        assert [count for (count,) in db.execute(f"SELECT count FROM {name}")] == stored  # noqa: S608
+
+
+@define_csv_row
+class _Sample:
+    whole: int = csv_field("whole", validator=attrs.validators.ge(0))
+    level: Optional[float] = csv_field(
+        "level",
+        default=None,
+        validator=attrs.validators.optional(
+            attrs.validators.and_(attrs.validators.gt(-1), attrs.validators.le(1))
+        ),
+    )
+    name: Optional[str] = csv_field("name", default="none")
+    flag: bool = csv_field("flag", default=False)
+    day: datetime.date = csv_field("day", factory=lambda: _DAY)
+    at: Optional[datetime.datetime] = csv_field("at", default=None, date_format="%Y-%m-%d %H:%M")
+    kind: str = attrs.field(init=False, default="sample")
+
+
+class _Samples(CSVSqliteTable, row_type=_Sample, name="samples"):
+    pass
+
+
+class _SamplesModel(SqliteModel):
+    samples = table(_Samples)
+
+
+_MIDNIGHT = datetime.datetime.combine(_DAY, datetime.time())
+#: each kind of column: its type in Polars, and the values that a column of it holds
+_KINDS: dict[str, tuple[Any, list[Any]]] = {
+    "int": (pl.Int64, [0, 1, -1, 7, None]),
+    "small int": (pl.UInt8, [0, 1, 7, None]),
+    "float": (pl.Float64, [0.0, 0.5, 1.0, -1.0, 7.0, float("nan"), float("inf"), None]),
+    # whole, but too large for SQLite's integers: no row class refuses it
+    "huge float": (pl.Float64, [1.0, 1e19, None]),
+    "text": (pl.String, ["a", "", "1", "2026-01-02 03:04", None]),
+    "bool": (pl.Boolean, [True, False, None]),
+    "date": (pl.Date, [_DAY, None]),
+    "datetime": (pl.Datetime("us"), [_MIDNIGHT, _AT, _AT.replace(microsecond=5), None]),
+    "aware": (
+        pl.Datetime("us", "UTC"),
+        [datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc), None],
+    ),
+}
+#: the kinds of column that each field takes as they are, or converts
+_FITS = {
+    "whole": ["int", "small int", "float"],
+    "level": ["float", "int"],
+    "name": ["text"],
+    "flag": ["bool"],
+    "day": ["date", "datetime"],
+    "at": ["datetime", "date"],
+    "ignored": list(_KINDS),
+}
+
+
+@attrs.frozen
+class _SampleFrame:
+    columns: list[pl.Series]
+    library: str
+    limit: Optional[int]
+
+    def native(self) -> IntoDataFrame:
+        frame = pl.DataFrame(self.columns)
+        if self.library == "pyarrow":
+            return frame.to_arrow()
+        return frame.to_pandas() if self.library == "pandas" else frame
+
+
+@st.composite
+def _sample_frames(draw: st.DrawFn) -> _SampleFrame:
+    """Draw columns that fit their field, but maybe one: else Python checks the rows."""
+    nb_rows = draw(st.integers(0, 4))
+    odd = draw(st.none() | st.sampled_from(list(_FITS)))
+    columns = []
+    for header, fits in _FITS.items():
+        kinds = [*_KINDS, None] if header == odd else fits
+        kind = draw(st.sampled_from(kinds))
+        if kind is not None:
+            dtype, values = _KINDS[kind]
+            cells = draw(st.lists(st.sampled_from(values), min_size=nb_rows, max_size=nb_rows))
+            columns.append(pl.Series(header, cells, dtype=dtype))
+    library = draw(st.sampled_from(["polars", "pyarrow", "pandas"]))
+    return _SampleFrame(columns, library, draw(st.none() | st.integers(0, nb_rows)))
+
+
+def _outcome(
+    model: _SamplesModel, batches: Iterator[int]
+) -> tuple[Optional[str], list[tuple[Any, ...]]]:
+    """Get an import's refusal and the rows that it stored, with their types in SQLite."""
+    try:
+        list(batches)
+    # SQLite's error for an integer that it can't store: no row class refuses it
+    except (RefusedError, OverflowError) as error:
+        refused: Optional[str] = f"{type(error).__name__}: {error}"
+    else:
+        refused = None
+    with model.samples.connection() as db:
+        names = [field.name for field in attrs.fields(_Sample)]
+        cells = ", ".join(f"{name}, typeof({name})" for name in names)
+        rows = [tuple(row) for row in db.execute(f"SELECT {cells} FROM samples ORDER BY rowid")]  # noqa: S608
+        db.execute("DELETE FROM samples")
+    return refused, rows
+
+
+def _with_whole(
+    cells: list[float],
+    library: str = "polars",
+    *,
+    limit: Optional[int] = None,
+    **columns: Optional[pl.Series],
+) -> _SampleFrame:
+    """Get a frame of `whole` that the frame's library checks, with the columns it needs.
+
+    `columns` replaces a column, or leaves it out if None.
+    """
+    fitting: dict[str, Optional[pl.Series]] = {
+        "whole": pl.Series("whole", cells),
+        "level": pl.Series("level", [0.0] * len(cells)),
+        "day": pl.Series("day", [_DAY] * len(cells)),
+    }
+    fitting.update(columns)
+    return _SampleFrame(
+        [column for column in fitting.values() if column is not None], library, limit
+    )
+
+
+def _nanoseconds(header: str, *texts: str) -> pl.Series:
+    """Get a column of dates and times to the nanosecond, which Python's dates don't hold."""
+    return pl.Series(header, texts).str.to_datetime(time_unit="ns")
+
+
+def test_a_frame_s_rows_are_stored_and_refused_as_its_rows_one_by_one() -> None:
+    """The frame's library checks the columns as the row class checks each row in Python."""
+    model, reference = _SamplesModel(), _SamplesModel()
+
+    # cheap examples, many: a difference needs a few columns that fit, and a cell to differ
+    @settings(max_examples=300)
+    @given(_sample_frames())
+    # PyArrow compared a float column to 2**63 as a C long, which overflowed
+    @example(_with_whole([1.0], "pyarrow"))
+    # a row that a validator refuses, before a value that the field's type refuses: the row's
+    # order first, not the order of the checks
+    @example(_with_whole([-1.0, 0.5]))
+    @example(_with_whole([0.5, -1.0]))
+    # Polars' NaN, not a null: a missing value that the validator doesn't check
+    @example(_with_whole([1.0], level=pl.Series("level", [float("nan")])))
+    # a row past the limit, which the import doesn't read
+    @example(_with_whole([1.0, -1.0], limit=1))
+    # each column that the frame's library leaves to Python: too large for SQLite, with a
+    # time zone, a date for a text, or no column for a field with a validator or a factory
+    @example(_with_whole([1e19, -1.0]))
+    @example(_with_whole([1.0], at=pl.Series("at", [_AT]).dt.replace_time_zone("UTC")))
+    @example(_with_whole([1.0], name=pl.Series("name", [_DAY])))
+    @example(_with_whole([1.0], whole=None))
+    @example(_with_whole([1.0], level=None))
+    @example(_with_whole([1.0], day=None))
+    # a nanosecond past midnight, which Python's date drops, before an hour that it refuses
+    @example(
+        _with_whole(
+            [1.0, 1.0], day=_nanoseconds("day", "2026-01-02 00:00:00.000000001", "2026-01-02 03:04")
+        )
+    )
+    # a date that SQLite stores as its text, but none for a row
+    @example(_with_whole([1.0, 1.0], at=pl.Series("at", [_AT, None])))
+    # pandas' text of a date and time has its nanoseconds
+    @example(_with_whole([1.0], "pandas", at=_nanoseconds("at", "2026-01-02 03:04:00.000000001")))
+    def check(sample: _SampleFrame) -> None:
+        rows = _frame_rows(nw.from_native(sample.native(), eager_only=True), 2)
+        expected = _outcome(
+            reference, reference.samples.fill_rows(rows, batch_size=2, limit=sample.limit)
+        )
+
+        batches = fill_from_frame(model.samples, sample.native(), batch_size=2, limit=sample.limit)
+
+        assert _outcome(model, batches) == expected
+
+    try:
+        check()
+    finally:
+        model.close()
+        reference.close()
+
+
+def test_validators_turned_off_refuse_no_row_of_a_frame() -> None:
+    """As a row class's own `__init__` does, the frame's library checks them only when on."""
+    model = _SamplesModel()
+    try:
+        with attrs.validators.disabled():
+            list(fill_from_frame(model.samples, _with_whole([-1.0]).native()))
+
+        with model.samples.connection() as db:
+            assert [whole for (whole,) in db.execute("SELECT whole FROM samples")] == [-1]
+    finally:
+        model.close()

@@ -356,12 +356,33 @@ moment is clean too.
 - **The fix.** With the change that `d852cea` merged, the main view is freed within 1.5 s, and no
   temporary file stays.
 
+### Many rows per statement
+
+This change makes `CSVSqliteTable` write many rows per statement, not one, on top of `ada2319`.
+Its results are in
+[`results/sessions-many-rows-per-statement.json`](results/sessions-many-rows-per-statement.json),
+with the same machine, Python and options. Only the SQLite example was measured again: the Polars
+example does not use this code.
+
+| Sessions | Load, before | Load, after | Move, before | Move, after |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 9.6 s | 9.0 s | 0.38 s | 0.39 s |
+| 2 | 17.5 s | 14.8 s | 0.45 s | 0.58 s |
+| 4 | 200 s | 35.5 s | 3.5 s | 3.6 s |
+
+- **Loads at once no longer wait on each row's write.** With 4 sessions, a load takes 4 times as
+  long as one session's, not 21 times. The CSV's checks still run in Python, one session at a
+  time.
+- **Moves do not change.** A move reads rows, and each row that a query reads still hands the GIL
+  over between threads.
+
 ### Sessions findings
 
 - **The SQLite example does not scale past 2 sessions at once.** From 2 to 4 sessions, a load
   takes about 11 times as long, and a move about 8 times as long. Moves also become slower after
-  the loads are over. ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the
-  cause.
+  the loads are over. With [many rows per statement](#many-rows-per-statement), a load takes 2.4
+  times as long, and a move 6 times.
+  ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the cause.
 - **The budget holds for one SQLite session.** A move takes 0.38 s, within the 500 ms budget of
   [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.45 s, but the 95th
   percentile is 0.94 s. Polars stays within the budget up to 4 sessions at the median, and its
@@ -399,6 +420,15 @@ worker, in one run.
 - **The disk does not matter.** A database in `/dev/shm` gives 56.5 s for the load.
 - **Python 3.14 behaves the same.** 4 threads on all CPUs give 61 s for the load and 20 s for the
   query run. One worker alone takes 1.8 s and 0.11 s.
+- **A statement of many rows gives the GIL away once.** In a separate check with `sqlite3` alone,
+  each thread inserts 300,000 generated rows into a database of its own. One statement per row
+  takes 0.52 s for one thread, and 66 s for 4 at once. Statements of 249 rows take 0.23 s and
+  1.0 s. `CSVSqliteTable` now writes such statements
+  ([many rows per statement](#many-rows-per-statement)).
+- **`fill_from_frame` checks the columns in Polars.** In another check, each thread imports a
+  generated Polars frame of 300,000 rows into an `UberPickupsModel`. It takes 1.0 s for one
+  thread, and 3.2 s for 4 at once. Before, `fill_from_frame` checked each row in Python, and took
+  3.2 s and 57 s. For 1,000,000 rows, the import's Python peak is 51 MiB, against 53 MiB before.
 
 With the Uvicorn server alone on one CPU, in one run of the concurrency case:
 
