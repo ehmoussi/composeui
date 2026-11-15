@@ -1283,6 +1283,52 @@ async def test_open_file_action_runs_the_picker_on_a_worker_thread_and_loads_sta
 
 
 @pytest.mark.asyncio
+async def test_open_and_quit_ask_before_they_discard_unsaved_changes(tmp_path: Path) -> None:
+    donor = PipeMainView()
+    donor.pages.inputs.pipe_form.name.text = "loaded_name"
+    filepath = tmp_path / "state.pipe"
+    donor.save_state(filepath)
+    view = PipeMainView()
+    _add_reference_to_signals(view, None)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    form = view.pages.inputs.pipe_form
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        view.mark_saved()
+        form.name.text = "edited"
+        await pilot.press("ctrl+o")
+        await pilot.pause()
+        await pilot.pause()
+        file_input = app.screen.query_one(Input)
+        file_input.focus()
+        file_input.value = str(filepath)
+        await pilot.pause()
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()  # the picker's worker thread, done
+        await pilot.pause()  # the question it handed to the app's thread
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        assert form.name.text == "edited"
+        await pilot.click(screen.accept_button)
+        await pilot.pause()
+        assert form.name.text == "loaded_name"
+
+        form.name.text = "edited again"
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        assert app.is_running
+        await pilot.click(screen.accept_button)
+        await pilot.pause()
+        assert app.return_code is not None  # exited
+
+
+@pytest.mark.asyncio
 async def test_pick_file_action_hands_the_picked_file_over(tmp_path: Path) -> None:
     """Its picker blocks a worker thread, as Open's does: the app keeps driving the modal."""
     path = tmp_path / "notes.md"

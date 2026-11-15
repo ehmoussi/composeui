@@ -365,7 +365,6 @@ _QT_APP = textwrap.dedent(
     import os, pathlib
     import attrs
     from qtpy.QtCore import QTimer
-    from qtpy.QtWidgets import QApplication
     from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
     from composeui.core.view import IntInputView, MainView, define_view
     from composeui.qtcore.qtapplication import QtModelApplication
@@ -395,6 +394,7 @@ _QT_APP = textwrap.dedent(
                 main_view.state_filepath,
                 main_view.language,
                 self.model.notes.fetch_column("SELECT text FROM note"),
+                main_view.has_unsaved_changes(),
                 window.objectName(),
             )
             with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as log:
@@ -407,7 +407,8 @@ _QT_APP = textwrap.dedent(
                     db.execute("INSERT INTO note VALUES ('kept')")
                 window.setObjectName("kept")
             else:
-                QTimer.singleShot(0, QApplication.quit)
+                # as Exit once the user agreed to lose the changes: a close would ask
+                QTimer.singleShot(0, main_view.close)
 
     LoggingApplication(build_main_view=CountMainView, build_model=NotesModel).run()
     with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as log:
@@ -444,11 +445,11 @@ def test_a_qt_app_with_reload_shows_the_changed_code_in_its_window_as_it_was_lef
 
     first, second = (line.split("|") for line in log.read_text().splitlines())
     # shown by the child alone, which didn't supervise a child of its own
-    assert first == ["True", second[1], "1", "None", "None", "en", "[]", ""]
+    assert first == ["True", second[1], "1", "None", "None", "en", "[]", "False", ""]
     # the same process and window, after the code that failed; the state and the model's
     # data the first code left, the user's study, not the scratch one saved, and the
-    # language picked
-    assert second[2:] == ["2", "7", "mine.count", "fr", "['kept']", "kept"]
+    # language picked; the changes still unsaved
+    assert second[2:] == ["2", "7", "mine.count", "fr", "['kept']", "True", "kept"]
 
 
 def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_changed(
@@ -486,7 +487,7 @@ def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_cha
 
     before, after = (line.split("|") for line in log.read_text().splitlines())
     assert after[1] != before[1]  # a new process
-    assert after[3:-1] == ["7", "mine.count", "fr", "['kept']"]
+    assert after[3:-1] == ["7", "mine.count", "fr", "['kept']", "True"]
 
 
 #: a Qt app logging each render and model's close, with its code's version, its process and

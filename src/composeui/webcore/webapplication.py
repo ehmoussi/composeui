@@ -548,6 +548,8 @@ class WebApplication(Application[MainViewT]):
                 main_view.loaded.emit()  # the study the session starts with is in place too
             if self._args is not None:
                 main_view.apply_arguments(self._args)
+            # what the user starts from: changes from now on are theirs
+            main_view.mark_saved()
         except BaseException:
             if model is not None:  # no session owns it yet
                 model.close()

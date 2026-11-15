@@ -490,6 +490,67 @@ so a callback connected only to those does not run. On New and Open, a model rea
 The app's own command-line options apply after `loaded` (see
 [Command-line options of your own](#command-line-options-of-your-own)).
 
+### Unsaved changes
+
+New, Open and Exit ask before they lose the changes of the study: "The study has unsaved
+changes. Discard them?", with Discard and Cancel. Cancel leaves the study as it is. The changes
+are those since the study was last saved, opened, or started. An app without a File menu
+(`has_file_menu = False`) never asks, as the user can't save.
+
+A change is what Save would write differently: a field of the study, or the model's data. A
+change undone is no change. UI text, a dialog, the status bar's message, and the tab shown are
+not changes (see the list above). A model tells its changes with `Model.data_version`: `SqliteModel` counts its committed
+writes, and a model of your own with data changes it as its data changes.
+
+- **`has_unsaved_changes()`** tells whether the study has changes.
+- **`ask_discard_changes(proceed)`** calls `proceed()` at once when the study has no changes,
+  else once the user agrees. Call it before an action of your own replaces the study.
+- **`mark_saved()`** takes the study as it is now as saved. The app's start, New, Open and Save
+  call it, after the callbacks of `loaded` and the app's command-line options. A job's result
+  that changes the views or the model's data is a change, also at the start. Call `mark_saved()`
+  when such a result is only what the next start gives again, such as a chart of data that
+  the app reads.
+
+```python
+from pathlib import Path
+
+from composeui.core.study import open_study
+from composeui.core.view import ActionView, MainView, Menu, child, define_view
+
+EXAMPLE = Path("example.pipe")
+
+
+@define_view
+class ExamplesMenu(Menu):
+    open_example: ActionView = child(ActionView, text="Open the example")
+
+
+@define_view
+class PipeMainView(MainView):
+    extension = ".pipe"
+
+    examples: ExamplesMenu = child(ExamplesMenu, title="Examples")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.examples.open_example.triggered.connect(self._open_example)
+
+    def _open_example(self) -> None:
+        # Cancel opens nothing
+        self.ask_discard_changes(lambda: open_study(self, None, EXAMPLE))
+```
+
+Each backend asks in its own way:
+
+- **Qt** asks also when the user closes the window. A
+  [reload](running-the-app.md#reloading-the-app-on-a-change) restarts without a question, and
+  keeps the changes unsaved.
+- **Textual** asks on Ctrl+Q, as on Exit.
+- **The web** asks on New and Open. The browser sends the file to open first: a file of
+  another type, or a file that is too large, is refused before the question. A closed tab does
+  not close the session, so nothing asks. An idle session that the server saves keeps its
+  changes unsaved.
+
 ### Versions of the state
 
 A study file holds the state of the views, and two versions: the version of ComposeUI's

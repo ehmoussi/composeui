@@ -4042,7 +4042,10 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
         assert bob_view.summary.text == "Alice, Ada, Bob"
         # the views' state alone isn't a study of this app: it would lose the signatures
         views_only = json.dumps(HelloMainView().state_data()).encode()
-        response = bob.post("/state", files={"file": ("study.hello", views_only)})
+        bob.post("/state", files={"file": ("study.hello", views_only)})
+        # Bob's signature is unsaved: opened once he agrees to discard it
+        discard_id = _widget_id(bob_view.discard_changes.renderer)
+        response = bob.post(f"/widget/{discard_id}", data={"event": "accept"})
         assert "isn&#39;t a valid .hello file" in response.text
         sign_as(bob, bob_view, "Eve")
         assert bob_view.summary.text == "Alice, Ada, Bob, Eve"
@@ -5896,6 +5899,7 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     main_view: HelloMainView, client: TestClient, filename: str, content: bytes, reason: str
 ) -> None:
     _type_name(client, main_view, "Bob")
+    main_view.mark_saved()  # as Save does: opened without asking to discard Bob
 
     response = client.post("/state", files={"file": (filename, content)})
 
@@ -5905,6 +5909,46 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     assert reason in response.text
     assert main_view.form.name.text == "Bob"
     assert main_view.state_filepath is None
+
+
+def test_an_upload_over_unsaved_changes_opens_once_the_user_discards_them(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    def study(name: str) -> bytes:
+        saved = HelloMainView()
+        saved.form.name.text = name
+        return json.dumps(saved.file_data()).encode()
+
+    _type_name(client, main_view, "Bob")
+    discard_id = _widget_id(main_view.discard_changes.renderer)
+
+    # refused before the question: nothing to discard for
+    response = client.post("/state", files={"file": ("study.pipe", b"{}")})
+    assert "expected a .hello file" in response.text
+    assert not main_view.discard_changes.is_visible
+    response = client.post("/state", files={"file": ("alice.hello", study("Alice"))})
+    assert f'id="{discard_id}" hx-swap-oob="true"' in response.text
+    # picked again before the answer: the last file is the one to open
+    client.post("/state", files={"file": ("ada.hello", study("Ada"))})
+    assert main_view.form.name.text == "Bob"
+
+    response = client.post(f"/widget/{discard_id}", data={"event": "accept"})
+
+    assert main_view.form.name.text == "Ada"
+    assert main_view.state_filepath == Path("ada.hello")
+    assert f'id="{_field_id(main_view.form.name)}" hx-swap-oob="true"' in response.text
+    assert not main_view.has_unsaved_changes()
+
+
+def test_save_s_post_saves_the_study_and_a_link_s_download_does_not(
+    main_view: HelloMainView, client: TestClient
+) -> None:
+    _type_name(client, main_view, "Bob")
+
+    client.get("/state")  # e.g. a link from another site: the user may never get the file
+    assert main_view.has_unsaved_changes()
+    client.post("/state/download", data={"trigger": _action_id(main_view.file_menu.save)})
+    assert not main_view.has_unsaved_changes()
 
 
 @pytest.mark.parametrize("chunked", [False, True])
@@ -6276,8 +6320,10 @@ def test_new_clears_the_form_in_place(
     _type_name(client, main_view, "Bob")
     client.post(f"/widget/{_field_id(form.age)}", data={"value": "41", "event": "input"})
 
+    client.post(f"/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"})
+    assert form.name.text == "Bob"  # unsaved: kept until the user agrees to discard it
     response = client.post(
-        f"/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"}
+        f"/widget/{_widget_id(main_view.discard_changes.renderer)}", data={"event": "accept"}
     )
 
     assert len(triggered) == 1

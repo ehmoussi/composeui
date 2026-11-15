@@ -47,12 +47,14 @@ def new_study(main_view: MainView, model: Model | None) -> None:
         model.new()
         model.loaded()
     main_view.loaded.emit()
+    main_view.mark_saved()  # what `loaded`'s callbacks set too
 
 
 def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     """Save the views' state and the model's data into the file `path`."""
     if model is None or model.data_name is None:
         main_view.save_state(path)
+        main_view.mark_saved()
         return
     # written beside `path` and renamed over it, so a failed save leaves the old study whole
     partial = path.with_name(f".{path.name}.partial")
@@ -67,6 +69,7 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     finally:
         partial.unlink(missing_ok=True)
     main_view.state_filepath = path
+    main_view.mark_saved()
 
 
 def _archive(file: IO[bytes], invalid: str) -> zipfile.ZipFile:
@@ -94,6 +97,7 @@ def open_study(
         if model is not None:
             model.loaded()
         main_view.loaded.emit()
+        main_view.mark_saved()  # what `loaded`'s callbacks set too
         return
     invalid = f"it isn't a valid {main_view.extension} file"
     try:
@@ -138,3 +142,4 @@ def open_study(
     main_view.state_filepath = path
     model.loaded()
     main_view.loaded.emit()
+    main_view.mark_saved()

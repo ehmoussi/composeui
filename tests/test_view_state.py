@@ -1266,6 +1266,86 @@ def test_the_new_action_resets_the_main_view() -> None:
     assert view.note.text == "initial note"
 
 
+def test_unsaved_changes_are_what_save_would_write_differently() -> None:
+    view = _StudyMainView()
+    view.status_bar.timeout = 0  # no timer left to clear its message
+    view.note.text = "edited"
+    assert not view.has_unsaved_changes()  # never started, opened or saved: nothing to lose
+    view.mark_saved()
+
+    # not the user's data: the File menu's text, a dialog, a message, the name of their file
+    view.file_menu.new.text = "Fresh"
+    view.replace_file.open()
+    view.status_bar.show_message("Can't open 'other.study'")
+    view.state_filepath = Path("other.study")
+    assert not view.has_unsaved_changes()
+    view.note.text = "changed"
+    assert view.has_unsaved_changes()
+    view.note.text = "edited"  # undone
+    assert not view.has_unsaved_changes()
+
+
+@pytest.mark.parametrize("action", ["new", "open"])
+def test_new_and_open_ask_before_they_discard_unsaved_changes(action: str, tmp_path: Path) -> None:
+    view = _StudyMainView()
+    _add_reference_to_signals(view, None)
+    study = tmp_path / "saved.study"
+    saved = _StudyMainView()
+    saved.note.text = "from the file"
+    saved.save_state(study)
+    view.file_view.filepath = study  # the answer a file dialog would give
+    loads: list[str] = []
+
+    def load() -> None:
+        view.radio.value = "b"  # part of the study New and Open start: not the user's change
+        loads.append(view.note.text)
+
+    view.loaded.connect(load)
+    trigger = getattr(view.file_menu, {"new": "new", "open": "open_file"}[action]).triggered
+    expected = {"new": "initial note", "open": "from the file"}[action]
+    view.mark_saved()
+
+    view.note.text = "edited"
+    trigger.emit()
+    assert view.discard_changes.is_visible
+    view.discard_changes.reject()
+    assert view.note.text == "edited"  # Cancel keeps the study
+    assert view.has_unsaved_changes()
+
+    trigger.emit()
+    view.discard_changes.accept()
+    assert loads == [expected]
+    assert not view.has_unsaved_changes()
+
+    view.note.text = expected + " again"
+    view.note.text = expected  # nothing left to lose: done at once
+    trigger.emit()
+    assert not view.discard_changes.is_visible
+    assert loads == [expected, expected]
+
+
+@define_view
+class _ViewerMainView(MainView):
+    app_title = "Viewer"
+    has_file_menu = False
+
+    note: InputView = Factory(InputView)
+
+
+def test_an_app_without_a_file_menu_never_asks_to_discard_changes() -> None:
+    view = _ViewerMainView()
+    view.mark_saved()
+    view.note.text = "edited"
+    proceeded: list[bool] = []
+
+    view.ask_discard_changes(lambda: proceeded.append(True))
+
+    # the user couldn't save the changes anyway
+    assert view.has_unsaved_changes()
+    assert proceeded == [True]
+    assert not view.discard_changes.is_visible
+
+
 def test_triggering_a_checkable_action_toggles_it_before_its_callbacks_run() -> None:
     wrap = ActionView(text="Wrap", is_checkable=True)
     plain = ActionView(text="Refresh")

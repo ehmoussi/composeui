@@ -864,6 +864,9 @@ def test_alt_shift_runs_a_menu_shortcut(page: Page) -> None:
     # New is Ctrl+N on the desktop: browsers keep that one, so it's Alt+Shift+N here
     with _posted(page):
         page.keyboard.press("Alt+Shift+KeyN")
+    # the name typed is unsaved: New asks first
+    with _posted(page):
+        page.get_by_role("button", name="Discard").click()
     expect(name).to_have_value("")
 
 
@@ -881,6 +884,37 @@ def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:
     assert download.suggested_filename.endswith(".hello")
     assert "Alice" in Path(download.path()).read_text()
     expect(name).to_have_value("Alice")
+
+
+def test_open_over_unsaved_changes_asks_then_shows_the_study_opened(
+    page: Page, tmp_path: Path
+) -> None:
+    _intercept_file_choosers(page)
+    page.goto("/")
+    name = page.get_by_label("Name")
+    with _posted(page):
+        name.press_sequentially("Alice")
+    with page.expect_download() as download_info:
+        page.keyboard.press("Alt+Shift+KeyS")
+    saved = tmp_path / "alice.hello"
+    download_info.value.save_as(saved)
+    name.press("End")
+    with _posted(page):
+        name.press_sequentially(" and Bob")
+
+    with page.expect_file_chooser() as chooser:
+        page.keyboard.press("Alt+Shift+KeyO")
+    with _posted(page):
+        chooser.value.set_files(saved)
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_contain_text("The study has unsaved changes. Discard them?")
+    expect(name).to_have_value("Alice and Bob")
+    with _posted(page):
+        dialog.get_by_role("button", name="Discard").click()
+
+    expect(dialog).to_be_hidden()
+    expect(name).to_have_value("Alice")
+    expect(page.locator("footer")).to_have_text("Hello, Alice!")
 
 
 def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser) -> None:

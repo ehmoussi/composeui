@@ -34,6 +34,7 @@ not in the package: run them from a clone of the repository (see
     - [Command-line options of your own](user-guide/building-views.md#command-line-options-of-your-own)
   - [Structure an app](user-guide/building-views.md#structure-an-app)
   - [Saving and loading state](user-guide/building-views.md#saving-and-loading-state)
+    - [Unsaved changes](user-guide/building-views.md#unsaved-changes)
     - [Versions of the state](user-guide/building-views.md#versions-of-the-state)
 - [Reactive methods](user-guide/reactive-methods.md)
   - [When a method runs](user-guide/reactive-methods.md#when-a-method-runs)

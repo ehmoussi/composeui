@@ -240,7 +240,8 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 - **Save and Open** download the state as a file and upload a file. The File menu is in the
   page header. Its shortcuts use Alt+Shift (Alt+Shift+S saves), because browsers keep the
   Ctrl shortcuts for themselves. A study can be at most 5 MiB, and the status bar says when a
-  file is too large.
+  file is too large. Open uploads the file, then asks before it loses the unsaved changes (see
+  [Unsaved changes](building-views.md#unsaved-changes)).
 - **Uploads have a limit that the app sets.** A user can upload a file of at most 5 MiB by
   default. The limit applies to a `PickFileAction`, a file path input, and a table's file path
   cell. A main view

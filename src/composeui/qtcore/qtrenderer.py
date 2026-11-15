@@ -155,6 +155,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
     from qtpy.QtCore import QModelIndex, SignalInstance
+    from qtpy.QtGui import QCloseEvent
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
@@ -3649,9 +3650,35 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
         page.renderer.qt_object.setVisible(page.is_visible)
 
 
-class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainView, QMainWindow]):
-    def __init__(self, view: MainView, window: QMainWindow | None = None) -> None:
+class QtMainWindow(QMainWindow):
+    """The main view's window, which asks before a close loses the study's unsaved changes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        #: whether a close goes on now, else it's refused; None lets every close go on, e.g.
+        #: a reload's, which saved the study
+        self.may_close: Callable[[], bool] | None = None
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self.may_close is None or self.may_close():
+            super().closeEvent(event)
+        else:
+            event.ignore()
+
+
+def _may_close(check: weakref.WeakMethod[Callable[[], bool]]) -> bool:
+    """Call `check` to tell whether a window closes; a main view gone lets it."""
+    method = check()
+    return method is None or method()
+
+
+class QtMainRenderer(
+    QtWidgetRenderer[MainView, QtMainWindow], MainRenderer[MainView, QtMainWindow]
+):
+    def __init__(self, view: MainView, window: QtMainWindow | None = None) -> None:
         super().__init__(view)
+        #: set by `close`: the app closes the window, once the user agreed if asked
+        self._is_closing = False
         #: another main view's window to show this one in, in place of its parts, e.g.
         #: the previous code's on a reload: the window keeps its place and size
         self._window = window
@@ -3670,10 +3697,15 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
     def render(self) -> None:
         if self._rendered_object is None:
             if self._window is None:
-                self._rendered_object = QMainWindow()
+                self._rendered_object = QtMainWindow()
             else:
                 self._rendered_object = self._window
                 self._clear_window(self._window)
+            # this main view's, also in a window that another one showed; weak, as the
+            # window's slots: the window outlives the views it showed
+            self._rendered_object.may_close = functools.partial(
+                _may_close, weakref.WeakMethod(self._may_close)
+            )
             self._rendered_object.setMinimumSize(
                 self._view.minimum_width, self._view.minimum_height
             )
@@ -3716,7 +3748,17 @@ class QtMainRenderer(QtWidgetRenderer[MainView, QMainWindow], MainRenderer[MainV
 
     def close(self) -> None:
         assert self._rendered_object is not None
+        self._is_closing = True
         self._rendered_object.close()
+
+    def _may_close(self) -> bool:
+        """Tell whether the window's close goes on; else ask the user, who may close it."""
+        view = self._view
+        if self._is_closing or not view.has_file_menu or not view.has_unsaved_changes():
+            return True
+        # `MainView.close`, as Exit, which drops the jobs too
+        view.discard_changes.ask(view.close)
+        return False
 
     def _build_filepath(self, filepath_str: str, selected_filter: str) -> Path | None:
         if filepath_str == "":
