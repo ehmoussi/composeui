@@ -2454,7 +2454,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
 
     The user zooms by dragging across it, back out with a double click, and reads the
     values at the cursor in its legend. A series' legend entry hides or shows it. A new
-    `series` list swaps the figure, the page keeping the user's zoom (see `page.js`).
+    `series` list swaps the figure, the page keeping the user's zoom (see `charts.js`).
 
     A click on the plot, rather than the end of a drag, posts its point: `clicked` emits
     it. Its corner downloads its image as a report's figure, in the format picked beside.
@@ -2586,7 +2586,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         return f"{view.title}: {description}" if view.title and description else view.title
 
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
-        # a click on the plot (see `page.js`), at a point in the axes' values
+        # a click on the plot (see `charts.js`), at a point in the axes' values
         if event != "click" or not self.is_enabled:
             super().dispatch(event, form)
         try:
@@ -3399,7 +3399,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     (`aria-selected`), and a click adds or removes its row.
 
     Double clicking a cell of `editable_columns`, or pressing F2 on its row (see
-    `page.js`), edits it. The table comes back with a field in the cell, named by its
+    `tables.js`), edits it. The table comes back with a field in the cell, named by its
     header, its text selected. Enter or leaving the field posts the text, Escape puts the
     old text back first; either way the cell is text again. The page keeps the text the
     user is typing through a swap of the table, e.g. answering the double click's clicks.
@@ -3408,7 +3408,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     posting its change and never swapped back for it (only a check-all box in the header
     follows). A button after the cell's text, or the text as a link-like button, posting
     a click. A check-all column's header starts with its box, partly checked (see
-    `page.js`) while some rows are; its click swaps back the rows, not itself. A file
+    `tables.js`) while some rows are; its click swaps back the rows, not itself. A file
     path is typed as a plain cell, and its "…" button opens the browser's picker, a
     hidden file input uploading the file picked with its row and column
     (`/widget/{id}/file`, see `WebSession.pick_file`). The cell then shows its copy's path.
@@ -3736,7 +3736,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             ' hx-trigger="activate"'
             """ hx-vals='{{"event": "select", "row": "{index}"}}'"""
             ' hx-swap="none"'
-            # a double click or Enter then activates it (see `page.js`)
+            # a double click or Enter then activates it (see `tables.js`)
             ' data-activate="{index}">'
             "{cells}</tr>"
         ).format(widget_id=self.widget_id, index=index, selected=selected, cells=cells)
@@ -4238,7 +4238,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
 
     The frame holds the headers, a window of `SOURCE_TABLE_WINDOW_ROWS` rows, and two filler
     rows that give the scroll bar the height of every row. When the user stops scrolling
-    outside the window, `page.js` posts the first row shown (`scroll`), and only the
+    outside the window, `tables.js` posts the first row shown (`scroll`), and only the
     `<tbody>` comes back, the scroll position kept, that row still under the headers.
     Past `SOURCE_TABLE_SCROLLED_ROWS` rows, the fillers stop growing: a filler's height
     stands for more rows than as many drawn ones (`_fillers`).
@@ -4250,9 +4250,9 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     (`SourceTableView.sort_by`), keeping the focus as it comes back (`autofocus`). A click
     on a row, or Enter on it, selects it (`select_at`): only the rows come back, the row
     keeping the focus. A double click on a row, or Enter, then activates it (`activate_at`,
-    posted by `page.js`). The web doesn't extend a selection. While a
+    posted by `tables.js`). The web doesn't extend a selection. While a
     column of `filterable_columns` filters, the filter bar (`WebFilterBarRenderer`) is
-    above the frame. Ctrl+C in the frame posts `copy` (see `page.js`): the selected rows'
+    above the frame. Ctrl+C in the frame posts `copy` (see `tables.js`): the selected rows'
     text (`SourceTableView.selection_text`) comes back in a hidden element, which the page
     writes to the clipboard. A link above the frame downloads the rows shown as CSV
     (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
@@ -4475,7 +4475,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             '{selected}{autofocus} data-window-row hx-post="/widget/{widget_id}"'
             """ hx-trigger="activate" hx-vals='{vals}'"""
             ' hx-swap="none"'
-            # a double click or Enter then activates it (see `page.js`)
+            # a double click or Enter then activates it (see `tables.js`)
             ' data-activate="{position}">{content}</tr>'
         ).format(
             position=position,
@@ -4490,7 +4490,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     def _frame_html(self, *, oob: bool = False) -> Markup:
         """Render the scrolled frame: the headers, then the window of rows between fillers.
 
-        Its hidden field takes the first row shown, which `page.js` posts on a scroll.
+        Its hidden field takes the first row shown, which `tables.js` posts on a scroll.
         """
         view = self._view
         focused, self._focused_header = self._focused_header, None

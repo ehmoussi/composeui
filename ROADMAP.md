@@ -72,7 +72,7 @@ The order of the work for **Now**:
 
 1. Share the data and speed up imports: the shared SQLite database, and a vectorized
    `fill_from_frame`, measured against the budgets.
-2. The charts: split the page's scripts, type-check them, then layers, then the new charts.
+2. The charts: check the HTML, then layers, then the new charts.
 3. Deployment in a container.
 
 ## Data and dashboards
@@ -158,8 +158,6 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
   on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
-- **Split the page's scripts** (Now, first). `charts.js` and `maps.js`, loaded with their
-  libraries, and `tables.js`, out of `page.js`.
 - **Layers** (Now). Every kind of series on shared axes, bars included, and a second y axis.
 - **Dates, ranges and bars** (Now). Dates on the x axis, axis ranges set by the app, and stacked
   and horizontal bars.
@@ -192,9 +190,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 ## The web page
 
-- **Type-check the scripts and check the HTML** (Now, with the charts). The scripts typed with
-  JSDoc and checked by `tsgo`, a pinned binary without Node, and the rendered HTML checked
-  against the scripts and the page's policy.
+- **Check the HTML** (Now, with the charts). The rendered HTML checked against the scripts and
+  the page's policy, as `make js-check` checks the scripts' types.
 - **Links that keep the state** (Now). The fields that an app names go in the page's address, so
   a copied link opens the same view.
 - **A session per tab** (Now). An option, so that two tabs of a browser do not share their

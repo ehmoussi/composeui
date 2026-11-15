@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": []
+  },
+  "files": [
+    "composeui.d.ts",
+    "uPlot.d.ts",
+    "../src/composeui/webcore/static/page.js",
+    "../src/composeui/webcore/static/tables.js",
+    "../src/composeui/webcore/static/charts.js",
+    "../src/composeui/webcore/static/maps.js"
+  ]
+}

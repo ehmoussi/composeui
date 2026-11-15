@@ -54,7 +54,7 @@ translations:
 	done; exit $$status
 
 .PHONY: check
-check: lint mypy translations
+check: lint mypy translations js-check
 
 .PHONY: test
 # in parallel, a worker per CPU (pytest-xdist)
@@ -142,6 +142,42 @@ css: $(TAILWIND) $(DAISYUI) $(DAISYUI_THEME)
 		|| { echo "Delete $(CSS_VENDOR)/ to download them again"; exit 1; }
 	$(TAILWIND) -i css/app.css -o src/composeui/webcore/static/app.css --minify
 
+# TypeScript's compiler, a binary without Node: it checks the page's scripts against their
+# JSDoc types (js/tsconfig.json). Downloaded once into js/vendor/, its platform in the name;
+# override it as for Tailwind, e.g. `make js-check TSC_PLATFORM=linux-arm64`.
+TSC_VERSION := 7.0.2
+JS_VENDOR := js/vendor
+TSC_PLATFORMS := linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64
+TSC_PLATFORM ?= $(shell uname -s | sed -e 's/^Linux$$/linux/' -e 's/^Darwin$$/darwin/' \
+	-e 's/^MINGW.*/win32/' -e 's/^MSYS.*/win32/' -e 's/^CYGWIN.*/win32/')-$(shell uname -m | sed -e 's/^x86_64$$/x64/' \
+	-e 's/^aarch64$$/arm64/')
+TSC_SUFFIX := $(if $(filter win32-%,$(TSC_PLATFORM)),.exe)
+TSC_DIR := $(JS_VENDOR)/typescript-$(TSC_VERSION)-$(TSC_PLATFORM)
+TSC := $(TSC_DIR)/lib/tsc$(TSC_SUFFIX)
+# the SHA-256 of each release archive (github.com/microsoft/TypeScript, the same files as
+# npm's @typescript/typescript-<platform>): change them with the version
+TSC_SHA256_linux-x64 := 7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3
+TSC_SHA256_linux-arm64 := c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea
+TSC_SHA256_darwin-x64 := eba158cb54050f723d5ff781438f33de5640054440bb4f2bd170cfe9bc2eb551
+TSC_SHA256_darwin-arm64 := 902e2fe1cf0799198ef902c6b8c310a450fef629a6baba41d45641ef75c04ebd
+TSC_SHA256_win32-x64 := 61fc4e141d2bc687db580e71bbfa63b9c209f0310645d82ca1b457eb3a24fd19
+TSC_SHA256_win32-arm64 := 0a73534e6ee50cdbb2a29ac48657ca0ad13cf0f424cf63808e4df7baeb87b8be
+TSC_SHA256 := $(TSC_SHA256_$(TSC_PLATFORM))
+
+# the archive kept beside it: checked again on each run, as Tailwind's binary is
+$(TSC):
+	$(if $(filter $(TSC_PLATFORM),$(TSC_PLATFORMS)),,\
+		$(error No TypeScript binary for '$(TSC_PLATFORM)': pass one of \
+		$(TSC_PLATFORMS) as TSC_PLATFORM))
+	$(call fetch,https://github.com/microsoft/TypeScript/releases/download/v$(TSC_VERSION)/typescript-$(TSC_PLATFORM).tgz,$(TSC_DIR).tgz,$(TSC_SHA256))
+	mkdir -p $(TSC_DIR) && tar -xzf $(TSC_DIR).tgz -C $(TSC_DIR) --strip-components=1
+
+.PHONY: js-check
+js-check: $(TSC)
+	@echo "$(TSC_SHA256)  $(TSC_DIR).tgz" | $(SHA256SUM) -c \
+		|| { echo "Delete $(JS_VENDOR)/ to download it again"; exit 1; }
+	$(TSC) -p js/tsconfig.json
+
 # the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
 # imports: committed, so the package needs no download. Change a version and its SHA-256,
 # run `make web-deps css`, and commit the files.
@@ -152,6 +188,8 @@ CALLY_VERSION := 0.9.2
 DECKGL_VERSION := 9.2.6
 DECKGL_SHA256 := 234e0af97a691b8e5aea6c6ca9e703a7ba5206fd1f53daa9f670e41db089de2d
 DECKGL_LICENSE_SHA256 := e499a2c2ba3b9faabe91fdfddf43e329439263264b7148e5548d0ec605cce9f2
+HTMX_TYPES_SHA256 := bdd6a73baa16cc0e10e892e3d7a7ebe9119d1d6761c6c6b8b42a4f98b53a338a
+UPLOT_TYPES_SHA256 := af44374f6e808be4f7f3fa5888b9c7574dca9f8a15a66d54b6763535802c8080
 HTMX_SHA256 := 71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de
 UPLOT_SHA256 := 19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f
 UPLOT_CSS_SHA256 := df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04
@@ -162,9 +200,12 @@ UPLOT_LICENSE_SHA256 := 8f989229699b4fe2f1a0432d0e9edc338a8a911e250e2d1b01ecd770
 DAISYUI_LICENSE_SHA256 := 8709e3ac65c84637c422dc8082b893d9997fce093751c77b2f1983bf29dbf9ea
 
 # Cally's file has no license comment: it gets Cally's LICENSE as one; uPlot's has only its
-# address, and its LICENSE goes beside it
+# address, and its LICENSE goes beside it. The declarations of htmx and uPlot go to js/, for
+# `make js-check`, not in the package.
 .PHONY: web-deps
 web-deps:
+	$(call fetch,https://unpkg.com/htmx.org@$(HTMX_VERSION)/dist/htmx.esm.d.ts,js/htmx.d.ts,$(HTMX_TYPES_SHA256))
+	$(call fetch,https://unpkg.com/uplot@$(UPLOT_VERSION)/dist/uPlot.d.ts,js/uPlot.d.ts,$(UPLOT_TYPES_SHA256))
 	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/dist.min.js,$(STATIC)/deckgl.min.js,$(DECKGL_SHA256))
 	$(call fetch,https://unpkg.com/deck.gl@$(DECKGL_VERSION)/LICENSE,$(STATIC)/deckgl.LICENSE,$(DECKGL_LICENSE_SHA256))
 	$(call fetch,https://unpkg.com/htmx.org@$(HTMX_VERSION)/dist/htmx.min.js,$(STATIC)/htmx.min.js,$(HTMX_SHA256))

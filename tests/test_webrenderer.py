@@ -6418,13 +6418,17 @@ def test_the_page_names_each_static_file_by_its_content(client: TestClient) -> N
     """A new stylesheet or script has a new address: a browser can't keep an older copy."""
     page = client.get("/").text
 
-    addresses = re.findall(r'(?:src|href|data-uplot|data-cally)="(/static/[^"]*)"', page)
+    addresses = re.findall(r'(?:src|href|data-[a-z]+)="(/static/[^"]*)"', page)
 
     assert sorted(address.split("?")[0] for address in addresses) == [
         "/static/app.css",
         "/static/cally.js",
+        "/static/charts.js",
+        "/static/deckgl.min.js",
         "/static/htmx.min.js",
+        "/static/maps.js",
         "/static/page.js",
+        "/static/tables.js",
         "/static/uPlot.iife.min.js",
     ]
     for address in addresses:
