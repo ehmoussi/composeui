@@ -285,6 +285,17 @@ def read_parquet(readings: Readings, path: Path, job) -> None:
   value gives `None`, including `NaN`, `NaT`, and `pd.NA`. A value converts only when nothing is
   lost: `2.0` fits an `int` field, and a date and time at midnight fits a date field. So `1.9`
   in an `int` field raises `RefusedError`, as a row class that refuses a value does.
+- **Speed.** The frame's library checks the columns, not Python row by row. Python checks each
+  row in these cases:
+  - the row class has a converter, its own `__init__`, or an `__attrs_post_init__` method;
+  - a field has a validator other than `attrs`' `ge`, `gt`, `le` and `lt`, alone or in `and_`
+    and `optional`;
+  - the table defines its own `row_parameters`;
+  - a column needs a conversion, such as text in a number field;
+  - the frame has no column for a field with a validator or a `factory`.
+
+  The import refuses the same rows, with the same messages, in both ways. When the frame's
+  library checks the columns, an import that refuses a row refuses it before its first count.
 - **Transactions.** The import works as `fill` does: exhaust the generator to commit, and close
   it to roll back.
 - **Memory.** The whole frame stays in memory during the import, and a lazy frame is collected

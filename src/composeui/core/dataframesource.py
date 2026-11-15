@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import datetime
 import decimal
-from typing import TYPE_CHECKING, Any, Optional, Union
+import operator
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
+import attrs
 import narwhals.stable.v2 as nw
 
+from composeui.core.model import RefusedError
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
     MAP_LATITUDE_LIMIT,
@@ -24,11 +28,11 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Hashable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Generator, Hashable, Iterator, Mapping, Sequence
 
     from narwhals.stable.v2.typing import IntoFrame
 
-    from composeui.core.sqlitemodel import CSVSqliteTable
+    from composeui.core.sqlitemodel import CSVSqliteTable, Parameters, _CSVField
     from composeui.core.view import Filter, Sort
 
 __all__ = ["DataFrameSource", "fill_from_frame", "points_of", "series_of"]
@@ -421,11 +425,305 @@ def fill_from_frame(
     ``polars.read_parquet``. A column gives the field of its name, and its null values give
     None. A lazy frame is collected first: the data stays in memory during the import.
 
+    The frame's library checks the columns. Python checks each row when the row class runs
+    its own code, such as a converter, or when a column needs a conversion, such as text for a
+    number. The rows refused, and the messages, are the same.
+
     Exhaust the generator to commit, or use ``contextlib.closing`` to roll back when
     stopping early, as with `CSVSqliteTable.fill`. A row that its row class refuses raises
     `RefusedError`.
     """
     collected = _collected(nw.from_native(frame))
-    yield from table.fill_rows(
-        _frame_rows(collected, batch_size), batch_size=batch_size, limit=limit
+    yield from table._insert_rows(  # noqa: SLF001 (the table's import, from a frame's columns)
+        _frame_parameters(table, collected, batch_size=batch_size, limit=limit),
+        batch_size=batch_size,
+        limit=limit,
     )
+
+
+def _frame_parameters(
+    table: CSVSqliteTable, frame: nw.DataFrame[Any], *, batch_size: int, limit: Optional[int]
+) -> Iterator[Parameters]:
+    """Get the SQL parameters of `frame`'s rows, checked in the frame's library if it can.
+
+    A generator: the import checks its own arguments before any row is read.
+    """
+    if limit is not None:
+        frame = frame.head(limit)  # as the rows' import, refuse no row after the limit
+    columns = _stored_columns(table, frame)
+    if columns is None:
+        yield from (
+            table.row_parameters(table._typed_row(row))  # noqa: SLF001 (as `fill_rows`)
+            for row in _frame_rows(frame, batch_size)
+        )
+        return
+    # in Python a batch at a time, as `_frame_rows`: the frame's values take less memory
+    for start in range(0, len(frame), batch_size):
+        stop = min(start + batch_size, len(frame))
+        yield from zip(*(column.cells(start, stop) for column in columns))
+
+
+#: the comparisons of attrs' number validators (`attrs.validators.ge`...), in the frame
+_BOUNDS: Mapping[str, Callable[[Any, Any], Any]] = MappingProxyType(
+    {"<": operator.lt, "<=": operator.le, ">=": operator.ge, ">": operator.gt}
+)
+_NUMBER_VALIDATOR: type[Any] = type(attrs.validators.ge(0))
+_AND_VALIDATOR: type[Any] = type(attrs.validators.and_())
+_OPTIONAL_VALIDATOR: type[Any] = type(attrs.validators.optional(attrs.validators.ge(0)))
+#: a date's text in SQLite: its own method, as pandas' adds the nanoseconds to Python's
+_ISO_TEXT = operator.methodcaller("isoformat")
+#: the integers that SQLite stores, in absolute value, at most
+_INTEGER_BOUND = float(2**63)  # a float: PyArrow compares a column to a C long
+#: the integer types that `_INTEGER_BOUND` holds
+_INTEGERS = (nw.Int8, nw.Int16, nw.Int32, nw.Int64, nw.UInt8, nw.UInt16, nw.UInt32)
+
+
+class _Column(NamedTuple):
+    values: nw.Series[Any]
+    #: where the row has no value: a null, or NaN
+    missing: nw.Series[Any]
+    #: the value that SQLite stores for each cell, if not the cell itself
+    stored: Optional[Callable[[Any], Any]] = None
+
+    def cells(self, start: int, stop: int) -> list[Any]:
+        """Get the values that SQLite stores for the rows from `start` to `stop`."""
+        cells = self.values[start:stop].to_list()
+        stored = self.stored
+        missing = self.missing[start:stop]
+        if missing.any():
+            nones = missing.to_list()
+            if stored is None:
+                return [None if is_missing else cell for cell, is_missing in zip(cells, nones)]
+            return [None if is_missing else stored(cell) for cell, is_missing in zip(cells, nones)]
+        return cells if stored is None else [stored(cell) for cell in cells]
+
+
+class _Default(NamedTuple):
+    """The cells of a field that the frame doesn't give: its default."""
+
+    value: Any
+
+    def cells(self, start: int, stop: int) -> list[Any]:
+        return [self.value] * (stop - start)
+
+
+class _Refusal(NamedTuple):
+    """The first row that a check refuses, which the import refuses if no check is earlier."""
+
+    row: int
+    #: the checks of a row, in the order of `CSVSqliteTable.fill_rows`: the types of its
+    #: values, then each field's missing value, then the row class's validators
+    step: int
+    position: int
+    refuse: Callable[[int], None]
+
+
+def _stored_columns(
+    table: CSVSqliteTable, frame: nw.DataFrame[Any]
+) -> Optional[list[Union[_Column, _Default]]]:
+    """Get the columns whose values `fill_rows` would store, one per column of the table.
+
+    Check the columns in the frame's library, and refuse the first row that `fill_rows`
+    refuses, with its message. None when the rows need Python: a field with a converter or
+    another validator than a number's, a column of text for a number...
+    """
+    if _runs_own_code(table):
+        return None
+    csv_fields = iter(table._csv_fields)  # noqa: SLF001 (the table's import)
+    columns: list[Union[_Column, _Default]] = []
+    refusals: list[_Refusal] = []
+    for position, field in enumerate(attrs.fields(table.row_type)):
+        csv_field_ = next(csv_fields) if field.init else None
+        if csv_field_ is None or csv_field_.header not in frame.columns:
+            cells: Optional[Union[_Column, _Default]] = _default_cells(field)
+        else:
+            cells = _field_cells(frame[csv_field_.header], field, csv_field_, position, refusals)
+        if cells is None:
+            return None
+        columns.append(cells)
+    if refusals:
+        first = min(refusals)
+        first.refuse(first.row)
+        # the frame's library and Python differ on its value, such as a nanosecond that
+        # Python's date doesn't hold: Python checks every row
+        return None
+    return columns
+
+
+def _runs_own_code(table: CSVSqliteTable) -> bool:
+    """Tell whether the table's row class or its import runs code of the app on each row."""
+    from composeui.core.sqlitemodel import CSVSqliteTable  # noqa: PLC0415 (loaded: `table` is one)
+
+    return (
+        hasattr(table.row_type, "__attrs_post_init__")
+        or hasattr(table.row_type, "__attrs_init__")  # the class's own `__init__` calls it
+        or type(table).row_parameters is not CSVSqliteTable.row_parameters
+        or any(field.converter is not None for field in attrs.fields(table.row_type))
+    )
+
+
+def _default_cells(field: attrs.Attribute[Any]) -> Optional[_Default]:
+    """Get the cells of a field that the frame doesn't give: its default, if a plain value."""
+    default = field.default
+    if (
+        field.validator is not None
+        or default is attrs.NOTHING  # the row class refuses the row, with its message
+        or isinstance(default, attrs.Factory)  # type: ignore[arg-type]
+    ):
+        return None
+    from composeui.core.sqlitemodel import _STORED_AS_IS, _csv_cell  # noqa: PLC0415 (loaded)
+
+    return _Default(default if type(default) in _STORED_AS_IS else _csv_cell(default))
+
+
+def _field_cells(
+    series: nw.Series[Any],
+    field: attrs.Attribute[Any],
+    csv_field_: _CSVField,
+    position: int,
+    refusals: list[_Refusal],
+) -> Optional[_Column]:
+    """Get the column of a field, and add its refusals."""
+    column = _typed_column(series, csv_field_, position, refusals)
+    if column is None:
+        return None
+    if csv_field_.is_required:
+        refusals.extend(_first_refusal(column.missing, 1, position, _no_value(csv_field_.header)))
+    if field.validator is not None and not attrs.validators.get_disabled():
+        fails = _validator_fails(field.validator, column)
+        if fails is None:
+            return None
+        refusals.extend(_first_refusal(fails, 2, position, _validator_refusal(field, column)))
+    return column
+
+
+def _typed_column(
+    series: nw.Series[Any], field: _CSVField, position: int, refusals: list[_Refusal]
+) -> Optional[_Column]:
+    """Get a column of the frame as `_typed_value` gets its values, or None if it can't."""
+    from composeui.core.sqlitemodel import _typed_value  # noqa: PLC0415 (loaded with the table)
+
+    def refuse(row: int) -> None:
+        _typed_value(_cell(series, row), field.value_type, field.header)
+
+    missing = series.is_null()
+    if series.dtype.is_float():
+        missing = (missing | series.is_nan()).fill_null(value=True)
+    if isinstance(series.dtype, (nw.Date, nw.Datetime)):
+        return _date_column(series, missing, field.value_type, _Refuse(refusals, position, refuse))
+    return _plain_column(series, missing, field.value_type, _Refuse(refusals, position, refuse))
+
+
+class _Refuse(NamedTuple):
+    """Where a column's type refuses its first row: in `refusals`."""
+
+    refusals: list[_Refusal]
+    position: int
+    refuse: Callable[[int], None]
+
+    def first(self, refused: nw.Series[Any]) -> None:
+        self.refusals.extend(_first_refusal(refused, 0, self.position, self.refuse))
+
+
+def _plain_column(
+    series: nw.Series[Any], missing: nw.Series[Any], value_type: Any, refuse: _Refuse
+) -> Optional[_Column]:
+    dtype = series.dtype
+    if (value_type is str and dtype == nw.String) or (value_type is bool and dtype == nw.Boolean):
+        return _Column(series, missing)
+    if value_type is float and (dtype.is_float() or isinstance(dtype, _INTEGERS)):
+        return _Column(series.cast(nw.Float64), missing)
+    if value_type is int and isinstance(dtype, _INTEGERS):
+        return _Column(series, missing)
+    if value_type is int and dtype.is_float():
+        kept = ~missing
+        if (kept & (series.abs() >= _INTEGER_BOUND)).any():
+            return None  # SQLite doesn't store it: as a row's error
+        fraction = kept & (series % 1 != 0)
+        refuse.first(fraction)
+        zeros = missing.cast(nw.Float64) * 0
+        return _Column(series.zip_with(kept & ~fraction, zeros).cast(nw.Int64), missing)
+    return None
+
+
+def _date_column(
+    series: nw.Series[Any], missing: nw.Series[Any], value_type: Any, refuse: _Refuse
+) -> Optional[_Column]:
+    dtype = series.dtype
+    if isinstance(dtype, nw.Datetime) and dtype.time_zone is not None:
+        return None
+    if value_type is datetime.date and dtype == nw.Date:
+        return _Column(series, missing, _ISO_TEXT)
+    if value_type is datetime.date:
+        times = series.dt.hour() + series.dt.minute() + series.dt.second() + series.dt.nanosecond()
+        refuse.first(~missing & (times != 0))
+        return _Column(series, missing, _date_text)
+    if value_type is datetime.datetime and dtype == nw.Date:
+        return _Column(series, missing, _midnight_text)
+    if value_type is datetime.datetime:
+        return _Column(series, missing, _ISO_TEXT)
+    return None
+
+
+def _date_text(value: datetime.datetime) -> str:
+    return value.date().isoformat()
+
+
+def _midnight_text(value: datetime.date) -> str:
+    return datetime.datetime.combine(value, datetime.time()).isoformat()
+
+
+def _cell(series: nw.Series[Any], row: int) -> Any:
+    """Get a cell as `_frame_rows` does: a missing value as None."""
+    return None if series.is_null()[row] else series[row : row + 1].to_list()[0]
+
+
+def _first_refusal(
+    refused: nw.Series[Any], step: int, position: int, refuse: Callable[[int], None]
+) -> list[_Refusal]:
+    rows = refused.fill_null(value=False).arg_true().head(1).to_list()
+    return [_Refusal(rows[0], step, position, refuse)] if rows else []
+
+
+def _no_value(header: str) -> Callable[[int], None]:
+    def refuse(_row: int) -> None:
+        msg = f"The row has no value for {header}"
+        raise RefusedError(msg)
+
+    return refuse
+
+
+def _validator_fails(validator: Any, column: _Column) -> Optional[nw.Series[Any]]:
+    """Get where `validator` refuses a number of `column`; None for another validator."""
+    if type(validator) is _AND_VALIDATOR:
+        fails = column.missing & ~column.missing
+        for each in validator._validators:  # noqa: SLF001 (attrs' `and_`, read alone)
+            each_fails = _validator_fails(each, column)
+            if each_fails is None:
+                return None
+            fails = fails | each_fails
+        return fails
+    if type(validator) is _OPTIONAL_VALIDATOR:
+        inner = _validator_fails(validator.validator, column)
+        return None if inner is None else inner & ~column.missing
+    if (
+        type(validator) is _NUMBER_VALIDATOR
+        and type(validator.bound) in (int, float)
+        and column.values.dtype.is_numeric()
+    ):
+        compare = _BOUNDS[validator.compare_op]
+        # None fails: Python can't compare it
+        return ~(compare(column.values, validator.bound).fill_null(value=False) & ~column.missing)
+    return None
+
+
+def _validator_refusal(field: attrs.Attribute[Any], column: _Column) -> Callable[[int], None]:
+    def refuse(row: int) -> None:
+        # the row class's own validator, for its message
+        value = None if column.missing[row] else column.values[row : row + 1].to_list()[0]
+        try:
+            field.validator(None, field, value)  # type: ignore[misc]
+        except (ValueError, TypeError) as error:
+            raise RefusedError(str(error)) from error
+
+    return refuse
