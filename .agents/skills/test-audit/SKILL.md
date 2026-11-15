@@ -81,6 +81,12 @@ the work itself:
 - **Without such a hook,** pause in a bounded loop until the state the test reads
   arrives, then assert it: `for _ in range(100): await pilot.pause(0.05)`, with a
   `break` once it is there, as the Textual tests of a sorting job do.
+- **Work that outlives the call the test waits for.** A canceled load, a cleanup,
+  or a replaced upload can end after the session, job, or request that started it.
+  When the test reads what that work records, wait for that work too.
+  `test_the_load_stops_when_its_last_session_cancels_and_the_next_one_loads_again`
+  joined its session's thread, then read the canceled load's record before the load
+  ended. Slow that work down (validation step 3) to show that the test waits for it.
 
 A fixed pause is fine only for work on the app's own thread, such as a screen
 pushed. Even there, a slow runner can need more pauses than a fast one: when a
