@@ -23,7 +23,7 @@ from composeui.core.reload import (
     take_changes,
 )
 from composeui.core.view import RendererType
-from composeui.qtcore.qtrenderer import QtMainRenderer
+from composeui.qtcore.qtrenderer import QtMainRenderer, QtMainWindow
 
 if TYPE_CHECKING:
     import argparse
@@ -122,7 +122,7 @@ class _Reloads:
         if not can_reload_in_place(changed):
             # the supervisor runs the program in a new process, which opens the state saved
             self._timer.stop()
-            QApplication.quit()
+            _quit_without_asking()
             return
         try:
             run = rerun_program()
@@ -138,7 +138,7 @@ class _Reloads:
             if run.model is not None and run.model is not self._run.model:
                 run.model.close()
             self._timer.stop()
-            QApplication.quit()
+            _quit_without_asking()
             return
         acknowledge_changes()
 
@@ -156,6 +156,17 @@ class _Reloads:
         self._run = run
         if previous.model is not None and previous.model is not run.model:
             previous.model.close()
+
+
+def _quit_without_asking() -> None:
+    """Quit for the next process, which opens the study saved: no window asks the user first.
+
+    `QApplication.quit` closes the windows, and a window that refuses its close stops it.
+    """
+    for widget in QApplication.topLevelWidgets():
+        if isinstance(widget, QtMainWindow):
+            widget.may_close = None
+    QApplication.quit()
 
 
 def _forget_widgets(view: View, window: QMainWindow) -> None:

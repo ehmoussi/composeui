@@ -47,6 +47,16 @@ class Model:
         """
         return [value for value in vars(self).values() if isinstance(value, Signal)]
 
+    @property
+    def data_version(self) -> int:
+        """Get a number that changes with every change of the data, 0 by default.
+
+        `MainView.has_unsaved_changes` compares it with the one the study was saved with.
+        A model with data of its own (`data_name`) changes it as its data changes:
+        `SqliteModel` counts its committed writes.
+        """
+        return 0
+
     def new(self) -> None:
         """Start the data of a new study."""
 

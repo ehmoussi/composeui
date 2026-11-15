@@ -524,6 +524,14 @@ section covers what users see.
 - **Open** applies an upload to a scratch instance first (core's `load_state_data`), so a bad
   file never half-loads. Responses send `Cache-Control: no-store` and controls set
   `autocomplete="off"`, so a reload always shows the server's state.
+- **Open over unsaved changes.** The browser's picker sends the file at once, so the question
+  comes after the upload: `WebSession.load_state` keeps the file's bytes in the dialog's pending
+  call (at most `MAX_STATE_SIZE`) until the answer, a post of its own. A second upload replaces
+  them. A session that asks doesn't hibernate (an open dialog), so the bytes never need saving.
+  A file of another type, or too large, is refused before the question.
+- **Save, not a download.** Only Save's post (`POST /state/download`) takes the study as saved.
+  `GET /state` downloads it and changes nothing: a link from another site reaches it, and the
+  user may never get the file.
 
 ### Downloads on the web
 
@@ -741,7 +749,8 @@ On Qt, `--reload` works like this:
    it closes: a dialog's own event loop also runs the timer, and its callback goes on with
    the app after it. Then the app saves the study to the same directory
    (`save_reloaded_state`): the view state, the model's data, and in `session.json` the
-   study file's path, the language shown, and the state of a new main view of this code.
+   study file's path, whether the study has unsaved changes, the language shown, and the state
+   of a new main view of this code.
    `load_reloaded_state` compares that state with a new main view of the changed code. A
    field that differs takes the value of the changed code (`_with_code_edits`). Both views
    come from the class, so that a build function cannot make them differ without an edit.
@@ -755,7 +764,9 @@ On Qt, `--reload` works like this:
    previous bars, menus, and sidebar). Then the app removes the `taken` file
    (`acknowledge_changes`), and the supervisor keeps it running.
 5. **In a new process.** When ComposeUI's own code changed, the app exits after it saves the
-   study. It does the same when the new main view fails to show. The supervisor then starts
+   study. It does the same when the new main view fails to show. It exits without the question
+   on unsaved changes (`_quit_without_asking`): Qt 6's `QApplication.quit` closes the windows,
+   and a window that refuses its close stops it. The supervisor then starts
    a new child, which opens the study (`load_reloaded_state`). It does the same when the app
    does not take the request within 5 seconds, after it terminates it. When the program
    fails while it runs again, for example on a syntax error, the app logs the error, keeps

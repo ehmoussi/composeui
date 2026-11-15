@@ -346,6 +346,8 @@ class Application(Generic[MainViewT]):
         else:
             self.main_view.loaded.emit()  # the study the app starts with is in place too
         self.main_view.apply_arguments(self._args)
+        # what the user starts from: changes from now on are theirs
+        self.main_view.mark_saved()
 
     def _start_reactions(self) -> None:
         """Run the main view's reactive methods once it's wired (`setup_model`)."""

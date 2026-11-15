@@ -226,6 +226,12 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   starts and after New and Open, to give again what a study does not hold, such as a large
   table's source.
   See https://ehmoussi.github.io/composeui/user-guide/building-views.html#saving-and-loading-state
+- **Ask before replacing the study.** New, Open and Exit ask before they lose unsaved
+  changes. An action of the app's own that replaces the study calls
+  `main_view.ask_discard_changes(proceed)`, which calls `proceed()` at once when nothing is
+  lost. A job's result that changes the views or the model is a change; call
+  `main_view.mark_saved()` once it shows only what the next start gives again.
+  See https://ehmoussi.github.io/composeui/user-guide/building-views.html#unsaved-changes
 - **Run slow work in jobs** (`main_view.jobs.start(work, *args)`), not in a callback: a
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,
   `failed`, and `progress` (`job.report_progress(value)`), which emit on the main thread.

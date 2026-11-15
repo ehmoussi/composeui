@@ -1211,6 +1211,8 @@ class SqliteModel(Model):
         self._turns = 0
         self._depth = 0
         self._changed: list[SqliteTable] = []
+        #: the transactions committed that changed rows (`data_version`)
+        self._writes = 0
         self._database = self._new_database()
 
     @property
@@ -1286,6 +1288,8 @@ class SqliteModel(Model):
                 if outermost:
                     db.commit()
                     changed, self._changed = self._changed, []
+                    if db.total_changes != before:
+                        self._writes += 1
             except BaseException:
                 if outermost:
                     db.rollback()
@@ -1334,6 +1338,10 @@ class SqliteModel(Model):
                 if db is not None:
                     database.idle_readers.append(db)
                 self._close_if_unused(database)
+
+    @property
+    def data_version(self) -> int:
+        return self._writes
 
     def new(self) -> None:
         self._replace_database(self._new_database())

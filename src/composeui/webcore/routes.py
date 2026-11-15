@@ -395,11 +395,11 @@ async def state_save(request: Request) -> Response:
         async with session.post_order.turn(form_order(form)):
             if isinstance(trigger, str):
                 await run_in_threadpool(session.trigger_action, trigger)
-            return _state_file(session)
+            return _state_file(session, is_save=True)
 
 
-def _state_file(session: WebSession) -> Response:
-    filename, body, media_type = session.save_state()
+def _state_file(session: WebSession, *, is_save: bool = False) -> Response:
+    filename, body, media_type = session.save_state(is_save=is_save)
     headers = {**_NO_STORE, "Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(body, media_type=media_type, headers=headers)
 
@@ -408,7 +408,8 @@ async def state_upload(request: Request) -> Response:
     """Load an uploaded state file, the web side of `MainView.load_state`.
 
     A load can change any part of the tree. So instead of collecting fragments the page
-    reloads. A rejected file leaves the state alone and says why in the status bar.
+    reloads. A rejected file leaves the state alone and says why in the status bar. A study
+    with unsaved changes first asks to discard them: the fragments show the question.
     """
     session = await _session_off_loop(request)
     if session is None:
@@ -425,10 +426,10 @@ async def state_upload(request: Request) -> Response:
             if isinstance(trigger, str):
                 # e.g. Open's own `triggered`, before the file is loaded
                 await run_in_threadpool(session.trigger_action, trigger)
-            status_bar = await run_in_threadpool(session.load_state, upload.filename or "", content)
-    if status_bar is None:
+            fragments = await run_in_threadpool(session.load_state, upload.filename or "", content)
+    if fragments is None:
         return Response(headers=_RELOAD)
-    return HTMLResponse(status_bar, headers=_NO_STORE)
+    return HTMLResponse(fragments, headers=_NO_STORE)
 
 
 def icon(request: Request) -> Response:

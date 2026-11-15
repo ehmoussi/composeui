@@ -15,6 +15,7 @@ import datetime
 import decimal
 import enum
 import functools
+import hashlib
 import io
 import json
 import logging
@@ -331,6 +332,8 @@ _BAD_STATE_ERRORS = (
     cattrs.BaseValidationError,
     cattrs.StructureHandlerNotFoundError,
 )
+#: `MainView._saved_study` of a study changed whatever it holds: no study has its mark
+_UNSAVED_STUDY = ("", -1)
 
 
 def _is_version(value: Any) -> bool:
@@ -1333,6 +1336,52 @@ class ReplaceFileDialogView(DialogView):
         self._pending = None
 
 
+def _do_nothing() -> None:
+    """Go on with nothing: what a question not asked would do once answered."""
+
+
+@define_view
+class DiscardChangesDialogView(DialogView):
+    """A question before the study's unsaved changes are lost, e.g. by New: Discard or Cancel.
+
+    The main view's own, which `MainView.ask_discard_changes` asks. The app's own function
+    goes on once the user agrees: the dialog only decides when. Cancel leaves the study as
+    it is.
+    """
+
+    kind: DialogKind = attrs.field(default=DialogKind.CONFIRM)
+    text: str = attrs.field(
+        default=T("The study has unsaved changes. Discard them?"), metadata={UI_TEXT: True}
+    )
+    accept_text: str = attrs.field(default=T("Discard"), metadata={UI_TEXT: True})
+    #: what goes on once the user agrees, while they haven't answered
+    _pending: Callable[[], object] = attrs.field(
+        default=_do_nothing, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.accepted.connect(self._proceed)
+        self.rejected.connect(self._forget)
+
+    def ask(self, proceed: Callable[[], object]) -> None:
+        """Ask, and call `proceed()` once the user agrees; it replaces one not answered yet."""
+        self._pending = proceed
+        self.open()
+
+    def forget(self) -> None:
+        """Close the question, if it's open, and forget what would go on."""
+        self._pending = _do_nothing
+        self.is_visible = False
+
+    def _proceed(self) -> None:
+        pending, self._pending = self._pending, _do_nothing
+        pending()
+
+    def _forget(self) -> None:
+        self._pending = _do_nothing
+
+
 @define_view
 class SeparatorAction(View):
     """A line between two groups of entries in a menu or a toolbar."""
@@ -1385,7 +1434,7 @@ class NewAction(ActionView):
         self.triggered.connect(self._new_study)
 
     def _new_study(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
-        study.new_study(main_view, model)
+        main_view.ask_discard_changes(functools.partial(study.new_study, main_view, model))
 
 
 @define_view
@@ -1478,7 +1527,7 @@ class ExitAppAction(ActionView):
         self.triggered.connect(self._exit_app)
 
     def _exit_app(self, *, main_view: MainView) -> None:
-        main_view.close()
+        main_view.ask_discard_changes(main_view.close)
 
 
 @define_view
@@ -1507,8 +1556,15 @@ class FileMenu(Menu):
         filepath = main_view.ask_open_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
-        if filepath is None:
-            return
+        if filepath is not None:
+            # once the file is picked: on Textual, only a worker thread may show the picker,
+            # and the answer comes on the app's
+            main_view.ask_discard_changes(
+                functools.partial(self._open_study, main_view, model, filepath)
+            )
+
+    @staticmethod
+    def _open_study(main_view: MainView, model: Optional[Model], filepath: Path) -> None:
         try:
             study.open_study(main_view, model, filepath)
         except InvalidStateError as error:
@@ -1650,6 +1706,13 @@ class MainView(View):
     status_bar: StatusBar = attrs.Factory(StatusBar)
     #: the question before `write_file` replaces a file that exists
     replace_file: ReplaceFileDialogView = attrs.Factory(ReplaceFileDialogView)
+    #: the question before New, Open or Exit loses unsaved changes (`ask_discard_changes`)
+    discard_changes: DiscardChangesDialogView = attrs.Factory(DiscardChangesDialogView)
+    #: the study as last saved, opened or started (`mark_saved`): its views' digest and the
+    #: model's `Model.data_version`. None until then: nothing known to lose
+    _saved_study: Optional[tuple[str, int]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
     #: emitted once the views and the model's data are in place: as the app starts, with the
     #: study of ``-f`` or a new one, and after New and Open (after `Model.loaded`). The app
     #: gives again then what a study doesn't hold, such as the source of a large table
@@ -1857,6 +1920,50 @@ class MainView(View):
         finally:
             partial.unlink(missing_ok=True)
         self.state_filepath = filepath
+
+    def has_unsaved_changes(self) -> bool:
+        """Tell whether the study changed since it was last saved, opened or started.
+
+        It compares what Save would write: the views' state and the model's data (see
+        `Model.data_version`). A change undone is no change; nor is UI text, a dialog, the
+        status bar's message, or the study's file name.
+        """
+        return self._saved_study is not None and self._saved_study != self._study_mark()
+
+    def mark_saved(self) -> None:
+        """Take the study as it is now as saved: `has_unsaved_changes` is False until a change.
+
+        The app's start, New, Open and Save do it. An app does it when it changes the views
+        in a way the user didn't, e.g. once a job started with the app has shown its result.
+        """
+        self._saved_study = self._study_mark()
+
+    def _mark_unsaved(self) -> None:
+        """Take the study as changed, whatever it holds: e.g. a reload restoring it unsaved."""
+        self._saved_study = _UNSAVED_STUDY
+
+    def _study_mark(self) -> tuple[str, int]:
+        views = self.state_data()
+        # the name of the user's file, which the web's Save keeps apart from what it writes,
+        # and a passing message, e.g. why Open failed
+        views.pop("state_filepath", None)
+        views["status_bar"].pop("message", None)
+        digest = hashlib.blake2b(json.dumps(views).encode(), digest_size=16).hexdigest()
+        model = None if self._model_reference is None else self._model_reference()
+        return digest, 0 if model is None else model.data_version
+
+    def ask_discard_changes(self, proceed: Callable[[], object]) -> None:
+        """Call `proceed()` now if the study has no unsaved changes, else once the user agrees.
+
+        New, Open and Exit ask through the `discard_changes` dialog; Cancel leaves the study
+        as it is. An app asks too before it replaces the study its own way. Without a File
+        menu (`has_file_menu`), the user can't save, so it never asks.
+        """
+        if not self.has_file_menu or not self.has_unsaved_changes():
+            self.discard_changes.forget()  # a question still open is about other changes
+            proceed()
+            return
+        self.discard_changes.ask(proceed)
 
     def can_hibernate(self) -> bool:
         """Tell whether the web may save this session to disk while it's idle, and free it.

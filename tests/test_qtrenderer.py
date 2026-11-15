@@ -122,7 +122,12 @@ from composeui.core.view import (
     replace_cell,
 )
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
-from composeui.qtcore.qtrenderer import QtActionRenderer, QtMainRenderer, QtWidgetRenderer
+from composeui.qtcore.qtrenderer import (
+    QtActionRenderer,
+    QtMainRenderer,
+    QtMainWindow,
+    QtWidgetRenderer,
+)
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
@@ -674,7 +679,7 @@ def test_a_main_view_shown_in_another_s_window_replaces_its_parts(
     previous = HelpMainView()
     previous.render(RendererType.QT)
     window = _widget(previous)
-    assert isinstance(window, QMainWindow)
+    assert isinstance(window, QtMainWindow)
     qtbot.addWidget(window)
     menus = [action.text() for action in window.menuBar().actions()]
     content = window.centralWidget()
@@ -5052,6 +5057,26 @@ def test_exit_closes_the_window(qtbot: QtBot) -> None:
     assert not window.isVisible()
 
 
+def test_closing_the_window_asks_before_it_discards_unsaved_changes(qtbot: QtBot) -> None:
+    view, window, _box = _dialog_window(qtbot)
+    qtbot.waitExposed(window)
+    view.mark_saved()
+    view.minimum_width = 800  # a field the study keeps
+
+    window.close()  # as its title bar's button does
+    box = _qt_widget(view.discard_changes)
+    assert isinstance(box, QMessageBox)
+    assert box.isVisible()
+    assert window.isVisible()
+    _shown_buttons(box)["Cancel"].click()
+    qtbot.waitUntil(lambda: not box.isVisible())
+    assert window.isVisible()
+
+    window.close()
+    _shown_buttons(box)["Discard"].click()
+    qtbot.waitUntil(lambda: not window.isVisible())
+
+
 def test_a_router_without_pages_shows_none(qtbot: QtBot) -> None:
     router = Router()
     router.render(RendererType.QT)
@@ -5068,7 +5093,7 @@ def test_a_window_shown_another_main_view_trades_its_toolbars_and_sidebar(
     first = ToolBarMainView()
     first.render(RendererType.QT)
     window = _widget(first)
-    assert isinstance(window, QMainWindow)
+    assert isinstance(window, QtMainWindow)
     qtbot.addWidget(window)
 
     def parts() -> tuple[int, int]:

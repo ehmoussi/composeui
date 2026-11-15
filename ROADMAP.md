@@ -192,6 +192,9 @@ The SQLite model is complete otherwise: do not rebuild it.
   a copied link opens the same view.
 - **A session per tab** (Now). An option, so that two tabs of a browser do not share their
   state. Links that keep the state need it.
+- **A warning when the tab closes** (Next). The browser's "Leave site?" prompt while the study
+  has unsaved changes, but not on Save or the app's own reloads. After a session per tab, so that
+  closing one of two tabs doesn't warn. First measure what the flag costs per request.
 - **Push from the server** (When needed). Server-Sent Events or websockets, if polling `/jobs` is
   not enough.
 
@@ -225,6 +228,11 @@ The SQLite model is complete otherwise: do not rebuild it.
   refuse the browser's `C:\fakepath`.
 - **Recent folders** (Next). The picker of the server's files opens at the last folder, with a
   short history inside the allowed roots.
+- **Save in the unsaved-changes question** (Next). Save, Discard and Cancel before New, Open
+  and Exit, on Qt and Textual. Save goes through the file picker when the study has no file, and
+  the action goes on only once the file is written: a canceled picker cancels the action.
+- **Save in the web's unsaved-changes question** (When needed). The page downloads the study,
+  then runs New or Open: the dialog's htmx answer can't start a download.
 - **Reload keeps the widgets' state** (Next). Scroll positions, column widths and focus survive
   a reload on Qt. First, measure the memory that each reload keeps.
 - **Textual reload in place** (When needed). After the Qt reload keeps its widgets' state.

@@ -537,8 +537,12 @@ class WebSession(RenderTarget):
                 return body, None
             return body, page_path(router.current_route)
 
-    def save_state(self) -> tuple[str, bytes, str]:
-        """Return a download name, the saved study (`save_study`'s) and its media type."""
+    def save_state(self, *, is_save: bool = False) -> tuple[str, bytes, str]:
+        """Return a download name, the saved study (`save_study`'s) and its media type.
+
+        With `is_save`, the user saved the study (Save's post): it has no unsaved changes
+        any more. A link's GET only downloads, and changes nothing.
+        """
         with self.lock, tempfile.TemporaryDirectory(prefix="composeui-") as directory:
             main_view = self.main_view
             if main_view.state_filepath is not None:
@@ -546,38 +550,58 @@ class WebSession(RenderTarget):
             else:
                 name = f"{main_view.title.lower()}{main_view.extension}"
             state_filepath = main_view.state_filepath
+            saved_study = main_view._saved_study  # noqa: SLF001 (kept unless saved)
             path = Path(directory, "study")
             save_study(main_view, self.model, path)
             # the browser's file is wherever it saves the download, not this scratch one
             main_view.state_filepath = state_filepath
+            if not is_save:
+                main_view._saved_study = saved_study  # noqa: SLF001
             media_type = "application/zip" if has_data(self.model) else "application/json"
             return safe_filename(name), path.read_bytes(), media_type
 
     def load_state(self, filename: str, content: bytes) -> str | None:
-        """Load an uploaded state file; on failure, return the status bar saying why."""
-        with self.lock, collect_dirty() as dirty:
-            error = self._load_state(filename, content)
-            if error is not None:
-                self.main_view.status_bar.show_message(f"Can't open {filename!r}: {error}.")
-                return render_dirty(dirty)
-            self.main_view.state_filepath = Path(Path(filename).name)
-            self._note_loaded_sources()
-            return None
+        """Load an uploaded state file; None once loaded, else the fragments to show.
 
-    def _load_state(self, filename: str, content: bytes) -> str | None:
-        extension = self.main_view.extension
-        if Path(filename).suffix != extension:
-            return f"expected a {extension} file"
-        if len(content) > MAX_STATE_SIZE:
-            return "the file is too large"
+        On failure, the status bar says why. A study with unsaved changes is loaded once the
+        user agrees to discard them (`MainView.ask_discard_changes`): the fragments show the
+        question, and its answer, a post of its own, loads the file. The file is uploaded
+        first, as the browser's picker sends it at once; one of another type, or too large,
+        is refused before the question.
+        """
+        with self.lock, collect_dirty() as dirty:
+            main_view = self.main_view
+            extension = main_view.extension
+            if Path(filename).suffix != extension:
+                self._refuse_upload(filename, f"expected a {extension} file")
+            elif len(content) > MAX_STATE_SIZE:
+                self._refuse_upload(filename, "the file is too large")
+            elif main_view.has_file_menu and main_view.has_unsaved_changes():
+                # kept until the answer, at most `MAX_STATE_SIZE` bytes; a session asking
+                # doesn't hibernate (`can_hibernate`), so it never needs saving
+                main_view.discard_changes.ask(
+                    functools.partial(self._open_upload, filename, content)
+                )
+            elif self._open_upload(filename, content):
+                return None
+            return render_dirty(dirty)
+
+    def _open_upload(self, filename: str, content: bytes) -> bool:
+        """Open an uploaded study, or say in the status bar why it can't; tell if it opened."""
         with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
             path = Path(directory, "study")
             path.write_bytes(content)
             try:
                 open_study(self.main_view, self.model, path, max_size=MAX_UNPACKED_SIZE)
             except InvalidStateError as error:
-                return str(error)
-        return None
+                self._refuse_upload(filename, str(error))
+                return False
+        self.main_view.state_filepath = Path(Path(filename).name)
+        self._note_loaded_sources()
+        return True
+
+    def _refuse_upload(self, filename: str, error: str) -> None:
+        self.main_view.status_bar.show_message(f"Can't open {filename!r}: {error}.")
 
     def fragment(self, widget_id: str) -> str | None:
         """Render one of this session's widgets as it is now; None if it isn't one.
