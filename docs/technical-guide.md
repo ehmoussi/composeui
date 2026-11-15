@@ -879,6 +879,10 @@ Every behavior change needs a test in `tests/`.
   the job's result (`GET /jobs`). The job's thread sets a flag such as `has_result` under the
   session's lock, before its reactive methods fill the views. A fixed wait passes on a fast
   machine and fails on a slow CI runner, such as Windows with Python 3.9.
+- Concurrency coverage must not depend on scheduling. Explicitly arrange and verify the
+  waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental
+  execution, elapsed time, or a fixed number of event-loop turns. Required coverage must
+  remain exercised on platforms where other tests are skipped.
 - Qt tests in a headless environment (CI, WSL) need `QT_QPA_PLATFORM=offscreen`.
   `make test` sets it. To run one file or test:
 

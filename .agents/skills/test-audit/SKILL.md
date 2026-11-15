@@ -14,7 +14,7 @@ whole backend's or core area's test surface; see [Campaign mode](#campaign-mode)
 
 ## Authoring gate
 
-Before adding any test, answer four questions; a missing answer means do not
+Before adding any test, answer five questions; a missing answer means do not
 add it yet:
 
 1. What observable behavior, invariant, or independent contract does it protect?
@@ -29,6 +29,9 @@ add it yet:
 4. Does it need a production seam (public helper, flag, wrapper, injection hook,
    extra `RENDERERS` entry) that no production caller needs? If yes, move the
    test to the real boundary instead.
+5. If timing matters, how does it prove the intended overlap or event ordering
+   occurred? A final result alone does not prove that a reader waited, a timer
+   found a lock held, or a second cancel arrived during cleanup.
 
 Then check the test against every [junk pattern](#junk-patterns); a match fails
 the gate unless the [retention bar](#retention-bar) names the contract it
@@ -85,6 +88,18 @@ test fails on CI only, use a bounded loop. When a test reads a file, a model, or
 a view that an action changes, find out first which thread the action runs on.
 Wait on the state that the test reads, not on a flag set before it: a task's
 `has_result` is set before its reactive methods fill the views.
+
+Polling proves eventual completion, not overlap. To test a race, hold the
+required state with events or barriers, verify it was reached, then trigger
+the competing event. A sleep or a fixed count of event-loop turns is not
+evidence that the state was reached. Use bounded waits to fail if work stalls,
+not to arrange its order. Release gates and wait for workers and tasks in
+`finally`, even when an assertion fails.
+
+Coverage of a waiting, cancellation, or cleanup path needs a test that
+explicitly exercises it. A normal download may cover the reader's wait only
+when its writer happens to fall behind. Check platform skips too: a POSIX-only
+test cannot guarantee coverage of shared code on Windows.
 
 ## Browser tests (Playwright)
 
@@ -335,20 +350,28 @@ rewrites), each passing validation on its own.
    down: a temporary `time.sleep(0.5)` in the production code it runs, such as
    `MainView.save_state`. The test must still pass; a test that waits on time
    fails. Revert the delay before continuing.
-4. For a property test, break each part of the code it checks, one at a time.
+4. For changed concurrency tests, temporarily break the protected waiting,
+   cancellation, or locking behavior and verify that the test fails for that
+   reason. Restore the code. Repeat the affected test group several times
+   with separate coverage data: each run must pass and cover the protected
+   lines and branches. Do not combine repeats to reach the coverage threshold
+   or use retries to hide a failure. Repetition supplements explicit event
+   ordering; it does not replace it. Check the relevant supported Python
+   versions and platforms, and report any that could not be run.
+5. For a property test, break each part of the code it checks, one at a time.
    Run it a few times without saved inputs (`rm -rf .hypothesis`), and once with
    `CI=true`, and count how often it fails. Narrow its inputs, raise its
    `max_examples`, or pin the case with `@example` until it fails each time.
    Revert each break.
-5. Run `make lint`, then `git diff --check`.
-6. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
+6. Run `make lint`, then `git diff --check`.
+7. Run `make mypy`, then the full `make test` (CI runs the same checks, but run them first).
    Compare coverage against the baseline run and explain any drop.
    When browser tests, `webcore/static/page.js` or the markup they rely on changed, also
    run `make browser-test` (once: `uv run --group browser playwright install
    chromium`) and check they passed rather than skipped; `make test` excludes them.
-7. Inspect `git diff --numstat`; report production/examples separately from
+8. Inspect `git diff --numstat`; report production/examples separately from
    tests and test support.
-8. After final audit edits, run the `code-review` skill on the diff.
+9. After final audit edits, run the `code-review` skill on the diff.
 
 ## Landing and continuation
 
