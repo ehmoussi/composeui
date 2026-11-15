@@ -5792,6 +5792,7 @@ class _SlowGreetingApp(_HelloApp):
     def __init__(self) -> None:
         super().__init__()
         self.messages_seen_by_the_request: list[str] = []
+        self.timer_waiting = threading.Event()
 
     def setup_session(self, main_view: HelloMainView) -> None:
         super().setup_session(main_view)
@@ -5799,17 +5800,34 @@ class _SlowGreetingApp(_HelloApp):
 
         # connected after the greeting, so it runs once "Hello, ...!" is shown
         def slow_callback(_text: str) -> None:
-            time.sleep(0.3)  # the message's timer fires meanwhile, on its own thread
+            assert self.timer_waiting.wait(10)
             self.messages_seen_by_the_request.append(main_view.status_bar.message)
 
         main_view.form.name.text_edited.connect(slow_callback)
 
 
-def test_a_message_timer_waits_for_the_request_holding_the_session() -> None:
+def test_a_message_timer_waits_for_the_request_holding_the_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = _SlowGreetingApp()
-    with _Browser(app.create_starlette_app()) as client:
+    starlette_app = app.create_starlette_app()
+    with _Browser(starlette_app) as client:
         client.get("/")
         main_view = app.session_views[0]
+        session = _session_of(starlette_app, client)
+        lock = session.lock
+
+        class WatchedLock:
+            def __enter__(self) -> None:
+                if not lock.acquire(blocking=False):
+                    if isinstance(threading.current_thread(), threading.Timer):
+                        app.timer_waiting.set()  # the timer found the request holding the lock
+                    lock.acquire()
+
+            def __exit__(self, *_exc: object) -> None:
+                lock.release()
+
+        monkeypatch.setattr(session, "lock", WatchedLock())
 
         _type_name(client, main_view, "Bob")
 
@@ -7140,7 +7158,45 @@ async def test_a_stream_s_writer_waits_while_no_one_reads_and_stops_once_cancele
 
 
 @pytest.mark.asyncio
+async def test_a_stream_s_reader_waits_for_more_pieces_until_the_writer_finishes() -> None:
+    release = threading.Event()
+    requested = asyncio.Event()
+    first_piece = bytes(DOWNLOAD_CHUNK_SIZE)
+
+    def write(sink: BinaryIO) -> None:
+        sink.write(first_piece)
+        assert release.wait(10)
+        sink.write(b"last")
+
+    stream = Stream(StreamContent(write))
+    pieces = stream.pieces()
+
+    async def read_next() -> bytes:
+        requested.set()
+        return await pieces.__anext__()
+
+    async with stream.running():
+        try:
+            assert await asyncio.wait_for(stream.first(), 10) is None
+            assert await asyncio.wait_for(pieces.__anext__(), 10) == first_piece
+            reading = asyncio.ensure_future(read_next())
+            await asyncio.wait_for(requested.wait(), 10)
+            # read_next runs until it suspends: there is no next piece until the gate opens.
+            assert not reading.done()
+        finally:
+            release.set()
+
+        assert await asyncio.wait_for(reading, 10) == b"last"
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(pieces.__anext__(), 10)
+
+
+@pytest.mark.asyncio
 async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    cleaning_up = asyncio.Event()
+    release = threading.Event()
     finished = threading.Event()
 
     def write(sink: BinaryIO) -> None:
@@ -7148,7 +7204,8 @@ async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
             while True:
                 sink.write(bytes(DOWNLOAD_CHUNK_SIZE))
         except DownloadCanceledError:
-            time.sleep(0.2)  # the writer's cleanup, e.g. closing its source
+            loop.call_soon_threadsafe(cleaning_up.set)
+            assert release.wait(10)  # the writer's cleanup, e.g. closing its source
             finished.set()
             raise
 
@@ -7157,18 +7214,26 @@ async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
     async def answer() -> None:
         async with stream.running():
             assert await stream.first() is None
-            await asyncio.sleep(10)
+            started.set()
+            await asyncio.Event().wait()
 
     task = asyncio.ensure_future(answer())
-    await asyncio.sleep(0.05)
-    # as uvicorn cancels the answers when the server stops, then `asyncio.run` as it ends
-    task.cancel()
-    await asyncio.sleep(0.05)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    try:
+        await asyncio.wait_for(started.wait(), 10)
+        # as uvicorn cancels the answers when the server stops, then `asyncio.run` as it ends
+        task.cancel()
+        await asyncio.wait_for(cleaning_up.wait(), 10)
+        assert not task.done()
+        task.cancel()
+        await asyncio.sleep(0)  # deliver the second cancel while the writer is still held
+        assert not task.done()
+    finally:
+        release.set()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait_for(task, 10)
 
     # the answer's place and session are freed once nothing writes any more
+    assert task.cancelled()
     assert finished.is_set()
 
 

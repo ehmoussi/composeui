@@ -165,6 +165,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   sets a flag such as `has_result` before its reactive methods fill the views. A slow CI runner
   (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on
   another thread").
+- Concurrency coverage must not depend on scheduling. Explicitly arrange and verify the
+  waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental
+  execution, elapsed time, or a fixed number of event-loop turns. Required coverage must
+  remain exercised on platforms where other tests are skipped.
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.
