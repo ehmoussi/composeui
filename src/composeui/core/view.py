@@ -3907,6 +3907,23 @@ class ProgressBarView(View):
         return value if maximum is None else min(value, maximum)
 
 
+_MAX_METRIC_FORMAT_LENGTH = 64
+_MAX_METRIC_FORMAT_COMPONENT = 1000
+
+
+def _check_delta_format(_view: MetricView, _attribute: attrs.Attribute[Any], value: str) -> None:
+    # A saved study controls this format: bound it before formatting allocates its output.
+    if len(value) > _MAX_METRIC_FORMAT_LENGTH or any(
+        int(number) > _MAX_METRIC_FORMAT_COMPONENT for number in re.findall(r"\d+", value)
+    ):
+        msg = (
+            f"MetricView.delta_format must have at most {_MAX_METRIC_FORMAT_LENGTH} characters, "
+            f"with width and precision at most {_MAX_METRIC_FORMAT_COMPONENT}."
+        )
+        raise ValueError(msg)
+    format(0.0, value)
+
+
 @define_view
 class MetricView(View):
     """A figure read at a glance, e.g. the jobs running, and how much it changed.
@@ -3924,16 +3941,18 @@ class MetricView(View):
     delta: Optional[float] = attrs.field(default=None)
     #: after the change in its badge, e.g. "since yesterday"
     delta_text: str = attrs.field(default="", metadata={UI_TEXT: True})
+    #: Python number format for the change's magnitude, e.g. ".1f" or ".1%"
+    delta_format: str = attrs.field(default=".15g", validator=[_check_delta_format])
 
     @staticmethod
-    def badge(delta: float, delta_text: str) -> str:
+    def badge(delta: float, delta_text: str, delta_format: str = ".15g") -> str:
         """Get the badge's text, e.g. "↑ 2 since yesterday", a fall "↓ 2", no change "→ 0".
 
-        Takes both, as a renderer refreshes one before the view holds the new value.
+        Take the values separately, as a renderer refreshes one before the view holds it.
         """
         arrow = "↑" if delta > 0 else "↓" if delta < 0 else "→"
-        # 15 digits: 2.0 shows "2" and 0.1 + 0.2 shows "0.3", never an exponent before 1e15
-        text = f"{arrow} {abs(delta):.15g}"
+        # The default's 15 digits hide float noise and keep counts below 1e15 out of exponents.
+        text = f"{arrow} {abs(delta):{delta_format}}"
         return f"{text} {delta_text}" if delta_text != "" else text
 
 

@@ -2923,6 +2923,7 @@ class MetricViewLike(ViewLike, Protocol):
     value: str
     delta: float | None
     delta_text: str
+    delta_format: str
 
 
 class WebMetricRenderer(WebRenderer[MetricViewLike]):
@@ -2938,6 +2939,7 @@ class WebMetricRenderer(WebRenderer[MetricViewLike]):
                 "value": self._mark_dirty,
                 "delta": self._mark_dirty,
                 "delta_text": self._mark_dirty,
+                "delta_format": self._mark_dirty,
             }
         )
 
@@ -2946,7 +2948,7 @@ class WebMetricRenderer(WebRenderer[MetricViewLike]):
         badge = ""
         if delta is not None:
             color = "badge-success" if delta > 0 else "badge-error" if delta < 0 else "badge-ghost"
-            text = MetricView.badge(delta, self._view.delta_text)
+            text = MetricView.badge(delta, self._view.delta_text, self._view.delta_format)
             badge = Markup(
                 '<div class="stat-desc"><span class="badge badge-soft {}">{}</span></div>'
             ).format(color, text)

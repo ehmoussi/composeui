@@ -780,6 +780,29 @@ point: `delta` is the change, and `delta_text` says the point, for example "sinc
 yesterday". The sign of the change sets the color of the badge. To show a row of metrics,
 put them in a `HorizontalView`.
 
+Set `delta_format` to a Python number format, such as `".1f"` for one decimal place:
+
+```python
+from composeui.core.view import MetricView
+
+metric = MetricView(
+    label="Completed tasks",
+    value="42",
+    delta=1 / 3,
+    delta_text="since yesterday",
+    delta_format=".1f",
+)
+```
+
+The badge shows `↑ 0.3 since yesterday`. Use `",.2f"` for thousands separators and two
+decimal places, or `".1%"` to show `0.125` as `12.5%`. The default, `".15g"`, keeps up to
+15 significant digits. The format applies to the change's magnitude; its original sign
+still sets the arrow and color, even if rounding shows zero. The app supplies `value`
+and `delta`; the view does not calculate the change. Set `delta=None` to hide the badge.
+An invalid format raises `ValueError` when the view is created or the format is assigned.
+The format can have at most 64 characters, with width and precision at most 1,000.
+These limits prevent excessive memory use when a study restores the format.
+
 Qt and Textual show the value in bold, and the web as a daisyUI stat.
 
 ## Log message

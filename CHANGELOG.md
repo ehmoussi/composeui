@@ -8,6 +8,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- `MetricView.delta_format` sets the number format of its change badge on Qt, Textual and
+  the web, for example `".1f"` for one decimal place. Its default keeps the existing format.
+  Formats are limited to 64 characters, with width and precision at most 1,000, to prevent
+  excessive memory use when opening a study.
 - Autosave on Qt and Textual: a main view with `autosave = True` saves the unsaved work to a
   folder of the app's own in the user's data directory, every `autosave_interval` seconds (60
   by default), in a thread, and logs it. After a crash, the next start asks whether to restore

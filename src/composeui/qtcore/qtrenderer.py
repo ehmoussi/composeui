@@ -1895,6 +1895,7 @@ class MetricViewLike(ViewLike, Protocol):
     value: str
     delta: float | None
     delta_text: str
+    delta_format: str
 
 
 class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
@@ -1906,6 +1907,7 @@ class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
                 "value": self._refresh_value,
                 "delta": self._refresh_delta,
                 "delta_text": self._refresh_delta_text,
+                "delta_format": self._refresh_delta_format,
             }
         )
 
@@ -1924,19 +1926,25 @@ class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
 
     @staticmethod
     def _refresh_delta(view: MetricViewLike, rendered_object: QMetric, value: float | None) -> None:
-        QtMetricRenderer._show_badge(rendered_object, value, view.delta_text)
+        QtMetricRenderer._show_badge(rendered_object, value, view.delta_text, view.delta_format)
 
     @staticmethod
     def _refresh_delta_text(view: MetricViewLike, rendered_object: QMetric, value: str) -> None:
-        QtMetricRenderer._show_badge(rendered_object, view.delta, value)
+        QtMetricRenderer._show_badge(rendered_object, view.delta, value, view.delta_format)
 
     @staticmethod
-    def _show_badge(rendered_object: QMetric, delta: float | None, delta_text: str) -> None:
+    def _refresh_delta_format(view: MetricViewLike, rendered_object: QMetric, value: str) -> None:
+        QtMetricRenderer._show_badge(rendered_object, view.delta, view.delta_text, value)
+
+    @staticmethod
+    def _show_badge(
+        rendered_object: QMetric, delta: float | None, delta_text: str, delta_format: str
+    ) -> None:
         if delta is None:
             rendered_object.set_delta("", 0)
         else:
             sign = (delta > 0) - (delta < 0)
-            rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
+            rendered_object.set_delta(MetricView.badge(delta, delta_text, delta_format), sign)
 
 
 class TableViewLike(ViewLike, Protocol):

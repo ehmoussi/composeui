@@ -71,6 +71,7 @@ from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
 from tests.horizontal import HorizontalMainView
+from tests.metrics import JobsMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.tables import EditableTableMainView
 from tests.toolbar import ToolBarMainView
@@ -792,6 +793,67 @@ def test_a_metric_badge_points_the_way_its_figure_changed() -> None:
     # a float's own noise and a large count read as written
     assert MetricView.badge(0.1 + 0.2, "") == "↑ 0.3"
     assert MetricView.badge(1_000_000.0, "") == "↑ 1000000"
+
+
+@pytest.mark.parametrize(
+    ("delta", "spec", "expected"),
+    [
+        (1 / 3, ".1f", "↑ 0.3"),
+        (-1 / 3, ".2f", "↓ 0.33"),
+        (0, ".1f", "→ 0.0"),
+        (-0.001, ".1f", "↓ 0.0"),
+        (1234.5, ",.2f", "↑ 1,234.50"),
+        (0.125, ".1%", "↑ 12.5%"),
+    ],
+)
+def test_a_metric_formats_its_change_without_changing_its_direction(
+    delta: float, spec: str, expected: str
+) -> None:
+    assert MetricView.badge(delta, "since yesterday", spec) == f"{expected} since yesterday"
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "not a format",
+        ".2q",
+        "d",
+        "1001.1f",
+        ".1001f",
+        "\u0661\u0660\u0660\u0661.1f",  # Python accepts decimal digits outside ASCII too
+        "0" * 65 + ".1f",
+    ],
+)
+def test_a_metric_refuses_an_invalid_or_excessive_format(spec: str) -> None:
+    with pytest.raises(ValueError, match="format"):
+        MetricView(delta_format=spec)
+    view = MetricView(delta_format=".1f")
+    with pytest.raises(ValueError, match="format"):
+        view.delta_format = spec
+    assert MetricView.badge(1 / 3, "", view.delta_format) == "↑ 0.3"
+
+
+@pytest.mark.parametrize("spec", ["1001.1f", ".1001f", "0" * 65 + ".1f"])
+def test_a_study_with_an_excessive_metric_format_leaves_the_current_study_unchanged(
+    tmp_path: Path, spec: str
+) -> None:
+    view = JobsMainView()
+    view.summary.running.value = "kept"
+    before = view.state_data()
+    data = JobsMainView().file_data()
+    data["views"]["summary"]["running"].update(value="999", delta_format=spec)
+    path = tmp_path / "excessive.jobs"
+    path.write_text(json.dumps(data))
+
+    with pytest.raises(InvalidStateError, match="doesn't match this application"):
+        view.load_state(path)
+    assert view.state_data() == before
+
+
+@pytest.mark.parametrize("spec", ["1000.1f", ".1000f", "0" * 61 + ".1f"])
+def test_a_metric_accepts_formats_at_the_size_limits(spec: str) -> None:
+    view = MetricView(delta=1.25, delta_format=spec)
+    assert MetricView.badge(1.25, "", view.delta_format) == "↑ " + format(1.25, spec)
 
 
 def test_unstructure_serializes_a_string_choice_as_itself() -> None:
