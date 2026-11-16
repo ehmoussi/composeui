@@ -1211,8 +1211,8 @@ class SqliteModel(Model):
         self._turns = 0
         self._depth = 0
         self._changed: list[SqliteTable] = []
-        #: the transactions committed that changed rows, and those of them not made by a
-        #: job started with the study (`data_version`)
+        #: the transactions committed that changed rows (`_data_revision`), and those of them
+        #: not made by a job started with the study (`data_version`)
         self._writes = 0
         self._user_writes = 0
         self._database = self._new_database()
@@ -1326,6 +1326,16 @@ class SqliteModel(Model):
         query's rows to the end in the block. A query left half read keeps the rows as
         they were when it started, for the next reader too.
         """
+        database, db = self._take_reader()
+        try:
+            if db is None:
+                db = database.open_reader()
+            yield db
+        finally:
+            self._give_back_reader(database, db)
+
+    def _take_reader(self) -> tuple[_Database, sqlite3.Connection | None]:
+        """Count a reader of the database, and take an idle connection, if any."""
         with self._readers_lock:
             if self._closed:  # its file is gone
                 msg = "Cannot operate on a closed database."
@@ -1333,20 +1343,41 @@ class SqliteModel(Model):
             database = self._database
             database.readers += 1
             db = database.idle_readers.pop() if len(database.idle_readers) > 0 else None
+        return database, db
+
+    def _give_back_reader(self, database: _Database, db: sqlite3.Connection | None) -> None:
+        with self._readers_lock:
+            database.readers -= 1
+            if db is not None:
+                database.idle_readers.append(db)
+            self._close_if_unused(database)
+
+    def _pin_data(self) -> _PinnedDatabase:
+        """Pin the committed rows of now: a reader's transaction, which a copy reads later.
+
+        Another thread copies them while the model goes on writing. Counted as a reader, so
+        a database New or Open replace stays open until the copy is released.
+        """
+        database, db = self._take_reader()
         try:
             if db is None:
                 db = database.open_reader()
-            yield db
-        finally:
-            with self._readers_lock:
-                database.readers -= 1
-                if db is not None:
-                    database.idle_readers.append(db)
-                self._close_if_unused(database)
+            # a read starts the transaction's snapshot in the WAL journal, not `BEGIN`
+            db.execute("BEGIN")
+            db.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        except BaseException:  # pragma: no cover (a read of the model's own scratch file)
+            if db is not None and db.in_transaction:
+                db.rollback()
+            self._give_back_reader(database, db)
+            raise
+        return _PinnedDatabase(self, database, db)
 
     @property
     def data_version(self) -> int:
         return self._user_writes
+
+    def _data_revision(self) -> int:
+        return self._writes
 
     def new(self) -> None:
         self._replace_database(self._new_database())
@@ -1466,6 +1497,28 @@ class SqliteModel(Model):
             migrate(db)
         db.execute(f"PRAGMA user_version = {int(self.schema_version)}")
         db.commit()
+
+
+class _PinnedDatabase:
+    """A model's rows pinned by a reader's transaction (`SqliteModel._pin_data`)."""
+
+    def __init__(self, model: SqliteModel, database: _Database, db: sqlite3.Connection) -> None:
+        self._model = model
+        self._database = database
+        self._db = db
+
+    def write(self, path: Path) -> None:
+        target = sqlite3.connect(str(path))
+        try:
+            self._db.backup(target)
+            # as `SqliteModel.save_data`: a file another app opens leaves no journal beside it
+            target.execute("PRAGMA journal_mode = DELETE")
+        finally:
+            target.close()
+
+    def release(self) -> None:
+        self._db.rollback()  # the read's transaction, before another query reuses the reader
+        self._model._give_back_reader(self._database, self._db)  # noqa: SLF001 (its own model)
 
 
 class _Database:

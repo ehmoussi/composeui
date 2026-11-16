@@ -232,6 +232,12 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   lost. What the app does on its own as the study starts (setup, `loaded`, and the jobs they
   start) is not a change; a job the user starts is.
   See https://ehmoussi.github.io/composeui/user-guide/building-views.html#unsaved-changes
+- **Autosave on the desktop** with `autosave = True` on the main view: Qt and
+  Textual save the unsaved work every `autosave_interval` seconds, and offer to restore it
+  after a crash.
+  `app_id` gives its folder a fixed name; without it, the folder is named after the main
+  view's class (and a script's file).
+  See https://ehmoussi.github.io/composeui/user-guide/building-views.html#autosave
 - **Run slow work in jobs** (`main_view.jobs.start(work, *args)`), not in a callback: a
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,
   `failed`, and `progress` (`job.report_progress(value)`), which emit on the main thread.

@@ -57,6 +57,9 @@ from cattrs.strategies import configure_tagged_union
 from typing_extensions import Buffer, ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
+
+# a field's type, which attrs resolves at runtime
+from composeui.core.autosave import Autosave  # noqa: TC001
 from composeui.core.jobs import Jobs, Task, _check_main_thread
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.reactivity import (
@@ -1384,6 +1387,54 @@ class DiscardChangesDialogView(DialogView):
 
 #: what Save asks before it replaces a study file changed on disk, its ``{name}`` the file's
 _CHANGED_ON_DISK_QUESTION = T("{name} changed on disk since it was opened. Replace it?")
+#: the answers of a `RestoreWorkDialogView` not asked, or answered already: nothing goes on
+_NOT_ASKED = (_do_nothing, _do_nothing, _do_nothing)
+#: the question `RestoreWorkDialogView` asks, its ``{time}`` the work's
+_RESTORE_WORK_QUESTION = T("The app closed without saving. Restore the unsaved work of {time}?")
+
+
+@define_view
+class RestoreWorkDialogView(DialogView):
+    """A question as the app starts after a crash: restore the unsaved work it left, or discard it.
+
+    The main view's own, which its autosave asks (`MainView.autosave`). Closing the question
+    without a button, e.g. with Escape, keeps the work for the next start.
+    """
+
+    kind: DialogKind = attrs.field(default=DialogKind.CONFIRM)
+    accept_text: str = attrs.field(default=T("Restore"), metadata={UI_TEXT: True})
+    reject_text: str = attrs.field(default=T("Discard"), metadata={UI_TEXT: True})
+    #: what Restore, Discard and closing the question do, while the user hasn't answered
+    _answers: tuple[Callable[[], object], Callable[[], object], Callable[[], object]] = attrs.field(
+        default=_NOT_ASKED, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.accepted.connect(functools.partial(self._answer, 0))
+        self.rejected.connect(functools.partial(self._answer, 1))
+
+    def ask(
+        self,
+        saved: str,
+        *,
+        restore: Callable[[], object],
+        discard: Callable[[], object],
+        later: Callable[[], object],
+    ) -> None:
+        """Ask about the work saved at `saved`, a time; one of the functions goes on."""
+        self._answers = (restore, discard, later)
+        self.text = translate_again(_RESTORE_WORK_QUESTION, self._tr).format(time=saved)
+        self.open()
+
+    def dismiss(self) -> None:
+        """Close the question without a button: the work waits for the next start."""
+        self.is_visible = False
+        self._answer(2)
+
+    def _answer(self, index: int) -> None:
+        answers, self._answers = self._answers, _NOT_ASKED
+        answers[index]()
 
 
 @define_view
@@ -1715,6 +1766,15 @@ class MainView(View):
     #: status bar refuses a file that goes below it. 0 refuses only when the disk is full.
     #: A subclass sets it, e.g. for a small container: ``min_free_disk = 100 * 1024 * 1024``
     min_free_disk: ClassVar[int] = 1024 * 1024 * 1024
+    #: whether Qt and Textual save the unsaved work to a folder of the app's own, every
+    #: `autosave_interval` seconds, and open it at the next start after a crash. False by
+    #: default: a form that must start empty must not open old values
+    autosave: ClassVar[bool] = False
+    #: the seconds between two autosaves, while the study has unsaved changes
+    autosave_interval: ClassVar[float] = 60.0
+    #: a fixed name of the app's folder of autosaves, e.g. ``"pipes"``; None names it after
+    #: the main view's module and class, and a script's (``__main__``) after its file
+    app_id: ClassVar[Optional[str]] = None
     #: `app_title`, in the main view's language
     title: str = attrs.field(
         default=attrs.Factory(lambda self: self.app_title, takes_self=True),
@@ -1744,6 +1804,8 @@ class MainView(View):
     replace_file: ReplaceFileDialogView = attrs.Factory(ReplaceFileDialogView)
     #: the question before New, Open or Exit loses unsaved changes (`ask_discard_changes`)
     discard_changes: DiscardChangesDialogView = attrs.Factory(DiscardChangesDialogView)
+    #: the question as the app starts after a crash, about the work its autosave kept
+    restore_work: RestoreWorkDialogView = attrs.Factory(RestoreWorkDialogView)
     #: the study as last saved, opened or started (`_mark_saved`): its views' digest and the
     #: model's `Model.data_version`. None until then: nothing known to lose
     _saved_study: Optional[tuple[str, int]] = attrs.field(
@@ -1756,6 +1818,10 @@ class MainView(View):
     #: the study file last opened or saved, and its modification time then (``st_mtime_ns``):
     #: Save asks before it writes over a file changed on disk since. None: not known
     _study_file: Optional[tuple[str, int]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: the app's autosave, which `_mark_saved` tells; None without one
+    _autosave: Optional[Autosave] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
     #: functions run in threads, their results given back on the main thread
@@ -1999,17 +2065,20 @@ class MainView(View):
         gave its result (`starting_study`).
         """
         self._saved_study = self._study_mark()
+        if self._autosave is not None:
+            self._autosave.forget()  # older than the study saved, opened or started
 
     def _mark_unsaved(self) -> None:
         """Take the study as changed, whatever it holds: e.g. a reload restoring it unsaved."""
         self._saved_study = _UNSAVED_STUDY
 
-    def _study_mark(self) -> tuple[str, int]:
-        views = self.state_data()
+    def _study_mark(self, state: Any = None) -> tuple[str, int]:
+        """Get the study's mark, of the views' `state` (`state_data`) if given, else now's."""
+        views = dict(self.state_data() if state is None else state)
         # the name of the user's file, which the web's Save keeps apart from what it writes,
         # and a passing message, e.g. why Open failed
         views.pop("state_filepath", None)
-        views["status_bar"].pop("message", None)
+        views["status_bar"] = {k: v for k, v in views["status_bar"].items() if k != "message"}
         digest = hashlib.blake2b(json.dumps(views).encode(), digest_size=16).hexdigest()
         model = None if self._model_reference is None else self._model_reference()
         return digest, 0 if model is None else model.data_version

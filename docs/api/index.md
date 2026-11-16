@@ -20,6 +20,7 @@ jobs
 shared
 reactivity
 reload
+autosave
 translation
 translationcheck
 renderer

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from composeui.core.autosave import Autosave
     from composeui.core.model import Model
     from composeui.core.view import MainView, View
 
@@ -73,9 +74,22 @@ def _exec(run: _Run) -> int:
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # kill the program when Ctr+c
     if not is_reloaded():
         run.render(RendererType.QT)
+        autosave = run.main_view._autosave  # noqa: SLF001 (the app's start took it)
+        timer = None if autosave is None else _autosave_timer(autosave, run.main_view)
+        if autosave is not None:
+            # once the window shows: a question opened before it stays hidden
+            autosave.ask_restore()
+        is_clean = False
         try:
-            return app.exec()
+            code = app.exec()
+            is_clean = code == 0
+            return code
         finally:
+            if timer is not None:
+                timer.stop()
+            if autosave is not None:
+                # first: a snapshot being written reads the model's data
+                autosave.close(clean=is_clean)
             if run.model is not None:
                 run.model.close()
     reloads = _Reloads(run)
@@ -83,6 +97,14 @@ def _exec(run: _Run) -> int:
         return app.exec()
     finally:
         reloads.close()
+
+
+def _autosave_timer(autosave: Autosave, main_view: MainView) -> QTimer:
+    """Start the timer of the autosave's ticks."""
+    timer = QTimer()
+    timer.timeout.connect(autosave.tick)
+    timer.start(round(type(main_view).autosave_interval * 1000))
+    return timer
 
 
 class _Reloads:
@@ -189,6 +211,7 @@ class QtApplication(Application[MainViewT]):
     """The Qt app: it shows the main view in a window."""
 
     backend = RendererType.QT
+    can_autosave = True
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         super().__init__(build_main_view=build_main_view)
@@ -206,6 +229,7 @@ class QtModelApplication(ModelApplication[MainViewT, ModelT]):
     """The Qt app with a model, which it closes once the window is closed."""
 
     backend = RendererType.QT
+    can_autosave = True
 
     def __init__(
         self,

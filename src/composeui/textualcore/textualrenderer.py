@@ -4,6 +4,7 @@ import contextlib
 import dataclasses
 import functools
 import logging
+import threading
 import weakref
 from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
@@ -3582,7 +3583,29 @@ class _ComposeUIApp(App[None]):
         self.registered_actions: dict[str, ActionView] = {}
         #: called once the app is mounted, e.g. to start a timer, which needs it running
         self.mounted_callbacks: list[Callable[[], None]] = []
+        #: the file actions running on worker threads, which may be replacing the study
+        self._file_workers = 0
+        self._file_workers_lock = threading.Lock()
         super().__init__()
+
+    def tick_autosave(self) -> None:
+        """Tick the main view's autosave, unless a file action's worker runs.
+
+        The worker may be replacing the study, e.g. Open loading one: the views would be read
+        half replaced.
+        """
+        autosave = self._view._autosave  # noqa: SLF001 (the app's start took it)
+        with self._file_workers_lock:
+            runs_file_action = self._file_workers > 0
+        if autosave is not None and not runs_file_action:
+            autosave.tick()
+
+    def _run_file_action(self, action_view: ActionView) -> None:
+        try:
+            action_view.triggered.emit()
+        finally:
+            with self._file_workers_lock:
+                self._file_workers -= 1
 
     def compose(self) -> ComposeResult:
         yield self._root
@@ -3592,6 +3615,10 @@ class _ComposeUIApp(App[None]):
         self.title = self._view.title
         _refresh_tree(self._view)
         _register_actions(self, self._view)
+        autosave = self._view._autosave  # noqa: SLF001 (the app's start took it)
+        if autosave is not None:
+            self.set_interval(type(self._view).autosave_interval, self.tick_autosave)
+            autosave.ask_restore()  # once mounted: its question is a screen
         for callback in self.mounted_callbacks:
             callback()
 
@@ -3616,7 +3643,9 @@ class _ComposeUIApp(App[None]):
             # runs on a worker thread instead (`TextualMainRenderer.open_file`/
             # `save_file` bridge back via `call_from_thread`). Everything else
             # dispatches directly, matching Qt's immediate, synchronous `emit()`.
-            self.run_worker(action_view.triggered.emit, thread=True)
+            with self._file_workers_lock:
+                self._file_workers += 1
+            self.run_worker(functools.partial(self._run_file_action, action_view), thread=True)
         else:
             action_view.triggered.emit()
 

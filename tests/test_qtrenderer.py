@@ -3036,6 +3036,32 @@ def _shown_buttons(box: QMessageBox) -> dict[str, QAbstractButton]:
     return {button.text(): button for button in box.buttons() if button.isVisibleTo(box)}
 
 
+def test_escape_closes_the_restore_question_and_keeps_the_work_for_later(qtbot: QtBot) -> None:
+    view = DialogsMainView()  # every main view has the question
+    answers: list[str] = []
+    view.restore_work.ask(
+        "2026-11-16 10:00",
+        restore=lambda: answers.append("restore"),
+        discard=lambda: answers.append("discard"),
+        later=lambda: answers.append("later"),
+    )
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    box = _qt_widget(view.restore_work)
+    assert isinstance(box, QMessageBox)
+    assert list(_shown_buttons(box)) == ["Restore", "Discard"]
+
+    qtbot.keyClick(box, Qt.Key.Key_Escape)
+    # macOS clicks the Escape button with an animation, later
+    qtbot.waitUntil(lambda: not box.isVisible())
+
+    assert answers == ["later"]  # not Discard: the work isn't lost
+
+
 def test_a_dialog_opened_before_the_window_is_built_shows_over_it(qtbot: QtBot) -> None:
     view = DialogsMainView()
     view.confirm_clear.open()  # e.g. a question as the app starts

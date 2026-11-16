@@ -2903,6 +2903,9 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         super().__init__(view)
         self._accept_button: QPushButton | None = None
         self._reject_button: QPushButton | None = None
+        #: a hidden button Escape clicks in a confirmation: it dismisses the dialog, which
+        #: needn't be its rejection (`DialogView.dismiss`)
+        self._escape_button: QPushButton | None = None
         #: the button that closed the box; None when it was closed from its window
         self._clicked: QAbstractButton | None = None
         self._refresh_dispatcher.update(
@@ -2924,6 +2927,8 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
             release_when_hidden(box)
             self._accept_button = box.addButton("", QMessageBox.ButtonRole.AcceptRole)
             self._reject_button = box.addButton("", QMessageBox.ButtonRole.RejectRole)
+            self._escape_button = box.addButton("", QMessageBox.ButtonRole.RejectRole)
+            self._escape_button.hide()
             connect_slot(box.buttonClicked, box, self._set_clicked)
             connect_slot(box.finished, box, self._answer)
             self._rendered_object = box
@@ -2933,7 +2938,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         self._clicked = button
 
     def _answer(self, _result: int) -> None:
-        if self._clicked is None:
+        if self._clicked is None or self._clicked is self._escape_button:
             self._view.dismiss()
         elif self._clicked is self._accept_button:
             self._view.accept()
@@ -2961,10 +2966,11 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
     ) -> None:
         assert self._accept_button is not None
         assert self._reject_button is not None
+        assert self._escape_button is not None
         is_confirm = value is DialogKind.CONFIRM
         self._reject_button.setVisible(is_confirm)
         # Escape clicks it: the hidden reject button would otherwise answer a message
-        rendered_object.setEscapeButton(self._reject_button if is_confirm else self._accept_button)
+        rendered_object.setEscapeButton(self._escape_button if is_confirm else self._accept_button)
 
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: QMessageBox, value: str
