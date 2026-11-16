@@ -5100,7 +5100,7 @@ def test_exit_closes_the_window(qtbot: QtBot) -> None:
 def test_closing_the_window_asks_before_it_discards_unsaved_changes(qtbot: QtBot) -> None:
     view, window, _box = _dialog_window(qtbot)
     qtbot.waitExposed(window)
-    view.mark_saved()
+    view._mark_saved()  # noqa: SLF001 (as the app's start does)
     view.minimum_width = 800  # a field the study keeps
 
     window.close()  # as its title bar's button does

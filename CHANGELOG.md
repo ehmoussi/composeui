@@ -12,11 +12,11 @@ The notable changes of each release of ComposeUI. The format follows
   on Qt when the window closes too, on Textual on Ctrl+Q, and on the web after Open uploads the
   file. Every app with a File menu asks, with no change to its code. A change is what Save
   would write differently, the model's data included.
-  `MainView.has_unsaved_changes()` tells whether the study has changes,
-  `ask_discard_changes(proceed)` asks before an app's own action replaces the study, and
-  `mark_saved()` takes the study as saved. `Model.data_version` tells a model's changes;
-  `SqliteModel` counts its committed writes. A reload and an idle web session keep the changes
-  unsaved.
+  `MainView.has_unsaved_changes()` tells whether the study has changes, and
+  `ask_discard_changes(proceed)` asks before an app's own action replaces the study. What the app
+  does on its own as the study starts, the jobs it starts then included, is not a change.
+  `Model.data_version` tells a model's changes; `SqliteModel` counts its committed writes, but
+  not those of these jobs. A reload and an idle web session keep the changes unsaved.
 - `@shared_data`, in `composeui.core.shared`, loads data once per process for every session, such
   as a dashboard's CSV file. The jobs that ask meanwhile wait for the one load and get its
   progress. Each session gets a copy that its changes can't spread from: a clone of a Polars

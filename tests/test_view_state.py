@@ -1271,7 +1271,7 @@ def test_unsaved_changes_are_what_save_would_write_differently() -> None:
     view.status_bar.timeout = 0  # no timer left to clear its message
     view.note.text = "edited"
     assert not view.has_unsaved_changes()  # never started, opened or saved: nothing to lose
-    view.mark_saved()
+    view._mark_saved()  # noqa: SLF001 (as the app's start does)
 
     # not the user's data: the File menu's text, a dialog, a message, the name of their file
     view.file_menu.new.text = "Fresh"
@@ -1303,7 +1303,7 @@ def test_new_and_open_ask_before_they_discard_unsaved_changes(action: str, tmp_p
     view.loaded.connect(load)
     trigger = getattr(view.file_menu, {"new": "new", "open": "open_file"}[action]).triggered
     expected = {"new": "initial note", "open": "from the file"}[action]
-    view.mark_saved()
+    view._mark_saved()  # noqa: SLF001 (as the app's start does)
 
     view.note.text = "edited"
     trigger.emit()
@@ -1334,7 +1334,7 @@ class _ViewerMainView(MainView):
 
 def test_an_app_without_a_file_menu_never_asks_to_discard_changes() -> None:
     view = _ViewerMainView()
-    view.mark_saved()
+    view._mark_saved()  # noqa: SLF001 (as the app's start does)
     view.note.text = "edited"
     proceeded: list[bool] = []
 

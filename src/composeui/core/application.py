@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TextIO, TypeVar, 
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType, has_renderer
 from composeui.core.signal import _STREAM_HANDLER as SIGNAL_STREAM_HANDLER
@@ -288,8 +289,10 @@ class Application(Generic[MainViewT]):
             "--language", metavar="LANGUAGE", help="Show the app in LANGUAGE, e.g. fr."
         )
         self._add_reference_to_signals()
-        self._set_up()
-        self._start_reactions()
+        # what the app does on its own as it starts isn't the user's change
+        with starting_study(self._main_view.jobs):
+            self._set_up()
+            self._start_reactions()
 
     def _set_up(self) -> None:
         """Wire the main view once it's built: nothing here, `setup_model` with a model."""
@@ -341,13 +344,14 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
         if self._args.language is not None:
             self.main_view.set_language(self._args.language)
-        if self._args.f is not None:
-            open_study(self.main_view, self._study_model(), self._args.f)  # emits `loaded`
-        else:
-            self.main_view.loaded.emit()  # the study the app starts with is in place too
-        self.main_view.apply_arguments(self._args)
+        with starting_study(self.main_view.jobs):
+            if self._args.f is not None:
+                open_study(self.main_view, self._study_model(), self._args.f)  # emits `loaded`
+            else:
+                self.main_view.loaded.emit()  # the study the app starts with is in place too
+            self.main_view.apply_arguments(self._args)
         # what the user starts from: changes from now on are theirs
-        self.main_view.mark_saved()
+        self.main_view._mark_saved()  # noqa: SLF001
 
     def _start_reactions(self) -> None:
         """Run the main view's reactive methods once it's wired (`setup_model`)."""

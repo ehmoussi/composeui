@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import queue
@@ -18,7 +19,7 @@ from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import T
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from composeui.core.model import Model
     from composeui.core.renderer import Renderer, RendererContainer
@@ -101,6 +102,8 @@ class Job(Generic[R, ProgressT]):
         self._dropped = False
         # set before `_canceled` when a newer run replaces it (`Task.start_latest`)
         self._superseded = False
+        # started with the study (`starting_study`): what it gives isn't the user's change
+        self._is_the_study_s = False
 
     @property
     def is_dropped(self) -> bool:
@@ -362,6 +365,24 @@ class Task(Generic[R, P, ProgressT]):
         self.failed.emit(error)
 
 
+@contextlib.contextmanager
+def starting_study(jobs: Jobs) -> Iterator[None]:
+    """Tag the jobs this thread starts in the block as the study's start's.
+
+    The app's start, New, Open and a restore start the study. What their jobs give is what
+    the next start gives again, not the user's change (`MainView.has_unsaved_changes`).
+    """
+    blocks = jobs._starting_study  # noqa: SLF001 (the jobs' own bookkeeping)
+    thread = threading.get_ident()
+    blocks[thread] = blocks.get(thread, 0) + 1
+    try:
+        yield
+    finally:
+        blocks[thread] -= 1
+        if blocks[thread] == 0:
+            del blocks[thread]
+
+
 def _debounced(
     work: Callable[Concatenate[Job[R, ProgressT], P], R],
     delay: float,
@@ -429,6 +450,9 @@ class Jobs:
         # until then, so none waits forever or overtakes one queued before it
         self._handed_over = False
         self._results_lock = threading.Lock()
+        #: the blocks starting a study (`starting_study`), by thread: Textual's Open runs on a
+        #: worker, while the main thread starts jobs of its own
+        self._starting_study: dict[int, int] = {}
 
     @property
     def is_running(self) -> bool:
@@ -510,6 +534,7 @@ class Jobs:
 
     def _new_job(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Job[R, ProgressT]:
         job: Job[R, ProgressT] = Job(self._hand_over)
+        job._is_the_study_s = threading.get_ident() in self._starting_study  # noqa: SLF001
         name = getattr(work, "__name__", "job")
         self._bind_signal(job.finished, f"{name}.finished")
         self._bind_signal(job.failed, f"{name}.failed")
@@ -693,16 +718,34 @@ class Jobs:
     def _call(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
         """Call a job's `callback`, on the main thread; unless the job was dropped."""
         if job in self._running:
-            callback()
+            self._deliver(job, callback)
 
     def _end(self, job: Job[Any, Any], signal: Signal[Any], outcome: object) -> None:
         """Emit the outcome of a job, on the main thread; unless it was dropped."""
         if job not in self._running:
             return
         self._running.discard(job)
-        signal.emit(outcome)
+        self._deliver(job, functools.partial(signal.emit, outcome))
         if not self.is_running:
             self.running_changed.emit(False)  # noqa: FBT003
+
+    def _deliver(self, job: Job[Any, Any], deliver: Callable[[], None]) -> None:
+        """Call `deliver`, what `job` gives the main thread.
+
+        A job started with the study gives what the next start gives again, not the user's
+        change: a study without unsaved changes before is taken as saved after. The jobs its
+        callbacks start are the study's too.
+        """
+        if not job._is_the_study_s:  # noqa: SLF001 (the jobs' own bookkeeping)
+            deliver()
+            return
+        main_view = self._main_view()
+        is_saved = main_view is not None and main_view._is_saved()  # noqa: SLF001
+        with starting_study(self):
+            deliver()
+        if is_saved:
+            assert main_view is not None  # saved
+            main_view._mark_saved()  # noqa: SLF001
 
     def _abort(self, job: Job[Any, Any]) -> None:
         """Clear a programming error's runtime state without emitting a business failure."""

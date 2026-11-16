@@ -40,6 +40,7 @@ from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
 from composeui.core.application import Application, _add_reference_to_signals
+from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
@@ -535,21 +536,24 @@ class WebApplication(Application[MainViewT]):
             main_view.is_visible = True
             for connection in self._connections:
                 self._replay(connection, main_view)
-            self.setup_session(main_view)
-            if model is not None:
-                self._setup_model(main_view, model)
-            if self._args is not None and self._args.language is not None:
-                main_view.set_language(self._args.language)
-            start_reactions(main_view)
-            # after the wiring, like Qt/Textual apps loading `-f` once everything is connected
-            if self._args is not None and self._args.f is not None:
-                open_study(main_view, model, self._args.f)  # emits `loaded`
-            else:
-                main_view.loaded.emit()  # the study the session starts with is in place too
-            if self._args is not None:
-                main_view.apply_arguments(self._args)
+            # what the session does on its own as it starts isn't the user's change
+            with starting_study(main_view.jobs):
+                self.setup_session(main_view)
+                if model is not None:
+                    self._setup_model(main_view, model)
+                if self._args is not None and self._args.language is not None:
+                    main_view.set_language(self._args.language)
+                start_reactions(main_view)
+                # after the wiring, like Qt/Textual apps loading `-f` once everything is
+                # connected
+                if self._args is not None and self._args.f is not None:
+                    open_study(main_view, model, self._args.f)  # emits `loaded`
+                else:
+                    main_view.loaded.emit()  # the study the session starts with is in place
+                if self._args is not None:
+                    main_view.apply_arguments(self._args)
             # what the user starts from: changes from now on are theirs
-            main_view.mark_saved()
+            main_view._mark_saved()  # noqa: SLF001
         except BaseException:
             if model is not None:  # no session owns it yet
                 model.close()
