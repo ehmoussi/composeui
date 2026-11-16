@@ -177,6 +177,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On Qt, a dialog that the app opens before its window is built, e.g. from a callback of
+  `loaded` at the start, shows over the window. It stayed hidden.
 - On the web, updates to console text and lists no longer raise a JavaScript error while a
   control has focus.
 - On Textual, a slider and a range slider no longer report a drag's value twice on a slow

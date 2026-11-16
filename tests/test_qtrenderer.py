@@ -2206,6 +2206,28 @@ def test_tables_changed_before_their_page_is_built_show_their_order_and_selectio
     assert readings.index(0, 0).data() == "0"  # the job running as the page was built
 
 
+def test_the_dialogs_of_pages_and_tabs_opened_before_the_window_show_over_it(
+    qtbot: QtBot,
+) -> None:
+    view = LatePagesMainView()
+    page = view.router.dialogs
+    page.confirm.open()  # e.g. a question as the app starts
+    page.tabs.tools.tool.open()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+
+    for dialog in (page.confirm, page.tabs.tools.tool):
+        box = _widget(dialog)
+        assert isinstance(box, QMessageBox)
+        assert box.isVisible()
+        parent = box.parentWidget()
+        assert parent is not None
+        assert parent.window() is window
+
+
 def test_the_dialogs_of_pages_and_tabs_not_built_open_over_the_window(qtbot: QtBot) -> None:
     view, window = _late_pages_window(qtbot)
     page = view.router.dialogs
@@ -3012,6 +3034,24 @@ def _dialog_window(qtbot: QtBot) -> tuple[DialogsMainView, QMainWindow, QMessage
 
 def _shown_buttons(box: QMessageBox) -> dict[str, QAbstractButton]:
     return {button.text(): button for button in box.buttons() if button.isVisibleTo(box)}
+
+
+def test_a_dialog_opened_before_the_window_is_built_shows_over_it(qtbot: QtBot) -> None:
+    view = DialogsMainView()
+    view.confirm_clear.open()  # e.g. a question as the app starts
+    view.render(RendererType.QT)
+    assert isinstance(view.renderer, QtWidgetRenderer)
+    window = view.renderer.qt_object
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.show()
+    box = _qt_widget(view.confirm_clear)
+    assert isinstance(box, QMessageBox)
+
+    assert box.isVisible()
+    assert box.parentWidget() is window.centralWidget()
+    _shown_buttons(box)["Clear"].click()
+    assert not view.confirm_clear.is_visible
 
 
 def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
