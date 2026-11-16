@@ -2834,7 +2834,14 @@ def _adopt_dialogs(view: View, parent: QWidget) -> None:
         widget = _widget_of(dialog)
         assert widget is not None  # Qt renders every dialog of the core
         if widget.parentWidget() is None:
-            widget.setParent(parent, widget.windowFlags())
+            _set_dialog_parent(dialog, widget, parent)
+
+
+def _set_dialog_parent(dialog: View, widget: QWidget, parent: QWidget | None) -> None:
+    """Make `parent` the parent of a dialog's window, which then opens over `parent`'s."""
+    widget.setParent(parent, widget.windowFlags())
+    # `setParent` hides it: a dialog opened before the window was built shows now
+    widget.setVisible(dialog.is_visible)
 
 
 def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
@@ -2846,7 +2853,7 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         # a window of its own, over the column's window; a page's built late already has
         # its router's, maybe while open, which another parent would hide
         if widget.parentWidget() is None:
-            widget.setParent(layout.parentWidget(), widget.windowFlags())
+            _set_dialog_parent(view, widget, layout.parentWidget())
     elif isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
         # a plain form insets its rows with its own layout's margins, and a page its views;
         # a page holding a view that scrolls within itself takes the spare height, for it
