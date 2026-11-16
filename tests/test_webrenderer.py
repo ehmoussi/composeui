@@ -7835,6 +7835,15 @@ def test_a_metric_is_a_stat_with_its_change_as_a_badge_colored_by_sign(
     assert "badge-success" not in badge
     assert "badge-error" not in badge
 
+    with collect_dirty() as dirty:
+        running.delta_format = ".1f"
+        stat = _swapped(render_dirty(dirty), running_id)
+    assert "↓ 2.0 since yesterday" in stat.text
+    running.delta = -1 / 3
+    running.delta_text = ""
+    stat = _element(client.get(f"/widget/{running_id}").text, running_id)
+    assert "↓ 0.3" in stat.text
+
 
 def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(
     pages_views: list[PagesMainView], pages_client: TestClient

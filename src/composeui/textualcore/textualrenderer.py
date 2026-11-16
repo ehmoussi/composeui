@@ -2141,6 +2141,7 @@ class MetricViewLike(ViewLike, Protocol):
     value: str
     delta: float | None
     delta_text: str
+    delta_format: str
 
 
 class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]):
@@ -2152,6 +2153,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
                 "value": self._refresh_value,
                 "delta": self._refresh_delta,
                 "delta_text": self._refresh_delta_text,
+                "delta_format": self._refresh_delta_format,
             }
         )
 
@@ -2171,21 +2173,31 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
     def _refresh_delta(
         view: MetricViewLike, rendered_object: ComposeMetric, value: float | None
     ) -> None:
-        TextualMetricRenderer._show_badge(rendered_object, value, view.delta_text)
+        TextualMetricRenderer._show_badge(
+            rendered_object, value, view.delta_text, view.delta_format
+        )
 
     @staticmethod
     def _refresh_delta_text(
         view: MetricViewLike, rendered_object: ComposeMetric, value: str
     ) -> None:
-        TextualMetricRenderer._show_badge(rendered_object, view.delta, value)
+        TextualMetricRenderer._show_badge(rendered_object, view.delta, value, view.delta_format)
 
     @staticmethod
-    def _show_badge(rendered_object: ComposeMetric, delta: float | None, delta_text: str) -> None:
+    def _refresh_delta_format(
+        view: MetricViewLike, rendered_object: ComposeMetric, value: str
+    ) -> None:
+        TextualMetricRenderer._show_badge(rendered_object, view.delta, view.delta_text, value)
+
+    @staticmethod
+    def _show_badge(
+        rendered_object: ComposeMetric, delta: float | None, delta_text: str, delta_format: str
+    ) -> None:
         if delta is None:
             rendered_object.set_delta("", 0)
         else:
             sign = (delta > 0) - (delta < 0)
-            rendered_object.set_delta(MetricView.badge(delta, delta_text), sign)
+            rendered_object.set_delta(MetricView.badge(delta, delta_text, delta_format), sign)
 
 
 class SourceTableViewLike(ViewLike, Protocol):

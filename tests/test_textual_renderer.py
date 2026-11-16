@@ -2283,6 +2283,7 @@ async def test_a_vertical_splitter_shares_its_rows_and_moves_its_border_up_and_d
 @pytest.mark.asyncio
 async def test_a_metric_shows_its_change_as_a_badge_colored_by_sign() -> None:
     view = JobsMainView()
+    view.summary.running.delta_format = ".1f"
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
     app = view.renderer.app
@@ -2297,7 +2298,7 @@ async def test_a_metric_shows_its_change_as_a_badge_colored_by_sign() -> None:
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         assert str(running_metric.value.render()) == "3"
-        assert str(running_metric.badge.render()) == "↑ 2 since yesterday"
+        assert str(running_metric.badge.render()) == "↑ 2.0 since yesterday"
         assert not failed_metric.badge.display  # no change given
         # side by side in their row
         assert failed_metric.region.x > running_metric.region.x
@@ -2306,9 +2307,19 @@ async def test_a_metric_shows_its_change_as_a_badge_colored_by_sign() -> None:
         view.summary.running.delta = -2
         view.summary.failed.delta = 0
         await pilot.pause()
-        assert str(running_metric.badge.render()) == "↓ 2 since yesterday"
+        assert str(running_metric.badge.render()) == "↓ 2.0 since yesterday"
         assert running_metric.badge.styles.color != rise
         assert failed_metric.badge.display
+
+        view.summary.running.delta_format = ".2f"
+        await pilot.pause()
+        assert str(running_metric.badge.render()) == "↓ 2.00 since yesterday"
+        view.summary.running.delta_text = ""
+        view.summary.failed.delta = None
+        view.summary.failed.delta_format = ".1f"
+        await pilot.pause()
+        assert str(running_metric.badge.render()) == "↓ 2.00"
+        assert not failed_metric.badge.display
 
 
 @pytest.mark.asyncio

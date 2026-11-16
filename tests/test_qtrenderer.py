@@ -2940,6 +2940,7 @@ def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sig
     qtbot: QtBot,
 ) -> None:
     view = JobsMainView()
+    view.summary.running.delta_format = ".1f"
     view.render(RendererType.QT)
     window = _widget(view)
     qtbot.addWidget(window)
@@ -2948,7 +2949,7 @@ def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sig
     assert isinstance(failed, QMetric)
     assert (running.label.text(), running.value.text()) == ("Running", "3")
     assert running.value.font().pointSizeF() > running.label.font().pointSizeF()
-    assert running.badge.text() == "↑ 2 since yesterday"
+    assert running.badge.text() == "↑ 2.0 since yesterday"
     assert not failed.badge.isVisibleTo(window)  # no change given
 
     window.show()
@@ -2956,12 +2957,17 @@ def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sig
     view.summary.running.delta = -2
     running.badge.ensurePolished()
     fall = running.badge.palette().color(running.badge.foregroundRole())
-    assert running.badge.text() == "↓ 2 since yesterday"
+    assert running.badge.text() == "↓ 2.0 since yesterday"
     assert rise != fall
+    view.summary.running.delta_format = ".2f"
+    assert running.badge.text() == "↓ 2.00 since yesterday"
     view.summary.running.delta_text = ""
-    assert running.badge.text() == "↓ 2"
+    assert running.badge.text() == "↓ 2.00"
+    view.summary.failed.delta_format = ".1f"
+    assert not failed.badge.isVisibleTo(window)
     view.summary.failed.delta = 1
     assert failed.badge.isVisibleTo(window)
+    assert failed.badge.text() == "↑ 1.0"
 
 
 def test_the_progress_bar_follows_its_view(qtbot: QtBot) -> None:
