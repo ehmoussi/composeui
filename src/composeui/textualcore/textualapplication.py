@@ -88,13 +88,19 @@ def _exec(
     except OSError as error:  # only the default: not worth refusing to run from such a folder
         LOGGER.warning("No log file for this run, choose one with --log-file: %s", error)
         log_file = Path(os.devnull)  # a failed open would print its error on the terminal
+    autosave = None
+    is_clean = False
     try:
         # a supervisor only starts: its line would flash before the app covers it
         with logs_in_file(log_file, names_file=not is_supervisor and log_file == args.log_file):
             start()
+            autosave = main_view._autosave  # noqa: SLF001 (the app's start took it)
             if not is_supervisor:
-                _show(main_view, model, render)
+                is_clean = _show(main_view, model, render)
     finally:
+        if autosave is not None:
+            # first: a snapshot being written reads the model's data
+            autosave.close(clean=is_clean)
         if model is not None:
             model.close()
     if is_supervisor:
@@ -105,7 +111,12 @@ def _show(
     main_view: MainView,
     model: Model | None,
     render: Callable[[RendererType], None],
-) -> None:
+) -> bool:
+    """Show the main view until the app exits; tell whether it exited cleanly.
+
+    Textual catches an error of a callback, exits the app and shows it, with a return code
+    of 1: not a clean exit, the autosave's folder is kept.
+    """
     if is_reloaded():
         load_reloaded_state(main_view, model)
     render(RendererType.TEXTUAL)
@@ -125,12 +136,14 @@ def _show(
 
         app.mounted_callbacks.append(follow_changes)
     app.run()
+    return app.return_code == 0
 
 
 class TextualApplication(Application[MainViewT]):
     """The Textual app: it shows the main view in the terminal."""
 
     backend = RendererType.TEXTUAL
+    can_autosave = True
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         super().__init__(build_main_view=build_main_view)
@@ -145,6 +158,7 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
     """The Textual app with a model, which it closes once the app exits."""
 
     backend = RendererType.TEXTUAL
+    can_autosave = True
 
     def __init__(
         self,

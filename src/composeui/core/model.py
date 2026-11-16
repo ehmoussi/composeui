@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 from composeui.core.signal import Signal
 
@@ -24,6 +24,16 @@ class RefusedError(Exception):
     Its message tells the user why, as written in the code (`View.refusing` translates it),
     or translated already by a view's `tr`.
     """
+
+
+class PinnedData(Protocol):
+    """A model's data as it was at an instant, to copy from another thread (`Model._pin_data`)."""
+
+    def write(self, path: Path) -> None:
+        """Write the pinned data into the file `path`, as `Model.save_data` does."""
+
+    def release(self) -> None:
+        """Release what pins the data; called once, written or not."""
 
 
 class Model:
@@ -69,6 +79,20 @@ class Model:
 
         Raises `InvalidStateError`, leaving the data unchanged, for a file that doesn't fit.
         """
+
+    def _data_revision(self) -> int:
+        """Get a number that changes with every change of the data, the study's start's too.
+
+        An autosave copies the data again when it changed. `data_version` by default.
+        """
+        return self.data_version
+
+    def _pin_data(self) -> PinnedData | None:
+        """Pin the data as it is now, for an autosave's thread to copy; None if it can't.
+
+        The autosave then calls `save_data` on the main thread instead.
+        """
+        return None
 
     def loaded(self) -> None:
         """React once New or Open has put both the views and the data in place.

@@ -555,6 +555,61 @@ Each backend asks in its own way:
   not close the session, so nothing asks. An idle session that the server saves keeps its
   changes unsaved.
 
+### Autosave
+
+On Qt and Textual, a main view with `autosave = True` saves the unsaved work to a folder of
+the app's own. When the app ends without a clean close, such as a crash, the next start
+offers to restore that work. The app's code calls nothing:
+
+```python
+from composeui.core.view import MainView, define_view
+
+
+@define_view
+class PipeMainView(MainView):
+    extension = ".pipe"
+    autosave = True
+```
+
+- **When it saves.** Every `autosave_interval` seconds, 60 by default, while the study has
+  [unsaved changes](#unsaved-changes) that the last autosave does not hold. An idle app writes
+  nothing. The log says "Autosaved the unsaved work in" and the folder at each autosave. A
+  thread writes the views' state, and copies the data of a `SqliteModel`, so the window does
+  not wait. The data is copied only when `Model.data_version` changed. The data of a model of
+  your own is copied by its `save_data`, on the main thread: at each autosave, unless the model
+  changes its `data_version`.
+- **What it is not.** An autosave is not the user's save: the study keeps its unsaved
+  changes, and its file name. Save, New, and Open delete the autosave, and a clean close
+  deletes the folder. A clean close is Exit, or the window closed, after the user saved or
+  discarded the changes.
+- **When it opens.** At the next start after an unclean end, unless `-f FILE` names a
+  study, the app starts with a new study and asks: "The app closed without saving. Restore the
+  unsaved work of", the time, with Restore and Discard.
+  - **Restore** opens the work. The study has unsaved changes, so New, Open, and Exit ask.
+    Save writes into the study file that was open, if any, and asks first when that file
+    changed since it was opened.
+  - **Discard** deletes the work.
+  - **Closing the question,** such as with Escape, keeps the work for the next start.
+
+  Work that no longer opens, such as one of a newer version of the app, is moved aside in its
+  folder, and the status bar says why.
+- **Where it is.** In a folder of the app's own, in a `composeui` folder of the user's data
+  directory: `~/.local/share/composeui` on Linux (`$XDG_DATA_HOME`),
+  `~/Library/Application Support/composeui` on macOS, and `%LOCALAPPDATA%\composeui` on
+  Windows. The environment variable `COMPOSEUI_AUTOSAVE_DIR` names another directory. Each
+  running app has a folder of its own in it, so two windows of the same app do not write over
+  each other.
+- **The app's folder** is named after the main view's module and class. For an app that runs
+  as a script (`python app.py`, `composeui run app.py`), it is named after the class and the
+  path of the script's file: a script moved after a crash does not find its work. Set
+  `app_id = "pipes"` on the main view to give the folder a fixed name. A script without a
+  file, such as `python -c`, does not autosave unless it sets `app_id`.
+
+Autosave is off by default: a form that must start empty must not open old values. The web
+does not autosave, and neither does an app under `--reload`, which saves the study itself
+between two runs of the code. `composeui run app.py` reloads by default: run
+`composeui run --no-reload app.py`, or `python app.py`, to autosave.
+
 ### Versions of the state
 
 A study file holds the state of the views, and two versions: the version of ComposeUI's

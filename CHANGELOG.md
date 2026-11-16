@@ -8,6 +8,13 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- Autosave on Qt and Textual: a main view with `autosave = True` saves the unsaved work to a
+  folder of the app's own in the user's data directory, every `autosave_interval` seconds (60
+  by default), in a thread, and logs it. After a crash, the next start asks whether to restore
+  it, with its changes unsaved, or discard it; closing the question keeps it for the next
+  start. Save, New and Open delete it, and a clean close deletes the folder. The folder is
+  named after the main view's class, and a script's file; `app_id` gives it a fixed name.
+  `COMPOSEUI_AUTOSAVE_DIR` names another directory.
 - New, Open and Exit ask before they lose the study's unsaved changes, with Discard and Cancel:
   on Qt when the window closes too, on Textual on Ctrl+Q, and on the web after Open uploads the
   file. Every app with a File menu asks, with no change to its code. A change is what Save

@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TextIO, TypeVar, 
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core.autosave import Autosave
 from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType, has_renderer
+from composeui.core.reload import is_reloaded
 from composeui.core.signal import _STREAM_HANDLER as SIGNAL_STREAM_HANDLER
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
@@ -269,6 +271,8 @@ class Application(Generic[MainViewT]):
 
     #: the backend that shows the app, given by each backend's app (`current_backend`)
     backend: ClassVar[RendererType | None] = None
+    #: whether the backend autosaves a main view with `MainView.autosave` (Qt, Textual)
+    can_autosave: ClassVar[bool] = False
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
         take_filter_patterns()  # a mistyped setting stops the app here, not at a first filter
@@ -344,6 +348,8 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
         if self._args.language is not None:
             self.main_view.set_language(self._args.language)
+        # the file asked for wins: the work an unclean end left waits for the next start
+        autosave = self._start_autosave(restores=self._args.f is None)
         with starting_study(self.main_view.jobs):
             if self._args.f is not None:
                 open_study(self.main_view, self._study_model(), self._args.f)  # emits `loaded`
@@ -352,6 +358,24 @@ class Application(Generic[MainViewT]):
             self.main_view.apply_arguments(self._args)
         # what the user starts from: changes from now on are theirs
         self.main_view._mark_saved()  # noqa: SLF001
+        # once the start's mark is taken; the backend asks about the work left once it shows
+        # the main view (`Autosave.ask_restore`)
+        self.main_view._autosave = autosave  # noqa: SLF001
+
+    def _start_autosave(self, *, restores: bool) -> Autosave | None:
+        """Take the main view's folder of autosaves, if it autosaves on this backend.
+
+        Not under ``--reload``, which saves the study itself between two runs of the code.
+        """
+        assert self._args is not None
+        if (
+            not self.can_autosave
+            or not type(self.main_view).autosave
+            or getattr(self._args, "reload", False)
+            or is_reloaded()
+        ):
+            return None
+        return Autosave.start(self.main_view, self._study_model(), restores=restores)
 
     def _start_reactions(self) -> None:
         """Run the main view's reactive methods once it's wired (`setup_model`)."""
