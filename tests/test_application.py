@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import threading
 from typing import TYPE_CHECKING
 
 import attrs
@@ -25,12 +26,15 @@ from composeui.core.application import (
     renders,
     run,
 )
+from composeui.core.jobs import starting_study
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
+from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
 from composeui.core.study import save_study
 from composeui.core.view import (
     ButtonView,
     FileView,
+    InputView,
     LabelRowInputView,
     MainView,
     MapView,
@@ -40,6 +44,8 @@ from composeui.core.view import (
 if TYPE_CHECKING:
     import argparse
     from pathlib import Path
+
+    from composeui.core.jobs import Job
 
 
 @define_view
@@ -270,6 +276,151 @@ def test_an_app_starts_without_unsaved_changes_once_its_options_apply(
     assert not app.main_view.has_unsaved_changes()
     app.main_view.start = 4
     assert app.main_view.has_unsaved_changes()
+
+
+@define_view
+class _NoteMainView(MainView):
+    extension = ".note"
+
+    note: InputView = attrs.Factory(InputView)
+    summary: InputView = attrs.Factory(InputView)
+
+
+def _read(job: Job[str], text: str) -> str:
+    """Read `text`, as a job reading what the next start reads again, e.g. a file."""
+    del job
+    return text
+
+
+def _read_note(main_view: _NoteMainView, *, chained: bool = False) -> None:
+    """Start a job that shows the note it reads; `chained`, a second one shows a summary."""
+    job = main_view.jobs.start(_read, "from the job")
+
+    def show(text: str) -> None:
+        main_view.note.text = text
+        if chained:  # the second job, started by the first one's callback
+            summary = main_view.jobs.start(_read, "summary")
+            summary.finished.connect(lambda text: setattr(main_view.summary, "text", text))
+
+    job.finished.connect(show)
+
+
+@pytest.mark.parametrize("where", ["setup_model", "loaded", "chained", "new"])
+def test_what_the_app_s_own_jobs_give_as_the_study_starts_is_no_unsaved_change(
+    where: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sys.argv", ["note"])
+
+    def setup_model(main_view: _NoteMainView, _model: Model) -> None:
+        if where == "setup_model":
+            _read_note(main_view)
+        else:
+            main_view.loaded.connect(lambda: _read_note(main_view, chained=where == "chained"))
+
+    app = ModelApplication(
+        build_main_view=_NoteMainView, build_model=Model, setup_model=setup_model
+    )
+    app.run()
+    main_view = app.main_view
+    if where == "new":
+        main_view.jobs.wait()
+        main_view.file_menu.new.triggered.emit()  # without changes: no question
+        assert main_view.note.text == ""
+    main_view.jobs.wait()
+
+    assert main_view.note.text == "from the job"
+    assert main_view.summary.text == ("summary" if where == "chained" else "")
+    assert not main_view.has_unsaved_changes()
+
+
+class _ImportedNotes(SqliteTable):
+    create = "CREATE TABLE notes (text TEXT NOT NULL)"
+
+
+class _ImportedNotesModel(SqliteModel):
+    notes = table(_ImportedNotes)
+
+    def add(self, text: str) -> None:
+        with self.connection(changing=self.notes) as db:
+            db.execute("INSERT INTO notes VALUES (?)", (text,))
+
+
+def _import_note(job: Job[None], model: _ImportedNotesModel) -> None:
+    """Write a note into the model in the job's thread, as an import the next start makes."""
+    del job
+    model.add("imported")
+
+
+def test_what_the_app_s_start_jobs_write_into_the_model_is_no_unsaved_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["note"])
+
+    def setup_model(main_view: _NoteMainView, model: _ImportedNotesModel) -> None:
+        def start_import() -> None:
+            main_view.jobs.start(_import_note, model)
+
+        main_view.loaded.connect(start_import)
+
+    app = ModelApplication(
+        build_main_view=_NoteMainView, build_model=_ImportedNotesModel, setup_model=setup_model
+    )
+    try:
+        app.run()
+        app.main_view.jobs.wait()
+        assert not app.main_view.has_unsaved_changes()
+
+        app.model.add("the user's")
+        assert app.main_view.has_unsaved_changes()
+    finally:
+        app.model.close()
+
+
+def test_a_job_started_while_another_thread_starts_the_study_is_the_user_s(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["note"])
+    app = Application(build_main_view=_NoteMainView)
+    app.run()
+    main_view = app.main_view
+    inside, done = threading.Event(), threading.Event()
+
+    def open_on_a_worker() -> None:  # as Textual's Open does
+        with starting_study(main_view.jobs):
+            inside.set()
+            assert done.wait(10)
+
+    worker = threading.Thread(target=open_on_a_worker)
+    worker.start()
+    try:
+        assert inside.wait(10)
+        _read_note(main_view)  # on the main thread, e.g. from a timer
+    finally:
+        done.set()
+        worker.join()
+    main_view.jobs.wait()
+
+    assert main_view.has_unsaved_changes()
+
+
+@pytest.mark.parametrize("when", ["the user changed the study first", "the user started it"])
+def test_what_a_job_gives_is_a_change_unless_it_reaches_the_study_as_it_started(
+    when: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sys.argv", ["note"])
+    app = Application(build_main_view=_NoteMainView)
+    main_view = app.main_view
+    if when == "the user changed the study first":
+        main_view.loaded.connect(lambda: _read_note(main_view))
+        app.run()
+        main_view.summary.text = "the user's"  # before the job's result
+    else:
+        app.run()
+        _read_note(main_view)  # e.g. from a button's click
+    main_view.jobs.wait()
+
+    assert main_view.note.text == "from the job"
+    assert main_view.has_unsaved_changes()
 
 
 def test_an_app_s_own_options_are_in_its_help(

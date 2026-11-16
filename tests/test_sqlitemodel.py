@@ -103,7 +103,7 @@ def _save(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
 
 def test_a_committed_write_of_the_model_is_an_unsaved_change(app: App, tmp_path: Path) -> None:
     main_view = app.main_view
-    main_view.mark_saved()
+    main_view._mark_saved()  # noqa: SLF001 (as the app's start does)
 
     app.model.runs.radii()
     with contextlib.suppress(ValueError), app.model.runs.connection() as db:

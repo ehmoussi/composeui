@@ -53,7 +53,8 @@ class Model:
 
         `MainView.has_unsaved_changes` compares it with the one the study was saved with.
         A model with data of its own (`data_name`) changes it as its data changes:
-        `SqliteModel` counts its committed writes.
+        `SqliteModel` counts its committed writes, but not those of the jobs started with
+        the study (as the app starts, New, Open), which the next start makes again.
         """
         return 0
 

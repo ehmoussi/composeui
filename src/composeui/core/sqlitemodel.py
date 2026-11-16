@@ -1211,8 +1211,10 @@ class SqliteModel(Model):
         self._turns = 0
         self._depth = 0
         self._changed: list[SqliteTable] = []
-        #: the transactions committed that changed rows (`data_version`)
+        #: the transactions committed that changed rows, and those of them not made by a
+        #: job started with the study (`data_version`)
         self._writes = 0
+        self._user_writes = 0
         self._database = self._new_database()
 
     @property
@@ -1290,6 +1292,9 @@ class SqliteModel(Model):
                     changed, self._changed = self._changed, []
                     if db.total_changes != before:
                         self._writes += 1
+                        job = current_job()
+                        if job is None or not job._is_the_study_s:  # noqa: SLF001
+                            self._user_writes += 1
             except BaseException:
                 if outermost:
                     db.rollback()
@@ -1341,7 +1346,7 @@ class SqliteModel(Model):
 
     @property
     def data_version(self) -> int:
-        return self._writes
+        return self._user_writes
 
     def new(self) -> None:
         self._replace_database(self._new_database())

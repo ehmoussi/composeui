@@ -499,17 +499,19 @@ are those since the study was last saved, opened, or started. An app without a F
 
 A change is what Save would write differently: a field of the study, or the model's data. A
 change undone is no change. UI text, a dialog, the status bar's message, and the tab shown are
-not changes (see the list above). A model tells its changes with `Model.data_version`: `SqliteModel` counts its committed
-writes, and a model of your own with data changes it as its data changes.
+not changes (see the list above). A model tells its changes with `Model.data_version`:
+`SqliteModel` counts its committed writes, but not those of the jobs that the study's start
+started (see below). A model of your own with data changes it as its data changes.
+
+What the app does on its own as the study starts is not a change: its setup, the callbacks of
+`loaded`, its command-line options, and the jobs they start, such as a download of the data a
+chart shows. The next start gives the same again. A job's result is the user's change when the
+user started the job, such as with a button, or when the user changed the study before the
+result arrived.
 
 - **`has_unsaved_changes()`** tells whether the study has changes.
 - **`ask_discard_changes(proceed)`** calls `proceed()` at once when the study has no changes,
   else once the user agrees. Call it before an action of your own replaces the study.
-- **`mark_saved()`** takes the study as it is now as saved. The app's start, New, Open and Save
-  call it, after the callbacks of `loaded` and the app's command-line options. A job's result
-  that changes the views or the model's data is a change, also at the start. Call `mark_saved()`
-  when such a result is only what the next start gives again, such as a chart of data that
-  the app reads.
 
 ```python
 from pathlib import Path

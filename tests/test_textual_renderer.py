@@ -1298,7 +1298,7 @@ async def test_open_and_quit_ask_before_they_discard_unsaved_changes(tmp_path: P
 
     async with app.run_test() as pilot:
         await pilot.pause()
-        view.mark_saved()
+        view._mark_saved()  # noqa: SLF001 (as the app's start does)
         form.name.text = "edited"
         await pilot.press("ctrl+o")
         await pilot.pause()

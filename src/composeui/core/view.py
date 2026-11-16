@@ -1708,7 +1708,7 @@ class MainView(View):
     replace_file: ReplaceFileDialogView = attrs.Factory(ReplaceFileDialogView)
     #: the question before New, Open or Exit loses unsaved changes (`ask_discard_changes`)
     discard_changes: DiscardChangesDialogView = attrs.Factory(DiscardChangesDialogView)
-    #: the study as last saved, opened or started (`mark_saved`): its views' digest and the
+    #: the study as last saved, opened or started (`_mark_saved`): its views' digest and the
     #: model's `Model.data_version`. None until then: nothing known to lose
     _saved_study: Optional[tuple[str, int]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
@@ -1930,11 +1930,15 @@ class MainView(View):
         """
         return self._saved_study is not None and self._saved_study != self._study_mark()
 
-    def mark_saved(self) -> None:
+    def _is_saved(self) -> bool:
+        """Tell whether the study is as last saved, opened or started: once one was."""
+        return self._saved_study is not None and self._saved_study == self._study_mark()
+
+    def _mark_saved(self) -> None:
         """Take the study as it is now as saved: `has_unsaved_changes` is False until a change.
 
-        The app's start, New, Open and Save do it. An app does it when it changes the views
-        in a way the user didn't, e.g. once a job started with the app has shown its result.
+        The app's start, New, Open and Save do it, and a job started with the study once it
+        gave its result (`starting_study`).
         """
         self._saved_study = self._study_mark()
 

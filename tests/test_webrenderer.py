@@ -5877,6 +5877,34 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
         assert 'filename="study.hello"' in bob.get("/state").headers["content-disposition"]
 
 
+def _read_name(job: object) -> str:
+    """Read a name, as a session's start reads what the next one reads again."""
+    del job
+    return "Ada"
+
+
+def test_what_a_session_s_start_jobs_give_is_no_unsaved_change() -> None:
+    class ReadingApp(_HelloApp):
+        def setup_session(self, main_view: HelloMainView) -> None:
+            super().setup_session(main_view)
+            job = main_view.jobs.start(_read_name)
+            job.finished.connect(lambda name: setattr(main_view.form.name, "text", name))
+
+    app = ReadingApp()
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = app.session_views
+        for _ in range(200):  # the job's result, handed to the session after a request
+            client.get("/jobs")
+            if main_view.form.name.text == "Ada":
+                break
+            time.sleep(0.05)
+        client.get("/jobs")  # after the job's callbacks, which hold the session's lock
+
+        assert main_view.form.name.text == "Ada"
+        assert not main_view.has_unsaved_changes()
+
+
 @pytest.mark.parametrize(
     ("filename", "content", "reason"),
     [
@@ -5899,7 +5927,7 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     main_view: HelloMainView, client: TestClient, filename: str, content: bytes, reason: str
 ) -> None:
     _type_name(client, main_view, "Bob")
-    main_view.mark_saved()  # as Save does: opened without asking to discard Bob
+    main_view._mark_saved()  # noqa: SLF001 (as Save does: opened without asking to discard Bob)
 
     response = client.post("/state", files={"file": (filename, content)})
 

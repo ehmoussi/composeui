@@ -14,6 +14,7 @@ import zlib
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
 
+from composeui.core.jobs import starting_study
 from composeui.core.model import InvalidStateError
 
 if TYPE_CHECKING:
@@ -43,18 +44,19 @@ def has_data(model: Model | None) -> bool:
 def new_study(main_view: MainView, model: Model | None) -> None:
     """Start a new study: the model's data and the views back to their start."""
     main_view.reset_state()
-    if model is not None:
-        model.new()
-        model.loaded()
-    main_view.loaded.emit()
-    main_view.mark_saved()  # what `loaded`'s callbacks set too
+    with starting_study(main_view.jobs):
+        if model is not None:
+            model.new()
+            model.loaded()
+        main_view.loaded.emit()
+    main_view._mark_saved()  # noqa: SLF001 (what `loaded`'s callbacks set too)
 
 
 def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     """Save the views' state and the model's data into the file `path`."""
     if model is None or model.data_name is None:
         main_view.save_state(path)
-        main_view.mark_saved()
+        main_view._mark_saved()  # noqa: SLF001
         return
     # written beside `path` and renamed over it, so a failed save leaves the old study whole
     partial = path.with_name(f".{path.name}.partial")
@@ -69,7 +71,7 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     finally:
         partial.unlink(missing_ok=True)
     main_view.state_filepath = path
-    main_view.mark_saved()
+    main_view._mark_saved()  # noqa: SLF001
 
 
 def _archive(file: IO[bytes], invalid: str) -> zipfile.ZipFile:
@@ -94,10 +96,11 @@ def open_study(
     """
     if model is None or model.data_name is None:
         main_view.load_state(path)
-        if model is not None:
-            model.loaded()
-        main_view.loaded.emit()
-        main_view.mark_saved()  # what `loaded`'s callbacks set too
+        with starting_study(main_view.jobs):
+            if model is not None:
+                model.loaded()
+            main_view.loaded.emit()
+        main_view._mark_saved()  # noqa: SLF001 (what `loaded`'s callbacks set too)
         return
     invalid = f"it isn't a valid {main_view.extension} file"
     try:
@@ -140,6 +143,7 @@ def open_study(
     # checked above, so it can't fail now that the model has changed
     main_view.load_state_data(data)
     main_view.state_filepath = path
-    model.loaded()
-    main_view.loaded.emit()
-    main_view.mark_saved()
+    with starting_study(main_view.jobs):
+        model.loaded()
+        main_view.loaded.emit()
+    main_view._mark_saved()  # noqa: SLF001
