@@ -837,9 +837,10 @@ def test_a_failed_save_leaves_the_previous_study_whole(
 
     monkeypatch.setattr(SqliteModel, "save_data", full_disk)
 
-    with pytest.raises(OSError, match="No space left"):
-        _save(app, path)
+    _save(app, path)
 
+    message = app.main_view.status_bar.message
+    assert message == "Can't save to study.hello: [Errno 28] No space left on device."
     assert path.read_bytes() == saved
     assert [file.name for file in tmp_path.iterdir()] == ["study.hello"]
 

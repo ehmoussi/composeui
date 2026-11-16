@@ -205,6 +205,9 @@ class MainRenderer(Renderer[TView, TObject]):
     #: freezes (Qt, Textual): a view then runs it in a job. The web's requests have
     #: threads of their own
     draws_on_main_thread: ClassVar[bool] = True
+    #: whether Save writes the study's file where it was opened or saved, on this machine
+    #: (Qt, Textual). The web's Save is a download: the browser keeps the file
+    saves_in_place: ClassVar[bool] = True
 
     @abstractmethod
     def close(self) -> None:

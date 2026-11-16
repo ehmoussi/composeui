@@ -229,15 +229,19 @@ def save_reloaded_state(
     directory = _state_directory() if directory is None else directory
     state_filepath = main_view.state_filepath
     saved_study = main_view._saved_study  # noqa: SLF001 (kept across the scratch save)
+    study_file = main_view._study_file  # noqa: SLF001
     unsaved = main_view.has_unsaved_changes()
     save_study(main_view, model, directory / _STUDY_NAME)
     # the user's study is still the file they opened, not this scratch one, and its
     # changes are still unsaved
     main_view.state_filepath = state_filepath
     main_view._saved_study = saved_study  # noqa: SLF001
+    main_view._study_file = study_file  # noqa: SLF001
     session: dict[str, Any] = {
         "state_filepath": None if state_filepath is None else str(state_filepath),
         "unsaved": unsaved,
+        # what Save compares the user's file with: not changed by this scratch save
+        "study_file": study_file,
         "language": main_view.language,
         # where the user is, e.g. the tab shown, which a study doesn't hold
         "views": session_data(main_view),
@@ -287,6 +291,15 @@ def load_reloaded_state(
         _RELOADED_STATE.reset(token)
     state_filepath = session.get("state_filepath")
     main_view.state_filepath = Path(state_filepath) if isinstance(state_filepath, str) else None
+    study_file = session.get("study_file")
+    main_view._study_file = (  # noqa: SLF001 (the study opened is the scratch save's)
+        (study_file[0], study_file[1])
+        if isinstance(study_file, list)
+        and len(study_file) == 2  # noqa: PLR2004 (a path and a time)
+        and isinstance(study_file[0], str)
+        and isinstance(study_file[1], int)
+        else None
+    )
     if session.get("unsaved") is True:
         main_view._mark_unsaved()  # noqa: SLF001 (the study opened is the scratch save's)
     views = session.get("views")
