@@ -18,6 +18,7 @@ import pytest
 
 import composeui as composeui_package
 from composeui.core import reload as reload_module
+from composeui.core.application import _add_reference_to_signals
 from composeui.core.reload import (
     RELOADED_VARIABLE,
     acknowledge_changes,
@@ -238,6 +239,28 @@ def test_a_view_filled_by_a_build_function_keeps_the_user_s_values(tmp_path: Pat
     load_reloaded_state(reloaded, None, tmp_path)
 
     assert reloaded.kept.shapes == [CircleShape((0, 0), 9)]
+
+
+def test_save_after_a_reload_asks_before_it_replaces_a_file_changed_on_disk(
+    tmp_path: Path,
+) -> None:
+    study = tmp_path / "mine.drawn"
+    previous = _DrawnMainView()
+    _add_reference_to_signals(previous, None)
+    previous.file_view.filepath = study  # the answer a file dialog would give
+    previous.file_menu.save.triggered.emit()
+    save_reloaded_state(previous, None, tmp_path)
+    reloaded = _DrawnMainView()
+    _add_reference_to_signals(reloaded, None)
+    load_reloaded_state(reloaded, None, tmp_path)
+    stat = study.stat()
+    os.utime(study, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # another app's
+
+    reloaded.file_menu.save.triggered.emit()
+    previous.file_menu.save.triggered.emit()  # e.g. kept as the changed code failed
+
+    assert reloaded.replace_file.is_visible
+    assert previous.replace_file.is_visible
 
 
 def test_a_study_opened_after_a_reload_keeps_its_saved_values(tmp_path: Path) -> None:

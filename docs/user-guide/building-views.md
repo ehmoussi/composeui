@@ -409,10 +409,12 @@ To test a component alone, see [Test a component](testing.md#test-a-component).
 
 ## Saving and loading state
 
-Save and Open in the File menu save and open the study, in a file with the `extension` of the
-main view. `-f FILE` on the command line opens a study at the start. Without a model, the
-study holds the state of the views. A model can add its data to the study (see
-[A SQLite model](sqlite-model.md)).
+Save and Open in the File menu save and open the study, in a file with the `extension` of the main
+view. On Qt and Textual, Save writes into the file that the study was opened from or saved to, and
+asks for a file only the first time. When another app changed that file since, Save asks before it
+replaces it. Save As always asks. On the web, Save downloads the study. `-f FILE` on the command
+line opens a study at the start. Without a model, the study holds the state of the views. A model
+can add its data to the study (see [A SQLite model](sqlite-model.md)).
 
 `MainView.save_state(path)` writes the state of the whole view tree as JSON, with `cattrs`,
 and `MainView.load_state(path)` reads it back. They skip the `Signal` and `Renderer` fields.

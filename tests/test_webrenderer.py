@@ -5979,6 +5979,21 @@ def test_save_s_post_saves_the_study_and_a_link_s_download_does_not(
     assert not main_view.has_unsaved_changes()
 
 
+def test_save_downloads_a_study_opened_from_a_file_and_writes_none_on_the_server(
+    main_view: HelloMainView, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    main_view.state_filepath = Path("ada.hello")  # as an Open names the study: the user's file
+
+    response = client.post(
+        "/state/download", data={"trigger": _action_id(main_view.file_menu.save)}
+    )
+
+    assert response.status_code == 200
+    assert "ada.hello" in response.headers["content-disposition"]
+    assert list(tmp_path.iterdir()) == []
+
+
 @pytest.mark.parametrize("chunked", [False, True])
 def test_a_body_larger_than_any_upload_is_refused_before_it_is_read(
     main_view: HelloMainView, client: TestClient, chunked: bool

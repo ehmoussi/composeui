@@ -1382,6 +1382,10 @@ class DiscardChangesDialogView(DialogView):
         self._pending = _do_nothing
 
 
+#: what Save asks before it replaces a study file changed on disk, its ``{name}`` the file's
+_CHANGED_ON_DISK_QUESTION = T("{name} changed on disk since it was opened. Replace it?")
+
+
 @define_view
 class SeparatorAction(View):
     """A line between two groups of entries in a menu or a toolbar."""
@@ -1483,7 +1487,11 @@ class PickFileAction(ActionView):
 
 @define_view
 class SaveAction(ActionView):
-    """The Save action of the File menu, which saves the study to a file."""
+    """The Save action of the File menu, which saves the study into its file.
+
+    The file it was opened from or saved to; without one, it asks for it, as Save As does.
+    On the web, Save downloads the study.
+    """
 
     text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
 
@@ -1500,7 +1508,7 @@ class SaveAction(ActionView):
 
 @define_view
 class SaveAsAction(ActionView):
-    """The Save As action of the File menu, which saves the study to a file."""
+    """The Save As action of the File menu, which saves the study to a file the user picks."""
 
     text: str = attrs.field(default=T("Save As"), metadata={UI_TEXT: True})
 
@@ -1548,7 +1556,7 @@ class FileMenu(Menu):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.save.triggered.connect(self._save_state)
+        self.save.triggered.connect(self._save)
         self.save_as.triggered.connect(self._save_state)
         self.open_file.triggered.connect(self._load_state)
 
@@ -1571,12 +1579,40 @@ class FileMenu(Menu):
             message = main_view.tr("Can't open {name}: {error}.")
             main_view.status_bar.show_message(message.format(name=repr(filepath.name), error=error))
 
+    def _save(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
+        """Save the study into its file; without one, ask for it, as Save As does.
+
+        A file changed on disk since it was opened or saved, e.g. by another app or after a
+        restore, is replaced once the user agrees.
+        """
+        filepath = main_view.state_filepath
+        renderer = main_view.renderer
+        if filepath is None or (isinstance(renderer, MainRenderer) and not renderer.saves_in_place):
+            self._save_state(main_view=main_view, model=model)
+            return
+        write = functools.partial(self._save_study, main_view, model)
+        if not main_view._is_study_file_changed(filepath):  # noqa: SLF001 (the study's own)
+            write(filepath)
+            return
+        dialog = main_view.replace_file
+        dialog.title, dialog.accept_text = "", main_view.tr("Replace")
+        dialog.save(filepath, write, question=_CHANGED_ON_DISK_QUESTION)
+
     def _save_state(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
         filepath = main_view.ask_save_filepath(
             extensions={main_view.extension: (f"{main_view.extension}",)}
         )
         if filepath is not None:
+            self._save_study(main_view, model, filepath)
+
+    @staticmethod
+    def _save_study(main_view: MainView, model: Optional[Model], filepath: Path) -> None:
+        """Save the study into `filepath`; the status bar says why it can't."""
+        try:
             study.save_study(main_view, model, filepath)
+        except OSError as error:  # e.g. its folder is gone, or the disk is full
+            failed = main_view.tr("Can't save to {name}: {error}.")
+            main_view.status_bar.show_message(failed.format(name=filepath.name, error=error))
 
 
 @define_view
@@ -1717,6 +1753,11 @@ class MainView(View):
     #: study of ``-f`` or a new one, and after New and Open (after `Model.loaded`). The app
     #: gives again then what a study doesn't hold, such as the source of a large table
     loaded: SignalNoArgs = attrs.Factory(SignalNoArgs)
+    #: the study file last opened or saved, and its modification time then (``st_mtime_ns``):
+    #: Save asks before it writes over a file changed on disk since. None: not known
+    _study_file: Optional[tuple[str, int]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
     #: functions run in threads, their results given back on the main thread
     jobs: Jobs = attrs.field(
         default=attrs.Factory(Jobs, takes_self=True),
@@ -1929,6 +1970,23 @@ class MainView(View):
         status bar's message, or the study's file name.
         """
         return self._saved_study is not None and self._saved_study != self._study_mark()
+
+    def _remember_study_file(self, path: Path) -> None:
+        """Remember the study file `path`, as opened or saved now: its modification time."""
+        self._study_file = (str(path), path.stat().st_mtime_ns)
+
+    def _is_study_file_changed(self, path: Path) -> bool:
+        """Tell whether the study file `path` changed on disk since it was opened or saved.
+
+        False when it's not known, e.g. a path the app set, or when the file is gone.
+        """
+        known = self._study_file
+        if known is None or known[0] != str(path):
+            return False
+        try:
+            return path.stat().st_mtime_ns != known[1]
+        except FileNotFoundError:
+            return False
 
     def _is_saved(self) -> bool:
         """Tell whether the study is as last saved, opened or started: once one was."""

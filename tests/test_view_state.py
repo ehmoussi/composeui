@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import math
+import os
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, Optional, Union
 
@@ -1569,6 +1570,85 @@ def test_loaded_lets_the_app_give_again_what_new_and_open_leave_out(tmp_path: Pa
 
     assert other.main_view.threshold.value == 4
     assert _sensors(other.main_view) == ["b", "c"]
+
+
+def test_save_writes_the_study_s_own_file_and_save_as_asks_for_one(tmp_path: Path) -> None:
+    view = _StudyMainView()
+    _add_reference_to_signals(view, None)  # what an application does: injects `main_view`
+    first, picked = tmp_path / "first.study", tmp_path / "picked.study"
+    view.file_view.filepath = first  # the answer a file dialog would give
+    view.file_menu.save.triggered.emit()  # no file yet: it asks
+    view.note.text = "saved again"
+    view.file_view.filepath = picked
+
+    view.file_menu.save.triggered.emit()
+
+    assert not picked.exists()  # not asked: written into its own file
+    assert json.loads(first.read_text())["views"]["note"]["text"] == "saved again"
+    view.file_menu.save_as.triggered.emit()
+    assert view.state_filepath == picked
+    assert json.loads(picked.read_text())["views"]["note"]["text"] == "saved again"
+
+
+def _changed_on_disk(path: Path) -> None:
+    """Change the file `path` as another app would: its modification time moves."""
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+
+@pytest.mark.parametrize(
+    ("case", "is_asked"),
+    [
+        ("unchanged", False),
+        ("changed on disk", True),
+        ("deleted", False),  # nothing to lose: written again
+        ("named by the app", False),  # not opened nor saved: nothing known to compare
+    ],
+)
+def test_save_asks_before_it_replaces_a_file_changed_on_disk(
+    tmp_path: Path, case: str, is_asked: bool
+) -> None:
+    view = _StudyMainView()
+    _add_reference_to_signals(view, None)  # what an application does: injects `main_view`
+    path = tmp_path / "mine.study"
+    view.file_view.filepath = path  # the answer a file dialog would give
+    view.file_menu.save.triggered.emit()
+    view.note.text = "mine"
+    if case == "changed on disk":
+        _changed_on_disk(path)
+    elif case == "deleted":
+        path.unlink()
+    elif case == "named by the app":
+        _changed_on_disk(path)
+        view.state_filepath = path = tmp_path / "named.study"
+        path.write_text("{}")
+
+    view.file_menu.save.triggered.emit()
+
+    question = view.replace_file
+    assert question.is_visible is is_asked
+    note = json.loads(path.read_text())["views"]["note"]["text"]
+    assert note == ("initial note" if is_asked else "mine")
+    if is_asked:
+        assert question.text == "mine.study changed on disk since it was opened. Replace it?"
+        question.accept()  # Replace
+        assert json.loads(path.read_text())["views"]["note"]["text"] == "mine"
+
+
+def test_save_into_a_folder_gone_says_why_in_the_status_bar(tmp_path: Path) -> None:
+    view = _StudyMainView()
+    view.status_bar.timeout = 0  # no timer left to clear its message
+    _add_reference_to_signals(view, None)  # what an application does: injects `main_view`
+    folder = tmp_path / "project"
+    folder.mkdir()
+    view.file_view.filepath = folder / "mine.study"  # the answer a file dialog would give
+    view.file_menu.save.triggered.emit()
+    (folder / "mine.study").unlink()
+    folder.rmdir()  # e.g. moved away by the user
+
+    view.file_menu.save.triggered.emit()
+
+    assert view.status_bar.message.startswith("Can't save to mine.study: ")
 
 
 def test_a_none_choice_is_selected_saved_and_loaded_as_any_other(tmp_path: Path) -> None:

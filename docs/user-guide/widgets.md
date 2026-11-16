@@ -1121,7 +1121,9 @@ The user selects and copies the text on each backend. What each backend shows:
 
 ## The File menu and picking a file
 
-The File menu, a `FileMenu`, has New, Open, Save, Save As, and Exit. New, Open, and Exit ask
+The File menu, a `FileMenu`, has New, Open, Save, Save As, and Exit. Save writes into the
+study's file, Save As into a file that the user picks (see
+[Saving and loading state](building-views.md#saving-and-loading-state)). New, Open, and Exit ask
 before they lose the unsaved changes of the study (see
 [Unsaved changes](building-views.md#unsaved-changes)). An app without studies sets
 `has_file_menu = False` on its `MainView` to leave out the File menu.

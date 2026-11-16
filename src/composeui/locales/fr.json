@@ -77,6 +77,7 @@
   "{name} already exists. Replace it?": "{name} existe déjà. Le remplacer ?",
   "Discard": "Abandonner",
   "The study has unsaved changes. Discard them?": "L'étude a des modifications non enregistrées. Les abandonner ?",
+  "{name} changed on disk since it was opened. Replace it?": "{name} a changé sur le disque depuis son ouverture. Le remplacer ?",
   "This folder holds too many items to list them all: type the folder's path.": "Ce dossier contient trop d'éléments pour tous les lister : tapez le chemin du dossier.",
   "Reload": "Recharger",
   "Parent folder": "Dossier parent",

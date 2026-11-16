@@ -56,6 +56,7 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     """Save the views' state and the model's data into the file `path`."""
     if model is None or model.data_name is None:
         main_view.save_state(path)
+        main_view._remember_study_file(path)  # noqa: SLF001
         main_view._mark_saved()  # noqa: SLF001
         return
     # written beside `path` and renamed over it, so a failed save leaves the old study whole
@@ -71,6 +72,7 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
     finally:
         partial.unlink(missing_ok=True)
     main_view.state_filepath = path
+    main_view._remember_study_file(path)  # noqa: SLF001
     main_view._mark_saved()  # noqa: SLF001
 
 
@@ -96,6 +98,7 @@ def open_study(
     """
     if model is None or model.data_name is None:
         main_view.load_state(path)
+        main_view._remember_study_file(path)  # noqa: SLF001
         with starting_study(main_view.jobs):
             if model is not None:
                 model.loaded()
@@ -143,6 +146,7 @@ def open_study(
     # checked above, so it can't fail now that the model has changed
     main_view.load_state_data(data)
     main_view.state_filepath = path
+    main_view._remember_study_file(path)  # noqa: SLF001
     with starting_study(main_view.jobs):
         model.loaded()
         main_view.loaded.emit()

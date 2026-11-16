@@ -7272,6 +7272,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     """Renders the whole page; never swapped itself, so its attributes are no-ops."""
 
     draws_on_main_thread = False
+    saves_in_place = False  # `state_filepath` is the name of the user's file, not a path here
 
     def __init__(self, view: MainView) -> None:
         super().__init__(view)
