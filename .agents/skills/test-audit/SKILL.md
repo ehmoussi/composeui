@@ -48,6 +48,12 @@ by core tests with no backend. What happens only once a response reaches a real
 page is owned by Playwright in `tests/test_browser.py`; see
 [Browser tests](#browser-tests-playwright).
 
+When a view accepts values from a dependency, include a representative runtime
+type that dependency produces, not only built-in equivalents. For example, use
+a NumPy scalar for a number read from pandas. Exercise it through the real
+rendered widget, preferably by extending an existing test. Choose types with a
+credible behavioral difference; do not test every type combination.
+
 Bug regression tests must fail on the pre-fix code for the intended reason and
 pass after the owner-boundary repair. A regression test that never demonstrably
 failed proves the mock, not the fix. One regression at the owner boundary
