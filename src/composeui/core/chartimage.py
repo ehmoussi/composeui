@@ -96,6 +96,8 @@ class ImageOptions:
     #: the region shown, e.g. the one the user zoomed into; None: all the data
     x_range: tuple[float, float] | None = None
     y_range: tuple[float, float] | None = None
+    #: the second y axis' (`ChartView.y2`), if the chart shows it
+    y2_range: tuple[float, float] | None = None
 
 
 #: an image for a report's page, in its body text's font size
@@ -176,8 +178,14 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             layout="constrained",
         )
         axes = figure.add_subplot()
-        handles = _draw_series(axes, chart)
-        _draw_reference_lines(axes, chart)
+        # each y axis' own, by whether it is the second: the same without a second one
+        sides = {False: axes, True: axes}
+        if ChartView.has_y2(chart.series, chart.reference_lines):
+            sides[True] = right = axes.twinx()
+            right.set_ylabel(chart.y2.label)
+            right.grid(visible=False)  # the first axis' lines alone
+        handles = _draw_series(sides, chart)
+        _draw_reference_lines(sides, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
         axes.set_xlabel(chart.x.label)
@@ -186,24 +194,30 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             axes.set_xlim(*options.x_range)
         if options.y_range is not None:
             axes.set_ylim(*options.y_range)
-        _add_legend(figure, axes, handles)
+        if options.y2_range is not None:
+            sides[True].set_ylim(*options.y2_range)
+        _add_legend(figure, axes, handles, is_inside=sides[True] is axes)
     return figure
 
 
-def _draw_series(axes: Axes, chart: ChartView) -> list[Artist | Container]:
-    """Draw each series as its kind: matplotlib draws the lines and dots over the bars.
+def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Container]:
+    """Draw each series as its kind, on its y axis (`sides`, by whether it is the second).
 
-    Returns what the legend names, in the series' order.
+    Matplotlib draws the lines and dots over the bars of the same axis. Returns what the
+    legend names, in the series' order.
     """
     handles: list[Artist | Container] = []
     x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
-    y_log = chart.y.is_log
     if x_log:
-        axes.set_xscale("log")
-    if y_log:
-        axes.set_yscale("log")
+        sides[False].set_xscale("log")
+    if chart.y.is_log:
+        sides[False].set_yscale("log")
+    if chart.y2.is_log:
+        sides[True].set_yscale("log")
     slots = ChartView.bar_slots(chart.series, chart.categories)
     for index, series in enumerate(chart.series):
+        axes = sides[series.on_y2]
+        y_log = chart.y2.is_log if series.on_y2 else chart.y.is_log
         color = series.color or SERIES_COLORS[index % len(SERIES_COLORS)]
         if series.kind is ChartKind.BAR:
             xs, heights = ChartView.bars_of(series, chart.categories, y_log=y_log)
@@ -256,15 +270,19 @@ def _draw_series(axes: Axes, chart: ChartView) -> list[Artist | Container]:
                     step="post" if series.step else None,
                 )
     if len(chart.categories) > 0:
-        axes.set_xticks(range(len(chart.categories)), chart.categories)
-        axes.grid(visible=False, axis="x")
+        sides[False].set_xticks(range(len(chart.categories)), chart.categories)
+        sides[False].grid(visible=False, axis="x")
     return handles
 
 
-def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
+def _draw_reference_lines(sides: dict[bool, Axes], chart: ChartView) -> None:
     """Draw the chart's reference lines, labeled inside the axes, at their ends."""
     x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
-    for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y.is_log):
+    lines = ChartView.drawn_lines(
+        chart.reference_lines, x_log=x_log, y_log=chart.y.is_log, y2_log=chart.y2.is_log
+    )
+    for line in lines:
+        axes = sides[line.is_on_y2]
         color = line.color or REFERENCE_LINE_COLOR
         style = REFERENCE_LINE_STYLES[line.style]
         # not in the legend, which names the series: its label is beside it
@@ -297,11 +315,17 @@ def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
             )
 
 
-def _add_legend(figure: Figure, axes: Axes, handles: list[Artist | Container]) -> None:
-    """Name the series, in their order, beside the axes when there are more than a few."""
+def _add_legend(
+    figure: Figure, axes: Axes, handles: list[Artist | Container], *, is_inside: bool
+) -> None:
+    """Name the series, in their order, beside the axes when there are more than a few.
+
+    Not `is_inside` (two y axes): beside them too. The place matplotlib finds in `axes`
+    avoids what `axes` draws alone, not what the other y axis draws.
+    """
     if len(handles) == 0:
         return
-    if len(handles) <= _INSIDE_LEGEND_MAX:
+    if is_inside and len(handles) <= _INSIDE_LEGEND_MAX:
         axes.legend(handles=handles, frameon=False)
     else:
         figure.legend(handles=handles, loc="outside right upper", frameon=False)

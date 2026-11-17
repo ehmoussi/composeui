@@ -2381,6 +2381,7 @@ class ChartViewLike(ViewLike, Protocol):
     title: str
     x: Axis
     y: Axis
+    y2: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
@@ -2440,7 +2441,7 @@ def _chart_points(
 
 
 def _query_range(query: Mapping[str, str], axis: str) -> tuple[float, float] | None:
-    """Get an axis' range from a query's `x_min` and `x_max` (or `y_...`), if it has one."""
+    """Get an axis' range from a query's `x_min` and `x_max` (or `y_...`, `y2_...`), if any."""
     low, high = query.get(f"{axis}_min"), query.get(f"{axis}_max")
     if low is None or high is None:
         return None
@@ -2475,6 +2476,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "title",
                     "x",
                     "y",
+                    "y2",
                     "series",
                     "reference_lines",
                     "categories",
@@ -2489,12 +2491,14 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         """Get what the page's script draws, as JSON."""
         view = self._view
         x_log = ChartView.is_x_log(view.x, view.categories, view.series)
-        y_log = view.y.is_log
         slots = ChartView.bar_slots(view.series, view.categories)
+        lines = ChartView.drawn_lines(
+            view.reference_lines, x_log=x_log, y_log=view.y.is_log, y2_log=view.y2.is_log
+        )
         spec: dict[str, Any] = {
             "title": view.title,
             "x": {"label": view.x.label, "unit": view.x.unit, "log": x_log},
-            "y": {"label": view.y.label, "unit": view.y.unit, "log": y_log},
+            "y": {"label": view.y.label, "unit": view.y.unit, "log": view.y.is_log},
             "series": [
                 {
                     "name": series.name,
@@ -2519,9 +2523,18 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "color": line.color,
                     "style": line.style.name.lower(),
                 }
-                for line in ChartView.drawn_lines(view.reference_lines, x_log=x_log, y_log=y_log)
+                for line in lines
             ],
         }
+        if ChartView.has_y2(view.series, view.reference_lines):
+            # at the right: shown only with something on it, flagged `on_y2`
+            spec["y2"] = {"label": view.y2.label, "unit": view.y2.unit, "log": view.y2.is_log}
+            for series, sent in zip(view.series, spec["series"]):
+                if series.on_y2:
+                    sent["on_y2"] = True
+            for line, sent in zip(lines, spec["lines"]):
+                if line.is_on_y2:
+                    sent["on_y2"] = True
         # a bar in its group, by its middle's offset from its x, and its width
         for index, (offset, width) in slots.items():
             spec["series"][index].update({"offset": offset, "width": width})
@@ -2531,7 +2544,12 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         if len(view.categories) > 0:
             spec["categories"] = view.categories
         points = [
-            _chart_points(series, view.categories, x_log=x_log, y_log=y_log)
+            _chart_points(
+                series,
+                view.categories,
+                x_log=x_log,
+                y_log=(view.y2 if series.on_y2 else view.y).is_log,
+            )
             for series in view.series
         ]
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
@@ -2578,7 +2596,9 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         view = self._view
         assert isinstance(view, ChartView)  # the chart renderer's only view
         options = chartimage.ImageOptions(
-            x_range=_query_range(query, "x"), y_range=_query_range(query, "y")
+            x_range=_query_range(query, "x"),
+            y_range=_query_range(query, "y"),
+            y2_range=_query_range(query, "y2"),
         )
         content = chartimage.chart_image_bytes(view, image_format, options)
         return chartimage.image_name(view.title, image_format.lower()), content

@@ -69,6 +69,26 @@ class ChartPage(PageView):
             Series.bars("Online", [80, 95, 130]),
         ],
     )
+    sales: ChartView = child(
+        ChartView,
+        title="Sales",
+        x=Axis("Month"),
+        y=Axis("Units"),
+        y2=Axis("Revenue", unit="k€", scale=Scale.LOG),
+        series=[
+            Series.bars("Units", [120, 150, 90], x=[1, 2, 3]),
+            # at the right, on a log axis: the 0 of month 3 leaves a gap, as it wouldn't at
+            # the left
+            Series.line("Revenue", [1, 2, 3], [3.2, 41, 0], on_y2=True),
+        ],
+        reference_lines=[
+            ReferenceLine(100, "Minimum"),
+            # past the revenue's power of 10: the right axis' range takes it in
+            ReferenceLine(200, "Target", on_y2=True),
+            # no value of the right axis, though one of the left
+            ReferenceLine(0, "Break-even", on_y2=True),
+        ],
+    )
     ages: ChartView = child(
         ChartView,
         title="Ages",

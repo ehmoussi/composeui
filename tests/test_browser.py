@@ -2913,6 +2913,79 @@ def test_a_line_is_drawn_over_the_bars_of_the_same_categories(chart_pages_page: 
     assert y_min == 0
 
 
+#: how many of a chart's canvas pixels near a row of the right y axis' value have a CSS
+#: color, from one x to another of the x axis: [x_from, x_to, y2, color]. Opaque ones
+#: alone: a grid line is the text's color, faint
+_CHART_INK_NEAR = """(element, [xFrom, xTo, y2, color]) => {
+    const chart = ComposeUI.charts.drawn.get(element);
+    const probe = document.createElement("canvas").getContext("2d");
+    probe.fillStyle = color;
+    probe.fillRect(0, 0, 1, 1);
+    const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
+    const left = Math.floor(chart.valToPos(xFrom, "x", true)) - 2;
+    const right = Math.ceil(chart.valToPos(xTo, "x", true)) + 2;
+    const top = Math.round(chart.valToPos(y2, "y2", true)) - 2;
+    const pixels = chart.ctx.getImageData(left, top, right - left, 5).data;
+    let count = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+        const near = Math.abs(pixels[i] - r) + Math.abs(pixels[i + 1] - g)
+            + Math.abs(pixels[i + 2] - b);
+        if (near < 40 && pixels[i + 3] > 200) count++;
+    }
+    return count;
+}"""
+
+
+def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right(
+    chart_pages_page: Page,
+) -> None:
+    chart_pages_page.goto("/chart")
+    sales = chart_pages_page.locator("figure").filter(has_text="Sales")
+    expect(sales.locator("canvas")).to_have_count(1)
+    plot = sales.locator("[data-chart]")
+    scales = (
+        "element => { const scales = ComposeUI.charts.drawn.get(element).scales;"
+        " return [scales.y.distr, scales.y.min, scales.y2.distr, scales.y2.min, scales.y2.max]; }"
+    )
+
+    # the bars on the left's linear axis, from 0; the revenue on the right's log one,
+    # whose range takes the target in, past the revenue's power of 10
+    y_distr, y_min, y2_distr, y2_min, y2_max = plot.evaluate(scales)
+    assert (y_distr, y_min, y2_distr) == (1, 0, 3)
+    assert 0 < y2_min <= 3.2
+    assert y2_max >= 200
+    # drawn at the right axis' values: the revenue's 41 k€ of month 2, in its legend's
+    # color, and the target's dashes at 200 k€, in the text's, between the bars
+    revenue = sales.locator(".u-legend .u-series").filter(has_text="Revenue")
+    color = revenue.locator(".u-marker").evaluate("marker => getComputedStyle(marker).borderColor")
+    assert plot.evaluate(_CHART_INK_NEAR, [2, 2, 41, color]) > 0
+    ink = plot.evaluate("element => getComputedStyle(element).color")
+    assert plot.evaluate(_CHART_INK_NEAR, [1.45, 1.55, 200, ink]) > 0
+
+    sales.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    box = sales.locator(".u-over").bounding_box()
+    assert box is not None
+    middle = box["y"] + box["height"] / 2
+    chart_pages_page.mouse.move(box["x"] + box["width"] / 2, middle)
+    # each value in its own axis' unit
+    legend = sales.locator(".u-legend")
+    expect(legend.locator(".u-series").filter(has_text="Units").locator(".u-value")).to_have_text(
+        "150"
+    )
+    expect(legend.locator(".u-series").filter(has_text="Revenue").locator(".u-value")).to_have_text(
+        "41.00 k€"
+    )
+
+    # a zoom: the image's address holds the range each y axis shows
+    chart_pages_page.mouse.move(box["x"] + box["width"] * 0.2, middle)
+    chart_pages_page.mouse.down()
+    chart_pages_page.mouse.move(box["x"] + box["width"] * 0.6, middle, steps=5)
+    chart_pages_page.mouse.up()
+    expect(sales.get_by_role("link", name="Save Image")).to_have_attribute(
+        "href", re.compile(r"&y_min=[^&]+&y_max=[^&]+&y2_min=[^&]+&y2_max=[^&]+$")
+    )
+
+
 def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(
     chart_pages_page: Page,
 ) -> None:

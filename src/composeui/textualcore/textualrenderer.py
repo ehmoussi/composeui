@@ -1951,6 +1951,7 @@ class ChartViewLike(ViewLike, Protocol):
     title: str
     x: Axis
     y: Axis
+    y2: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
@@ -1972,6 +1973,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "title": self._refresh_title,
                 "x": self._refresh_x,
                 "y": self._refresh_y,
+                "y2": self._refresh_y2,
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
@@ -1999,6 +2001,11 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
     @staticmethod
     def _refresh_y(_view: ChartViewLike, rendered_object: ComposeChart, value: Axis) -> None:
         rendered_object.y = value
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_y2(_view: ChartViewLike, rendered_object: ComposeChart, value: Axis) -> None:
+        rendered_object.y2 = value
         rendered_object.refresh()
 
     @staticmethod

@@ -268,6 +268,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Give a chart's axes as `Axis` objects:** `ChartView(x=Axis("Time", unit="s"),
   y=Axis(scale=Scale.LOG))`. An `Axis` does not change: set a new one, such as
   `chart.y = attrs.evolve(chart.y, scale=Scale.LOG)`. A study does not save the axes.
+  `y2` is a second y axis, at the right: put a series or a horizontal `ReferenceLine` on it
+  with `on_y2=True`.
 - **Make a chart's series with `Series.line(name, x, y)`, `Series.scatter(name, x, y)` or
   `Series.bars(name, values)`,** not `Series(...)`. A chart mixes them, such as a line over
   bars. A `ChartView` has no `kind`: each series has its own. With `categories`, a series' x

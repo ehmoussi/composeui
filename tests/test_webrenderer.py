@@ -9328,6 +9328,34 @@ def test_a_line_over_bars_is_sent_with_the_slots_of_the_bars_alone() -> None:
     assert plot.attributes["aria-label"] == "Orders: Shop, Target, Online for Jan, Feb, Mar"
 
 
+def test_a_series_on_the_second_y_axis_is_sent_with_that_axis() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    sales = main_view.router.chart.sales
+    assert isinstance(sales.renderer, WebChartRenderer)
+
+    spec = json.loads(sales.renderer.chart_json())
+
+    assert spec["y2"] == {"label": "Revenue (k€)", "unit": "k€", "log": True}
+    assert [series.get("on_y2") for series in spec["series"]] == [None, True]
+    # month 3's 0 a gap of the right axis' log, not of the left's
+    assert spec["data"] == [[1, 2, 3], [120, 150, 90], [3.2, 41, None]]
+    # no break-even on a log axis
+    assert [(line["label"], line.get("on_y2")) for line in spec["lines"]] == [
+        ("Minimum", None),
+        ("Target", True),
+    ]
+
+    # nothing left at the right: no axis there, and month 3's revenue on the left's
+    sales.series = [attrs.evolve(series, on_y2=False) for series in sales.series]
+    sales.reference_lines = sales.reference_lines[:1]
+    spec = json.loads(sales.renderer.chart_json())
+    assert "y2" not in spec
+    assert not any("on_y2" in series for series in spec["series"])
+    assert spec["data"][2] == [3.2, 41, 0]
+
+
 def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)
@@ -9414,7 +9442,8 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
     monkeypatch.setattr(chartimage, "chart_image_bytes", chart_image_bytes)
 
     response = chart_client.get(
-        f"/widget/{chart_id}/image", params={"format": "svg", "x_min": 0.5, "x_max": "1.5"}
+        f"/widget/{chart_id}/image",
+        params={"format": "svg", "x_min": 0.5, "x_max": "1.5", "y2_min": 1, "y2_max": 100},
     )
 
     assert response.status_code == 200
@@ -9424,7 +9453,7 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
     )
     assert "Flow Rate (L/s)" in response.text
     (options,) = drawn
-    assert (options.x_range, options.y_range) == ((0.5, 1.5), None)
+    assert (options.x_range, options.y_range, options.y2_range) == ((0.5, 1.5), None, (1, 100))
     bad = chart_client.get(f"/widget/{chart_id}/image", params={"format": "jpg"})
     assert bad.status_code == 400
     assert (

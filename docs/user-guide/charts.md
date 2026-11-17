@@ -100,6 +100,44 @@ The axes belong to the code of the app, as a title does. The study does not save
 does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap. An x axis that
 shows categories or bars stays linear.
 
+### A second y axis
+
+`y2` is a second y axis, at the right of the chart. It shows the values of another quantity
+than `y`, for example a revenue over the units sold. A series or a horizontal reference line
+with `on_y2=True` is on it:
+
+```python
+from composeui.core.view import Axis, ChartView, ReferenceLine, Scale, Series, child
+
+sales: ChartView = child(
+    ChartView,
+    title="Sales",
+    x=Axis("Month"),
+    y=Axis("Units"),
+    y2=Axis("Revenue", unit="k€", scale=Scale.LOG),
+    series=[
+        Series.bars("Units", [120, 150, 90], x=[1, 2, 3]),
+        Series.line("Revenue", [1, 2, 3], [3.2, 41, 12], on_y2=True),
+    ],
+    reference_lines=[ReferenceLine(200, "Target", on_y2=True)],
+)
+```
+
+- **Shown when used.** The chart shows the second axis only when a series or a horizontal
+  reference line is on it. A vertical line stands at an x, so `on_y2` has no effect on it.
+- **Its own unit and scale.** Each axis has its own range. The hovered value of a series shows
+  the unit of its own axis. A log `y2` leaves out the values of its series that it cannot
+  show, as a log `y` does.
+- **The grid of `y`.** Only the first y axis draws grid lines.
+- **What the study saves.** The study saves `on_y2` with the series. As for the other axes, it
+  does not save `y2`.
+
+On Qt, when the mouse zooms or pans the first y axis, the second one follows in proportion:
+both show the same part of the plot. When the first axis fits its data again, for example
+after a double click, the second fits its own. On the web, a drag zooms the x axis, and each y
+axis fits what it shows. Textual shows the second axis at the right of the plot. A report image puts its
+legend beside the plot, because the legend can cover what either axis draws.
+
 ## Reference lines
 
 `reference_lines` draws lines across the chart at values. Each line is a `ReferenceLine`:

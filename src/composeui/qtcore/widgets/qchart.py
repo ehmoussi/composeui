@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import QEvent, QPointF, QSize, Qt
+from qtpy.QtCore import QEvent, QPointF, QRectF, QSize, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QAction, QColor, QFont, QPalette
+from qtpy.QtWidgets import QGraphicsItem
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
@@ -54,6 +55,44 @@ def _tabular_font() -> QFont:
     return font
 
 
+def _values(bounds: list[float], *, is_log: bool) -> tuple[float, float]:
+    """Get the values of a view's range: on a log axis, the view holds their logs."""
+    low, high = bounds
+    if is_log:
+        return float(10**low), float(10**high)
+    return float(low), float(high)
+
+
+class _XExtent(pg.GraphicsObject):  # type: ignore[misc]
+    """The x that the second y axis' items reach, for the plot's own view to fit.
+
+    That view fits its own items alone, and the second view follows its x: without it,
+    a bar of the second y axis past the others would be cut. It draws nothing.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemHasNoContents)
+        self._bounds: list[float] | None = None
+
+    def set_bounds(self, bounds: list[float] | None) -> None:
+        self._bounds = bounds
+        self.informViewBoundsChanged()
+
+    def dataBounds(  # noqa: N802
+        self,
+        ax: int,
+        frac: float = 1.0,
+        orthoRange: object = None,  # noqa: N803
+    ) -> list[float] | None:
+        """Get its bounds along the x axis (0), as pyqtgraph asks an item: none along y."""
+        del frac, orthoRange
+        return self._bounds if ax == 0 else None
+
+    def boundingRect(self) -> QRectF:  # noqa: N802
+        return QRectF()
+
+
 class QChart(pg.PlotWidget):  # type: ignore[misc]
     """A chart of series; hovering it shows each series' point nearest the cursor's x.
 
@@ -73,24 +112,52 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._categories: list[str] = []
         self._x = Axis()
         self._y = Axis()
+        self._y2 = Axis()
         #: each series' item, of its kind: a curve (its dots too) or its bars
         self._items: list[pg.PlotDataItem | pg.BarGraphItem] = []
+        #: whether each of `_items` is in the second y axis' view
+        self._on_y2: list[bool] = []
         self._reference_lines: list[ReferenceLine] = []
-        self._line_items: list[pg.InfiniteLine] = []
+        #: each reference line drawn, and whether it is in the second y axis' view
+        self._line_items: list[tuple[pg.InfiniteLine, bool]] = []
         plot = self.getPlotItem()
+        #: the view of what is on the second y axis, at the plot's x and drawn over the
+        #: plot's own series, e.g. a line over bars
+        self._view2 = pg.ViewBox()
+        self._view2.setZValue(1)
+        # the mouse goes to the plot's own view, under it: that one zooms and pans, and
+        # this one follows its x, and its y in proportion (see `_follow_y`)
+        self._view2.setEnabled(False)
+        #: the x that the second view's items reach, which the plot's view fits too
+        self._extent2 = _XExtent()
+        plot.addItem(self._extent2)
+        #: over both views, for the legend: the second view would draw over it
+        self._overlay = pg.GraphicsWidget()
+        self._overlay.setZValue(2)
+        for item in (self._view2, self._overlay):
+            plot.scene().addItem(item)
+        plot.getAxis("right").linkToView(self._view2)
+        self._view2.setXLink(plot)
+        plot.getViewBox().sigResized.connect(self._fit_view2)
+        #: the plot's own y range, before its last change, which the second view follows
+        self._y_range = tuple(plot.getViewBox().viewRange()[1])
+        plot.getViewBox().sigYRangeChanged.connect(self._follow_y)
         self._legend = plot.addLegend()
+        self._legend.setParentItem(self._overlay)
         # pyqtgraph thins and clips what it draws itself: a million points stay fluid
         plot.setDownsampling(auto=True, mode="peak")
         plot.setClipToView(True)
         plot.showGrid(x=True, y=True, alpha=0.15)
+        plot.getAxis("right").setGrid(False)  # the left axis' lines alone
         self._crosshair = pg.InfiniteLine(angle=90, movable=False)
         self._crosshair.setVisible(False)
         self._hover = pg.TextItem(anchor=(0, 1))
         # its values change as the cursor moves, without changing their width
         self._hover.setFont(_tabular_font())
         self._hover.setVisible(False)
+        # in the second view, over everything either view draws; it has the plot's x
         for item in (self._crosshair, self._hover):
-            plot.addItem(item, ignoreBounds=True)
+            self._add(item, z=2, on_y2=True, ignore_bounds=True)
         self.scene().sigMouseClicked.connect(self._on_mouse_clicked)
         self._mouse_proxy = pg.SignalProxy(
             self.scene().sigMouseMoved, rateLimit=_HOVER_RATE, slot=self._on_mouse_moved
@@ -108,24 +175,55 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self.getPlotItem().setTitle(title or None)
 
     def set_axis(self, side: str, axis: Axis) -> None:
-        """Show `axis` at a `side` ("bottom" or "left"), labeled, as a log axis or a linear one.
+        """Show `axis` at a `side`, labeled, as a log axis or a linear one.
 
-        pyqtgraph scales the unit, e.g. into ms. An x of categories or bars stays linear.
+        At the "bottom" the x, at the "left" the y, and at the "right" the second y, which
+        shows only with something on it. pyqtgraph scales the unit, e.g. into ms. An x of
+        categories or bars stays linear.
         """
         self.getPlotItem().setLabel(side, axis.title or None, units=axis.unit or None)
         if side == "bottom":
             self._x = axis
-        else:
+        elif side == "left":
             self._y = axis
+        else:
+            self._y2 = axis
         self._draw()
+
+    def _follow_y(self, view_box: pg.ViewBox, y_range: tuple[float, float]) -> None:
+        """Zoom and pan the second y axis as the user does the first, in proportion.
+
+        The two axes then show the same part of the plot. While the first fits its data,
+        e.g. once the user double clicks, the second fits its own.
+        """
+        (low, high), self._y_range = self._y_range, y_range
+        if view_box.autoRangeEnabled()[1] is not False:
+            self._view2.enableAutoRange(y=True)
+            return
+        # pyqtgraph never gives a view an empty range
+        low2, high2 = self._view2.viewRange()[1]
+        scale = (high2 - low2) / (high - low)
+        self._view2.setYRange(
+            low2 + (y_range[0] - low) * scale, low2 + (y_range[1] - low) * scale, padding=0
+        )
+
+    def _fit_view2(self) -> None:
+        """Keep the second y axis' view over the plot's own, as the plot is laid out."""
+        view_box = self.getPlotItem().getViewBox()
+        for item in (self._view2, self._overlay):
+            item.setGeometry(view_box.sceneBoundingRect())
+        self._view2.linkedViewChanged(view_box, self._view2.XAxis)
+
+    def _holder(self, *, on_y2: bool) -> pg.PlotItem | pg.ViewBox:
+        """Get what holds the items of a y axis: the plot, or the second y axis' view."""
+        return self._view2 if on_y2 else self.getPlotItem()
+
+    def _is_log(self, *, on_y2: bool) -> bool:
+        return self._y2.is_log if on_y2 else self._y.is_log
 
     @property
     def _x_log(self) -> bool:
         return ChartView.is_x_log(self._x, self._categories, self._series)
-
-    @property
-    def _y_log(self) -> bool:
-        return self._y.is_log
 
     def set_categories(self, categories: list[str]) -> None:
         """Show the categories on the x axis, each at its index."""
@@ -145,42 +243,49 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._draw()
 
     def _draw(self) -> None:
-        """Draw each series as its kind, over the same axes, and their legend."""
+        """Draw each series as its kind, on its y axis, and their legend."""
         plot = self.getPlotItem()
+        plot.showAxis("right", ChartView.has_y2(self._series, self._reference_lines))
         for index, curve in enumerate(self._series):
             is_bars = curve.kind is ChartKind.BAR
             if index < len(self._items):
-                if isinstance(self._items[index], pg.BarGraphItem) == is_bars:
+                is_same_kind = isinstance(self._items[index], pg.BarGraphItem) == is_bars
+                if is_same_kind and self._on_y2[index] == curve.on_y2:
                     continue  # reused: the zoom stays where the user put it
-                plot.removeItem(self._items[index])
-            self._items[index : index + 1] = [self._make_item(is_bars=is_bars)]
+                self._holder(on_y2=self._on_y2[index]).removeItem(self._items[index])
+            self._items[index : index + 1] = [self._make_item(is_bars=is_bars, on_y2=curve.on_y2)]
+            self._on_y2[index : index + 1] = [curve.on_y2]
         while len(self._items) > len(self._series):
-            plot.removeItem(self._items.pop())
+            self._holder(on_y2=self._on_y2.pop()).removeItem(self._items.pop())
         x_log = self._x_log
+        # the curves draw their log themselves; the bars are given theirs (see `_apply_styles`)
+        plot.setLogMode(x=x_log, y=self._y.is_log)
+        # the plot gave its right axis the left one's scale
+        plot.getAxis("right").setLogMode(self._y2.is_log)
         for item, curve in zip(self._items, self._series):
             if isinstance(item, pg.BarGraphItem):
                 continue  # drawn with their styles (see `_apply_styles`)
-            x, y = ChartView.drawn_points(curve, x_log=x_log, y_log=self._y_log)
+            y_log = self._is_log(on_y2=curve.on_y2)
+            x, y = ChartView.drawn_points(curve, x_log=x_log, y_log=y_log)
             if self._is_step(curve):
                 x, y = ChartView.step_points(x, y)
+            # the plot tells its own items their log; the second view's are told here
+            item.setLogMode(x_log, y_log)
             item.setData(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
             item.opts["name"] = curve.name
-        # the curves draw their log themselves; the bars are given theirs (see `_apply_styles`)
-        plot.setLogMode(x=x_log, y=self._y_log)
         ticks = [list(enumerate(self._categories))] if len(self._categories) > 0 else None
         plot.getAxis("bottom").setTicks(ticks)
         self._draw_reference_lines(x_log=x_log)
         self._apply_styles()
+        self._extent2.set_bounds(self._view2.childrenBounds()[0])
 
     def _draw_reference_lines(self, *, x_log: bool) -> None:
         """Draw the reference lines afresh: a log axis takes their logs, as pyqtgraph doesn't."""
-        plot = self.getPlotItem()
-        for item in self._line_items:
-            plot.removeItem(item)
+        for item, on_y2 in self._line_items:
+            self._holder(on_y2=on_y2).removeItem(item)
         self._line_items = []
-        lines = ChartView.drawn_lines(self._reference_lines, x_log=x_log, y_log=self._y_log)
-        for line in lines:
-            is_log = x_log if line.vertical else self._y_log
+        for line in self._drawn_lines():
+            is_log = x_log if line.vertical else self._is_log(on_y2=line.is_on_y2)
             item = pg.InfiniteLine(
                 pos=math.log10(line.value) if is_log else line.value,
                 angle=90 if line.vertical else 0,
@@ -194,27 +299,49 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                     "anchors": [(1, 0), (1, 0)] if line.vertical else [(1, 1), (1, 1)],
                 },
             )
-            item.setZValue(1)  # over the series
-            plot.addItem(item)
-            self._line_items.append(item)
+            self._add(item, z=1, on_y2=line.is_on_y2)  # over the series
+            self._line_items.append((item, line.is_on_y2))
 
-    def _make_item(self, *, is_bars: bool) -> pg.PlotDataItem | pg.BarGraphItem:
-        plot = self.getPlotItem()
-        if not is_bars:
-            return plot.plot(connect="finite")
-        bars = pg.BarGraphItem(x0=[], height=[], width=1)
-        bars.setZValue(-1)  # under the lines and dots
-        plot.addItem(bars)
-        return bars
+    def _drawn_lines(self) -> list[ReferenceLine]:
+        return ChartView.drawn_lines(
+            self._reference_lines,
+            x_log=self._x_log,
+            y_log=self._y.is_log,
+            y2_log=self._y2.is_log,
+        )
+
+    def _make_item(self, *, is_bars: bool, on_y2: bool) -> pg.PlotDataItem | pg.BarGraphItem:
+        item: pg.PlotDataItem | pg.BarGraphItem
+        if is_bars:
+            item = pg.BarGraphItem(x0=[], height=[], width=1)
+        else:
+            item = pg.PlotDataItem(connect="finite")
+            # as the plot's own items, which it thins and clips itself
+            item.setDownsampling(auto=True, method="peak")
+            item.setClipToView(True)
+        self._add(item, z=-1 if is_bars else 0, on_y2=on_y2)  # the bars under the lines and dots
+        return item
+
+    def _add(
+        self, item: pg.GraphicsObject, *, z: float, on_y2: bool, ignore_bounds: bool = False
+    ) -> None:
+        """Add `item` to the view of a y axis, stacked at `z` among that view's items.
+
+        Set after: a view raises an item stacked under itself, as the second one is.
+        """
+        self._holder(on_y2=on_y2).addItem(item, ignoreBounds=ignore_bounds)
+        item.setZValue(z)
 
     def shown_range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         """Get the x and y ranges the chart shows, e.g. zoomed into; not their logs."""
-        (x_min, x_max), (y_min, y_max) = self.getPlotItem().getViewBox().viewRange()
-        if self._x_log:
-            x_min, x_max = 10**x_min, 10**x_max
-        if self._y_log:
-            y_min, y_max = 10**y_min, 10**y_max
-        return (float(x_min), float(x_max)), (float(y_min), float(y_max))
+        x_range, y_range = self.getPlotItem().getViewBox().viewRange()
+        return _values(x_range, is_log=self._x_log), _values(y_range, is_log=self._y.is_log)
+
+    def shown_y2_range(self) -> tuple[float, float] | None:
+        """Get the range the second y axis shows, not its logs; None while it doesn't show."""
+        if not ChartView.has_y2(self._series, self._reference_lines):
+            return None
+        return _values(self._view2.viewRange()[1], is_log=self._y2.is_log)
 
     def sizeHint(self) -> QSize:  # noqa: N802
         # not its scene's, which follows its own size: a height it was given once would stay
@@ -241,7 +368,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         text = palette.color(QPalette.ColorRole.WindowText)
         self.setBackground(background)
         plot = self.getPlotItem()
-        for name in ("bottom", "left"):
+        for name in ("bottom", "left", "right"):
             axis = plot.getAxis(name)
             axis.setPen(text)
             axis.setTextPen(text)
@@ -261,19 +388,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         is_dark = self._is_dark()
         background = self.palette().color(QPalette.ColorRole.Window)
         all_bars = {
-            index: ChartView.bars_of(curve, self._categories, y_log=self._y_log)
+            index: ChartView.bars_of(curve, self._categories, y_log=self._is_log(on_y2=curve.on_y2))
             for index, curve in enumerate(self._series)
             if curve.kind is ChartKind.BAR
         }
-        drawn = [height for _xs, heights in all_bars.values() for height in heights]
-        # on a log axis, the bars rise from the power of 10 under the lowest of them
-        base = math.floor(math.log10(min(drawn))) if self._y_log and len(drawn) > 0 else 0
         slots = ChartView.bar_slots(self._series, self._categories)
         for index, (item, curve) in enumerate(zip(self._items, self._series)):
             color = curve.color or series_color(index, is_dark=is_dark)
             if isinstance(item, pg.BarGraphItem):
+                is_log = self._is_log(on_y2=curve.on_y2)
+                drawn = [
+                    height
+                    for other, (_xs, heights) in all_bars.items()
+                    if self._series[other].on_y2 == curve.on_y2
+                    for height in heights
+                ]
+                # on a log axis, the bars rise from the power of 10 under the lowest of its
+                base = math.floor(math.log10(min(drawn))) if is_log and len(drawn) > 0 else 0
                 xs, heights = (np.asarray(values, dtype=float) for values in all_bars[index])
-                tops = np.log10(heights) if self._y_log else heights
+                tops = np.log10(heights) if is_log else heights
                 offset, width = slots[index]
                 item.setOpts(
                     x0=xs + offset - width / 2,
@@ -302,8 +435,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 style = {"dash": [6, 4]} if is_dashed(index) else {}
                 item.setPen(pg.mkPen(color, width=2, **style))
         text = self.palette().color(QPalette.ColorRole.WindowText)
-        lines = ChartView.drawn_lines(self._reference_lines, x_log=self._x_log, y_log=self._y_log)
-        for item, line in zip(self._line_items, lines):
+        for (item, _on_y2), line in zip(self._line_items, self._drawn_lines()):
             ink = QColor(line.color) if line.color is not None else text
             item.setPen(pg.mkPen(ink, width=1.5, style=_LINE_STYLES[line.style]))
             item.label.setColor(ink)
@@ -327,7 +459,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         # the view's values are their logs on a log axis
         if self._x_log:
             x = 10**x
-        if self._y_log:
+        if self._y.is_log:
             y = 10**y
         self.point_clicked.emit(float(x), float(y))
 
@@ -351,28 +483,29 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._crosshair.setPos(position.x())
         self._crosshair.setVisible(True)
         self._hover.setText("\n".join(lines))
-        self._hover.setPos(position)
+        # in the second view's values, where it is drawn
+        self._hover.setPos(self._view2.mapSceneToView(scene_position))
         self._hover.setVisible(True)
 
     def _hover_lines(self, x: float) -> list[str]:
         """Get what the hover shows at `x`: where it is, then each series' value there."""
-        x_unit, y_unit = self._x.unit, self._y.unit
         if len(self._categories) > 0:
             category = round(x)
             if not 0 <= category < len(self._categories):
                 return []
             lines = [self._categories[category]]
         else:
-            lines = [_format(x, x_unit)]
+            lines = [_format(x, self._x.unit)]
         # a bar is hovered across its group's room
         reach = ChartView.bar_step(self._series, self._categories) / 2
         for curve in self._series:
             y: float | None
+            y_log = self._is_log(on_y2=curve.on_y2)
             if curve.kind is ChartKind.BAR:
-                point = _nearest(*ChartView.bars_of(curve, self._categories, y_log=self._y_log), x)
+                point = _nearest(*ChartView.bars_of(curve, self._categories, y_log=y_log), x)
                 y = None if point is None or abs(point[0] - x) > reach else point[1]
             else:
-                points = ChartView.drawn_points(curve, x_log=self._x_log, y_log=self._y_log)
+                points = ChartView.drawn_points(curve, x_log=self._x_log, y_log=y_log)
                 if self._is_step(curve):
                     # the value held there, rather than the next point's
                     held = ChartView.held_value(*points, x)
@@ -381,7 +514,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                     point = _nearest(*points, x)
                     y = None if point is None else point[1]
             if y is not None:
-                value = _format(y, y_unit, is_whole=ChartView.is_whole(curve.y))
+                # in its own y axis' unit
+                unit = self._y2.unit if curve.on_y2 else self._y.unit
+                value = _format(y, unit, is_whole=ChartView.is_whole(curve.y))
                 lines.append(f"{curve.name}: {value}")
         return lines
 

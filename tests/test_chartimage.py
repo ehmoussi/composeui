@@ -120,6 +120,32 @@ def test_a_line_is_drawn_over_the_bars_of_the_same_categories() -> None:
     assert [label.get_text() for label in axes.get_xticklabels()] == ["Jan", "Feb", "Mar"]
 
 
+def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right() -> None:
+    sales = ChartPagesMainView().router.chart.sales
+
+    figure = chart_figure(sales, ImageOptions(y2_range=(1, 100)))
+
+    left, right = figure.axes
+    (units,) = left.containers
+    assert [bar.get_height() for bar in units] == [120, 150, 90]
+    assert left.get_yscale() == "linear"
+    assert (right.get_ylabel(), right.get_yscale(), right.get_ylim()) == (
+        "Revenue (k€)",
+        "log",
+        pytest.approx((1, 100)),
+    )
+    # on its own axis' log: month 3's 0 is a gap; the target there, the break-even nowhere
+    revenue, target = right.get_lines()
+    assert list(np.asarray(revenue.get_ydata())) == [3.2, 41, pytest.approx(math.nan, nan_ok=True)]
+    assert list(np.asarray(target.get_ydata())) == [200, 200]
+    (minimum,) = left.get_lines()
+    assert list(np.asarray(minimum.get_ydata())) == [100, 100]
+    # beside the plot, whose two axes each draw a part of what it shows
+    assert left.get_legend() is None
+    assert right.get_legend() is None
+    assert [text.get_text() for text in figure.legends[0].get_texts()] == ["Units", "Revenue"]
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:
     ages = ChartPagesMainView().router.chart.ages
 

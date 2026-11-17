@@ -1707,6 +1707,7 @@ class ChartViewLike(ViewLike, Protocol):
     title: str
     x: Axis
     y: Axis
+    y2: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
@@ -1729,6 +1730,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "title": self._refresh_title,
                 "x": self._refresh_x,
                 "y": self._refresh_y,
+                "y2": self._refresh_y2,
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
@@ -1755,6 +1757,10 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _refresh_y(_view: ChartViewLike, rendered_object: QChart, value: Axis) -> None:
         rendered_object.set_axis("left", value)
+
+    @staticmethod
+    def _refresh_y2(_view: ChartViewLike, rendered_object: QChart, value: Axis) -> None:
+        rendered_object.set_axis("right", value)
 
     @staticmethod
     def _refresh_series(_view: ChartViewLike, rendered_object: QChart, value: list[Series]) -> None:
@@ -1801,7 +1807,9 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         if filepath.suffix.lstrip(".").lower() not in chartimage.FORMATS:
             filepath = filepath.with_name(f"{filepath.name}.{_IMAGE_FILTERS.get(chosen, 'pdf')}")
         x_range, y_range = chart.shown_range()
-        options = chartimage.ImageOptions(x_range=x_range, y_range=y_range)
+        options = chartimage.ImageOptions(
+            x_range=x_range, y_range=y_range, y2_range=chart.shown_y2_range()
+        )
         chartimage.save_chart_image(view, filepath, options)
 
 
