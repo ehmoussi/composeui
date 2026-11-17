@@ -36,7 +36,7 @@
   /**
    * @param {HTMLElement} element @param {ChartSpec} spec @param {number} width
    * @returns {uPlot.Options & {series: uPlot.Series[], axes: uPlot.Axis[],
-   *   scales: {x: uPlot.Scale, y: uPlot.Scale}, hooks: {draw: ((chart: uPlot) => void)[]}}}
+   *   scales: ChartScales, hooks: {draw: ((chart: uPlot) => void)[]}}}
    */
   function chartOptions(element, spec, width) {
     var ink = resolveColor(element, "var(--color-base-content)");
@@ -53,14 +53,20 @@
         ticks: { stroke: faint, width: 1 },
       };
     }
+    var y2 = spec.y2;
     var series = spec.series.map(function (series, index) {
       // its own color, the same in every theme, or the theme's
       var color = series.color || resolveColor(
         element, "var(--color-" + SERIES_COLORS[index % SERIES_COLORS.length] + ")"
       );
+      // on its y axis, in its unit
+      var side = series.on_y2 && y2 !== undefined ? y2 : spec.y;
       /** @type {uPlot.Series} */
       var options = {
-        label: series.name, stroke: color, value: chartValue(spec.y.unit, series.whole),
+        label: series.name,
+        stroke: color,
+        scale: yScale(series),
+        value: chartValue(side.unit, series.whole),
       };
       if (series.kind === "bar") {
         // its bar in the group at each x, by its left edge: offsets from the server
@@ -108,12 +114,21 @@
       x.class = "chart-unnamed";
     }
     // a log scale: uPlot's distribution 3
-    /** @type {{x: uPlot.Scale, y: uPlot.Scale}} */
+    /** @type {ChartScales} */
     var scales = {
       x: { time: false, distr: spec.x.log ? 3 : 1 }, y: { distr: spec.y.log ? 3 : 1 },
     };
-    /** @type {[uPlot.Axis, uPlot.Axis]} */
+    /** @type {[uPlot.Axis, uPlot.Axis, ...uPlot.Axis[]]} */
     var axes = [axis(spec.x), axis(spec.y)];
+    if (y2 !== undefined) {
+      scales.y2 = { distr: y2.log ? 3 : 1 };
+      // at the right, its ticks without lines: the left axis' lines alone
+      var right = axis(y2);
+      right.scale = "y2";
+      right.side = 1;
+      right.grid = { show: false };
+      axes.push(right);
+    }
     var categories = spec.categories;
     if (categories !== undefined) {
       // a category's index stands for its name
@@ -134,12 +149,19 @@
     }
     var barStep = spec.bar_step;
     if (barStep !== undefined) {
-      if (!spec.y.log) {
-        // the bars stand on 0
-        scales.y.range = function (chart, min, max) {
+      // the bars stand on 0, on a linear axis that has some
+      [["y", spec.y], ["y2", y2]].forEach(function (pair) {
+        var key = /** @type {"y" | "y2"} */ (pair[0]);
+        var side = /** @type {ChartAxisSpec | undefined} */ (pair[1]);
+        var scale = scales[key];
+        var hasBars = spec.series.some(function (series) {
+          return series.kind === "bar" && yScale(series) === key;
+        });
+        if (scale === undefined || side === undefined || side.log || !hasBars) return;
+        scale.range = function (chart, min, max) {
           return uPlot.rangeNum(Math.min(0, min), Math.max(0, max), 0.1, true);
         };
-      }
+      });
       if (categories === undefined) {
         var half = barStep / 2;
         // the whole data: half a bar's room past the first and the last x, so that their
@@ -157,11 +179,18 @@
     var lineXs = [];
     /** @type {number[]} */
     var lineYs = [];
-    spec.lines.forEach(function (line) { (line.vertical ? lineXs : lineYs).push(line.value); });
+    /** @type {number[]} */
+    var lineY2s = [];
+    spec.lines.forEach(function (line) {
+      (line.vertical ? lineXs : line.on_y2 ? lineY2s : lineYs).push(line.value);
+    });
     if (categories === undefined) {
       scales.x.range = rangeWith(rangeFunction(scales.x), lineXs, spec.x.log, false);
     }
     scales.y.range = rangeWith(rangeFunction(scales.y), lineYs, spec.y.log, true);
+    if (scales.y2 !== undefined && y2 !== undefined) {
+      scales.y2.range = rangeWith(rangeFunction(scales.y2), lineY2s, y2.log, true);
+    }
     return {
       width: width,
       height: element.clientHeight,
@@ -182,6 +211,11 @@
       },
       hooks: { draw: [drawReferenceLines(spec, ink)] },
     };
+  }
+  /* the scale of a series' y: its axis' */
+  /** @param {{on_y2?: boolean}} item @returns {"y" | "y2"} */
+  function yScale(item) {
+    return item.on_y2 ? "y2" : "y";
   }
   /* the x of a chart's points */
   /** @param {uPlot} chart @returns {number[]} */
@@ -236,7 +270,7 @@
       context.lineWidth = 1.5 * uPlot.pxRatio;
       context.textAlign = "right";
       spec.lines.forEach(function (line) {
-        var position = chart.valToPos(line.value, line.vertical ? "x" : "y", true);
+        var position = chart.valToPos(line.value, line.vertical ? "x" : yScale(line), true);
         var start = line.vertical ? box.left : box.top;
         var end = start + (line.vertical ? box.width : box.height);
         if (!(position >= start && position <= end)) return;  // zoomed past it
@@ -374,6 +408,10 @@
       query.set("x_max", String(scales.x.max));
       query.set("y_min", String(scales.y.min));
       query.set("y_max", String(scales.y.max));
+      if (scales.y2 !== undefined) {
+        query.set("y2_min", String(scales.y2.min));
+        query.set("y2_max", String(scales.y2.max));
+      }
     }
     var address = /** @type {string} */ (link.getAttribute("href"));
     link.setAttribute("href", address.split("?")[0] + "?" + query);
@@ -517,10 +555,10 @@
     if (min <= first && max >= last) return undefined;
     return { min: min, max: max };
   }
-  /* a chart's scales: the x and the y, which every chart has */
-  /** @param {uPlot} chart @returns {{x: uPlot.Scale, y: uPlot.Scale}} */
+  /* a chart's scales: the x and the y, which every chart has, and the second y */
+  /** @param {uPlot} chart @returns {ChartScales} */
   function chartScales(chart) {
-    return /** @type {{x: uPlot.Scale, y: uPlot.Scale}} */ (chart.scales);
+    return /** @type {ChartScales} */ (chart.scales);
   }
   /** @param {HTMLElement} element */
   function destroyChart(element) {

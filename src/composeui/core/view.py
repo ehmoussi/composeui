@@ -4141,6 +4141,8 @@ class Series:
     #: with `fill`, the area's color, as #rrggbb, e.g. a pale area under a strong line;
     #: None: the color of its line
     fill_color: Optional[str] = attrs.field(default=None, kw_only=True, validator=[_check_color])
+    #: whether its y are on the chart's second y axis, `ChartView.y2`, at the right
+    on_y2: bool = attrs.field(default=False, kw_only=True)
 
     @classmethod
     def line(  # noqa: PLR0913 (a line's options, each by its name)
@@ -4153,6 +4155,7 @@ class Series:
         fill: bool = False,
         step: bool = False,
         fill_color: Optional[str] = None,
+        on_y2: bool = False,
     ) -> Series:
         """Make a series drawn as a line through its points, e.g. a result against time."""
         return cls(
@@ -4164,14 +4167,21 @@ class Series:
             fill=fill,
             step=step,
             fill_color=fill_color,
+            on_y2=on_y2,
         )
 
     @classmethod
     def scatter(
-        cls, name: str, x: Iterable[float], y: Iterable[float], *, color: Optional[str] = None
+        cls,
+        name: str,
+        x: Iterable[float],
+        y: Iterable[float],
+        *,
+        color: Optional[str] = None,
+        on_y2: bool = False,
     ) -> Series:
         """Make a series drawn as dots, e.g. measurements over a model's curve."""
-        return cls(name, x, y, kind=ChartKind.SCATTER, color=color)
+        return cls(name, x, y, kind=ChartKind.SCATTER, color=color, on_y2=on_y2)
 
     @classmethod
     def bars(
@@ -4181,6 +4191,7 @@ class Series:
         *,
         x: Optional[Iterable[float]] = None,
         color: Optional[str] = None,
+        on_y2: bool = False,
     ) -> Series:
         """Make a series drawn as bars: a bar per value, in its chart's `categories` in order.
 
@@ -4194,6 +4205,7 @@ class Series:
             heights,
             kind=ChartKind.BAR,
             color=color,
+            on_y2=on_y2,
         )
 
 
@@ -4230,6 +4242,13 @@ class ReferenceLine:
     color: Optional[str] = attrs.field(default=None, validator=[_check_color])
     #: dashed by default: told apart from the series, which are solid
     style: LineStyle = LineStyle.DASHED
+    #: whether its y is on the chart's second y axis, `ChartView.y2`; not a vertical line's
+    on_y2: bool = attrs.field(default=False, kw_only=True)
+
+    @property
+    def is_on_y2(self) -> bool:
+        """Tell whether it lies at a y of the second y axis: a vertical one stands at an x."""
+        return self.on_y2 and not self.vertical
 
 
 class Scale(enum.Enum):
@@ -4291,7 +4310,9 @@ class ChartView(View):
     category. The bars at an x stand beside each other, in a group.
 
     Its axes, `x` and `y`, hold their titles, units and scales (see `Axis`). They are the
-    app's, as a title is: a study doesn't save them.
+    app's, as a title is: a study doesn't save them. A series or a reference line with
+    `on_y2` is on a second y axis, `y2`, at the right, which shows once one is on it, e.g.
+    a revenue over the orders it comes from.
 
     A log axis (`Scale.LOG`) leaves out the values it can't show, those <= 0. A point
     at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`). A reference
@@ -4304,6 +4325,8 @@ class ChartView(View):
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     x: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
     y: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
+    #: the second y axis, at the right, of the series and reference lines with `on_y2`
+    y2: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
     series: list[Series] = attrs.field(factory=list[Series])
     #: lines at values, e.g. a limit, drawn over the series
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
@@ -4404,14 +4427,23 @@ class ChartView(View):
         return held
 
     @staticmethod
-    def drawn_lines(lines: list[ReferenceLine], *, x_log: bool, y_log: bool) -> list[ReferenceLine]:
+    def drawn_lines(
+        lines: list[ReferenceLine], *, x_log: bool, y_log: bool, y2_log: bool = False
+    ) -> list[ReferenceLine]:
         """Get the reference lines their axes can show: a log axis can't show 0 or less."""
         return [
             line
             for line in lines
             if math.isfinite(line.value)
-            and (line.value > 0 or not (x_log if line.vertical else y_log))
+            and (
+                line.value > 0 or not (x_log if line.vertical else y2_log if line.on_y2 else y_log)
+            )
         ]
+
+    @staticmethod
+    def has_y2(series: list[Series], lines: list[ReferenceLine]) -> bool:
+        """Tell whether the second y axis shows: a series or a reference line is on it."""
+        return any(curve.on_y2 for curve in series) or any(line.is_on_y2 for line in lines)
 
     @staticmethod
     def bar_heights(series: Series, category_count: int, *, y_log: bool = False) -> list[float]:

@@ -71,7 +71,7 @@ what exists. This file holds only the work that is left.
 The order of the work for **Now**:
 
 1. Share the data: the shared SQLite database, measured against the budgets.
-2. The charts: check the HTML, then layers, then the new charts.
+2. The charts: check the HTML, then the new charts.
 3. Deployment in a container.
 
 ## Data and dashboards
@@ -154,7 +154,6 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
   on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
-- **Layers** (Now). Every kind of series on shared axes, bars included, and a second y axis.
 - **Dates, ranges and bars** (Now). Dates on the x axis, axis ranges set by the app, and stacked
   and horizontal bars.
 - **Histograms** (Now). Bins computed in the core, by count, percent or density.

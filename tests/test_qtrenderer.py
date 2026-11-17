@@ -3976,6 +3976,74 @@ def test_a_line_is_drawn_over_the_bars_of_the_same_categories(qtbot: QtBot) -> N
     assert chart.legend_names() == ["Shop", "Target", "Online"]
 
 
+def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right(
+    qtbot: QtBot,
+) -> None:
+    view, chart = _chart_page_chart(qtbot, "sales")
+    plot = _plot_item(chart)
+    view_box = _view_box(chart)
+    # laid out: pyqtgraph draws only the points within the view, as it shows them then
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 3)
+    right = plot.getAxis("right")
+    view2 = right.linkedView()
+    assert isinstance(view2, pg.ViewBox)
+    assert right.isVisible()
+    assert (right.labelText, right.labelUnits, right.logMode) == ("Revenue", "k€", True)
+    # the bars and the minimum in the plot's own view, on its linear axis
+    (units,) = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+    assert list(np.asarray(units.opts["height"])) == [120, 150, 90]
+    assert not any(isinstance(item, pg.PlotDataItem) for item in plot.items)
+    assert [item.value() for item in plot.items if isinstance(item, pg.InfiniteLine)] == [100]
+    # the revenue and the target in the right's, as its logs; no break-even on a log axis
+    (revenue,) = (item for item in view2.addedItems if isinstance(item, pg.PlotDataItem))
+    _xs, drawn = revenue.getData()
+    assert drawn is not None
+    assert list(drawn) == [
+        pytest.approx(math.log10(3.2)),
+        pytest.approx(math.log10(41)),
+        pytest.approx(math.nan, nan_ok=True),
+    ]
+    lines = [item for item in view2.addedItems if isinstance(item, pg.InfiniteLine)]
+    (target,) = (line for line in lines if line.angle == 0)
+    assert target.value() == pytest.approx(math.log10(200))
+    assert target.zValue() > revenue.zValue()  # over the series, as in the plot's own view
+    # the right axis fits its own series and lines, given in their values
+    y2_range = chart.shown_y2_range()
+    assert y2_range is not None
+    assert y2_range[0] <= 3.2
+    assert y2_range[1] >= 200
+    # a zoom into the lower half of the left axis: the right one shows its own lower half,
+    # the same part of the plot
+    (low, high), (low2, high2) = view_box.viewRange()[1], view2.viewRange()[1]
+    view_box.setRange(yRange=(low, (low + high) / 2), padding=0)
+    assert view2.viewRange()[1] == [pytest.approx(low2), pytest.approx((low2 + high2) / 2)]
+    # fitted to the data again, as a double click does: each axis fits its own
+    view_box.enableAutoRange()
+    qtbot.waitUntil(lambda: view2.viewRange()[1] == [pytest.approx(low2), pytest.approx(high2)])
+    # each value in its own axis' unit, over everything either axis draws
+    chart.show_hover(view_box.mapViewToScene(QPointF(2, 50)))
+    assert chart.hover_text().splitlines()[1:] == ["Units: 150", "Revenue: 41.00 k€"]
+    stacked = _chart_scene(chart).items(Qt.SortOrder.DescendingOrder)
+    (hover,) = (
+        item
+        for item in stacked
+        if isinstance(item, pg.TextItem) and item.toPlainText() == chart.hover_text()
+    )
+    assert stacked.index(hover) < stacked.index(revenue)
+
+    sales = view.router.chart.sales
+    # nothing left at the right: its axis hides, and the revenue is on the left's linear axis
+    sales.series = [attrs.evolve(curve, on_y2=False) for curve in sales.series]
+    sales.reference_lines = sales.reference_lines[:1]
+    assert not right.isVisible()
+    assert chart.shown_y2_range() is None
+    (revenue,) = (item for item in plot.items if isinstance(item, pg.PlotDataItem))
+    _xs, drawn = revenue.getData()
+    assert drawn is not None
+    assert list(drawn) == [3.2, 41, 0]
+    assert not any(isinstance(item, pg.PlotDataItem) for item in view2.addedItems)
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot, "ages")
     plot = _plot_item(chart)

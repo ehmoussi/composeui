@@ -3105,6 +3105,10 @@ class _PlotMonitor(Protocol):
     y: list[list[float]]
     xscale: list[str]
     yscale: list[str]
+    #: by the y axis' side: the left's, then the right's
+    ylabel: list[str | None]
+    #: each plot's y axis: "left" or "right"
+    yside: list[str]
     hcoord: list[list[float]]
     vcoord: list[list[float]]
     hcolors: list[list[tuple[int, int, int]]]
@@ -3219,8 +3223,8 @@ async def test_a_line_is_plotted_over_the_bars_of_the_same_categories() -> None:
         # which alone share a category's room
         assert plotted.x[-1] == [1, 2, 3]
         assert plotted.y[-1] == [100, 110, 125]
-        assert plotted.x[0][1:3] == pytest.approx([0.55, 0.95])  # the shop's bar of January
-        assert plotted.x[3][1:3] == pytest.approx([1.05, 1.45])  # the online one beside it
+        assert plotted.x[0][1:3] == pytest.approx([0.6, 1.0])  # the shop's bar of January
+        assert plotted.x[3][1:3] == pytest.approx([1.0, 1.4])  # the online one beside it
 
         # no bars to name the categories: the line and dots still stand at them
         orders.series = [Series.scatter("Target", [0, 1, 2], [100, 110, 125])]
@@ -3229,6 +3233,46 @@ async def test_a_line_is_plotted_over_the_bars_of_the_same_categories() -> None:
         for name in ("Jan", "Feb", "Mar"):
             assert name in text
         assert _plot_monitor(chart).x == [[1, 2, 3]]
+
+
+@pytest.mark.asyncio
+async def test_a_series_on_the_second_y_axis_is_plotted_against_an_axis_at_the_right() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    sales = view.router.chart.sales
+    assert isinstance(sales.renderer, TextualWidgetRenderer)
+    chart = sales.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        plotted = _plot_monitor(chart)
+        assert plotted.ylabel == ["Units", "Revenue (k€)"]
+        assert plotted.yscale == ["linear", "log"]
+        # the bars at the left; the revenue, then the target, at the right as their logs:
+        # month 3's 0 a gap, and no break-even
+        assert plotted.yside == ["left"] * 3 + ["right"] * 2
+        assert plotted.y[3] == [
+            pytest.approx(math.log10(3.2)),
+            pytest.approx(math.log10(41)),
+            pytest.approx(math.nan, nan_ok=True),
+        ]
+        assert plotted.y[4] == [pytest.approx(math.log10(200))] * 2
+        assert plotted.hcoord == [[100], []]  # the minimum, at the left
+        assert "Target" in chart.render().plain  # type: ignore[union-attr]
+
+        # nothing left at the right: the revenue on the left's linear axis
+        sales.series = [attrs.evolve(curve, on_y2=False) for curve in sales.series]
+        sales.reference_lines = sales.reference_lines[:1]
+        await pilot.pause()
+        plotted = _plot_monitor(chart)
+        assert plotted.ylabel == ["Units", None]
+        assert plotted.yside == ["left"] * 4
+        assert plotted.y[3] == [3.2, 41, 0]
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,8 @@ declare global {
     fill_color: string | null;
     step: boolean;
     whole: boolean;
+    /* on the second y axis, `y2`: sent only when it is */
+    on_y2?: boolean;
     /* a bar's, in the group at its x */
     offset: number;
     width: number;
@@ -78,11 +80,15 @@ declare global {
     vertical: boolean;
     color: string | null;
     style: "solid" | "dashed" | "dotted" | "dash_dot";
+    /* a horizontal one at a y of the second y axis: sent only when it is */
+    on_y2?: boolean;
   }
   interface ChartSpec {
     title: string;
     x: ChartAxisSpec;
     y: ChartAxisSpec;
+    /* the second y axis, at the right, when something is on it */
+    y2?: ChartAxisSpec;
     series: ChartSeriesSpec[];
     lines: ChartLineSpec[];
     /* uPlot's columns, or each series' own x and y, joined in the browser */
@@ -92,6 +98,13 @@ declare global {
     /* with bars: the room between two of their x */
     bar_step?: number;
   }
+  /* a chart's uPlot scales: the second y's while something is on it (a type, not an
+     interface: uPlot's `Scales` takes it, which has an index signature) */
+  type ChartScales = {
+    x: uPlot.Scale;
+    y: uPlot.Scale;
+    y2?: uPlot.Scale;
+  };
   /* the x range the user zoomed into */
   interface ChartZoom {
     min: number;

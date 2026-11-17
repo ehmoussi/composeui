@@ -118,6 +118,7 @@ not in the package: run them from a clone of the repository (see
 - [Charts](user-guide/charts.md)
   - [Kinds of chart](user-guide/charts.md#kinds-of-chart)
   - [Axes](user-guide/charts.md#axes)
+    - [A second y axis](user-guide/charts.md#a-second-y-axis)
   - [Reference lines](user-guide/charts.md#reference-lines)
   - [Colors, fill, steps, and height](user-guide/charts.md#colors-fill-steps-and-height)
   - [What each backend draws](user-guide/charts.md#what-each-backend-draws)
